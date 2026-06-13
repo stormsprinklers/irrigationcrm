@@ -12,11 +12,13 @@ import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
+import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
 import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
+import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 
 type VisitDetailData = {
   id: string;
@@ -30,8 +32,24 @@ type VisitDetailData = {
   city: string | null;
   state: string | null;
   zip: string | null;
-  customer: { id: string; name: string; phone: string | null; email: string | null } | null;
-  property: { id: string; name: string; address: string | null } | null;
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+  } | null;
+  property: {
+    id: string;
+    name: string;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+  } | null;
   serviceArea: { id: string; name: string; color: string };
   assignedUser: { id: string; name: string; color: string | null; photoUrl: string | null } | null;
   lineItems: Array<{
@@ -158,10 +176,12 @@ export function VisitDetail({ visitId }: Props) {
   const subtotal = sumLineItems(visit.lineItems);
   const discountTotal = sumDiscounts(subtotal, visit.discounts);
   const { total } = computeTotals(subtotal, discountTotal);
-  const location =
-    [visit.address, visit.city, visit.state, visit.zip].filter(Boolean).join(", ") ||
-    visit.property?.address ||
-    visit.serviceArea.name;
+  const jobAddress =
+    formatPostalAddress(visit) ||
+    (visit.property ? formatPostalAddress(visit.property) : null) ||
+    (visit.customer ? formatPostalAddress(visit.customer) : null);
+  const mapsUrl = jobAddress ? googleMapsDirectionsUrl(jobAddress) : null;
+  const location = jobAddress || visit.serviceArea.name;
 
   return (
     <div className="space-y-6">
@@ -182,10 +202,23 @@ export function VisitDetail({ visitId }: Props) {
             {format(new Date(visit.startAt), "EEE, MMM d")} ·{" "}
             {format(new Date(visit.startAt), "h:mm a")} – {format(new Date(visit.endAt), "h:mm a")}
           </p>
-          <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin className="h-4 w-4" />
-            {location}
-          </p>
+          <div className="mt-2 flex items-start gap-2">
+            <p className="text-sm text-muted-foreground">{location}</p>
+            {mapsUrl ? (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                asChild
+                title="Navigate with Google Maps"
+              >
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                  <MapPin className="h-4 w-4" />
+                  <span className="sr-only">Open in Google Maps</span>
+                </a>
+              </Button>
+            ) : null}
+          </div>
         </div>
         <CollectPaymentButton visitId={visit.id} total={total} disabled={visit.status === "COMPLETED"} />
       </div>
@@ -222,6 +255,12 @@ export function VisitDetail({ visitId }: Props) {
           </div>
 
           <VisitTagsSection visitId={visit.id} tags={visit.tags} onUpdated={load} />
+          <VisitMaintenancePlanSection
+            visitId={visit.id}
+            customerId={visit.customer?.id ?? null}
+            propertyId={visit.property?.id ?? null}
+            onUpdated={load}
+          />
           <VisitDiscountsSection
             visitId={visit.id}
             discounts={visit.discounts}

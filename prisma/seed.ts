@@ -20,13 +20,19 @@ const SERVICE_AREAS = [
 ];
 
 const PRICE_BOOK_CATEGORIES = [
-  { slug: "backflow", name: "Backflow", items: [{ name: "Backflow test", unitPrice: 125 }, { name: "Backflow repair", unitPrice: 185 }] },
-  { slug: "stop-waste", name: "Stop & Waste", items: [{ name: "Stop & waste replacement", unitPrice: 275 }] },
-  { slug: "heads-nozzles", name: "Heads & Nozzles", items: [{ name: "Rotor head replacement", unitPrice: 95 }, { name: "Nozzle adjustment", unitPrice: 45 }] },
-  { slug: "leaks", name: "Leaks", items: [{ name: "Leak diagnosis", unitPrice: 89 }, { name: "Pipe repair", unitPrice: 150 }] },
-  { slug: "controllers", name: "Controllers", items: [{ name: "Controller programming", unitPrice: 75 }, { name: "Smart controller install", unitPrice: 450 }] },
-  { slug: "drip", name: "Drip", items: [{ name: "Drip line repair", unitPrice: 120 }] },
-  { slug: "other", name: "Other", items: [{ name: "Service call minimum", unitPrice: 89 }] },
+  { slug: "service-irrigation", name: "Irrigation", items: [{ name: "Backflow test", unitPrice: 125, sku: "SVC-BF-TEST" }, { name: "Backflow repair", unitPrice: 185 }, { name: "Stop & waste replacement", unitPrice: 275 }, { name: "Rotor head replacement", unitPrice: 95 }, { name: "Nozzle adjustment", unitPrice: 45 }, { name: "Leak diagnosis", unitPrice: 89 }, { name: "Pipe repair", unitPrice: 150 }, { name: "Controller programming", unitPrice: 75 }, { name: "Smart controller install", unitPrice: 450 }, { name: "Drip line repair", unitPrice: 120 }, { name: "Service call minimum", unitPrice: 89, laborRate: 95, laborHours: 1 }] },
+];
+
+const MATERIAL_CATEGORIES = [
+  {
+    slug: "material-parts",
+    name: "Parts",
+    items: [
+      { name: "1/2\" PVC coupling", unitPrice: 4.5, unitCost: 1.2, sku: "PVC-050-CPL" },
+      { name: "Rain Bird 5000 rotor", unitPrice: 24, unitCost: 12.5, sku: "RB-5000" },
+      { name: "9V battery", unitPrice: 6, unitCost: 2.25, sku: "BAT-9V" },
+    ],
+  },
 ];
 
 function startOfWeek(date: Date) {
@@ -338,9 +344,55 @@ async function main() {
     const cat = PRICE_BOOK_CATEGORIES[i];
     const category = await prisma.priceBookCategory.upsert({
       where: { companyId_slug: { companyId: company.id, slug: cat.slug } },
-      update: { name: cat.name, sortOrder: i },
+      update: { name: cat.name, sortOrder: i, type: "SERVICE" },
       create: {
         companyId: company.id,
+        type: "SERVICE",
+        name: cat.name,
+        slug: cat.slug,
+        sortOrder: i,
+      },
+    });
+
+    for (let j = 0; j < cat.items.length; j++) {
+      const item = cat.items[j] as {
+        name: string;
+        unitPrice: number;
+        sku?: string;
+        laborRate?: number;
+        laborHours?: number;
+      };
+      const existing = await prisma.priceBookItem.findFirst({
+        where: { categoryId: category.id, name: item.name },
+      });
+      if (existing) {
+        priceBookItems[item.name] = existing.id;
+      } else {
+        const created = await prisma.priceBookItem.create({
+          data: {
+            categoryId: category.id,
+            type: "SERVICE",
+            name: item.name,
+            sku: item.sku ?? null,
+            unitPrice: item.unitPrice,
+            laborRate: item.laborRate ?? null,
+            laborHours: item.laborHours ?? null,
+            sortOrder: j,
+          },
+        });
+        priceBookItems[item.name] = created.id;
+      }
+    }
+  }
+
+  for (let i = 0; i < MATERIAL_CATEGORIES.length; i++) {
+    const cat = MATERIAL_CATEGORIES[i];
+    const category = await prisma.priceBookCategory.upsert({
+      where: { companyId_slug: { companyId: company.id, slug: cat.slug } },
+      update: { name: cat.name, sortOrder: i, type: "MATERIAL" },
+      create: {
+        companyId: company.id,
+        type: "MATERIAL",
         name: cat.name,
         slug: cat.slug,
         sortOrder: i,
@@ -352,18 +404,18 @@ async function main() {
       const existing = await prisma.priceBookItem.findFirst({
         where: { categoryId: category.id, name: item.name },
       });
-      if (existing) {
-        priceBookItems[item.name] = existing.id;
-      } else {
-        const created = await prisma.priceBookItem.create({
+      if (!existing) {
+        await prisma.priceBookItem.create({
           data: {
             categoryId: category.id,
+            type: "MATERIAL",
             name: item.name,
+            sku: item.sku ?? null,
             unitPrice: item.unitPrice,
+            unitCost: item.unitCost ?? null,
             sortOrder: j,
           },
         });
-        priceBookItems[item.name] = created.id;
       }
     }
   }

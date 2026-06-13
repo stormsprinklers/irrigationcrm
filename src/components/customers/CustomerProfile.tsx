@@ -54,7 +54,10 @@ export function CustomerProfile({ customerId }: Props) {
     ]);
 
     if (customerRes.ok) setCustomer(await customerRes.json());
-    if (propertiesRes.ok) setProperties(await propertiesRes.json());
+    if (propertiesRes.ok) {
+      const data = await propertiesRes.json();
+      setProperties(Array.isArray(data) ? data : []);
+    }
     if (estimatesRes.ok) {
       const data = await estimatesRes.json();
       setEstimates(data.estimates ?? []);
@@ -119,7 +122,10 @@ export function CustomerProfile({ customerId }: Props) {
     }
     setNewProperty({ name: "", address: "", city: "", state: "", zip: "" });
     const propsRes = await fetch(`/api/customers/${customerId}/properties`);
-    if (propsRes.ok) setProperties(await propsRes.json());
+    if (propsRes.ok) {
+      const data = await propsRes.json();
+      setProperties(Array.isArray(data) ? data : []);
+    }
   }
 
   async function deleteProperty(propertyId: string) {
@@ -131,6 +137,41 @@ export function CustomerProfile({ customerId }: Props) {
       return;
     }
     setProperties((prev) => prev.filter((p) => p.id !== propertyId));
+  }
+
+  async function openEnrollModal() {
+    if (!customer) return;
+
+    if (properties.length === 0) {
+      const hasAddress = Boolean(customer.address || customer.city || customer.zip);
+      if (!hasAddress) {
+        toast.error("Add a property on the Properties tab before enrolling in a plan.");
+        return;
+      }
+
+      const res = await fetch(`/api/customers/${customerId}/properties`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Primary",
+          address: customer.address,
+          city: customer.city,
+          state: customer.state,
+          zip: customer.zip,
+          isPrimary: true,
+        }),
+      });
+
+      if (!res.ok) {
+        toast.error("Add a property before enrolling in a plan.");
+        return;
+      }
+
+      const property = await res.json();
+      setProperties([property]);
+    }
+
+    setEnrollOpen(true);
   }
 
   async function createEstimate() {
@@ -444,7 +485,7 @@ export function CustomerProfile({ customerId }: Props) {
 
         <TabsContent value="maintenance" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={() => setEnrollOpen(true)} disabled={properties.length === 0}>
+            <Button type="button" onClick={openEnrollModal}>
               <Plus className="h-4 w-4" />
               Enroll in plan
             </Button>
@@ -497,6 +538,7 @@ export function CustomerProfile({ customerId }: Props) {
       </Tabs>
 
       <EnrollPlanModal
+        key={customerId}
         customerId={customerId}
         properties={properties}
         open={enrollOpen}

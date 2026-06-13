@@ -1,30 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees } from "@/lib/employees";
+import type { PriceBookItemType, UserRole } from "@prisma/client";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getItem, listItems, upsertItemMaterials } from "@/lib/price-book/queries";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const q = request.nextUrl.searchParams.get("q")?.trim();
-    const categoryId = request.nextUrl.searchParams.get("categoryId");
+    const categoryId = request.nextUrl.searchParams.get("categoryId") ?? undefined;
+    const type = request.nextUrl.searchParams.get("type") as PriceBookItemType | null;
+    const activeOnly = request.nextUrl.searchParams.get("activeOnly") !== "false";
 
-    const items = await prisma.priceBookItem.findMany({
-      where: {
-        active: true,
-        category: { companyId: user.companyId },
-        ...(categoryId ? { categoryId } : {}),
-        ...(q
-          ? {
-              OR: [
-                { name: { contains: q, mode: "insensitive" } },
-                { description: { contains: q, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ category: { sortOrder: "asc" } }, { sortOrder: "asc" }, { name: "asc" }],
-      include: { category: { select: { id: true, name: true, slug: true } } },
+    const items = await listItems({
+      companyId: user.companyId,
+      q: q ?? undefined,
+      categoryId,
+      type: type ?? undefined,
+      activeOnly,
     });
 
     return NextResponse.json(items);
@@ -36,9 +30,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    if (!canManagePriceBook(user.role as UserRole)) return forbiddenResponse();
 
     const body = await request.json();
     if (!body.categoryId || !body.name) {
@@ -50,54 +42,39 @@ export async function POST(request: NextRequest) {
     });
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
+    const type = (body.type ?? category.type) as PriceBookItemType;
     const item = await prisma.priceBookItem.create({
       data: {
         categoryId: body.categoryId,
+        type,
         name: String(body.name),
         description: body.description ?? null,
+        sku: body.sku ?? null,
         unitPrice: Number(body.unitPrice ?? 0),
+        unitCost: body.unitCost != null ? Number(body.unitCost) : null,
         unit: body.unit ?? "each",
+        taxable: Boolean(body.taxable),
+        markupEnabled: Boolean(body.markupEnabled),
+        laborRate: body.laborRate != null ? Number(body.laborRate) : null,
+        laborHours: body.laborHours != null ? Number(body.laborHours) : null,
+        trackMaterials: Boolean(body.trackMaterials),
         active: body.active ?? true,
         sortOrder: body.sortOrder ?? 0,
       },
-      include: { category: { select: { id: true, name: true, slug: true } } },
     });
 
-    return NextResponse.json(item, { status: 201 });
-  } catch {
-    return unauthorizedResponse();
-  }
-}
-
-export async function PATCH(request: NextRequest) {
-  try {
-    const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (type === "SERVICE" && Array.isArray(body.materials)) {
+      await upsertItemMaterials(
+        item.id,
+        body.materials.map((m: { materialItemId: string; quantity?: number }) => ({
+          materialItemId: m.materialItemId,
+          quantity: Number(m.quantity ?? 1),
+        }))
+      );
     }
 
-    const body = await request.json();
-    if (!body.id) return badRequestResponse("id is required");
-
-    const existing = await prisma.priceBookItem.findFirst({
-      where: { id: body.id, category: { companyId: user.companyId } },
-    });
-    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-    const item = await prisma.priceBookItem.update({
-      where: { id: body.id },
-      data: {
-        ...(body.name !== undefined ? { name: String(body.name) } : {}),
-        ...(body.description !== undefined ? { description: body.description } : {}),
-        ...(body.unitPrice !== undefined ? { unitPrice: Number(body.unitPrice) } : {}),
-        ...(body.unit !== undefined ? { unit: String(body.unit) } : {}),
-        ...(body.active !== undefined ? { active: Boolean(body.active) } : {}),
-        ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) } : {}),
-      },
-      include: { category: { select: { id: true, name: true, slug: true } } },
-    });
-
-    return NextResponse.json(item);
+    const full = await getItem(user.companyId, item.id);
+    return NextResponse.json(full, { status: 201 });
   } catch {
     return unauthorizedResponse();
   }

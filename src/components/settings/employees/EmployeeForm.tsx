@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropFileName, setCropFileName] = useState("photo.jpg");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!employee) {
@@ -109,6 +113,18 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         ? prev.serviceAreaIds.filter((id) => id !== areaId)
         : [...prev.serviceAreaIds, areaId],
     }));
+  }
+
+  function handlePhotoSelected(file: File) {
+    const objectUrl = URL.createObjectURL(file);
+    setCropFileName(file.name);
+    setCropImageSrc(objectUrl);
+  }
+
+  function closeCropDialog() {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc);
+    setCropImageSrc(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handlePhotoUpload(file: File) {
@@ -198,12 +214,13 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         <div>
           <label className="text-sm font-medium">Photo</label>
           <Input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             disabled={uploading}
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handlePhotoUpload(file);
+              if (file) handlePhotoSelected(file);
             }}
           />
         </div>
@@ -319,6 +336,16 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           Cancel
         </Button>
       </div>
+
+      <ImageCropDialog
+        open={Boolean(cropImageSrc)}
+        imageSrc={cropImageSrc}
+        fileName={cropFileName}
+        title="Adjust employee photo"
+        cropShape="round"
+        onClose={closeCropDialog}
+        onConfirm={handlePhotoUpload}
+      />
     </form>
   );
 }

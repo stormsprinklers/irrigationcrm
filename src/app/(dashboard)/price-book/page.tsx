@@ -1,10 +1,14 @@
-import { PriceBookContent } from "@/components/price-book/PriceBookContent";
+import { PriceBookHub } from "@/components/price-book/PriceBookHub";
 import { ContentArea } from "@/components/layout/ContentArea";
 
 export default function PriceBookPage() {
   return (
     <ContentArea>
-      <PriceBookContent />
+      <PriceBookHub
+        type="SERVICE"
+        title="Services"
+        breadcrumb={["Price book", "Services"]}
+      />
     </ContentArea>
   );
 }

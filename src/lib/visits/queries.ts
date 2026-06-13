@@ -4,8 +4,10 @@ import { sumDiscounts, sumLineItems } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
 
 export const visitInclude = {
-  customer: { select: { id: true, name: true, phone: true, email: true } },
-  property: { select: { id: true, name: true, address: true } },
+  customer: {
+    select: { id: true, name: true, phone: true, email: true, address: true, city: true, state: true, zip: true },
+  },
+  property: { select: { id: true, name: true, address: true, city: true, state: true, zip: true } },
   serviceArea: { select: { id: true, name: true, color: true } },
   assignedUser: { select: { id: true, name: true, color: true, photoUrl: true } },
   crew: { select: { id: true, name: true, color: true } },

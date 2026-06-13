@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrolled }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [templates, setTemplates] = useState<MaintenancePlanTemplateDTO[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const [templateId, setTemplateId] = useState("");
@@ -32,20 +34,27 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
 
   const loadTemplates = useCallback(async () => {
     const res = await fetch("/api/maintenance-plans/templates");
-    if (res.ok) {
-      const data = await res.json();
-      setTemplates((data.templates ?? []).filter((t: MaintenancePlanTemplateDTO) => t.active));
+    if (!res.ok) {
+      throw new Error("Failed to load templates");
     }
+    const data = await res.json();
+    setTemplates((data.templates ?? []).filter((t: MaintenancePlanTemplateDTO) => t.active));
   }, []);
 
   useEffect(() => {
-    if (open) {
-      loadTemplates().catch(() => toast.error("Failed to load templates"));
-      if (properties.length > 0 && !propertyId) {
-        setPropertyId(properties.find((p) => p.isPrimary)?.id ?? properties[0].id);
-      }
-    }
-  }, [open, loadTemplates, properties, propertyId]);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setTemplateId("");
+    setSelectedAddonIds([]);
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setPropertyId(properties.find((p) => p.isPrimary)?.id ?? properties[0]?.id ?? "");
+
+    loadTemplates().catch(() => toast.error("Failed to load plan templates"));
+  }, [open, properties, loadTemplates]);
 
   useEffect(() => {
     if (selectedTemplate) {
@@ -54,8 +63,6 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
       setSelectedAddonIds([]);
     }
   }, [selectedTemplate]);
-
-  if (!open) return null;
 
   function toggleAddon(id: string) {
     setSelectedAddonIds((prev) =>
@@ -102,9 +109,17 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg">
+  if (!open || !mounted) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="mb-4 text-lg font-semibold">Enroll in maintenance plan</h2>
         <form onSubmit={submit} className="space-y-4">
           <div>
@@ -139,6 +154,11 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
                 </option>
               ))}
             </select>
+            {templates.length === 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No active plan templates. Create one under Maintenance Plans first.
+              </p>
+            )}
           </div>
 
           {selectedTemplate && (
@@ -198,12 +218,13 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || templates.length === 0}>
               {submitting ? "Enrolling..." : "Enroll"}
             </Button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

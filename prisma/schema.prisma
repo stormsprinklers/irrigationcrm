@@ -177,6 +177,11 @@ enum SmartControllerStatus {
   ERROR
 }
 
+enum PriceBookItemType {
+  SERVICE
+  MATERIAL
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
@@ -607,38 +612,68 @@ model Discount {
 }
 
 model PriceBookCategory {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   companyId String
+  type      PriceBookItemType @default(SERVICE)
   name      String
   slug      String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  parentId  String?
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
-  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items   PriceBookItem[]
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent   PriceBookCategory?  @relation("PriceBookCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children PriceBookCategory[] @relation("PriceBookCategoryTree")
+  items    PriceBookItem[]
 
   @@unique([companyId, slug])
-  @@index([companyId, sortOrder])
+  @@index([companyId, type, sortOrder])
+  @@index([parentId])
 }
 
 model PriceBookItem {
-  id          String   @id @default(cuid())
-  categoryId  String
-  name        String
-  description String?
-  unitPrice   Decimal  @db.Decimal(10, 2)
-  unit        String   @default("each")
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String            @id @default(cuid())
+  categoryId     String
+  type           PriceBookItemType @default(SERVICE)
+  name           String
+  description    String?
+  sku            String?
+  unitPrice      Decimal           @db.Decimal(10, 2)
+  unitCost       Decimal?          @db.Decimal(10, 2)
+  unit           String            @default("each")
+  taxable        Boolean           @default(false)
+  markupEnabled  Boolean           @default(false)
+  laborRate      Decimal?          @db.Decimal(10, 2)
+  laborHours     Decimal?          @db.Decimal(10, 3)
+  trackMaterials Boolean           @default(false)
+  active         Boolean           @default(true)
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  category           PriceBookCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  visitLineItems     VisitLineItem[]
-  estimateLineItems  EstimateLineItem[]
+  category          PriceBookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  serviceMaterials  PriceBookServiceMaterial[] @relation("ServiceItemMaterials")
+  usedInServices    PriceBookServiceMaterial[] @relation("MaterialInServices")
+  visitLineItems    VisitLineItem[]
+  estimateLineItems EstimateLineItem[]
 
   @@index([categoryId, active])
+  @@index([type, active])
+  @@index([sku])
+}
+
+model PriceBookServiceMaterial {
+  id             String  @id @default(cuid())
+  serviceItemId  String
+  materialItemId String
+  quantity       Decimal @default(1) @db.Decimal(10, 3)
+
+  serviceItem  PriceBookItem @relation("ServiceItemMaterials", fields: [serviceItemId], references: [id], onDelete: Cascade)
+  materialItem PriceBookItem @relation("MaterialInServices", fields: [materialItemId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceItemId, materialItemId])
+  @@index([materialItemId])
 }
 
 model Estimate {

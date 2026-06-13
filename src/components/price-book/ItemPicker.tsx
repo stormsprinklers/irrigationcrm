@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
@@ -102,9 +103,11 @@ export function ItemPicker({ open, onClose, onSelect, categoryId }: Props) {
               >
                 <div>
                   <p className="font-medium">{item.name}</p>
-                  {item.category ? (
-                    <p className="text-xs text-muted-foreground">{item.category.name}</p>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {item.category ? <span>{item.category.name}</span> : null}
+                    <Badge variant="outline">{item.type === "MATERIAL" ? "Material" : "Service"}</Badge>
+                    {item.sku ? <span>SKU {item.sku}</span> : null}
+                  </div>
                   {item.description ? (
                     <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                       {item.description}

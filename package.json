@@ -35,6 +35,7 @@
     "prisma": "5.22.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-easy-crop": "^6.0.2",
     "sonner": "^2.0.5",
     "stripe": "^22.2.1",
     "tailwind-merge": "^3.3.1",

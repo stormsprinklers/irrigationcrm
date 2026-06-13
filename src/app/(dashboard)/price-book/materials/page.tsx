@@ -1,5 +1,14 @@
-import { PlaceholderPage } from "@/components/layout/PlaceholderPage";
+import { PriceBookHub } from "@/components/price-book/PriceBookHub";
+import { ContentArea } from "@/components/layout/ContentArea";
 
-export default function PriceBookPlaceholderPage() {
-  return <PlaceholderPage breadcrumb={["Price book"]} title="Price book section" />;
+export default function PriceBookMaterialsPage() {
+  return (
+    <ContentArea>
+      <PriceBookHub
+        type="MATERIAL"
+        title="Materials"
+        breadcrumb={["Price book", "Materials"]}
+      />
+    </ContentArea>
+  );
 }
