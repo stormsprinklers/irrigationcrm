@@ -38,8 +38,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const updated = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(updated);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Visit time tracking error:", error);
+    return NextResponse.json({ error: "Failed to update time tracking" }, { status: 500 });
   }
 }
 
@@ -53,7 +57,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
       include: { user: { select: { id: true, name: true } } },
     });
     return NextResponse.json(events);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Visit time events error:", error);
+    return NextResponse.json({ error: "Failed to load time events" }, { status: 500 });
   }
 }

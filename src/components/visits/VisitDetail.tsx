@@ -124,7 +124,8 @@ export function VisitDetail({ visitId }: Props) {
         body: JSON.stringify({ type }),
       });
       if (!res.ok) {
-        toast.error("Failed to update time tracking");
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to update time tracking");
         return;
       }
       const updated = await res.json();

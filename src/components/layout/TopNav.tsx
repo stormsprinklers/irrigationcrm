@@ -9,13 +9,13 @@ import {
   Grid3X3,
   MapPin,
   Phone,
-  Plus,
   Search,
   Settings,
 } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
 import { currentUser } from "@/lib/mock/user";
 import { cn } from "@/lib/utils";
+import { NewMenu } from "@/components/layout/NewMenu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,10 +66,7 @@ export function TopNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="dark" size="sm" className="rounded-full px-4">
-            <Plus className="h-4 w-4" />
-            New
-          </Button>
+          <NewMenu />
 
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />

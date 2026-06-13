@@ -51,7 +51,7 @@ function getDevAdminSession() {
 }
 
 async function tryEnsureDevAdminInDb() {
-  if (!process.env.DATABASE_URL) return;
+  if (!process.env.DATABASE_URL) return null;
 
   try {
     const passwordHash = await bcrypt.hash(TEMP_DEV_ADMIN.password, 10);
@@ -63,7 +63,7 @@ async function tryEnsureDevAdminInDb() {
         name: "Storm Sprinklers",
       },
     });
-    await prisma.user.upsert({
+    return await prisma.user.upsert({
       where: { email: TEMP_DEV_ADMIN.email },
       update: { passwordHash, role: "ADMIN", status: "ACTIVE" },
       create: {
@@ -77,6 +77,19 @@ async function tryEnsureDevAdminInDb() {
     });
   } catch {
     // DB not ready yet — dev login still works without it
+    return null;
+  }
+}
+
+async function resolveDevAdminFromDb() {
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    return await prisma.user.findUnique({
+      where: { email: TEMP_DEV_ADMIN.email },
+      select: { id: true, email: true, name: true, companyId: true, role: true },
+    });
+  } catch {
+    return null;
   }
 }
 
@@ -94,7 +107,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = String(credentials.password);
 
         if (email === TEMP_DEV_ADMIN.email && password === TEMP_DEV_ADMIN.password) {
-          void tryEnsureDevAdminInDb();
+          await tryEnsureDevAdminInDb();
+          const dbUser = await resolveDevAdminFromDb();
+          if (dbUser) {
+            return {
+              id: dbUser.id,
+              email: dbUser.email,
+              name: dbUser.name,
+              companyId: dbUser.companyId,
+              role: dbUser.role,
+            };
+          }
           return getDevAdminSession();
         }
 
@@ -129,6 +152,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.companyId = user.companyId;
         token.role = user.role;
+      } else if (token.id === TEMP_DEV_ADMIN.id) {
+        const dbUser = await resolveDevAdminFromDb();
+        if (dbUser) {
+          token.id = dbUser.id;
+          token.companyId = dbUser.companyId;
+          token.role = dbUser.role;
+        }
       }
       return token;
     },
