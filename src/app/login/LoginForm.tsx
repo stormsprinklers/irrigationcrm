@@ -1,14 +1,13 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
   const [email, setEmail] = useState("admin@stormsprinklers.com");
@@ -21,21 +20,31 @@ export default function LoginForm() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email: email.trim().toLowerCase(),
+        password,
+        redirect: false,
+      });
 
-    setLoading(false);
+      if (!result) {
+        setError("Sign in failed. Check that the dev server is running.");
+        return;
+      }
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      return;
+      if (result.error || !result.ok) {
+        setError("Invalid email or password");
+        return;
+      }
+
+      // Hard navigation ensures middleware picks up the new session cookie
+      window.location.assign(callbackUrl);
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Sign in failed. Try again or restart the dev server.");
+    } finally {
+      setLoading(false);
     }
-
-    router.push(callbackUrl);
-    router.refresh();
   }
 
   return (
@@ -44,6 +53,9 @@ export default function LoginForm() {
         <CardHeader>
           <CardTitle className="text-2xl">Storm Sprinklers CRM</CardTitle>
           <p className="text-sm text-muted-foreground">Sign in to continue</p>
+          <p className="text-xs text-muted-foreground">
+            Dev login: admin@stormsprinklers.com / Test123
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -56,6 +68,7 @@ export default function LoginForm() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
                 required
               />
             </div>
@@ -68,6 +81,7 @@ export default function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
             </div>
