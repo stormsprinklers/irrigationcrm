@@ -3,6 +3,7 @@ import { TimeEventType, VisitStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { getVisitForCompany } from "@/lib/visits/queries";
+import { completeMaintenancePlanVisit } from "@/lib/maintenance-plans/discounts";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,6 +35,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     const newStatus = STATUS_MAP[type];
     if (newStatus) {
       await prisma.visit.update({ where: { id }, data: { status: newStatus } });
+      if (newStatus === "COMPLETED") {
+        await completeMaintenancePlanVisit(id);
+      }
     }
 
     const updated = await getVisitForCompany(user.companyId, id);

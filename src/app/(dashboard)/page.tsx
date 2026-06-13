@@ -1,5 +1,6 @@
 import { ContentArea } from "@/components/layout/ContentArea";
 import { KpiStrip } from "@/components/home/KpiStrip";
+import { MaintenancePlansHomeCard } from "@/components/home/MaintenancePlansHomeCard";
 import { SummaryCard } from "@/components/home/SummaryCard";
 import { homeKpis } from "@/lib/mock/home-kpis";
 import { homeSummaryCards } from "@/lib/mock/home-summary";
@@ -13,9 +14,12 @@ export default function HomePage() {
       </h1>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {homeSummaryCards.map((card) => (
-          <SummaryCard key={card.title} data={card} />
-        ))}
+        {homeSummaryCards
+          .filter((card) => card.title !== "Maintenance Plans")
+          .map((card) => (
+            <SummaryCard key={card.title} data={card} />
+          ))}
+        <MaintenancePlansHomeCard />
       </div>
 
       <KpiStrip metrics={homeKpis} />

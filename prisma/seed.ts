@@ -549,6 +549,68 @@ async function main() {
     }
   }
 
+  const existingTemplate = await prisma.maintenancePlanTemplate.findFirst({
+    where: { companyId: company.id, name: "Storm Shield" },
+  });
+  if (!existingTemplate) {
+    await prisma.maintenancePlanTemplate.create({
+      data: {
+        companyId: company.id,
+        name: "Storm Shield",
+        description: "Annual lawn sprinkler maintenance plan with seasonal tune-ups and winterization.",
+        termsText:
+          "Storm Shield includes spring activation, summer tune-up, and fall winterization. Waived service and emergency fees, priority scheduling, and 5-year parts & labor warranty when maintained by Storm Sprinklers.",
+        basePrice: 379,
+        active: true,
+        durationType: "FIXED_TERM",
+        durationYears: 1,
+        allowedBillingFrequencies: ["ANNUAL", "MONTHLY", "QUARTERLY"],
+        autoRenewDefault: true,
+        cancellationFeeType: "NONE",
+        cancellationNoticeDays: 30,
+        benefits: [
+          "Waived service & emergency fees",
+          "Priority scheduling",
+          "5-year parts & labor warranty",
+          "Spring system activation",
+          "Summer system checkup",
+          "Fall system winterization",
+        ],
+        visitTemplates: {
+          create: [
+            {
+              name: "Spring Activation",
+              season: "SPRING",
+              defaultMonth: 3,
+              visitTitle: "Spring system activation",
+              description: "Startup, zone check, controller programming",
+              estimatedMinutes: 90,
+              sortOrder: 0,
+            },
+            {
+              name: "Summer Tune-up",
+              season: "SUMMER",
+              defaultMonth: 7,
+              visitTitle: "Summer system checkup",
+              description: "Coverage check, nozzle adjustment, mid-season tune-up",
+              estimatedMinutes: 60,
+              sortOrder: 1,
+            },
+            {
+              name: "Fall Winterization",
+              season: "FALL",
+              defaultMonth: 10,
+              visitTitle: "Fall system winterization",
+              description: "Blow out lines and winterize system",
+              estimatedMinutes: 90,
+              sortOrder: 2,
+            },
+          ],
+        },
+      },
+    });
+  }
+
   console.log("Seed complete. Dev login: admin@stormsprinklers.com / Test123");
 }
 

@@ -18,13 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
+import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrrigationPanel";
+import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 
 type Props = { customerId: string };
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
-}
 
 export function CustomerProfile({ customerId }: Props) {
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
@@ -38,16 +38,19 @@ export function CustomerProfile({ customerId }: Props) {
   const [invoices, setInvoices] = useState<
     Array<{ id: string; invoiceNumber: string; status: string; total: number; createdAt: string }>
   >([]);
+  const [enrollments, setEnrollments] = useState<EnrollmentDTO[]>([]);
+  const [enrollOpen, setEnrollOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: "", address: "", city: "", state: "", zip: "" });
 
   const load = useCallback(async () => {
-    const [customerRes, propertiesRes, estimatesRes, invoicesRes] = await Promise.all([
+    const [customerRes, propertiesRes, estimatesRes, invoicesRes, enrollmentsRes] = await Promise.all([
       fetch(`/api/customers/${customerId}`),
       fetch(`/api/customers/${customerId}/properties`),
       fetch(`/api/estimates?customerId=${customerId}`),
       fetch(`/api/invoices?customerId=${customerId}`),
+      fetch(`/api/maintenance-plans/enrollments?customerId=${customerId}`),
     ]);
 
     if (customerRes.ok) setCustomer(await customerRes.json());
@@ -59,6 +62,10 @@ export function CustomerProfile({ customerId }: Props) {
     if (invoicesRes.ok) {
       const data = await invoicesRes.json();
       setInvoices(data.invoices ?? []);
+    }
+    if (enrollmentsRes.ok) {
+      const data = await enrollmentsRes.json();
+      setEnrollments(data.enrollments ?? []);
     }
 
     const now = new Date();
@@ -176,6 +183,7 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -433,7 +441,68 @@ export function CustomerProfile({ customerId }: Props) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setEnrollOpen(true)} disabled={properties.length === 0}>
+              <Plus className="h-4 w-4" />
+              Enroll in plan
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="pt-6">
+              {enrollments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No maintenance plan enrollments.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Property</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Billing</TableHead>
+                      <TableHead>Price</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enrollments.map((enrollment) => (
+                      <TableRow key={enrollment.id}>
+                        <TableCell>
+                          <Link
+                            href={`/maintenance-plans/enrollments/${enrollment.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {enrollment.template.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell>{enrollment.property.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{enrollment.status.replace(/_/g, " ")}</Badge>
+                        </TableCell>
+                        <TableCell>{BILLING_FREQUENCY_LABELS[enrollment.billingFrequency]}</TableCell>
+                        <TableCell>{formatCurrency(enrollment.template.basePrice)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {enrollments.some((e) => e.status === "ACTIVE") && (
+            <SmartIrrigationPanel compact />
+          )}
+        </TabsContent>
       </Tabs>
+
+      <EnrollPlanModal
+        customerId={customerId}
+        properties={properties}
+        open={enrollOpen}
+        onClose={() => setEnrollOpen(false)}
+        onEnrolled={load}
+      />
     </div>
   );
 }

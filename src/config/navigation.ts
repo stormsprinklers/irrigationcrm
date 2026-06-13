@@ -117,6 +117,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Customer Portal", href: "/settings/customer-portal" },
       { label: "Estimates", href: "/settings/estimates" },
       { label: "Invoices", href: "/settings/invoices" },
+      { label: "Maintenance", href: "/settings/maintenance" },
     ],
   },
 ];

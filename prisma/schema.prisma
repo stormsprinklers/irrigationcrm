@@ -107,6 +107,76 @@ enum PaymentMethod {
   OTHER
 }
 
+enum BillingFrequency {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+  MULTI_YEAR_UPFRONT
+}
+
+enum PlanDurationType {
+  FIXED_TERM
+  UNTIL_CANCELLED
+}
+
+enum EnrollmentStatus {
+  DRAFT
+  SENT
+  ACTIVE
+  PENDING_RENEWAL
+  RENEWED
+  EXPIRING_SOON
+  EXPIRED
+  CANCELLED
+}
+
+enum PlanVisitSeason {
+  SPRING
+  SUMMER
+  FALL
+  CUSTOM
+}
+
+enum PlanVisitStatus {
+  UNSCHEDULED
+  SCHEDULED
+  COMPLETED
+  SKIPPED
+  OVERDUE
+}
+
+enum BillingPeriodStatus {
+  PENDING
+  DUE
+  PAID
+  FAILED
+  CANCELLED
+  WAIVED
+}
+
+enum CancellationFeeType {
+  NONE
+  FIXED
+  PERCENT
+}
+
+enum PlanDiscountAppliesTo {
+  PLAN_PRICE
+  VISIT_LABOR
+  ALL_JOBS
+}
+
+enum SmartControllerProvider {
+  RACHIO
+  HYDRAWISE
+}
+
+enum SmartControllerStatus {
+  DISCONNECTED
+  CONNECTED
+  ERROR
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
@@ -136,7 +206,8 @@ model Company {
   priceBookCategories PriceBookCategory[]
   estimates         Estimate[]
   invoices          Invoice[]
-  maintenancePlans  MaintenancePlan[]
+  maintenancePlans  MaintenancePlanTemplate[]
+  maintenanceEnrollments MaintenancePlanEnrollment[]
 }
 
 model User {
@@ -186,19 +257,21 @@ model Customer {
   city        String?
   state       String?
   zip         String?
-  leadSource  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  leadSource       String?
+  stripeCustomerId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  blockedEntry  BlockedContact?
-  callLogs      CallLog[]
-  conversations Conversation[]
-  emailMessages EmailMessage[]
-  properties    CustomerProperty[]
-  visits        Visit[]
-  estimates     Estimate[]
-  invoices      Invoice[]
+  company              Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  blockedEntry         BlockedContact?
+  callLogs             CallLog[]
+  conversations        Conversation[]
+  emailMessages        EmailMessage[]
+  properties           CustomerProperty[]
+  visits               Visit[]
+  estimates            Estimate[]
+  invoices             Invoice[]
+  maintenanceEnrollments MaintenancePlanEnrollment[]
 }
 
 model CustomerProperty {
@@ -218,7 +291,8 @@ model CustomerProperty {
   customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   visits           Visit[]
   estimates        Estimate[]
-  maintenancePlans PropertyMaintenancePlan[]
+  maintenancePlans MaintenancePlanEnrollment[]
+  smartControllers PropertySmartController[]
 
   @@index([companyId, customerId])
 }
@@ -432,15 +506,17 @@ model Visit {
   city           String?
   state          String?
   zip            String?
+  maintenancePlanVisitId String?     @unique
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
-  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer     Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  property     CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  serviceArea  ServiceArea       @relation(fields: [serviceAreaId], references: [id])
-  assignedUser User?             @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  crew         Crew?             @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer             Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  property             CustomerProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  serviceArea          ServiceArea             @relation(fields: [serviceAreaId], references: [id])
+  assignedUser         User?                   @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  crew                 Crew?                   @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  maintenancePlanVisit MaintenancePlanVisit?   @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
   timeEvents   VisitTimeEvent[]
   lineItems    VisitLineItem[]
   notes        VisitNote[]
@@ -668,6 +744,7 @@ model Invoice {
   estimate  Estimate?         @relation(fields: [estimateId], references: [id], onDelete: SetNull)
   lineItems InvoiceLineItem[]
   payments  Payment[]
+  maintenanceBillingPeriods MaintenancePlanBillingPeriod[]
 
   @@unique([companyId, invoiceNumber])
   @@index([companyId, status])
@@ -704,31 +781,169 @@ model Payment {
   @@index([invoiceId])
 }
 
-model MaintenancePlan {
-  id          String   @id @default(cuid())
-  companyId   String
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model MaintenancePlanTemplate {
+  id                       String             @id @default(cuid())
+  companyId                String
+  name                     String
+  description              String?
+  termsText                String?
+  termsHtml                String?
+  basePrice                Decimal            @db.Decimal(10, 2)
+  active                   Boolean            @default(true)
+  durationType             PlanDurationType   @default(FIXED_TERM)
+  durationYears            Int?
+  allowedBillingFrequencies BillingFrequency[] @default([ANNUAL])
+  autoRenewDefault         Boolean            @default(true)
+  cancellationFeeType      CancellationFeeType @default(NONE)
+  cancellationFeeAmount    Decimal?           @db.Decimal(10, 2)
+  cancellationNoticeDays   Int                @default(0)
+  benefits                 String[]           @default([])
+  stripeProductId          String?
+  stripePriceIds           Json?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
 
-  company    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  properties PropertyMaintenancePlan[]
+  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  visitTemplates MaintenancePlanVisitTemplate[]
+  addons       MaintenancePlanAddon[]
+  discounts    MaintenancePlanDiscount[]
+  enrollments  MaintenancePlanEnrollment[]
 
-  @@index([companyId])
+  @@index([companyId, active])
+  @@map("MaintenancePlan")
 }
 
-model PropertyMaintenancePlan {
-  id         String   @id @default(cuid())
-  propertyId String
-  planId     String
-  startDate  DateTime @default(now())
-  active     Boolean  @default(true)
+model MaintenancePlanVisitTemplate {
+  id               String          @id @default(cuid())
+  templateId       String
+  name             String
+  season           PlanVisitSeason @default(CUSTOM)
+  defaultMonth     Int
+  visitTitle       String
+  description      String?
+  estimatedMinutes Int             @default(60)
+  sortOrder        Int             @default(0)
+
+  template     MaintenancePlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  planVisits   MaintenancePlanVisit[]
+
+  @@index([templateId, sortOrder])
+}
+
+model MaintenancePlanAddon {
+  id          String  @id @default(cuid())
+  templateId  String
+  name        String
+  description String?
+  price       Decimal @db.Decimal(10, 2)
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  template MaintenancePlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model MaintenancePlanDiscount {
+  id         String                @id @default(cuid())
+  templateId String
+  label      String?
+  type       DiscountType
+  amount     Decimal               @db.Decimal(10, 2)
+  appliesTo  PlanDiscountAppliesTo @default(ALL_JOBS)
+
+  template MaintenancePlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model MaintenancePlanEnrollment {
+  id                      String            @id @default(cuid())
+  companyId               String
+  customerId              String
+  propertyId              String
+  templateId              String
+  status                  EnrollmentStatus  @default(DRAFT)
+  billingFrequency        BillingFrequency  @default(ANNUAL)
+  startDate               DateTime          @default(now())
+  endDate                 DateTime?
+  nextBillingDate         DateTime?
+  renewalDate             DateTime?
+  autoRenew               Boolean           @default(true)
+  acceptedAt              DateTime?
+  cancelledAt             DateTime?
+  cancellationReason      String?
+  cancellationFeeCharged  Decimal?          @db.Decimal(10, 2)
+  stripeCustomerId        String?
+  stripeSubscriptionId    String?
+  stripePaymentMethodId   String?
+  selectedAddonIds        String[]          @default([])
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property     CustomerProperty              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  template     MaintenancePlanTemplate       @relation(fields: [templateId], references: [id])
+  planVisits   MaintenancePlanVisit[]
+  billingPeriods MaintenancePlanBillingPeriod[]
+
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([propertyId])
+  @@map("PropertyMaintenancePlan")
+}
+
+model MaintenancePlanVisit {
+  id              String          @id @default(cuid())
+  enrollmentId    String
+  visitTemplateId String?
+  dueYear         Int
+  dueMonth        Int
+  status          PlanVisitStatus @default(UNSCHEDULED)
+  completedAt     DateTime?
+  notes           String?
+
+  enrollment    MaintenancePlanEnrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  visitTemplate MaintenancePlanVisitTemplate? @relation(fields: [visitTemplateId], references: [id], onDelete: SetNull)
+  visit         Visit?
+
+  @@index([enrollmentId, dueYear, dueMonth])
+  @@index([status])
+}
+
+model MaintenancePlanBillingPeriod {
+  id                    String              @id @default(cuid())
+  enrollmentId          String
+  periodStart           DateTime
+  periodEnd             DateTime
+  amount                Decimal             @db.Decimal(10, 2)
+  status                BillingPeriodStatus @default(PENDING)
+  dueDate               DateTime
+  paidAt                DateTime?
+  invoiceId             String?
+  stripePaymentIntentId  String?
+
+  enrollment MaintenancePlanEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  invoice    Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId, dueDate])
+  @@index([status])
+}
+
+model PropertySmartController {
+  id                String                  @id @default(cuid())
+  propertyId        String
+  provider          SmartControllerProvider
+  externalDeviceId  String?
+  externalAccountId String?
+  status            SmartControllerStatus   @default(DISCONNECTED)
+  lastSyncedAt      DateTime?
+  metadata          Json?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  plan     MaintenancePlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
 
-  @@unique([propertyId, planId])
+  @@index([propertyId])
 }

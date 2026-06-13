@@ -1,11 +1,39 @@
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { recordMaintenanceInvoicePayment } from "@/lib/maintenance-plans/discounts";
 import { sendEmail } from "@/lib/inbox/sendgrid";
 import { sendSms } from "@/lib/inbox/twilio";
 import { toNumber } from "@/lib/visits/totals";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+type InvoiceWithSubscription = Stripe.Invoice & {
+  subscription?: string | Stripe.Subscription | null;
+  payment_intent?: string | Stripe.PaymentIntent | null;
+  parent?: {
+    subscription_details?: {
+      subscription?: string | Stripe.Subscription | null;
+    };
+  };
+};
+
+function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
+  const inv = invoice as InvoiceWithSubscription;
+  if (typeof inv.subscription === "string") return inv.subscription;
+  if (inv.subscription && typeof inv.subscription === "object") return inv.subscription.id;
+  const parentSub = inv.parent?.subscription_details?.subscription;
+  if (typeof parentSub === "string") return parentSub;
+  if (parentSub && typeof parentSub === "object") return parentSub.id;
+  return null;
+}
+
+function getPaymentIntentIdFromInvoice(invoice: Stripe.Invoice): string | null {
+  const inv = invoice as InvoiceWithSubscription;
+  if (typeof inv.payment_intent === "string") return inv.payment_intent;
+  if (inv.payment_intent && typeof inv.payment_intent === "object") return inv.payment_intent.id;
+  return null;
 }
 
 async function sendPaymentReceipt(params: {
@@ -106,5 +134,94 @@ export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Se
     invoiceNumber: invoice.invoiceNumber,
     amount,
     publicToken: invoice.publicToken,
+  });
+}
+
+export async function handleInvoicePaid(invoice: Stripe.Invoice) {
+  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
+  if (!subscriptionId) return;
+
+  const enrollment = await prisma.maintenancePlanEnrollment.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+  });
+  if (!enrollment) return;
+
+  const paymentIntentId = getPaymentIntentIdFromInvoice(invoice);
+
+  const amount = (invoice.amount_paid ?? 0) / 100;
+  if (amount <= 0) return;
+
+  const period = await prisma.maintenancePlanBillingPeriod.findFirst({
+    where: {
+      enrollmentId: enrollment.id,
+      status: { in: ["DUE", "FAILED", "PENDING"] },
+    },
+    orderBy: { dueDate: "asc" },
+  });
+
+  if (period) {
+    const existing = paymentIntentId
+      ? await prisma.maintenancePlanBillingPeriod.findFirst({
+          where: { stripePaymentIntentId: paymentIntentId },
+        })
+      : null;
+    if (existing) return;
+
+    await recordMaintenanceInvoicePayment({
+      companyId: enrollment.companyId,
+      customerId: enrollment.customerId,
+      enrollmentId: enrollment.id,
+      billingPeriodId: period.id,
+      amount,
+      stripePaymentIntentId: paymentIntentId,
+    });
+  }
+
+  await prisma.maintenancePlanEnrollment.update({
+    where: { id: enrollment.id },
+    data: {
+      nextBillingDate: invoice.lines?.data[0]?.period?.end
+        ? new Date(invoice.lines.data[0].period.end * 1000)
+        : undefined,
+    },
+  });
+}
+
+export async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
+  if (!subscriptionId) return;
+
+  const enrollment = await prisma.maintenancePlanEnrollment.findFirst({
+    where: { stripeSubscriptionId: subscriptionId },
+  });
+  if (!enrollment) return;
+
+  await prisma.maintenancePlanBillingPeriod.updateMany({
+    where: {
+      enrollmentId: enrollment.id,
+      status: { in: ["DUE", "PENDING"] },
+    },
+    data: { status: "FAILED" },
+  });
+}
+
+export async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  const periodEnd = subscription.items?.data[0]?.current_period_end;
+  await prisma.maintenancePlanEnrollment.updateMany({
+    where: { stripeSubscriptionId: subscription.id },
+    data: {
+      nextBillingDate: periodEnd ? new Date(periodEnd * 1000) : undefined,
+    },
+  });
+}
+
+export async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  await prisma.maintenancePlanEnrollment.updateMany({
+    where: { stripeSubscriptionId: subscription.id, status: { not: "CANCELLED" } },
+    data: {
+      status: "CANCELLED",
+      cancelledAt: new Date(),
+      cancellationReason: "Stripe subscription cancelled",
+    },
   });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleCheckoutSessionCompleted } from "@/lib/stripe/webhooks";
+import { handleCheckoutSessionCompleted, handleInvoicePaid, handleInvoicePaymentFailed, handleSubscriptionDeleted, handleSubscriptionUpdated } from "@/lib/stripe/webhooks";
 import { getStripeClient } from "@/lib/stripe/client";
 
 export async function POST(request: NextRequest) {
@@ -24,6 +24,22 @@ export async function POST(request: NextRequest) {
 
   if (event.type === "checkout.session.completed") {
     await handleCheckoutSessionCompleted(event.data.object);
+  }
+
+  if (event.type === "invoice.paid") {
+    await handleInvoicePaid(event.data.object);
+  }
+
+  if (event.type === "invoice.payment_failed") {
+    await handleInvoicePaymentFailed(event.data.object);
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    await handleSubscriptionDeleted(event.data.object);
+  }
+
+  if (event.type === "customer.subscription.updated") {
+    await handleSubscriptionUpdated(event.data.object);
   }
 
   return NextResponse.json({ received: true });
