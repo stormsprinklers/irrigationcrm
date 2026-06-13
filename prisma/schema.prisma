@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CSR
+  TECH
+}
+
+enum Scope {
+  EXTERNAL
+  INTERNAL
+}
+
+enum Channel {
+  SMS
+  INTERNAL_CHAT
+  EMAIL
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum EmailFolder {
+  INBOX
+  SENT
+  DRAFT
+  ARCHIVE
+  SPAM
+  TRASH
+}
+
+model Company {
+  id                    String   @id @default(cuid())
+  name                  String
+  twilioPhone           String?
+  sendgridFrom          String?
+  sendgridInboundDomain String?
+  recordCalls           Boolean  @default(true)
+  transcribeCalls       Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  users            User[]
+  customers        Customer[]
+  blockedContacts  BlockedContact[]
+  callLogs         CallLog[]
+  conversations    Conversation[]
+  emailMessages    EmailMessage[]
+  internalGroups   InternalGroup[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  email        String   @unique
+  passwordHash String?
+  phone        String?
+  role         UserRole @default(CSR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callLogs           CallLog[]
+  sentMessages       Message[]
+  emailMessages      EmailMessage[]
+  blockedContacts    BlockedContact[]     @relation("BlockedByUser")
+  groupMemberships   InternalGroupMember[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  phone     String?
+  email     String?
+  companyName String?
+  address   String?
+  city      String?
+  state     String?
+  zip       String?
+  leadSource String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  blockedEntry  BlockedContact?
+  callLogs      CallLog[]
+  conversations Conversation[]
+  emailMessages EmailMessage[]
+}
+
+model BlockedContact {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String?  @unique
+  phone      String?
+  email      String?
+  blockedAt  DateTime @default(now())
+  blockedBy  String
+  reason     String?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User      @relation("BlockedByUser", fields: [blockedBy], references: [id])
+
+  @@index([companyId, phone])
+  @@index([companyId, email])
+}
+
+model CallLog {
+  id            String        @id @default(cuid())
+  companyId     String
+  scope         Scope
+  direction     CallDirection
+  fromNumber    String
+  toNumber      String
+  customerId    String?
+  userId        String?
+  twilioCallSid String        @unique
+  status        String
+  durationSec   Int?
+  recordingUrl  String?
+  transcript    String?
+  startedAt     DateTime      @default(now())
+  endedAt       DateTime?
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, scope, startedAt])
+}
+
+model Conversation {
+  id               String   @id @default(cuid())
+  companyId        String
+  channel          Channel
+  scope            Scope
+  customerId       String?
+  participantPhone String?
+  title            String?
+  lastMessageAt    DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([companyId, channel, scope, lastMessageAt])
+}
+
+model Message {
+  id               String           @id @default(cuid())
+  conversationId   String
+  senderId         String?
+  direction        MessageDirection
+  body             String
+  twilioMessageSid String?          @unique
+  sentAt           DateTime         @default(now())
+  readAt           DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, sentAt])
+}
+
+model EmailMessage {
+  id         String      @id @default(cuid())
+  companyId  String
+  scope      Scope
+  folder     EmailFolder @default(INBOX)
+  fromEmail  String
+  toEmails   String[]
+  ccEmails   String[]    @default([])
+  subject    String
+  bodyHtml   String?
+  bodyText   String?
+  customerId String?
+  userId     String?
+  sendgridId String?
+  threadId   String?
+  isRead     Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, scope, folder, createdAt])
+}
+
+model InternalGroup {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  createdAt DateTime @default(now())
+
+  company Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members InternalGroupMember[]
+}
+
+model InternalGroupMember {
+  id      String @id @default(cuid())
+  groupId String
+  userId  String
+
+  group InternalGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}

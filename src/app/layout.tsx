@@ -1,5 +1,6 @@
 import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
+import Providers from "@/components/providers/SessionProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        {children}
+        <Providers>{children}</Providers>
         <Toaster position="bottom-center" />
       </body>
     </html>

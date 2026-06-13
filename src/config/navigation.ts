@@ -34,21 +34,24 @@ export const customersSidebar: NavSection[] = [
 
 export const inboxSidebar: NavSection[] = [
   {
-    title: "CHATS",
+    title: "VOICE",
     items: [
-      { label: "All comms", href: "/inbox" },
-      { label: "Customers", href: "/inbox/customers" },
-      { label: "Employees", href: "/inbox/employees" },
-      { label: "AI team", href: "/inbox/ai-team" },
-      { label: "Job inbox", href: "/inbox/job-inbox" },
+      { label: "Customers", href: "/inbox/voice/customers" },
+      { label: "Team", href: "/inbox/voice/team" },
     ],
   },
   {
-    title: "CALLS",
+    title: "SMS",
     items: [
-      { label: "Overview", href: "/inbox/calls" },
-      { label: "Voice call log", href: "/inbox/voice-call-log" },
-      { label: "HCP Assist", href: "/inbox/hcp-assist", badge: "Add on" },
+      { label: "Customers", href: "/inbox/sms/customers" },
+      { label: "Team", href: "/inbox/sms/team" },
+    ],
+  },
+  {
+    title: "EMAIL",
+    items: [
+      { label: "Customers", href: "/inbox/email/customers" },
+      { label: "Team", href: "/inbox/email/team" },
     ],
   },
 ];
@@ -130,4 +133,8 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/settings") return pathname.startsWith("/settings");
   return pathname.startsWith(href);
+}
+
+export function getInboxSectionActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
