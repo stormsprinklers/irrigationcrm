@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,7 +188,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-white p-4">
       <div className="flex items-center gap-4">
         <Avatar className="h-16 w-16 ring-2" style={{ outlineColor: form.color }}>
-          {form.photoUrl ? <AvatarImage src={form.photoUrl} alt={form.name} /> : null}
+          {form.photoUrl ? (
+            <AvatarImage src={blobProxyUrl(form.photoUrl)} alt={form.name} />
+          ) : null}
           <AvatarFallback style={{ backgroundColor: form.color, color: "#fff" }}>
             {initials || "?"}
           </AvatarFallback>

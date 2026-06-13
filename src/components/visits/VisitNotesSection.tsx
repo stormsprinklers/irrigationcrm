@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Note = {
   id: string;
@@ -79,7 +80,7 @@ export function VisitNotesSection({ visitId, notes, onUpdated }: Props) {
               <div key={note.id} className="flex gap-3 rounded-md border p-3">
                 <Avatar className="h-8 w-8">
                   {note.author.photoUrl ? (
-                    <AvatarImage src={note.author.photoUrl} alt={note.author.name} />
+                    <AvatarImage src={blobProxyUrl(note.author.photoUrl)} alt={note.author.name} />
                   ) : null}
                   <AvatarFallback
                     style={{ backgroundColor: note.author.color ?? "#64748B", color: "#fff" }}

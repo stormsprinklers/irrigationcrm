@@ -1,30 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { canManageEmployees } from "@/lib/employees";
 
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-function getBlobToken() {
-  return process.env.BLOB_READ_WRITE_TOKEN;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canManageEmployees(user.role)) return forbiddenResponse();
-
-    const token = getBlobToken();
-    if (!token) {
-      return NextResponse.json(
-        {
-          error:
-            "Blob storage is not configured. In Vercel: Storage → Blob → Connect to this project (or add BLOB_READ_WRITE_TOKEN under Settings → Environment Variables), then redeploy.",
-        },
-        { status: 503 }
-      );
-    }
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -42,16 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const blob = await put(
+    const blob = await uploadPrivateBlob(
       `employees/${user.companyId}/${Date.now()}-${safeName}`,
       file,
-      {
-        access: "public",
-        token,
-      }
+      { contentType: file.type }
     );
 
-    return NextResponse.json({ url: blob.url });
+    return NextResponse.json({ url: blob.url, pathname: blob.pathname });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

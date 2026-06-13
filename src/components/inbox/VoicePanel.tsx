@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import type { InboxScope } from "@/lib/inbox/types";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Employee = {
   id: string;
@@ -33,14 +34,26 @@ type CallDetail = {
 export function VoicePanel({
   scope,
   selectedCallId,
+  initialPhone,
+  initialCustomerId,
+  initialName,
 }: {
   scope: InboxScope;
   selectedCallId: string | null;
+  initialPhone?: string | null;
+  initialCustomerId?: string | null;
+  initialName?: string | null;
 }) {
   const [phone, setPhone] = useState("");
   const [calling, setCalling] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [callDetail, setCallDetail] = useState<CallDetail | null>(null);
+
+  useEffect(() => {
+    if (initialPhone && !selectedCallId) {
+      setPhone(initialPhone);
+    }
+  }, [initialPhone, selectedCallId]);
 
   useEffect(() => {
     if (scope === "team") {
@@ -127,7 +140,9 @@ export function VoicePanel({
               <li key={emp.id} className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-9 w-9">
-                    {emp.photoUrl ? <AvatarImage src={emp.photoUrl} alt={emp.name} /> : null}
+                    {emp.photoUrl ? (
+                      <AvatarImage src={blobProxyUrl(emp.photoUrl)} alt={emp.name} />
+                    ) : null}
                     <AvatarFallback
                       style={{ backgroundColor: emp.color ?? "#64748B", color: "#fff" }}
                       className="text-xs"
@@ -166,8 +181,12 @@ export function VoicePanel({
 
   return (
     <div className="flex h-full flex-col p-6">
-      <h3 className="text-lg font-semibold">Dialer</h3>
-      <p className="mb-4 text-sm text-muted-foreground">Call a customer by number</p>
+      <h3 className="text-lg font-semibold">
+        {initialName ? `Call ${initialName}` : "Dialer"}
+      </h3>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Place a VoIP call through Storm Sprinklers
+      </p>
       <Input
         placeholder="(801) 555-0123"
         value={phone}
@@ -191,7 +210,7 @@ export function VoicePanel({
         <Button
           className="flex-1"
           disabled={!phone || calling}
-          onClick={() => handleCall(phone)}
+          onClick={() => handleCall(phone, initialCustomerId ?? undefined)}
         >
           <Phone className="h-4 w-4" />
           Call

@@ -5,6 +5,7 @@ import { FileText, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Attachment = {
   id: string;
@@ -94,7 +95,7 @@ export function VisitAttachmentsSection({ visitId, attachments, onUpdated }: Pro
                 className="flex items-center justify-between rounded-md border p-3"
               >
                 <a
-                  href={attachment.blobUrl}
+                  href={blobProxyUrl(attachment.blobUrl) ?? attachment.blobUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-sm hover:underline"

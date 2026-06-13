@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PenSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
@@ -22,15 +23,43 @@ export function InboxChannelView({
   scope: string;
 }) {
   const parsed = parseInboxRoute(channel, scope);
+  const searchParams = useSearchParams();
+  const deepLink = useMemo(
+    () => ({
+      customerId: searchParams.get("customerId"),
+      phone: searchParams.get("phone"),
+      email: searchParams.get("email"),
+      name: searchParams.get("name"),
+    }),
+    [searchParams]
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [emailFolder, setEmailFolder] = useState("INBOX");
   const [refreshKey, setRefreshKey] = useState(0);
 
-  if (!parsed) {
+  const ch = parsed?.channel;
+  const sc = parsed?.scope;
+
+  useEffect(() => {
+    if (!ch || !sc) return;
+    if (ch !== "sms" || sc !== "customers") return;
+    if (!deepLink.customerId && !deepLink.phone) return;
+
+    const params = new URLSearchParams();
+    if (deepLink.customerId) params.set("customerId", deepLink.customerId);
+    if (deepLink.phone) params.set("phone", deepLink.phone);
+
+    fetch(`/api/inbox/sms/conversations/resolve?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.conversation?.id) setSelectedId(data.conversation.id);
+      })
+      .catch(() => {});
+  }, [ch, sc, deepLink.customerId, deepLink.phone]);
+
+  if (!parsed || !ch || !sc) {
     return <div className="p-6">Invalid inbox route</div>;
   }
-
-  const { channel: ch, scope: sc } = parsed;
 
   if (ch === "sms") {
     return (
@@ -44,7 +73,15 @@ export function InboxChannelView({
             onSelect={setSelectedId}
           />
         }
-        detail={<SmsMessagePane conversationId={selectedId} scope={sc} />}
+        detail={
+          <SmsMessagePane
+            conversationId={selectedId}
+            scope={sc}
+            initialPhone={deepLink.phone}
+            initialCustomerId={deepLink.customerId}
+            initialName={deepLink.name}
+          />
+        }
       />
     );
   }
@@ -61,7 +98,15 @@ export function InboxChannelView({
             onSelect={setSelectedId}
           />
         }
-        detail={<VoicePanel scope={sc} selectedCallId={selectedId} />}
+        detail={
+          <VoicePanel
+            scope={sc}
+            selectedCallId={selectedId}
+            initialPhone={deepLink.phone}
+            initialCustomerId={deepLink.customerId}
+            initialName={deepLink.name}
+          />
+        }
       />
     );
   }
@@ -93,6 +138,9 @@ export function InboxChannelView({
           emailId={selectedId}
           scope={sc}
           onSent={() => setRefreshKey((k) => k + 1)}
+          initialTo={deepLink.email}
+          initialCustomerId={deepLink.customerId}
+          initialName={deepLink.name}
         />
       }
     />

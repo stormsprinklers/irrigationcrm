@@ -1,7 +1,12 @@
+"use client";
+
+import Link from "next/link";
 import { Mail, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 
 type Customer = {
+  id: string;
   name: string;
   phone: string | null;
   email: string | null;
@@ -20,7 +25,12 @@ export function CustomerContactBar({ customer }: Props) {
     );
   }
 
-  const phoneDigits = customer.phone?.replace(/\D/g, "");
+  const linkParams = {
+    customerId: customer.id,
+    phone: customer.phone,
+    email: customer.email,
+    name: customer.name,
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
@@ -28,25 +38,25 @@ export function CustomerContactBar({ customer }: Props) {
       {customer.phone ? (
         <>
           <Button variant="outline" size="sm" asChild>
-            <a href={`tel:${customer.phone}`}>
+            <Link href={buildInboxCustomerUrl("voice", linkParams)}>
               <Phone className="h-4 w-4" />
               Call
-            </a>
+            </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href={`sms:${phoneDigits}`}>
+            <Link href={buildInboxCustomerUrl("sms", linkParams)}>
               <MessageSquare className="h-4 w-4" />
               Text
-            </a>
+            </Link>
           </Button>
         </>
       ) : null}
       {customer.email ? (
         <Button variant="outline" size="sm" asChild>
-          <a href={`mailto:${customer.email}`}>
+          <Link href={buildInboxCustomerUrl("email", linkParams)}>
             <Mail className="h-4 w-4" />
             Email
-          </a>
+          </Link>
         </Button>
       ) : null}
     </div>

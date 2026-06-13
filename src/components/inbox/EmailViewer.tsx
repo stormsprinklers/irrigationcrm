@@ -22,10 +22,16 @@ export function EmailViewer({
   emailId,
   scope,
   onSent,
+  initialTo,
+  initialCustomerId,
+  initialName,
 }: {
   emailId: string | null;
   scope: InboxScope;
   onSent?: () => void;
+  initialTo?: string | null;
+  initialCustomerId?: string | null;
+  initialName?: string | null;
 }) {
   const [compose, setCompose] = useState(!emailId);
   const [email, setEmail] = useState<EmailDetail | null>(null);
@@ -33,6 +39,13 @@ export function EmailViewer({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (!emailId && initialTo) {
+      setTo(initialTo);
+      setCompose(true);
+    }
+  }, [emailId, initialTo]);
 
   useEffect(() => {
     if (!emailId) {
@@ -68,6 +81,7 @@ export function EmailViewer({
         bodyText: body,
         scope: scope === "customers" ? "external" : "internal",
         saveAsDraft,
+        customerId: initialCustomerId ?? email?.customer?.id,
       }),
     });
     setSending(false);
@@ -87,7 +101,9 @@ export function EmailViewer({
   if (compose || !emailId) {
     return (
       <div className="flex h-full flex-col p-4">
-        <h3 className="mb-4 font-semibold">Compose email</h3>
+        <h3 className="mb-4 font-semibold">
+          {initialName ? `Email ${initialName}` : "Compose email"}
+        </h3>
         <Input placeholder="To" value={to} onChange={(e) => setTo(e.target.value)} className="mb-2" />
         <Input
           placeholder="Subject"

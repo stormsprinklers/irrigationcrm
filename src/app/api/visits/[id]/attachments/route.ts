@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -41,10 +41,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (file.size > MAX_SIZE) return badRequestResponse("File must be under 10MB");
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const blob = await put(`visits/${visit.companyId}/${id}/${Date.now()}-${safeName}`, file, {
-      access: "public",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
+    const blob = await uploadPrivateBlob(
+      `visits/${visit.companyId}/${id}/${Date.now()}-${safeName}`,
+      file,
+      { contentType: file.type }
+    );
 
     const attachment = await prisma.visitAttachment.create({
       data: {

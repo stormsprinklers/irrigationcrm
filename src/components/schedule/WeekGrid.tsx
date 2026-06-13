@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { jobCardStyle } from "@/lib/schedule/colors";
 import type { ColorByMode, ScheduleJobDTO } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 const SCHEDULE_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 const HOUR_HEIGHT = 56;
@@ -109,7 +110,9 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
                   <div className="mt-1 flex items-center gap-1">
                     {techs.slice(0, 4).map((tech) => (
                       <Avatar key={tech.id} className="h-5 w-5">
-                        {tech.photoUrl ? <AvatarImage src={tech.photoUrl} alt={tech.name} /> : null}
+                        {tech.photoUrl ? (
+                          <AvatarImage src={blobProxyUrl(tech.photoUrl)} alt={tech.name} />
+                        ) : null}
                         <AvatarFallback
                           className="text-[8px]"
                           style={{ backgroundColor: tech.color ?? "#64748B", color: "#fff" }}
@@ -195,7 +198,10 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
                         {job.assignedUser ? (
                           <Avatar className="h-4 w-4">
                             {job.assignedUser.photoUrl ? (
-                              <AvatarImage src={job.assignedUser.photoUrl} alt={job.assignedUser.name} />
+                              <AvatarImage
+                                src={blobProxyUrl(job.assignedUser.photoUrl)}
+                                alt={job.assignedUser.name}
+                              />
                             ) : null}
                             <AvatarFallback
                               className="text-[7px]"

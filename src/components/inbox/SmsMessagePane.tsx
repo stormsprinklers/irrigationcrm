@@ -28,15 +28,26 @@ type Conversation = {
 export function SmsMessagePane({
   conversationId,
   scope,
+  initialPhone,
+  initialCustomerId,
+  initialName,
 }: {
   conversationId: string | null;
   scope: InboxScope;
+  initialPhone?: string | null;
+  initialCustomerId?: string | null;
+  initialName?: string | null;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (conversationId || !initialPhone) return;
+    setTo(initialPhone);
+  }, [conversationId, initialPhone]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -72,7 +83,7 @@ export function SmsMessagePane({
       body: JSON.stringify({
         to: to || conversation?.participantPhone,
         body,
-        customerId: conversation?.customer?.id,
+        customerId: conversation?.customer?.id ?? initialCustomerId ?? undefined,
         scope: scope === "customers" ? "external" : "internal",
         title: conversation?.title,
       }),
@@ -92,7 +103,12 @@ export function SmsMessagePane({
     return (
       <div className="flex h-full flex-col">
         <div className="border-b border-border p-4">
-          <h3 className="font-semibold">New message</h3>
+          <h3 className="font-semibold">
+            {initialName ? `Message ${initialName}` : "New message"}
+          </h3>
+          {initialPhone ? (
+            <p className="text-xs text-muted-foreground">{initialPhone}</p>
+          ) : null}
         </div>
         <form onSubmit={handleSend} className="flex flex-1 flex-col p-4">
           {scope === "customers" && (

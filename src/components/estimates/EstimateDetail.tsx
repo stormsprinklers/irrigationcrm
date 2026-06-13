@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
 
 type EstimateData = {
@@ -551,7 +552,7 @@ export function EstimateDetail({ estimateId }: Props) {
                   {estimate.attachments.map((a) => (
                     <a
                       key={a.id}
-                      href={a.blobUrl}
+                      href={blobProxyUrl(a.blobUrl) ?? a.blobUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-2 rounded-md border p-3 text-sm hover:bg-muted/50"
@@ -594,7 +595,11 @@ export function EstimateDetail({ estimateId }: Props) {
               {estimate.signatureBlobUrl ? (
                 <div className="space-y-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={estimate.signatureBlobUrl} alt="Customer signature" className="max-w-full rounded border" />
+                  <img
+                    src={blobProxyUrl(estimate.signatureBlobUrl)}
+                    alt="Customer signature"
+                    className="max-w-full rounded border"
+                  />
                   {estimate.signedAt && (
                     <p className="text-xs text-muted-foreground">
                       Signed {format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")}

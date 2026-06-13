@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm, type EmployeeRecord } from "./EmployeeForm";
 import { CrewManager } from "./CrewManager";
 import { ROLE_LABELS } from "@/lib/employees";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
@@ -118,7 +119,9 @@ export function EmployeeList() {
                 <div key={employee.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 ring-2 ring-offset-1" style={{ outlineColor: employee.color ?? undefined }}>
-                      {employee.photoUrl ? <AvatarImage src={employee.photoUrl} alt={employee.name} /> : null}
+                      {employee.photoUrl ? (
+                        <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
+                      ) : null}
                       <AvatarFallback style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}>
                         {employee.name
                           .split(" ")

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -29,11 +29,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     const mimeType = mimeMatch?.[1] ?? "image/png";
     const buffer = Buffer.from(base64Data, "base64");
 
-    const blob = await put(`estimates/${estimate.companyId}/${id}/signature-${Date.now()}.png`, buffer, {
-      access: "public",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-      contentType: mimeType,
-    });
+    const blob = await uploadPrivateBlob(
+      `estimates/${estimate.companyId}/${id}/signature-${Date.now()}.png`,
+      buffer,
+      { contentType: mimeType }
+    );
 
     await prisma.estimate.update({
       where: { id },
