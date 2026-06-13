@@ -12,7 +12,7 @@ type ServiceArea = {
   slug: string;
   color: string;
   sortOrder: number;
-  _count: { zips: number; jobs: number };
+  _count: { zips: number; visits: number };
 };
 
 type ZipRecord = { id: string; zipCode: string };
@@ -138,7 +138,7 @@ export function ServiceAreaManager() {
             <div>
               <h3 className="font-semibold">{selected.name}</h3>
               <p className="text-sm text-muted-foreground">
-                {selected._count.zips} zip codes · {selected._count.jobs} jobs
+                {selected._count.zips} zip codes · {selected._count.visits} visits
               </p>
             </div>
             <div className="flex items-center gap-2">

@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const publicPaths = ["/login", "/api/auth", "/api/twilio", "/api/sendgrid"];
+const publicPaths = [
+  "/login",
+  "/api/auth",
+  "/api/twilio",
+  "/api/sendgrid",
+  "/api/stripe/webhook",
+  "/api/invoices/public",
+];
 
 const authSecret =
   process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "dev-only-secret-change-me";

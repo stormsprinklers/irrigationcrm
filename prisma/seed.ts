@@ -3,7 +3,8 @@ import {
   UserRole,
   Division,
   EmployeeStatus,
-  JobStatus,
+  VisitStatus,
+  EstimateStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -16,6 +17,16 @@ const SERVICE_AREAS = [
   { name: "Salt Lake County North", slug: "slc-county-north", color: "#16A34A", sortOrder: 3, zips: ["84101", "84102", "84103"] },
   { name: "Salt Lake County South", slug: "slc-county-south", color: "#EA580C", sortOrder: 4, zips: ["84070", "84094", "84020"] },
   { name: "Salt Lake County Central", slug: "slc-county-central", color: "#DB2777", sortOrder: 5, zips: ["84111", "84115", "84105"] },
+];
+
+const PRICE_BOOK_CATEGORIES = [
+  { slug: "backflow", name: "Backflow", items: [{ name: "Backflow test", unitPrice: 125 }, { name: "Backflow repair", unitPrice: 185 }] },
+  { slug: "stop-waste", name: "Stop & Waste", items: [{ name: "Stop & waste replacement", unitPrice: 275 }] },
+  { slug: "heads-nozzles", name: "Heads & Nozzles", items: [{ name: "Rotor head replacement", unitPrice: 95 }, { name: "Nozzle adjustment", unitPrice: 45 }] },
+  { slug: "leaks", name: "Leaks", items: [{ name: "Leak diagnosis", unitPrice: 89 }, { name: "Pipe repair", unitPrice: 150 }] },
+  { slug: "controllers", name: "Controllers", items: [{ name: "Controller programming", unitPrice: 75 }, { name: "Smart controller install", unitPrice: 450 }] },
+  { slug: "drip", name: "Drip", items: [{ name: "Drip line repair", unitPrice: 120 }] },
+  { slug: "other", name: "Other", items: [{ name: "Service call minimum", unitPrice: 89 }] },
 ];
 
 function startOfWeek(date: Date) {
@@ -32,7 +43,7 @@ function addDays(date: Date, days: number) {
   return d;
 }
 
-function jobTime(weekStart: Date, dayOffset: number, hour: number, minute = 0) {
+function visitTime(weekStart: Date, dayOffset: number, hour: number, minute = 0) {
   const d = addDays(weekStart, dayOffset);
   d.setHours(hour, minute, 0, 0);
   return d;
@@ -44,7 +55,10 @@ async function main() {
 
   const company = await prisma.company.upsert({
     where: { id: "seed-company" },
-    update: {},
+    update: {
+      estimateExpiryDays: 14,
+      estimateDepositRequired: false,
+    },
     create: {
       id: "seed-company",
       name: "Storm Sprinklers",
@@ -52,6 +66,7 @@ async function main() {
       sendgridFrom: process.env.SENDGRID_FROM_EMAIL ?? "support@stormsprinklers.com",
       recordCalls: true,
       transcribeCalls: true,
+      estimateExpiryDays: 14,
     },
   });
 
@@ -294,130 +309,243 @@ async function main() {
     }
   }
 
-  const weekStart = startOfWeek(new Date());
-  const existingJobs = await prisma.scheduledJob.count({ where: { companyId: company.id } });
+  const propertyRecords: Record<string, string> = {};
+  for (const customer of customerRecords) {
+    const existing = await prisma.customerProperty.findFirst({
+      where: { customerId: customer.id, isPrimary: true },
+    });
+    if (existing) {
+      propertyRecords[customer.id] = existing.id;
+    } else if (customer.address) {
+      const property = await prisma.customerProperty.create({
+        data: {
+          companyId: company.id,
+          customerId: customer.id,
+          name: "Primary",
+          address: customer.address,
+          city: customer.city,
+          state: customer.state,
+          zip: customer.zip,
+          isPrimary: true,
+        },
+      });
+      propertyRecords[customer.id] = property.id;
+    }
+  }
 
-  if (existingJobs === 0) {
-    const jobs = [
+  const priceBookItems: Record<string, string> = {};
+  for (let i = 0; i < PRICE_BOOK_CATEGORIES.length; i++) {
+    const cat = PRICE_BOOK_CATEGORIES[i];
+    const category = await prisma.priceBookCategory.upsert({
+      where: { companyId_slug: { companyId: company.id, slug: cat.slug } },
+      update: { name: cat.name, sortOrder: i },
+      create: {
+        companyId: company.id,
+        name: cat.name,
+        slug: cat.slug,
+        sortOrder: i,
+      },
+    });
+
+    for (let j = 0; j < cat.items.length; j++) {
+      const item = cat.items[j];
+      const existing = await prisma.priceBookItem.findFirst({
+        where: { categoryId: category.id, name: item.name },
+      });
+      if (existing) {
+        priceBookItems[item.name] = existing.id;
+      } else {
+        const created = await prisma.priceBookItem.create({
+          data: {
+            categoryId: category.id,
+            name: item.name,
+            unitPrice: item.unitPrice,
+            sortOrder: j,
+          },
+        });
+        priceBookItems[item.name] = created.id;
+      }
+    }
+  }
+
+  const weekStart = startOfWeek(new Date());
+  const existingVisits = await prisma.visit.count({ where: { companyId: company.id } });
+
+  if (existingVisits === 0) {
+    const visits = [
       {
         title: "Spring startup - Anderson",
-        startAt: jobTime(weekStart, 1, 8),
-        endAt: jobTime(weekStart, 1, 11),
+        startAt: visitTime(weekStart, 1, 8),
+        endAt: visitTime(weekStart, 1, 11),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["utah-county-north"],
         assignedUserId: mike.id,
         customerId: customerRecords[0]?.id,
+        propertyId: customerRecords[0] ? propertyRecords[customerRecords[0].id] : undefined,
         address: "1245 Maple Street",
         city: "Orem",
         state: "UT",
         zip: "84057",
-        estimatedValue: 450,
       },
       {
         title: "Backflow test - Chen",
-        startAt: jobTime(weekStart, 1, 9, 30),
-        endAt: jobTime(weekStart, 1, 11, 30),
+        startAt: visitTime(weekStart, 1, 9, 30),
+        endAt: visitTime(weekStart, 1, 11, 30),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["utah-county-central"],
         assignedUserId: mike.id,
         crewId: serviceCrew.id,
         customerId: customerRecords[1]?.id,
+        propertyId: customerRecords[1] ? propertyRecords[customerRecords[1].id] : undefined,
         address: "456 Business Park Dr",
         city: "Lehi",
         state: "UT",
         zip: "84043",
-        estimatedValue: 125,
       },
       {
         title: "New install - zone 4",
-        startAt: jobTime(weekStart, 2, 8),
-        endAt: jobTime(weekStart, 2, 12),
+        startAt: visitTime(weekStart, 2, 8),
+        endAt: visitTime(weekStart, 2, 12),
         division: Division.INSTALL,
         serviceAreaId: areaRecords["utah-county-central"],
         assignedUserId: jordan.id,
         crewId: installCrew.id,
-        estimatedValue: 3200,
       },
       {
         title: "Repair - Park residence",
-        startAt: jobTime(weekStart, 3, 10),
-        endAt: jobTime(weekStart, 3, 12),
+        startAt: visitTime(weekStart, 3, 10),
+        endAt: visitTime(weekStart, 3, 12),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["utah-county-south"],
         assignedUserId: mike.id,
         customerId: customerRecords[2]?.id,
+        propertyId: customerRecords[2] ? propertyRecords[customerRecords[2].id] : undefined,
         address: "789 Elm St",
         city: "Provo",
         state: "UT",
         zip: "84604",
-        estimatedValue: 275,
       },
       {
         title: "SLC commercial inspection",
-        startAt: jobTime(weekStart, 4, 8),
-        endAt: jobTime(weekStart, 4, 11),
+        startAt: visitTime(weekStart, 4, 8),
+        endAt: visitTime(weekStart, 4, 11),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["slc-county-north"],
         assignedUserId: mike.id,
-        estimatedValue: 600,
       },
       {
         title: "Install - drip conversion",
-        startAt: jobTime(weekStart, 4, 13),
-        endAt: jobTime(weekStart, 4, 16),
+        startAt: visitTime(weekStart, 4, 13),
+        endAt: visitTime(weekStart, 4, 16),
         division: Division.INSTALL,
         serviceAreaId: areaRecords["utah-county-north"],
         assignedUserId: jordan.id,
         crewId: installCrew.id,
-        estimatedValue: 1800,
       },
       {
         title: "Winterization prep",
-        startAt: jobTime(weekStart, 5, 9),
-        endAt: jobTime(weekStart, 5, 12),
+        startAt: visitTime(weekStart, 5, 9),
+        endAt: visitTime(weekStart, 5, 12),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["slc-county-south"],
         assignedUserId: mike.id,
-        estimatedValue: 350,
       },
       {
         title: "Controller upgrade",
-        startAt: jobTime(weekStart, 2, 13),
-        endAt: jobTime(weekStart, 2, 15),
+        startAt: visitTime(weekStart, 2, 13),
+        endAt: visitTime(weekStart, 2, 15),
         division: Division.INSTALL,
         serviceAreaId: areaRecords["slc-county-central"],
         assignedUserId: jordan.id,
-        estimatedValue: 890,
       },
       {
         title: "Midday service call",
-        startAt: jobTime(weekStart, 3, 14),
-        endAt: jobTime(weekStart, 3, 16),
+        startAt: visitTime(weekStart, 3, 14),
+        endAt: visitTime(weekStart, 3, 16),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["utah-county-north"],
         assignedUserId: mike.id,
-        estimatedValue: 195,
       },
       {
         title: "Estimate follow-up",
-        startAt: jobTime(weekStart, 5, 14),
-        endAt: jobTime(weekStart, 5, 15, 30),
+        startAt: visitTime(weekStart, 5, 14),
+        endAt: visitTime(weekStart, 5, 15, 30),
         division: Division.SERVICE,
         serviceAreaId: areaRecords["slc-county-central"],
         assignedUserId: austin.id,
-        status: JobStatus.SCHEDULED,
-        estimatedValue: 0,
+        status: VisitStatus.SCHEDULED,
       },
     ];
 
-    for (const job of jobs) {
-      await prisma.scheduledJob.create({
+    const createdVisits = [];
+    for (const visit of visits) {
+      createdVisits.push(
+        await prisma.visit.create({
+          data: {
+            companyId: company.id,
+            status: VisitStatus.SCHEDULED,
+            ...visit,
+          },
+        })
+      );
+    }
+
+    const backflowVisit = createdVisits[1];
+    if (backflowVisit && priceBookItems["Backflow test"]) {
+      await prisma.visitLineItem.create({
         data: {
-          companyId: company.id,
-          status: JobStatus.SCHEDULED,
-          ...job,
+          visitId: backflowVisit.id,
+          priceBookItemId: priceBookItems["Backflow test"],
+          name: "Backflow test",
+          quantity: 1,
+          unitPrice: 125,
+          total: 125,
         },
       });
+    }
+
+    const andersonCustomer = customerRecords[0];
+    if (andersonCustomer && propertyRecords[andersonCustomer.id]) {
+      const existingEstimate = await prisma.estimate.findFirst({
+        where: { companyId: company.id, customerId: andersonCustomer.id },
+      });
+      if (!existingEstimate) {
+        const estimate = await prisma.estimate.create({
+          data: {
+            companyId: company.id,
+            customerId: andersonCustomer.id,
+            propertyId: propertyRecords[andersonCustomer.id],
+            visitId: createdVisits[0]?.id,
+            status: EstimateStatus.DRAFT,
+            subtotal: 450,
+            total: 450,
+            lineItems: {
+              create: [
+                {
+                  name: "Spring startup service",
+                  quantity: 1,
+                  unitPrice: 350,
+                  total: 350,
+                  priceBookItemId: priceBookItems["Service call minimum"],
+                },
+                {
+                  name: "Zone inspection",
+                  quantity: 1,
+                  unitPrice: 100,
+                  total: 100,
+                },
+              ],
+            },
+          },
+        });
+        await prisma.estimateNote.create({
+          data: {
+            estimateId: estimate.id,
+            authorId: sarah.id,
+            body: "Customer requested quote before scheduling full startup.",
+          },
+        });
+      }
     }
   }
 

@@ -44,10 +44,10 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const existing = await prisma.serviceArea.findFirst({
       where: { id, companyId: user.companyId },
-      include: { _count: { select: { jobs: true } } },
+      include: { _count: { select: { visits: true } } },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (existing._count.jobs > 0) {
+    if (existing._count.visits > 0) {
       return badRequestResponse("Cannot delete area with scheduled jobs");
     }
 

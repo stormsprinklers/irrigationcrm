@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   ColumnDef,
   flexRender,
@@ -11,7 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { Customer } from "@/lib/mock/customers";
+import type { CustomerDTO } from "@/lib/customers/types";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -23,11 +24,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export function CustomerTable({ data }: { data: Customer[] }) {
+export function CustomerTable({ data }: { data: CustomerDTO[] }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
 
-  const columns = useMemo<ColumnDef<Customer>[]>(
+  const columns = useMemo<ColumnDef<CustomerDTO>[]>(
     () => [
       {
         id: "select",
@@ -62,21 +63,28 @@ export function CustomerTable({ data }: { data: Customer[] }) {
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => (
+          <Link href={`/customers/${row.original.id}`} className="font-medium text-primary hover:underline">
+            {row.original.name}
+          </Link>
+        ),
       },
       {
-        accessorKey: "company",
+        accessorKey: "companyName",
         header: "Company",
+        cell: ({ row }) => row.original.companyName ?? "—",
       },
       {
         id: "address",
         header: "Address",
         cell: ({ row }) => (
           <div className="text-sm">
-            <div>{row.original.address}</div>
-            <div className="text-muted-foreground">
-              {row.original.city}, {row.original.state} {row.original.zip}
-            </div>
+            <div>{row.original.address ?? "—"}</div>
+            {(row.original.city || row.original.state || row.original.zip) && (
+              <div className="text-muted-foreground">
+                {[row.original.city, row.original.state, row.original.zip].filter(Boolean).join(", ")}
+              </div>
+            )}
           </div>
         ),
       },
@@ -88,10 +96,11 @@ export function CustomerTable({ data }: { data: Customer[] }) {
             className="-ml-4 h-8"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Mobile ph...
+            Phone
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
+        cell: ({ row }) => row.original.phone ?? "—",
       },
       {
         accessorKey: "email",
@@ -105,10 +114,12 @@ export function CustomerTable({ data }: { data: Customer[] }) {
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
+        cell: ({ row }) => row.original.email ?? "—",
       },
       {
         accessorKey: "leadSource",
         header: "Lead source",
+        cell: ({ row }) => row.original.leadSource ?? "—",
       },
     ],
     []

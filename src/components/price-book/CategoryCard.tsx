@@ -1,10 +1,12 @@
-import type { PriceBookCategory } from "@/lib/mock/price-book-categories";
+import type { PriceBookCategoryDTO } from "@/lib/price-book/types";
+import { getCategoryIcon } from "@/lib/price-book/icons";
 import { MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-export function CategoryCard({ category }: { category: PriceBookCategory }) {
-  const Icon = category.icon;
+export function CategoryCard({ category }: { category: PriceBookCategoryDTO }) {
+  const Icon = getCategoryIcon(category.slug);
+  const itemCount = category._count?.items ?? 0;
 
   return (
     <Card className="group overflow-hidden transition-shadow hover:shadow-md">
@@ -13,7 +15,10 @@ export function CategoryCard({ category }: { category: PriceBookCategory }) {
           <Icon className="h-16 w-16 text-primary/70" strokeWidth={1.5} />
         </div>
         <div className="flex items-center justify-between p-3">
-          <span className="text-sm font-medium">{category.name}</span>
+          <div>
+            <span className="text-sm font-medium">{category.name}</span>
+            <p className="text-xs text-muted-foreground">{itemCount} item(s)</p>
+          </div>
           <Button
             variant="ghost"
             size="icon"

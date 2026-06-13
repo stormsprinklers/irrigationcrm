@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { format } from "date-fns";
 import { Wrench } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -173,10 +174,11 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
                     job.serviceArea.name;
 
                   return (
-                    <div
+                    <Link
                       key={job.id}
+                      href={`/visits/${job.id}`}
                       className={cn(
-                        "absolute z-10 overflow-hidden rounded border p-1.5 text-[10px] shadow-sm"
+                        "absolute z-10 block overflow-hidden rounded border p-1.5 text-[10px] shadow-sm transition-shadow hover:shadow-md"
                       )}
                       style={{
                         top: top + 2,
@@ -212,7 +214,7 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
                       <p className="text-muted-foreground">
                         {format(start, "h:mm")}-{format(end, "h:mma").toLowerCase()}
                       </p>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

@@ -1,5 +1,10 @@
-import { PlaceholderPage } from "@/components/layout/PlaceholderPage";
+import { Suspense } from "react";
+import CustomerEstimatesPageInner from "./CustomerEstimatesPageInner";
 
 export default function CustomerEstimatesPage() {
-  return <PlaceholderPage breadcrumb={["Customers", "Estimates"]} title="Estimates" />;
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Loading...</p>}>
+      <CustomerEstimatesPageInner />
+    </Suspense>
+  );
 }

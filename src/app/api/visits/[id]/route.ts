@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Division, VisitStatus } from "@prisma/client";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { prisma } from "@/lib/prisma";
+import { getVisitForCompany } from "@/lib/visits/queries";
+
+type Params = { params: Promise<{ id: string }> };
+
+export async function GET(_request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const visit = await getVisitForCompany(user.companyId, id);
+    if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json(visit);
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    if (user.role === "TECH") return forbiddenResponse();
+
+    const { id } = await params;
+    const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const body = await request.json();
+    await prisma.visit.update({
+      where: { id },
+      data: {
+        ...(body.title !== undefined ? { title: String(body.title) } : {}),
+        ...(body.startAt !== undefined ? { startAt: new Date(body.startAt) } : {}),
+        ...(body.endAt !== undefined ? { endAt: new Date(body.endAt) } : {}),
+        ...(body.division !== undefined ? { division: body.division as Division } : {}),
+        ...(body.status !== undefined ? { status: body.status as VisitStatus } : {}),
+        ...(body.propertyId !== undefined ? { propertyId: body.propertyId ?? null } : {}),
+        ...(body.customerId !== undefined ? { customerId: body.customerId ?? null } : {}),
+        ...(body.tags !== undefined ? { tags: Array.isArray(body.tags) ? body.tags : [] } : {}),
+        ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId ?? null } : {}),
+        ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
+      },
+    });
+
+    const visit = await getVisitForCompany(user.companyId, id);
+    return NextResponse.json(visit);
+  } catch {
+    return unauthorizedResponse();
+  }
+}

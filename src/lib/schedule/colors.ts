@@ -1,4 +1,4 @@
-import type { ColorByMode, ScheduleJobDTO } from "./types";
+import type { ColorByMode, ScheduleJobDTO } from "@/lib/visits/types";
 
 const DIVISION_COLORS: Record<string, string> = {
   INSTALL: "#059669",

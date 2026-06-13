@@ -9,7 +9,7 @@ export async function GET() {
     const areas = await prisma.serviceArea.findMany({
       where: { companyId: user.companyId },
       orderBy: { sortOrder: "asc" },
-      include: { _count: { select: { zips: true, jobs: true } } },
+      include: { _count: { select: { zips: true, visits: true } } },
     });
     return NextResponse.json(areas);
   } catch {

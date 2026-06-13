@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Division, JobStatus } from "@prisma/client";
+import { Division, VisitStatus } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
@@ -21,19 +21,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const startParam = searchParams.get("start");
     const endParam = searchParams.get("end");
-
-    if (!startParam || !endParam) {
-      return badRequestResponse("start and end query params are required");
-    }
+    if (!startParam || !endParam) return badRequestResponse("start and end query params are required");
 
     const start = new Date(startParam);
     const end = new Date(endParam);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return badRequestResponse("Invalid date range");
-    }
-
-    const filters = parseFilters(searchParams);
-    const jobs = await listScheduleJobs(user.companyId, start, end, filters);
+    const jobs = await listScheduleJobs(user.companyId, start, end, parseFilters(searchParams));
     return NextResponse.json(jobs);
   } catch {
     return unauthorizedResponse();
@@ -46,7 +38,7 @@ export async function POST(request: NextRequest) {
     if (user.role === "TECH") return forbiddenResponse();
 
     const body = await request.json();
-    const { title, startAt, endAt, division, serviceAreaId, assignedUserId, crewId, customerId, notes, address, city, state, zip, estimatedValue } = body;
+    const { title, startAt, endAt, division, serviceAreaId, assignedUserId, crewId, customerId, propertyId, tags, address, city, state, zip } = body;
 
     if (!title || !startAt || !endAt || !division) {
       return badRequestResponse("title, startAt, endAt, and division are required");
@@ -57,16 +49,9 @@ export async function POST(request: NextRequest) {
       const area = await resolveServiceAreaByZip(user.companyId, String(zip));
       resolvedServiceAreaId = area?.id;
     }
-    if (!resolvedServiceAreaId) {
-      return badRequestResponse("serviceAreaId or valid customer zip is required");
-    }
+    if (!resolvedServiceAreaId) return badRequestResponse("serviceAreaId or valid zip is required");
 
-    const area = await prisma.serviceArea.findFirst({
-      where: { id: resolvedServiceAreaId, companyId: user.companyId },
-    });
-    if (!area) return badRequestResponse("Invalid service area");
-
-    const job = await prisma.scheduledJob.create({
+    const visit = await prisma.visit.create({
       data: {
         companyId: user.companyId,
         title: String(title),
@@ -77,22 +62,20 @@ export async function POST(request: NextRequest) {
         assignedUserId: assignedUserId ?? null,
         crewId: crewId ?? null,
         customerId: customerId ?? null,
-        notes: notes ?? null,
+        propertyId: propertyId ?? null,
+        tags: Array.isArray(tags) ? tags : [],
         address: address ?? null,
         city: city ?? null,
         state: state ?? null,
         zip: zip ?? null,
-        estimatedValue: estimatedValue ?? null,
-        status: JobStatus.SCHEDULED,
+        status: VisitStatus.SCHEDULED,
       },
       include: jobInclude,
     });
 
-    return NextResponse.json(serializeJob(job), { status: 201 });
+    return NextResponse.json(serializeJob(visit), { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return unauthorizedResponse();
-    }
-    return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
+    if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
+    return NextResponse.json({ error: "Failed to create visit" }, { status: 500 });
   }
 }

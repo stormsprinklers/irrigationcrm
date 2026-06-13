@@ -14,7 +14,7 @@ export async function GET() {
         members: {
           include: { user: { select: { id: true, name: true, color: true, photoUrl: true } } },
         },
-        _count: { select: { jobs: true } },
+        _count: { select: { visits: true } },
       },
     });
     return NextResponse.json(crews);

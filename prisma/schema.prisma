@@ -54,35 +54,89 @@ enum EmployeeStatus {
   ARCHIVED
 }
 
-enum JobStatus {
+enum VisitStatus {
   UNSCHEDULED
   SCHEDULED
+  EN_ROUTE
   IN_PROGRESS
+  PAUSED
   COMPLETED
   CANCELLED
 }
 
-model Company {
-  id                    String   @id @default(cuid())
-  name                  String
-  twilioPhone           String?
-  sendgridFrom          String?
-  sendgridInboundDomain String?
-  recordCalls           Boolean  @default(true)
-  transcribeCalls       Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+enum TimeEventType {
+  EN_ROUTE
+  START
+  PAUSE
+  RESUME
+  FINISH
+}
 
-  users            User[]
-  customers        Customer[]
-  blockedContacts  BlockedContact[]
-  callLogs         CallLog[]
-  conversations    Conversation[]
-  emailMessages    EmailMessage[]
-  internalGroups   InternalGroup[]
-  serviceAreas     ServiceArea[]
-  crews            Crew[]
-  scheduledJobs    ScheduledJob[]
+enum EstimateStatus {
+  DRAFT
+  SENT
+  APPROVED
+  EXPIRED
+  DECLINED
+  CONVERTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIAL
+  REFUNDED
+  VOID
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum DepositType {
+  PERCENT
+  FIXED
+}
+
+enum PaymentMethod {
+  STRIPE
+  CASH
+  CHECK
+  OTHER
+}
+
+model Company {
+  id                       String   @id @default(cuid())
+  name                     String
+  twilioPhone              String?
+  sendgridFrom             String?
+  sendgridInboundDomain    String?
+  recordCalls              Boolean  @default(true)
+  transcribeCalls          Boolean  @default(true)
+  estimateExpiryDays       Int      @default(14)
+  estimateDepositRequired  Boolean  @default(false)
+  estimateDepositType      DepositType?
+  estimateDepositAmount    Decimal? @db.Decimal(10, 2)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  users             User[]
+  customers         Customer[]
+  blockedContacts   BlockedContact[]
+  callLogs          CallLog[]
+  conversations     Conversation[]
+  emailMessages     EmailMessage[]
+  internalGroups    InternalGroup[]
+  serviceAreas      ServiceArea[]
+  crews             Crew[]
+  visits            Visit[]
+  properties        CustomerProperty[]
+  priceBookCategories PriceBookCategory[]
+  estimates         Estimate[]
+  invoices          Invoice[]
+  maintenancePlans  MaintenancePlan[]
 }
 
 model User {
@@ -115,30 +169,58 @@ model User {
   groupMemberships   InternalGroupMember[]
   serviceAreas       UserServiceArea[]
   crewMemberships    CrewMember[]
-  assignedJobs       ScheduledJob[]       @relation("AssignedJobs")
+  assignedVisits     Visit[]              @relation("AssignedVisits")
+  visitTimeEvents    VisitTimeEvent[]
+  visitNotes         VisitNote[]
+  visitAttachments   VisitAttachment[]
 }
 
 model Customer {
-  id        String   @id @default(cuid())
-  companyId String
-  name      String
-  phone     String?
-  email     String?
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  phone       String?
+  email       String?
   companyName String?
-  address   String?
-  city      String?
-  state     String?
-  zip       String?
-  leadSource String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  address     String?
+  city        String?
+  state       String?
+  zip         String?
+  leadSource  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   blockedEntry  BlockedContact?
   callLogs      CallLog[]
   conversations Conversation[]
   emailMessages EmailMessage[]
-  scheduledJobs ScheduledJob[]
+  properties    CustomerProperty[]
+  visits        Visit[]
+  estimates     Estimate[]
+  invoices      Invoice[]
+}
+
+model CustomerProperty {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String
+  name       String
+  address    String?
+  city       String?
+  state      String?
+  zip        String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  visits           Visit[]
+  estimates        Estimate[]
+  maintenancePlans PropertyMaintenancePlan[]
+
+  @@index([companyId, customerId])
 }
 
 model BlockedContact {
@@ -277,7 +359,7 @@ model ServiceArea {
   company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   zips    ServiceAreaZip[]
   users   UserServiceArea[]
-  jobs    ScheduledJob[]
+  visits  Visit[]
 
   @@unique([companyId, slug])
   @@index([companyId, sortOrder])
@@ -316,7 +398,7 @@ model Crew {
 
   company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   members CrewMember[]
-  jobs    ScheduledJob[]
+  visits  Visit[]
 
   @@index([companyId])
 }
@@ -332,35 +414,321 @@ model CrewMember {
   @@unique([crewId, userId])
 }
 
-model ScheduledJob {
-  id              String    @id @default(cuid())
-  companyId       String
-  customerId      String?
-  title           String
-  startAt         DateTime
-  endAt           DateTime
-  division        Division
-  serviceAreaId   String
-  assignedUserId  String?
-  crewId          String?
-  status          JobStatus @default(SCHEDULED)
-  notes           String?
-  address         String?
-  city            String?
-  state           String?
-  zip             String?
-  estimatedValue  Decimal?  @db.Decimal(10, 2)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+model Visit {
+  id             String      @id @default(cuid())
+  companyId      String
+  customerId     String?
+  propertyId     String?
+  title          String
+  startAt        DateTime
+  endAt          DateTime
+  division       Division
+  serviceAreaId  String
+  assignedUserId String?
+  crewId         String?
+  status         VisitStatus @default(SCHEDULED)
+  tags           String[]    @default([])
+  address        String?
+  city           String?
+  state          String?
+  zip            String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
-  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer     Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  serviceArea  ServiceArea @relation(fields: [serviceAreaId], references: [id])
-  assignedUser User?       @relation("AssignedJobs", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  crew         Crew?       @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  property     CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  serviceArea  ServiceArea       @relation(fields: [serviceAreaId], references: [id])
+  assignedUser User?             @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  crew         Crew?             @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  timeEvents   VisitTimeEvent[]
+  lineItems    VisitLineItem[]
+  notes        VisitNote[]
+  attachments  VisitAttachment[]
+  discounts    Discount[]        @relation("VisitDiscounts")
+  estimates    Estimate[]
+  invoices     Invoice[]
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])
   @@index([assignedUserId])
   @@index([crewId])
+  @@index([customerId])
+  @@map("ScheduledJob")
+}
+
+model VisitTimeEvent {
+  id         String        @id @default(cuid())
+  visitId    String
+  userId     String
+  type       TimeEventType
+  occurredAt DateTime      @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([visitId, occurredAt])
+}
+
+model VisitLineItem {
+  id              String   @id @default(cuid())
+  visitId         String
+  priceBookItemId String?
+  name            String
+  description     String?
+  quantity        Decimal  @default(1) @db.Decimal(10, 2)
+  unitPrice       Decimal  @db.Decimal(10, 2)
+  total           Decimal  @db.Decimal(10, 2)
+  sortOrder       Int      @default(0)
+
+  visit         Visit          @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  priceBookItem PriceBookItem? @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
+
+  @@index([visitId])
+}
+
+model VisitNote {
+  id        String   @id @default(cuid())
+  visitId   String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  visit  Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([visitId, createdAt])
+}
+
+model VisitAttachment {
+  id           String   @id @default(cuid())
+  visitId      String
+  uploadedById String
+  blobUrl      String
+  fileName     String
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  visit      Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([visitId])
+}
+
+model Discount {
+  id         String       @id @default(cuid())
+  visitId    String?
+  estimateId String?
+  label      String?
+  type       DiscountType
+  amount     Decimal      @db.Decimal(10, 2)
+
+  visit    Visit?    @relation("VisitDiscounts", fields: [visitId], references: [id], onDelete: Cascade)
+  estimate Estimate? @relation("EstimateDiscounts", fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([visitId])
+  @@index([estimateId])
+}
+
+model PriceBookCategory {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   PriceBookItem[]
+
+  @@unique([companyId, slug])
+  @@index([companyId, sortOrder])
+}
+
+model PriceBookItem {
+  id          String   @id @default(cuid())
+  categoryId  String
+  name        String
+  description String?
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  unit        String   @default("each")
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category           PriceBookCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  visitLineItems     VisitLineItem[]
+  estimateLineItems  EstimateLineItem[]
+
+  @@index([categoryId, active])
+}
+
+model Estimate {
+  id              String         @id @default(cuid())
+  companyId       String
+  customerId      String
+  propertyId      String?
+  visitId         String?
+  status          EstimateStatus @default(DRAFT)
+  expiresAt       DateTime?
+  depositRequired Boolean        @default(false)
+  depositType     DepositType?
+  depositAmount   Decimal?       @db.Decimal(10, 2)
+  signatureBlobUrl String?
+  signedAt        DateTime?
+  approvedAt      DateTime?
+  subtotal        Decimal        @default(0) @db.Decimal(10, 2)
+  discountTotal   Decimal        @default(0) @db.Decimal(10, 2)
+  total           Decimal        @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property    CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  visit       Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  lineItems   EstimateLineItem[]
+  notes       EstimateNote[]
+  attachments EstimateAttachment[]
+  discounts   Discount[]        @relation("EstimateDiscounts")
+  invoices    Invoice[]
+
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([visitId])
+}
+
+model EstimateLineItem {
+  id              String  @id @default(cuid())
+  estimateId      String
+  priceBookItemId String?
+  name            String
+  description     String?
+  quantity        Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice       Decimal @db.Decimal(10, 2)
+  total           Decimal @db.Decimal(10, 2)
+  sortOrder       Int     @default(0)
+
+  estimate      Estimate       @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  priceBookItem PriceBookItem? @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
+
+  @@index([estimateId])
+}
+
+model EstimateNote {
+  id         String   @id @default(cuid())
+  estimateId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+
+  estimate Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId, createdAt])
+}
+
+model EstimateAttachment {
+  id         String   @id @default(cuid())
+  estimateId String
+  blobUrl    String
+  fileName   String
+  mimeType   String
+  createdAt  DateTime @default(now())
+
+  estimate Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model Invoice {
+  id                      String        @id @default(cuid())
+  companyId               String
+  customerId              String
+  visitId                 String?
+  estimateId              String?
+  invoiceNumber           String
+  status                  InvoiceStatus @default(DRAFT)
+  subtotal                Decimal       @default(0) @db.Decimal(10, 2)
+  discountTotal           Decimal       @default(0) @db.Decimal(10, 2)
+  tax                     Decimal       @default(0) @db.Decimal(10, 2)
+  total                   Decimal       @default(0) @db.Decimal(10, 2)
+  paidAt                  DateTime?
+  publicToken             String        @unique @default(cuid())
+  stripeCheckoutSessionId String?
+  stripePaymentIntentId   String?
+  sentAt                  DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer  Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  visit     Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  estimate  Estimate?         @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
+
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId, status])
+  @@index([customerId])
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  name        String
+  description String?
+  quantity    Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice   Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+  sortOrder   Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  invoiceId             String
+  amount                Decimal       @db.Decimal(10, 2)
+  method                PaymentMethod @default(STRIPE)
+  stripePaymentIntentId String?
+  stripeRefundId        String?
+  paidAt                DateTime      @default(now())
+  refundedAt            DateTime?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model MaintenancePlan {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company    Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  properties PropertyMaintenancePlan[]
+
+  @@index([companyId])
+}
+
+model PropertyMaintenancePlan {
+  id         String   @id @default(cuid())
+  propertyId String
+  planId     String
+  startDate  DateTime @default(now())
+  active     Boolean  @default(true)
+
+  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  plan     MaintenancePlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, planId])
 }

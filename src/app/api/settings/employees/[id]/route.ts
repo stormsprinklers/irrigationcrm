@@ -98,7 +98,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const existing = await prisma.user.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const futureJobs = await prisma.scheduledJob.count({
+    const futureJobs = await prisma.visit.count({
       where: {
         assignedUserId: id,
         startAt: { gt: new Date() },

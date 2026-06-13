@@ -6,14 +6,22 @@ import { canManageEmployees } from "@/lib/employees";
 const MAX_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+function getBlobToken() {
+  return process.env.BLOB_READ_WRITE_TOKEN;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canManageEmployees(user.role)) return forbiddenResponse();
 
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    const token = getBlobToken();
+    if (!token) {
       return NextResponse.json(
-        { error: "BLOB_READ_WRITE_TOKEN is not configured" },
+        {
+          error:
+            "Blob storage is not configured. In Vercel: Storage → Blob → Connect to this project (or add BLOB_READ_WRITE_TOKEN under Settings → Environment Variables), then redeploy.",
+        },
         { status: 503 }
       );
     }
@@ -33,16 +41,23 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("File must be under 5MB");
     }
 
-    const blob = await put(`employees/${user.companyId}/${Date.now()}-${file.name}`, file, {
-      access: "public",
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    });
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const blob = await put(
+      `employees/${user.companyId}/${Date.now()}-${safeName}`,
+      file,
+      {
+        access: "public",
+        token,
+      }
+    );
 
     return NextResponse.json({ url: blob.url });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    console.error("Employee photo upload failed:", error);
+    const message = error instanceof Error ? error.message : "Upload failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
