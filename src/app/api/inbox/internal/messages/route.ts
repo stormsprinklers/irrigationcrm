@@ -11,8 +11,17 @@ export async function GET(request: NextRequest) {
 
     if (scopeParam === "team") {
       const users = await prisma.user.findMany({
-        where: { companyId: user.companyId, NOT: { id: user.id } },
-        select: { id: true, name: true, email: true, phone: true, role: true },
+        where: { companyId: user.companyId, NOT: { id: user.id }, status: "ACTIVE" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          color: true,
+          photoUrl: true,
+          title: true,
+        },
         orderBy: { name: "asc" },
       });
       return NextResponse.json(users);

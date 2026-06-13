@@ -3,6 +3,9 @@ import { getToken } from "next-auth/jwt";
 
 const publicPaths = ["/login", "/api/auth", "/api/twilio", "/api/sendgrid"];
 
+const authSecret =
+  process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "dev-only-secret-change-me";
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -16,7 +19,7 @@ export async function middleware(request: NextRequest) {
 
   const token = await getToken({
     req: request,
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: authSecret,
   });
 
   if (!token) {

@@ -11,8 +11,8 @@ export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
-  const [email, setEmail] = useState("austin@stormsprinklers.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("admin@stormsprinklers.com");
+  const [password, setPassword] = useState("Test123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

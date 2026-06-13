@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/layout/PlaceholderPage";
+import { redirect } from "next/navigation";
 
 export default function SettingsTeamPage() {
-  return <PlaceholderPage breadcrumb={["Settings", "Team & Permissions"]} title="Team & Permissions" />;
+  redirect("/settings/employees");
 }

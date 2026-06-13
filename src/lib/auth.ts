@@ -28,6 +28,44 @@ declare module "@auth/core/jwt" {
   }
 }
 
+// TODO: Remove before production — temporary dev login while auth is being set up
+const TEMP_DEV_ADMIN = {
+  email: "admin@stormsprinklers.com",
+  password: "Test123",
+  name: "Dev Admin",
+  companyId: "seed-company",
+};
+
+async function ensureDevAdminUser() {
+  const passwordHash = await bcrypt.hash(TEMP_DEV_ADMIN.password, 10);
+
+  await prisma.company.upsert({
+    where: { id: TEMP_DEV_ADMIN.companyId },
+    update: {},
+    create: {
+      id: TEMP_DEV_ADMIN.companyId,
+      name: "Storm Sprinklers",
+    },
+  });
+
+  return prisma.user.upsert({
+    where: { email: TEMP_DEV_ADMIN.email },
+    update: {
+      passwordHash,
+      role: "ADMIN",
+      status: "ACTIVE",
+    },
+    create: {
+      email: TEMP_DEV_ADMIN.email,
+      name: TEMP_DEV_ADMIN.name,
+      passwordHash,
+      role: "ADMIN",
+      companyId: TEMP_DEV_ADMIN.companyId,
+      color: "#2563EB",
+    },
+  });
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
@@ -40,6 +78,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const email = String(credentials.email).toLowerCase();
         const password = String(credentials.password);
+
+        if (email === TEMP_DEV_ADMIN.email && password === TEMP_DEV_ADMIN.password) {
+          try {
+            const user = await ensureDevAdminUser();
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              companyId: user.companyId,
+              role: user.role,
+            };
+          } catch {
+            return {
+              id: "dev-admin-temp",
+              email: TEMP_DEV_ADMIN.email,
+              name: TEMP_DEV_ADMIN.name,
+              companyId: TEMP_DEV_ADMIN.companyId,
+              role: "ADMIN",
+            };
+          }
+        }
 
         const user = await prisma.user.findUnique({
           where: { email },
@@ -83,5 +142,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
   },
+  secret: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "dev-only-secret-change-me",
   trustHost: true,
 });

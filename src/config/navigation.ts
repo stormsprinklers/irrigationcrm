@@ -20,7 +20,7 @@ export const primaryNav: NavItem[] = [
   { label: "Settings", href: "/settings" },
 ];
 
-export const customersSidebar: NavSection[] = [
+export const customerSidebar: NavSection[] = [
   {
     items: [
       { label: "Customers", href: "/customers" },
@@ -103,11 +103,12 @@ export const settingsSidebar: NavSection[] = [
       { label: "Billing", href: "/settings/billing" },
       { label: "Notifications", href: "/settings/notifications" },
       { label: "Refer a Friend", href: "/settings/refer" },
-      { label: "Team & Permissions", href: "/settings/team" },
+      { label: "Employees", href: "/settings/employees" },
+      { label: "Service Areas", href: "/settings/service-areas" },
     ],
   },
   {
-    title: "FEATURE CONFIGURATIONS",
+    title: "FEATURE CONFIGURATION",
     items: [
       { label: "Booking", href: "/settings/booking" },
       { label: "Leads", href: "/settings/leads" },
@@ -122,7 +123,7 @@ export const settingsSidebar: NavSection[] = [
 
 export function isNavActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function getPrimaryNavActive(pathname: string, href: string) {
@@ -138,3 +139,5 @@ export function getPrimaryNavActive(pathname: string, href: string) {
 export function getInboxSectionActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
+
+export { customerSidebar as customersSidebar };

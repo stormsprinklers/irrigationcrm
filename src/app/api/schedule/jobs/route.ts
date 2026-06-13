@@ -1,0 +1,98 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Division, JobStatus } from "@prisma/client";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { prisma } from "@/lib/prisma";
+import { resolveServiceAreaByZip } from "@/lib/service-areas";
+import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
+import type { ScheduleFilters } from "@/lib/schedule/types";
+
+function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
+  return {
+    serviceAreaIds: searchParams.getAll("serviceAreaIds").filter(Boolean),
+    userIds: searchParams.getAll("userIds").filter(Boolean),
+    crewIds: searchParams.getAll("crewIds").filter(Boolean),
+    divisions: searchParams.getAll("divisions").filter(Boolean) as ("INSTALL" | "SERVICE")[],
+  };
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = await requireSessionUser();
+    const { searchParams } = request.nextUrl;
+    const startParam = searchParams.get("start");
+    const endParam = searchParams.get("end");
+
+    if (!startParam || !endParam) {
+      return badRequestResponse("start and end query params are required");
+    }
+
+    const start = new Date(startParam);
+    const end = new Date(endParam);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return badRequestResponse("Invalid date range");
+    }
+
+    const filters = parseFilters(searchParams);
+    const jobs = await listScheduleJobs(user.companyId, start, end, filters);
+    return NextResponse.json(jobs);
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await requireSessionUser();
+    if (user.role === "TECH") return forbiddenResponse();
+
+    const body = await request.json();
+    const { title, startAt, endAt, division, serviceAreaId, assignedUserId, crewId, customerId, notes, address, city, state, zip, estimatedValue } = body;
+
+    if (!title || !startAt || !endAt || !division) {
+      return badRequestResponse("title, startAt, endAt, and division are required");
+    }
+
+    let resolvedServiceAreaId = serviceAreaId;
+    if (!resolvedServiceAreaId && zip) {
+      const area = await resolveServiceAreaByZip(user.companyId, String(zip));
+      resolvedServiceAreaId = area?.id;
+    }
+    if (!resolvedServiceAreaId) {
+      return badRequestResponse("serviceAreaId or valid customer zip is required");
+    }
+
+    const area = await prisma.serviceArea.findFirst({
+      where: { id: resolvedServiceAreaId, companyId: user.companyId },
+    });
+    if (!area) return badRequestResponse("Invalid service area");
+
+    const job = await prisma.scheduledJob.create({
+      data: {
+        companyId: user.companyId,
+        title: String(title),
+        startAt: new Date(startAt),
+        endAt: new Date(endAt),
+        division: division as Division,
+        serviceAreaId: resolvedServiceAreaId,
+        assignedUserId: assignedUserId ?? null,
+        crewId: crewId ?? null,
+        customerId: customerId ?? null,
+        notes: notes ?? null,
+        address: address ?? null,
+        city: city ?? null,
+        state: state ?? null,
+        zip: zip ?? null,
+        estimatedValue: estimatedValue ?? null,
+        status: JobStatus.SCHEDULED,
+      },
+      include: jobInclude,
+    });
+
+    return NextResponse.json(serializeJob(job), { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
+  }
+}

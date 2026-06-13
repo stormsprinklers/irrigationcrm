@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { companyDescription, companyInfo } from "@/lib/mock/settings-company";
 import { cn } from "@/lib/utils";
 
-const profileTabs = ["Profile", "Business hours", "Service area"];
+const profileTabs = ["Profile", "Business hours"];
 
 export default function SettingsPage() {
   return (

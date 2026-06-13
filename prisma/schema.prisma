@@ -44,6 +44,24 @@ enum EmailFolder {
   TRASH
 }
 
+enum Division {
+  INSTALL
+  SERVICE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum JobStatus {
+  UNSCHEDULED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model Company {
   id                    String   @id @default(cuid())
   name                  String
@@ -62,18 +80,32 @@ model Company {
   conversations    Conversation[]
   emailMessages    EmailMessage[]
   internalGroups   InternalGroup[]
+  serviceAreas     ServiceArea[]
+  crews            Crew[]
+  scheduledJobs    ScheduledJob[]
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String         @id @default(cuid())
   companyId    String
   name         String
-  email        String   @unique
+  email        String         @unique
   passwordHash String?
   phone        String?
-  role         UserRole @default(CSR)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         UserRole       @default(CSR)
+  title        String?
+  status       EmployeeStatus @default(ACTIVE)
+  division     Division?
+  color        String?
+  photoUrl     String?
+  address      String?
+  city         String?
+  state        String?
+  zip          String?
+  birthDate    DateTime?
+  tags         String[]       @default([])
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   callLogs           CallLog[]
@@ -81,6 +113,9 @@ model User {
   emailMessages      EmailMessage[]
   blockedContacts    BlockedContact[]     @relation("BlockedByUser")
   groupMemberships   InternalGroupMember[]
+  serviceAreas       UserServiceArea[]
+  crewMemberships    CrewMember[]
+  assignedJobs       ScheduledJob[]       @relation("AssignedJobs")
 }
 
 model Customer {
@@ -103,6 +138,7 @@ model Customer {
   callLogs      CallLog[]
   conversations Conversation[]
   emailMessages EmailMessage[]
+  scheduledJobs ScheduledJob[]
 }
 
 model BlockedContact {
@@ -226,4 +262,105 @@ model InternalGroupMember {
   user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
+}
+
+model ServiceArea {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  slug      String
+  color     String   @default("#2563EB")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  zips    ServiceAreaZip[]
+  users   UserServiceArea[]
+  jobs    ScheduledJob[]
+
+  @@unique([companyId, slug])
+  @@index([companyId, sortOrder])
+}
+
+model ServiceAreaZip {
+  id            String @id @default(cuid())
+  serviceAreaId String
+  zipCode       String
+
+  serviceArea ServiceArea @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceAreaId, zipCode])
+  @@index([zipCode])
+}
+
+model UserServiceArea {
+  id            String @id @default(cuid())
+  userId        String
+  serviceAreaId String
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceArea ServiceArea @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceAreaId])
+}
+
+model Crew {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  color     String    @default("#16A34A")
+  division  Division?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members CrewMember[]
+  jobs    ScheduledJob[]
+
+  @@index([companyId])
+}
+
+model CrewMember {
+  id     String @id @default(cuid())
+  crewId String
+  userId String
+
+  crew Crew @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([crewId, userId])
+}
+
+model ScheduledJob {
+  id              String    @id @default(cuid())
+  companyId       String
+  customerId      String?
+  title           String
+  startAt         DateTime
+  endAt           DateTime
+  division        Division
+  serviceAreaId   String
+  assignedUserId  String?
+  crewId          String?
+  status          JobStatus @default(SCHEDULED)
+  notes           String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+  estimatedValue  Decimal?  @db.Decimal(10, 2)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  serviceArea  ServiceArea @relation(fields: [serviceAreaId], references: [id])
+  assignedUser User?       @relation("AssignedJobs", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  crew         Crew?       @relation(fields: [crewId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, startAt])
+  @@index([serviceAreaId])
+  @@index([assignedUserId])
+  @@index([crewId])
 }

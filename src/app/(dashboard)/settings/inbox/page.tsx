@@ -70,7 +70,7 @@ export default function SettingsInboxPage() {
       <PageHeader
         breadcrumb={["Settings", "Inbox"]}
         title="Inbox"
-        subtitle="Configure Twilio and SendGrid integrations"
+        subtitle="Configure Twilio and SendGrid integration"
       />
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -131,16 +131,15 @@ export default function SettingsInboxPage() {
                 placeholder="parse.stormsprinklers.com"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Webhook URL: {process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}
-                /api/sendgrid/inbound
+                Webhook URL: {process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}/api/sendgrid/inbound
               </p>
             </div>
           </div>
         </section>
 
-        <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
           <p className="font-medium text-foreground">Twilio webhook URLs</p>
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-2 space-y-1 text-muted-foreground">
             <li>SMS inbound: /api/twilio/sms/inbound</li>
             <li>Voice status: /api/twilio/voice/status</li>
             <li>Voice TwiML: /api/twilio/voice/twiml</li>

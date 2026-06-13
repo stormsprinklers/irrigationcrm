@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import type { InboxScope } from "@/lib/inbox/types";
 
@@ -15,6 +16,9 @@ type Employee = {
   phone?: string | null;
   email: string;
   role: string;
+  color?: string | null;
+  photoUrl?: string | null;
+  title?: string | null;
 };
 
 type CallDetail = {
@@ -121,9 +125,27 @@ export function VoicePanel({
           <ul>
             {employees.map((emp) => (
               <li key={emp.id} className="flex items-center justify-between border-b border-border px-4 py-3">
-                <div>
-                  <p className="font-medium">{emp.name}</p>
-                  <p className="text-xs text-muted-foreground">{emp.role} · {emp.phone ?? "No phone"}</p>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-9 w-9">
+                    {emp.photoUrl ? <AvatarImage src={emp.photoUrl} alt={emp.name} /> : null}
+                    <AvatarFallback
+                      style={{ backgroundColor: emp.color ?? "#64748B", color: "#fff" }}
+                      className="text-xs"
+                    >
+                      {emp.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{emp.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {emp.title ?? emp.role} · {emp.phone ?? "No phone"}
+                    </p>
+                  </div>
                 </div>
                 <Button
                   size="sm"
