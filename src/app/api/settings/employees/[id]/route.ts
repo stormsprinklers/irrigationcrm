@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
+import { PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canDeleteEmployee, canManageEmployees, employeeSelectFields } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
@@ -60,6 +60,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             ? { birthDate: fields.birthDate ? new Date(fields.birthDate) : null }
             : {}),
           ...(fields.tags !== undefined ? { tags: Array.isArray(fields.tags) ? fields.tags : [] } : {}),
+          ...(fields.payType !== undefined
+            ? { payType: fields.payType ? (fields.payType as PayType) : null }
+            : {}),
+          ...(fields.hourlyRate !== undefined
+            ? { hourlyRate: fields.hourlyRate != null ? Number(fields.hourlyRate) : null }
+            : {}),
+          ...(fields.commissionPercent !== undefined
+            ? {
+                commissionPercent:
+                  fields.commissionPercent != null ? Number(fields.commissionPercent) : null,
+              }
+            : {}),
+          ...(fields.annualSalary !== undefined
+            ? { annualSalary: fields.annualSalary != null ? Number(fields.annualSalary) : null }
+            : {}),
         },
       });
 

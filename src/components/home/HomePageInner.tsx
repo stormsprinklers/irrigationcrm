@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ContentArea } from "@/components/layout/ContentArea";
+import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { KpiStrip } from "@/components/home/KpiStrip";
 import { MaintenancePlansHomeCard } from "@/components/home/MaintenancePlansHomeCard";
 import { SummaryCard } from "@/components/home/SummaryCard";
@@ -33,6 +34,8 @@ export function HomePageInner() {
       <h1 className="mb-6 text-3xl font-semibold tracking-tight">
         Hi, {greeting || "there"}
       </h1>
+
+      <ClockInOutButton />
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading dashboard...</p>

@@ -54,6 +54,26 @@ enum EmployeeStatus {
   ARCHIVED
 }
 
+enum PayType {
+  HOURLY
+  COMMISSION
+  HYBRID
+  SALARY
+}
+
+enum CommissionBasis {
+  COMPLETED_JOB_REVENUE
+  COLLECTED_INVOICE
+  GROSS_PROFIT
+  LABOR_ONLY
+}
+
+enum PayPeriodType {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
 enum VisitStatus {
   UNSCHEDULED
   SCHEDULED
@@ -283,6 +303,9 @@ model Company {
   defaultLeadAssigneeId    String?
   flatRatePricingEnabled   Boolean  @default(false)
   materialMarkupsEnabled   Boolean  @default(true)
+  commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
+  payPeriodType            PayPeriodType   @default(BIWEEKLY)
+  payPeriodAnchorDate      DateTime?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -314,6 +337,7 @@ model Company {
   callSessions           CallSession[]
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
+  timeClockEntries       TimeClockEntry[]
 }
 
 model User {
@@ -335,6 +359,10 @@ model User {
   zip          String?
   birthDate    DateTime?
   tags         String[]       @default([])
+  payType            PayType?
+  hourlyRate         Decimal?       @db.Decimal(10, 2)
+  commissionPercent  Decimal?       @db.Decimal(5, 2)
+  annualSalary       Decimal?       @db.Decimal(12, 2)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -356,6 +384,7 @@ model User {
   agentGroupMembers  AgentGroupMember[]
   assignedCallSessions CallSession[] @relation("AssignedCallSessions")
   transferTargetSessions CallSession[] @relation("TransferTargetSessions")
+  timeClockEntries       TimeClockEntry[]
 }
 
 model Customer {
@@ -813,6 +842,7 @@ model VisitLineItem {
   description     String?
   quantity        Decimal  @default(1) @db.Decimal(10, 2)
   unitPrice       Decimal  @db.Decimal(10, 2)
+  unitCost        Decimal? @db.Decimal(10, 2)
   total           Decimal  @db.Decimal(10, 2)
   sortOrder       Int      @default(0)
 
@@ -820,6 +850,22 @@ model VisitLineItem {
   priceBookItem PriceBookItem? @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
 
   @@index([visitId])
+}
+
+model TimeClockEntry {
+  id         String    @id @default(cuid())
+  companyId  String
+  userId     String
+  clockInAt  DateTime
+  clockOutAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, clockInAt])
+  @@index([userId, clockInAt])
 }
 
 model VisitNote {

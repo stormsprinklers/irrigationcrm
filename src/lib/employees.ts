@@ -14,6 +14,13 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   TECH: "View assigned jobs and team inbox",
 };
 
+export const PAY_TYPE_LABELS: Record<string, string> = {
+  HOURLY: "Hourly",
+  COMMISSION: "Commission",
+  HYBRID: "Hybrid (higher of hourly or commission)",
+  SALARY: "Salary (yearly)",
+};
+
 export function canManageEmployees(role: string) {
   return role === "ADMIN" || role === "MANAGER";
 }
@@ -40,6 +47,10 @@ export function employeeSelectFields() {
     zip: true,
     birthDate: true,
     tags: true,
+    payType: true,
+    hourlyRate: true,
+    commissionPercent: true,
+    annualSalary: true,
     createdAt: true,
     serviceAreas: {
       include: { serviceArea: { select: { id: true, name: true, color: true } } },

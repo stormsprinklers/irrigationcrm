@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { CustomerContactBar } from "@/components/visits/CustomerContactBar";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
+import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
@@ -253,6 +254,8 @@ export function VisitDetail({ visitId }: Props) {
               </p>
             ) : null}
           </div>
+
+          <VisitProfitSection visitId={visit.id} />
 
           <VisitTagsSection visitId={visit.id} tags={visit.tags} onUpdated={load} />
           <VisitMaintenancePlanSection

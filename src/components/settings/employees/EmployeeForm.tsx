@@ -8,7 +8,7 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "@/lib/employees";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS } from "@/lib/employees";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
@@ -29,6 +29,10 @@ export type EmployeeRecord = {
   zip: string | null;
   birthDate: string | null;
   tags: string[];
+  payType: "HOURLY" | "COMMISSION" | "HYBRID" | "SALARY" | null;
+  hourlyRate: number | null;
+  commissionPercent: number | null;
+  annualSalary: number | null;
   serviceAreas: { serviceArea: ServiceAreaOption }[];
 };
 
@@ -40,6 +44,7 @@ type Props = {
 };
 
 const ROLES = ["ADMIN", "MANAGER", "CSR", "TECH"] as const;
+const PAY_TYPES = ["", "HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
 
 export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Props) {
   const [form, setForm] = useState({
@@ -57,6 +62,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     zip: "",
     birthDate: "",
     tags: "",
+    payType: "" as (typeof PAY_TYPES)[number],
+    hourlyRate: "",
+    commissionPercent: "",
+    annualSalary: "",
     serviceAreaIds: [] as string[],
   });
   const [uploading, setUploading] = useState(false);
@@ -82,6 +91,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         zip: "",
         birthDate: "",
         tags: "",
+        payType: "",
+        hourlyRate: "",
+        commissionPercent: "",
+        annualSalary: "",
         serviceAreaIds: [],
       });
       return;
@@ -102,6 +115,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       zip: employee.zip ?? "",
       birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "",
       tags: employee.tags.join(", "),
+      payType: employee.payType ?? "",
+      hourlyRate: employee.hourlyRate != null ? String(employee.hourlyRate) : "",
+      commissionPercent:
+        employee.commissionPercent != null ? String(employee.commissionPercent) : "",
+      annualSalary: employee.annualSalary != null ? String(employee.annualSalary) : "",
       serviceAreaIds: employee.serviceAreas.map((sa) => sa.serviceArea.id),
     });
   }, [employee]);
@@ -167,6 +185,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
+        payType: form.payType || null,
+        hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : null,
+        commissionPercent: form.commissionPercent ? Number(form.commissionPercent) : null,
+        annualSalary: form.annualSalary ? Number(form.annualSalary) : null,
         serviceAreaIds: form.serviceAreaIds,
       };
 
@@ -305,6 +327,66 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         <div>
           <label className="text-sm font-medium">Tags</label>
           <Input value={form.tags} onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))} placeholder="install, senior" />
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border p-4">
+        <h3 className="mb-3 text-sm font-semibold">Compensation</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium">Pay type</label>
+            <select
+              className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
+              value={form.payType}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, payType: e.target.value as (typeof PAY_TYPES)[number] }))
+              }
+            >
+              <option value="">Not configured</option>
+              {(["HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const).map((type) => (
+                <option key={type} value={type}>
+                  {PAY_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(form.payType === "HOURLY" || form.payType === "HYBRID") && (
+            <div>
+              <label className="text-sm font-medium">Hourly rate ($)</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.hourlyRate}
+                onChange={(e) => setForm((p) => ({ ...p, hourlyRate: e.target.value }))}
+              />
+            </div>
+          )}
+          {(form.payType === "COMMISSION" || form.payType === "HYBRID") && (
+            <div>
+              <label className="text-sm font-medium">Commission (%)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={form.commissionPercent}
+                onChange={(e) => setForm((p) => ({ ...p, commissionPercent: e.target.value }))}
+              />
+            </div>
+          )}
+          {form.payType === "SALARY" && (
+            <div>
+              <label className="text-sm font-medium">Annual salary ($)</label>
+              <Input
+                type="number"
+                min={0}
+                step="100"
+                value={form.annualSalary}
+                onChange={(e) => setForm((p) => ({ ...p, annualSalary: e.target.value }))}
+              />
+            </div>
+          )}
         </div>
       </div>
 

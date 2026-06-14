@@ -38,6 +38,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     let name = body.name ? String(body.name) : "";
     let description = body.description ?? null;
     let unitPrice = Number(body.unitPrice ?? 0);
+    let unitCost: number | null = body.unitCost != null ? Number(body.unitCost) : null;
     let priceBookItemId = body.priceBookItemId ?? null;
     const quantity = Number(body.quantity ?? 1);
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       name = fromBook.name;
       description = fromBook.description ?? description;
       unitPrice = fromBook.unitPrice;
+      unitCost = fromBook.unitCost ?? null;
       priceBookItemId = fromBook.priceBookItemId;
     }
 
@@ -60,6 +62,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         description,
         quantity,
         unitPrice,
+        unitCost,
         total,
         sortOrder: body.sortOrder ?? 0,
       },
@@ -87,13 +90,29 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const quantity = body.quantity !== undefined ? Number(body.quantity) : Number(existing.quantity);
     const unitPrice = body.unitPrice !== undefined ? Number(body.unitPrice) : Number(existing.unitPrice);
 
+    let unitCost =
+      existing.unitCost != null ? Number(existing.unitCost) : null;
+    if (body.priceBookItemId) {
+      const fromBook = await buildLineItemFromPriceBook(
+        user.companyId,
+        String(body.priceBookItemId)
+      );
+      unitCost = fromBook.unitCost ?? null;
+    } else if (body.unitCost !== undefined) {
+      unitCost = body.unitCost != null ? Number(body.unitCost) : null;
+    }
+
     await prisma.visitLineItem.update({
       where: { id: body.lineItemId },
       data: {
         ...(body.name !== undefined ? { name: String(body.name) } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.priceBookItemId !== undefined
+          ? { priceBookItemId: body.priceBookItemId ?? null }
+          : {}),
         quantity,
         unitPrice,
+        unitCost,
         total: computeLineItemTotal(quantity, unitPrice),
       },
     });

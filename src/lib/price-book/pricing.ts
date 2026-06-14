@@ -292,6 +292,34 @@ export function buildLineItemDescriptionFromBreakdown(breakdown: ServicePriceBre
   return breakdown.lines.map((l) => `${l.label}: $${l.amount.toFixed(2)}`).join(" · ");
 }
 
+export async function computeItemUnitCost(
+  item: NonNullable<Awaited<ReturnType<typeof loadItemForPricing>>>
+): Promise<number | null> {
+  if (item.type === "MATERIAL") {
+    return item.unitCost != null ? toNumber(item.unitCost) : null;
+  }
+
+  if (item.pricingMode === "CALCULATED") {
+    const hours = item.laborHours != null ? toNumber(item.laborHours) : 0;
+    let laborCost = 0;
+    if (item.laborRatePreset && hours > 0) {
+      laborCost = roundMoney(toNumber(item.laborRatePreset.hourlyCost) * hours);
+    } else if (item.laborRate != null && hours > 0) {
+      laborCost = roundMoney(toNumber(item.laborRate) * hours);
+    }
+
+    let materialsCost = 0;
+    for (const link of item.serviceMaterials) {
+      const cost = link.materialItem.unitCost != null ? toNumber(link.materialItem.unitCost) : 0;
+      materialsCost += cost * toNumber(link.quantity);
+    }
+
+    return roundMoney(laborCost + materialsCost);
+  }
+
+  return item.unitCost != null ? toNumber(item.unitCost) : null;
+}
+
 export async function buildLineItemFromPriceBook(companyId: string, itemId: string) {
   const item = await loadItemForPricing(itemId);
   if (!item || item.category.companyId !== companyId) {
@@ -303,6 +331,7 @@ export async function buildLineItemFromPriceBook(companyId: string, itemId: stri
 
   const unitPrice =
     item.pricingMode === "MANUAL" ? toNumber(item.unitPrice) : computed.unitPrice;
+  const unitCost = await computeItemUnitCost(item);
 
   return {
     priceBookItemId: item.id,
@@ -313,6 +342,7 @@ export async function buildLineItemFromPriceBook(companyId: string, itemId: stri
         : item.description,
     quantity: 1,
     unitPrice,
+    unitCost,
   };
 }
 

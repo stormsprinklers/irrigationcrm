@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { EmployeeStatus, UserRole } from "@prisma/client";
+import { EmployeeStatus, PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees, employeeSelectFields } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (!canManageEmployees(user.role)) return forbiddenResponse();
 
     const body = await request.json();
-    const { name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds } = body;
+    const { name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary } = body;
 
     if (!name || !email) return badRequestResponse("Name and email are required");
 
@@ -56,6 +56,10 @@ export async function POST(request: NextRequest) {
         zip: zip ?? null,
         birthDate: birthDate ? new Date(birthDate) : null,
         tags: Array.isArray(tags) ? tags : [],
+        payType: payType ? (payType as PayType) : null,
+        hourlyRate: hourlyRate != null ? Number(hourlyRate) : null,
+        commissionPercent: commissionPercent != null ? Number(commissionPercent) : null,
+        annualSalary: annualSalary != null ? Number(annualSalary) : null,
         passwordHash,
         serviceAreas: serviceAreaIds?.length
           ? {

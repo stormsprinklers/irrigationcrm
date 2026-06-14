@@ -14,6 +14,7 @@ export const primaryNav: NavItem[] = [
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
+  { label: "Timesheets", href: "/timesheets" },
   { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Reporting", href: "/reporting" },
@@ -104,6 +105,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Notifications", href: "/settings/notifications" },
       { label: "Refer a Friend", href: "/settings/refer" },
       { label: "Employees", href: "/settings/employees" },
+      { label: "Compensation", href: "/settings/compensation" },
       { label: "Service Areas", href: "/settings/service-areas" },
     ],
   },
@@ -158,6 +160,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/inbox") return pathname.startsWith("/inbox");
   if (href === "/price-book") return pathname.startsWith("/price-book");
   if (href === "/reporting") return pathname.startsWith("/reporting");
+  if (href === "/timesheets") return pathname.startsWith("/timesheets");
   if (href === "/settings") return pathname.startsWith("/settings");
   return pathname.startsWith(href);
 }

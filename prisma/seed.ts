@@ -5,6 +5,8 @@ import {
   EmployeeStatus,
   VisitStatus,
   EstimateStatus,
+  PayType,
+  PayPeriodType,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -65,6 +67,8 @@ async function main() {
       estimateExpiryDays: 14,
       flatRatePricingEnabled: true,
       materialMarkupsEnabled: true,
+      payPeriodType: PayPeriodType.BIWEEKLY,
+      payPeriodAnchorDate: new Date("2025-01-01"),
       estimateDepositRequired: false,
       address: "1234 Irrigation Way",
       city: "Orem",
@@ -102,6 +106,8 @@ async function main() {
       transcribeCalls: true,
       flatRatePricingEnabled: true,
       materialMarkupsEnabled: true,
+      payPeriodType: PayPeriodType.BIWEEKLY,
+      payPeriodAnchorDate: new Date("2025-01-01"),
       estimateExpiryDays: 14,
       leadSources: ["Website", "Referral", "Google", "Yard sign"],
       referralCode: "STORM-REF",
@@ -118,6 +124,8 @@ async function main() {
       division: Division.SERVICE,
       color: "#2563EB",
       tags: ["management"],
+      payType: PayType.SALARY,
+      annualSalary: 65000,
     },
     create: {
       email: "austin@stormsprinklers.com",
@@ -130,6 +138,8 @@ async function main() {
       division: Division.SERVICE,
       color: "#2563EB",
       tags: ["management"],
+      payType: PayType.SALARY,
+      annualSalary: 65000,
     },
   });
 
@@ -161,6 +171,8 @@ async function main() {
       division: Division.INSTALL,
       color: "#16A34A",
       tags: ["install", "senior"],
+      payType: PayType.HOURLY,
+      hourlyRate: 28,
     },
     create: {
       email: "tech@stormsprinklers.com",
@@ -173,6 +185,8 @@ async function main() {
       division: Division.INSTALL,
       color: "#16A34A",
       tags: ["install", "senior"],
+      payType: PayType.HOURLY,
+      hourlyRate: 28,
     },
   });
 
@@ -184,6 +198,9 @@ async function main() {
       division: Division.SERVICE,
       color: "#EA580C",
       tags: ["service"],
+      payType: PayType.HYBRID,
+      hourlyRate: 24,
+      commissionPercent: 8,
     },
     create: {
       email: "mike@stormsprinklers.com",
@@ -196,6 +213,9 @@ async function main() {
       division: Division.SERVICE,
       color: "#EA580C",
       tags: ["service"],
+      payType: PayType.HYBRID,
+      hourlyRate: 24,
+      commissionPercent: 8,
     },
   });
 
