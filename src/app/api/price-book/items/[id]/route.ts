@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { UserRole } from "@prisma/client";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import type { PriceBookPricingMode, UserRole } from "@prisma/client";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getItem, upsertItemMaterials } from "@/lib/price-book/queries";
 import { canManagePriceBook } from "@/lib/price-book/permissions";
+import {
+  recalculateCalculatedServicesUsingMaterial,
+  recalculateItemPrice,
+} from "@/lib/price-book/pricing";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -38,13 +42,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.name !== undefined ? { name: String(body.name) } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.sku !== undefined ? { sku: body.sku } : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl } : {}),
         ...(body.unitPrice !== undefined ? { unitPrice: Number(body.unitPrice) } : {}),
         ...(body.unitCost !== undefined ? { unitCost: body.unitCost != null ? Number(body.unitCost) : null } : {}),
         ...(body.unit !== undefined ? { unit: String(body.unit) } : {}),
         ...(body.taxable !== undefined ? { taxable: Boolean(body.taxable) } : {}),
         ...(body.markupEnabled !== undefined ? { markupEnabled: Boolean(body.markupEnabled) } : {}),
         ...(body.laborRate !== undefined ? { laborRate: body.laborRate != null ? Number(body.laborRate) : null } : {}),
+        ...(body.laborRateId !== undefined ? { laborRateId: body.laborRateId } : {}),
         ...(body.laborHours !== undefined ? { laborHours: body.laborHours != null ? Number(body.laborHours) : null } : {}),
+        ...(body.pricingMode !== undefined ? { pricingMode: body.pricingMode as PriceBookPricingMode } : {}),
         ...(body.trackMaterials !== undefined ? { trackMaterials: Boolean(body.trackMaterials) } : {}),
         ...(body.active !== undefined ? { active: Boolean(body.active) } : {}),
         ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) } : {}),
@@ -59,6 +66,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           quantity: Number(m.quantity ?? 1),
         }))
       );
+    }
+
+    const updated = await prisma.priceBookItem.findUnique({ where: { id } });
+    if (updated) {
+      await recalculateItemPrice(id);
+    }
+
+    if (existing.type === "MATERIAL") {
+      await recalculateCalculatedServicesUsingMaterial(id);
     }
 
     const item = await getItem(user.companyId, id);

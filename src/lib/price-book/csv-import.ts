@@ -1,4 +1,4 @@
-import type { PriceBookItemType } from "@prisma/client";
+import type { PriceBookItemType, PriceBookPricingMode } from "@prisma/client";
 import { parseCurrency, parseCsv, parseOptionalBoolean } from "./csv-parse";
 import { ensureCategoryPath } from "./queries";
 import { prisma } from "@/lib/prisma";
@@ -88,8 +88,18 @@ export async function importPriceBookCsv(params: {
       const taxable = parseOptionalBoolean(getColumn(row, "taxable")) ?? false;
       const markupEnabled =
         parseOptionalBoolean(getColumn(row, "material_mark_up_enabled", "material_markup_enabled")) ?? false;
+      const laborRateName = getColumn(row, "labor_rate_name", "labor_rate");
+      const laborRateRow = laborRateName
+        ? await prisma.laborRate.findFirst({
+            where: { companyId: params.companyId, name: { equals: laborRateName, mode: "insensitive" } },
+          })
+        : null;
       const laborRate = parseCurrency(getColumn(row, "labor_rate", "hourly_rate"));
       const laborHours = parseCurrency(getColumn(row, "labor_hours", "hours"));
+      const pricingModeRaw = getColumn(row, "pricing_mode").toUpperCase();
+      const pricingMode: PriceBookPricingMode =
+        pricingModeRaw === "MANUAL" ? "MANUAL" : "CALCULATED";
+      const imageUrl = getColumn(row, "image_url") || null;
 
       const existing = await prisma.priceBookItem.findFirst({
         where: {
@@ -110,24 +120,33 @@ export async function importPriceBookCsv(params: {
         name,
         description,
         sku,
+        imageUrl,
         unitPrice,
         unitCost,
         unit,
         taxable,
         markupEnabled,
-        laborRate: params.type === "SERVICE" ? laborRate : null,
+        laborRate: params.type === "SERVICE" && !laborRateRow ? laborRate : null,
+        laborRateId: params.type === "SERVICE" ? laborRateRow?.id ?? null : null,
         laborHours: params.type === "SERVICE" ? laborHours : null,
-        trackMaterials: params.type === "SERVICE" ? Boolean(laborRate || laborHours) : false,
+        pricingMode: params.type === "SERVICE" ? pricingMode : "MANUAL",
+        trackMaterials: params.type === "SERVICE" ? Boolean(laborRateRow || laborHours) : false,
         active: true,
       };
 
+      let itemId: string;
       if (existing) {
         await prisma.priceBookItem.update({ where: { id: existing.id }, data });
+        itemId = existing.id;
         result.updated++;
       } else {
-        await prisma.priceBookItem.create({ data });
+        const created = await prisma.priceBookItem.create({ data });
+        itemId = created.id;
         result.created++;
       }
+
+      const { recalculateItemPrice } = await import("./pricing");
+      await recalculateItemPrice(itemId);
     } catch (error) {
       result.errors.push(
         `Row ${line}: ${error instanceof Error ? error.message : "Import failed"}`

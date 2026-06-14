@@ -1,5 +1,6 @@
 import type { PriceBookItemType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { computeItemBreakdown } from "@/lib/price-book/pricing";
 import { toNumber } from "@/lib/visits/totals";
 
 export function slugify(text: string): string {
@@ -10,16 +11,49 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function serializeItem(
+export function serializeLaborRate(rate: {
+  id: string;
+  name: string;
+  hourlyCost: Prisma.Decimal;
+  hourlyPrice: Prisma.Decimal;
+  isDefault: boolean;
+  sortOrder: number;
+}) {
+  return {
+    id: rate.id,
+    name: rate.name,
+    hourlyCost: toNumber(rate.hourlyCost),
+    hourlyPrice: toNumber(rate.hourlyPrice),
+    isDefault: rate.isDefault,
+    sortOrder: rate.sortOrder,
+  };
+}
+
+export async function serializeItem(
   item: Prisma.PriceBookItemGetPayload<{
     include: {
-      category: { select: { id: true; name: true; slug: true; type: true } };
+      category: { select: { id: true; name: true; slug: true; type: true; companyId: true } };
+      laborRatePreset: true;
       serviceMaterials: {
-        include: { materialItem: { select: { id: true; name: true; sku: true; unitPrice: true; unit: true } } };
+        include: {
+          materialItem: {
+            select: {
+              id: true;
+              name: true;
+              sku: true;
+              unitPrice: true;
+              unitCost: true;
+              markupEnabled: true;
+              unit: true;
+            };
+          };
+        };
       };
     };
   }>
 ) {
+  const computed = await computeItemBreakdown(item);
+
   return {
     id: item.id,
     categoryId: item.categoryId,
@@ -27,17 +61,29 @@ export function serializeItem(
     name: item.name,
     description: item.description,
     sku: item.sku,
+    imageUrl: item.imageUrl,
     unitPrice: toNumber(item.unitPrice),
     unitCost: item.unitCost != null ? toNumber(item.unitCost) : null,
     unit: item.unit,
     taxable: item.taxable,
     markupEnabled: item.markupEnabled,
     laborRate: item.laborRate != null ? toNumber(item.laborRate) : null,
+    laborRateId: item.laborRateId,
     laborHours: item.laborHours != null ? toNumber(item.laborHours) : null,
+    pricingMode: item.pricingMode,
+    lastCalculatedPrice:
+      item.lastCalculatedPrice != null ? toNumber(item.lastCalculatedPrice) : null,
     trackMaterials: item.trackMaterials,
     active: item.active,
     sortOrder: item.sortOrder,
-    category: item.category,
+    category: {
+      id: item.category.id,
+      name: item.category.name,
+      slug: item.category.slug,
+      type: item.category.type,
+    },
+    laborRatePreset: item.laborRatePreset ? serializeLaborRate(item.laborRatePreset) : null,
+    priceBreakdown: computed?.breakdown ?? null,
     materials: item.serviceMaterials.map((link) => ({
       id: link.id,
       materialItemId: link.materialItemId,
@@ -47,6 +93,8 @@ export function serializeItem(
         name: link.materialItem.name,
         sku: link.materialItem.sku,
         unitPrice: toNumber(link.materialItem.unitPrice),
+        unitCost: link.materialItem.unitCost != null ? toNumber(link.materialItem.unitCost) : null,
+        markupEnabled: link.materialItem.markupEnabled,
         unit: link.materialItem.unit,
       },
     })),
@@ -68,10 +116,21 @@ export function serializeCategory(
 }
 
 const itemInclude = {
-  category: { select: { id: true, name: true, slug: true, type: true } },
+  category: { select: { id: true, name: true, slug: true, type: true, companyId: true } },
+  laborRatePreset: true,
   serviceMaterials: {
     include: {
-      materialItem: { select: { id: true, name: true, sku: true, unitPrice: true, unit: true } },
+      materialItem: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          unitPrice: true,
+          unitCost: true,
+          markupEnabled: true,
+          unit: true,
+        },
+      },
     },
   },
 } as const;
@@ -174,7 +233,7 @@ export async function listItems(params: {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: itemInclude,
   });
-  return rows.map(serializeItem);
+  return Promise.all(rows.map(serializeItem));
 }
 
 export async function getItem(companyId: string, itemId: string) {
@@ -198,4 +257,26 @@ export async function upsertItemMaterials(
       quantity: m.quantity,
     })),
   });
+}
+
+export async function listLaborRates(companyId: string) {
+  const rows = await prisma.laborRate.findMany({
+    where: { companyId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  return rows.map(serializeLaborRate);
+}
+
+export async function listMarkupTiers(companyId: string) {
+  const rows = await prisma.materialMarkupTier.findMany({
+    where: { companyId },
+    orderBy: { sortOrder: "asc" },
+  });
+  return rows.map((tier) => ({
+    id: tier.id,
+    minCost: toNumber(tier.minCost),
+    maxCost: tier.maxCost != null ? toNumber(tier.maxCost) : null,
+    markupPercent: toNumber(tier.markupPercent),
+    sortOrder: tier.sortOrder,
+  }));
 }

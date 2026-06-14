@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { buildLineItemFromPriceBook } from "@/lib/price-book/pricing";
 import { prisma } from "@/lib/prisma";
 import { computeLineItemTotal } from "@/lib/visits/totals";
 import { getVisitForCompany } from "@/lib/visits/queries";
@@ -33,17 +34,30 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     const body = await request.json();
+
+    let name = body.name ? String(body.name) : "";
+    let description = body.description ?? null;
+    let unitPrice = Number(body.unitPrice ?? 0);
+    let priceBookItemId = body.priceBookItemId ?? null;
     const quantity = Number(body.quantity ?? 1);
-    const unitPrice = Number(body.unitPrice ?? 0);
-    if (!body.name) return badRequestResponse("name is required");
+
+    if (body.priceBookItemId) {
+      const fromBook = await buildLineItemFromPriceBook(user.companyId, String(body.priceBookItemId));
+      name = fromBook.name;
+      description = fromBook.description ?? description;
+      unitPrice = fromBook.unitPrice;
+      priceBookItemId = fromBook.priceBookItemId;
+    }
+
+    if (!name) return badRequestResponse("name is required");
 
     const total = computeLineItemTotal(quantity, unitPrice);
     await prisma.visitLineItem.create({
       data: {
         visitId: id,
-        priceBookItemId: body.priceBookItemId ?? null,
-        name: String(body.name),
-        description: body.description ?? null,
+        priceBookItemId,
+        name,
+        description,
         quantity,
         unitPrice,
         total,

@@ -196,6 +196,11 @@ enum PriceBookDiscountAppliesTo {
   MATERIALS
 }
 
+enum PriceBookPricingMode {
+  MANUAL
+  CALCULATED
+}
+
 enum RingStrategy {
   SIMULTANEOUS
   ROUND_ROBIN
@@ -276,6 +281,8 @@ model Company {
   rachioApiKey             String?
   hydrawiseApiKey          String?
   defaultLeadAssigneeId    String?
+  flatRatePricingEnabled   Boolean  @default(false)
+  materialMarkupsEnabled   Boolean  @default(true)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -305,6 +312,8 @@ model Company {
   agentGroups            AgentGroup[]
   agentPresences         AgentPresence[]
   callSessions           CallSession[]
+  laborRates             LaborRate[]
+  materialMarkupTiers    MaterialMarkupTier[]
 }
 
 model User {
@@ -879,26 +888,31 @@ model PriceBookCategory {
 }
 
 model PriceBookItem {
-  id             String            @id @default(cuid())
-  categoryId     String
-  type           PriceBookItemType @default(SERVICE)
-  name           String
-  description    String?
-  sku            String?
-  unitPrice      Decimal           @db.Decimal(10, 2)
-  unitCost       Decimal?          @db.Decimal(10, 2)
-  unit           String            @default("each")
-  taxable        Boolean           @default(false)
-  markupEnabled  Boolean           @default(false)
-  laborRate      Decimal?          @db.Decimal(10, 2)
-  laborHours     Decimal?          @db.Decimal(10, 3)
-  trackMaterials Boolean           @default(false)
-  active         Boolean           @default(true)
-  sortOrder      Int               @default(0)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                  String               @id @default(cuid())
+  categoryId          String
+  type                PriceBookItemType    @default(SERVICE)
+  name                String
+  description         String?
+  sku                 String?
+  imageUrl            String?
+  unitPrice           Decimal              @db.Decimal(10, 2)
+  unitCost            Decimal?             @db.Decimal(10, 2)
+  unit                String               @default("each")
+  taxable             Boolean              @default(false)
+  markupEnabled       Boolean              @default(false)
+  laborRate           Decimal?             @db.Decimal(10, 2)
+  laborRateId         String?
+  laborHours          Decimal?             @db.Decimal(10, 3)
+  pricingMode         PriceBookPricingMode @default(CALCULATED)
+  lastCalculatedPrice Decimal?             @db.Decimal(10, 2)
+  trackMaterials      Boolean              @default(false)
+  active              Boolean              @default(true)
+  sortOrder           Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   category          PriceBookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  laborRatePreset   LaborRate?                 @relation(fields: [laborRateId], references: [id], onDelete: SetNull)
   serviceMaterials  PriceBookServiceMaterial[] @relation("ServiceItemMaterials")
   usedInServices    PriceBookServiceMaterial[] @relation("MaterialInServices")
   visitLineItems           VisitLineItem[]
@@ -908,6 +922,39 @@ model PriceBookItem {
   @@index([categoryId, active])
   @@index([type, active])
   @@index([sku])
+  @@index([laborRateId])
+}
+
+model LaborRate {
+  id           String   @id @default(cuid())
+  companyId    String
+  name         String
+  hourlyCost   Decimal  @db.Decimal(10, 2)
+  hourlyPrice  Decimal  @db.Decimal(10, 2)
+  isDefault    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items   PriceBookItem[]
+
+  @@index([companyId, sortOrder])
+}
+
+model MaterialMarkupTier {
+  id             String   @id @default(cuid())
+  companyId      String
+  minCost        Decimal  @db.Decimal(10, 2)
+  maxCost        Decimal? @db.Decimal(10, 2)
+  markupPercent  Decimal  @db.Decimal(10, 2)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, sortOrder])
 }
 
 model PriceBookServiceMaterial {

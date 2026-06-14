@@ -63,6 +63,8 @@ async function main() {
     where: { id: "seed-company" },
     update: {
       estimateExpiryDays: 14,
+      flatRatePricingEnabled: true,
+      materialMarkupsEnabled: true,
       estimateDepositRequired: false,
       address: "1234 Irrigation Way",
       city: "Orem",
@@ -98,6 +100,8 @@ async function main() {
       sendgridFrom: process.env.SENDGRID_FROM_EMAIL ?? "support@stormsprinklers.com",
       recordCalls: true,
       transcribeCalls: true,
+      flatRatePricingEnabled: true,
+      materialMarkupsEnabled: true,
       estimateExpiryDays: 14,
       leadSources: ["Website", "Referral", "Google", "Yard sign"],
       referralCode: "STORM-REF",
@@ -812,6 +816,30 @@ async function main() {
       isPrimary: true,
       callFlowId: "seed-voice-main-flow",
     },
+  });
+
+  await prisma.laborRate.upsert({
+    where: { id: "seed-labor-journeyman" },
+    update: { name: "Journeyman", hourlyCost: 65, hourlyPrice: 120, isDefault: true },
+    create: {
+      id: "seed-labor-journeyman",
+      companyId: company.id,
+      name: "Journeyman",
+      hourlyCost: 65,
+      hourlyPrice: 120,
+      isDefault: true,
+      sortOrder: 0,
+    },
+  });
+
+  await prisma.materialMarkupTier.deleteMany({ where: { companyId: company.id } });
+  await prisma.materialMarkupTier.createMany({
+    data: [
+      { companyId: company.id, minCost: 0.01, maxCost: 50, markupPercent: 150, sortOrder: 0 },
+      { companyId: company.id, minCost: 50.01, maxCost: 100, markupPercent: 100, sortOrder: 1 },
+      { companyId: company.id, minCost: 100.01, maxCost: 500, markupPercent: 75, sortOrder: 2 },
+      { companyId: company.id, minCost: 500.01, maxCost: null, markupPercent: 50, sortOrder: 3 },
+    ],
   });
 
   const existingEstimateTemplate = await prisma.estimateTemplate.findFirst({

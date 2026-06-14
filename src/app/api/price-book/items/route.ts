@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { PriceBookItemType, UserRole } from "@prisma/client";
+import type { PriceBookItemType, PriceBookPricingMode, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getItem, listItems, upsertItemMaterials } from "@/lib/price-book/queries";
 import { canManagePriceBook } from "@/lib/price-book/permissions";
+import { recalculateItemPrice } from "@/lib/price-book/pricing";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -43,6 +44,8 @@ export async function POST(request: NextRequest) {
     if (!category) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
     const type = (body.type ?? category.type) as PriceBookItemType;
+    const pricingMode = (body.pricingMode ?? "CALCULATED") as PriceBookPricingMode;
+
     const item = await prisma.priceBookItem.create({
       data: {
         categoryId: body.categoryId,
@@ -50,13 +53,16 @@ export async function POST(request: NextRequest) {
         name: String(body.name),
         description: body.description ?? null,
         sku: body.sku ?? null,
+        imageUrl: body.imageUrl ?? null,
         unitPrice: Number(body.unitPrice ?? 0),
         unitCost: body.unitCost != null ? Number(body.unitCost) : null,
         unit: body.unit ?? "each",
         taxable: Boolean(body.taxable),
         markupEnabled: Boolean(body.markupEnabled),
         laborRate: body.laborRate != null ? Number(body.laborRate) : null,
+        laborRateId: body.laborRateId ?? null,
         laborHours: body.laborHours != null ? Number(body.laborHours) : null,
+        pricingMode,
         trackMaterials: Boolean(body.trackMaterials),
         active: body.active ?? true,
         sortOrder: body.sortOrder ?? 0,
@@ -72,6 +78,8 @@ export async function POST(request: NextRequest) {
         }))
       );
     }
+
+    await recalculateItemPrice(item.id);
 
     const full = await getItem(user.companyId, item.id);
     return NextResponse.json(full, { status: 201 });

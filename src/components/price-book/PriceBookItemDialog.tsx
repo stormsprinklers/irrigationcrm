@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import type { PriceBookItemDTO } from "@/lib/price-book/types";
+import type { LaborRateDTO, PriceBookItemDTO } from "@/lib/price-book/types";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
-type MaterialOption = { id: string; name: string; sku: string | null; unitPrice: number };
+type MaterialOption = {
+  id: string;
+  name: string;
+  sku: string | null;
+  unitPrice: number;
+  unitCost?: number | null;
+};
 
 type Props = {
   open: boolean;
@@ -27,18 +35,41 @@ const emptyForm = {
   unit: "each",
   taxable: false,
   markupEnabled: false,
-  laborRate: "",
+  laborRateId: "",
   laborHours: "",
   trackMaterials: false,
+  pricingMode: "CALCULATED" as "MANUAL" | "CALCULATED",
+  imageUrl: "",
 };
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
 
 export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onSaved }: Props) {
   const [form, setForm] = useState(emptyForm);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
+  const [laborRates, setLaborRates] = useState<LaborRateDTO[]>([]);
+  const [flatRateEnabled, setFlatRateEnabled] = useState(false);
   const [selectedMaterials, setSelectedMaterials] = useState<Array<{ materialItemId: string; quantity: string }>>(
     []
   );
   const [saving, setSaving] = useState(false);
+  const [generatingDesc, setGeneratingDesc] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/settings/price-book")
+      .then((r) => r.json())
+      .then((data) => setFlatRateEnabled(Boolean(data.flatRatePricingEnabled)))
+      .catch(() => setFlatRateEnabled(false));
+    fetch("/api/settings/price-book/labor-rates")
+      .then((r) => r.json())
+      .then(setLaborRates)
+      .catch(() => setLaborRates([]));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,9 +83,11 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
         unit: item.unit,
         taxable: item.taxable,
         markupEnabled: item.markupEnabled,
-        laborRate: item.laborRate != null ? String(item.laborRate) : "",
+        laborRateId: item.laborRateId ?? item.laborRatePreset?.id ?? "",
         laborHours: item.laborHours != null ? String(item.laborHours) : "",
         trackMaterials: item.trackMaterials,
+        pricingMode: item.pricingMode,
+        imageUrl: item.imageUrl ?? "",
       });
       setSelectedMaterials(
         (item.materials ?? []).map((m) => ({
@@ -72,11 +105,78 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
     if (!open || type !== "SERVICE") return;
     fetch("/api/price-book/items?type=MATERIAL")
       .then((r) => r.json())
-      .then((data) => setMaterials(data))
+      .then(setMaterials)
       .catch(() => setMaterials([]));
   }, [open, type]);
 
+  const breakdown = item?.priceBreakdown;
+
+  const computedTotal = useMemo(() => {
+    if (type !== "SERVICE" || form.pricingMode !== "CALCULATED") return null;
+    return breakdown?.total ?? null;
+  }, [type, form.pricingMode, breakdown?.total]);
+
   if (!open) return null;
+
+  async function handleGenerateDescription() {
+    if (!form.name.trim()) {
+      toast.error("Enter a name first");
+      return;
+    }
+    setGeneratingDesc(true);
+    try {
+      const res = await fetch("/api/price-book/items/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: form.name.trim(), type }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setForm((p) => ({ ...p, description: data.description ?? "" }));
+      toast.success("Description generated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate description");
+    } finally {
+      setGeneratingDesc(false);
+    }
+  }
+
+  async function handleUploadImage(file: File) {
+    setUploadingImage(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload/price-book-image", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setForm((p) => ({ ...p, imageUrl: data.url }));
+      toast.success("Image uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
+  async function handleGenerateImage() {
+    if (!item?.id) {
+      toast.error("Save the item first, then generate an image");
+      return;
+    }
+    setGeneratingImage(true);
+    try {
+      const res = await fetch(`/api/price-book/items/${item.id}/generate-image`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setForm((p) => ({ ...p, imageUrl: data.imageUrl ?? "" }));
+      toast.success("Image generated");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate image");
+    } finally {
+      setGeneratingImage(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,13 +190,15 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
         name: form.name.trim(),
         description: form.description || null,
         sku: form.sku || null,
+        imageUrl: form.imageUrl || null,
         unitPrice: Number(form.unitPrice || 0),
         unitCost: form.unitCost ? Number(form.unitCost) : null,
         unit: form.unit || "each",
         taxable: form.taxable,
         markupEnabled: form.markupEnabled,
-        laborRate: type === "SERVICE" && form.laborRate ? Number(form.laborRate) : null,
+        laborRateId: type === "SERVICE" && form.laborRateId ? form.laborRateId : null,
         laborHours: type === "SERVICE" && form.laborHours ? Number(form.laborHours) : null,
+        pricingMode: type === "SERVICE" ? form.pricingMode : "MANUAL",
         trackMaterials: type === "SERVICE" ? form.trackMaterials : false,
         materials:
           type === "SERVICE"
@@ -135,22 +237,77 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
     setSelectedMaterials((prev) => [...prev, { materialItemId: "", quantity: "1" }]);
   }
 
+  const priceReadOnly = type === "SERVICE" && flatRateEnabled && form.pricingMode === "CALCULATED";
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg border bg-background p-6 shadow-lg">
-        <h2 className="text-lg font-semibold">{item ? "Edit" : "Add"} {type === "SERVICE" ? "service" : "material"}</h2>
+        <h2 className="text-lg font-semibold">
+          {item ? "Edit" : "Add"} {type === "SERVICE" ? "service" : "material"}
+        </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <div>
             <label className="mb-1 block text-sm font-medium">Name</label>
             <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Description</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-sm font-medium">Description</label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={generatingDesc}
+                onClick={() => void handleGenerateDescription()}
+              >
+                <Sparkles className="mr-1 h-3 w-3" />
+                Generate
+              </Button>
+            </div>
             <Input
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             />
           </div>
+
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-sm font-medium">Photo</p>
+            {form.imageUrl ? (
+              <img
+                src={blobProxyUrl(form.imageUrl)}
+                alt={form.name}
+                className="mb-2 h-24 w-24 rounded-md border object-cover"
+              />
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleUploadImage(file);
+                  }}
+                />
+                <span className="inline-flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm hover:bg-muted">
+                  <Upload className="mr-1 h-3 w-3" />
+                  {uploadingImage ? "Uploading..." : "Upload"}
+                </span>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={generatingImage || !item?.id}
+                onClick={() => void handleGenerateImage()}
+              >
+                <Sparkles className="mr-1 h-3 w-3" />
+                AI image
+              </Button>
+            </div>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">SKU (optional)</label>
@@ -161,12 +318,15 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
               <Input value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Price</label>
+              <label className="mb-1 block text-sm font-medium">
+                Price {priceReadOnly ? "(calculated)" : ""}
+              </label>
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.unitPrice}
+                value={priceReadOnly && computedTotal != null ? String(computedTotal) : form.unitPrice}
+                readOnly={priceReadOnly}
                 onChange={(e) => setForm((p) => ({ ...p, unitPrice: e.target.value }))}
               />
             </div>
@@ -193,25 +353,40 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
                 checked={form.markupEnabled}
                 onCheckedChange={(c) => setForm((p) => ({ ...p, markupEnabled: Boolean(c) }))}
               />
-              Material markup enabled
+              Use material markups (tier pricing from cost)
             </label>
           )}
 
-          {type === "SERVICE" && (
+          {type === "SERVICE" && flatRateEnabled && (
             <>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={form.pricingMode === "MANUAL"}
+                  onCheckedChange={(c) =>
+                    setForm((p) => ({ ...p, pricingMode: c ? "MANUAL" : "CALCULATED" }))
+                  }
+                />
+                Manual price override
+              </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Labor rate ($/hr)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.laborRate}
-                    onChange={(e) => setForm((p) => ({ ...p, laborRate: e.target.value }))}
-                  />
+                  <label className="mb-1 block text-sm font-medium">Labor rate</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={form.laborRateId}
+                    onChange={(e) => setForm((p) => ({ ...p, laborRateId: e.target.value }))}
+                  >
+                    <option value="">Select rate</option>
+                    {laborRates.map((rate) => (
+                      <option key={rate.id} value={rate.id}>
+                        {rate.name} (${rate.hourlyPrice}/hr)
+                        {rate.isDefault ? " · default" : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Labor hours</label>
+                  <label className="mb-1 block text-sm font-medium">Estimated hours</label>
                   <Input
                     type="number"
                     min="0"
@@ -221,6 +396,23 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
                   />
                 </div>
               </div>
+              {breakdown && form.pricingMode === "CALCULATED" && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                  <p className="mb-2 font-medium">Price breakdown</p>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {breakdown.lines.map((line, i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>{line.label}</span>
+                        <span>{formatCurrency(line.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 flex justify-between font-medium text-foreground">
+                    <span>Flat rate total</span>
+                    <span>{formatCurrency(breakdown.total)}</span>
+                  </p>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={form.trackMaterials}
@@ -271,6 +463,12 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
                 ))}
               </div>
             </>
+          )}
+
+          {type === "SERVICE" && !flatRateEnabled && (
+            <p className="text-sm text-muted-foreground">
+              Enable flat rate pricing in Settings → Price Book to use labor rates and calculated prices.
+            </p>
           )}
 
           <div className="flex justify-end gap-2 pt-2">

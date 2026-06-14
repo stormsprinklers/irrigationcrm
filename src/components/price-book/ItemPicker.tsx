@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -101,7 +102,14 @@ export function ItemPicker({ open, onClose, onSelect, categoryId }: Props) {
                   "flex w-full items-start justify-between gap-3 rounded-md px-3 py-2 text-left hover:bg-muted"
                 )}
               >
-                <div>
+                {item.imageUrl ? (
+                  <img
+                    src={blobProxyUrl(item.imageUrl)}
+                    alt=""
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
+                ) : null}
+                <div className="min-w-0 flex-1">
                   <p className="font-medium">{item.name}</p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {item.category ? <span>{item.category.name}</span> : null}

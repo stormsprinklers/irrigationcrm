@@ -114,6 +114,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Leads", href: "/settings/leads" },
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice", href: "/settings/voice" },
+      { label: "Price Book", href: "/settings/price-book" },
       { label: "Customer Intake", href: "/settings/customer-intake" },
       { label: "Customer Portal", href: "/settings/customer-portal" },
       { label: "Estimates", href: "/settings/estimates" },
@@ -131,6 +132,17 @@ export const voiceSettingsSidebar: NavSection[] = [
       { label: "Call flows", href: "/settings/voice/flows" },
       { label: "Agent groups", href: "/settings/voice/groups" },
       { label: "Business hours", href: "/settings/voice/hours" },
+    ],
+  },
+];
+
+export const priceBookSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Overview", href: "/settings/price-book" },
+      { label: "Labor rates", href: "/settings/price-book/labor-rates" },
+      { label: "Material markups", href: "/settings/price-book/material-markups" },
+      { label: "Bulk adjust", href: "/settings/price-book/bulk-adjust" },
     ],
   },
 ];

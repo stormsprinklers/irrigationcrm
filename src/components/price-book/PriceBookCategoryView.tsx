@@ -9,6 +9,7 @@ import { PriceBookItemDialog } from "@/components/price-book/PriceBookItemDialog
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PriceBookCategoryDTO, PriceBookItemDTO } from "@/lib/price-book/types";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Props = { categoryId: string };
 
@@ -125,6 +126,7 @@ export function PriceBookCategoryView({ categoryId }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left">
                 <tr>
+                  <th className="px-4 py-2 font-medium w-12" />
                   <th className="px-4 py-2 font-medium">Name</th>
                   <th className="px-4 py-2 font-medium">SKU</th>
                   <th className="px-4 py-2 font-medium">Price</th>
@@ -138,6 +140,17 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                 {items.map((item) => (
                   <tr key={item.id} className="border-t">
                     <td className="px-4 py-3">
+                      {item.imageUrl ? (
+                        <img
+                          src={blobProxyUrl(item.imageUrl)}
+                          alt=""
+                          className="h-10 w-10 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded bg-muted" />
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <p className="font-medium">{item.name}</p>
                       {item.description ? (
                         <p className="text-xs text-muted-foreground line-clamp-1">{item.description}</p>
@@ -150,8 +163,8 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                     <td className="px-4 py-3">{item.unit}</td>
                     {category.type === "SERVICE" && (
                       <td className="px-4 py-3 text-muted-foreground">
-                        {item.laborRate != null
-                          ? `${formatCurrency(item.laborRate)}/hr${item.laborHours ? ` × ${item.laborHours}h` : ""}`
+                        {item.laborRatePreset
+                          ? `${item.laborRatePreset.name}${item.laborHours ? ` × ${item.laborHours}h` : ""}`
                           : item.materials?.length
                             ? `${item.materials.length} material(s)`
                             : "—"}
