@@ -196,6 +196,41 @@ enum PriceBookDiscountAppliesTo {
   MATERIALS
 }
 
+enum RingStrategy {
+  SIMULTANEOUS
+  ROUND_ROBIN
+  SEQUENTIAL
+}
+
+enum AgentPresenceStatus {
+  AVAILABLE
+  ON_CALL
+  AWAY
+  OFFLINE
+}
+
+enum CallSessionStatus {
+  RINGING
+  IN_PROGRESS
+  ON_HOLD
+  TRANSFERRING
+  COMPLETED
+}
+
+enum TransferType {
+  COLD
+  WARM
+}
+
+enum CallFlowNodeType {
+  DIAL_GROUP
+  IVR
+  QUEUE
+  FORWARD
+  VOICEMAIL
+  HANGUP
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
@@ -265,6 +300,11 @@ model Company {
   invoices               Invoice[]
   maintenancePlans       MaintenancePlanTemplate[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
+  phoneNumbers           PhoneNumber[]
+  callFlows              CallFlow[]
+  agentGroups            AgentGroup[]
+  agentPresences         AgentPresence[]
+  callSessions           CallSession[]
 }
 
 model User {
@@ -303,6 +343,10 @@ model User {
   visitTimeEvents    VisitTimeEvent[]
   visitNotes         VisitNote[]
   visitAttachments   VisitAttachment[]
+  agentPresence      AgentPresence?
+  agentGroupMembers  AgentGroupMember[]
+  assignedCallSessions CallSession[] @relation("AssignedCallSessions")
+  transferTargetSessions CallSession[] @relation("TransferTargetSessions")
 }
 
 model Customer {
@@ -332,6 +376,7 @@ model Customer {
   invoices             Invoice[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
   convertedFromLead      Lead?
+  callSessions           CallSession[]
 }
 
 model Lead {
@@ -406,6 +451,9 @@ model CallLog {
   toNumber      String
   customerId    String?
   userId        String?
+  sessionId     String?
+  conferenceSid String?
+  queueWaitSec  Int?
   twilioCallSid String        @unique
   status        String
   durationSec   Int?
@@ -414,11 +462,131 @@ model CallLog {
   startedAt     DateTime      @default(now())
   endedAt       DateTime?
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session  CallSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([companyId, scope, startedAt])
+  @@index([sessionId])
+}
+
+model PhoneNumber {
+  id          String   @id @default(cuid())
+  companyId   String
+  e164        String
+  friendlyName String?
+  isPrimary   Boolean  @default(false)
+  callFlowId  String?
+  twilioSid   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callFlow    CallFlow?    @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+  callSessions CallSession[]
+
+  @@unique([companyId, e164])
+  @@index([companyId])
+}
+
+model CallFlow {
+  id                 String   @id @default(cuid())
+  companyId          String
+  name               String
+  description        String?
+  entryNodeId        String?
+  afterHoursNodeId   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nodes        CallFlowNode[]
+  phoneNumbers PhoneNumber[]
+
+  @@index([companyId])
+}
+
+model CallFlowNode {
+  id        String           @id @default(cuid())
+  flowId    String
+  type      CallFlowNodeType
+  config    Json             @default("{}")
+  parentId  String?
+  sortOrder Int              @default(0)
+
+  flow CallFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId, sortOrder])
+}
+
+model AgentGroup {
+  id              String        @id @default(cuid())
+  companyId       String
+  name            String
+  ringStrategy    RingStrategy  @default(SIMULTANEOUS)
+  ringTimeoutSec  Int           @default(30)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members AgentGroupMember[]
+
+  @@index([companyId])
+}
+
+model AgentGroupMember {
+  groupId   String
+  userId    String
+  sortOrder Int @default(0)
+
+  group AgentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+model AgentPresence {
+  userId     String              @id
+  companyId  String
+  status     AgentPresenceStatus @default(OFFLINE)
+  lastSeenAt DateTime            @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+}
+
+model CallSession {
+  id                   String            @id @default(cuid())
+  companyId            String
+  callSid              String            @unique
+  conferenceSid        String?
+  direction            CallDirection
+  status               CallSessionStatus @default(RINGING)
+  fromNumber           String
+  toNumber             String
+  customerId           String?
+  assignedUserId       String?
+  phoneNumberId        String?
+  queueEnteredAt       DateTime?
+  holdStartedAt        DateTime?
+  transferType         TransferType?
+  transferTargetUserId String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  endedAt              DateTime?
+
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedUser   User?        @relation("AssignedCallSessions", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  transferTarget User?        @relation("TransferTargetSessions", fields: [transferTargetUserId], references: [id], onDelete: SetNull)
+  phoneNumber    PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  callLogs       CallLog[]
+
+  @@index([companyId, status])
+  @@index([assignedUserId])
 }
 
 model Conversation {

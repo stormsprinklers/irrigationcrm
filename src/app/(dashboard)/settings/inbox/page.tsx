@@ -1,12 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 
 type InboxSettings = {
   id: string;
@@ -14,8 +14,6 @@ type InboxSettings = {
   twilioPhone: string | null;
   sendgridFrom: string | null;
   sendgridInboundDomain: string | null;
-  recordCalls: boolean;
-  transcribeCalls: boolean;
 };
 
 export default function SettingsInboxPage() {
@@ -41,8 +39,6 @@ export default function SettingsInboxPage() {
         twilioPhone: settings.twilioPhone,
         sendgridFrom: settings.sendgridFrom,
         sendgridInboundDomain: settings.sendgridInboundDomain,
-        recordCalls: settings.recordCalls,
-        transcribeCalls: settings.transcribeCalls,
       }),
     });
     setSaving(false);
@@ -70,41 +66,29 @@ export default function SettingsInboxPage() {
       <PageHeader
         breadcrumb={["Settings", "Inbox"]}
         title="Inbox"
-        subtitle="Configure Twilio and SendGrid integration"
+        subtitle="SMS and email integration"
       />
+
+      <p className="mb-6 text-sm text-muted-foreground">
+        Voice dialer, call routing, recording, and transcription are configured in{" "}
+        <Link href="/settings/voice" className="text-primary underline">
+          Settings → Voice
+        </Link>
+        .
+      </p>
 
       <form onSubmit={handleSave} className="space-y-6">
         <section className="rounded-lg border border-border bg-white p-6">
-          <h3 className="mb-4 text-lg font-semibold">Twilio (Voice & SMS)</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Company phone number</label>
-              <Input
-                value={settings.twilioPhone ?? ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, twilioPhone: e.target.value || null })
-                }
-                placeholder="+18015550100"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={settings.recordCalls}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, recordCalls: Boolean(checked) })
-                }
-              />
-              <label className="text-sm">Record calls</label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={settings.transcribeCalls}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, transcribeCalls: Boolean(checked) })
-                }
-              />
-              <label className="text-sm">Transcribe calls</label>
-            </div>
+          <h3 className="mb-4 text-lg font-semibold">Twilio (SMS & caller ID)</h3>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Company phone number</label>
+            <Input
+              value={settings.twilioPhone ?? ""}
+              onChange={(e) =>
+                setSettings({ ...settings, twilioPhone: e.target.value || null })
+              }
+              placeholder="+18015550100"
+            />
           </div>
         </section>
 
@@ -141,10 +125,9 @@ export default function SettingsInboxPage() {
           <p className="font-medium text-foreground">Twilio webhook URLs</p>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             <li>SMS inbound: /api/twilio/sms/inbound</li>
+            <li>Voice inbound: /api/twilio/voice/inbound</li>
+            <li>Voice client (TwiML App): /api/twilio/voice/client</li>
             <li>Voice status: /api/twilio/voice/status</li>
-            <li>Voice TwiML: /api/twilio/voice/twiml</li>
-            <li>Recording: /api/twilio/voice/recording</li>
-            <li>Transcription: /api/twilio/voice/transcription</li>
           </ul>
         </section>
 

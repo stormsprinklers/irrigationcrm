@@ -729,6 +729,91 @@ async function main() {
     },
   });
 
+  const twilioE164 = company.twilioPhone ?? process.env.TWILIO_PHONE_NUMBER ?? "+18015550100";
+  const normalizedE164 = twilioE164.startsWith("+")
+    ? twilioE164
+    : `+${twilioE164.replace(/\D/g, "")}`;
+
+  const defaultGroup = await prisma.agentGroup.upsert({
+    where: { id: "seed-voice-csr-group" },
+    update: { name: "Customer Service" },
+    create: {
+      id: "seed-voice-csr-group",
+      companyId: company.id,
+      name: "Customer Service",
+      ringStrategy: "SIMULTANEOUS",
+      ringTimeoutSec: 30,
+    },
+  });
+
+  const csrMembers = [austin.id, jordan.id, sarah.id];
+  for (const [index, userId] of csrMembers.entries()) {
+    await prisma.agentGroupMember.upsert({
+      where: { groupId_userId: { groupId: defaultGroup.id, userId } },
+      update: { sortOrder: index },
+      create: { groupId: defaultGroup.id, userId, sortOrder: index },
+    });
+  }
+
+  await prisma.callFlow.upsert({
+    where: { id: "seed-voice-main-flow" },
+    update: { name: "Main line" },
+    create: {
+      id: "seed-voice-main-flow",
+      companyId: company.id,
+      name: "Main line",
+      description: "Ring CSR team, then queue",
+    },
+  });
+
+  const dialNode = await prisma.callFlowNode.upsert({
+    where: { id: "seed-voice-dial-node" },
+    update: { config: { groupId: defaultGroup.id } },
+    create: {
+      id: "seed-voice-dial-node",
+      flowId: "seed-voice-main-flow",
+      type: "DIAL_GROUP",
+      config: { groupId: defaultGroup.id },
+      sortOrder: 0,
+    },
+  });
+
+  const voicemailNode = await prisma.callFlowNode.upsert({
+    where: { id: "seed-voice-after-hours-vm" },
+    update: {},
+    create: {
+      id: "seed-voice-after-hours-vm",
+      flowId: "seed-voice-main-flow",
+      type: "VOICEMAIL",
+      config: {},
+      sortOrder: 1,
+    },
+  });
+
+  await prisma.callFlow.update({
+    where: { id: "seed-voice-main-flow" },
+    data: {
+      entryNodeId: dialNode.id,
+      afterHoursNodeId: voicemailNode.id,
+    },
+  });
+
+  await prisma.phoneNumber.upsert({
+    where: { companyId_e164: { companyId: company.id, e164: normalizedE164 } },
+    update: {
+      callFlowId: "seed-voice-main-flow",
+      isPrimary: true,
+      friendlyName: "Main tracking line",
+    },
+    create: {
+      companyId: company.id,
+      e164: normalizedE164,
+      friendlyName: "Main tracking line",
+      isPrimary: true,
+      callFlowId: "seed-voice-main-flow",
+    },
+  });
+
   const existingEstimateTemplate = await prisma.estimateTemplate.findFirst({
     where: { companyId: company.id, name: "Backflow test bundle" },
   });

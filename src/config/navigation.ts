@@ -113,11 +113,24 @@ export const settingsSidebar: NavSection[] = [
       { label: "Booking", href: "/settings/booking" },
       { label: "Leads", href: "/settings/leads" },
       { label: "Inbox", href: "/settings/inbox" },
+      { label: "Voice", href: "/settings/voice" },
       { label: "Customer Intake", href: "/settings/customer-intake" },
       { label: "Customer Portal", href: "/settings/customer-portal" },
       { label: "Estimates", href: "/settings/estimates" },
       { label: "Invoices", href: "/settings/invoices" },
       { label: "Maintenance", href: "/settings/maintenance" },
+    ],
+  },
+];
+
+export const voiceSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Overview", href: "/settings/voice" },
+      { label: "Phone numbers", href: "/settings/voice/numbers" },
+      { label: "Call flows", href: "/settings/voice/flows" },
+      { label: "Agent groups", href: "/settings/voice/groups" },
+      { label: "Business hours", href: "/settings/voice/hours" },
     ],
   },
 ];

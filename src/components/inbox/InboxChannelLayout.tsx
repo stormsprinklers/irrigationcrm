@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { InboxChannel, InboxScope } from "@/lib/inbox/types";
 import { channelLabel, scopeLabel } from "@/lib/inbox/types";
@@ -14,13 +13,12 @@ type InboxChannelLayoutProps = {
 };
 
 export function InboxChannelLayout({ channel, scope, list, detail }: InboxChannelLayoutProps) {
-  const pathname = usePathname();
   const base = `/inbox/${channel}`;
 
   return (
-    <div className="flex h-full min-w-0 overflow-hidden">
-      <div className="flex w-80 shrink-0 flex-col border-r border-border bg-white md:max-w-md">
-        <div className="border-b border-border px-4 py-3">
+    <div className="flex h-full w-full min-w-0 overflow-hidden">
+      <div className="flex h-full w-80 shrink-0 flex-col border-r border-border bg-white">
+        <div className="shrink-0 border-b border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">
             Inbox &gt; {channelLabel(channel)} &gt; {scopeLabel(scope)}
           </p>
@@ -49,9 +47,9 @@ export function InboxChannelLayout({ channel, scope, list, detail }: InboxChanne
             </Link>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">{list}</div>
+        <div className="min-h-0 flex-1 overflow-hidden">{list}</div>
       </div>
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">{detail}</div>
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white">{detail}</div>
     </div>
   );
 }

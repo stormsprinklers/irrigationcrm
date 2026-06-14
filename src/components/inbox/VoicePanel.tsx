@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Phone, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
+import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { InboxScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
@@ -31,6 +32,14 @@ type CallDetail = {
   customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
 };
 
+type QueueEntry = {
+  id: string;
+  fromNumber: string;
+  toNumber: string;
+  queueEnteredAt: string | null;
+  customer?: { id: string; name: string; phone?: string | null } | null;
+};
+
 export function VoicePanel({
   scope,
   selectedCallId,
@@ -44,10 +53,12 @@ export function VoicePanel({
   initialCustomerId?: string | null;
   initialName?: string | null;
 }) {
+  const { ready, connect, activeCall } = useVoiceDevice();
   const [phone, setPhone] = useState("");
   const [calling, setCalling] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [callDetail, setCallDetail] = useState<CallDetail | null>(null);
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
 
   useEffect(() => {
     if (initialPhone && !selectedCallId) {
@@ -76,26 +87,48 @@ export function VoicePanel({
       });
   }, [selectedCallId, scope]);
 
-  async function handleCall(toNumber: string, customerId?: string) {
-    setCalling(true);
-    const res = await fetch("/api/inbox/voice/call", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: toNumber,
-        customerId,
-        scope: scope === "customers" ? "external" : "internal",
-      }),
-    });
-    setCalling(false);
+  useEffect(() => {
+    if (scope !== "customers") return;
+    const loadQueue = () => {
+      fetch("/api/voice/queue")
+        .then((r) => r.json())
+        .then((data) => setQueue(data.queue ?? []))
+        .catch(() => {});
+    };
+    loadQueue();
+    const timer = setInterval(loadQueue, 5000);
+    return () => clearInterval(timer);
+  }, [scope]);
 
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Failed to place call");
+  async function handleCall(toNumber: string, customerId?: string) {
+    if (!ready) {
+      toast.error("Softphone not ready — check Twilio Voice settings");
+      return;
+    }
+    if (activeCall) {
+      toast.error("Already on a call");
       return;
     }
 
-    toast.success("Call initiated");
+    setCalling(true);
+    try {
+      await connect(toNumber, customerId);
+      toast.success("Calling…");
+    } catch {
+      toast.error("Failed to place call");
+    } finally {
+      setCalling(false);
+    }
+  }
+
+  async function acceptQueue(id: string) {
+    const res = await fetch(`/api/voice/queue/${id}/accept`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Failed to accept queued call");
+      return;
+    }
+    toast.success("Connecting queued caller…");
+    setQueue((q) => q.filter((e) => e.id !== id));
   }
 
   if (selectedCallId && callDetail) {
@@ -165,7 +198,7 @@ export function VoicePanel({
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!emp.phone || calling}
+                  disabled={!emp.phone || calling || !ready}
                   onClick={() => emp.phone && handleCall(emp.phone)}
                 >
                   <Phone className="h-4 w-4" />
@@ -184,16 +217,38 @@ export function VoicePanel({
       <h3 className="text-lg font-semibold">
         {initialName ? `Call ${initialName}` : "Dialer"}
       </h3>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Place a VoIP call through Storm Sprinklers
+      <p className="mb-1 text-sm text-muted-foreground">
+        Browser softphone {ready ? "· ready" : "· connecting…"}
       </p>
+
+      {queue.length > 0 && (
+        <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <Users className="h-4 w-4" />
+            Queue ({queue.length})
+          </div>
+          <ul className="space-y-2">
+            {queue.map((entry) => (
+              <li key={entry.id} className="flex items-center justify-between text-sm">
+                <span>
+                  {entry.customer?.name ?? entry.fromNumber}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => void acceptQueue(entry.id)}>
+                  Accept
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Input
         placeholder="(801) 555-0123"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
         className="mb-4 text-lg"
       />
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="mb-4 grid grid-cols-3 gap-2">
         {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((digit) => (
           <Button
             key={digit}
@@ -209,7 +264,7 @@ export function VoicePanel({
       <div className="flex gap-2">
         <Button
           className="flex-1"
-          disabled={!phone || calling}
+          disabled={!phone || calling || !ready || Boolean(activeCall)}
           onClick={() => handleCall(phone, initialCustomerId ?? undefined)}
         >
           <Phone className="h-4 w-4" />

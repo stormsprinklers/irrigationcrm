@@ -1,29 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CallDirection, Scope } from "@prisma/client";
+import { CallDirection, CallSessionStatus, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { validateTwilioSignature } from "@/lib/inbox/twilio";
+import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 
-async function parseTwilioBody(request: NextRequest) {
-  const formData = await request.formData();
-  const params: Record<string, string> = {};
-  formData.forEach((value, key) => {
-    params[key] = String(value);
-  });
-
-  const signature = request.headers.get("x-twilio-signature") ?? "";
-  if (
-    process.env.TWILIO_AUTH_TOKEN &&
-    !validateTwilioSignature(signature, request.url, params)
-  ) {
-    return null;
-  }
-  return params;
-}
-
 export async function POST(request: NextRequest) {
-  const params = await parseTwilioBody(request);
+  const params = await parseTwilioWebhook(request);
   if (!params) return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
 
   const callSid = params.CallSid;
@@ -31,6 +14,25 @@ export async function POST(request: NextRequest) {
   const from = params.From;
   const to = params.To;
   const duration = params.CallDuration ? parseInt(params.CallDuration, 10) : null;
+
+  if (callSid) {
+    const sessionStatus =
+      callStatus === "completed"
+        ? CallSessionStatus.COMPLETED
+        : callStatus === "in-progress"
+          ? CallSessionStatus.IN_PROGRESS
+          : callStatus === "ringing"
+            ? CallSessionStatus.RINGING
+            : undefined;
+
+    await prisma.callSession.updateMany({
+      where: { callSid },
+      data: {
+        ...(sessionStatus ? { status: sessionStatus } : {}),
+        ...(callStatus === "completed" ? { endedAt: new Date() } : {}),
+      },
+    });
+  }
 
   const company = await getCompanyByTwilioPhone(to);
   if (!company) return NextResponse.json({ ok: true });

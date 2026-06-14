@@ -25,6 +25,49 @@ type Conversation = {
   customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
 };
 
+function ComposeBar({
+  body,
+  onBodyChange,
+  onSubmit,
+  sending,
+  placeholder = "Type a message...",
+  multiline = false,
+}: {
+  body: string;
+  onBodyChange: (value: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  sending: boolean;
+  placeholder?: string;
+  multiline?: boolean;
+}) {
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="flex shrink-0 items-end gap-2 border-t border-border bg-white p-4"
+    >
+      {multiline ? (
+        <textarea
+          rows={3}
+          className="min-h-[44px] w-full min-w-0 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm"
+          placeholder={placeholder}
+          value={body}
+          onChange={(e) => onBodyChange(e.target.value)}
+        />
+      ) : (
+        <Input
+          placeholder={placeholder}
+          value={body}
+          onChange={(e) => onBodyChange(e.target.value)}
+          className="min-w-0 flex-1"
+        />
+      )}
+      <Button type="submit" size="icon" className="shrink-0" disabled={sending || !body.trim()}>
+        <Send className="h-4 w-4" />
+      </Button>
+    </form>
+  );
+}
+
 export function SmsMessagePane({
   conversationId,
   scope,
@@ -76,6 +119,11 @@ export function SmsMessagePane({
     e.preventDefault();
     if (!body.trim()) return;
 
+    if (scope === "customers" && !conversationId && !to.trim()) {
+      toast.error("Enter a phone number");
+      return;
+    }
+
     setSending(true);
     const res = await fetch("/api/inbox/sms/conversations", {
       method: "POST",
@@ -99,52 +147,26 @@ export function SmsMessagePane({
     toast.success("Message sent");
   }
 
-  if (!conversationId) {
-    return (
-      <div className="flex h-full min-w-0 flex-col">
-        <div className="border-b border-border p-4">
-          <h3 className="font-semibold">
-            {initialName ? `Message ${initialName}` : "New message"}
-          </h3>
-          {initialPhone ? (
-            <p className="text-xs text-muted-foreground">{initialPhone}</p>
-          ) : null}
-        </div>
-        <form onSubmit={handleSend} className="flex min-w-0 flex-1 flex-col p-4">
-          {scope === "customers" && (
-            <Input
-              placeholder="Phone number"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="mb-3 w-full"
-            />
-          )}
-          <textarea
-            className="mb-3 min-h-[120px] w-full flex-1 rounded-md border border-input p-3 text-sm"
-            placeholder="Type a message..."
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          <Button type="submit" disabled={sending}>
-            <Send className="h-4 w-4" />
-            Send
-          </Button>
-        </form>
-      </div>
-    );
-  }
+  const headerName = conversationId
+    ? (conversation?.customer?.name ??
+      conversation?.title ??
+      conversation?.participantPhone ??
+      "Conversation")
+    : initialName
+      ? `Message ${initialName}`
+      : "New message";
 
-  const headerName =
-    conversation?.customer?.name ?? conversation?.title ?? conversation?.participantPhone ?? "Conversation";
+  const headerSubtitle =
+    conversation?.participantPhone ?? (initialPhone && !conversationId ? initialPhone : null);
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div>
-          <h3 className="font-semibold">{headerName}</h3>
-          {conversation?.participantPhone && (
-            <p className="text-xs text-muted-foreground">{conversation.participantPhone}</p>
-          )}
+    <div className="flex h-full w-full min-w-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="truncate font-semibold">{headerName}</h3>
+          {headerSubtitle ? (
+            <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
+          ) : null}
         </div>
         {scope === "customers" && conversation?.customer && (
           <BlockContactAction
@@ -156,38 +178,56 @@ export function SmsMessagePane({
         )}
       </div>
 
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                msg.direction === "OUTBOUND"
-                  ? "ml-auto bg-primary text-white"
-                  : "bg-muted text-foreground"
-              )}
-            >
-              {msg.sender?.name && msg.direction === "OUTBOUND" && scope === "team" && (
-                <p className="mb-1 text-[10px] opacity-70">{msg.sender.name}</p>
-              )}
-              {msg.body}
-            </div>
-          ))}
+      {scope === "customers" && !conversationId && (
+        <div className="shrink-0 border-b border-border px-4 py-3">
+          <Input
+            placeholder="Phone number"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+          />
         </div>
-      </ScrollArea>
+      )}
 
-      <form onSubmit={handleSend} className="flex min-w-0 gap-2 border-t border-border p-4">
-        <Input
-          placeholder="Type a message..."
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          className="min-w-0 flex-1"
-        />
-        <Button type="submit" size="icon" disabled={sending}>
-          <Send className="h-4 w-4" />
-        </Button>
-      </form>
+      <div className="min-h-0 flex-1 overflow-hidden bg-muted/20">
+        <ScrollArea className="h-full w-full">
+          <div className="flex min-h-full flex-col p-4">
+            {messages.length > 0 ? (
+              <div className="space-y-3">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "max-w-[75%] rounded-2xl px-4 py-2 text-sm",
+                      msg.direction === "OUTBOUND"
+                        ? "ml-auto bg-primary text-white"
+                        : "bg-white text-foreground shadow-sm"
+                    )}
+                  >
+                    {msg.sender?.name && msg.direction === "OUTBOUND" && scope === "team" && (
+                      <p className="mb-1 text-[10px] opacity-70">{msg.sender.name}</p>
+                    )}
+                    {msg.body}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center py-12 text-center text-sm text-muted-foreground">
+                {conversationId
+                  ? "No messages in this conversation yet."
+                  : "Compose a message below to start the conversation."}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <ComposeBar
+        body={body}
+        onBodyChange={setBody}
+        onSubmit={handleSend}
+        sending={sending}
+        multiline
+      />
     </div>
   );
 }

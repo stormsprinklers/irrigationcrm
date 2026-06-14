@@ -63,26 +63,28 @@ export function InboxChannelView({
 
   if (ch === "sms") {
     return (
-      <InboxChannelLayout
-        channel={ch}
-        scope={sc}
-        list={
-          <SmsThreadList
-            scope={sc}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
-        }
-        detail={
-          <SmsMessagePane
-            conversationId={selectedId}
-            scope={sc}
-            initialPhone={deepLink.phone}
-            initialCustomerId={deepLink.customerId}
-            initialName={deepLink.name}
-          />
-        }
-      />
+      <div className="h-full w-full min-w-0">
+        <InboxChannelLayout
+          channel={ch}
+          scope={sc}
+          list={
+            <SmsThreadList
+              scope={sc}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          }
+          detail={
+            <SmsMessagePane
+              conversationId={selectedId}
+              scope={sc}
+              initialPhone={deepLink.phone}
+              initialCustomerId={deepLink.customerId}
+              initialName={deepLink.name}
+            />
+          }
+        />
+      </div>
     );
   }
 

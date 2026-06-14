@@ -45,9 +45,17 @@ export async function findOrCreateSmsConversation(params: {
 }
 
 export async function getCompanyByTwilioPhone(phone: string) {
-  return prisma.company.findFirst({
+  const direct = await prisma.company.findFirst({
     where: { twilioPhone: phone },
   });
+  if (direct) return direct;
+
+  const normalized = phone.startsWith("+") ? phone : phone;
+  const tracked = await prisma.phoneNumber.findFirst({
+    where: { e164: normalized },
+    include: { company: true },
+  });
+  return tracked?.company ?? null;
 }
 
 export async function getCompanyBySendGridAddress(email: string) {
