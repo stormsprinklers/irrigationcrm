@@ -18,8 +18,8 @@ export function InboxChannelLayout({ channel, scope, list, detail }: InboxChanne
   const base = `/inbox/${channel}`;
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <div className="flex w-full max-w-md flex-col border-r border-border bg-white">
+    <div className="flex h-full min-w-0 overflow-hidden">
+      <div className="flex w-80 shrink-0 flex-col border-r border-border bg-white md:max-w-md">
         <div className="border-b border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">
             Inbox &gt; {channelLabel(channel)} &gt; {scopeLabel(scope)}
@@ -51,7 +51,7 @@ export function InboxChannelLayout({ channel, scope, list, detail }: InboxChanne
         </div>
         <div className="flex-1 overflow-hidden">{list}</div>
       </div>
-      <div className="flex-1 overflow-hidden bg-white">{detail}</div>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">{detail}</div>
     </div>
   );
 }

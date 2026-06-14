@@ -101,7 +101,7 @@ export function SmsMessagePane({
 
   if (!conversationId) {
     return (
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-w-0 flex-col">
         <div className="border-b border-border p-4">
           <h3 className="font-semibold">
             {initialName ? `Message ${initialName}` : "New message"}
@@ -110,17 +110,17 @@ export function SmsMessagePane({
             <p className="text-xs text-muted-foreground">{initialPhone}</p>
           ) : null}
         </div>
-        <form onSubmit={handleSend} className="flex flex-1 flex-col p-4">
+        <form onSubmit={handleSend} className="flex min-w-0 flex-1 flex-col p-4">
           {scope === "customers" && (
             <Input
               placeholder="Phone number"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="mb-3"
+              className="mb-3 w-full"
             />
           )}
           <textarea
-            className="mb-3 min-h-[120px] flex-1 rounded-md border border-input p-3 text-sm"
+            className="mb-3 min-h-[120px] w-full flex-1 rounded-md border border-input p-3 text-sm"
             placeholder="Type a message..."
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -138,7 +138,7 @@ export function SmsMessagePane({
     conversation?.customer?.name ?? conversation?.title ?? conversation?.participantPhone ?? "Conversation";
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h3 className="font-semibold">{headerName}</h3>
@@ -177,11 +177,12 @@ export function SmsMessagePane({
         </div>
       </ScrollArea>
 
-      <form onSubmit={handleSend} className="flex gap-2 border-t border-border p-4">
+      <form onSubmit={handleSend} className="flex min-w-0 gap-2 border-t border-border p-4">
         <Input
           placeholder="Type a message..."
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          className="min-w-0 flex-1"
         />
         <Button type="submit" size="icon" disabled={sending}>
           <Send className="h-4 w-4" />

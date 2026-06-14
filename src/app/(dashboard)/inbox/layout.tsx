@@ -9,7 +9,7 @@ export default function InboxLayout({
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
       <ModuleSidebar title="Inbox" sections={inboxSidebar} />
-      <div className="flex flex-1 overflow-hidden">{children}</div>
+      <div className="flex min-w-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }
