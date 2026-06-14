@@ -42,6 +42,8 @@ type Props = {
   onFiltersChange: (filters: ScheduleFilters) => void;
   onToggleFilters: () => void;
   onBulkAction: (action: string) => void;
+  viewMode?: "week" | "day";
+  onViewModeChange?: (mode: "week" | "day") => void;
 };
 
 const COLOR_BY_LABELS: Record<ColorByMode, string> = {
@@ -67,6 +69,8 @@ export function ScheduleToolbar({
   onFiltersChange,
   onToggleFilters,
   onBulkAction,
+  viewMode = "week",
+  onViewModeChange,
 }: Props) {
   return (
     <div className="relative flex flex-wrap items-center justify-between gap-4 border-b border-border bg-white px-4 py-3">
@@ -167,13 +171,13 @@ export function ScheduleToolbar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              Week
+              {viewMode === "day" ? "Day" : "Week"}
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
-            <DropdownMenuItem disabled>Day (coming soon)</DropdownMenuItem>
-            <DropdownMenuItem>Week</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewModeChange?.("day")}>Day</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewModeChange?.("week")}>Week</DropdownMenuItem>
             <DropdownMenuItem disabled>Month (coming soon)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

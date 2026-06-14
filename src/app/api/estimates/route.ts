@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { computeEstimateExpiry, getEstimateForCompany, listEstimates } from "@/lib/estimates/queries";
+import { getTemplateLineItemsForEstimate } from "@/lib/price-book/extras";
+import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -54,6 +56,34 @@ export async function POST(request: NextRequest) {
         depositAmount: company.estimateDepositAmount,
       },
     });
+
+    if (body.templateId) {
+      const templateItems = await getTemplateLineItemsForEstimate(user.companyId, body.templateId);
+      if (templateItems.length > 0) {
+        const lineItems = templateItems.map((item, index) => {
+          const qty = Number(item.quantity);
+          const price = Number(item.unitPrice);
+          const total = computeLineItemTotal(qty, price);
+          return {
+            estimateId: estimate.id,
+            priceBookItemId: item.priceBookItemId,
+            name: item.name,
+            description: item.description,
+            quantity: qty,
+            unitPrice: price,
+            total,
+            sortOrder: index,
+          };
+        });
+        await prisma.estimateLineItem.createMany({ data: lineItems });
+        const subtotal = lineItems.reduce((s, i) => s + i.total, 0);
+        const totals = computeTotals(subtotal, 0);
+        await prisma.estimate.update({
+          where: { id: estimate.id },
+          data: totals,
+        });
+      }
+    }
 
     const full = await getEstimateForCompany(user.companyId, estimate.id);
     return NextResponse.json(full, { status: 201 });

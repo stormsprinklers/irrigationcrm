@@ -19,19 +19,22 @@ import type { DashboardDTO } from "@/lib/maintenance-plans/types";
 export default function ReportingServicePlansPage() {
   const [dashboard, setDashboard] = useState<DashboardDTO | null>(null);
   const [billingRows, setBillingRows] = useState<BillingRowDisplay[]>([]);
+  const [churn, setChurn] = useState<{ churnRatePercent: number; cancelledThisMonth: number; activeStart: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/maintenance-plans/dashboard"),
       fetch("/api/maintenance-plans/billing"),
+      fetch("/api/reporting/service-plans-churn"),
     ])
-      .then(async ([dashRes, billingRes]) => {
+      .then(async ([dashRes, billingRes, churnRes]) => {
         if (dashRes.ok) setDashboard(await dashRes.json());
         if (billingRes.ok) {
           const data = await billingRes.json();
           setBillingRows(data.billing ?? []);
         }
+        if (churnRes.ok) setChurn(await churnRes.json());
       })
       .catch(() => toast.error("Failed to load service plan stats"))
       .finally(() => setLoading(false));
@@ -81,6 +84,18 @@ export default function ReportingServicePlansPage() {
                 <span className="text-muted-foreground">Revenue this month:</span>{" "}
                 {formatCurrency(dashboard.revenueCollectedThisMonth)}
               </p>
+              {churn && (
+                <>
+                  <p>
+                    <span className="text-muted-foreground">Churn rate (MTD):</span>{" "}
+                    {churn.churnRatePercent}%
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Cancelled this month:</span>{" "}
+                    {churn.cancelledThisMonth} of {churn.activeStart} active
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
 

@@ -64,15 +64,45 @@ async function main() {
     update: {
       estimateExpiryDays: 14,
       estimateDepositRequired: false,
+      address: "1234 Irrigation Way",
+      city: "Orem",
+      state: "UT",
+      zip: "84057",
+      supportEmail: "support@stormsprinklers.com",
+      phone: "(801) 555-0100",
+      website: "www.stormsprinklers.com",
+      legalName: "Storm Sprinklers LLC",
+      industry: "Irrigation & Lawn Care",
+      description:
+        "Storm Sprinklers is a full-service irrigation company serving Utah County and surrounding areas.",
+      leadSources: ["Website", "Referral", "Google", "Yard sign"],
+      referralCode: "STORM-REF",
+      bookingSlug: "storm-sprinklers",
+      intakeRequiredFields: ["name", "phone", "email"],
     },
     create: {
       id: "seed-company",
       name: "Storm Sprinklers",
+      address: "1234 Irrigation Way",
+      city: "Orem",
+      state: "UT",
+      zip: "84057",
+      supportEmail: "support@stormsprinklers.com",
+      phone: "(801) 555-0100",
+      website: "www.stormsprinklers.com",
+      legalName: "Storm Sprinklers LLC",
+      industry: "Irrigation & Lawn Care",
+      description:
+        "Storm Sprinklers is a full-service irrigation company serving Utah County and surrounding areas.",
       twilioPhone: process.env.TWILIO_PHONE_NUMBER ?? null,
       sendgridFrom: process.env.SENDGRID_FROM_EMAIL ?? "support@stormsprinklers.com",
       recordCalls: true,
       transcribeCalls: true,
       estimateExpiryDays: 14,
+      leadSources: ["Website", "Referral", "Google", "Yard sign"],
+      referralCode: "STORM-REF",
+      bookingSlug: "storm-sprinklers",
+      intakeRequiredFields: ["name", "phone", "email"],
     },
   });
 
@@ -657,6 +687,61 @@ async function main() {
               estimatedMinutes: 90,
               sortOrder: 2,
             },
+          ],
+        },
+      },
+    });
+  }
+
+  await prisma.lead.deleteMany({ where: { companyId: company.id, name: { in: ["Maria Lopez", "Chris Nguyen"] } } });
+  await prisma.lead.createMany({
+    data: [
+      {
+        companyId: company.id,
+        name: "Maria Lopez",
+        phone: "+18015550222",
+        email: "maria@example.com",
+        source: "Website",
+        status: "NEW",
+        assignedUserId: austin.id,
+      },
+      {
+        companyId: company.id,
+        name: "Chris Nguyen",
+        phone: "+18015550333",
+        source: "Google",
+        status: "CONTACTED",
+        assignedUserId: austin.id,
+      },
+    ],
+  });
+
+  await prisma.priceBookDiscount.deleteMany({ where: { companyId: company.id, name: "Spring special" } });
+  await prisma.priceBookDiscount.create({
+    data: {
+      companyId: company.id,
+      name: "Spring special",
+      code: "SPRING10",
+      type: "PERCENT",
+      amount: 10,
+      active: true,
+      appliesTo: "SERVICES",
+    },
+  });
+
+  const existingEstimateTemplate = await prisma.estimateTemplate.findFirst({
+    where: { companyId: company.id, name: "Backflow test bundle" },
+  });
+  if (!existingEstimateTemplate) {
+    await prisma.estimateTemplate.create({
+      data: {
+        companyId: company.id,
+        name: "Backflow test bundle",
+        description: "Standard backflow test visit",
+        lineItems: {
+          create: [
+            { name: "Backflow test", quantity: 1, unitPrice: 125, sortOrder: 0 },
+            { name: "Trip charge", quantity: 1, unitPrice: 49, sortOrder: 1 },
           ],
         },
       },

@@ -182,9 +182,34 @@ enum PriceBookItemType {
   MATERIAL
 }
 
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+}
+
+enum PriceBookDiscountAppliesTo {
+  ALL
+  SERVICES
+  MATERIALS
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
+  address                  String?
+  city                     String?
+  state                    String?
+  zip                      String?
+  timezone                 String?  @default("America/Denver")
+  supportEmail             String?
+  phone                    String?
+  website                  String?
+  legalName                String?
+  industry                 String?
+  description              String?
   twilioPhone              String?
   sendgridFrom             String?
   sendgridInboundDomain    String?
@@ -194,24 +219,51 @@ model Company {
   estimateDepositRequired  Boolean  @default(false)
   estimateDepositType      DepositType?
   estimateDepositAmount    Decimal? @db.Decimal(10, 2)
+  invoicePrefix            String?  @default("INV")
+  invoiceTerms             String?
+  invoiceFooter            String?
+  onlineBookingEnabled     Boolean  @default(false)
+  bookingSlug              String?
+  bookingLeadTimeHours     Int      @default(24)
+  portalEnabled            Boolean  @default(false)
+  portalShowInvoices       Boolean  @default(true)
+  portalShowEstimates      Boolean  @default(true)
+  portalShowJobs           Boolean  @default(true)
+  notifyEstimateSent       Boolean  @default(true)
+  notifyInvoicePaid        Boolean  @default(true)
+  notifyVisitScheduled     Boolean  @default(true)
+  leadSources              String[] @default([])
+  intakeRequiredFields     String[] @default([])
+  businessHours            Json?
+  referralCode             String?
+  subscriptionTier         String?  @default("Professional")
+  customReportPresets      Json?
+  rachioApiKey             String?
+  hydrawiseApiKey          String?
+  defaultLeadAssigneeId    String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  users             User[]
-  customers         Customer[]
-  blockedContacts   BlockedContact[]
-  callLogs          CallLog[]
-  conversations     Conversation[]
-  emailMessages     EmailMessage[]
-  internalGroups    InternalGroup[]
-  serviceAreas      ServiceArea[]
-  crews             Crew[]
-  visits            Visit[]
-  properties        CustomerProperty[]
-  priceBookCategories PriceBookCategory[]
-  estimates         Estimate[]
-  invoices          Invoice[]
-  maintenancePlans  MaintenancePlanTemplate[]
+  defaultLeadAssignee    User?                    @relation("DefaultLeadAssignee", fields: [defaultLeadAssigneeId], references: [id], onDelete: SetNull)
+  users                  User[]
+  customers              Customer[]
+  blockedContacts        BlockedContact[]
+  callLogs               CallLog[]
+  conversations          Conversation[]
+  emailMessages          EmailMessage[]
+  internalGroups         InternalGroup[]
+  serviceAreas           ServiceArea[]
+  crews                  Crew[]
+  visits                 Visit[]
+  properties             CustomerProperty[]
+  priceBookCategories    PriceBookCategory[]
+  priceBookDiscounts     PriceBookDiscount[]
+  estimateTemplates      EstimateTemplate[]
+  pricingForms           PricingForm[]
+  leads                  Lead[]
+  estimates              Estimate[]
+  invoices               Invoice[]
+  maintenancePlans       MaintenancePlanTemplate[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
 }
 
@@ -246,6 +298,8 @@ model User {
   serviceAreas       UserServiceArea[]
   crewMemberships    CrewMember[]
   assignedVisits     Visit[]              @relation("AssignedVisits")
+  assignedLeads      Lead[]               @relation("AssignedLeads")
+  defaultLeadFor     Company[]            @relation("DefaultLeadAssignee")
   visitTimeEvents    VisitTimeEvent[]
   visitNotes         VisitNote[]
   visitAttachments   VisitAttachment[]
@@ -277,6 +331,29 @@ model Customer {
   estimates            Estimate[]
   invoices             Invoice[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
+  convertedFromLead      Lead?
+}
+
+model Lead {
+  id                  String     @id @default(cuid())
+  companyId           String
+  name                String
+  phone               String?
+  email               String?
+  source              String?
+  status              LeadStatus @default(NEW)
+  assignedUserId      String?
+  notes               String?
+  convertedCustomerId String?    @unique
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedUser      User?     @relation("AssignedLeads", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([assignedUserId])
 }
 
 model CustomerProperty {
@@ -624,8 +701,9 @@ model PriceBookCategory {
 
   company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   parent   PriceBookCategory?  @relation("PriceBookCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children PriceBookCategory[] @relation("PriceBookCategoryTree")
-  items    PriceBookItem[]
+  children     PriceBookCategory[] @relation("PriceBookCategoryTree")
+  items        PriceBookItem[]
+  pricingForms PricingForm[]
 
   @@unique([companyId, slug])
   @@index([companyId, type, sortOrder])
@@ -655,8 +733,9 @@ model PriceBookItem {
   category          PriceBookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   serviceMaterials  PriceBookServiceMaterial[] @relation("ServiceItemMaterials")
   usedInServices    PriceBookServiceMaterial[] @relation("MaterialInServices")
-  visitLineItems    VisitLineItem[]
-  estimateLineItems EstimateLineItem[]
+  visitLineItems           VisitLineItem[]
+  estimateLineItems        EstimateLineItem[]
+  estimateTemplateLineItems EstimateTemplateLineItem[]
 
   @@index([categoryId, active])
   @@index([type, active])
@@ -981,4 +1060,67 @@ model PropertySmartController {
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId])
+}
+
+model PriceBookDiscount {
+  id        String                   @id @default(cuid())
+  companyId String
+  name      String
+  code      String?
+  type      DiscountType
+  amount    Decimal                  @db.Decimal(10, 2)
+  active    Boolean                  @default(true)
+  appliesTo PriceBookDiscountAppliesTo @default(ALL)
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, active])
+}
+
+model EstimateTemplate {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lineItems EstimateTemplateLineItem[]
+
+  @@index([companyId])
+}
+
+model EstimateTemplateLineItem {
+  id              String  @id @default(cuid())
+  templateId      String
+  priceBookItemId String?
+  name            String
+  description     String?
+  quantity        Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice       Decimal @db.Decimal(10, 2)
+  sortOrder       Int     @default(0)
+
+  template      EstimateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  priceBookItem PriceBookItem?   @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
+
+  @@index([templateId])
+}
+
+model PricingForm {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  fields      Json
+  categoryId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category PriceBookCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
 }

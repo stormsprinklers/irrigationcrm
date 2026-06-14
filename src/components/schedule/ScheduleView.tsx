@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addWeeks, endOfWeek, format, startOfWeek, subWeeks } from "date-fns";
+import {
+  addDays,
+  addWeeks,
+  endOfWeek,
+  format,
+  startOfDay,
+  startOfWeek,
+  subDays,
+  subWeeks,
+} from "date-fns";
 import { toast } from "sonner";
 import { ScheduleToolbar } from "./ScheduleToolbar";
 import { WeekGrid } from "./WeekGrid";
@@ -19,7 +28,9 @@ type FilterOptions = {
 };
 
 export function ScheduleView() {
+  const [viewMode, setViewMode] = useState<"week" | "day">("week");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
+  const [focusDay, setFocusDay] = useState(() => startOfDay(new Date()));
   const [jobs, setJobs] = useState<ScheduleJobDTO[]>([]);
   const [colorBy, setColorBy] = useState<ColorByMode>("area");
   const [filters, setFilters] = useState<ScheduleFilters>(DEFAULT_SCHEDULE_FILTERS);
@@ -35,16 +46,23 @@ export function ScheduleView() {
   });
   const [loading, setLoading] = useState(true);
 
-  const weekEnd = useMemo(
-    () => endOfWeek(weekStart, { weekStartsOn: 0 }),
-    [weekStart]
-  );
+  const weekEnd = useMemo(() => {
+    if (viewMode === "day") {
+      const end = new Date(focusDay);
+      end.setHours(23, 59, 59, 999);
+      return end;
+    }
+    return endOfWeek(weekStart, { weekStartsOn: 0 });
+  }, [weekStart, focusDay, viewMode]);
+
+  const rangeStart = viewMode === "day" ? focusDay : weekStart;
 
   const weekLabel = useMemo(() => {
+    if (viewMode === "day") return format(focusDay, "EEEE, MMMM d, yyyy");
     const end = new Date(weekStart);
     end.setDate(end.getDate() + 6);
     return `${format(weekStart, "MMMM dd")}-${format(end, "dd, yyyy")}`;
-  }, [weekStart]);
+  }, [weekStart, focusDay, viewMode]);
 
   const activeFilterCount =
     filters.serviceAreaIds.length +
@@ -65,7 +83,7 @@ export function ScheduleView() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const start = weekStart.toISOString();
+      const start = rangeStart.toISOString();
       const end = new Date(weekEnd.getTime() + 1).toISOString();
 
       const jobsParams = new URLSearchParams({ start, end });
@@ -100,7 +118,7 @@ export function ScheduleView() {
     } finally {
       setLoading(false);
     }
-  }, [weekStart, weekEnd, buildFilterQuery]);
+  }, [rangeStart, weekEnd, buildFilterQuery]);
 
   useEffect(() => {
     loadData();
@@ -117,9 +135,24 @@ export function ScheduleView() {
         filterOptions={filterOptions}
         filtersOpen={filtersOpen}
         activeFilterCount={activeFilterCount}
-        onPrevWeek={() => setWeekStart((d) => subWeeks(d, 1))}
-        onNextWeek={() => setWeekStart((d) => addWeeks(d, 1))}
-        onToday={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }))}
+        onPrevWeek={() => {
+          if (viewMode === "day") setFocusDay((d) => subDays(d, 1));
+          else setWeekStart((d) => subWeeks(d, 1));
+        }}
+        onNextWeek={() => {
+          if (viewMode === "day") setFocusDay((d) => addDays(d, 1));
+          else setWeekStart((d) => addWeeks(d, 1));
+        }}
+        onToday={() => {
+          const today = startOfDay(new Date());
+          setFocusDay(today);
+          setWeekStart(startOfWeek(today, { weekStartsOn: 0 }));
+        }}
+        viewMode={viewMode}
+        onViewModeChange={(mode) => {
+          setViewMode(mode);
+          if (mode === "day") setFocusDay(startOfDay(new Date()));
+        }}
         onColorByChange={setColorBy}
         onFiltersChange={setFilters}
         onToggleFilters={() => setFiltersOpen((o) => !o)}
@@ -129,7 +162,12 @@ export function ScheduleView() {
         {loading ? (
           <p className="p-6 text-sm text-muted-foreground">Loading schedule...</p>
         ) : (
-          <WeekGrid jobs={jobs} weekStart={weekStart} colorBy={colorBy} />
+          <WeekGrid
+            jobs={jobs}
+            weekStart={viewMode === "day" ? focusDay : weekStart}
+            colorBy={colorBy}
+            dayCount={viewMode === "day" ? 1 : 7}
+          />
         )}
       </div>
     </div>

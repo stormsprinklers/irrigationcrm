@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { FormEvent, useState } from "react";
 import {
   Bell,
   ChevronDown,
@@ -13,16 +15,34 @@ import {
   Settings,
 } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
-import { currentUser } from "@/lib/mock/user";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [search, setSearch] = useState("");
+  const userName = session?.user?.name ?? "User";
+
+  function onSearchSubmit(e: FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    if (q) router.push(`/customers?search=${encodeURIComponent(q)}`);
+    else router.push("/customers");
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white">
@@ -58,21 +78,23 @@ export function TopNav() {
           })}
         </nav>
 
-        <div className="mx-auto hidden max-w-md flex-1 md:block">
+        <form className="mx-auto hidden max-w-md flex-1 md:block" onSubmit={onSearchSubmit}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search" className="h-9 rounded-full bg-muted/50 pl-9" />
+            <Input
+              placeholder="Search customers"
+              className="h-9 rounded-full bg-muted/50 pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
-        </div>
+        </form>
 
         <div className="ml-auto flex items-center gap-1">
           <NewMenu />
 
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            <Badge variant="unread" className="absolute -right-0.5 -top-0.5 h-5 min-w-5 px-1 text-[10px]">
-              23
-            </Badge>
           </Button>
           <Button variant="ghost" size="icon">
             <Phone className="h-5 w-5" />
@@ -91,7 +113,7 @@ export function TopNav() {
 
           <Avatar className="ml-1 h-8 w-8">
             <AvatarFallback className="bg-primary/10 text-xs text-primary">
-              {currentUser.avatarInitials}
+              {getInitials(userName)}
             </AvatarFallback>
           </Avatar>
         </div>

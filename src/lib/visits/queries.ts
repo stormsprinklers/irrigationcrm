@@ -85,6 +85,40 @@ function buildVisitWhere(
   return where;
 }
 
+export type VisitListFilters = {
+  search?: string;
+  status?: VisitStatus;
+};
+
+export async function listVisitsForCompany(
+  companyId: string,
+  filters?: VisitListFilters
+) {
+  const where: Prisma.VisitWhereInput = { companyId };
+
+  if (filters?.status) {
+    where.status = filters.status;
+  } else {
+    where.status = { not: VisitStatus.CANCELLED };
+  }
+
+  if (filters?.search) {
+    const q = filters.search;
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { customer: { name: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  const visits = await prisma.visit.findMany({
+    where,
+    include: visitInclude,
+    orderBy: { startAt: "desc" },
+    take: 200,
+  });
+  return visits.map(serializeVisit);
+}
+
 export async function listVisits(
   companyId: string,
   start: Date,

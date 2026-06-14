@@ -57,24 +57,26 @@ type Props = {
   jobs: ScheduleJobDTO[];
   weekStart: Date;
   colorBy: ColorByMode;
+  dayCount?: number;
 };
 
-export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
+export function WeekGrid({ jobs, weekStart, colorBy, dayCount = 7 }: Props) {
   const startHour = SCHEDULE_HOURS[0];
   const endHour = SCHEDULE_HOURS[SCHEDULE_HOURS.length - 1] + 1;
   const totalHours = endHour - startHour;
+  const gridCols = `grid-cols-[60px_repeat(${dayCount},1fr)]`;
 
   const days = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length: dayCount }, (_, i) => {
       const date = new Date(weekStart);
       date.setDate(date.getDate() + i);
       return date;
     });
-  }, [weekStart]);
+  }, [weekStart, dayCount]);
 
   const now = new Date();
   const isCurrentWeek =
-    now >= weekStart && now < new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    now >= weekStart && now < new Date(weekStart.getTime() + dayCount * 24 * 60 * 60 * 1000);
   const currentLineTop = isCurrentWeek
     ? ((now.getHours() + now.getMinutes() / 60 - startHour) / totalHours) *
       (totalHours * HOUR_HEIGHT)
@@ -83,7 +85,7 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
   return (
     <div className="overflow-x-auto bg-white">
       <div className="min-w-[900px]">
-        <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-border">
+        <div className={`grid ${gridCols} border-b border-border`}>
           <div className="border-r border-border bg-muted/30" />
           {days.map((day) => {
             const dayJobs = jobs.filter(
@@ -129,7 +131,7 @@ export function WeekGrid({ jobs, weekStart, colorBy }: Props) {
           })}
         </div>
 
-        <div className="relative grid grid-cols-[60px_repeat(7,1fr)]">
+        <div className={`relative grid ${gridCols}`}>
           <div className="border-r border-border">
             {SCHEDULE_HOURS.map((hour) => (
               <div

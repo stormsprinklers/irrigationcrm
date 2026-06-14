@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CustomerTable } from "@/components/customers/CustomerTable";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -12,8 +13,9 @@ import { toast } from "sonner";
 import type { CustomerDTO } from "@/lib/customers/types";
 
 export default function CustomersPageContent() {
+  const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
