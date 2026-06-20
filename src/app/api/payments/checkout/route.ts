@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { prisma } from "@/lib/prisma";
+import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 
@@ -76,44 +77,26 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: visit.customer.email ?? undefined,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: Math.round(total * 100),
-            product_data: {
-              name: visit.title,
-              description: `Invoice ${invoice.invoiceNumber}`,
-            },
-          },
-        },
-      ],
-      success_url: `${appUrl}/visits/${visit.id}?payment=success`,
-      cancel_url: `${appUrl}/visits/${visit.id}?payment=cancelled`,
-      metadata: {
-        invoiceId: invoice.id,
-        visitId: visit.id,
+    const session = await createInvoiceCheckoutSession({
+      invoice: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
         companyId: user.companyId,
+        visitId: visit.id,
       },
+      customerEmail: visit.customer.email,
+      productName: visit.title,
+      amount: total,
+      successUrl: `${appUrl}/visits/${visit.id}?payment=success`,
+      cancelUrl: `${appUrl}/visits/${visit.id}?payment=cancelled`,
     });
 
-    await prisma.invoice.update({
-      where: { id: invoice.id },
-      data: { stripeCheckoutSessionId: session.id },
+    return NextResponse.json({
+      url: session.url,
+      payLink: getInvoicePayUrl(invoice.publicToken),
     });
-
-    if (!session.url) {
-      return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
-    }
-
-    return NextResponse.json({ url: session.url });
   } catch {
     return unauthorizedResponse();
   }

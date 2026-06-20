@@ -1,8 +1,9 @@
 import type Stripe from "stripe";
-import { prisma } from "@/lib/prisma";
-import { recordMaintenanceInvoicePayment } from "@/lib/maintenance-plans/discounts";
 import { sendEmail } from "@/lib/inbox/sendgrid";
 import { sendSms } from "@/lib/inbox/twilio";
+import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
+import { recordMaintenanceInvoicePayment } from "@/lib/maintenance-plans/discounts";
+import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 
 function formatCurrency(value: number) {
@@ -47,8 +48,7 @@ async function sendPaymentReceipt(params: {
   amount: number;
   publicToken: string;
 }) {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const payUrl = `${appUrl}/api/invoices/public/${params.publicToken}`;
+  const payUrl = getInvoicePayUrl(params.publicToken);
   const message = `Payment received for invoice ${params.invoiceNumber}: ${formatCurrency(params.amount)}. View receipt: ${payUrl}`;
 
   if (params.customerEmail && params.sendgridFrom && process.env.SENDGRID_API_KEY) {
