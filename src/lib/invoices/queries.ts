@@ -4,7 +4,7 @@ import { toNumber } from "@/lib/visits/totals";
 import type { InvoiceDTO, PublicInvoiceDTO } from "./types";
 
 export const invoiceInclude = {
-  customer: { select: { id: true, name: true, phone: true, email: true } },
+  customer: { select: { id: true, name: true, phone: true, email: true, doNotService: true } },
   visit: { select: { id: true, title: true } },
   estimate: { select: { id: true, status: true } },
   lineItems: { orderBy: { sortOrder: "asc" as const } },

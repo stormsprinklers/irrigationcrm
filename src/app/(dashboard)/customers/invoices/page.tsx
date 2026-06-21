@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
+import { useSession } from "next-auth/react";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { canIssueRefunds } from "@/lib/invoices/permissions";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
@@ -26,17 +30,21 @@ type InvoiceRow = {
   invoiceNumber: string;
   status: string;
   total: number;
+  amountPaid: number;
   balanceDue: number;
   publicToken: string;
   createdAt: string;
-  customer: { id: string; name: string };
+  customer: { id: string; name: string; doNotService?: boolean };
 };
 
 export default function CustomerInvoicesPage() {
+  const { data: session } = useSession();
+  const canRefund = canIssueRefunds(session?.user?.role ?? "TECH");
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [refundInvoice, setRefundInvoice] = useState<InvoiceRow | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -115,7 +123,12 @@ export default function CustomerInvoicesPage() {
               {invoices.map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                  <TableCell>{invoice.customer.name}</TableCell>
+                  <TableCell>
+                    <CustomerNameWithBadge
+                      name={invoice.customer.name}
+                      doNotService={invoice.customer.doNotService}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{invoice.status}</Badge>
                   </TableCell>
@@ -151,6 +164,16 @@ export default function CustomerInvoicesPage() {
                       >
                         Copy link
                       </Button>
+                      {canRefund && invoice.amountPaid > 0 && invoice.status !== "REFUNDED" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setRefundInvoice(invoice)}
+                        >
+                          Refund
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -159,6 +182,16 @@ export default function CustomerInvoicesPage() {
           </Table>
         </div>
       )}
+      {refundInvoice ? (
+        <IssueRefundDialog
+          invoiceId={refundInvoice.id}
+          invoiceNumber={refundInvoice.invoiceNumber}
+          customerName={refundInvoice.customer.name}
+          open
+          onClose={() => setRefundInvoice(null)}
+          onRefunded={() => load()}
+        />
+      ) : null}
     </ContentArea>
   );
 }

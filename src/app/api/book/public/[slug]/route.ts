@@ -145,6 +145,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
   } else {
+    if (customer.doNotService) {
+      return NextResponse.json(
+        { error: "Online booking is not available for this account. Please call us." },
+        { status: 403 }
+      );
+    }
     customer = await prisma.customer.update({
       where: { id: customer.id },
       data: {

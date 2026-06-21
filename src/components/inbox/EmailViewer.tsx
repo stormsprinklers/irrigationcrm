@@ -87,7 +87,8 @@ export function EmailViewer({
     setSending(false);
 
     if (!res.ok) {
-      toast.error("Failed to send email");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to send email");
       return;
     }
 

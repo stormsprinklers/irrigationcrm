@@ -13,6 +13,7 @@ import {
 import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { CustomerDTO } from "@/lib/customers/types";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -24,9 +25,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export function CustomerTable({ data }: { data: CustomerDTO[] }) {
+export function CustomerTable({
+  data,
+  selectedIds = [],
+  onSelectedIdsChange,
+}: {
+  data: CustomerDTO[];
+  selectedIds?: string[];
+  onSelectedIdsChange?: (ids: string[]) => void;
+}) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [rowSelection, setRowSelection] = useState({});
+  const rowSelection = useMemo(() => {
+    const selection: Record<string, boolean> = {};
+    for (const id of selectedIds) selection[id] = true;
+    return selection;
+  }, [selectedIds]);
+
+  const setRowSelection = (
+    updater: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)
+  ) => {
+    if (!onSelectedIdsChange) return;
+    const next = typeof updater === "function" ? updater(rowSelection) : updater;
+    onSelectedIdsChange(Object.keys(next).filter((id) => next[id]));
+  };
 
   const columns = useMemo<ColumnDef<CustomerDTO>[]>(
     () => [
@@ -65,7 +86,10 @@ export function CustomerTable({ data }: { data: CustomerDTO[] }) {
         ),
         cell: ({ row }) => (
           <Link href={`/customers/${row.original.id}`} className="font-medium text-primary hover:underline">
-            {row.original.name}
+            <CustomerNameWithBadge
+              name={row.original.name}
+              doNotService={row.original.doNotService}
+            />
           </Link>
         ),
       },

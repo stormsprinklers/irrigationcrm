@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
@@ -68,6 +69,11 @@ export async function POST(request: NextRequest) {
       resolvedServiceAreaId = area?.id;
     }
     if (!resolvedServiceAreaId) return badRequestResponse("serviceAreaId or valid zip is required");
+
+    if (customerId) {
+      const block = await getCustomerServiceBlock(user.companyId, customerId);
+      if (block) return badRequestResponse(block);
+    }
 
     const visit = await prisma.visit.create({
       data: {

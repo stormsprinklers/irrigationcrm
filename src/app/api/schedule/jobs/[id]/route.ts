@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
@@ -17,6 +18,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    const nextCustomerId =
+      body.customerId !== undefined ? (body.customerId as string | null) : existing.customerId;
+    if (nextCustomerId) {
+      const block = await getCustomerServiceBlock(user.companyId, nextCustomerId);
+      if (block) return badRequestResponse(block);
+    }
+
     let serviceAreaId = body.serviceAreaId ?? existing.serviceAreaId;
     if (!body.serviceAreaId && body.zip) {
       const area = await resolveServiceAreaByZip(user.companyId, String(body.zip));

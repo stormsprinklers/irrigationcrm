@@ -4,7 +4,7 @@ import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visit
 import type { EstimateDTO, EstimateListItem } from "./types";
 
 export const estimateInclude = {
-  customer: { select: { id: true, name: true, phone: true, email: true } },
+  customer: { select: { id: true, name: true, phone: true, email: true, doNotService: true } },
   property: { select: { id: true, name: true, address: true } },
   visit: { select: { id: true, title: true, startAt: true } },
   lineItems: { orderBy: { sortOrder: "asc" as const } },

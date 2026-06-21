@@ -154,6 +154,10 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         const res = await fetch("/api/inbox/voice/token", { method: "POST" });
         if (!res.ok) {
           const data = await res.json();
+          if (res.status === 503) {
+            setError(data.error ?? "Twilio Voice is not configured");
+            return;
+          }
           throw new Error(data.error ?? "Failed to get voice token");
         }
         const { token } = await res.json();

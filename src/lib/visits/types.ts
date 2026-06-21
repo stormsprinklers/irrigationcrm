@@ -26,7 +26,13 @@ export type VisitDTO = {
   city: string | null;
   state: string | null;
   zip: string | null;
-  customer: { id: string; name: string; phone: string | null; email: string | null } | null;
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    doNotService?: boolean;
+  } | null;
   property: { id: string; name: string; address: string | null } | null;
   serviceArea: { id: string; name: string; color: string };
   assignedUser: {

@@ -10,9 +10,12 @@ export async function POST() {
     const token = getTwilioVoiceToken(identity);
     return NextResponse.json({ token, identity });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to generate token";
+    const missingCredentials =
+      message.includes("not configured") || message.includes("credentials");
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to generate token" },
-      { status: 500 }
+      { error: message },
+      { status: missingCredentials ? 503 : 500 }
     );
   }
 }

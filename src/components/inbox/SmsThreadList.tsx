@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import type { InboxScope } from "@/lib/inbox/types";
 
@@ -11,7 +12,7 @@ type Conversation = {
   id: string;
   participantPhone?: string | null;
   title?: string | null;
-  customer?: { name: string; phone?: string | null } | null;
+  customer?: { name: string; phone?: string | null; doNotService?: boolean } | null;
   messages: { body: string; sentAt: string }[];
 };
 
@@ -81,7 +82,16 @@ export function SmsThreadList({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{label}</p>
+                  {thread.customer?.name ? (
+                    <CustomerNameWithBadge
+                      name={thread.customer.name}
+                      doNotService={thread.customer.doNotService}
+                      nameClassName="truncate text-sm font-semibold"
+                      className="max-w-full"
+                    />
+                  ) : (
+                    <p className="truncate text-sm font-semibold">{label}</p>
+                  )}
                   <p className="truncate text-sm text-muted-foreground">{snippet}</p>
                 </div>
                 {scope === "customers" && thread.participantPhone && (

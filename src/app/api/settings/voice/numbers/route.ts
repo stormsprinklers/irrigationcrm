@@ -15,8 +15,12 @@ export async function GET() {
       orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
     });
     return NextResponse.json(numbers);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    const message = error instanceof Error ? error.message : "Failed to load phone numbers";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

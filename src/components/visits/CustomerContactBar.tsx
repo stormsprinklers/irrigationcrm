@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Mail, MessageSquare, Phone } from "lucide-react";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 
@@ -10,6 +11,7 @@ type Customer = {
   name: string;
   phone: string | null;
   email: string | null;
+  doNotService?: boolean;
 };
 
 type Props = {
@@ -34,7 +36,11 @@ export function CustomerContactBar({ customer }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
-      <span className="mr-2 font-medium">{customer.name}</span>
+      <CustomerNameWithBadge
+        name={customer.name}
+        doNotService={customer.doNotService}
+        nameClassName="mr-2 font-medium"
+      />
       {customer.phone ? (
         <>
           <Button variant="outline" size="sm" asChild>

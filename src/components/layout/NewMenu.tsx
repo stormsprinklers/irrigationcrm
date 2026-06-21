@@ -197,6 +197,10 @@ export function NewMenu() {
     }
 
     const selectedCustomer = customers.find((c) => c.id === newVisit.customerId);
+    if (selectedCustomer?.doNotService) {
+      toast.error("This customer is marked DO NOT SERVICE and cannot be scheduled");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -381,6 +385,7 @@ export function NewMenu() {
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.name}
+                {customer.doNotService ? " — DO NOT SERVICE" : ""}
               </option>
             ))}
           </select>
@@ -427,6 +432,7 @@ export function NewMenu() {
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.name}
+                {customer.doNotService ? " — DO NOT SERVICE" : ""}
               </option>
             ))}
           </select>

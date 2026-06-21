@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getTwilioEmailAuthStatus } from "@/lib/inbox/email";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -17,7 +18,10 @@ export async function GET() {
         transcribeCalls: true,
       },
     });
-    return NextResponse.json(company);
+    return NextResponse.json({
+      ...company,
+      emailAuth: getTwilioEmailAuthStatus(),
+    });
   } catch {
     return unauthorizedResponse();
   }

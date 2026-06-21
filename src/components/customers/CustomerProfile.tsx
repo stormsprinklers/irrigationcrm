@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, GitMerge, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -18,17 +21,74 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CreateCustomerVisitModal } from "@/components/customers/CreateCustomerVisitModal";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { CustomerNotesAttachmentsTab } from "@/components/customers/CustomerNotesAttachmentsTab";
+import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
+import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
 import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrrigationPanel";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
-import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
+import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 
 type Props = { customerId: string };
 
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  open,
+  onClose,
+  onConfirm,
+  destructive,
+  loading,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  destructive?: boolean;
+  loading?: boolean;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? "destructive" : "default"}
+            onClick={onConfirm}
+            disabled={loading}
+          >
+            {loading ? "Please wait..." : confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerProfile({ customerId }: Props) {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const userRole = session?.user?.role ?? "TECH";
+  const canManage = canManageCustomers(userRole);
+  const canFlagDns = canFlagDoNotService(userRole);
+  const canRefund = canIssueRefunds(userRole);
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
+  const [phones, setPhones] = useState<CustomerPhoneDTO[]>([]);
   const [visits, setVisits] = useState<
     Array<{ id: string; title: string; status: string; startAt: string; total?: number }>
   >([]);
@@ -36,18 +96,36 @@ export function CustomerProfile({ customerId }: Props) {
     Array<{ id: string; status: string; total: number; createdAt: string }>
   >([]);
   const [invoices, setInvoices] = useState<
-    Array<{ id: string; invoiceNumber: string; status: string; total: number; createdAt: string }>
+    Array<{
+      id: string;
+      invoiceNumber: string;
+      status: string;
+      total: number;
+      amountPaid: number;
+      createdAt: string;
+    }>
   >([]);
   const [enrollments, setEnrollments] = useState<EnrollmentDTO[]>([]);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [visitOpen, setVisitOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [mergeCandidates, setMergeCandidates] = useState<CustomerDTO[]>([]);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [refundInvoiceId, setRefundInvoiceId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: "", address: "", city: "", state: "", zip: "" });
+  const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
 
   const load = useCallback(async () => {
-    const [customerRes, propertiesRes, estimatesRes, invoicesRes, enrollmentsRes] = await Promise.all([
+    const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
+      await Promise.all([
       fetch(`/api/customers/${customerId}`),
       fetch(`/api/customers/${customerId}/properties`),
+      fetch(`/api/customers/${customerId}/phones`),
       fetch(`/api/estimates?customerId=${customerId}`),
       fetch(`/api/invoices?customerId=${customerId}`),
       fetch(`/api/maintenance-plans/enrollments?customerId=${customerId}`),
@@ -57,6 +135,10 @@ export function CustomerProfile({ customerId }: Props) {
     if (propertiesRes.ok) {
       const data = await propertiesRes.json();
       setProperties(Array.isArray(data) ? data : []);
+    }
+    if (phonesRes.ok) {
+      const data = await phonesRes.json();
+      setPhones(Array.isArray(data) ? data : []);
     }
     if (estimatesRes.ok) {
       const data = await estimatesRes.json();
@@ -188,6 +270,86 @@ export function CustomerProfile({ customerId }: Props) {
     window.location.href = `/estimates/${estimate.id}`;
   }
 
+  async function addPhone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newPhone.phone.trim()) return;
+    const res = await fetch(`/api/customers/${customerId}/phones`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newPhone),
+    });
+    if (!res.ok) {
+      toast.error("Failed to add phone number");
+      return;
+    }
+    setNewPhone({ phone: "", note: "" });
+    const phonesRes = await fetch(`/api/customers/${customerId}/phones`);
+    if (phonesRes.ok) setPhones(await phonesRes.json());
+  }
+
+  async function deletePhone(phoneId: string) {
+    const res = await fetch(`/api/customers/${customerId}/phones/${phoneId}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Failed to remove phone number");
+      return;
+    }
+    setPhones((prev) => prev.filter((p) => p.id !== phoneId));
+  }
+
+  async function deleteCustomer() {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/customers/${customerId}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Failed to delete customer");
+        return;
+      }
+      toast.success("Customer deleted");
+      router.push("/customers");
+    } finally {
+      setActionLoading(false);
+      setDeleteOpen(false);
+    }
+  }
+
+  async function searchMergeCandidates(query: string) {
+    setMergeSearch(query);
+    if (!query.trim()) {
+      setMergeCandidates([]);
+      return;
+    }
+    const res = await fetch(`/api/customers?search=${encodeURIComponent(query.trim())}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setMergeCandidates((data.customers ?? []).filter((c: CustomerDTO) => c.id !== customerId));
+  }
+
+  async function mergeCustomer() {
+    if (!mergeTargetId) {
+      toast.error("Select a customer to merge into");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetCustomerId: mergeTargetId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to merge customers");
+        return;
+      }
+      toast.success("Customers merged");
+      setMergeOpen(false);
+      router.push(`/customers/${mergeTargetId}`);
+      router.refresh();
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">Loading customer...</p>;
 
   if (!customer) {
@@ -206,25 +368,56 @@ export function CustomerProfile({ customerId }: Props) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Button variant="ghost" size="sm" className="-ml-2 mb-2" asChild>
-          <Link href="/customers">
-            <ArrowLeft className="h-4 w-4" />
-            Customers
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold">{customer.name}</h1>
-        {customer.companyName && <p className="text-muted-foreground">{customer.companyName}</p>}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <Button variant="ghost" size="sm" className="-ml-2 mb-2" asChild>
+            <Link href="/customers">
+              <ArrowLeft className="h-4 w-4" />
+              Customers
+            </Link>
+          </Button>
+          <CustomerNameWithBadge
+            name={customer.name}
+            doNotService={customer.doNotService}
+            className="text-2xl font-semibold"
+            nameClassName="text-2xl font-semibold"
+          />
+          {customer.status === "ARCHIVED" && (
+            <Badge variant="outline" className="mt-2">
+              Archived
+            </Badge>
+          )}
+          {customer.companyName && <p className="text-muted-foreground">{customer.companyName}</p>}
+        </div>
+        {canManage && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setMergeOpen(true)}>
+              <GitMerge className="h-4 w-4" />
+              Merge
+            </Button>
+            <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        )}
       </div>
 
+      {customer.doNotService && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-destructive">
+          Do not service — appointments cannot be booked for this customer
+        </div>
+      )}
+
       <Tabs defaultValue="profile">
-        <TabsList>
+        <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
+          <TabsTrigger value="notes">Notes & attachments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -297,12 +490,68 @@ export function CustomerProfile({ customerId }: Props) {
                     onChange={(e) => setCustomer({ ...customer, leadSource: e.target.value || null })}
                   />
                 </div>
+                {canFlagDns && (
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={customer.doNotService}
+                        onCheckedChange={(checked) =>
+                          setCustomer({ ...customer, doNotService: Boolean(checked) })
+                        }
+                      />
+                      Mark as DO NOT SERVICE (blocks all appointment booking)
+                    </label>
+                  </div>
+                )}
                 <div className="sm:col-span-2">
                   <Button type="submit" disabled={saving}>
                     {saving ? "Saving..." : "Save changes"}
                   </Button>
                 </div>
               </form>
+
+              <div className="mt-8 border-t pt-6">
+                <h3 className="mb-3 text-sm font-semibold">Alternate phone numbers</h3>
+                {phones.length === 0 ? (
+                  <p className="mb-4 text-sm text-muted-foreground">No alternate numbers.</p>
+                ) : (
+                  <div className="mb-4 space-y-2">
+                    {phones.map((phone) => (
+                      <div
+                        key={phone.id}
+                        className="flex items-start justify-between rounded-md border p-3"
+                      >
+                        <div>
+                          <p className="font-medium">{phone.phone}</p>
+                          {phone.note && (
+                            <p className="text-sm text-muted-foreground">{phone.note}</p>
+                          )}
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => deletePhone(phone.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <form onSubmit={addPhone} className="grid gap-2 sm:grid-cols-2">
+                  <Input
+                    value={newPhone.phone}
+                    onChange={(e) => setNewPhone({ ...newPhone, phone: e.target.value })}
+                    placeholder="Phone number"
+                    required
+                  />
+                  <Input
+                    value={newPhone.note}
+                    onChange={(e) => setNewPhone({ ...newPhone, note: e.target.value })}
+                    placeholder="Note (e.g. spouse, office)"
+                  />
+                  <Button type="submit" className="sm:col-span-2 w-fit">
+                    <Plus className="h-4 w-4" />
+                    Add phone
+                  </Button>
+                </form>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -372,7 +621,13 @@ export function CustomerProfile({ customerId }: Props) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="visits">
+        <TabsContent value="visits" className="space-y-4">
+          <div className="flex justify-end">
+            <Button type="button" onClick={() => setVisitOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add visit
+            </Button>
+          </div>
           <Card>
             <CardContent className="pt-6">
               {visits.length === 0 ? (
@@ -462,7 +717,9 @@ export function CustomerProfile({ customerId }: Props) {
                       <TableHead>Invoice #</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Total</TableHead>
+                      <TableHead>Paid</TableHead>
                       <TableHead>Created</TableHead>
+                      {canRefund ? <TableHead className="text-right">Actions</TableHead> : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -473,7 +730,23 @@ export function CustomerProfile({ customerId }: Props) {
                           <Badge variant="outline">{invoice.status}</Badge>
                         </TableCell>
                         <TableCell>{formatCurrency(invoice.total)}</TableCell>
+                        <TableCell>{formatCurrency(invoice.amountPaid ?? 0)}</TableCell>
                         <TableCell>{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
+                        {canRefund ? (
+                          <TableCell className="text-right">
+                            {invoice.amountPaid > 0 && invoice.status !== "REFUNDED" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setRefundInvoiceId(invoice.id)}
+                              >
+                                Refund
+                              </Button>
+                            ) : null}
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -535,7 +808,95 @@ export function CustomerProfile({ customerId }: Props) {
             <SmartIrrigationPanel compact />
           )}
         </TabsContent>
+
+        <TabsContent value="notes">
+          <CustomerNotesAttachmentsTab customerId={customerId} />
+        </TabsContent>
       </Tabs>
+
+      <CreateCustomerVisitModal
+        open={visitOpen}
+        onClose={() => setVisitOpen(false)}
+        customer={customer}
+        properties={properties}
+      />
+
+      <ConfirmModal
+        title="Delete customer?"
+        message="Are you sure you want to delete this customer? All related records will be removed or unlinked. This cannot be undone."
+        confirmLabel="Yes, delete customer"
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={deleteCustomer}
+        destructive
+        loading={actionLoading}
+      />
+
+      {mergeOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => setMergeOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="font-semibold">Merge into another customer</h2>
+              <Button variant="ghost" size="icon" onClick={() => setMergeOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-4 p-4">
+              <p className="text-sm text-muted-foreground">
+                All visits, estimates, invoices, properties, and notes from{" "}
+                <strong>{customer.name}</strong> will move to the customer you select. This profile
+                will be deleted.
+              </p>
+              <Input
+                value={mergeSearch}
+                onChange={(e) => searchMergeCandidates(e.target.value)}
+                placeholder="Search customers by name, email, or phone..."
+                autoFocus
+              />
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border">
+                {mergeCandidates.length === 0 ? (
+                  <p className="p-3 text-sm text-muted-foreground">
+                    {mergeSearch.trim() ? "No matching customers." : "Type to search."}
+                  </p>
+                ) : (
+                  mergeCandidates.map((candidate) => (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${
+                        mergeTargetId === candidate.id ? "bg-muted font-medium" : ""
+                      }`}
+                      onClick={() => setMergeTargetId(candidate.id)}
+                    >
+                      {candidate.name}
+                      {candidate.email ? ` · ${candidate.email}` : ""}
+                      {candidate.phone ? ` · ${candidate.phone}` : ""}
+                    </button>
+                  ))
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  disabled={!mergeTargetId || actionLoading}
+                  onClick={mergeCustomer}
+                >
+                  {actionLoading ? "Merging..." : "Merge customers"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setMergeOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <EnrollPlanModal
         key={customerId}
@@ -545,6 +906,19 @@ export function CustomerProfile({ customerId }: Props) {
         onClose={() => setEnrollOpen(false)}
         onEnrolled={load}
       />
+
+      {refundInvoiceId && customer ? (
+        <IssueRefundDialog
+          invoiceId={refundInvoiceId}
+          invoiceNumber={
+            invoices.find((invoice) => invoice.id === refundInvoiceId)?.invoiceNumber ?? ""
+          }
+          customerName={customer.name}
+          open
+          onClose={() => setRefundInvoiceId(null)}
+          onRefunded={() => load()}
+        />
+      ) : null}
     </div>
   );
 }

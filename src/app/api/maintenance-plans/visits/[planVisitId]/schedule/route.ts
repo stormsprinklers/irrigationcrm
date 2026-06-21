@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { UserRole } from "@prisma/client";
 import { Division, VisitStatus } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { canManageEnrollments } from "@/lib/maintenance-plans/permissions";
 import { applyPlanDiscountsToVisit } from "@/lib/maintenance-plans/discounts";
 import { prisma } from "@/lib/prisma";
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       serviceAreaId = area?.id;
     }
     if (!serviceAreaId) return badRequestResponse("serviceAreaId or property zip is required");
+
+    const block = await getCustomerServiceBlock(user.companyId, planVisit.enrollment.customerId);
+    if (block) return badRequestResponse(block);
 
     const title = planVisit.visitTemplate?.visitTitle ?? "Maintenance visit";
     const startAt = body.startAt

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Calendar, Phone, User } from "lucide-react";
 import { toast } from "sonner";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,6 +23,7 @@ type CustomerDetail = {
   name: string;
   phone?: string | null;
   email?: string | null;
+  doNotService?: boolean;
 };
 
 type FilterOptions = {
@@ -92,7 +94,12 @@ export function CsrDeskPanel({
             .then((r) => r.json())
             .then((data) => {
               if (data.error) {
-                setCustomer({ id: lookup.customerId, name: lookup.name ?? "Customer", phone: lookup.phone });
+                setCustomer({
+                  id: lookup.customerId,
+                  name: lookup.name ?? "Customer",
+                  phone: lookup.phone,
+                  doNotService: lookup.doNotService,
+                });
                 return;
               }
               setCustomer({
@@ -100,6 +107,7 @@ export function CsrDeskPanel({
                 name: data.name,
                 phone: data.phone,
                 email: data.email,
+                doNotService: data.doNotService,
               });
             });
         }
@@ -197,9 +205,11 @@ export function CsrDeskPanel({
         </h3>
         {activeCall ? (
           <div className="space-y-2 text-sm">
-            <p className="text-lg font-semibold">
-              {activeCall.callerInfo?.name ?? callerPhone ?? "Unknown caller"}
-            </p>
+            <CustomerNameWithBadge
+              name={customer?.name ?? activeCall.callerInfo?.name ?? callerPhone ?? "Unknown caller"}
+              doNotService={customer?.doNotService}
+              nameClassName="text-lg font-semibold"
+            />
             <p className="text-muted-foreground">{callerPhone}</p>
             {customer?.email && <p>{customer.email}</p>}
             {customer?.id && (
@@ -218,7 +228,7 @@ export function CsrDeskPanel({
         <div className="flex flex-col gap-2">
           <Button
             variant="outline"
-            disabled={!activeCall}
+            disabled={!activeCall || customer?.doNotService}
             onClick={() => setBookOpen(true)}
           >
             <Calendar className="mr-2 h-4 w-4" />

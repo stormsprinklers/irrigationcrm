@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import type { InboxScope } from "@/lib/inbox/types";
 
@@ -12,7 +13,7 @@ type Email = {
   bodyText?: string | null;
   createdAt: string;
   isRead: boolean;
-  customer?: { name: string } | null;
+  customer?: { name: string; doNotService?: boolean } | null;
   user?: { name: string } | null;
 };
 
@@ -62,7 +63,15 @@ export function EmailList({
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{from}</span>
+                  {email.customer?.name ? (
+                    <CustomerNameWithBadge
+                      name={email.customer.name}
+                      doNotService={email.customer.doNotService}
+                      className="min-w-0 truncate text-sm"
+                    />
+                  ) : (
+                    <span className="truncate text-sm">{from}</span>
+                  )}
                   <span className="shrink-0 text-[10px] text-muted-foreground">
                     {new Date(email.createdAt).toLocaleDateString()}
                   </span>

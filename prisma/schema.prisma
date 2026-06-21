@@ -14,6 +14,11 @@ enum UserRole {
   TECH
 }
 
+enum CustomerStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum Scope {
   EXTERNAL
   INTERNAL
@@ -338,6 +343,7 @@ model Company {
   defaultLeadAssignee    User?                    @relation("DefaultLeadAssignee", fields: [defaultLeadAssigneeId], references: [id], onDelete: SetNull)
   users                  User[]
   customers              Customer[]
+  customerPhones         CustomerPhone[]
   blockedContacts        BlockedContact[]
   callLogs               CallLog[]
   conversations          Conversation[]
@@ -411,6 +417,8 @@ model User {
   visitTimeEvents    VisitTimeEvent[]
   visitNotes         VisitNote[]
   visitAttachments   VisitAttachment[]
+  customerNotes      CustomerNote[]
+  customerAttachments CustomerAttachment[]
   agentPresence      AgentPresence?
   agentGroupMembers  AgentGroupMember[]
   assignedCallSessions CallSession[] @relation("AssignedCallSessions")
@@ -433,6 +441,8 @@ model Customer {
   zip         String?
   leadSource       String?
   stripeCustomerId String?
+  status           CustomerStatus @default(ACTIVE)
+  doNotService     Boolean        @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -450,6 +460,53 @@ model Customer {
   callSessions           CallSession[]
   contactListMembers     ContactListMember[]
   campaignRecipients     CampaignRecipient[]
+  phones                 CustomerPhone[]
+  notes                  CustomerNote[]
+  attachments            CustomerAttachment[]
+}
+
+model CustomerPhone {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String
+  phone      String
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, phone])
+  @@index([customerId])
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt])
+}
+
+model CustomerAttachment {
+  id           String   @id @default(cuid())
+  customerId   String
+  uploadedById String
+  blobUrl      String
+  fileName     String
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Lead {

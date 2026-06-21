@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 
 const MONTHS = [
@@ -82,7 +83,11 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
         <div>
           <h1 className="text-2xl font-semibold">{enrollment.template.name}</h1>
           <p className="text-muted-foreground">
-            {enrollment.customer.name} · {enrollment.property.name}
+            <CustomerNameWithBadge
+              name={enrollment.customer.name}
+              doNotService={enrollment.customer.doNotService}
+            />{" "}
+            · {enrollment.property.name}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

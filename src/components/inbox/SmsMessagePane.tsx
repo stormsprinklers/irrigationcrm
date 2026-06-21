@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import type { InboxScope } from "@/lib/inbox/types";
 
@@ -22,7 +23,13 @@ type Conversation = {
   id: string;
   participantPhone?: string | null;
   title?: string | null;
-  customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
+  customer?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    doNotService?: boolean;
+  } | null;
 };
 
 function ComposeBar({
@@ -163,7 +170,15 @@ export function SmsMessagePane({
     <div className="flex h-full w-full min-w-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <div className="min-w-0">
-          <h3 className="truncate font-semibold">{headerName}</h3>
+          {conversation?.customer?.name ? (
+            <CustomerNameWithBadge
+              name={conversation.customer.name}
+              doNotService={conversation.customer.doNotService}
+              nameClassName="truncate font-semibold"
+            />
+          ) : (
+            <h3 className="truncate font-semibold">{headerName}</h3>
+          )}
           {headerSubtitle ? (
             <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
           ) : null}

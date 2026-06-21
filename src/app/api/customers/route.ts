@@ -6,8 +6,15 @@ import { prisma } from "@/lib/prisma";
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const search = request.nextUrl.searchParams.get("search") ?? undefined;
-    const customers = await listCustomers(user.companyId, search);
+    const { searchParams } = request.nextUrl;
+    const customers = await listCustomers(user.companyId, {
+      search: searchParams.get("search") ?? undefined,
+      city: searchParams.get("city") ?? undefined,
+      zip: searchParams.get("zip") ?? undefined,
+      leadSource: searchParams.get("leadSource") ?? undefined,
+      company: searchParams.get("company") ?? undefined,
+      status: (searchParams.get("status") as "ACTIVE" | "ARCHIVED" | "ALL" | null) ?? undefined,
+    });
     return NextResponse.json({ customers, total: customers.length });
   } catch {
     return unauthorizedResponse();

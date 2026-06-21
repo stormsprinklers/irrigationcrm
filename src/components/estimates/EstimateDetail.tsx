@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +32,13 @@ type EstimateData = {
   total: number;
   signatureBlobUrl: string | null;
   signedAt: string | null;
-  customer: { id: string; name: string; phone: string | null; email: string | null };
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    doNotService: boolean;
+  };
   property: { id: string; name: string; address: string | null } | null;
   visit: { id: string; title: string; startAt: string } | null;
   lineItems: Array<{
@@ -376,8 +383,12 @@ export function EstimateDetail({ estimateId }: Props) {
               Estimates
             </Link>
           </Button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold">{estimate.customer.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <CustomerNameWithBadge
+              name={estimate.customer.name}
+              doNotService={estimate.customer.doNotService}
+              nameClassName="text-2xl font-semibold"
+            />
             <Badge variant="outline">{estimate.status}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -574,7 +585,10 @@ export function EstimateDetail({ estimateId }: Props) {
             </CardHeader>
             <CardContent className="space-y-1 text-sm">
               <Link href={`/customers/${estimate.customer.id}`} className="font-medium text-primary hover:underline">
-                {estimate.customer.name}
+                <CustomerNameWithBadge
+                  name={estimate.customer.name}
+                  doNotService={estimate.customer.doNotService}
+                />
               </Link>
               {estimate.customer.phone && <p>{estimate.customer.phone}</p>}
               {estimate.customer.email && <p>{estimate.customer.email}</p>}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -27,6 +28,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    if (body.doNotService !== undefined && !canFlagDoNotService(user.role)) {
+      return forbiddenResponse();
+    }
+
     const customer = await prisma.customer.update({
       where: { id },
       data: {
@@ -39,6 +44,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.state !== undefined ? { state: body.state ?? null } : {}),
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
         ...(body.leadSource !== undefined ? { leadSource: body.leadSource ?? null } : {}),
+        ...(body.doNotService !== undefined ? { doNotService: Boolean(body.doNotService) } : {}),
+        ...(body.status !== undefined && canManageCustomers(user.role)
+          ? { status: body.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE" }
+          : {}),
       },
       include: {
         _count: { select: { properties: true, visits: true, estimates: true, invoices: true } },
@@ -46,6 +55,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json(serializeCustomer(customer));
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function DELETE(_request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    if (user.role === "TECH") return forbiddenResponse();
+
+    const { id } = await params;
+    const existing = await prisma.customer.findFirst({ where: { id, companyId: user.companyId } });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    await prisma.customer.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
   } catch {
     return unauthorizedResponse();
   }

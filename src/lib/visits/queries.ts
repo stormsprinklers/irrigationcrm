@@ -5,7 +5,17 @@ import type { ScheduleFilters, VisitDTO } from "./types";
 
 export const visitInclude = {
   customer: {
-    select: { id: true, name: true, phone: true, email: true, address: true, city: true, state: true, zip: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+      doNotService: true,
+    },
   },
   property: { select: { id: true, name: true, address: true, city: true, state: true, zip: true } },
   serviceArea: { select: { id: true, name: true, color: true } },

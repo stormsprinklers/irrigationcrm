@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,7 @@ export default function CustomerEstimatesPageInner() {
       status: string;
       total: number;
       createdAt: string;
-      customer: { id: string; name: string };
+      customer: { id: string; name: string; doNotService?: boolean };
     }>
   >([]);
   const [search, setSearch] = useState("");
@@ -122,7 +123,10 @@ export default function CustomerEstimatesPageInner() {
                       href={`/estimates/${estimate.id}`}
                       className="font-medium text-primary hover:underline"
                     >
-                      {estimate.customer.name}
+                      <CustomerNameWithBadge
+                        name={estimate.customer.name}
+                        doNotService={estimate.customer.doNotService}
+                      />
                     </Link>
                   </TableCell>
                   <TableCell>

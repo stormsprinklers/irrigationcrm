@@ -6,6 +6,7 @@ import { CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -19,6 +20,7 @@ import {
 type UnscheduledVisit = {
   id: string;
   customer: string;
+  customerDoNotService?: boolean;
   property: string;
   visitTitle: string;
   dueMonth: number;
@@ -99,7 +101,12 @@ export function UnscheduledVisitsCard() {
             <TableBody>
               {visits.map((visit) => (
                 <TableRow key={visit.id}>
-                  <TableCell className="font-medium">{visit.customer}</TableCell>
+                  <TableCell className="font-medium">
+                    <CustomerNameWithBadge
+                      name={visit.customer}
+                      doNotService={visit.customerDoNotService}
+                    />
+                  </TableCell>
                   <TableCell>{visit.property}</TableCell>
                   <TableCell>{visit.visitTitle}</TableCell>
                   <TableCell>
@@ -114,7 +121,12 @@ export function UnscheduledVisitsCard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={schedulingId === visit.id}
+                      disabled={schedulingId === visit.id || visit.customerDoNotService}
+                      title={
+                        visit.customerDoNotService
+                          ? "Customer is marked DO NOT SERVICE"
+                          : undefined
+                      }
                       onClick={() => scheduleVisit(visit.id)}
                     >
                       <CalendarPlus className="h-4 w-4" />

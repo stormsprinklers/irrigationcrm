@@ -24,7 +24,7 @@ const templateInclude = {
 } satisfies Prisma.MaintenancePlanTemplateInclude;
 
 const enrollmentInclude = {
-  customer: { select: { id: true, name: true, phone: true, email: true } },
+  customer: { select: { id: true, name: true, phone: true, email: true, doNotService: true } },
   property: { select: { id: true, name: true, address: true } },
   template: { select: { id: true, name: true, basePrice: true } },
   planVisits: {
@@ -397,7 +397,7 @@ export async function listUnscheduledVisits(companyId: string) {
       visitTemplate: true,
       enrollment: {
         include: {
-          customer: { select: { id: true, name: true } },
+          customer: { select: { id: true, name: true, doNotService: true } },
           property: { select: { id: true, name: true, address: true, zip: true } },
         },
       },
@@ -409,6 +409,7 @@ export async function listUnscheduledVisits(companyId: string) {
     id: r.id,
     enrollmentId: r.enrollmentId,
     customer: r.enrollment.customer.name,
+    customerDoNotService: r.enrollment.customer.doNotService,
     property: r.enrollment.property.name,
     visitTitle: r.visitTemplate?.visitTitle ?? "Maintenance visit",
     dueMonth: r.dueMonth,

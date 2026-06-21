@@ -9,6 +9,8 @@ export type CustomerDTO = {
   phone: string | null;
   email: string | null;
   leadSource: string | null;
+  status: "ACTIVE" | "ARCHIVED";
+  doNotService: boolean;
   createdAt: string;
   updatedAt: string;
   propertyCount?: number;
@@ -26,5 +28,21 @@ export type CustomerPropertyDTO = {
   state: string | null;
   zip: string | null;
   isPrimary: boolean;
+  createdAt: string;
+};
+
+export type CustomerListFilters = {
+  search?: string;
+  city?: string;
+  zip?: string;
+  leadSource?: string;
+  company?: string;
+  status?: "ACTIVE" | "ARCHIVED" | "ALL";
+};
+
+export type CustomerPhoneDTO = {
+  id: string;
+  phone: string;
+  note: string | null;
   createdAt: string;
 };

@@ -13,7 +13,13 @@ export type EstimateDTO = {
   total: number;
   createdAt: string;
   updatedAt: string;
-  customer: { id: string; name: string; phone: string | null; email: string | null };
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    doNotService: boolean;
+  };
   property: { id: string; name: string; address: string | null } | null;
   visit: { id: string; title: string; startAt: string } | null;
   lineItems: Array<{

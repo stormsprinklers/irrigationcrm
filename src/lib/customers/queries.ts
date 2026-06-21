@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { CustomerDTO, CustomerPropertyDTO } from "./types";
+import type { CustomerDTO, CustomerListFilters, CustomerPropertyDTO } from "./types";
 
 export const customerInclude = {
   _count: { select: { properties: true, visits: true, estimates: true, invoices: true } },
@@ -20,6 +20,8 @@ export function serializeCustomer(customer: CustomerPayload): CustomerDTO {
     phone: customer.phone,
     email: customer.email,
     leadSource: customer.leadSource,
+    status: customer.status,
+    doNotService: customer.doNotService,
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
     propertyCount: customer._count.properties,
@@ -53,19 +55,65 @@ export function serializeProperty(property: {
   };
 }
 
-export async function listCustomers(companyId: string, search?: string) {
+export async function listCustomers(companyId: string, filters: CustomerListFilters = {}) {
   const where: Prisma.CustomerWhereInput = { companyId };
+  const and: Prisma.CustomerWhereInput[] = [];
 
-  if (search?.trim()) {
-    const q = search.trim();
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { email: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q, mode: "insensitive" } },
-      { companyName: { contains: q, mode: "insensitive" } },
-      { address: { contains: q, mode: "insensitive" } },
-      { city: { contains: q, mode: "insensitive" } },
-    ];
+  if (filters.search?.trim()) {
+    const q = filters.search.trim();
+    and.push({
+      OR: [
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { phone: { contains: q, mode: "insensitive" } },
+        { companyName: { contains: q, mode: "insensitive" } },
+        { address: { contains: q, mode: "insensitive" } },
+        { city: { contains: q, mode: "insensitive" } },
+        { phones: { some: { phone: { contains: q, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (filters.city?.trim()) {
+    const q = filters.city.trim();
+    and.push({
+      OR: [
+        { city: { contains: q, mode: "insensitive" } },
+        { properties: { some: { city: { contains: q, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (filters.zip?.trim()) {
+    const q = filters.zip.trim();
+    and.push({
+      OR: [
+        { zip: { contains: q, mode: "insensitive" } },
+        { properties: { some: { zip: { contains: q, mode: "insensitive" } } } },
+      ],
+    });
+  }
+
+  if (filters.leadSource?.trim()) {
+    and.push({
+      leadSource: { contains: filters.leadSource.trim(), mode: "insensitive" },
+    });
+  }
+
+  if (filters.company?.trim()) {
+    and.push({
+      companyName: { contains: filters.company.trim(), mode: "insensitive" },
+    });
+  }
+
+  if (filters.status === "ARCHIVED") {
+    and.push({ status: "ARCHIVED" });
+  } else if (filters.status !== "ALL") {
+    and.push({ status: "ACTIVE" });
+  }
+
+  if (and.length > 0) {
+    where.AND = and;
   }
 
   const customers = await prisma.customer.findMany({

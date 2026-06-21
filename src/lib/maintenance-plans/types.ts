@@ -74,7 +74,13 @@ export type EnrollmentDTO = {
   acceptedAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
-  customer: { id: string; name: string; phone: string | null; email: string | null };
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    doNotService: boolean;
+  };
   property: { id: string; name: string; address: string | null };
   template: { id: string; name: string; basePrice: number };
   planVisits?: PlanVisitDTO[];

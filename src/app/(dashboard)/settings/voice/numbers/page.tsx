@@ -55,9 +55,14 @@ export default function VoiceNumbersPage() {
       fetch("/api/settings/employees?status=ACTIVE").then((r) => r.json()),
     ])
       .then(([nums, fl, emps]) => {
-        setNumbers(nums);
-        setFlows(fl.map((f: CallFlowOption) => ({ id: f.id, name: f.name })));
-        setEmployees(emps.map((e: EmployeeOption) => ({ id: e.id, name: e.name })));
+        if (nums?.error) {
+          toast.error(nums.error);
+          setNumbers([]);
+        } else {
+          setNumbers(Array.isArray(nums) ? nums : []);
+        }
+        setFlows(Array.isArray(fl) ? fl.map((f: CallFlowOption) => ({ id: f.id, name: f.name })) : []);
+        setEmployees(Array.isArray(emps) ? emps.map((e: EmployeeOption) => ({ id: e.id, name: e.name })) : []);
       })
       .catch(() => toast.error("Failed to load numbers"));
   }
