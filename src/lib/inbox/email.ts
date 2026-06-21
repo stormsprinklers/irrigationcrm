@@ -167,10 +167,6 @@ export async function sendEmail(params: {
     },
   };
 
-  if (params.replyTo) {
-    payload.headers = { "Reply-To": params.replyTo };
-  }
-
   const res = await fetch(TWILIO_EMAIL_API, {
     method: "POST",
     headers: {
