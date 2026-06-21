@@ -8,7 +8,10 @@ export async function GET() {
     const user = await requireSessionUser();
     const numbers = await prisma.phoneNumber.findMany({
       where: { companyId: user.companyId },
-      include: { callFlow: { select: { id: true, name: true } } },
+      include: {
+        callFlow: { select: { id: true, name: true } },
+        assignedUser: { select: { id: true, name: true } },
+      },
       orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
     });
     return NextResponse.json(numbers);
@@ -25,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { e164, friendlyName, callFlowId, isPrimary } = body;
+    const { e164, friendlyName, callFlowId, isPrimary, numberType, assignedUserId, trackingSource, twilioSid } = body;
     if (!e164) {
       return NextResponse.json({ error: "Phone number required" }, { status: 400 });
     }
@@ -44,6 +47,10 @@ export async function POST(request: NextRequest) {
         friendlyName: friendlyName ?? null,
         callFlowId: callFlowId ?? null,
         isPrimary: Boolean(isPrimary),
+        numberType: numberType ?? "TRACKING",
+        assignedUserId: assignedUserId ?? null,
+        trackingSource: trackingSource ?? null,
+        twilioSid: twilioSid ?? null,
       },
     });
 

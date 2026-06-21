@@ -17,6 +17,7 @@ export const primaryNav: NavItem[] = [
   { label: "Timesheets", href: "/timesheets" },
   { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
+  { label: "Campaigns", href: "/campaigns" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
 ];
@@ -37,6 +38,7 @@ export const inboxSidebar: NavSection[] = [
   {
     title: "VOICE",
     items: [
+      { label: "CSR Desk", href: "/inbox/voice/desk" },
       { label: "Customers", href: "/inbox/voice/customers" },
       { label: "Team", href: "/inbox/voice/team" },
     ],
@@ -132,6 +134,7 @@ export const voiceSettingsSidebar: NavSection[] = [
       { label: "Overview", href: "/settings/voice" },
       { label: "Phone numbers", href: "/settings/voice/numbers" },
       { label: "Call flows", href: "/settings/voice/flows" },
+      { label: "Audio clips", href: "/settings/voice/clips" },
       { label: "Agent groups", href: "/settings/voice/groups" },
       { label: "Business hours", href: "/settings/voice/hours" },
     ],
@@ -159,6 +162,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/customers") return pathname.startsWith("/customers");
   if (href === "/inbox") return pathname.startsWith("/inbox");
   if (href === "/price-book") return pathname.startsWith("/price-book");
+  if (href === "/campaigns") return pathname.startsWith("/campaigns");
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
   if (href === "/settings") return pathname.startsWith("/settings");

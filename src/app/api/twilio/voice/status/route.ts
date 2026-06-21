@@ -38,6 +38,9 @@ export async function POST(request: NextRequest) {
   if (!company) return NextResponse.json({ ok: true });
 
   const existing = await prisma.callLog.findUnique({ where: { twilioCallSid: callSid } });
+  const session = callSid
+    ? await prisma.callSession.findUnique({ where: { callSid }, select: { id: true } })
+    : null;
 
   if (existing) {
     await prisma.callLog.update({
@@ -46,6 +49,7 @@ export async function POST(request: NextRequest) {
         status: callStatus,
         durationSec: duration ?? existing.durationSec,
         endedAt: callStatus === "completed" ? new Date() : existing.endedAt,
+        ...(session?.id && !existing.sessionId ? { sessionId: session.id } : {}),
       },
     });
     return NextResponse.json({ ok: true });
@@ -68,6 +72,7 @@ export async function POST(request: NextRequest) {
       toNumber: to,
       customerId: customer?.id,
       twilioCallSid: callSid,
+      sessionId: session?.id ?? null,
       status: callStatus,
       durationSec: duration,
     },

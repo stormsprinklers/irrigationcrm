@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/inbox/contacts";
+import { releaseNumber } from "@/lib/twilio/numbers";
 import { prisma } from "@/lib/prisma";
 
 export async function PATCH(
@@ -15,7 +16,7 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { e164, friendlyName, callFlowId, isPrimary } = body;
+    const { e164, friendlyName, callFlowId, isPrimary, numberType, assignedUserId, trackingSource } = body;
 
     if (isPrimary) {
       await prisma.phoneNumber.updateMany({
@@ -31,6 +32,9 @@ export async function PATCH(
         ...(friendlyName !== undefined ? { friendlyName } : {}),
         ...(callFlowId !== undefined ? { callFlowId } : {}),
         ...(isPrimary !== undefined ? { isPrimary: Boolean(isPrimary) } : {}),
+        ...(numberType !== undefined ? { numberType } : {}),
+        ...(assignedUserId !== undefined ? { assignedUserId: assignedUserId || null } : {}),
+        ...(trackingSource !== undefined ? { trackingSource: trackingSource || null } : {}),
       },
     });
 
@@ -41,7 +45,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -51,7 +55,13 @@ export async function DELETE(
     }
 
     const { id } = await params;
-    await prisma.phoneNumber.delete({ where: { id, companyId: user.companyId } });
+    const releaseInTwilio = request.nextUrl.searchParams.get("releaseTwilio") === "true";
+
+    if (releaseInTwilio) {
+      await releaseNumber(user.companyId, id);
+    } else {
+      await prisma.phoneNumber.delete({ where: { id, companyId: user.companyId } });
+    }
     return NextResponse.json({ ok: true });
   } catch {
     return unauthorizedResponse();

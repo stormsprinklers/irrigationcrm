@@ -3,6 +3,26 @@ import { CallFlowNodeType, Prisma } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const flow = await prisma.callFlow.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { nodes: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!flow) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json(flow);
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -24,15 +44,28 @@ export async function PATCH(
     };
 
     if (steps) {
-      await prisma.callFlowNode.deleteMany({ where: { flowId: id } });
-      await prisma.callFlowNode.createMany({
-        data: steps.map((step, index) => ({
-          flowId: id,
+      const keptIds = steps.map((s) => s.id).filter(Boolean) as string[];
+      await prisma.callFlowNode.deleteMany({
+        where: { flowId: id, ...(keptIds.length ? { id: { notIn: keptIds } } : {}) },
+      });
+
+      for (const [index, step] of steps.entries()) {
+        const data = {
           type: step.type,
           config: (step.config ?? {}) as Prisma.InputJsonValue,
           sortOrder: index,
-        })),
-      });
+        };
+        if (step.id) {
+          await prisma.callFlowNode.updateMany({
+            where: { id: step.id, flowId: id },
+            data,
+          });
+        } else {
+          await prisma.callFlowNode.create({
+            data: { flowId: id, ...data },
+          });
+        }
+      }
     }
 
     const flow = await prisma.callFlow.update({

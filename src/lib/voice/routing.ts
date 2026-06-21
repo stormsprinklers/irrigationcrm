@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
+import { renderIvrGather, renderIvrNode, type FlowContext } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
 
 type TwilioParams = Record<string, string>;
@@ -60,6 +61,22 @@ async function createInboundSession(params: {
       status: CallSessionStatus.RINGING,
     },
   });
+}
+
+function inboundDialAttributes(
+  company: { recordCalls: boolean },
+  attrs: Record<string, unknown>
+) {
+  return {
+    ...attrs,
+    ...(company.recordCalls
+      ? {
+          record: "record-from-answer-dual" as const,
+          recordingStatusCallback: `${appBaseUrl()}/api/twilio/voice/recording`,
+          recordingStatusCallbackMethod: "POST" as const,
+        }
+      : {}),
+  };
 }
 
 async function dialAgentGroup(
@@ -140,18 +157,18 @@ export async function buildInboundTwiml(params: TwilioParams) {
   }
 
   if (!isWithinBusinessHours(company.businessHours) && phoneRecord?.callFlow?.afterHoursNodeId) {
-    const afterNode = phoneRecord.callFlow.nodes.find((n) => n.id === phoneRecord.callFlow!.afterHoursNodeId);
-    if (afterNode?.type === CallFlowNodeType.VOICEMAIL) {
-      response.say("Please leave a message after the tone.");
-      response.record({
-        maxLength: 120,
-        recordingStatusCallback: `${appBaseUrl()}/api/twilio/voice/recording`,
-        transcribe: company.transcribeCalls,
-        transcribeCallback: company.transcribeCalls
-          ? `${appBaseUrl()}/api/twilio/voice/transcription`
-          : undefined,
-      });
-      return response.toString();
+    const afterNode = phoneRecord.callFlow.nodes.find(
+      (n) => n.id === phoneRecord.callFlow!.afterHoursNodeId
+    );
+    if (afterNode) {
+      const ctx: FlowContext = {
+        flowId: phoneRecord.callFlow.id,
+        companyId: company.id,
+        from,
+        recordCalls: company.recordCalls,
+        transcribeCalls: company.transcribeCalls,
+      };
+      return renderIvrNode(afterNode, phoneRecord.callFlow.nodes, ctx);
     }
   }
 
@@ -159,77 +176,31 @@ export async function buildInboundTwiml(params: TwilioParams) {
     phoneRecord?.callFlow?.nodes.find((n) => n.id === phoneRecord.callFlow?.entryNodeId) ??
     phoneRecord?.callFlow?.nodes[0];
 
-  if (entryNode?.type === CallFlowNodeType.IVR) {
-    const config = entryNode.config as { prompt?: string; actionUrl?: string };
-    const gather = response.gather({
-      numDigits: 1,
-      action: `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${phoneRecord!.callFlow!.id}&nodeId=${entryNode.id}`,
-      method: "POST",
-    });
-    gather.say(config.prompt ?? "Press 1 for service.");
-    response.say("We did not receive your input. Goodbye.");
-    return response.toString();
-  }
+  if (entryNode && phoneRecord?.callFlow) {
+    const ctx: FlowContext = {
+      flowId: phoneRecord.callFlow.id,
+      companyId: company.id,
+      from,
+      recordCalls: company.recordCalls,
+      transcribeCalls: company.transcribeCalls,
+    };
 
-  if (entryNode?.type === CallFlowNodeType.FORWARD) {
-    const config = entryNode.config as { forwardTo?: string };
-    if (config.forwardTo) {
-      response.dial({}, normalizePhone(config.forwardTo));
-    } else {
-      response.say("Forward destination not configured.");
+    if (entryNode.type === CallFlowNodeType.IVR) {
+      await renderIvrGather(response, entryNode, ctx);
+      return response.toString();
     }
-    return response.toString();
+
+    return renderIvrNode(entryNode, phoneRecord.callFlow.nodes, ctx);
   }
 
-  if (entryNode?.type === CallFlowNodeType.HANGUP) {
-    response.say("Goodbye.");
-    response.hangup();
-    return response.toString();
-  }
-
-  if (entryNode?.type === CallFlowNodeType.DIAL_GROUP) {
-    const config = entryNode.config as { groupId?: string };
-    const groupId = config.groupId;
-    const group = groupId
-      ? await prisma.agentGroup.findFirst({ where: { id: groupId, companyId: company.id } })
-      : await prisma.agentGroup.findFirst({ where: { companyId: company.id } });
-
-    const dial = response.dial({
-      timeout: group?.ringTimeoutSec ?? 30,
+  const dial = response.dial(
+    inboundDialAttributes(company, {
+      timeout: 30,
       action: `${appBaseUrl()}/api/twilio/voice/queue?companyId=${company.id}`,
       method: "POST",
       callerId: from,
-    });
-
-    if (group) {
-      await dialAgentGroup(dial, company.id, group.id, group.ringStrategy);
-    } else {
-      const identities = await getAvailableAgentIdentities(company.id);
-      if (identities.length) {
-        for (const identity of identities) {
-          dial.client({}, identity);
-        }
-      } else {
-        response.say("No agents are available. Please try again later.");
-      }
-    }
-    return response.toString();
-  }
-
-  if (entryNode?.type === CallFlowNodeType.QUEUE) {
-    response.enqueue(
-      { waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait` },
-      `company_${company.id}`
-    );
-    return response.toString();
-  }
-
-  const dial = response.dial({
-    timeout: 30,
-    action: `${appBaseUrl()}/api/twilio/voice/queue?companyId=${company.id}`,
-    method: "POST",
-    callerId: from,
-  });
+    })
+  );
   const identities = await getAvailableAgentIdentities(company.id);
   if (identities.length) {
     for (const identity of identities) {

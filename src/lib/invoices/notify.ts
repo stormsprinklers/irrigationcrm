@@ -1,4 +1,4 @@
-import { sendEmail } from "@/lib/inbox/sendgrid";
+import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
 import { sendSms } from "@/lib/inbox/twilio";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 
@@ -41,8 +41,8 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
   let emailSent = false;
   let smsSent = false;
 
-  const fromEmail = params.sendgridFrom ?? process.env.SENDGRID_FROM_EMAIL;
-  if (params.customerEmail && fromEmail && process.env.SENDGRID_API_KEY) {
+  const fromEmail = params.sendgridFrom ?? getDefaultFromEmail();
+  if (params.customerEmail && fromEmail && isEmailConfigured()) {
     try {
       await sendEmail({
         from: fromEmail,

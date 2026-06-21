@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import { sendEmail } from "@/lib/inbox/sendgrid";
+import { isEmailConfigured, sendEmail } from "@/lib/inbox/email";
 import { sendSms } from "@/lib/inbox/twilio";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { recordMaintenanceInvoicePayment } from "@/lib/maintenance-plans/discounts";
@@ -51,7 +51,7 @@ async function sendPaymentReceipt(params: {
   const payUrl = getInvoicePayUrl(params.publicToken);
   const message = `Payment received for invoice ${params.invoiceNumber}: ${formatCurrency(params.amount)}. View receipt: ${payUrl}`;
 
-  if (params.customerEmail && params.sendgridFrom && process.env.SENDGRID_API_KEY) {
+  if (params.customerEmail && params.sendgridFrom && isEmailConfigured()) {
     try {
       await sendEmail({
         from: params.sendgridFrom,

@@ -84,6 +84,7 @@ async function main() {
       leadSources: ["Website", "Referral", "Google", "Yard sign"],
       referralCode: "STORM-REF",
       bookingSlug: "storm-sprinklers",
+      onlineBookingEnabled: true,
       intakeRequiredFields: ["name", "phone", "email"],
     },
     create: {
@@ -101,7 +102,7 @@ async function main() {
       description:
         "Storm Sprinklers is a full-service irrigation company serving Utah County and surrounding areas.",
       twilioPhone: process.env.TWILIO_PHONE_NUMBER ?? null,
-      sendgridFrom: process.env.SENDGRID_FROM_EMAIL ?? "support@stormsprinklers.com",
+      sendgridFrom: process.env.TWILIO_FROM_EMAIL ?? process.env.SENDGRID_FROM_EMAIL ?? "support@stormsprinklers.com",
       recordCalls: true,
       transcribeCalls: true,
       flatRatePricingEnabled: true,
@@ -112,6 +113,7 @@ async function main() {
       leadSources: ["Website", "Referral", "Google", "Yard sign"],
       referralCode: "STORM-REF",
       bookingSlug: "storm-sprinklers",
+      onlineBookingEnabled: true,
       intakeRequiredFields: ["name", "phone", "email"],
     },
   });
@@ -882,6 +884,10 @@ async function main() {
   }
 
   console.log("Seed complete. Dev login: admin@stormsprinklers.com / Test123");
+  const { ensureDefaultNotificationTemplates } = await import(
+    "../src/lib/notifications/send"
+  );
+  await ensureDefaultNotificationTemplates(company.id);
 }
 
 main()

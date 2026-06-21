@@ -256,6 +256,32 @@ enum CallFlowNodeType {
   HANGUP
 }
 
+enum PhoneNumberType {
+  PRIMARY
+  TRACKING
+  AGENT_DIRECT
+}
+
+enum CallDisposition {
+  NONE
+  BOOKED
+  NOT_BOOKED
+  NON_OPPORTUNITY
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignChannel {
+  SMS
+  EMAIL
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
@@ -338,6 +364,11 @@ model Company {
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
+  voiceClips             VoiceClip[]
+  notificationTemplates  NotificationTemplate[]
+  notificationRules      NotificationRule[]
+  contactLists           ContactList[]
+  campaigns              Campaign[]
 }
 
 model User {
@@ -385,6 +416,8 @@ model User {
   assignedCallSessions CallSession[] @relation("AssignedCallSessions")
   transferTargetSessions CallSession[] @relation("TransferTargetSessions")
   timeClockEntries       TimeClockEntry[]
+  assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
+  handledCallLogs        CallLog[]            @relation("HandledCallLogs")
 }
 
 model Customer {
@@ -415,6 +448,8 @@ model Customer {
   maintenanceEnrollments MaintenancePlanEnrollment[]
   convertedFromLead      Lead?
   callSessions           CallSession[]
+  contactListMembers     ContactListMember[]
+  campaignRecipients     CampaignRecipient[]
 }
 
 model Lead {
@@ -434,6 +469,7 @@ model Lead {
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   assignedUser      User?     @relation("AssignedLeads", fields: [assignedUserId], references: [id], onDelete: SetNull)
   convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+  callLogs          CallLog[]
 
   @@index([companyId, status])
   @@index([assignedUserId])
@@ -497,6 +533,11 @@ model CallLog {
   durationSec   Int?
   recordingUrl  String?
   transcript    String?
+  disposition   CallDisposition @default(NONE)
+  dispositionNote String?
+  visitId       String?
+  leadId        String?
+  handledByUserId String?
   startedAt     DateTime      @default(now())
   endedAt       DateTime?
 
@@ -504,28 +545,154 @@ model CallLog {
   customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   user     User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   session  CallSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  visit    Visit?       @relation("CallLogVisit", fields: [visitId], references: [id], onDelete: SetNull)
+  lead     Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  handledBy User?       @relation("HandledCallLogs", fields: [handledByUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId, scope, startedAt])
   @@index([sessionId])
+  @@index([disposition])
 }
 
 model PhoneNumber {
-  id          String   @id @default(cuid())
-  companyId   String
-  e164        String
-  friendlyName String?
-  isPrimary   Boolean  @default(false)
-  callFlowId  String?
-  twilioSid   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String          @id @default(cuid())
+  companyId      String
+  e164           String
+  friendlyName   String?
+  numberType     PhoneNumberType @default(TRACKING)
+  isPrimary      Boolean         @default(false)
+  callFlowId     String?
+  assignedUserId String?
+  trackingSource String?
+  twilioSid      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  callFlow    CallFlow?    @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callFlow     CallFlow?    @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+  assignedUser User?        @relation("AssignedPhoneNumbers", fields: [assignedUserId], references: [id], onDelete: SetNull)
   callSessions CallSession[]
 
   @@unique([companyId, e164])
   @@index([companyId])
+}
+
+model VoiceClip {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  blobUrl     String
+  mimeType    String
+  durationSec Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model NotificationTemplate {
+  id        String  @id @default(cuid())
+  companyId String
+  channel   Channel
+  slug      String
+  name      String
+  subject   String?
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rules   NotificationRule[]
+
+  @@unique([companyId, slug, channel])
+  @@index([companyId])
+}
+
+model NotificationRule {
+  id         String  @id @default(cuid())
+  companyId  String
+  event      String
+  templateId String
+  enabled    Boolean @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  template NotificationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, event, templateId])
+  @@index([companyId, event])
+}
+
+model ContactList {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members  ContactListMember[]
+  campaigns Campaign[]
+
+  @@index([companyId])
+}
+
+model ContactListMember {
+  id         String  @id @default(cuid())
+  listId     String
+  customerId String?
+  email      String?
+  phone      String?
+  name       String?
+
+  list     ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  customer Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([listId])
+}
+
+model Campaign {
+  id          String          @id @default(cuid())
+  companyId   String
+  name        String
+  channel     CampaignChannel
+  status      CampaignStatus  @default(DRAFT)
+  subject     String?
+  bodyHtml    String?
+  bodyText    String
+  listId      String?
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  statsJson   Json?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  list       ContactList?        @relation(fields: [listId], references: [id], onDelete: SetNull)
+  recipients CampaignRecipient[]
+
+  @@index([companyId, status])
+}
+
+model CampaignRecipient {
+  id                String   @id @default(cuid())
+  campaignId        String
+  customerId        String?
+  email             String?
+  phone             String?
+  status            String   @default("pending")
+  sentAt            DateTime?
+  error             String?
+  sendgridMessageId String?
+  twilioMessageSid  String?
+
+  campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
 }
 
 model CallFlow {
@@ -622,6 +789,7 @@ model CallSession {
   transferTarget User?        @relation("TransferTargetSessions", fields: [transferTargetUserId], references: [id], onDelete: SetNull)
   phoneNumber    PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
   callLogs       CallLog[]
+  visits         Visit[]
 
   @@index([companyId, status])
   @@index([assignedUserId])
@@ -652,6 +820,7 @@ model Message {
   direction        MessageDirection
   body             String
   twilioMessageSid String?          @unique
+  deliveryStatus   String?
   sentAt           DateTime         @default(now())
   readAt           DateTime?
 
@@ -795,6 +964,7 @@ model Visit {
   state          String?
   zip            String?
   maintenancePlanVisitId String?     @unique
+  callSessionId          String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -812,6 +982,8 @@ model Visit {
   discounts    Discount[]        @relation("VisitDiscounts")
   estimates    Estimate[]
   invoices     Invoice[]
+  callLogs     CallLog[]         @relation("CallLogVisit")
+  callSession  CallSession?      @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])

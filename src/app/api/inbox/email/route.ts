@@ -3,7 +3,7 @@ import { EmailFolder, Scope } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse, badRequestResponse, forbiddenResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
-import { sendEmail } from "@/lib/inbox/sendgrid";
+import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
 
 export async function GET(request: NextRequest) {
   try {
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest) {
       }
 
       const company = await prisma.company.findUnique({ where: { id: user.companyId } });
-      const from = company?.sendgridFrom ?? process.env.SENDGRID_FROM_EMAIL;
-      if (!from) return badRequestResponse("SendGrid from address not configured");
+      const from = company?.sendgridFrom ?? getDefaultFromEmail();
+      if (!from) return badRequestResponse("From email address not configured");
 
       await sendEmail({
         from,

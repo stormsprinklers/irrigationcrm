@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CallFlowNodeType } from "@prisma/client";
 import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
-import { appBaseUrl } from "@/lib/voice/identity";
 import { buildInboundTwiml } from "@/lib/voice/routing";
+import {
+  findNextIvrNode,
+  renderIvrNode,
+  type FlowContext,
+} from "@/lib/voice/ivr";
 
 export async function POST(request: NextRequest) {
   const params = await parseTwilioWebhook(request);
@@ -23,44 +26,58 @@ export async function POST(request: NextRequest) {
     where: { id: flowId },
     include: { nodes: true },
   });
-  const current = flow?.nodes.find((n) => n.id === nodeId);
-  const config = (current?.config ?? {}) as {
-    options?: Array<{ digit: string; nextNodeId?: string; label?: string }>;
-  };
-
-  const match = config.options?.find((o) => o.digit === digits);
-  const nextNode = match?.nextNodeId
-    ? flow?.nodes.find((n) => n.id === match.nextNodeId)
-    : null;
-
-  const VoiceResponse = twilio.twiml.VoiceResponse;
-  const response = new VoiceResponse();
-
-  if (nextNode?.type === CallFlowNodeType.DIAL_GROUP && flow) {
-    const nodeConfig = nextNode.config as { groupId?: string };
-    const group = nodeConfig.groupId
-      ? await prisma.agentGroup.findFirst({ where: { id: nodeConfig.groupId, companyId: flow.companyId } })
-      : await prisma.agentGroup.findFirst({ where: { companyId: flow.companyId } });
-
-    const dial = response.dial({
-      timeout: group?.ringTimeoutSec ?? 30,
-      action: `${appBaseUrl()}/api/twilio/voice/queue?companyId=${flow.companyId}`,
-      method: "POST",
-    });
-
-    if (group) {
-      const { getAvailableAgentIdentities } = await import("@/lib/voice/presence");
-      const identities = await getAvailableAgentIdentities(flow.companyId);
-      for (const identity of identities) {
-        dial.client({}, identity);
-      }
-    }
-  } else if (nextNode?.type === CallFlowNodeType.VOICEMAIL) {
-    response.say("Please leave a message after the tone.");
-    response.record({ maxLength: 120 });
-  } else {
-    response.say("Invalid option. Goodbye.");
+  if (!flow) {
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    response.say("Call flow not found. Goodbye.");
+    return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
   }
 
-  return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+  const current = flow.nodes.find((n) => n.id === nodeId);
+  if (!current) {
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    response.say("Invalid menu. Goodbye.");
+    return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: flow.companyId },
+    select: { recordCalls: true, transcribeCalls: true },
+  });
+
+  const ctx: FlowContext = {
+    flowId: flow.id,
+    companyId: flow.companyId,
+    from: params.From,
+    recordCalls: company?.recordCalls ?? true,
+    transcribeCalls: company?.transcribeCalls ?? true,
+  };
+
+  const reason = digits ? "digit" : "timeout";
+  const nextNode = findNextIvrNode(current, flow.nodes, digits, reason);
+
+  if (!nextNode) {
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    if (!digits) {
+      const fallback = findNextIvrNode(current, flow.nodes, undefined, "timeout");
+      if (fallback) {
+        const twiml = await renderIvrNode(fallback, flow.nodes, ctx);
+        return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
+      }
+      response.say("We did not receive your input. Goodbye.");
+    } else {
+      const invalidFallback = findNextIvrNode(current, flow.nodes, digits, "invalid");
+      if (invalidFallback) {
+        const twiml = await renderIvrNode(invalidFallback, flow.nodes, ctx);
+        return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
+      }
+      response.say("Invalid option. Goodbye.");
+    }
+    return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+  }
+
+  const twiml = await renderIvrNode(nextNode, flow.nodes, ctx);
+  return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
 }

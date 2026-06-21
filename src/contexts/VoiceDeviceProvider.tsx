@@ -13,6 +13,7 @@ import {
 import { useSession } from "next-auth/react";
 import { Device, Call } from "@twilio/voice-sdk";
 import { toast } from "sonner";
+import { CallWrapUpModal } from "@/components/voice/CallWrapUpModal";
 
 export type CallerInfo = {
   phone: string;
@@ -95,6 +96,9 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     call: Call;
     callerInfo: CallerInfo | null;
   } | null>(null);
+  const [wrapUpSessionId, setWrapUpSessionId] = useState<string | null>(null);
+  const [wrapUpVisitId, setWrapUpVisitId] = useState<string | null>(null);
+  const [wrapUpOpen, setWrapUpOpen] = useState(false);
 
   const bindCall = useCallback(
     async (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
@@ -117,6 +121,10 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       void patchPresence("ON_CALL");
 
       call.on("disconnect", () => {
+        if (sessionId) {
+          setWrapUpSessionId(sessionId);
+          setWrapUpOpen(true);
+        }
         setActiveCall(null);
         void patchPresence("AVAILABLE");
       });
@@ -344,7 +352,21 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
+  return (
+    <VoiceContext.Provider value={value}>
+      {children}
+      <CallWrapUpModal
+        open={wrapUpOpen}
+        sessionId={wrapUpSessionId}
+        visitId={wrapUpVisitId}
+        onClose={() => {
+          setWrapUpOpen(false);
+          setWrapUpSessionId(null);
+          setWrapUpVisitId(null);
+        }}
+      />
+    </VoiceContext.Provider>
+  );
 }
 
 export function useVoiceDevice() {

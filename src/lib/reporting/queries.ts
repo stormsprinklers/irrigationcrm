@@ -1,4 +1,5 @@
 import {
+  CallDisposition,
   CallDirection,
   EnrollmentStatus,
   EstimateStatus,
@@ -168,7 +169,14 @@ export async function getCsrReport(companyId: string) {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const calls = await prisma.callLog.findMany({
     where: { companyId, startedAt: { gte: thirtyDaysAgo } },
-    select: { direction: true, startedAt: true, durationSec: true },
+    select: {
+      direction: true,
+      startedAt: true,
+      durationSec: true,
+      disposition: true,
+      handledByUserId: true,
+      handledBy: { select: { name: true } },
+    },
   });
 
   const byDay = new Map<string, { inbound: number; outbound: number }>();
@@ -191,7 +199,52 @@ export async function getCsrReport(companyId: string) {
       ? Math.round(calls.reduce((s, c) => s + (c.durationSec ?? 0), 0) / calls.length)
       : 0;
 
-  return { daily, inbound, outbound, totalCalls: calls.length, avgDurationSeconds: avgDuration };
+  const inboundCalls = calls.filter((c) => c.direction === CallDirection.INBOUND);
+  const dispositioned = inboundCalls.filter((c) => c.disposition !== CallDisposition.NONE);
+  const booked = inboundCalls.filter((c) => c.disposition === CallDisposition.BOOKED).length;
+  const notBooked = inboundCalls.filter((c) => c.disposition === CallDisposition.NOT_BOOKED).length;
+  const nonOpportunity = inboundCalls.filter(
+    (c) => c.disposition === CallDisposition.NON_OPPORTUNITY
+  ).length;
+
+  const bookRate =
+    dispositioned.length > 0 ? Math.round((booked / dispositioned.length) * 100) : 0;
+  const nonOpportunityRate =
+    dispositioned.length > 0 ? Math.round((nonOpportunity / dispositioned.length) * 100) : 0;
+
+  const byAgentMap = new Map<string, { name: string; booked: number; total: number }>();
+  for (const call of dispositioned) {
+    const key = call.handledByUserId ?? "unknown";
+    const name = call.handledBy?.name ?? "Unknown";
+    const entry = byAgentMap.get(key) ?? { name, booked: 0, total: 0 };
+    entry.total++;
+    if (call.disposition === CallDisposition.BOOKED) entry.booked++;
+    byAgentMap.set(key, entry);
+  }
+
+  const byAgent = [...byAgentMap.values()].map((a) => ({
+    name: a.name,
+    total: a.total,
+    booked: a.booked,
+    bookRate: a.total > 0 ? Math.round((a.booked / a.total) * 100) : 0,
+  }));
+
+  return {
+    daily,
+    inbound,
+    outbound,
+    totalCalls: calls.length,
+    avgDurationSeconds: avgDuration,
+    disposition: {
+      booked,
+      notBooked,
+      nonOpportunity,
+      none: inboundCalls.length - dispositioned.length,
+      bookRate,
+      nonOpportunityRate,
+    },
+    byAgent,
+  };
 }
 
 export async function getEstimatesReport(companyId: string) {

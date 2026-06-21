@@ -93,7 +93,11 @@ export default function SettingsInboxPage() {
         </section>
 
         <section className="rounded-lg border border-border bg-white p-6">
-          <h3 className="mb-4 text-lg font-semibold">SendGrid (Email)</h3>
+          <h3 className="mb-4 text-lg font-semibold">Twilio Email</h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Outbound email uses your Twilio account credentials. Set{" "}
+            <code className="text-xs">TWILIO_FROM_EMAIL</code> in Vercel, or override below per company.
+          </p>
           <div className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium">From email address</label>
@@ -106,7 +110,7 @@ export default function SettingsInboxPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Inbound parse domain</label>
+              <label className="mb-1 block text-sm font-medium">Inbound parse domain (optional)</label>
               <Input
                 value={settings.sendgridInboundDomain ?? ""}
                 onChange={(e) =>
@@ -115,7 +119,10 @@ export default function SettingsInboxPage() {
                 placeholder="parse.stormsprinklers.com"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Webhook URL: {process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}/api/sendgrid/inbound
+                Inbound webhook: {process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}/api/sendgrid/inbound
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Campaign events: {process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}/api/sendgrid/events
               </p>
             </div>
           </div>

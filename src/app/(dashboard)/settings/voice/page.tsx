@@ -114,11 +114,15 @@ export default function SettingsVoicePage() {
       <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
         <p className="font-medium">Twilio Console setup</p>
         <ul className="mt-2 space-y-1 text-muted-foreground">
-          <li>TwiML App Voice URL: {appUrl}{data.webhooks.client}</li>
-          <li>Tracking number Voice URL: {appUrl}{data.webhooks.inbound}</li>
-          <li>Status callback: {appUrl}{data.webhooks.status}</li>
-          <li>Recording: {appUrl}{data.webhooks.recording}</li>
-          <li>Transcription: {appUrl}{data.webhooks.transcription}</li>
+          <li>TwiML App Voice URL: {appUrl}{data.webhooks.voiceClient}</li>
+          <li>Number Voice URL: {appUrl}{data.webhooks.voiceInbound}</li>
+          <li>Status callback: {appUrl}{data.webhooks.voiceStatus}</li>
+          <li>Recording: {appUrl}{data.webhooks.voiceRecording}</li>
+          <li>Transcription: {appUrl}{data.webhooks.voiceTranscription}</li>
+          <li>SMS inbound: {appUrl}{data.webhooks.smsInbound}</li>
+          <li>SMS status: {appUrl}{data.webhooks.smsStatus}</li>
+          <li>Email inbound: {appUrl}{data.webhooks.emailInbound}</li>
+          <li>Email events: {appUrl}{data.webhooks.emailEvents}</li>
         </ul>
       </section>
     </ContentArea>

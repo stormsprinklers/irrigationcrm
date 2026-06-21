@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MessageDirection, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { validateTwilioSignature } from "@/lib/inbox/twilio";
-import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { isContactBlocked, normalizePhone, blockCustomer } from "@/lib/inbox/contacts";
 import { findOrCreateSmsConversation, getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 
 export async function POST(request: NextRequest) {
@@ -31,6 +31,31 @@ export async function POST(request: NextRequest) {
   if (!company) return NextResponse.json({ ok: true });
 
   const normalizedFrom = normalizePhone(from);
+  const normalizedBody = body.trim().toUpperCase();
+
+  if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(normalizedBody)) {
+    const customer = await prisma.customer.findFirst({
+      where: { companyId: company.id, phone: normalizedFrom },
+    });
+    const admin = await prisma.user.findFirst({
+      where: { companyId: company.id, role: "ADMIN" },
+      select: { id: true },
+    });
+    if (admin) {
+      await blockCustomer({
+        companyId: company.id,
+        blockedBy: admin.id,
+        customerId: customer?.id,
+        phone: normalizedFrom,
+        reason: "SMS STOP opt-out",
+      });
+    }
+    return new NextResponse(
+      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>You have been unsubscribed.</Message></Response>',
+      { headers: { "Content-Type": "text/xml" } }
+    );
+  }
+
   const blocked = await isContactBlocked(company.id, normalizedFrom, null);
   if (blocked) return NextResponse.json({ ok: true });
 

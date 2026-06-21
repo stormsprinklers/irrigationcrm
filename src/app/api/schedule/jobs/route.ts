@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
 import type { ScheduleFilters } from "@/lib/schedule/types";
+import { sendOperationalNotification } from "@/lib/notifications/send";
+import { buildVisitContext } from "@/lib/notifications/templates";
 
 function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
   return {
@@ -38,7 +40,23 @@ export async function POST(request: NextRequest) {
     if (user.role === "TECH") return forbiddenResponse();
 
     const body = await request.json();
-    const { title, startAt, endAt, division, serviceAreaId, assignedUserId, crewId, customerId, propertyId, tags, address, city, state, zip } = body;
+    const {
+      title,
+      startAt,
+      endAt,
+      division,
+      serviceAreaId,
+      assignedUserId,
+      crewId,
+      customerId,
+      propertyId,
+      tags,
+      address,
+      city,
+      state,
+      zip,
+      callSessionId,
+    } = body;
 
     if (!title || !startAt || !endAt || !division) {
       return badRequestResponse("title, startAt, endAt, and division are required");
@@ -69,9 +87,40 @@ export async function POST(request: NextRequest) {
         state: state ?? null,
         zip: zip ?? null,
         status: VisitStatus.SCHEDULED,
+        callSessionId: callSessionId ?? null,
       },
       include: jobInclude,
     });
+
+    if (visit.customerId) {
+      const customer = await prisma.customer.findUnique({
+        where: { id: visit.customerId },
+        select: { name: true, email: true, phone: true },
+      });
+      const company = await prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: { name: true },
+      });
+      if (customer && company) {
+        sendOperationalNotification({
+          companyId: user.companyId,
+          event: "VISIT_SCHEDULED",
+          recipient: {
+            customerId: visit.customerId,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+          },
+          context: buildVisitContext({
+            customerName: customer.name,
+            companyName: company.name,
+            visitTitle: visit.title,
+            startAt: visit.startAt,
+            address: [visit.address, visit.city, visit.state, visit.zip].filter(Boolean).join(", "),
+          }),
+        }).catch(() => {});
+      }
+    }
 
     return NextResponse.json(serializeJob(visit), { status: 201 });
   } catch (error) {

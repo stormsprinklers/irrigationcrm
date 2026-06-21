@@ -4,7 +4,9 @@ import { getToken } from "next-auth/jwt";
 const publicPaths = [
   "/login",
   "/pay",
+  "/book",
   "/api/auth",
+  "/api/book/public",
   "/api/twilio",
   "/api/sendgrid",
   "/api/stripe/webhook",

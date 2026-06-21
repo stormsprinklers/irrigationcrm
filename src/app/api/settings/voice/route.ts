@@ -34,11 +34,15 @@ export async function GET() {
       counts: { numbers, flows, groups },
       twilioConfigured,
       webhooks: {
-        inbound: "/api/twilio/voice/inbound",
-        client: "/api/twilio/voice/client",
-        status: "/api/twilio/voice/status",
-        recording: "/api/twilio/voice/recording",
-        transcription: "/api/twilio/voice/transcription",
+        voiceInbound: "/api/twilio/voice/inbound",
+        voiceClient: "/api/twilio/voice/client",
+        voiceStatus: "/api/twilio/voice/status",
+        voiceRecording: "/api/twilio/voice/recording",
+        voiceTranscription: "/api/twilio/voice/transcription",
+        smsInbound: "/api/twilio/sms/inbound",
+        smsStatus: "/api/twilio/sms/status",
+        emailInbound: "/api/sendgrid/inbound",
+        emailEvents: "/api/sendgrid/events",
       },
     });
   } catch {

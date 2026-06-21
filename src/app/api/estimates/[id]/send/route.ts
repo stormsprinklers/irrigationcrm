@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { sendEmail } from "@/lib/inbox/sendgrid";
+import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
@@ -31,9 +31,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
       return badRequestResponse("Customer must have an email address to send estimate");
     }
 
-    const fromEmail = estimate.company.sendgridFrom ?? process.env.SENDGRID_FROM_EMAIL;
-    if (!fromEmail || !process.env.SENDGRID_API_KEY) {
-      return NextResponse.json({ error: "SendGrid is not configured" }, { status: 503 });
+    const fromEmail = estimate.company.sendgridFrom ?? getDefaultFromEmail();
+    if (!fromEmail || !isEmailConfigured()) {
+      return NextResponse.json({ error: "Twilio email is not configured" }, { status: 503 });
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
