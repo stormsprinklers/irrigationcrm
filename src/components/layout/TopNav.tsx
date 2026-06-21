@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { FormEvent, useState } from "react";
 import {
   Bell,
   ChevronDown,
-  Droplets,
   Grid3X3,
   MapPin,
   Phone,
@@ -15,8 +15,10 @@ import {
   Settings,
 } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
+import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
+import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +37,7 @@ export function TopNav() {
   const router = useRouter();
   const { data: session } = useSession();
   const [search, setSearch] = useState("");
+  const [dialerOpen, setDialerOpen] = useState(false);
   const userName = session?.user?.name ?? "User";
 
   function onSearchSubmit(e: FormEvent) {
@@ -48,10 +51,15 @@ export function TopNav() {
     <header className="sticky top-0 z-50 border-b border-border bg-white">
       <div className="flex h-14 items-center gap-4 px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-            <Droplets className="h-5 w-5 text-primary" />
-          </div>
-          <span className="hidden text-sm font-semibold text-foreground lg:inline">
+          <Image
+            src={stormBrand.logoPath}
+            alt="Storm Sprinklers"
+            width={160}
+            height={160}
+            priority
+            className="h-9 w-auto object-contain"
+          />
+          <span className="font-display hidden text-sm font-bold tracking-tight text-storm-navy lg:inline">
             Storm Sprinklers
           </span>
         </Link>
@@ -66,7 +74,7 @@ export function TopNav() {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative px-3 py-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                  active && "text-foreground"
+                  active && "text-storm-navy"
                 )}
               >
                 {item.label}
@@ -96,7 +104,13 @@ export function TopNav() {
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button
+            variant="ghost"
+            size="icon"
+            type="button"
+            aria-label="Open phone dialer"
+            onClick={() => setDialerOpen(true)}
+          >
             <Phone className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon">
@@ -142,6 +156,8 @@ export function TopNav() {
           <ChevronDown className="h-3 w-3" />
         </Button>
       </div>
+
+      <VoiceDialerDialog open={dialerOpen} onClose={() => setDialerOpen(false)} />
     </header>
   );
 }

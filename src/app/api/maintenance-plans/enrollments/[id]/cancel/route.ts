@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserRole } from "@prisma/client";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  badRequestResponse,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { computeCancellationFee } from "@/lib/maintenance-plans/discounts";
 import { getEnrollment } from "@/lib/maintenance-plans/queries";
 import { canManageEnrollments } from "@/lib/maintenance-plans/permissions";
@@ -12,7 +17,9 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEnrollments(user.role as UserRole)) return forbiddenResponse();
+    if (!canManageEnrollments(user.role as UserRole)) {
+      return forbiddenResponse("You do not have permission to cancel enrollments");
+    }
 
     const { id } = await params;
     const existing = await prisma.maintenancePlanEnrollment.findFirst({
@@ -34,8 +41,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
 
     if (existing.stripeSubscriptionId && process.env.STRIPE_SECRET_KEY) {
-      const { getStripeClient } = await import("@/lib/stripe/client");
-      await getStripeClient().subscriptions.cancel(existing.stripeSubscriptionId);
+      try {
+        const { getStripeClient } = await import("@/lib/stripe/client");
+        await getStripeClient().subscriptions.cancel(existing.stripeSubscriptionId);
+      } catch (stripeError) {
+        console.error("Stripe subscription cancel failed:", stripeError);
+        // Continue cancelling locally even if Stripe is already cancelled or misconfigured.
+      }
     }
 
     await prisma.maintenancePlanEnrollment.update({
@@ -43,8 +55,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
-        cancellationReason: body.cancellationReason ?? null,
+        cancellationReason:
+          typeof body.cancellationReason === "string" && body.cancellationReason.trim()
+            ? body.cancellationReason.trim()
+            : null,
         cancellationFeeCharged,
+        autoRenew: false,
       },
     });
 
@@ -53,9 +69,26 @@ export async function POST(request: NextRequest, { params }: Params) {
       data: { status: "CANCELLED" },
     });
 
+    await prisma.maintenancePlanVisit.updateMany({
+      where: {
+        enrollmentId: id,
+        status: { in: ["UNSCHEDULED", "OVERDUE"] },
+      },
+      data: { status: "SKIPPED" },
+    });
+
     const enrollment = await getEnrollment(user.companyId, id);
+    if (!enrollment) {
+      return NextResponse.json({ error: "Enrollment not found after cancellation" }, { status: 500 });
+    }
+
     return NextResponse.json(enrollment);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Cancel enrollment failed:", error);
+    const message = error instanceof Error ? error.message : "Failed to cancel enrollment";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
+import { VoiceDialer } from "@/components/voice/VoiceDialer";
 
 type QueueEntry = {
   id: string;
@@ -45,7 +46,7 @@ export function CsrDeskPanel({
 }: {
   onVisitBooked?: (visitId: string) => void;
 }) {
-  const { ready, activeCall, connect, disconnect, transfer } = useVoiceDevice();
+  const { ready, activeCall, disconnect, transfer } = useVoiceDevice();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
@@ -176,7 +177,7 @@ export function CsrDeskPanel({
   }
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-3">
+    <div className="grid h-full gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <section className="rounded-lg border border-border bg-white p-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">
           <Phone className="h-4 w-4" /> Queue ({queue.length})
@@ -221,6 +222,13 @@ export function CsrDeskPanel({
         ) : (
           <p className="text-sm text-muted-foreground">No active call.</p>
         )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-white p-4">
+        <h3 className="mb-3 flex items-center gap-2 font-semibold">
+          <Phone className="h-4 w-4" /> Outbound dialer
+        </h3>
+        <VoiceDialer compact />
       </section>
 
       <section className="rounded-lg border border-border bg-white p-4">

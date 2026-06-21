@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { ArrowLeft, GitMerge, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateCustomerVisitModal } from "@/components/customers/CreateCustomerVisitModal";
+import {
+  CustomerEmailAction,
+  CustomerPhoneActions,
+} from "@/components/customers/CustomerContactActions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerNotesAttachmentsTab } from "@/components/customers/CustomerNotesAttachmentsTab";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
@@ -34,6 +39,26 @@ import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 
 type Props = { customerId: string };
+
+function ProfileDetail({
+  label,
+  value,
+  actions,
+}: {
+  label: string;
+  value: string | null;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-1 flex items-center gap-1">
+        <p className="text-sm">{value || "—"}</p>
+        {actions}
+      </div>
+    </div>
+  );
+}
 
 function ConfirmModal({
   title,
@@ -119,6 +144,8 @@ export function CustomerProfile({ customerId }: Props) {
   const [saving, setSaving] = useState(false);
   const [newProperty, setNewProperty] = useState({ name: "", address: "", city: "", state: "", zip: "" });
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
+  const [editMode, setEditMode] = useState(false);
+  const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
 
   const load = useCallback(async () => {
     const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
@@ -171,24 +198,57 @@ export function CustomerProfile({ customerId }: Props) {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    if (!customer) return;
+    const payload = draftCustomer ?? customer;
+    if (!payload) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/customers/${customerId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(customer),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         toast.error("Failed to save customer");
         return;
       }
-      setCustomer(await res.json());
+      const updated = await res.json();
+      setCustomer(updated);
+      setDraftCustomer(null);
+      setEditMode(false);
       toast.success("Customer updated");
     } finally {
       setSaving(false);
     }
   }
+
+  function startEditing() {
+    if (!customer) return;
+    setDraftCustomer({ ...customer });
+    setEditMode(true);
+  }
+
+  function cancelEditing() {
+    setDraftCustomer(null);
+    setEditMode(false);
+  }
+
+  const profileCustomer = editMode ? draftCustomer : customer;
+  const formattedAddress = customer
+    ? formatCustomerAddress({
+        address: customer.address,
+        city: customer.city,
+        state: customer.state,
+        zip: customer.zip,
+      })
+    : null;
+  const mapsUrl = customer
+    ? buildGoogleMapsUrl({
+        address: customer.address,
+        city: customer.city,
+        state: customer.state,
+        zip: customer.zip,
+      })
+    : null;
 
   async function addProperty(e: React.FormEvent) {
     e.preventDefault();
@@ -422,96 +482,206 @@ export function CustomerProfile({ customerId }: Props) {
 
         <TabsContent value="profile">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Contact information</CardTitle>
+              {!editMode ? (
+                <Button type="button" variant="ghost" size="icon" aria-label="Edit profile" onClick={startEditing}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent>
-              <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Name</label>
-                  <Input
-                    value={customer.name}
-                    onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Company</label>
-                  <Input
-                    value={customer.companyName ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, companyName: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Phone</label>
-                  <Input
-                    value={customer.phone ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, phone: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Email</label>
-                  <Input
-                    value={customer.email ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, email: e.target.value || null })}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium">Address</label>
-                  <Input
-                    value={customer.address ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, address: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">City</label>
-                  <Input
-                    value={customer.city ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, city: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">State</label>
-                  <Input
-                    value={customer.state ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, state: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">ZIP</label>
-                  <Input
-                    value={customer.zip ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, zip: e.target.value || null })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Lead source</label>
-                  <Input
-                    value={customer.leadSource ?? ""}
-                    onChange={(e) => setCustomer({ ...customer, leadSource: e.target.value || null })}
-                  />
-                </div>
-                {canFlagDns && (
-                  <div className="sm:col-span-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={customer.doNotService}
-                        onCheckedChange={(checked) =>
-                          setCustomer({ ...customer, doNotService: Boolean(checked) })
-                        }
+              {!editMode && customer ? (
+                <dl className="grid gap-5 sm:grid-cols-2">
+                  <ProfileDetail label="Name" value={customer.name} />
+                  <ProfileDetail label="Company" value={customer.companyName} />
+                  <ProfileDetail
+                    label="Phone"
+                    value={customer.phone}
+                    actions={
+                      <CustomerPhoneActions
+                        customerId={customer.id}
+                        name={customer.name}
+                        phone={customer.phone}
                       />
-                      Mark as DO NOT SERVICE (blocks all appointment booking)
-                    </label>
+                    }
+                  />
+                  <ProfileDetail
+                    label="Email"
+                    value={customer.email}
+                    actions={
+                      <CustomerEmailAction
+                        customerId={customer.id}
+                        name={customer.name}
+                        email={customer.email}
+                      />
+                    }
+                  />
+                  <div className="sm:col-span-2">
+                    <ProfileDetail
+                      label="Address"
+                      value={formattedAddress}
+                      actions={
+                        mapsUrl ? (
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-primary" asChild>
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Open address in Google Maps"
+                            >
+                              <MapPin className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        ) : null
+                      }
+                    />
                   </div>
-                )}
-                <div className="sm:col-span-2">
-                  <Button type="submit" disabled={saving}>
-                    {saving ? "Saving..." : "Save changes"}
-                  </Button>
-                </div>
-              </form>
+                  <ProfileDetail label="Lead source" value={customer.leadSource} />
+                  {customer.doNotService ? (
+                    <div className="sm:col-span-2">
+                      <Badge variant="destructive">Do not service</Badge>
+                    </div>
+                  ) : null}
+                </dl>
+              ) : profileCustomer ? (
+                <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Name</label>
+                    <Input
+                      value={profileCustomer.name}
+                      onChange={(e) =>
+                        setDraftCustomer({ ...profileCustomer, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Company</label>
+                    <Input
+                      value={profileCustomer.companyName ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          companyName: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Phone</label>
+                    <Input
+                      value={profileCustomer.phone ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          phone: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Email</label>
+                    <Input
+                      value={profileCustomer.email ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          email: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-1 block text-sm font-medium">Address</label>
+                    <Input
+                      value={profileCustomer.address ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          address: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">City</label>
+                    <Input
+                      value={profileCustomer.city ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          city: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">State</label>
+                    <Input
+                      value={profileCustomer.state ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          state: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">ZIP</label>
+                    <Input
+                      value={profileCustomer.zip ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          zip: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Lead source</label>
+                    <Input
+                      value={profileCustomer.leadSource ?? ""}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          leadSource: e.target.value || null,
+                        })
+                      }
+                    />
+                  </div>
+                  {canFlagDns && (
+                    <div className="sm:col-span-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={profileCustomer.doNotService}
+                          onCheckedChange={(checked) =>
+                            setDraftCustomer({
+                              ...profileCustomer,
+                              doNotService: Boolean(checked),
+                            })
+                          }
+                        />
+                        Mark as DO NOT SERVICE (blocks all appointment booking)
+                      </label>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 sm:col-span-2">
+                    <Button type="submit" disabled={saving}>
+                      {saving ? "Saving..." : "Save changes"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={cancelEditing} disabled={saving}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
 
               <div className="mt-8 border-t pt-6">
-                <h3 className="mb-3 text-sm font-semibold">Alternate phone numbers</h3>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Alternate phone numbers</h3>
+                </div>
                 {phones.length === 0 ? (
                   <p className="mb-4 text-sm text-muted-foreground">No alternate numbers.</p>
                 ) : (
@@ -521,36 +691,49 @@ export function CustomerProfile({ customerId }: Props) {
                         key={phone.id}
                         className="flex items-start justify-between rounded-md border p-3"
                       >
-                        <div>
-                          <p className="font-medium">{phone.phone}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            <p className="font-medium">{phone.phone}</p>
+                            {!editMode && customer ? (
+                              <CustomerPhoneActions
+                                customerId={customer.id}
+                                name={customer.name}
+                                phone={phone.phone}
+                              />
+                            ) : null}
+                          </div>
                           {phone.note && (
                             <p className="text-sm text-muted-foreground">{phone.note}</p>
                           )}
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => deletePhone(phone.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {editMode ? (
+                          <Button variant="ghost" size="icon" onClick={() => deletePhone(phone.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
                     ))}
                   </div>
                 )}
-                <form onSubmit={addPhone} className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    value={newPhone.phone}
-                    onChange={(e) => setNewPhone({ ...newPhone, phone: e.target.value })}
-                    placeholder="Phone number"
-                    required
-                  />
-                  <Input
-                    value={newPhone.note}
-                    onChange={(e) => setNewPhone({ ...newPhone, note: e.target.value })}
-                    placeholder="Note (e.g. spouse, office)"
-                  />
-                  <Button type="submit" className="sm:col-span-2 w-fit">
-                    <Plus className="h-4 w-4" />
-                    Add phone
-                  </Button>
-                </form>
+                {editMode ? (
+                  <form onSubmit={addPhone} className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      value={newPhone.phone}
+                      onChange={(e) => setNewPhone({ ...newPhone, phone: e.target.value })}
+                      placeholder="Phone number"
+                      required
+                    />
+                    <Input
+                      value={newPhone.note}
+                      onChange={(e) => setNewPhone({ ...newPhone, note: e.target.value })}
+                      placeholder="Note (e.g. spouse, office)"
+                    />
+                    <Button type="submit" className="w-fit sm:col-span-2">
+                      <Plus className="h-4 w-4" />
+                      Add phone
+                    </Button>
+                  </form>
+                ) : null}
               </div>
             </CardContent>
           </Card>

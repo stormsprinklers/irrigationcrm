@@ -2,7 +2,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: "Lulo Clean One";
+  src: url("/fonts/Lulo-Clean-One-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lulo Clean One", var(--font-sans);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -21,10 +31,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-highlight: #eff6ff;
-  --color-highlight-panel: #e3f2fd;
+  --color-highlight: var(--highlight);
+  --color-highlight-panel: var(--highlight-panel);
   --color-success: #16a34a;
-  --color-page: #f9fafb;
+  --color-page: var(--page);
+  --color-storm-navy: #102341;
+  --color-storm-sky: #4c9bc8;
+  --color-storm-coral: #f17388;
+  --color-storm-ice: #c2e4f0;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -34,23 +48,26 @@
 :root {
   --radius: 0.5rem;
   --background: #ffffff;
-  --foreground: #111827;
+  --foreground: #102341;
   --card: #ffffff;
-  --card-foreground: #111827;
+  --card-foreground: #102341;
   --popover: #ffffff;
-  --popover-foreground: #111827;
-  --primary: #2563eb;
+  --popover-foreground: #102341;
+  --primary: #4c9bc8;
   --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #111827;
-  --muted: #f9fafb;
-  --muted-foreground: #6b7280;
-  --accent: #eff6ff;
-  --accent-foreground: #1d4ed8;
+  --secondary: #c2e4f0;
+  --secondary-foreground: #102341;
+  --muted: #f0f4f8;
+  --muted-foreground: #4a5568;
+  --accent: #c2e4f0;
+  --accent-foreground: #102341;
   --destructive: #ef4444;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #2563eb;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #4c9bc8;
+  --highlight: #c2e4f0;
+  --highlight-panel: #eef7fb;
+  --page: #f8fafc;
 }
 
 @layer base {
@@ -60,5 +77,12 @@
 
   body {
     @apply bg-page text-foreground antialiased;
+  }
+
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 }

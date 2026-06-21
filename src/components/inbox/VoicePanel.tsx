@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Phone, PhoneOff, Users } from "lucide-react";
+import { Phone, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { InboxScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
@@ -54,17 +53,10 @@ export function VoicePanel({
   initialName?: string | null;
 }) {
   const { ready, connect, activeCall } = useVoiceDevice();
-  const [phone, setPhone] = useState("");
   const [calling, setCalling] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [callDetail, setCallDetail] = useState<CallDetail | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
-
-  useEffect(() => {
-    if (initialPhone && !selectedCallId) {
-      setPhone(initialPhone);
-    }
-  }, [initialPhone, selectedCallId]);
 
   useEffect(() => {
     if (scope === "team") {
@@ -214,13 +206,6 @@ export function VoicePanel({
 
   return (
     <div className="flex h-full flex-col p-6">
-      <h3 className="text-lg font-semibold">
-        {initialName ? `Call ${initialName}` : "Dialer"}
-      </h3>
-      <p className="mb-1 text-sm text-muted-foreground">
-        Browser softphone {ready ? "· ready" : "· connecting…"}
-      </p>
-
       {queue.length > 0 && (
         <div className="mb-4 rounded-lg border border-border bg-muted/30 p-3">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -242,43 +227,11 @@ export function VoicePanel({
         </div>
       )}
 
-      <Input
-        placeholder="(801) 555-0123"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        className="mb-4 text-lg"
+      <VoiceDialer
+        initialPhone={initialPhone}
+        initialCustomerId={initialCustomerId}
+        initialName={initialName}
       />
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((digit) => (
-          <Button
-            key={digit}
-            variant="outline"
-            className="h-12 text-lg"
-            type="button"
-            onClick={() => setPhone((p) => p + digit)}
-          >
-            {digit}
-          </Button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <Button
-          className="flex-1"
-          disabled={!phone || calling || !ready || Boolean(activeCall)}
-          onClick={() => handleCall(phone, initialCustomerId ?? undefined)}
-        >
-          <Phone className="h-4 w-4" />
-          Call
-        </Button>
-        <Button variant="outline" onClick={() => setPhone("")}>
-          <PhoneOff className="h-4 w-4" />
-        </Button>
-      </div>
-      {scope === "customers" && phone && (
-        <div className="mt-4 flex justify-end">
-          <BlockContactAction phone={phone} name={phone} />
-        </div>
-      )}
     </div>
   );
 }

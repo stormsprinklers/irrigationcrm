@@ -1,11 +1,13 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { stormBrand } from "@/lib/branding";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
@@ -49,9 +51,17 @@ export default function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-page px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Storm Sprinklers CRM</CardTitle>
+      <Card className="w-full max-w-md border-storm-ice/60">
+        <CardHeader className="items-center text-center">
+          <Image
+            src={stormBrand.logoPath}
+            alt="Storm Sprinklers"
+            width={220}
+            height={220}
+            priority
+            className="mx-auto mb-2 h-24 w-auto object-contain"
+          />
+          <CardTitle className="font-display text-2xl text-storm-navy">Storm Sprinklers CRM</CardTitle>
           <p className="text-sm text-muted-foreground">Sign in to continue</p>
           <p className="text-xs text-muted-foreground">
             Dev login: admin@stormsprinklers.com / Test123

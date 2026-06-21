@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
       }
       onUpdated(await res.json());
       setShowCancel(false);
+      setCancelReason("");
       toast.success("Enrollment cancelled");
     } finally {
       setActing(false);
@@ -98,7 +100,12 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
             </Button>
           )}
           {canCancel && (
-            <Button variant="destructive" onClick={() => setShowCancel(true)} disabled={acting}>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setShowCancel(true)}
+              disabled={acting}
+            >
               Cancel plan
             </Button>
           )}
@@ -222,29 +229,53 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
       </Card>
 
       {showCancel && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cancel enrollment</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Reason (optional)</label>
-              <Input
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Customer requested cancellation"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="destructive" onClick={cancelEnrollment} disabled={acting}>
-                Confirm cancellation
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => !acting && setShowCancel(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">Cancel enrollment</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This will cancel {enrollment.template.name} for {enrollment.customer.name}. Pending
+                  billing periods will be closed out.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={acting}
+                onClick={() => setShowCancel(false)}
+              >
+                <X className="h-4 w-4" />
               </Button>
-              <Button variant="outline" onClick={() => setShowCancel(false)}>
-                Keep plan
-              </Button>
             </div>
-          </CardContent>
-        </Card>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Reason (optional)</label>
+                <Input
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="Customer requested cancellation"
+                  disabled={acting}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="destructive" onClick={cancelEnrollment} disabled={acting}>
+                  {acting ? "Cancelling..." : "Confirm cancellation"}
+                </Button>
+                <Button variant="outline" onClick={() => setShowCancel(false)} disabled={acting}>
+                  Keep plan
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

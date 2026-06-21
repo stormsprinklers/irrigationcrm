@@ -19,7 +19,7 @@ export function ModuleSidebar({ title, sections }: ModuleSidebarProps) {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-4 py-4">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <h2 className="font-display text-lg font-bold text-storm-navy">{title}</h2>
         <button
           type="button"
           className="rounded p-1 text-muted-foreground hover:bg-muted"
