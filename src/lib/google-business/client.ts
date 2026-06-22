@@ -1,11 +1,25 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import type { GbpAccount, GbpLocation, GbpPerformanceSummary } from "@/lib/google-business/types";
+import { Prisma } from "@prisma/client";
+import type { GbpAccount, GbpCatalogCache, GbpLocation, GbpPerformanceSummary } from "@/lib/google-business/types";
 import { GBP_METRIC_LABELS, GBP_PERFORMANCE_METRICS, GOOGLE_BUSINESS_SCOPE } from "@/lib/google-business/types";
 import { prisma } from "@/lib/prisma";
 
 const ACCOUNT_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
 const LOCATION_API = "https://mybusinessbusinessinformation.googleapis.com/v1";
 const PERFORMANCE_API = "https://businessprofileperformance.googleapis.com/v1";
+const GBP_CATALOG_TTL_MS = 30 * 60 * 1000;
+const MAX_429_RETRIES = 4;
+
+const inflightAccountLoads = new Map<string, Promise<GbpAccount[]>>();
+const inflightLocationLoads = new Map<string, Promise<GbpLocation[]>>();
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isQuotaError(message: string) {
+  return /quota exceeded/i.test(message);
+}
 
 export class GoogleBusinessApiError extends Error {
   status: number;
@@ -170,32 +184,196 @@ export async function getCompanyAccessToken(companyId: string) {
 }
 
 async function googleFetch<T>(accessToken: string, url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let attempt = 0;
 
-  const data = (await res.json()) as T & { error?: { message?: string } };
-  if (!res.ok) {
-    throw new GoogleBusinessApiError(
-      data.error?.message ?? `Google API error (${res.status})`,
-      res.status
-    );
+  while (true) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const data = (await res.json()) as T & {
+      error?: { message?: string; status?: string };
+    };
+
+    if (res.ok) return data;
+
+    const message = data.error?.message ?? `Google API error (${res.status})`;
+
+    if (res.status === 429 && attempt < MAX_429_RETRIES) {
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : Math.min(60_000, 2_000 * 2 ** attempt);
+      attempt += 1;
+      await sleep(delayMs);
+      continue;
+    }
+
+    throw new GoogleBusinessApiError(message, res.status);
+  }
+}
+
+function readCatalog(raw: unknown): GbpCatalogCache {
+  if (!raw || typeof raw !== "object") return {};
+  return raw as GbpCatalogCache;
+}
+
+async function loadCatalog(companyId: string): Promise<GbpCatalogCache> {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { googleBusinessCatalogJson: true },
+  });
+  return readCatalog(company?.googleBusinessCatalogJson);
+}
+
+async function saveCatalog(companyId: string, catalog: GbpCatalogCache) {
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { googleBusinessCatalogJson: catalog as Prisma.InputJsonValue },
+  });
+}
+
+function catalogFresh(iso: string | undefined, ttlMs = GBP_CATALOG_TTL_MS) {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() < ttlMs;
+}
+
+export async function getGbpAccountsForCompany(
+  companyId: string,
+  options?: { refresh?: boolean }
+) {
+  const catalog = await loadCatalog(companyId);
+  const cached = catalog.accounts ?? [];
+  const fresh = catalogFresh(catalog.accountsFetchedAt);
+
+  if (!options?.refresh && fresh) {
+    return { accounts: cached, stale: false, fromCache: true };
   }
 
-  return data;
+  const inflightKey = `${companyId}:accounts`;
+  if (!options?.refresh && inflightAccountLoads.has(inflightKey)) {
+    const accounts = await inflightAccountLoads.get(inflightKey)!;
+    return { accounts, stale: false, fromCache: false };
+  }
+
+  const loadPromise = (async () => {
+    const accessToken = await getCompanyAccessToken(companyId);
+    const accounts = await listGbpAccounts(accessToken);
+    const nextCatalog = await loadCatalog(companyId);
+    await saveCatalog(companyId, {
+      ...nextCatalog,
+      accounts,
+      accountsFetchedAt: new Date().toISOString(),
+    });
+    return accounts;
+  })();
+
+  inflightAccountLoads.set(inflightKey, loadPromise);
+  try {
+    const accounts = await loadPromise;
+    return { accounts, stale: false, fromCache: false };
+  } catch (err) {
+    if (cached.length > 0) {
+      const message = err instanceof Error ? err.message : "Failed to load accounts";
+      return {
+        accounts: cached,
+        stale: true,
+        fromCache: true,
+        warning: isQuotaError(message)
+          ? "Google API rate limit reached. Showing cached accounts — try Refresh from Google in a minute."
+          : `${message} Showing cached accounts.`,
+      };
+    }
+    throw err;
+  } finally {
+    inflightAccountLoads.delete(inflightKey);
+  }
+}
+
+export async function getGbpLocationsForCompany(
+  companyId: string,
+  accountId: string,
+  options?: { refresh?: boolean }
+) {
+  const catalog = await loadCatalog(companyId);
+  const cached = catalog.locationsByAccount?.[accountId] ?? [];
+  const fetchedAt = catalog.locationsFetchedAt?.[accountId];
+  const fresh = catalogFresh(fetchedAt);
+
+  if (!options?.refresh && fresh) {
+    return { locations: cached, stale: false, fromCache: true };
+  }
+
+  const inflightKey = `${companyId}:locations:${accountId}`;
+  if (!options?.refresh && inflightLocationLoads.has(inflightKey)) {
+    const locations = await inflightLocationLoads.get(inflightKey)!;
+    return { locations, stale: false, fromCache: false };
+  }
+
+  const loadPromise = (async () => {
+    const accessToken = await getCompanyAccessToken(companyId);
+    const locations = await listGbpLocations(accessToken, accountId);
+    const nextCatalog = await loadCatalog(companyId);
+    await saveCatalog(companyId, {
+      ...nextCatalog,
+      locationsByAccount: {
+        ...(nextCatalog.locationsByAccount ?? {}),
+        [accountId]: locations,
+      },
+      locationsFetchedAt: {
+        ...(nextCatalog.locationsFetchedAt ?? {}),
+        [accountId]: new Date().toISOString(),
+      },
+    });
+    return locations;
+  })();
+
+  inflightLocationLoads.set(inflightKey, loadPromise);
+  try {
+    const locations = await loadPromise;
+    return { locations, stale: false, fromCache: false };
+  } catch (err) {
+    if (cached.length > 0) {
+      const message = err instanceof Error ? err.message : "Failed to load locations";
+      return {
+        locations: cached,
+        stale: true,
+        fromCache: true,
+        warning: isQuotaError(message)
+          ? "Google API rate limit reached. Showing cached locations — try Refresh from Google in a minute."
+          : `${message} Showing cached locations.`,
+      };
+    }
+    throw err;
+  } finally {
+    inflightLocationLoads.delete(inflightKey);
+  }
 }
 
 export async function listGbpAccounts(accessToken: string): Promise<GbpAccount[]> {
-  const data = await googleFetch<{ accounts?: Array<{ name: string; accountName: string; type?: string }> }>(
-    accessToken,
-    `${ACCOUNT_API}/accounts`
-  );
+  const accounts: GbpAccount[] = [];
+  let pageToken: string | undefined;
 
-  return (data.accounts ?? []).map((account) => ({
-    name: account.name,
-    accountName: account.accountName,
-    type: account.type,
-  }));
+  do {
+    const params = new URLSearchParams();
+    if (pageToken) params.set("pageToken", pageToken);
+    const query = params.toString();
+    const data = await googleFetch<{
+      accounts?: Array<{ name: string; accountName: string; type?: string }>;
+      nextPageToken?: string;
+    }>(accessToken, `${ACCOUNT_API}/accounts${query ? `?${query}` : ""}`);
+
+    accounts.push(
+      ...(data.accounts ?? []).map((account) => ({
+        name: account.name,
+        accountName: account.accountName,
+        type: account.type,
+      }))
+    );
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return accounts;
 }
 
 export async function listGbpLocations(
@@ -203,37 +381,49 @@ export async function listGbpLocations(
   accountName: string
 ): Promise<GbpLocation[]> {
   const parent = accountName.startsWith("accounts/") ? accountName : `accounts/${accountName}`;
-  const params = new URLSearchParams({
-    readMask: "name,title,storefrontAddress",
-    pageSize: "100",
-  });
+  const locations: GbpLocation[] = [];
+  let pageToken: string | undefined;
 
-  const data = await googleFetch<{
-    locations?: Array<{
-      name: string;
-      title?: string;
-      storefrontAddress?: {
-        addressLines?: string[];
-        locality?: string;
-        administrativeArea?: string;
-        postalCode?: string;
-      };
-    }>;
-  }>(accessToken, `${LOCATION_API}/${parent}/locations?${params.toString()}`);
+  do {
+    const params = new URLSearchParams({
+      readMask: "name,title,storefrontAddress",
+      pageSize: "100",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
 
-  return (data.locations ?? []).map((location) => {
-    const addr = location.storefrontAddress;
-    const address = addr
-      ? [addr.addressLines?.join(" "), addr.locality, addr.administrativeArea, addr.postalCode]
-          .filter(Boolean)
-          .join(", ")
-      : null;
-    return {
-      name: location.name,
-      title: location.title ?? location.name,
-      address,
-    };
-  });
+    const data = await googleFetch<{
+      locations?: Array<{
+        name: string;
+        title?: string;
+        storefrontAddress?: {
+          addressLines?: string[];
+          locality?: string;
+          administrativeArea?: string;
+          postalCode?: string;
+        };
+      }>;
+      nextPageToken?: string;
+    }>(accessToken, `${LOCATION_API}/${parent}/locations?${params.toString()}`);
+
+    locations.push(
+      ...(data.locations ?? []).map((location) => {
+        const addr = location.storefrontAddress;
+        const address = addr
+          ? [addr.addressLines?.join(" "), addr.locality, addr.administrativeArea, addr.postalCode]
+              .filter(Boolean)
+              .join(", ")
+          : null;
+        return {
+          name: location.name,
+          title: location.title ?? location.name,
+          address,
+        };
+      })
+    );
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return locations;
 }
 
 function locationResourceId(locationId: string) {

@@ -2,6 +2,7 @@ export type TemplateContext = Record<string, string | number | null | undefined>
 
 export const NOTIFICATION_EVENTS = [
   "VISIT_SCHEDULED",
+  "VISIT_EN_ROUTE",
   "INVOICE_SENT",
   "INVOICE_REMINDER",
   "ESTIMATE_SENT",
@@ -16,6 +17,9 @@ export const MERGE_FIELD_HINTS = [
   "{{visitDate}}",
   "{{visitTime}}",
   "{{visitAddress}}",
+  "{{technicianName}}",
+  "{{etaMinutes}}",
+  "{{etaTime}}",
   "{{invoiceNumber}}",
   "{{invoiceAmount}}",
   "{{payUrl}}",
@@ -44,6 +48,13 @@ export const DEFAULT_TEMPLATES: Array<{
     event: "VISIT_SCHEDULED",
     subject: "Your appointment with {{companyName}}",
     body: "Hi {{customerName}},\n\nYour {{visitTitle}} is scheduled for {{visitDate}} at {{visitTime}}.\n\nAddress: {{visitAddress}}\n\n— {{companyName}}",
+  },
+  {
+    slug: "visit_en_route",
+    name: "Technician on the way",
+    channel: "SMS",
+    event: "VISIT_EN_ROUTE",
+    body: "Hi {{customerName}}, {{technicianName}} is on the way to your appointment. Estimated arrival: {{etaTime}} (about {{etaMinutes}} min). — {{companyName}}",
   },
   {
     slug: "invoice_sent",
@@ -92,5 +103,29 @@ export function buildVisitContext(params: {
       minute: "2-digit",
     }),
     visitAddress: params.address ?? "",
+  };
+}
+
+export function buildEnRouteContext(params: {
+  customerName: string;
+  companyName: string;
+  technicianName: string;
+  visitTitle: string;
+  etaSeconds: number;
+  etaAt: Date;
+  visitAddress?: string | null;
+}): TemplateContext {
+  const minutes = Math.max(1, Math.round(params.etaSeconds / 60));
+  return {
+    customerName: params.customerName,
+    companyName: params.companyName,
+    technicianName: params.technicianName,
+    visitTitle: params.visitTitle,
+    visitAddress: params.visitAddress ?? "",
+    etaMinutes: String(minutes),
+    etaTime: params.etaAt.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
   };
 }

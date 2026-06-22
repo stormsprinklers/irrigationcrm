@@ -44,6 +44,9 @@ export type VisitDTO = {
   crew: { id: string; name: string; color: string } | null;
   subtotal?: number;
   total?: number;
+  enRouteEtaSeconds?: number | null;
+  enRouteEtaAt?: string | null;
+  enRouteCalculatedAt?: string | null;
 };
 
 export type ScheduleJobDTO = VisitDTO;

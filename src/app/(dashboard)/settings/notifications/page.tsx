@@ -89,6 +89,7 @@ export default function SettingsNotificationsPage() {
     { key: "notifyEstimateSent" as const, label: "Estimate sent to customer" },
     { key: "notifyInvoicePaid" as const, label: "Invoice paid" },
     { key: "notifyVisitScheduled" as const, label: "Visit scheduled" },
+    { key: "notifyVisitEnRoute" as const, label: "Technician on the way (with ETA)" },
   ];
 
   return (

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageCustomers } from "@/lib/customers/permissions";
 import {
@@ -46,6 +47,7 @@ export async function DELETE() {
         googleBusinessLocationId: null,
         googleBusinessLocationTitle: null,
         googleBusinessConnectedAt: null,
+        googleBusinessCatalogJson: Prisma.DbNull,
       },
     });
 

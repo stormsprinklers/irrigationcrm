@@ -60,6 +60,13 @@ export type GbpPerformanceSummary = {
   };
 };
 
+export type GbpCatalogCache = {
+  accounts?: GbpAccount[];
+  accountsFetchedAt?: string;
+  locationsByAccount?: Record<string, GbpLocation[]>;
+  locationsFetchedAt?: Record<string, string>;
+};
+
 export type GbpConnectionStatus = {
   connected: boolean;
   accountId: string | null;

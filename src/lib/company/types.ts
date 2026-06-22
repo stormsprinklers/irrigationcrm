@@ -27,6 +27,7 @@ export const companySettingsSelect = {
   notifyEstimateSent: true,
   notifyInvoicePaid: true,
   notifyVisitScheduled: true,
+  notifyVisitEnRoute: true,
   leadSources: true,
   intakeRequiredFields: true,
   businessHours: true,
@@ -68,6 +69,7 @@ export type CompanySettingsDTO = {
   notifyEstimateSent: boolean;
   notifyInvoicePaid: boolean;
   notifyVisitScheduled: boolean;
+  notifyVisitEnRoute: boolean;
   leadSources: string[];
   intakeRequiredFields: string[];
   businessHours: unknown;

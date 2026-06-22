@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
+import { requestCurrentPosition } from "@/lib/maps/geolocation";
+import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
 
 type VisitDetailData = {
   id: string;
@@ -31,6 +33,10 @@ type VisitDetailData = {
   endAt: string;
   division: string;
   tags: string[];
+  enRouteEtaSeconds?: number | null;
+  enRouteEtaAt?: string | null;
+  enRouteCalculatedAt?: string | null;
+  eta?: VisitEtaDisplay | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -202,23 +208,47 @@ export function VisitDetail({ visitId }: Props) {
   async function handleTimeEvent(type: TimeEvent["type"]) {
     setTimeLoading(true);
     try {
+      const payload: Record<string, unknown> = { type };
+
+      if (type === "EN_ROUTE") {
+        const position = await requestCurrentPosition();
+        if (position.ok) {
+          payload.originLat = position.lat;
+          payload.originLng = position.lng;
+        }
+      }
+
       const res = await fetch(`/api/visits/${visitId}/time`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify(payload),
       });
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         toast.error(data.error ?? "Failed to update time tracking");
         return;
       }
-      const updated = await res.json();
-      setVisit(updated);
+      if (data.etaWarning) {
+        toast.message(data.etaWarning);
+      } else if (type === "EN_ROUTE" && data.eta) {
+        toast.success(`ETA updated — arriving in ~${data.eta.minutes} min`);
+      }
+      setVisit(data);
       const timeRes = await fetch(`/api/visits/${visitId}/time`);
       if (timeRes.ok) setTimeEvents(await timeRes.json());
     } finally {
       setTimeLoading(false);
     }
+  }
+
+  function visitEta(visitData: VisitDetailData): VisitEtaDisplay | null {
+    if (visitData.eta) return visitData.eta;
+    if (!visitData.enRouteEtaSeconds || !visitData.enRouteEtaAt) return null;
+    return {
+      minutes: Math.max(1, Math.round(visitData.enRouteEtaSeconds / 60)),
+      arrivalAt: visitData.enRouteEtaAt,
+      calculatedAt: visitData.enRouteCalculatedAt ?? null,
+    };
   }
 
   async function deleteVisit() {
@@ -328,6 +358,7 @@ export function VisitDetail({ visitId }: Props) {
         timeEvents={timeEvents}
         onEvent={handleTimeEvent}
         loading={timeLoading}
+        eta={visitEta(visit)}
       />
 
       <CustomerContactBar customer={visit.customer} />

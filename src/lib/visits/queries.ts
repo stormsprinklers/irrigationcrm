@@ -76,6 +76,9 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     crew: visit.crew,
     subtotal,
     total: Math.max(0, subtotal - discountTotal),
+    enRouteEtaSeconds: visit.enRouteEtaSeconds,
+    enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,
+    enRouteCalculatedAt: visit.enRouteCalculatedAt?.toISOString() ?? null,
   };
 }
 

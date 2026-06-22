@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   exchangeOAuthCode,
-  listGbpAccounts,
   verifyOAuthState,
 } from "@/lib/google-business/client";
 import { prisma } from "@/lib/prisma";
@@ -48,16 +47,6 @@ export async function GET(request: NextRequest) {
         googleBusinessConnectedAt: new Date(),
       },
     });
-
-    if (tokens.access_token) {
-      const accounts = await listGbpAccounts(tokens.access_token);
-      if (accounts.length === 1) {
-        await prisma.company.update({
-          where: { id: companyId },
-          data: { googleBusinessAccountId: accounts[0].name },
-        });
-      }
-    }
 
     return NextResponse.redirect(`${redirectBase}?connected=1`);
   } catch (err) {

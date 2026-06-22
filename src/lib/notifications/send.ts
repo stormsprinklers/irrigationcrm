@@ -36,6 +36,7 @@ export async function sendOperationalNotification(params: {
       emailSenderName: true,
       emailLogoUrl: true,
       notifyVisitScheduled: true,
+      notifyVisitEnRoute: true,
       notifyEstimateSent: true,
       notifyInvoicePaid: true,
     },
@@ -44,6 +45,10 @@ export async function sendOperationalNotification(params: {
 
   if (params.event === "VISIT_SCHEDULED" && !company.notifyVisitScheduled) {
     result.skipped.push("visit notifications disabled");
+    return result;
+  }
+  if (params.event === "VISIT_EN_ROUTE" && !company.notifyVisitEnRoute) {
+    result.skipped.push("on-my-way notifications disabled");
     return result;
   }
   if (params.event === "ESTIMATE_SENT" && !company.notifyEstimateSent) {
@@ -124,30 +129,40 @@ export async function sendOperationalNotification(params: {
 }
 
 export async function ensureDefaultNotificationTemplates(companyId: string) {
-  const existing = await prisma.notificationTemplate.count({ where: { companyId } });
-  if (existing > 0) return;
-
   const { DEFAULT_TEMPLATES } = await import("./templates");
 
   for (const tpl of DEFAULT_TEMPLATES) {
-    const template = await prisma.notificationTemplate.create({
-      data: {
-        companyId,
-        channel: tpl.channel,
-        slug: tpl.slug,
-        name: tpl.name,
-        subject: tpl.subject ?? null,
-        body: tpl.body,
-      },
+    const existing = await prisma.notificationTemplate.findFirst({
+      where: { companyId, slug: tpl.slug, channel: tpl.channel },
     });
 
-    await prisma.notificationRule.create({
-      data: {
-        companyId,
-        event: tpl.event,
-        templateId: template.id,
-        enabled: tpl.event === "VISIT_SCHEDULED",
-      },
+    const template =
+      existing ??
+      (await prisma.notificationTemplate.create({
+        data: {
+          companyId,
+          channel: tpl.channel,
+          slug: tpl.slug,
+          name: tpl.name,
+          subject: tpl.subject ?? null,
+          body: tpl.body,
+        },
+      }));
+
+    const ruleExists = await prisma.notificationRule.findFirst({
+      where: { companyId, event: tpl.event, templateId: template.id },
     });
+
+    if (!ruleExists) {
+      await prisma.notificationRule.create({
+        data: {
+          companyId,
+          event: tpl.event,
+          templateId: template.id,
+          enabled:
+            tpl.event === "VISIT_SCHEDULED" || tpl.event === "VISIT_EN_ROUTE",
+        },
+      });
+    }
   }
 }

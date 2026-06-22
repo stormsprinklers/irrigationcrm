@@ -388,6 +388,7 @@ model Company {
   notifyEstimateSent       Boolean  @default(true)
   notifyInvoicePaid        Boolean  @default(true)
   notifyVisitScheduled     Boolean  @default(true)
+  notifyVisitEnRoute       Boolean  @default(true)
   leadSources              String[] @default([])
   intakeRequiredFields     String[] @default([])
   businessHours            Json?
@@ -402,6 +403,7 @@ model Company {
   googleBusinessLocationId     String?
   googleBusinessLocationTitle  String?
   googleBusinessConnectedAt    DateTime?
+  googleBusinessCatalogJson    Json?
   defaultLeadAssigneeId    String?
   flatRatePricingEnabled   Boolean  @default(false)
   materialMarkupsEnabled   Boolean  @default(true)
@@ -1140,6 +1142,11 @@ model Visit {
   city           String?
   state          String?
   zip            String?
+  enRouteEtaSeconds     Int?
+  enRouteEtaAt          DateTime?
+  enRouteCalculatedAt   DateTime?
+  enRouteOriginLat      Decimal?  @db.Decimal(10, 7)
+  enRouteOriginLng      Decimal?  @db.Decimal(10, 7)
   maintenancePlanVisitId String?     @unique
   callSessionId          String?
   createdAt      DateTime    @default(now())

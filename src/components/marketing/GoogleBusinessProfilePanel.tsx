@@ -30,6 +30,11 @@ export function GoogleBusinessProfilePanel() {
   const [loading, setLoading] = useState(true);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [locationsError, setLocationsError] = useState<string | null>(null);
+  const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
 
   const redirectUri =
     typeof window !== "undefined"
@@ -41,20 +46,59 @@ export function GoogleBusinessProfilePanel() {
     if (res.ok) setStatus(await res.json());
   }, []);
 
-  const loadAccounts = useCallback(async () => {
-    const res = await fetch("/api/marketing/google-business/accounts");
-    if (!res.ok) return;
-    const data = await res.json();
-    setAccounts(data.accounts ?? []);
+  const loadAccounts = useCallback(async (refresh = false) => {
+    setLoadingAccounts(true);
+    setAccountsError(null);
+    try {
+      const res = await fetch(
+        `/api/marketing/google-business/accounts${refresh ? "?refresh=1" : ""}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load accounts");
+      const nextAccounts = data.accounts ?? [];
+      setAccounts(nextAccounts);
+      if (data.warning) {
+        setCatalogWarning(data.warning);
+        toast.message(data.warning);
+      } else if (!data.stale) {
+        setCatalogWarning(null);
+      }
+      if (nextAccounts.length === 1) {
+        setSelectedAccountId((current) => current || nextAccounts[0].name);
+      }
+      return nextAccounts as GbpAccount[];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load accounts";
+      setAccountsError(message);
+      toast.error(message);
+      return [];
+    } finally {
+      setLoadingAccounts(false);
+    }
   }, []);
 
-  const loadLocations = useCallback(async (accountId: string) => {
-    const res = await fetch(
-      `/api/marketing/google-business/locations?accountId=${encodeURIComponent(accountId)}`
-    );
-    if (!res.ok) return;
-    const data = await res.json();
-    setLocations(data.locations ?? []);
+  const loadLocations = useCallback(async (accountId: string, refresh = false) => {
+    setLoadingLocations(true);
+    setLocationsError(null);
+    try {
+      const res = await fetch(
+        `/api/marketing/google-business/locations?accountId=${encodeURIComponent(accountId)}${refresh ? "&refresh=1" : ""}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load locations");
+      setLocations(data.locations ?? []);
+      if (data.warning) {
+        setCatalogWarning(data.warning);
+        toast.message(data.warning);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load locations";
+      setLocationsError(message);
+      toast.error(message);
+      setLocations([]);
+    } finally {
+      setLoadingLocations(false);
+    }
   }, []);
 
   const loadPerformance = useCallback(async (rangeDays: number) => {
@@ -76,7 +120,17 @@ export function GoogleBusinessProfilePanel() {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
     if (connected) toast.success("Google Business Profile connected");
-    if (error) toast.error(decodeURIComponent(error));
+    if (error) {
+      const decoded = decodeURIComponent(error);
+      if (decoded === "org_internal" || decoded.includes("org_internal")) {
+        toast.error(
+          "Google blocked sign-in: OAuth app is Internal-only. Set consent screen to External and add your email as a test user.",
+          { duration: 12000 }
+        );
+      } else {
+        toast.error(decoded);
+      }
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -87,13 +141,15 @@ export function GoogleBusinessProfilePanel() {
 
   useEffect(() => {
     if (!status?.connected) return;
-    loadAccounts().catch(() => {});
     if (status.accountId) setSelectedAccountId(status.accountId);
-  }, [status, loadAccounts]);
+    void loadAccounts(false);
+    // Load accounts once when connection becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.connected]);
 
   useEffect(() => {
     if (!selectedAccountId) return;
-    loadLocations(selectedAccountId).catch(() => {});
+    void loadLocations(selectedAccountId, false);
   }, [selectedAccountId, loadLocations]);
 
   useEffect(() => {
@@ -221,6 +277,20 @@ export function GoogleBusinessProfilePanel() {
           <Button asChild>
             <a href="/api/marketing/google-business">Connect Google Business Profile</a>
           </Button>
+          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Google Cloud OAuth consent screen</p>
+            <p>
+              If Google shows <strong>“restricted to users within its organization”</strong>{" "}
+              (error 403 org_internal), your OAuth app is set to <strong>Internal</strong>. In
+              Google Cloud Console → APIs &amp; Services → OAuth consent screen, change{" "}
+              <strong>User type</strong> to <strong>External</strong>.
+            </p>
+            <p>
+              While the app is in <strong>Testing</strong>, add each Google account that manages
+              your Business Profile under <strong>Test users</strong> (e.g. the Gmail you sign in
+              with). Use the same account that owns the listing in Google Business Profile.
+            </p>
+          </div>
           <p className="text-xs text-muted-foreground">
             If Google returns a redirect error, confirm this URI is on your OAuth client:{" "}
             <code className="break-all">{redirectUri}</code>
@@ -257,29 +327,71 @@ export function GoogleBusinessProfilePanel() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div>
-            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Account
-            </label>
-            <select
-              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-            >
-              <option value="">Select account</option>
-              {accounts.map((account) => (
-                <option key={account.name} value={account.name}>
-                  {account.accountName}
+          {catalogWarning ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              {catalogWarning}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div className="min-w-[12rem] flex-1">
+              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Account
+              </label>
+              <select
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={selectedAccountId}
+                onChange={(e) => setSelectedAccountId(e.target.value)}
+                disabled={loadingAccounts || accounts.length === 0}
+              >
+                <option value="">
+                  {loadingAccounts
+                    ? "Loading accounts..."
+                    : accounts.length === 0
+                      ? "No accounts loaded"
+                      : "Select account"}
                 </option>
-              ))}
-            </select>
+                {accounts.map((account) => (
+                  <option key={account.name} value={account.name}>
+                    {account.accountName}
+                  </option>
+                ))}
+              </select>
+              {accountsError ? (
+                <p className="mt-1 text-xs text-destructive">{accountsError}</p>
+              ) : null}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loadingAccounts || loadingLocations}
+              onClick={() => {
+                void loadAccounts(true).then((nextAccounts) => {
+                  const accountId = selectedAccountId || nextAccounts[0]?.name;
+                  if (accountId) void loadLocations(accountId, true);
+                });
+              }}
+            >
+              <RefreshCw
+                className={`mr-1 h-4 w-4 ${loadingAccounts || loadingLocations ? "animate-spin" : ""}`}
+              />
+              Refresh from Google
+            </Button>
           </div>
 
           {selectedAccountId ? (
             <div className="space-y-2">
               <p className="text-sm font-medium">Locations</p>
-              {locations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No locations found for this account.</p>
+              {loadingLocations ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading locations...
+                </div>
+              ) : locations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {locationsError
+                    ? locationsError
+                    : "No locations found for this account. Try Refresh from Google in a minute if you recently hit a rate limit."}
+                </p>
               ) : (
                 locations.map((location) => (
                   <div
