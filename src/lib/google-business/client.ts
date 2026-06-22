@@ -30,12 +30,16 @@ export function isGoogleBusinessConfigured() {
 }
 
 function oauthStateSecret() {
-  return (
+  const secret =
     process.env.GOOGLE_OAUTH_STATE_SECRET ??
     process.env.NEXTAUTH_SECRET ??
-    process.env.AUTH_SECRET ??
-    "dev-only-secret-change-me"
-  );
+    process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      "GOOGLE_OAUTH_STATE_SECRET or NEXTAUTH_SECRET must be set for Google Business OAuth"
+    );
+  }
+  return secret;
 }
 
 export function createOAuthState(companyId: string) {

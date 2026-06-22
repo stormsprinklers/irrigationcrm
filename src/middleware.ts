@@ -14,8 +14,7 @@ const publicPaths = [
   "/api/marketing/google-business/callback",
 ];
 
-const authSecret =
-  process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "dev-only-secret-change-me";
+const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 
 const ROBOTS_TAG = "noindex, nofollow, noarchive, nosnippet, noimageindex";
 

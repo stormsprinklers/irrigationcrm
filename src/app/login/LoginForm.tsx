@@ -12,8 +12,8 @@ import { stormBrand } from "@/lib/branding";
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/";
-  const [email, setEmail] = useState("admin@stormsprinklers.com");
-  const [password, setPassword] = useState("Test123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,7 +30,7 @@ export default function LoginForm() {
       });
 
       if (!result) {
-        setError("Sign in failed. Check that the dev server is running.");
+        setError("Sign in failed. Please try again.");
         return;
       }
 
@@ -43,7 +43,7 @@ export default function LoginForm() {
       window.location.assign(callbackUrl);
     } catch (err) {
       console.error("Login error:", err);
-      setError("Sign in failed. Try again or restart the dev server.");
+      setError("Sign in failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -63,9 +63,6 @@ export default function LoginForm() {
           />
           <CardTitle className="font-display text-2xl text-storm-navy">Storm Sprinklers CRM</CardTitle>
           <p className="text-sm text-muted-foreground">Sign in to continue</p>
-          <p className="text-xs text-muted-foreground">
-            Dev login: admin@stormsprinklers.com / Test123
-          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
