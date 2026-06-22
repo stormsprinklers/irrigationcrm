@@ -71,6 +71,39 @@
   --page: #f8fafc;
 }
 
+.dark {
+  color-scheme: dark;
+  --background: #0f1729;
+  --foreground: #e8eef5;
+  --card: #162033;
+  --card-foreground: #e8eef5;
+  --popover: #162033;
+  --popover-foreground: #e8eef5;
+  --primary: #4c9bc8;
+  --primary-foreground: #ffffff;
+  --secondary: #1e3a52;
+  --secondary-foreground: #c2e4f0;
+  --muted: #1a2740;
+  --muted-foreground: #94a3b8;
+  --accent: #1e3a52;
+  --accent-foreground: #c2e4f0;
+  --destructive: #f87171;
+  --border: #2a3d5c;
+  --input: #2a3d5c;
+  --ring: #4c9bc8;
+  --highlight: #1e3a52;
+  --highlight-panel: #152238;
+  --page: #0c1526;
+}
+
+.dark .bg-white {
+  background-color: var(--card);
+}
+
+.dark .text-storm-navy {
+  color: var(--foreground);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -133,7 +133,12 @@ export default function SettingsInboxPage() {
             <code className="text-xs">TWILIO_AUTH_TOKEN</code>, or dedicated{" "}
             <code className="text-xs">TWILIO_EMAIL_API_KEY</code> +{" "}
             <code className="text-xs">TWILIO_EMAIL_API_SECRET</code>. Override the From address below
-            per company, or set <code className="text-xs">TWILIO_FROM_EMAIL</code> globally.
+            per company, or set <code className="text-xs">TWILIO_FROM_EMAIL</code> globally. Sender display
+            name and logo are configured in{" "}
+            <Link href="/settings/company" className="text-primary underline">
+              Settings → Company → Email branding
+            </Link>
+            .
           </p>
           {settings.emailAuth ? (
             <div

@@ -3,7 +3,7 @@ import { EmailFolder, Scope } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse, badRequestResponse, forbiddenResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
-import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
+import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 
 export async function GET(request: NextRequest) {
   try {
@@ -71,15 +71,20 @@ export async function POST(request: NextRequest) {
       }
 
       const company = await prisma.company.findUnique({ where: { id: user.companyId } });
-      const from = company?.sendgridFrom ?? getDefaultFromEmail();
-      if (!from) return badRequestResponse("From email address not configured");
+      if (!company) return badRequestResponse("Company not found");
 
-      await sendEmail({
-        from,
+      const branding = {
+        companyName: company.name,
+        sendgridFrom: company.sendgridFrom,
+        emailSenderName: company.emailSenderName,
+        emailLogoUrl: company.emailLogoUrl,
+      };
+
+      await sendCompanyEmail(branding, {
         to: toEmails,
         subject,
         text: bodyText,
-        html: bodyHtml,
+        html: bodyHtml ?? `<p>${(bodyText ?? "").replace(/\n/g, "<br/>")}</p>`,
         replyTo: user.email,
       });
     }

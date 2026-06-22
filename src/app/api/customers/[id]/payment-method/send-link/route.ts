@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
+import { isEmailConfigured } from "@/lib/inbox/email";
+import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import {
   canManageCustomerPayments,
   createCardSetupCheckoutSession,
@@ -32,8 +33,24 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { name: true, sendgridFrom: true },
+      select: {
+        name: true,
+        sendgridFrom: true,
+        emailSenderName: true,
+        emailLogoUrl: true,
+      },
     });
+
+    if (!isEmailConfigured()) {
+      return NextResponse.json({ error: "Outbound email is not configured" }, { status: 503 });
+    }
+
+    const branding = {
+      companyName: company?.name ?? "Your company",
+      sendgridFrom: company?.sendgridFrom,
+      emailSenderName: company?.emailSenderName,
+      emailLogoUrl: company?.emailLogoUrl,
+    };
 
     const stripeCustomerId = await ensureStripeCustomer(customer, user.companyId);
     if (!stripeCustomerId) return badRequestResponse("Failed to create Stripe customer");
@@ -50,14 +67,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Failed to create checkout session" }, { status: 500 });
     }
 
-    const companyName = company?.name ?? "Storm Sprinklers";
-    const from = company?.sendgridFrom ?? getDefaultFromEmail();
-    if (!from) {
-      return NextResponse.json({ error: "Outbound email is not configured" }, { status: 503 });
-    }
+    const companyName = branding.companyName;
 
-    await sendEmail({
-      from,
+    await sendCompanyEmail(branding, {
       to: [customer.email],
       subject: `Save your card on file — ${companyName}`,
       text: `Hi ${customer.name},\n\nPlease use this secure link to save your payment card on file with ${companyName}:\n\n${session.url}\n\nThis link is hosted by Stripe and your full card number is never stored on our servers.`,

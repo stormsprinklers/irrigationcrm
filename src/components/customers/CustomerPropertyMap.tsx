@@ -23,6 +23,7 @@ type EmbedResponse = {
   configured: boolean;
   placeEmbed: string | null;
   streetEmbed: string | null;
+  formattedAddress?: string | null;
 };
 
 export function CustomerPropertyMap({ title = "Property location", location }: Props) {
@@ -74,7 +75,9 @@ export function CustomerPropertyMap({ title = "Property location", location }: P
         ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">{formatted}</p>
+        <p className="text-sm text-muted-foreground">
+          {embeds?.formattedAddress ?? formatted}
+        </p>
 
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -121,7 +124,16 @@ export function CustomerPropertyMap({ title = "Property location", location }: P
                   />
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Street view
+                </p>
+                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  Street View is not available for this address.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

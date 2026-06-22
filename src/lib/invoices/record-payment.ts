@@ -126,6 +126,8 @@ export async function recordInvoicePayment(
       customerPhone: invoice.customer.phone,
       companyName: invoice.company.name,
       sendgridFrom: invoice.company.sendgridFrom,
+      emailSenderName: invoice.company.emailSenderName,
+      emailLogoUrl: invoice.company.emailLogoUrl,
       twilioPhone: invoice.company.twilioPhone,
       invoiceNumber: invoice.invoiceNumber,
       amount: params.amount,

@@ -4,7 +4,8 @@ import {
   CampaignStatus,
   CampaignType,
 } from "@prisma/client";
-import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
+import { getDefaultFromEmail } from "@/lib/inbox/email";
+import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
@@ -114,7 +115,13 @@ async function sendToRecipient(
     name: string;
     bodyText: string;
     bodyHtml: string | null;
-    company: { sendgridFrom: string | null; twilioPhone: string | null; name: string };
+    company: {
+      sendgridFrom: string | null;
+      twilioPhone: string | null;
+      name: string;
+      emailSenderName: string | null;
+      emailLogoUrl: string | null;
+    };
   },
   recipient: {
     id: string;
@@ -133,6 +140,12 @@ async function sendToRecipient(
   const bodyText = content?.bodyText ?? campaign.bodyText;
   const bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
   const fromEmail = campaign.company.sendgridFrom ?? getDefaultFromEmail();
+  const branding = {
+    companyName: campaign.company.name,
+    sendgridFrom: campaign.company.sendgridFrom,
+    emailSenderName: campaign.company.emailSenderName,
+    emailLogoUrl: campaign.company.emailLogoUrl,
+  };
   const fromPhone = campaign.company.twilioPhone;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
@@ -188,8 +201,7 @@ async function sendToRecipient(
     `<p>${bodyText.replace(/\n/g, "<br/>")}</p><p style="font-size:12px;color:#666">Unsubscribe: mailto:${fromEmail}?subject=unsubscribe</p>`;
   const html = rewriteTrackedLinks(rawHtml, recipient.id);
 
-  const response = await sendEmail({
-    from: fromEmail,
+  const response = await sendCompanyEmail(branding, {
     to: [email],
     subject,
     text: bodyText,

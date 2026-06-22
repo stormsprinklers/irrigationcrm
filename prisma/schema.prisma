@@ -367,6 +367,8 @@ model Company {
   twilioPhone              String?
   sendgridFrom             String?
   sendgridInboundDomain    String?
+  emailSenderName          String?
+  emailLogoUrl             String?
   recordCalls              Boolean  @default(true)
   transcribeCalls          Boolean  @default(true)
   estimateExpiryDays       Int      @default(14)

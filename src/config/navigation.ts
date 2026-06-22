@@ -114,6 +114,7 @@ export const settingsSidebar: NavSection[] = [
     title: "GLOBAL SETTINGS",
     items: [
       { label: "Company", href: "/settings" },
+      { label: "Appearance", href: "/settings/appearance" },
       { label: "Notifications", href: "/settings/notifications" },
       { label: "Employees", href: "/settings/employees" },
       { label: "Compensation", href: "/settings/compensation" },

@@ -33,6 +33,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
       customerPhone: invoice.customer.phone,
       companyName: invoice.company.name,
       sendgridFrom: invoice.company.sendgridFrom,
+      emailSenderName: invoice.company.emailSenderName,
+      emailLogoUrl: invoice.company.emailLogoUrl,
       twilioPhone: invoice.company.twilioPhone,
       invoiceNumber: invoice.invoiceNumber,
       balanceDue,

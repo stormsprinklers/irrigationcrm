@@ -3,8 +3,12 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import {
   buildMapsPlaceEmbedUrl,
   buildMapsStreetViewEmbedUrl,
+  buildMapsViewEmbedUrl,
+  geocodeAddress,
   getGoogleMapsApiKey,
 } from "@/lib/customers/maps";
+
+const MAP_ZOOM = 14;
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,10 +21,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ configured: false, placeEmbed: null, streetEmbed: null });
     }
 
+    const geocoded = await geocodeAddress(query, apiKey);
+
+    if (geocoded) {
+      return NextResponse.json({
+        configured: true,
+        formattedAddress: geocoded.formattedAddress,
+        placeEmbed: buildMapsViewEmbedUrl(geocoded.lat, geocoded.lng, apiKey, MAP_ZOOM),
+        streetEmbed: buildMapsStreetViewEmbedUrl(geocoded.lat, geocoded.lng, apiKey),
+      });
+    }
+
     return NextResponse.json({
       configured: true,
-      placeEmbed: buildMapsPlaceEmbedUrl(query, apiKey),
-      streetEmbed: buildMapsStreetViewEmbedUrl(query, apiKey),
+      placeEmbed: buildMapsPlaceEmbedUrl(query, apiKey, MAP_ZOOM),
+      streetEmbed: null,
     });
   } catch {
     return unauthorizedResponse();

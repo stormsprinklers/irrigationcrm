@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
@@ -72,7 +73,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   const [saving, setSaving] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [cropFileName, setCropFileName] = useState("photo.jpg");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
 
   useEffect(() => {
     if (!employee) {
@@ -97,6 +102,8 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         annualSalary: "",
         serviceAreaIds: [],
       });
+      setPassword("");
+      setConfirmPassword("");
       return;
     }
 
@@ -122,6 +129,8 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       annualSalary: employee.annualSalary != null ? String(employee.annualSalary) : "",
       serviceAreaIds: employee.serviceAreas.map((sa) => sa.serviceArea.id),
     });
+    setPassword("");
+    setConfirmPassword("");
   }, [employee]);
 
   function toggleArea(areaId: string) {
@@ -165,9 +174,34 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (isAdmin && password) {
+      if (password.length < 8) {
+        toast.error("Password must be at least 8 characters");
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast.error("Passwords do not match");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      const payload = {
+      if (employee && isAdmin && password) {
+        const pwRes = await fetch(`/api/settings/employees/${employee.id}/password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password, confirmPassword }),
+        });
+        const pwData = await pwRes.json();
+        if (!pwRes.ok) {
+          toast.error(pwData.error ?? "Failed to set password");
+          return;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
         name: form.name,
         email: form.email,
         phone: form.phone || null,
@@ -192,6 +226,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         serviceAreaIds: form.serviceAreaIds,
       };
 
+      if (!employee && isAdmin && password) {
+        payload.password = password;
+        payload.confirmPassword = confirmPassword;
+      }
+
       const url = employee ? `/api/settings/employees/${employee.id}` : "/api/settings/employees";
       const method = employee ? "PATCH" : "POST";
       const res = await fetch(url, {
@@ -205,7 +244,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         return;
       }
       if (data.tempPassword) {
-        toast.message(`Employee created. Temp password: ${data.tempPassword}`);
+        toast.message(`Employee created. Default login password: ${data.tempPassword}`);
+      } else if (employee && isAdmin && password) {
+        toast.success("Employee updated and login password set");
       } else {
         toast.success(employee ? "Employee updated" : "Employee created");
       }
@@ -409,6 +450,41 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           ))}
         </div>
       </div>
+
+      {isAdmin ? (
+        <div className="rounded-md border border-border p-4">
+          <h3 className="text-sm font-semibold">Login access</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {employee
+              ? "Set a new password for this employee to sign in. Leave blank to keep their current password."
+              : "Set the password this employee will use to sign in. Leave blank to use the default password123."}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">{employee ? "New password" : "Password"}</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                placeholder={employee ? "Leave unchanged" : "At least 8 characters"}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Confirm password</label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                placeholder={employee ? "Leave unchanged" : "Repeat password"}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex gap-2">
         <Button type="submit" disabled={saving}>

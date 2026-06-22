@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser } from "@/lib/api-auth";
-import { getDefaultFromEmail, getTwilioEmailAuthStatus, sendEmail } from "@/lib/inbox/email";
+import { getTwilioEmailAuthStatus } from "@/lib/inbox/email";
+import { resolveFromAddress, sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -22,7 +23,13 @@ export async function POST(request: NextRequest) {
     }
 
     const company = await prisma.company.findUnique({ where: { id: user.companyId } });
-    const from = company?.sendgridFrom ?? getDefaultFromEmail();
+    const branding = {
+      companyName: company?.name ?? "Your company",
+      sendgridFrom: company?.sendgridFrom,
+      emailSenderName: company?.emailSenderName,
+      emailLogoUrl: company?.emailLogoUrl,
+    };
+    const from = resolveFromAddress(branding);
     if (!from) {
       return NextResponse.json(
         { error: "From email address not configured. Set TWILIO_FROM_EMAIL or Settings → Inbox." },
@@ -30,12 +37,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await sendEmail({
-      from,
+    const result = await sendCompanyEmail(branding, {
       to: [to],
-      subject: "Irrigation CRM test email",
-      text: "This is a test email from Irrigation CRM. If you received this, Twilio Email is configured correctly.",
-      html: "<p>This is a test email from <strong>Irrigation CRM</strong>.</p><p>If you received this, Twilio Email is configured correctly.</p>",
+      subject: `${branding.companyName} — test email`,
+      text: `This is a test email from ${branding.companyName}. If you received this, outbound email is configured correctly.`,
+      html: `<p>This is a test email from <strong>${branding.companyName}</strong>.</p><p>If you received this, outbound email is configured correctly.</p>`,
       replyTo: user.email ?? undefined,
     });
 

@@ -5,7 +5,6 @@ import { FileText, History, Play } from "lucide-react";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallDetailView } from "@/components/voice/CallDetailView";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { CallHistoryDetail, CallHistoryListItem } from "@/lib/voice/call-history";
 import { formatCallDuration, formatCallTime, remotePartyLabel } from "@/lib/voice/call-history";
@@ -43,13 +42,13 @@ export function CsrCallHistoryPanel() {
   }, [selectedId]);
 
   return (
-    <section className="grid min-h-[360px] gap-4 rounded-lg border border-border bg-white lg:grid-cols-5">
-      <div className="flex flex-col border-b border-border lg:col-span-2 lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+    <section className="grid max-h-[min(70vh,640px)] min-h-[360px] overflow-hidden rounded-lg border border-border bg-white lg:grid-cols-5">
+      <div className="flex min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-2 lg:border-b-0 lg:border-r">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold">Call history</h3>
         </div>
-        <ScrollArea className="h-80 lg:h-[320px]">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {!calls.length ? (
             <p className="p-4 text-sm text-muted-foreground">No calls yet.</p>
           ) : (
@@ -99,14 +98,14 @@ export function CsrCallHistoryPanel() {
               })}
             </ul>
           )}
-        </ScrollArea>
+        </div>
       </div>
 
-      <div className="flex flex-col lg:col-span-3">
-        <div className="border-b border-border px-4 py-3">
+      <div className="flex min-h-0 flex-col overflow-hidden lg:col-span-3">
+        <div className="shrink-0 border-b border-border px-4 py-3">
           <h3 className="font-semibold">Call details</h3>
         </div>
-        <ScrollArea className="h-80 lg:h-[320px]">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {!selectedId ? (
             <p className="p-4 text-sm text-muted-foreground">Select a call to play recording or read transcript.</p>
           ) : loadingDetail ? (
@@ -118,7 +117,7 @@ export function CsrCallHistoryPanel() {
               <CallDetailView detail={detail} />
             </div>
           )}
-        </ScrollArea>
+        </div>
       </div>
     </section>
   );

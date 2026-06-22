@@ -12,6 +12,8 @@ export const companySettingsSelect = {
   legalName: true,
   industry: true,
   description: true,
+  emailSenderName: true,
+  emailLogoUrl: true,
   invoicePrefix: true,
   invoiceTerms: true,
   invoiceFooter: true,
@@ -51,6 +53,8 @@ export type CompanySettingsDTO = {
   legalName: string | null;
   industry: string | null;
   description: string | null;
+  emailSenderName: string | null;
+  emailLogoUrl: string | null;
   invoicePrefix: string | null;
   invoiceTerms: string | null;
   invoiceFooter: string | null;

@@ -1,5 +1,6 @@
 import { Channel } from "@prisma/client";
-import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
+import { isEmailConfigured } from "@/lib/inbox/email";
+import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { isContactBlocked } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
@@ -32,6 +33,8 @@ export async function sendOperationalNotification(params: {
       name: true,
       twilioPhone: true,
       sendgridFrom: true,
+      emailSenderName: true,
+      emailLogoUrl: true,
       notifyVisitScheduled: true,
       notifyEstimateSent: true,
       notifyInvoicePaid: true,
@@ -76,15 +79,19 @@ export async function sendOperationalNotification(params: {
 
     if (rule.template.channel === Channel.EMAIL) {
       const to = params.recipient.email;
-      const from = company.sendgridFrom ?? getDefaultFromEmail();
-      if (!to || !from || !isEmailConfigured()) continue;
+      if (!to || !isEmailConfigured()) continue;
+      const branding = {
+        companyName: company.name,
+        sendgridFrom: company.sendgridFrom,
+        emailSenderName: company.emailSenderName,
+        emailLogoUrl: company.emailLogoUrl,
+      };
       try {
         const subject = renderTemplate(
           rule.template.subject ?? `${company.name} notification`,
           context
         );
-        await sendEmail({
-          from,
+        await sendCompanyEmail(branding, {
           to: [to],
           subject,
           text: body,

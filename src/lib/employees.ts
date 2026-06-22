@@ -29,6 +29,18 @@ export function canDeleteEmployee(role: string) {
   return role === "ADMIN";
 }
 
+export function canSetEmployeePassword(role: string) {
+  return role === "ADMIN";
+}
+
+export function validateEmployeePassword(password: string) {
+  const value = password.trim();
+  if (value.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  return null;
+}
+
 export function employeeSelectFields() {
   return {
     id: true,

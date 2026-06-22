@@ -16,9 +16,9 @@ export function ModuleSidebar({ title, sections }: ModuleSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-white">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card">
       <div className="border-b border-border px-4 py-4">
-        <h2 className="font-display text-lg font-bold text-storm-navy">{title}</h2>
+        <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2" aria-label={`${title} navigation`}>

@@ -30,7 +30,7 @@ export function TopNav() {
   const userName = session?.user?.name ?? "User";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-white">
+    <header className="sticky top-0 z-50 border-b border-border bg-card">
       <div className="flex h-[4.5rem] items-center gap-4 px-4">
         <Link href="/" className="flex shrink-0 items-center">
           <Image
@@ -39,7 +39,7 @@ export function TopNav() {
             width={320}
             height={320}
             priority
-            className="h-[4.5rem] w-auto bg-white object-contain"
+            className="h-[4.5rem] w-auto rounded-sm bg-card object-contain"
           />
         </Link>
 
@@ -53,7 +53,7 @@ export function TopNav() {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative px-3 py-4 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground",
-                  active && "text-storm-navy"
+                  active && "text-foreground"
                 )}
               >
                 {item.label}

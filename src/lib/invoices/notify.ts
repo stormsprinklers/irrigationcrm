@@ -1,4 +1,5 @@
-import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
+import { isEmailConfigured } from "@/lib/inbox/email";
+import { sendCompanyEmail, resolveFromAddress, type EmailBranding } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 
@@ -12,6 +13,8 @@ type InvoiceNotifyParams = {
   customerPhone: string | null;
   companyName: string;
   sendgridFrom: string | null;
+  emailSenderName?: string | null;
+  emailLogoUrl?: string | null;
   twilioPhone: string | null;
   invoiceNumber: string;
   balanceDue: number;
@@ -41,11 +44,16 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
   let emailSent = false;
   let smsSent = false;
 
-  const fromEmail = params.sendgridFrom ?? getDefaultFromEmail();
-  if (params.customerEmail && fromEmail && isEmailConfigured()) {
+  const branding: EmailBranding = {
+    companyName: params.companyName,
+    sendgridFrom: params.sendgridFrom,
+    emailSenderName: params.emailSenderName,
+    emailLogoUrl: params.emailLogoUrl,
+  };
+
+  if (params.customerEmail && isEmailConfigured() && resolveFromAddress(branding)) {
     try {
-      await sendEmail({
-        from: fromEmail,
+      await sendCompanyEmail(branding, {
         to: [params.customerEmail],
         subject,
         text: `Hi ${params.customerName},\n\n${intro}\n\nPay online: ${payUrl}\n\n— ${params.companyName}`,
@@ -79,6 +87,8 @@ type InvoiceReceiptParams = {
   customerPhone: string | null;
   companyName: string;
   sendgridFrom: string | null;
+  emailSenderName?: string | null;
+  emailLogoUrl?: string | null;
   twilioPhone: string | null;
   invoiceNumber: string;
   amount: number;
@@ -95,11 +105,16 @@ export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
   let emailSent = false;
   let smsSent = false;
 
-  const fromEmail = params.sendgridFrom ?? getDefaultFromEmail();
-  if (params.customerEmail && fromEmail && isEmailConfigured()) {
+  const branding: EmailBranding = {
+    companyName: params.companyName,
+    sendgridFrom: params.sendgridFrom,
+    emailSenderName: params.emailSenderName,
+    emailLogoUrl: params.emailLogoUrl,
+  };
+
+  if (params.customerEmail && isEmailConfigured() && resolveFromAddress(branding)) {
     try {
-      await sendEmail({
-        from: fromEmail,
+      await sendCompanyEmail(branding, {
         to: [params.customerEmail],
         subject,
         text: `Hi ${params.customerName},\n\n${intro}\n\nView your invoice: ${payUrl}\n\n— ${params.companyName}`,

@@ -106,12 +106,11 @@ function getTwilioBasicAuth(): string {
 }
 
 function parseFromAddress(from: string): { address: string; name: string } {
-  const named = from.match(/^(.+?)\s*<([^>]+)>$/);
-  if (named) {
-    return { name: named[1].trim(), address: named[2].trim() };
+  const parsed = from.match(/^(.+?)\s*<([^>]+)>$/);
+  if (parsed) {
+    return { name: parsed[1].replace(/^"|"$/g, "").trim(), address: parsed[2].trim() };
   }
-  const local = from.split("@")[0] ?? "Support";
-  return { name: local, address: from.trim() };
+  return { name: "", address: from.trim() };
 }
 
 function formatTwilioEmailError(status: number, body: unknown, source: TwilioEmailAuthSource) {
@@ -150,7 +149,11 @@ export async function sendEmail(params: {
   }
 
   const credentials = getTwilioEmailCredentials();
-  const from = parseFromAddress(params.from);
+  const fromParsed = parseFromAddress(params.from);
+  const from = {
+    address: fromParsed.address,
+    name: fromParsed.name || fromParsed.address.split("@")[0] || "Support",
+  };
   const text =
     params.text ??
     params.html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??

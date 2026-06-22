@@ -40,10 +40,16 @@ export function SmartIrrigationPanel({
             </Badge>
           </div>
           {rachioConnected ? (
-            <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="space-y-2 text-sm text-muted-foreground">
               <p>Person ID: {personId}</p>
               {deviceCount != null ? <p>{deviceCount} controller(s) on account</p> : null}
-              <p>Link controllers on customer property profiles.</p>
+              <p>
+                Link controllers in{" "}
+                <Link href="/settings/maintenance" className="text-primary hover:underline">
+                  Settings → Maintenance
+                </Link>
+                , then control them on each customer&apos;s <strong>Properties</strong> tab.
+              </p>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

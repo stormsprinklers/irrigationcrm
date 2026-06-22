@@ -1,5 +1,4 @@
 import { Inter } from "next/font/google";
-import { Toaster } from "sonner";
 import Providers from "@/components/providers/SessionProvider";
 import { stormBrand } from "@/lib/branding";
 import "./globals.css";
@@ -39,10 +38,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
-        <Toaster position="bottom-center" />
       </body>
     </html>
   );

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrrigationPanel";
+import { RachioControllersHub } from "@/components/rachio/RachioControllersHub";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -97,6 +98,8 @@ export default function SettingsMaintenancePage() {
       <div className="space-y-6">
         <SmartIrrigationPanel personId={rachioPersonId} deviceCount={rachioTest?.deviceCount} />
 
+        <RachioControllersHub connected={Boolean(rachioPersonId)} />
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Rachio API key</CardTitle>
@@ -125,6 +128,10 @@ export default function SettingsMaintenancePage() {
                 {rachioTest?.deviceCount != null ? (
                   <p>{rachioTest.deviceCount} controller(s) available</p>
                 ) : null}
+                <p className="mt-2 text-green-800">
+                  Next: link controllers below, then manage zones and schedules from the customer
+                  property&apos;s <strong>Properties</strong> tab.
+                </p>
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">

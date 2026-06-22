@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
+import { isEmailConfigured } from "@/lib/inbox/email";
+import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
@@ -31,10 +32,16 @@ export async function POST(_request: NextRequest, { params }: Params) {
       return badRequestResponse("Customer must have an email address to send estimate");
     }
 
-    const fromEmail = estimate.company.sendgridFrom ?? getDefaultFromEmail();
-    if (!fromEmail || !isEmailConfigured()) {
+    if (!isEmailConfigured()) {
       return NextResponse.json({ error: "Twilio email is not configured" }, { status: 503 });
     }
+
+    const branding = {
+      companyName: estimate.company.name,
+      sendgridFrom: estimate.company.sendgridFrom,
+      emailSenderName: estimate.company.emailSenderName,
+      emailLogoUrl: estimate.company.emailLogoUrl,
+    };
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const estimateUrl = `${appUrl}/estimates/${estimate.id}`;
@@ -45,8 +52,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       )
       .join("");
 
-    await sendEmail({
-      from: fromEmail,
+    await sendCompanyEmail(branding, {
       to: [estimate.customer.email],
       subject: `Estimate from ${estimate.company.name}`,
       text: `Hi ${estimate.customer.name},\n\nPlease review your estimate totaling ${formatCurrency(toNumber(estimate.total))}.\n\nView estimate: ${estimateUrl}\n\n— ${estimate.company.name}`,

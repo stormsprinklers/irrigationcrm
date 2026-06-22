@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import { ArrowLeft, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -33,7 +33,7 @@ import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap"
 import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
 import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
-import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps";
+import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
@@ -110,7 +110,21 @@ function ConfirmModal({
 
 export function CustomerProfile({ customerId }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const validTabs = new Set([
+    "profile",
+    "properties",
+    "visits",
+    "estimates",
+    "invoices",
+    "maintenance",
+    "notes",
+  ]);
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(
+    tabFromUrl && validTabs.has(tabFromUrl) ? tabFromUrl : "profile"
+  );
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
@@ -152,6 +166,12 @@ export function CustomerProfile({ customerId }: Props) {
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
+
+  useEffect(() => {
+    if (tabFromUrl && validTabs.has(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const load = useCallback(async () => {
     const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
@@ -256,21 +276,7 @@ export function CustomerProfile({ customerId }: Props) {
       })
     : null;
   const primaryProperty = properties.find((p) => p.isPrimary) ?? properties[0];
-  const mapLocation = primaryProperty
-    ? {
-        address: primaryProperty.address,
-        city: primaryProperty.city,
-        state: primaryProperty.state,
-        zip: primaryProperty.zip,
-      }
-    : customer
-      ? {
-          address: customer.address,
-          city: customer.city,
-          state: customer.state,
-          zip: customer.zip,
-        }
-      : { address: null, city: null, state: null, zip: null };
+  const mapLocation = pickBestAddressForMap(customer, properties);
 
   async function addProperty(e: React.FormEvent) {
     e.preventDefault();
@@ -497,7 +503,7 @@ export function CustomerProfile({ customerId }: Props) {
         location={mapLocation}
       />
 
-      <Tabs defaultValue="profile">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>

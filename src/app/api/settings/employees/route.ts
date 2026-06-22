@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { EmployeeStatus, PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees, employeeSelectFields } from "@/lib/employees";
+import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, validateEmployeePassword } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -38,7 +38,22 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
     if (existing) return badRequestResponse("Email already in use");
 
-    const passwordHash = await bcrypt.hash(body.password ?? "password123", 10);
+    let plainPassword = "password123";
+    if (body.password != null && String(body.password).length > 0) {
+      if (!canSetEmployeePassword(user.role)) {
+        return forbiddenResponse("Only admins can set a custom login password");
+      }
+      plainPassword = String(body.password);
+      const passwordError = validateEmployeePassword(plainPassword);
+      if (passwordError) return badRequestResponse(passwordError);
+      const confirmPassword =
+        body.confirmPassword != null ? String(body.confirmPassword) : plainPassword;
+      if (plainPassword !== confirmPassword) {
+        return badRequestResponse("Passwords do not match");
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
 
     const employee = await prisma.user.create({
       data: {
@@ -71,7 +86,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { ...employee, tempPassword: body.password ? undefined : "password123" },
+      {
+        ...employee,
+        tempPassword: plainPassword === "password123" ? "password123" : undefined,
+      },
       { status: 201 }
     );
   } catch (error) {
