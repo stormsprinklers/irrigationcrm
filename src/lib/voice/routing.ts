@@ -4,6 +4,7 @@ import {
   CallFlowNodeType,
   CallSessionStatus,
   RingStrategy,
+  Scope,
 } from "@prisma/client";
 import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
@@ -236,6 +237,7 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
   }
 
   const normalizedTo = normalizePhone(to);
+  const statusUrl = `${appBaseUrl()}/api/twilio/voice/status`;
   const dial = response.dial({
     callerId: company.twilioPhone,
     record: company.recordCalls ? "record-from-answer-dual" : undefined,
@@ -244,10 +246,16 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
       : undefined,
   });
 
-  dial.number({}, normalizedTo);
+  dial.number(
+    {
+      statusCallback: statusUrl,
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+    },
+    normalizedTo
+  );
 
   if (params.CallSid) {
-    await prisma.callSession.upsert({
+    const session = await prisma.callSession.upsert({
       where: { callSid: params.CallSid },
       create: {
         companyId,
@@ -260,6 +268,29 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
         assignedUserId: params.userId || null,
       },
       update: { status: CallSessionStatus.IN_PROGRESS },
+    });
+
+    await prisma.callLog.upsert({
+      where: { twilioCallSid: params.CallSid },
+      create: {
+        companyId,
+        scope: Scope.EXTERNAL,
+        direction: CallDirection.OUTBOUND,
+        fromNumber: company.twilioPhone,
+        toNumber: normalizedTo,
+        customerId: customerId || null,
+        userId: params.userId || null,
+        sessionId: session.id,
+        twilioCallSid: params.CallSid,
+        status: "initiated",
+      },
+      update: {
+        status: "initiated",
+        toNumber: normalizedTo,
+        customerId: customerId || null,
+        userId: params.userId || null,
+        sessionId: session.id,
+      },
     });
   }
 

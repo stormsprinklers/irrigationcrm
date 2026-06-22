@@ -9,7 +9,7 @@ export default function CsrDeskPage() {
   const [bookedVisitId, setBookedVisitId] = useState<string | null>(null);
 
   return (
-    <ContentArea className="max-w-6xl">
+    <ContentArea className="max-w-7xl">
       <PageHeader
         breadcrumb={["Inbox", "Voice", "CSR Desk"]}
         title="CSR Desk"

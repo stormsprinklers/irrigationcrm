@@ -10,12 +10,29 @@ export async function POST(request: NextRequest) {
   if (!params) return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
 
   const callSid = params.CallSid;
+  const parentCallSid = params.ParentCallSid;
+  const sessionCallSid = parentCallSid || callSid;
   const callStatus = params.CallStatus;
-  const from = params.From;
-  const to = params.To;
+  const from = params.From ?? "";
+  const to = params.To ?? "";
   const duration = params.CallDuration ? parseInt(params.CallDuration, 10) : null;
 
-  if (callSid) {
+  if (!callSid) return NextResponse.json({ ok: true });
+
+  const session = await prisma.callSession.findUnique({
+    where: { callSid: sessionCallSid },
+    select: {
+      id: true,
+      companyId: true,
+      direction: true,
+      fromNumber: true,
+      toNumber: true,
+      customerId: true,
+      assignedUserId: true,
+    },
+  });
+
+  if (session) {
     const sessionStatus =
       callStatus === "completed"
         ? CallSessionStatus.COMPLETED
@@ -25,8 +42,8 @@ export async function POST(request: NextRequest) {
             ? CallSessionStatus.RINGING
             : undefined;
 
-    await prisma.callSession.updateMany({
-      where: { callSid },
+    await prisma.callSession.update({
+      where: { id: session.id },
       data: {
         ...(sessionStatus ? { status: sessionStatus } : {}),
         ...(callStatus === "completed" ? { endedAt: new Date() } : {}),
@@ -34,47 +51,85 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const company = await getCompanyByTwilioPhone(to);
+  let company = session
+    ? await prisma.company.findUnique({ where: { id: session.companyId } })
+    : await getCompanyByTwilioPhone(to);
+
+  let direction = session?.direction ?? CallDirection.INBOUND;
+  let fromNumber = session?.fromNumber ?? normalizePhone(from);
+  let toNumber = session?.toNumber ?? to;
+  let customerId = session?.customerId ?? null;
+  let userId = session?.assignedUserId ?? null;
+
+  if (!company) {
+    company = await getCompanyByTwilioPhone(from);
+    if (company) {
+      direction = CallDirection.OUTBOUND;
+      fromNumber = normalizePhone(from);
+      toNumber = normalizePhone(to);
+    }
+  }
+
   if (!company) return NextResponse.json({ ok: true });
 
-  const existing = await prisma.callLog.findUnique({ where: { twilioCallSid: callSid } });
-  const session = callSid
-    ? await prisma.callSession.findUnique({ where: { callSid }, select: { id: true } })
-    : null;
+  const logLookupSid = sessionCallSid;
+  const existing =
+    (await prisma.callLog.findUnique({ where: { twilioCallSid: logLookupSid } })) ??
+    (session
+      ? await prisma.callLog.findFirst({
+          where: { sessionId: session.id },
+          orderBy: { startedAt: "desc" },
+        })
+      : null);
 
   if (existing) {
     await prisma.callLog.update({
-      where: { twilioCallSid: callSid },
+      where: { id: existing.id },
       data: {
         status: callStatus,
         durationSec: duration ?? existing.durationSec,
         endedAt: callStatus === "completed" ? new Date() : existing.endedAt,
         ...(session?.id && !existing.sessionId ? { sessionId: session.id } : {}),
+        ...(userId && !existing.userId ? { userId } : {}),
       },
     });
     return NextResponse.json({ ok: true });
   }
 
-  const normalizedFrom = normalizePhone(from);
-  const blocked = await isContactBlocked(company.id, normalizedFrom, null);
-  if (blocked) return NextResponse.json({ ok: true });
+  if (direction === CallDirection.INBOUND) {
+    const normalizedFrom = normalizePhone(from);
+    const blocked = await isContactBlocked(company.id, normalizedFrom, null);
+    if (blocked) return NextResponse.json({ ok: true });
 
-  const customer = await prisma.customer.findFirst({
-    where: { companyId: company.id, phone: normalizedFrom },
-  });
+    if (!customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { companyId: company.id, phone: normalizedFrom },
+      });
+      customerId = customer?.id ?? null;
+    }
+
+    fromNumber = normalizedFrom;
+  } else if (!customerId) {
+    const customer = await prisma.customer.findFirst({
+      where: { companyId: company.id, phone: toNumber },
+    });
+    customerId = customer?.id ?? null;
+  }
 
   await prisma.callLog.create({
     data: {
       companyId: company.id,
       scope: Scope.EXTERNAL,
-      direction: CallDirection.INBOUND,
-      fromNumber: normalizedFrom,
-      toNumber: to,
-      customerId: customer?.id,
-      twilioCallSid: callSid,
+      direction,
+      fromNumber,
+      toNumber,
+      customerId,
+      userId,
+      twilioCallSid: logLookupSid,
       sessionId: session?.id ?? null,
       status: callStatus,
       durationSec: duration,
+      endedAt: callStatus === "completed" ? new Date() : null,
     },
   });
 

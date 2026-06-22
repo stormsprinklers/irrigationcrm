@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
+import { CsrCallHistoryPanel } from "@/components/voice/CsrCallHistoryPanel";
 
 type QueueEntry = {
   id: string;
@@ -177,7 +178,8 @@ export function CsrDeskPanel({
   }
 
   return (
-    <div className="grid h-full gap-4 lg:grid-cols-2 xl:grid-cols-4">
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <section className="rounded-lg border border-border bg-white p-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">
           <Phone className="h-4 w-4" /> Queue ({queue.length})
@@ -342,6 +344,9 @@ export function CsrDeskPanel({
         onOpenChange={setTransferOpen}
         onTransfer={transfer}
       />
+      </div>
+
+      <CsrCallHistoryPanel />
     </div>
   );
 }
