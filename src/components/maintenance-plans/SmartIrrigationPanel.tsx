@@ -1,9 +1,22 @@
+"use client";
+
 import Link from "next/link";
 import { Droplets, Settings } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function SmartIrrigationPanel({ compact = false }: { compact?: boolean }) {
+export function SmartIrrigationPanel({
+  compact = false,
+  personId = null,
+  deviceCount,
+}: {
+  compact?: boolean;
+  personId?: string | null;
+  deviceCount?: number;
+}) {
+  const rachioConnected = Boolean(personId);
+
   return (
     <Card className={compact ? "" : "h-full"}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -15,20 +28,28 @@ export function SmartIrrigationPanel({ compact = false }: { compact?: boolean })
           </Link>
         </Button>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-dashed p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Droplets className="h-5 w-5 text-green-600" />
-            <span className="font-medium">Rachio</span>
+      <CardContent>
+        <div className="rounded-lg border border-border p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Droplets className="h-5 w-5 text-green-600" />
+              <span className="font-medium">Rachio</span>
+            </div>
+            <Badge variant={rachioConnected ? "default" : "secondary"}>
+              {rachioConnected ? "Connected" : "Not connected"}
+            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Integration coming soon</p>
-        </div>
-        <div className="rounded-lg border border-dashed p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <Droplets className="h-5 w-5 text-blue-600" />
-            <span className="font-medium">Hydrawise</span>
-          </div>
-          <p className="text-sm text-muted-foreground">Integration coming soon</p>
+          {rachioConnected ? (
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>Person ID: {personId}</p>
+              {deviceCount != null ? <p>{deviceCount} controller(s) on account</p> : null}
+              <p>Link controllers on customer property profiles.</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Add your API key and test the connection in Settings → Maintenance.
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

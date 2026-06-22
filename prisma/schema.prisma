@@ -330,6 +330,7 @@ model Company {
   subscriptionTier         String?  @default("Professional")
   customReportPresets      Json?
   rachioApiKey             String?
+  rachioPersonId           String?
   hydrawiseApiKey          String?
   defaultLeadAssigneeId    String?
   flatRatePricingEnabled   Boolean  @default(false)
@@ -1549,6 +1550,7 @@ model PropertySmartController {
 
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
+  @@unique([propertyId, provider])
   @@index([propertyId])
 }
 

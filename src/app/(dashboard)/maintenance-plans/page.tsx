@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { HelpCircle, Plus, Settings, Smile } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { DueForBillingCard } from "@/components/maintenance-plans/DueForBillingCard";
 import { PlanSummaryCard } from "@/components/maintenance-plans/PlanSummaryCard";
@@ -75,12 +75,6 @@ export default function MaintenancePlansPage() {
         title="Maintenance Plans"
         actions={
           <>
-            <Button variant="ghost" size="icon">
-              <HelpCircle className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Smile className="h-5 w-5" />
-            </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/maintenance-plans/templates/new">
                 <Plus className="h-4 w-4" />

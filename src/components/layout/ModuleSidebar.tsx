@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 import type { NavSection } from "@/config/navigation";
 import { isNavActive } from "@/config/navigation";
 import { cn } from "@/lib/utils";
@@ -18,15 +17,8 @@ export function ModuleSidebar({ title, sections }: ModuleSidebarProps) {
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-4 py-4">
+      <div className="border-b border-border px-4 py-4">
         <h2 className="font-display text-lg font-bold text-storm-navy">{title}</h2>
-        <button
-          type="button"
-          className="rounded p-1 text-muted-foreground hover:bg-muted"
-          aria-label="Collapse sidebar"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2" aria-label={`${title} navigation`}>

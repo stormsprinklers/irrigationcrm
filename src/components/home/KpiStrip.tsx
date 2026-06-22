@@ -1,8 +1,7 @@
 import type { HomeDateRange, HomeKpi } from "@/lib/home/types";
-import { ChevronDown, Info, MoreVertical } from "lucide-react";
+import { ChevronDown, Info } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -43,14 +42,9 @@ export function KpiStrip({ metrics, range = "ytd", onRangeChange }: KpiStripProp
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="flex items-center gap-2">
-          <Link href="/reporting" className="text-sm font-medium text-primary hover:underline">
-            View all reports
-          </Link>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreVertical className="h-4 w-4" />
-          </Button>
-        </div>
+        <Link href="/reporting" className="text-sm font-medium text-primary hover:underline">
+          View all reports
+        </Link>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 divide-y md:grid-cols-5 md:divide-x md:divide-y-0">

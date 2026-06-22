@@ -1,5 +1,4 @@
 import type { PlanStatusDisplay } from "@/lib/maintenance-plans/format";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function PlanSummaryCard({
@@ -15,9 +14,6 @@ export function PlanSummaryCard({
     <Card className="h-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base font-semibold">Plan summary</CardTitle>
-        <Link href="/maintenance-plans" className="text-sm text-primary hover:underline">
-          View all
-        </Link>
       </CardHeader>
       <CardContent>
         <div className="mb-4">

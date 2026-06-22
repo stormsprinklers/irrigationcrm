@@ -33,7 +33,7 @@ import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps"
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
-import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrrigationPanel";
+import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -746,25 +746,32 @@ export function CustomerProfile({ customerId }: Props) {
             </CardHeader>
             <CardContent className="space-y-4">
               {properties.map((property) => (
-                <div key={property.id} className="flex items-start justify-between rounded-md border p-3">
-                  <div>
-                    <div className="font-medium">
-                      {property.name}
-                      {property.isPrimary && (
-                        <Badge variant="outline" className="ml-2">
-                          Primary
-                        </Badge>
-                      )}
+                <div key={property.id} className="space-y-3">
+                  <div className="flex items-start justify-between rounded-md border p-3">
+                    <div>
+                      <div className="font-medium">
+                        {property.name}
+                        {property.isPrimary && (
+                          <Badge variant="outline" className="ml-2">
+                            Primary
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {[property.address, property.city, property.state, property.zip]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {[property.address, property.city, property.state, property.zip]
-                        .filter(Boolean)
-                        .join(", ")}
-                    </p>
+                    <Button variant="ghost" size="icon" onClick={() => deleteProperty(property.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => deleteProperty(property.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <RachioPropertyPanel
+                    customerId={customerId}
+                    propertyId={property.id}
+                    propertyName={property.name}
+                  />
                 </div>
               ))}
 
@@ -987,9 +994,6 @@ export function CustomerProfile({ customerId }: Props) {
             </CardContent>
           </Card>
 
-          {enrollments.some((e) => e.status === "ACTIVE") && (
-            <SmartIrrigationPanel compact />
-          )}
         </TabsContent>
 
         <TabsContent value="notes">

@@ -1,12 +1,10 @@
 "use client";
 
 import {
-  Calendar,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Filter,
-  Menu,
   Settings,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -75,12 +73,6 @@ export function ScheduleToolbar({
   return (
     <div className="relative flex flex-wrap items-center justify-between gap-4 border-b border-border bg-white px-4 py-3">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon">
-          <Menu className="h-5 w-5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="relative">
-          <Calendar className="h-5 w-5" />
-        </Button>
         <Button variant="outline" size="sm" onClick={onToday}>
           Today
         </Button>
@@ -124,15 +116,6 @@ export function ScheduleToolbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex rounded-md border border-border">
-          <Button variant="default" size="sm" className="rounded-r-none">
-            Calendar
-          </Button>
-          <Button variant="ghost" size="sm" className="rounded-l-none text-muted-foreground" disabled>
-            Map
-          </Button>
-        </div>
-
         <div className="relative">
           <Button variant="outline" size="sm" onClick={onToggleFilters}>
             <Filter className="mr-1 h-4 w-4" />
@@ -178,7 +161,6 @@ export function ScheduleToolbar({
           <DropdownMenuContent>
             <DropdownMenuItem onClick={() => onViewModeChange?.("day")}>Day</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onViewModeChange?.("week")}>Week</DropdownMenuItem>
-            <DropdownMenuItem disabled>Month (coming soon)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

@@ -32,6 +32,7 @@ export const companySettingsSelect = {
   subscriptionTier: true,
   customReportPresets: true,
   rachioApiKey: true,
+  rachioPersonId: true,
   hydrawiseApiKey: true,
   defaultLeadAssigneeId: true,
 } as const;
@@ -70,6 +71,7 @@ export type CompanySettingsDTO = {
   subscriptionTier: string | null;
   customReportPresets: unknown;
   rachioApiKey: string | null;
+  rachioPersonId: string | null;
   hydrawiseApiKey: string | null;
   defaultLeadAssigneeId: string | null;
 };

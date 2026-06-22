@@ -5,15 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { FormEvent, useState } from "react";
-import {
-  Bell,
-  ChevronDown,
-  Grid3X3,
-  MapPin,
-  Phone,
-  Search,
-  Settings,
-} from "lucide-react";
+import { Phone, Search, Settings } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
@@ -98,9 +90,6 @@ export function TopNav() {
         <div className="ml-auto flex items-center gap-1">
           <NewMenu />
 
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -109,12 +98,6 @@ export function TopNav() {
             onClick={() => setDialerOpen(true)}
           >
             <Phone className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon">
-            <MapPin className="h-5 w-5" />
-          </Button>
-          <Button variant="ghost" size="icon">
-            <Grid3X3 className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" asChild>
             <Link href="/settings">
@@ -148,10 +131,6 @@ export function TopNav() {
             </Link>
           );
         })}
-        <Button variant="ghost" size="sm" className="shrink-0 text-xs">
-          More
-          <ChevronDown className="h-3 w-3" />
-        </Button>
       </div>
 
       <VoiceDialerDialog open={dialerOpen} onClose={() => setDialerOpen(false)} />
