@@ -95,6 +95,33 @@ export function ServiceAreaManager() {
     await loadZips(selectedId);
   }
 
+  async function deleteArea(area: ServiceArea) {
+    if (area._count.visits > 0) {
+      toast.error("Cannot delete an area that has scheduled visits");
+      return;
+    }
+    if (
+      !confirm(
+        `Delete "${area.name}"? Zip codes and employee assignments for this area will be removed.`
+      )
+    ) {
+      return;
+    }
+
+    const res = await fetch(`/api/settings/service-areas/${area.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to delete service area");
+      return;
+    }
+
+    toast.success("Service area deleted");
+    const remaining = areas.filter((a) => a.id !== area.id);
+    setSelectedId(remaining[0]?.id ?? null);
+    setZips([]);
+    await loadAreas();
+  }
+
   const selected = areas.find((a) => a.id === selectedId);
   const filteredZips = zips.filter((z) => z.zipCode.includes(zipFilter));
 
@@ -149,8 +176,23 @@ export function ServiceAreaManager() {
                 onChange={(e) => updateColor(selected.id, e.target.value)}
                 className="h-8 w-10 cursor-pointer rounded border border-border"
               />
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={selected._count.visits > 0}
+                onClick={() => void deleteArea(selected)}
+              >
+                Delete area
+              </Button>
             </div>
           </div>
+
+          {selected._count.visits > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              This area cannot be deleted because it has {selected._count.visits} scheduled visit
+              {selected._count.visits === 1 ? "" : "s"}.
+            </p>
+          ) : null}
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Add zip codes</label>

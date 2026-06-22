@@ -2,14 +2,51 @@ import { HousecallProMigrationStepType } from "@prisma/client";
 
 export const HCP_BASE_URL = "https://api.housecallpro.com";
 
-export const HCP_PATHS = {
-  materialCategories: "/pricebook/v1/material_categories",
-  materials: "/pricebook/v1/materials",
-  services: "/pricebook/v1/services",
-  servicesAlt: "/v1/pricebook/services",
+export const HCP_ATTACHMENT_PATHS = {
+  customers: (id: string) => [
+    `/customers/${id}/attachments`,
+    `/customer/${id}/attachments`,
+    `/api/customers/${id}/attachments`,
+  ],
+  jobs: (id: string) => [
+    `/jobs/${id}/attachments`,
+    `/job/${id}/attachments`,
+    `/api/jobs/${id}/attachments`,
+  ],
+  estimates: (id: string) => [
+    `/estimates/${id}/attachments`,
+    `/estimate/${id}/attachments`,
+    `/api/estimates/${id}/attachments`,
+  ],
 } as const;
 
-export const DEFAULT_BATCH_SIZE = 25;
+export const HCP_PARENT_DETAIL_PATHS = {
+  customers: (id: string) => [`/customers/${id}`, `/customer/${id}`],
+  jobs: (id: string) => [`/jobs/${id}`, `/job/${id}`],
+  estimates: (id: string) => [`/estimates/${id}`, `/estimate/${id}`],
+} as const;
+
+export const HCP_PATHS = {
+  materialCategories: [
+    "/price_book/material_categories",
+    "/v1/pricebook/material_categories",
+    "/pricebook/v1/material_categories",
+    "/material_categories",
+  ],
+  materials: [
+    "/price_book/materials",
+    "/v1/pricebook/materials",
+    "/pricebook/v1/materials",
+    "/materials",
+  ],
+  services: [
+    "/price_book/services",
+    "/v1/pricebook/services",
+    "/pricebook/v1/services",
+  ],
+} as const;
+
+export const DEFAULT_BATCH_SIZE = 250;
 export const ATTACHMENT_BATCH_SIZE = 10;
 export const DEFAULT_THROTTLE_MS = 750;
 export const MAX_429_RETRIES = 5;

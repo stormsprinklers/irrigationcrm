@@ -66,6 +66,51 @@ export type RachioDeviceSummary = {
   zoneCount?: number;
 };
 
+export type RachioDeviceKind = "controller" | "hose_timer";
+
+export type RachioBaseStation = {
+  id: string;
+  name?: string;
+  serialNumber?: string;
+  model?: string;
+  status?: string;
+  reportedState?: string;
+  valves?: { id: string; name?: string }[];
+};
+
+export type RachioProperty = {
+  id?: string;
+  name?: string;
+  street?: string;
+  streetAddress?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  postalCode?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  entities?: Array<{
+    id?: string;
+    type?: string;
+    deviceId?: string;
+    baseStationId?: string;
+    locationId?: string;
+  }>;
+};
+
+export type RachioSuggestedCustomer = {
+  customerId: string;
+  customerName: string;
+  propertyId: string | null;
+  propertyName: string | null;
+  matchSource: "customer" | "property";
+};
+
 export type RachioEvent = {
   id?: string;
   type?: string;

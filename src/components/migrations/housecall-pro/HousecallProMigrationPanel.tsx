@@ -7,7 +7,7 @@ import {
   HousecallProMigrationStepStatus,
   HousecallProMigrationStepType,
 } from "@prisma/client";
-import { CheckCircle2, Loader2, Pause, Play, RefreshCw, SkipForward } from "lucide-react";
+import { CheckCircle2, Loader2, Pause, Play, RefreshCw, RotateCcw, SkipForward } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -173,6 +173,19 @@ export function HousecallProMigrationPanel() {
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to skip");
+    }
+  }
+
+  async function handleReactivate(step: HousecallProMigrationStepType) {
+    try {
+      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/reactivate`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success(`${STEP_LABELS[step]} ready to retry`);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reactivate step");
     }
   }
 
@@ -343,7 +356,7 @@ export function HousecallProMigrationPanel() {
             <div className="flex flex-wrap gap-2">
               {migration.currentStep !== HousecallProMigrationStepType.CONNECT ? (
                 <>
-                  <Button onClick={handleRunNextBatch} disabled={runningBatch || isPaused}>
+                  <Button onClick={handleRunNextBatch} disabled={runningBatch}>
                     {runningBatch ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -382,6 +395,12 @@ export function HousecallProMigrationPanel() {
                 </Button>
               ) : null}
             </div>
+            {isPaused ? (
+              <p className="text-xs text-muted-foreground">
+                Migration is paused. You can run batches manually on the current step, or retry
+                skipped steps below.
+              </p>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -395,6 +414,7 @@ export function HousecallProMigrationPanel() {
             (step) => {
               const row = migration?.steps.find((s) => s.step === step);
               const isCurrent = migration?.currentStep === step;
+              const isSkipped = row?.status === HousecallProMigrationStepStatus.SKIPPED;
               return (
                 <div
                   key={step}
@@ -412,9 +432,32 @@ export function HousecallProMigrationPanel() {
                       </div>
                     ) : null}
                   </div>
-                  <Badge variant={row ? stepBadgeVariant(row.status) : "outline"}>
-                    {row?.status ?? "PENDING"}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isPaused && isSkipped ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={runningBatch}
+                          onClick={() => handleReactivate(step)}
+                        >
+                          <RotateCcw className="mr-1 h-3 w-3" />
+                          Retry
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={runningBatch}
+                          onClick={() => handleReset(step)}
+                        >
+                          Reset
+                        </Button>
+                      </>
+                    ) : null}
+                    <Badge variant={row ? stepBadgeVariant(row.status) : "outline"}>
+                      {row?.status ?? "PENDING"}
+                    </Badge>
+                  </div>
                 </div>
               );
             }

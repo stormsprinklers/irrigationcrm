@@ -18,9 +18,9 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
     errors: [],
   };
 
-  const page = await ctx.client.getPaginated(HCP_PATHS.materialCategories, {
+  const page = await ctx.client.getPaginatedFirst(HCP_PATHS.materialCategories, {
     cursor: ctx.cursor,
-    pageSize: 100,
+    pageSize: ctx.batchSize,
     arrayKeys: ["categories", "material_categories"],
   });
 

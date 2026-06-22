@@ -16,11 +16,15 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (!deviceId) return badRequestResponse("deviceId is required");
 
-    const { controller, device } = await linkRachioDevice(
+    const deviceKind =
+      body.deviceKind === "hose_timer" ? ("hose_timer" as const) : ("controller" as const);
+
+    const { controller, device, entity } = await linkRachioDevice(
       user.companyId,
       customerId,
       propertyId,
-      deviceId
+      deviceId,
+      deviceKind
     );
 
     return NextResponse.json({
@@ -30,7 +34,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         status: controller.status,
         metadata: controller.metadata,
       },
-      device,
+      device: device ?? entity,
     });
   } catch (error) {
     if (error instanceof RachioApiError) {

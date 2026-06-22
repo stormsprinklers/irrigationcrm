@@ -1,5 +1,10 @@
+import { createHash } from "crypto";
 import { HcpEntityType } from "@prisma/client";
-import { ATTACHMENT_BATCH_SIZE } from "@/lib/housecall-pro/constants";
+import {
+  ATTACHMENT_BATCH_SIZE,
+  HCP_ATTACHMENT_PATHS,
+  HCP_PARENT_DETAIL_PATHS,
+} from "@/lib/housecall-pro/constants";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import {
   countMappedParents,
@@ -12,9 +17,73 @@ import { prisma } from "@/lib/prisma";
 
 type AttachmentParentType = "customers" | "jobs" | "estimates";
 
+const ATTACHMENT_ARRAY_KEYS = [
+  "attachments",
+  "files",
+  "photos",
+  "images",
+  "documents",
+  "job_attachments",
+  "estimate_attachments",
+  "customer_attachments",
+] as const;
+
 function parseAttachmentCursor(cursor: string | null) {
   const offset = Number(cursor ?? "0");
   return Number.isFinite(offset) ? offset : 0;
+}
+
+function attachmentFileUrl(attachment: HcpRecord): string | null {
+  return (
+    hcpString(attachment.url) ??
+    hcpString(attachment.download_url) ??
+    hcpString(attachment.file_url) ??
+    hcpString(attachment.signed_url) ??
+    hcpString(attachment.href) ??
+    hcpString(attachment.link)
+  );
+}
+
+function extractAttachmentItems(data: HcpRecord): HcpRecord[] {
+  const items: HcpRecord[] = [];
+  for (const key of ATTACHMENT_ARRAY_KEYS) {
+    const value = data[key];
+    if (Array.isArray(value)) {
+      items.push(...(value as HcpRecord[]));
+    }
+  }
+  if (Array.isArray(data.links)) {
+    for (const link of data.links as HcpRecord[]) {
+      const type = hcpString(link.type)?.toLowerCase();
+      if (!type || type === "file" || type === "link") {
+        items.push(link);
+      }
+    }
+  }
+  if (Array.isArray(data.data)) {
+    items.push(...(data.data as HcpRecord[]));
+  }
+  return items;
+}
+
+function dedupeAttachments(items: HcpRecord[]): HcpRecord[] {
+  const seen = new Set<string>();
+  const unique: HcpRecord[] = [];
+  for (const item of items) {
+    const id = hcpId(item);
+    const url = attachmentFileUrl(item);
+    const key = id || url;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function stableAttachmentId(attachment: HcpRecord, fileUrl: string): string {
+  const id = hcpId(attachment);
+  if (id) return id;
+  return createHash("sha256").update(fileUrl).digest("hex").slice(0, 16);
 }
 
 async function fetchAttachments(
@@ -22,21 +91,30 @@ async function fetchAttachments(
   parentType: AttachmentParentType,
   parentHcpId: string
 ): Promise<HcpRecord[]> {
-  const paths = [
-    `/${parentType}/${parentHcpId}/attachments`,
-    `/${parentType.slice(0, -1)}/${parentHcpId}/attachments`,
-  ];
-  for (const path of paths) {
+  const items: HcpRecord[] = [];
+
+  for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
     try {
       const data = await ctx.client.get<HcpRecord>(path);
-      if (Array.isArray(data.attachments)) return data.attachments as HcpRecord[];
-      if (Array.isArray(data.files)) return data.files as HcpRecord[];
-      if (Array.isArray(data.data)) return data.data as HcpRecord[];
+      items.push(...extractAttachmentItems(data));
     } catch {
       // try next path shape
     }
   }
-  return [];
+
+  if (!items.length) {
+    for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
+      try {
+        const data = await ctx.client.get<HcpRecord>(path);
+        items.push(...extractAttachmentItems(data));
+        if (items.length) break;
+      } catch {
+        // try next path shape
+      }
+    }
+  }
+
+  return dedupeAttachments(items);
 }
 
 async function importAttachmentFile(params: {
@@ -54,19 +132,18 @@ async function importAttachmentFile(params: {
   }) => Promise<void>;
   result: BatchResult;
 }) {
-  const attachmentId = hcpId(params.attachment);
-  const fileName =
-    hcpString(params.attachment.file_name) ??
-    hcpString(params.attachment.name) ??
-    `attachment-${attachmentId || "file"}`;
-  const fileUrl =
-    hcpString(params.attachment.url) ??
-    hcpString(params.attachment.download_url) ??
-    hcpString(params.attachment.file_url);
-  if (!attachmentId || !fileUrl) {
+  const fileUrl = attachmentFileUrl(params.attachment);
+  if (!fileUrl) {
     params.result.skipped++;
     return;
   }
+
+  const attachmentId = stableAttachmentId(params.attachment, fileUrl);
+  const fileName =
+    hcpString(params.attachment.file_name) ??
+    hcpString(params.attachment.name) ??
+    hcpString(params.attachment.fileName) ??
+    `attachment-${attachmentId}`;
 
   const mappingKey = `${params.parentType}:${params.parentHcpId}:${attachmentId}`;
   const existing = await prisma.hcpEntityMapping.findUnique({
@@ -145,10 +222,6 @@ async function importParentAttachmentsBatch(params: {
     result.processed++;
     try {
       const attachments = await fetchAttachments(params.ctx, params.parentType, parent.hcpId);
-      if (!attachments.length) {
-        result.skipped++;
-        continue;
-      }
       for (const attachment of attachments) {
         try {
           await importAttachmentFile({

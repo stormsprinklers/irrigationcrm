@@ -3,29 +3,58 @@ import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
   addressFromRecord,
-  hcpDate,
+  hcpAddressRecords,
+  hcpCreatedAt,
   hcpId,
   hcpString,
   hcpTags,
+  primaryAddressFromHcpRecord,
+  hasHcpAddressData,
 } from "@/lib/housecall-pro/utils";
 import { prisma } from "@/lib/prisma";
 
-function customerName(record: HcpRecord) {
+function customerName(record: HcpRecord, id: string) {
+  const fullName = [hcpString(record.first_name), hcpString(record.last_name)]
+    .filter(Boolean)
+    .join(" ");
   return (
     hcpString(record.name) ??
-    [hcpString(record.first_name), hcpString(record.last_name)].filter(Boolean).join(" ") ??
-    hcpString(record.company_name)
+    (fullName || null) ??
+    hcpString(record.company) ??
+    hcpString(record.company_name) ??
+    hcpString(record.display_name) ??
+    hcpString(record.email) ??
+    hcpString(record.phone) ??
+    hcpString(record.mobile_number) ??
+    `Customer ${id}`
   );
 }
 
-function propertyRecords(record: HcpRecord): HcpRecord[] {
-  if (Array.isArray(record.addresses)) return record.addresses as HcpRecord[];
-  if (Array.isArray(record.properties)) return record.properties as HcpRecord[];
-  const addr = addressFromRecord(record);
-  if (addr.address || addr.city) {
-    return [{ ...addr, id: record.id, name: "Primary" }];
+function propertyLabel(record: HcpRecord, index: number): string {
+  const explicit = hcpString(record.name);
+  if (explicit) return explicit;
+
+  const type = hcpString(record.type)?.toLowerCase();
+  if (type === "service") return "Service address";
+  if (type === "billing") return "Billing address";
+  return index === 0 ? "Primary" : `Property ${index + 1}`;
+}
+
+async function enrichCustomerRecord(
+  ctx: ImportContext,
+  record: HcpRecord,
+  id: string
+): Promise<HcpRecord> {
+  const needsDetail = !hcpCreatedAt(record) || !hasHcpAddressData(record);
+  if (!needsDetail) return record;
+
+  try {
+    const detail = await ctx.client.get<HcpRecord>(`/customers/${id}`);
+    const customer = ((detail.customer as HcpRecord | undefined) ?? detail) as HcpRecord;
+    return { ...record, ...customer };
+  } catch {
+    return record;
   }
-  return [];
 }
 
 export async function importCustomersBatch(ctx: ImportContext): Promise<BatchResult> {
@@ -53,29 +82,31 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
     });
   }
 
-  for (const record of page.items) {
+  for (const listRecord of page.items) {
     result.processed++;
-    const id = hcpId(record);
-    const name = customerName(record);
-    if (!id || !name) {
+    const id = hcpId(listRecord);
+    if (!id) {
       result.skipped++;
       continue;
     }
+    const record = await enrichCustomerRecord(ctx, listRecord, id);
+    const name = customerName(record, id);
 
     try {
-      const primary = addressFromRecord(record);
+      const primary = primaryAddressFromHcpRecord(record);
+      const importedCreatedAt = hcpCreatedAt(record);
       const customerData = {
         name,
         email: hcpString(record.email),
         phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
-        companyName: hcpString(record.company_name),
-        address: primary.address,
-        city: primary.city,
-        state: primary.state,
-        zip: primary.zip,
+        companyName: hcpString(record.company) ?? hcpString(record.company_name),
+        address: primary?.address ?? null,
+        city: primary?.city ?? null,
+        state: primary?.state ?? null,
+        zip: primary?.zip ?? null,
         tags: hcpTags(record),
         status: record.archived === true ? CustomerStatus.ARCHIVED : CustomerStatus.ACTIVE,
-        createdAt: hcpDate(record.created_at) ?? undefined,
+        ...(importedCreatedAt ? { createdAt: importedCreatedAt } : {}),
       };
 
       const mapping = await prisma.hcpEntityMapping.findUnique({
@@ -135,7 +166,7 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         }
       }
 
-      const properties = propertyRecords(record);
+      const properties = hcpAddressRecords(record);
       for (let i = 0; i < properties.length; i++) {
         const prop = properties[i];
         const propHcpId = hcpId(prop) || `${id}-property-${i}`;
@@ -152,7 +183,7 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         const propertyData = {
           companyId: ctx.companyId,
           customerId,
-          name: hcpString(prop.name) ?? (i === 0 ? "Primary" : `Property ${i + 1}`),
+          name: propertyLabel(prop, i),
           ...addr,
           isPrimary: i === 0,
         };

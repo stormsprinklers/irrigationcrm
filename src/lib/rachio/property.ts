@@ -2,6 +2,7 @@ import { SmartControllerProvider, SmartControllerStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   enrichEventsWithZoneNames,
+  getBaseStation,
   getCurrentSchedule,
   getDevice,
   getDeviceEvents,
@@ -9,6 +10,7 @@ import {
   startZone,
   stopDeviceWater,
 } from "@/lib/rachio/client";
+import type { RachioDeviceKind } from "@/lib/rachio/types";
 import { RachioApiError } from "@/lib/rachio/types";
 
 export async function assertPropertyAccess(
@@ -78,11 +80,51 @@ export async function getLinkedDeviceContext(
   return { link, device, apiKey };
 }
 
+async function fetchLinkedRachioEntity(apiKey: string, deviceId: string, deviceKind: RachioDeviceKind) {
+  if (deviceKind === "hose_timer") {
+    const base = await getBaseStation(apiKey, deviceId);
+    return {
+      kind: deviceKind,
+      name: base.name ?? "Hose timer",
+      model: base.model,
+      serialNumber: base.serialNumber,
+      status: base.status ?? base.reportedState,
+      zoneCount: base.valves?.length ?? 0,
+    };
+  }
+
+  const device = await getDevice(apiKey, deviceId);
+  return {
+    kind: deviceKind,
+    name: device.name,
+    model: device.model,
+    serialNumber: device.serialNumber,
+    status: device.status,
+    zoneCount: device.zones?.length ?? 0,
+    device,
+  };
+}
+
+function linkedMetadata(
+  entity: Awaited<ReturnType<typeof fetchLinkedRachioEntity>>,
+  deviceKind: RachioDeviceKind
+) {
+  return {
+    deviceKind,
+    deviceName: entity.name,
+    model: entity.model,
+    serialNumber: entity.serialNumber,
+    zoneCount: entity.zoneCount,
+    deviceStatus: entity.status,
+  };
+}
+
 export async function linkRachioDevice(
   companyId: string,
   customerId: string,
   propertyId: string,
-  deviceId: string
+  deviceId: string,
+  deviceKind: RachioDeviceKind = "controller"
 ) {
   await assertPropertyAccess(companyId, customerId, propertyId);
   const { apiKey, personId } = await resolveCompanyRachio(companyId);
@@ -93,7 +135,8 @@ export async function linkRachioDevice(
     );
   }
 
-  const device = await getDevice(apiKey, deviceId);
+  const entity = await fetchLinkedRachioEntity(apiKey, deviceId, deviceKind);
+  const metadata = linkedMetadata(entity, deviceKind);
 
   const controller = await prisma.propertySmartController.upsert({
     where: {
@@ -108,37 +151,29 @@ export async function linkRachioDevice(
       externalDeviceId: deviceId,
       externalAccountId: personId,
       status:
-        device.status === "ONLINE"
+        entity.status === "ONLINE"
           ? SmartControllerStatus.CONNECTED
           : SmartControllerStatus.DISCONNECTED,
       lastSyncedAt: new Date(),
-      metadata: {
-        deviceName: device.name,
-        model: device.model,
-        serialNumber: device.serialNumber,
-        zoneCount: device.zones?.length ?? 0,
-        deviceStatus: device.status,
-      },
+      metadata,
     },
     update: {
       externalDeviceId: deviceId,
       externalAccountId: personId,
       status:
-        device.status === "ONLINE"
+        entity.status === "ONLINE"
           ? SmartControllerStatus.CONNECTED
           : SmartControllerStatus.DISCONNECTED,
       lastSyncedAt: new Date(),
-      metadata: {
-        deviceName: device.name,
-        model: device.model,
-        serialNumber: device.serialNumber,
-        zoneCount: device.zones?.length ?? 0,
-        deviceStatus: device.status,
-      },
+      metadata,
     },
   });
 
-  return { controller, device };
+  return {
+    controller,
+    device: "device" in entity ? entity.device : null,
+    entity,
+  };
 }
 
 export async function unlinkRachioDevice(

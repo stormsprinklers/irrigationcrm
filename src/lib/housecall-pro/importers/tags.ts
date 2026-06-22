@@ -16,7 +16,7 @@ export async function importTagsBatch(ctx: ImportContext): Promise<BatchResult> 
 
   const page = await ctx.client.getPaginated("/tags", {
     cursor: ctx.cursor,
-    pageSize: 100,
+    pageSize: ctx.batchSize,
     arrayKeys: ["tags"],
   });
 

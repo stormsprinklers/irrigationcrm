@@ -102,7 +102,7 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
 
   const page = await ctx.client.getPaginated("/service_zones", {
     cursor: ctx.cursor,
-    pageSize: 100,
+    pageSize: ctx.batchSize,
     arrayKeys: ["service_zones", "zones"],
   });
 

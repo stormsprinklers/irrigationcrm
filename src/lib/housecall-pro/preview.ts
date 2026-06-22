@@ -19,6 +19,23 @@ async function countPage(
   }
 }
 
+async function countPageFirst(
+  client: HousecallProClient,
+  paths: readonly string[],
+  arrayKeys: string[]
+): Promise<number | undefined> {
+  try {
+    const result = await client.getPaginatedFirst(paths, {
+      pageSize: 1,
+      arrayKeys,
+      cursor: null,
+    });
+    return result.totalEstimate;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function fetchPreviewCounts(client: HousecallProClient): Promise<PreviewCounts> {
   let companyName: string | undefined;
   try {
@@ -43,9 +60,9 @@ export async function fetchPreviewCounts(client: HousecallProClient): Promise<Pr
     countPage(client, "/tags", ["tags"]),
     countPage(client, "/service_zones", ["service_zones", "zones"]),
     countPage(client, "/employees", ["employees"]),
-    countPage(client, HCP_PATHS.materialCategories, ["categories", "material_categories"]),
-    countPage(client, HCP_PATHS.materials, ["materials"]),
-    countPage(client, HCP_PATHS.services, ["services", "price_book_services"]),
+    countPageFirst(client, HCP_PATHS.materialCategories, ["categories", "material_categories"]),
+    countPageFirst(client, HCP_PATHS.materials, ["materials"]),
+    countPageFirst(client, HCP_PATHS.services, ["services", "price_book_services"]),
     countPage(client, "/customers", ["customers"]),
     countPage(client, "/jobs", ["jobs"]),
     countPage(client, "/estimates", ["estimates"]),

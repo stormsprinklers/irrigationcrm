@@ -3,10 +3,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { RachioDeviceSummary } from "@/lib/rachio/types";
-
-const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm";
 
 type Props = {
   customerId: string;
@@ -64,7 +62,7 @@ export function RachioDeviceLinker({ customerId, propertyId, onLinked }: Props) 
 
   if (error) {
     return (
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
         {error}. Configure and test your Rachio API key in Settings → Maintenance.
       </div>
     );
@@ -85,7 +83,7 @@ export function RachioDeviceLinker({ customerId, propertyId, onLinked }: Props) 
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          className={selectClass}
+          className={nativeSelectClassName}
         >
           <option value="">Select a controller</option>
           {devices.map((device) => (

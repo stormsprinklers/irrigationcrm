@@ -16,6 +16,43 @@ import {
 } from "@/lib/housecall-pro/utils";
 import { prisma } from "@/lib/prisma";
 
+function hcpCustomerDisplayName(customer: HcpRecord | undefined | null): string | null {
+  if (!customer) return null;
+  const fullName = [hcpString(customer.first_name), hcpString(customer.last_name)]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    hcpString(customer.name) ??
+    (fullName || null) ??
+    hcpString(customer.company) ??
+    hcpString(customer.company_name) ??
+    hcpString(customer.display_name)
+  );
+}
+
+function isInternalHcpLabel(value: string): boolean {
+  if (/^job[_-][a-z0-9]+$/i.test(value)) return true;
+  return value.length >= 20 && /^[a-z0-9_-]+$/i.test(value) && !value.includes(" ");
+}
+
+function visitTitleFromHcpJob(record: HcpRecord, customerName: string | null): string {
+  const jobNumber =
+    hcpString(record.invoice_number) ??
+    hcpString(record.job_number) ??
+    hcpString(record.work_order_number) ??
+    hcpString(record.number);
+  if (jobNumber) {
+    return `Job #${jobNumber.replace(/^#/, "")}`;
+  }
+
+  const name = hcpString(record.name);
+  const description = hcpString(record.description);
+  if (name && !isInternalHcpLabel(name)) return name;
+  if (description && !isInternalHcpLabel(description)) return description;
+
+  return customerName ? `Job for ${customerName}` : "Job for Unknown customer";
+}
+
 function jobSchedule(record: HcpRecord) {
   const schedule =
     record.schedule && typeof record.schedule === "object"
@@ -86,6 +123,17 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
           })
         : null;
 
+      const localCustomer = customerMapping
+        ? await prisma.customer.findUnique({
+            where: { id: customerMapping.localId },
+            select: { name: true },
+          })
+        : null;
+      const customerName =
+        hcpCustomerDisplayName(record.customer as HcpRecord | undefined) ??
+        localCustomer?.name ??
+        null;
+
       const addr = addressFromRecord(record);
       const zoneId =
         hcpString(record.service_zone_id) ??
@@ -118,7 +166,7 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
       const visitData = {
         companyId: ctx.companyId,
         customerId: customerMapping?.localId ?? null,
-        title: hcpString(record.name) ?? hcpString(record.description) ?? `Job ${id}`,
+        title: visitTitleFromHcpJob(record, customerName),
         startAt,
         endAt,
         division: mapDivision(record.business_unit ?? record.division, defaultDivision),

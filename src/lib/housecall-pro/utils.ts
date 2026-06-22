@@ -31,12 +31,6 @@ export function hcpMoney(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export function hcpDate(value: unknown): Date | null {
-  if (!value) return null;
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export function hcpTags(record: HcpRecord): string[] {
   const tags = record.tags;
   if (!Array.isArray(tags)) return [];
@@ -116,17 +110,94 @@ export function uniqueSlug(base: string, existing: Set<string>) {
   return candidate;
 }
 
-export function addressFromRecord(record: HcpRecord) {
-  const address =
+export function hcpDate(value: unknown): Date | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value < 1e12 ? value * 1000 : value;
+    const date = new Date(ms);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function hcpCreatedAt(record: HcpRecord): Date | null {
+  return (
+    hcpDate(record.created_at) ??
+    hcpDate(record.createdAt) ??
+    hcpDate(record.date_created)
+  );
+}
+
+export type ParsedAddress = {
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+};
+
+export function isEmptyParsedAddress(addr: ParsedAddress): boolean {
+  return !addr.address && !addr.city && !addr.state && !addr.zip;
+}
+
+export function addressFromRecord(record: HcpRecord): ParsedAddress {
+  const nested =
     (record.address as HcpRecord | undefined) ??
     (record.service_address as HcpRecord | undefined) ??
-    record;
+    (record.billing_address as HcpRecord | undefined) ??
+    (record.location as HcpRecord | undefined);
+
+  const source = nested ?? record;
+  const line1 = hcpString(
+    source.street ?? source.street_line_1 ?? source.address ?? source.line1 ?? source.line_1
+  );
+  const line2 = hcpString(
+    source.street_line_2 ?? source.line2 ?? source.street_line2 ?? source.unit
+  );
+  const address = [line1, line2].filter(Boolean).join(", ") || null;
+
   return {
-    address: hcpString(address.street ?? address.street_line_1 ?? address.address),
-    city: hcpString(address.city),
-    state: hcpString(address.state),
-    zip: hcpString(address.zip ?? address.postal_code),
+    address,
+    city: hcpString(source.city ?? source.locality),
+    state: hcpString(source.state ?? source.region ?? source.province),
+    zip: hcpString(source.zip ?? source.postal_code ?? source.zip_code),
   };
+}
+
+function addressTypeRank(record: HcpRecord): number {
+  const type = hcpString(record.type)?.toLowerCase();
+  if (type === "service") return 0;
+  if (type === "billing") return 1;
+  return 2;
+}
+
+export function hcpAddressRecords(record: HcpRecord): HcpRecord[] {
+  const records: HcpRecord[] = [];
+  if (Array.isArray(record.addresses)) records.push(...(record.addresses as HcpRecord[]));
+  if (Array.isArray(record.properties)) records.push(...(record.properties as HcpRecord[]));
+
+  const withData = records.filter((entry) => !isEmptyParsedAddress(addressFromRecord(entry)));
+  if (withData.length) {
+    return [...withData].sort((a, b) => addressTypeRank(a) - addressTypeRank(b));
+  }
+
+  const top = addressFromRecord(record);
+  if (!isEmptyParsedAddress(top)) {
+    return [{ ...record, name: "Primary", type: "service" }];
+  }
+
+  return [];
+}
+
+export function primaryAddressFromHcpRecord(record: HcpRecord): ParsedAddress | null {
+  const records = hcpAddressRecords(record);
+  if (records.length) return addressFromRecord(records[0]);
+  const top = addressFromRecord(record);
+  return isEmptyParsedAddress(top) ? null : top;
+}
+
+export function hasHcpAddressData(record: HcpRecord): boolean {
+  return primaryAddressFromHcpRecord(record) != null;
 }
 
 export function lineItemsFromRecord(record: HcpRecord): HcpRecord[] {

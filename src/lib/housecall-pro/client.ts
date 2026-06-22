@@ -1,4 +1,5 @@
 import {
+  DEFAULT_BATCH_SIZE,
   DEFAULT_THROTTLE_MS,
   HCP_BASE_URL,
   MAX_429_RETRIES,
@@ -75,6 +76,7 @@ function extractTotal(data: HcpRecord): number | undefined {
 
 export class HousecallProClient {
   private lastRequestAt = 0;
+  private readonly resolvedPaths = new Map<string, string>();
 
   constructor(private readonly apiKey: string) {}
 
@@ -126,7 +128,7 @@ export class HousecallProClient {
       throttleMs?: number;
     }
   ): Promise<PaginatedFetchResult<HcpRecord>> {
-    const pageSize = options.pageSize ?? 100;
+    const pageSize = options.pageSize ?? DEFAULT_BATCH_SIZE;
     let page = 1;
 
     if (options.cursor) {
@@ -162,6 +164,37 @@ export class HousecallProClient {
       nextCursor: extractNextCursor(data, page),
       totalEstimate: extractTotal(data),
     };
+  }
+
+  async getPaginatedFirst(
+    paths: readonly string[],
+    options: {
+      cursor?: string | null;
+      pageSize?: number;
+      arrayKeys: string[];
+      throttleMs?: number;
+    }
+  ): Promise<PaginatedFetchResult<HcpRecord>> {
+    const cacheKey = paths.join("|");
+    const cached = this.resolvedPaths.get(cacheKey);
+    if (cached) {
+      return this.getPaginated(cached, options);
+    }
+
+    let lastError: Error | null = null;
+    for (const path of paths) {
+      try {
+        const result = await this.getPaginated(path, options);
+        this.resolvedPaths.set(cacheKey, path);
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!message.includes("404")) throw err;
+        lastError = err instanceof Error ? err : new Error(message);
+      }
+    }
+
+    throw lastError ?? new Error(`HCP 404: none of [${paths.join(", ")}] are available`);
   }
 
   async downloadBinary(url: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {

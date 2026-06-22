@@ -30,22 +30,11 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
     errors: [],
   };
 
-  let page;
-  try {
-    page = await ctx.client.getPaginated(HCP_PATHS.services, {
-      cursor: ctx.cursor,
-      pageSize: ctx.batchSize,
-      arrayKeys: ["services", "price_book_services"],
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    if (!message.includes("404") || ctx.cursor) throw err;
-    page = await ctx.client.getPaginated(HCP_PATHS.servicesAlt, {
-      cursor: ctx.cursor,
-      pageSize: ctx.batchSize,
-      arrayKeys: ["services", "price_book_services"],
-    });
-  }
+  const page = await ctx.client.getPaginatedFirst(HCP_PATHS.services, {
+    cursor: ctx.cursor,
+    pageSize: ctx.batchSize,
+    arrayKeys: ["services", "price_book_services"],
+  });
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
