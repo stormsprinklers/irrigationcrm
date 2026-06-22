@@ -29,24 +29,12 @@ function envGoogleOAuthConfig() {
   };
 }
 
-export async function getGoogleOAuthConfig(companyId: string) {
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: {
-      googleBusinessOAuthClientId: true,
-      googleBusinessOAuthClientSecret: true,
-    },
-  });
-
-  const env = envGoogleOAuthConfig();
-  const clientId = company?.googleBusinessOAuthClientId?.trim() || env.clientId;
-  const clientSecret = company?.googleBusinessOAuthClientSecret?.trim() || env.clientSecret;
-
-  return { clientId, clientSecret };
+export function getGoogleOAuthConfig() {
+  return envGoogleOAuthConfig();
 }
 
-export async function isGoogleBusinessConfigured(companyId: string) {
-  const { clientId, clientSecret } = await getGoogleOAuthConfig(companyId);
+export function isGoogleBusinessConfigured() {
+  const { clientId, clientSecret } = getGoogleOAuthConfig();
   return Boolean(clientId && clientSecret);
 }
 
@@ -95,8 +83,8 @@ export function verifyOAuthState(state: string, maxAgeMs = 15 * 60 * 1000) {
   }
 }
 
-export async function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: string) {
-  const { clientId } = await getGoogleOAuthConfig(companyId);
+export function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: string) {
+  const { clientId } = getGoogleOAuthConfig();
   if (!clientId) throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
 
   const params = new URLSearchParams({
@@ -112,12 +100,8 @@ export async function buildGoogleBusinessAuthUrl(companyId: string, redirectUri:
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export async function exchangeOAuthCode(
-  companyId: string,
-  code: string,
-  redirectUri: string
-) {
-  const { clientId, clientSecret } = await getGoogleOAuthConfig(companyId);
+export async function exchangeOAuthCode(code: string, redirectUri: string) {
+  const { clientId, clientSecret } = getGoogleOAuthConfig();
   if (!clientId || !clientSecret) {
     throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
   }
@@ -161,7 +145,7 @@ export async function getCompanyAccessToken(companyId: string) {
     throw new GoogleBusinessApiError("Google Business Profile is not connected", 400);
   }
 
-  const { clientId, clientSecret } = await getGoogleOAuthConfig(companyId);
+  const { clientId, clientSecret } = getGoogleOAuthConfig();
   if (!clientId || !clientSecret) {
     throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
   }
@@ -353,8 +337,6 @@ export async function getGbpConnectionStatus(companyId: string) {
     where: { id: companyId },
     select: {
       googleBusinessRefreshToken: true,
-      googleBusinessOAuthClientId: true,
-      googleBusinessOAuthClientSecret: true,
       googleBusinessAccountId: true,
       googleBusinessLocationId: true,
       googleBusinessLocationTitle: true,
@@ -365,11 +347,6 @@ export async function getGbpConnectionStatus(companyId: string) {
   if (!company) return null;
 
   const env = envGoogleOAuthConfig();
-  const oauthClientId =
-    company.googleBusinessOAuthClientId?.trim() || env.clientId || null;
-  const hasOAuthClientSecret = Boolean(
-    company.googleBusinessOAuthClientSecret?.trim() || env.clientSecret
-  );
 
   return {
     connected: Boolean(company.googleBusinessRefreshToken),
@@ -377,8 +354,10 @@ export async function getGbpConnectionStatus(companyId: string) {
     locationId: company.googleBusinessLocationId,
     locationTitle: company.googleBusinessLocationTitle,
     connectedAt: company.googleBusinessConnectedAt?.toISOString() ?? null,
-    configured: Boolean(oauthClientId && hasOAuthClientSecret),
-    oauthClientId,
-    hasOAuthClientSecret,
+    configured: isGoogleBusinessConfigured(),
+    oauthEnv: {
+      hasClientId: Boolean(env.clientId),
+      hasClientSecret: Boolean(env.clientSecret),
+    },
   };
 }

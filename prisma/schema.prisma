@@ -398,8 +398,6 @@ model Company {
   rachioPersonId           String?
   hydrawiseApiKey          String?
   googleBusinessRefreshToken   String?
-  googleBusinessOAuthClientId  String?
-  googleBusinessOAuthClientSecret String?
   googleBusinessAccountId      String?
   googleBusinessLocationId     String?
   googleBusinessLocationTitle  String?

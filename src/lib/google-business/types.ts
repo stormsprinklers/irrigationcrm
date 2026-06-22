@@ -67,6 +67,8 @@ export type GbpConnectionStatus = {
   locationTitle: string | null;
   connectedAt: string | null;
   configured: boolean;
-  oauthClientId: string | null;
-  hasOAuthClientSecret: boolean;
+  oauthEnv: {
+    hasClientId: boolean;
+    hasClientSecret: boolean;
+  };
 };

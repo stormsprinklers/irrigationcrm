@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import type {
   GbpAccount,
   GbpConnectionStatus,
@@ -31,9 +30,6 @@ export function GoogleBusinessProfilePanel() {
   const [loading, setLoading] = useState(true);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
-  const [oauthClientId, setOauthClientId] = useState("");
-  const [oauthClientSecret, setOauthClientSecret] = useState("");
-  const [savingCredentials, setSavingCredentials] = useState(false);
 
   const redirectUri =
     typeof window !== "undefined"
@@ -90,10 +86,6 @@ export function GoogleBusinessProfilePanel() {
   }, [loadStatus]);
 
   useEffect(() => {
-    if (status?.oauthClientId) setOauthClientId(status.oauthClientId);
-  }, [status?.oauthClientId]);
-
-  useEffect(() => {
     if (!status?.connected) return;
     loadAccounts().catch(() => {});
     if (status.accountId) setSelectedAccountId(status.accountId);
@@ -134,38 +126,6 @@ export function GoogleBusinessProfilePanel() {
     }
   }
 
-  async function saveCredentials() {
-    if (!oauthClientId.trim()) {
-      toast.error("Enter your OAuth client ID");
-      return;
-    }
-    if (!oauthClientSecret.trim() && !status?.hasOAuthClientSecret) {
-      toast.error("Enter your OAuth client secret");
-      return;
-    }
-
-    setSavingCredentials(true);
-    try {
-      const res = await fetch("/api/marketing/google-business/credentials", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: oauthClientId.trim(),
-          ...(oauthClientSecret.trim() ? { clientSecret: oauthClientSecret.trim() } : {}),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save credentials");
-      setStatus(data);
-      setOauthClientSecret("");
-      toast.success("Google OAuth credentials saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save credentials");
-    } finally {
-      setSavingCredentials(false);
-    }
-  }
-
   async function disconnect() {
     const res = await fetch("/api/marketing/google-business", { method: "DELETE" });
     if (!res.ok) {
@@ -183,83 +143,60 @@ export function GoogleBusinessProfilePanel() {
     return <p className="text-sm text-muted-foreground">Loading Google Business Profile...</p>;
   }
 
-  if (!status?.configured) {
+  if (!status) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          Could not load Google Business Profile status.{" "}
+          <button type="button" className="text-primary underline" onClick={() => loadStatus()}>
+            Try again
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!status.configured) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Globe className="h-5 w-5" />
-            Google Business Profile setup
+            Google Business Profile
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6 text-sm">
+        <CardContent className="space-y-4 text-sm">
           <p className="text-muted-foreground">
-            Create OAuth credentials in Google Cloud Console, then connect the Google account that
-            manages your Business Profile to view impressions, calls, and website clicks.
+            Server OAuth credentials are required before you can connect a Google account. These are
+            set as environment variables on your deployment (not in this screen).
           </p>
-
-          <div className="space-y-3">
-            <p className="font-medium">1. Enable APIs in Google Cloud</p>
-            <p className="text-muted-foreground">
-              In your Google Cloud project, enable{" "}
-              <strong>My Business Account Management API</strong>,{" "}
-              <strong>My Business Business Information API</strong>, and{" "}
-              <strong>Business Profile Performance API</strong>.
-            </p>
+          <div className="rounded-md border p-3 text-sm">
+            <p className="font-medium">Server environment</p>
+            <ul className="mt-2 space-y-1 text-muted-foreground">
+              <li>
+                <code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code>:{" "}
+                {status?.oauthEnv.hasClientId ? "detected" : "missing"}
+              </li>
+              <li>
+                <code className="text-xs">GOOGLE_OAUTH_CLIENT_SECRET</code>:{" "}
+                {status?.oauthEnv.hasClientSecret ? "detected" : "missing"}
+              </li>
+            </ul>
+            {status && (!status.oauthEnv.hasClientId || !status.oauthEnv.hasClientSecret) ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add the missing variables in Vercel (or your host), redeploy, then refresh this
+                page. Aliases <code>GOOGLE_CLOUD_CLIENT_ID</code> /{" "}
+                <code>GOOGLE_CLOUD_CLIENT_SECRET</code> are also supported.
+              </p>
+            ) : null}
           </div>
-
-          <div className="space-y-3">
-            <p className="font-medium">2. Create OAuth client credentials</p>
-            <p className="text-muted-foreground">
-              Under APIs &amp; Services → Credentials, create an OAuth 2.0 client (Web application).
-              Paste the client ID and secret below.
+          <div>
+            <p className="font-medium">Google Cloud redirect URI</p>
+            <p className="mt-1 text-muted-foreground">
+              On your OAuth client in Google Cloud Console, add this authorized redirect URI:
             </p>
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                OAuth client ID
-              </label>
-              <Input
-                value={oauthClientId}
-                onChange={(e) => setOauthClientId(e.target.value)}
-                placeholder="123456789.apps.googleusercontent.com"
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                OAuth client secret
-              </label>
-              <Input
-                type="password"
-                value={oauthClientSecret}
-                onChange={(e) => setOauthClientSecret(e.target.value)}
-                placeholder={
-                  status?.hasOAuthClientSecret ? "Saved — enter only to replace" : "GOCSPX-..."
-                }
-                autoComplete="off"
-              />
-            </div>
-            <Button onClick={() => void saveCredentials()} disabled={savingCredentials}>
-              {savingCredentials ? "Saving..." : "Save credentials"}
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            <p className="font-medium">3. Add authorized redirect URI</p>
-            <p className="text-muted-foreground">
-              On the same OAuth client, add this exact redirect URI under Authorized redirect URIs:
-            </p>
-            <p className="rounded-md border bg-muted/30 p-3 font-mono text-xs text-foreground break-all">
+            <p className="mt-2 rounded-md border bg-muted/30 p-3 font-mono text-xs text-foreground break-all">
               {redirectUri}
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <p className="font-medium">4. Connect your Google account</p>
-            <p className="text-muted-foreground">
-              After saving credentials above, this page will show a{" "}
-              <strong>Connect Google Business Profile</strong> button. Sign in with the Google
-              account that manages your Business Profile.
             </p>
           </div>
         </CardContent>
@@ -269,66 +206,27 @@ export function GoogleBusinessProfilePanel() {
 
   if (!status.connected) {
     return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Globe className="h-5 w-5" />
-              Google Business Profile
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Connect the Google account that manages your Business Profile to view impressions,
-              calls, website clicks, and direction requests.
-            </p>
-            <Button asChild>
-              <a href="/api/marketing/google-business">Connect Google Business Profile</a>
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Redirect URI for Google Cloud:{" "}
-              <code className="break-all">{redirectUri}</code>
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">OAuth credentials</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                OAuth client ID
-              </label>
-              <Input
-                value={oauthClientId}
-                onChange={(e) => setOauthClientId(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                OAuth client secret
-              </label>
-              <Input
-                type="password"
-                value={oauthClientSecret}
-                onChange={(e) => setOauthClientSecret(e.target.value)}
-                placeholder={status.hasOAuthClientSecret ? "Saved — enter only to replace" : ""}
-                autoComplete="off"
-              />
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => void saveCredentials()}
-              disabled={savingCredentials}
-            >
-              {savingCredentials ? "Saving..." : "Update credentials"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-5 w-5" />
+            Google Business Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Connect the Google account that manages your Business Profile to view impressions,
+            calls, website clicks, and direction requests.
+          </p>
+          <Button asChild>
+            <a href="/api/marketing/google-business">Connect Google Business Profile</a>
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            If Google returns a redirect error, confirm this URI is on your OAuth client:{" "}
+            <code className="break-all">{redirectUri}</code>
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 
