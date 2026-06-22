@@ -15,6 +15,18 @@ export const metadata = {
   icons: {
     icon: stormBrand.iconPath,
   },
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      noarchive: true,
+      nosnippet: true,
+    },
+  },
 };
 
 export const viewport = {

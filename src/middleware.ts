@@ -16,6 +16,13 @@ const publicPaths = [
 const authSecret =
   process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET ?? "dev-only-secret-change-me";
 
+const ROBOTS_TAG = "noindex, nofollow, noarchive, nosnippet, noimageindex";
+
+function withNoIndex(response: NextResponse) {
+  response.headers.set("X-Robots-Tag", ROBOTS_TAG);
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -24,7 +31,7 @@ export async function middleware(request: NextRequest) {
   );
 
   if (isPublic) {
-    return NextResponse.next();
+    return withNoIndex(NextResponse.next());
   }
 
   const token = await getToken({
@@ -35,14 +42,14 @@ export async function middleware(request: NextRequest) {
 
   if (!token) {
     if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return withNoIndex(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
     }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(loginUrl);
+    return withNoIndex(NextResponse.redirect(loginUrl));
   }
 
-  return NextResponse.next();
+  return withNoIndex(NextResponse.next());
 }
 
 export const config = {
