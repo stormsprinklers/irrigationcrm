@@ -266,40 +266,72 @@ export async function resetMigrationStep(
   });
 }
 
-export async function reactivateSkippedStep(
+export async function focusMigrationStep(
   companyId: string,
   step: HousecallProMigrationStepType
 ) {
   const migration = await prisma.housecallProMigration.findFirst({
     where: {
       companyId,
-      status: HousecallProMigrationStatus.PAUSED,
+      status: {
+        in: [
+          HousecallProMigrationStatus.IN_PROGRESS,
+          HousecallProMigrationStatus.PAUSED,
+          HousecallProMigrationStatus.FAILED,
+        ],
+      },
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!migration) throw new Error("Migration must be paused to retry skipped steps");
+  if (!migration) throw new Error("No active migration");
+
+  if (step === HousecallProMigrationStepType.CONNECT) {
+    throw new Error("Cannot focus connect step");
+  }
 
   const stepRow = await prisma.housecallProMigrationStep.findUnique({
     where: { migrationId_step: { migrationId: migration.id, step } },
   });
   if (!stepRow) throw new Error("Step not found");
-  if (stepRow.status !== HousecallProMigrationStepStatus.SKIPPED) {
-    throw new Error("Only skipped steps can be reactivated");
+
+  if (stepRow.status === HousecallProMigrationStepStatus.SKIPPED) {
+    await prisma.housecallProMigrationStep.update({
+      where: { migrationId_step: { migrationId: migration.id, step } },
+      data: {
+        status: HousecallProMigrationStepStatus.PENDING,
+        completedAt: null,
+      },
+    });
+  } else if (stepRow.status === HousecallProMigrationStepStatus.FAILED) {
+    await prisma.housecallProMigrationStep.update({
+      where: { migrationId_step: { migrationId: migration.id, step } },
+      data: {
+        status: HousecallProMigrationStepStatus.PENDING,
+        lastError: null,
+      },
+    });
   }
 
-  await prisma.housecallProMigrationStep.update({
-    where: { migrationId_step: { migrationId: migration.id, step } },
-    data: {
-      status: HousecallProMigrationStepStatus.PENDING,
-      completedAt: null,
-    },
-  });
+  const keepPaused = migration.status === HousecallProMigrationStatus.PAUSED;
 
   return prisma.housecallProMigration.update({
     where: { id: migration.id },
-    data: { currentStep: step },
+    data: {
+      currentStep: step,
+      status: keepPaused
+        ? HousecallProMigrationStatus.PAUSED
+        : HousecallProMigrationStatus.IN_PROGRESS,
+    },
     include: { steps: { orderBy: { step: "asc" } } },
   });
+}
+
+/** @deprecated Use focusMigrationStep */
+export async function reactivateSkippedStep(
+  companyId: string,
+  step: HousecallProMigrationStepType
+) {
+  return focusMigrationStep(companyId, step);
 }
 
 export async function skipMigrationStep(companyId: string, step: HousecallProMigrationStepType) {
@@ -370,7 +402,7 @@ export async function processMigrationBatch(params: {
   const stepRow = migration.steps.find((s) => s.step === params.step);
   if (!stepRow) throw new Error("Step not found");
   if (stepRow.status === HousecallProMigrationStepStatus.SKIPPED) {
-    throw new Error("Step was skipped — use Retry on that step while paused");
+    throw new Error("Step was skipped — select it in the step list to retry");
   }
   if (stepRow.status === HousecallProMigrationStepStatus.COMPLETED) {
     return {

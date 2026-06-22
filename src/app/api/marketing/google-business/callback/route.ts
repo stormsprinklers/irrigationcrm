@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectUri = `${appUrl}/api/marketing/google-business/callback`;
-    const tokens = await exchangeOAuthCode(code, redirectUri);
+    const tokens = await exchangeOAuthCode(companyId, code, redirectUri);
 
     const existing = await prisma.company.findUnique({
       where: { id: companyId },

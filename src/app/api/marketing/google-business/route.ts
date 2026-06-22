@@ -12,11 +12,11 @@ export async function GET(request: NextRequest) {
     const user = await requireSessionUser();
     if (!canManageCustomers(user.role)) return forbiddenResponse();
 
-    if (!isGoogleBusinessConfigured()) {
+    if (!(await isGoogleBusinessConfigured(user.companyId))) {
       return NextResponse.json(
         {
           error:
-            "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET (Google Cloud OAuth credentials with Business Profile APIs enabled).",
+            "Add your Google OAuth client ID and secret below, or set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET on the server.",
         },
         { status: 503 }
       );
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const redirectUri = `${appUrl}/api/marketing/google-business/callback`;
-    const url = buildGoogleBusinessAuthUrl(user.companyId, redirectUri);
+    const url = await buildGoogleBusinessAuthUrl(user.companyId, redirectUri);
 
     return NextResponse.redirect(url);
   } catch {

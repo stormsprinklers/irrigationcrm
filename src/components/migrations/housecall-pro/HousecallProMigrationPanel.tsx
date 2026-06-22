@@ -12,7 +12,9 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { MIGRATION_STEP_ORDER, STEP_LABELS } from "@/lib/housecall-pro/constants";
+import { cn } from "@/lib/utils";
 
 type MigrationStep = {
   id: string;
@@ -56,6 +58,15 @@ function stepBadgeVariant(status: HousecallProMigrationStepStatus) {
   }
 }
 
+function canFocusStep(status: HousecallProMigrationStepStatus | undefined) {
+  return (
+    status === HousecallProMigrationStepStatus.SKIPPED ||
+    status === HousecallProMigrationStepStatus.COMPLETED ||
+    status === HousecallProMigrationStepStatus.FAILED ||
+    status === HousecallProMigrationStepStatus.PENDING
+  );
+}
+
 function stepProgress(step: MigrationStep) {
   if (!step.totalEstimate) return step.status === HousecallProMigrationStepStatus.COMPLETED ? 100 : 0;
   return Math.min(100, Math.round((step.processed / step.totalEstimate) * 100));
@@ -67,6 +78,7 @@ export function HousecallProMigrationPanel() {
   const [autoContinue, setAutoContinue] = useState(false);
   const [runningBatch, setRunningBatch] = useState(false);
   const autoContinueRef = useRef(false);
+  const currentStepCardRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/migrations/housecall-pro");
@@ -176,16 +188,21 @@ export function HousecallProMigrationPanel() {
     }
   }
 
-  async function handleReactivate(step: HousecallProMigrationStepType) {
+  async function handleFocus(
+    step: HousecallProMigrationStepType,
+    currentMigration: Migration | null | undefined
+  ) {
+    if (!currentMigration || currentMigration.currentStep === step) return;
     try {
-      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/reactivate`, {
+      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/focus`, {
         method: "POST",
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      toast.success(`${STEP_LABELS[step]} ready to retry`);
       await refresh();
+      toast.success(`Now on ${STEP_LABELS[step]}`);
+      currentStepCardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reactivate step");
+      toast.error(err instanceof Error ? err.message : "Failed to open step");
     }
   }
 
@@ -318,7 +335,7 @@ export function HousecallProMigrationPanel() {
       </Card>
 
       {migration && isActive ? (
-        <Card>
+        <Card ref={currentStepCardRef}>
           <CardHeader>
             <CardTitle className="text-base">
               Current step: {STEP_LABELS[migration.currentStep]}
@@ -397,10 +414,14 @@ export function HousecallProMigrationPanel() {
             </div>
             {isPaused ? (
               <p className="text-xs text-muted-foreground">
-                Migration is paused. You can run batches manually on the current step, or retry
-                skipped steps below.
+                Migration is paused. Click any skipped or completed step below to return to it, or
+                run batches on the current step.
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Click a skipped or completed step in the list below to return to it.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -415,12 +436,29 @@ export function HousecallProMigrationPanel() {
               const row = migration?.steps.find((s) => s.step === step);
               const isCurrent = migration?.currentStep === step;
               const isSkipped = row?.status === HousecallProMigrationStepStatus.SKIPPED;
+              const focusable =
+                isActive && !isCurrent && canFocusStep(row?.status);
               return (
                 <div
                   key={step}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 ${
-                    isCurrent ? "border-primary bg-muted/30" : ""
-                  }`}
+                  role={focusable ? "button" : undefined}
+                  tabIndex={focusable ? 0 : undefined}
+                  onClick={() => {
+                    if (focusable && !runningBatch) void handleFocus(step, migration);
+                  }}
+                  onKeyDown={(e) => {
+                    if (focusable && !runningBatch && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      void handleFocus(step, migration);
+                    }
+                  }}
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 transition-colors",
+                    isCurrent ? "border-primary bg-muted/30" : "",
+                    focusable
+                      ? "cursor-pointer hover:border-primary/50 hover:bg-muted/20"
+                      : ""
+                  )}
                 >
                   <div>
                     <div className="font-medium">{STEP_LABELS[step]}</div>
@@ -431,15 +469,21 @@ export function HousecallProMigrationPanel() {
                         {row.created} · failed {row.failed}
                       </div>
                     ) : null}
+                    {focusable ? (
+                      <div className="mt-1 text-xs text-primary">Click to open this step</div>
+                    ) : null}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {isPaused && isSkipped ? (
+                  <div
+                    className="flex flex-wrap items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {isActive && isSkipped ? (
                       <>
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={runningBatch}
-                          onClick={() => handleReactivate(step)}
+                          onClick={() => void handleFocus(step, migration)}
                         >
                           <RotateCcw className="mr-1 h-3 w-3" />
                           Retry
@@ -448,7 +492,7 @@ export function HousecallProMigrationPanel() {
                           size="sm"
                           variant="ghost"
                           disabled={runningBatch}
-                          onClick={() => handleReset(step)}
+                          onClick={() => void handleReset(step)}
                         >
                           Reset
                         </Button>
