@@ -2,6 +2,7 @@ import {
   DEFAULT_BATCH_SIZE,
   DEFAULT_THROTTLE_MS,
   HCP_BASE_URL,
+  HCP_MAX_PAGE_SIZE,
   MAX_429_RETRIES,
 } from "@/lib/housecall-pro/constants";
 import type { HcpRecord, PaginatedFetchResult } from "@/lib/housecall-pro/types";
@@ -128,7 +129,7 @@ export class HousecallProClient {
       throttleMs?: number;
     }
   ): Promise<PaginatedFetchResult<HcpRecord>> {
-    const pageSize = options.pageSize ?? DEFAULT_BATCH_SIZE;
+    const pageSize = Math.min(options.pageSize ?? DEFAULT_BATCH_SIZE, HCP_MAX_PAGE_SIZE);
     let page = 1;
 
     if (options.cursor) {

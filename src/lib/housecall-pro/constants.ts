@@ -46,7 +46,8 @@ export const HCP_PATHS = {
   ],
 } as const;
 
-export const DEFAULT_BATCH_SIZE = 250;
+export const DEFAULT_BATCH_SIZE = 200;
+export const HCP_MAX_PAGE_SIZE = 200;
 export const ATTACHMENT_BATCH_SIZE = 10;
 export const DEFAULT_THROTTLE_MS = 750;
 export const MAX_429_RETRIES = 5;
