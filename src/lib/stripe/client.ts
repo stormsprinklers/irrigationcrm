@@ -12,3 +12,12 @@ export function getStripeClient() {
   }
   return stripeClient;
 }
+
+/** Safe to expose to the browser for Stripe.js / Elements (starts with pk_). */
+export function getStripePublishableKey() {
+  return (
+    process.env.STRIPE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ??
+    ""
+  );
+}

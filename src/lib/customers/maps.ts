@@ -31,7 +31,7 @@ export function formatAddressQuery(parts: {
 }
 
 export function getGoogleMapsApiKey() {
-  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
+  return process.env.GOOGLE_MAPS_API_KEY ?? "";
 }
 
 export function buildMapsPlaceEmbedUrl(query: string, apiKey?: string) {

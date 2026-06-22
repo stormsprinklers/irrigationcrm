@@ -35,12 +35,19 @@ export function CustomerPaymentMethodsSection({
   const [linkLoading, setLinkLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [publishableKey, setPublishableKey] = useState("");
 
-  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
   const stripePromise = useMemo(
     () => (publishableKey ? loadStripe(publishableKey) : null),
     [publishableKey]
   );
+
+  useEffect(() => {
+    fetch("/api/stripe/config")
+      .then((r) => r.json())
+      .then((data) => setPublishableKey(data.publishableKey ?? ""))
+      .catch(() => setPublishableKey(""));
+  }, []);
 
   const loadMethods = () => {
     setLoading(true);
@@ -96,7 +103,7 @@ export function CustomerPaymentMethodsSection({
 
   async function startManualEntry() {
     if (!publishableKey) {
-      toast.error("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not configured");
+      toast.error("STRIPE_PUBLISHABLE_KEY is not configured");
       return;
     }
     setFormLoading(true);
