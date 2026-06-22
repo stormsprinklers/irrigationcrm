@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { getAuthSecret } from "@/lib/auth-secret";
 
 const publicPaths = [
   "/login",
@@ -14,7 +15,7 @@ const publicPaths = [
   "/api/marketing/google-business/callback",
 ];
 
-const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+const authSecret = getAuthSecret();
 
 const ROBOTS_TAG = "noindex, nofollow, noarchive, nosnippet, noimageindex";
 

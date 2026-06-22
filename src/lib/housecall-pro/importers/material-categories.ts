@@ -1,4 +1,5 @@
 import { HcpEntityType, PriceBookItemType } from "@prisma/client";
+import { HCP_PATHS } from "@/lib/housecall-pro/constants";
 import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { hcpId, hcpString, uniqueSlug } from "@/lib/housecall-pro/utils";
@@ -17,10 +18,10 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
     errors: [],
   };
 
-  const page = await ctx.client.getPaginated("/material_categories", {
+  const page = await ctx.client.getPaginated(HCP_PATHS.materialCategories, {
     cursor: ctx.cursor,
     pageSize: 100,
-    arrayKeys: ["material_categories", "categories"],
+    arrayKeys: ["categories", "material_categories"],
   });
 
   if (page.totalEstimate != null && !ctx.cursor) {

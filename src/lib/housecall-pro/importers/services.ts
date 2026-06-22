@@ -1,4 +1,5 @@
 import { HcpEntityType, PriceBookItemType } from "@prisma/client";
+import { HCP_PATHS } from "@/lib/housecall-pro/constants";
 import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { hcpId, hcpMoney, hcpString } from "@/lib/housecall-pro/utils";
@@ -29,11 +30,22 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
     errors: [],
   };
 
-  const page = await ctx.client.getPaginated("/price_book/services", {
-    cursor: ctx.cursor,
-    pageSize: ctx.batchSize,
-    arrayKeys: ["services", "price_book_services"],
-  });
+  let page;
+  try {
+    page = await ctx.client.getPaginated(HCP_PATHS.services, {
+      cursor: ctx.cursor,
+      pageSize: ctx.batchSize,
+      arrayKeys: ["services", "price_book_services"],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (!message.includes("404") || ctx.cursor) throw err;
+    page = await ctx.client.getPaginated(HCP_PATHS.servicesAlt, {
+      cursor: ctx.cursor,
+      pageSize: ctx.batchSize,
+      arrayKeys: ["services", "price_book_services"],
+    });
+  }
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({

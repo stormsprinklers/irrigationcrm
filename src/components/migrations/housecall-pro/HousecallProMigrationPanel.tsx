@@ -232,9 +232,11 @@ export function HousecallProMigrationPanel() {
   const preview = (migration?.previewJson ?? {}) as Record<string, number | string | boolean>;
   const activeStep = migration?.steps.find((s) => s.step === migration.currentStep);
   const isPaused = migration?.status === HousecallProMigrationStatus.PAUSED;
+  const isFailed = migration?.status === HousecallProMigrationStatus.FAILED;
   const isActive =
     migration?.status === HousecallProMigrationStatus.IN_PROGRESS ||
-    migration?.status === HousecallProMigrationStatus.PAUSED;
+    migration?.status === HousecallProMigrationStatus.PAUSED ||
+    migration?.status === HousecallProMigrationStatus.FAILED;
   const stepComplete =
     activeStep?.status === HousecallProMigrationStepStatus.COMPLETED ||
     activeStep?.status === HousecallProMigrationStepStatus.SKIPPED;
@@ -277,7 +279,9 @@ export function HousecallProMigrationPanel() {
             {!isActive ? (
               <Button onClick={handleStart} disabled={!data?.configured || runningBatch}>
                 <Play className="mr-2 h-4 w-4" />
-                Start migration
+                {migration?.status === HousecallProMigrationStatus.FAILED
+                  ? "Resume migration"
+                  : "Start migration"}
               </Button>
             ) : null}
             {migration?.status === HousecallProMigrationStatus.IN_PROGRESS ? (
@@ -286,10 +290,10 @@ export function HousecallProMigrationPanel() {
                 Pause
               </Button>
             ) : null}
-            {isPaused ? (
+            {isPaused || isFailed ? (
               <Button variant="outline" onClick={handleResume}>
                 <Play className="mr-2 h-4 w-4" />
-                Resume
+                {isFailed ? "Retry failed step" : "Resume"}
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => refresh().catch(() => toast.error("Refresh failed"))}>

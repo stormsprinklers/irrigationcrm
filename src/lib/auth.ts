@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { getAuthSecret } from "@/lib/auth-secret";
 
 declare module "next-auth" {
   interface Session {
@@ -28,7 +29,7 @@ declare module "@auth/core/jwt" {
   }
 }
 
-const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+const authSecret = getAuthSecret();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [

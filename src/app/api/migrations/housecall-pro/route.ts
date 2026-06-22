@@ -6,7 +6,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import {
-  getOrCreateMigration,
+  getLatestMigration,
   isApiKeyConfigured,
   requireAdmin,
 } from "@/lib/housecall-pro/orchestrator";
@@ -16,7 +16,7 @@ export async function GET() {
     const user = await requireSessionUser();
     requireAdmin(user.role);
 
-    const migration = await getOrCreateMigration(user.companyId);
+    const migration = await getLatestMigration(user.companyId);
     return NextResponse.json({
       configured: isApiKeyConfigured(),
       migration,

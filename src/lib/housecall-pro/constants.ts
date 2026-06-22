@@ -2,6 +2,13 @@ import { HousecallProMigrationStepType } from "@prisma/client";
 
 export const HCP_BASE_URL = "https://api.housecallpro.com";
 
+export const HCP_PATHS = {
+  materialCategories: "/pricebook/v1/material_categories",
+  materials: "/pricebook/v1/materials",
+  services: "/pricebook/v1/services",
+  servicesAlt: "/v1/pricebook/services",
+} as const;
+
 export const DEFAULT_BATCH_SIZE = 25;
 export const ATTACHMENT_BATCH_SIZE = 10;
 export const DEFAULT_THROTTLE_MS = 750;

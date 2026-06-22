@@ -1,4 +1,5 @@
 import type { HousecallProClient } from "@/lib/housecall-pro/client";
+import { HCP_PATHS } from "@/lib/housecall-pro/constants";
 import type { PreviewCounts } from "@/lib/housecall-pro/types";
 
 async function countPage(
@@ -42,9 +43,9 @@ export async function fetchPreviewCounts(client: HousecallProClient): Promise<Pr
     countPage(client, "/tags", ["tags"]),
     countPage(client, "/service_zones", ["service_zones", "zones"]),
     countPage(client, "/employees", ["employees"]),
-    countPage(client, "/material_categories", ["material_categories", "categories"]),
-    countPage(client, "/materials", ["materials"]),
-    countPage(client, "/price_book/services", ["services", "price_book_services"]),
+    countPage(client, HCP_PATHS.materialCategories, ["categories", "material_categories"]),
+    countPage(client, HCP_PATHS.materials, ["materials"]),
+    countPage(client, HCP_PATHS.services, ["services", "price_book_services"]),
     countPage(client, "/customers", ["customers"]),
     countPage(client, "/jobs", ["jobs"]),
     countPage(client, "/estimates", ["estimates"]),

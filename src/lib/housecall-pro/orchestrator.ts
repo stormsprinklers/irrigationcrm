@@ -29,24 +29,15 @@ function defaultBatchSize(step: HousecallProMigrationStepType) {
   return attachmentStep(step) ? ATTACHMENT_BATCH_SIZE : DEFAULT_BATCH_SIZE;
 }
 
-export async function getOrCreateMigration(companyId: string) {
+export async function getLatestMigration(companyId: string) {
   const existing = await prisma.housecallProMigration.findFirst({
-    where: {
-      companyId,
-      status: {
-        in: [
-          HousecallProMigrationStatus.DRAFT,
-          HousecallProMigrationStatus.IN_PROGRESS,
-          HousecallProMigrationStatus.PAUSED,
-        ],
-      },
-    },
+    where: { companyId },
     include: { steps: { orderBy: { step: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
   if (existing) return existing;
 
-  const migration = await prisma.housecallProMigration.create({
+  return prisma.housecallProMigration.create({
     data: {
       companyId,
       status: HousecallProMigrationStatus.DRAFT,
@@ -54,22 +45,44 @@ export async function getOrCreateMigration(companyId: string) {
       steps: {
         create: MIGRATION_STEP_ORDER.map((step) => ({
           step,
-          status:
-            step === HousecallProMigrationStepType.CONNECT
-              ? HousecallProMigrationStepStatus.PENDING
-              : HousecallProMigrationStepStatus.PENDING,
+          status: HousecallProMigrationStepStatus.PENDING,
         })),
       },
     },
     include: { steps: { orderBy: { step: "asc" } } },
   });
-  return migration;
+}
+
+/** @deprecated Use getLatestMigration */
+export async function getOrCreateMigration(companyId: string) {
+  return getLatestMigration(companyId);
 }
 
 export async function startMigration(companyId: string) {
   const client = createHousecallProClient();
   const preview = await fetchPreviewCounts(client);
-  const migration = await getOrCreateMigration(companyId);
+  const migration = await getLatestMigration(companyId);
+
+  if (migration.status === HousecallProMigrationStatus.COMPLETED) {
+    throw new Error("Migration already completed. Reset a step to run it again.");
+  }
+
+  if (
+    migration.status === HousecallProMigrationStatus.IN_PROGRESS ||
+    migration.status === HousecallProMigrationStatus.PAUSED ||
+    migration.status === HousecallProMigrationStatus.FAILED
+  ) {
+    return prisma.housecallProMigration.update({
+      where: { id: migration.id },
+      data: {
+        status: HousecallProMigrationStatus.IN_PROGRESS,
+        previewJson: preview,
+        pausedAt: null,
+        startedAt: migration.startedAt ?? new Date(),
+      },
+      include: { steps: { orderBy: { step: "asc" } } },
+    });
+  }
 
   const updated = await prisma.housecallProMigration.update({
     where: { id: migration.id },
@@ -128,10 +141,30 @@ export async function pauseMigration(companyId: string) {
 
 export async function resumeMigration(companyId: string) {
   const migration = await prisma.housecallProMigration.findFirst({
-    where: { companyId, status: HousecallProMigrationStatus.PAUSED },
+    where: {
+      companyId,
+      status: {
+        in: [
+          HousecallProMigrationStatus.PAUSED,
+          HousecallProMigrationStatus.FAILED,
+        ],
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
-  if (!migration) throw new Error("No paused migration");
+  if (!migration) throw new Error("No paused or failed migration");
+
+  await prisma.housecallProMigrationStep.updateMany({
+    where: {
+      migrationId: migration.id,
+      step: migration.currentStep,
+      status: HousecallProMigrationStepStatus.FAILED,
+    },
+    data: {
+      status: HousecallProMigrationStepStatus.PENDING,
+      lastError: null,
+    },
+  });
 
   return prisma.housecallProMigration.update({
     where: { id: migration.id },
@@ -266,7 +299,11 @@ export async function processMigrationBatch(params: {
     where: {
       companyId: params.companyId,
       status: {
-        in: [HousecallProMigrationStatus.IN_PROGRESS, HousecallProMigrationStatus.PAUSED],
+        in: [
+          HousecallProMigrationStatus.IN_PROGRESS,
+          HousecallProMigrationStatus.PAUSED,
+          HousecallProMigrationStatus.FAILED,
+        ],
       },
     },
     include: { steps: true },
@@ -275,6 +312,12 @@ export async function processMigrationBatch(params: {
   if (!migration) throw new Error("No active migration");
   if (migration.status === HousecallProMigrationStatus.PAUSED) {
     throw new Error("Migration is paused");
+  }
+  if (migration.status === HousecallProMigrationStatus.FAILED) {
+    await prisma.housecallProMigration.update({
+      where: { id: migration.id },
+      data: { status: HousecallProMigrationStatus.IN_PROGRESS },
+    });
   }
   if (migration.currentStep !== params.step) {
     throw new Error(`Active step is ${migration.currentStep}`);
@@ -330,10 +373,6 @@ export async function processMigrationBatch(params: {
         status: HousecallProMigrationStepStatus.FAILED,
         lastError: message,
       },
-    });
-    await prisma.housecallProMigration.update({
-      where: { id: migration.id },
-      data: { status: HousecallProMigrationStatus.FAILED },
     });
     throw err;
   }
