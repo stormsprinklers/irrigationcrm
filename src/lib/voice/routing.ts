@@ -10,6 +10,7 @@ import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
+import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { renderIvrGather, renderIvrNode, type FlowContext } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
@@ -231,7 +232,8 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
   }
 
   const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company?.twilioPhone) {
+  const callerId = await getCompanyCallerId(companyId);
+  if (!callerId || !company) {
     response.say("Company phone not configured.");
     return response.toString();
   }
@@ -239,7 +241,7 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
   const normalizedTo = normalizePhone(to);
   const statusUrl = `${appBaseUrl()}/api/twilio/voice/status`;
   const dial = response.dial({
-    callerId: company.twilioPhone,
+    callerId,
     record: company.recordCalls ? "record-from-answer-dual" : undefined,
     recordingStatusCallback: company.recordCalls
       ? `${appBaseUrl()}/api/twilio/voice/recording`
@@ -262,7 +264,7 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
         callSid: params.CallSid,
         direction: CallDirection.OUTBOUND,
         status: CallSessionStatus.IN_PROGRESS,
-        fromNumber: company.twilioPhone,
+        fromNumber: callerId,
         toNumber: normalizedTo,
         customerId: customerId || null,
         assignedUserId: params.userId || null,
@@ -276,7 +278,7 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
         companyId,
         scope: Scope.EXTERNAL,
         direction: CallDirection.OUTBOUND,
-        fromNumber: company.twilioPhone,
+        fromNumber: callerId,
         toNumber: normalizedTo,
         customerId: customerId || null,
         userId: params.userId || null,

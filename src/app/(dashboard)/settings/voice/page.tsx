@@ -73,7 +73,7 @@ export default function SettingsVoicePage() {
           Twilio SDK: {data.twilioConfigured ? "Configured" : "Missing env vars"}
         </p>
         <p className="text-sm text-muted-foreground">
-          Primary number: {data.twilioPhone ?? "Not set — add in Inbox settings"}
+          Primary caller ID: {data.twilioPhone ?? "Not set — mark a number as primary under Phone numbers"}
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link href="/settings/voice/numbers" className="text-primary underline">

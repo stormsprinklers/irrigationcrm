@@ -72,3 +72,57 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
 
   return { emailSent, smsSent, payUrl };
 }
+
+type InvoiceReceiptParams = {
+  customerName: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  companyName: string;
+  sendgridFrom: string | null;
+  twilioPhone: string | null;
+  invoiceNumber: string;
+  amount: number;
+  publicToken: string;
+};
+
+export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
+  const payUrl = getInvoicePayUrl(params.publicToken);
+  const amountFormatted = formatCurrency(params.amount);
+
+  const subject = `Receipt — Invoice ${params.invoiceNumber}`;
+  const intro = `Thank you for your payment of ${amountFormatted} for invoice ${params.invoiceNumber}.`;
+
+  let emailSent = false;
+  let smsSent = false;
+
+  const fromEmail = params.sendgridFrom ?? getDefaultFromEmail();
+  if (params.customerEmail && fromEmail && isEmailConfigured()) {
+    try {
+      await sendEmail({
+        from: fromEmail,
+        to: [params.customerEmail],
+        subject,
+        text: `Hi ${params.customerName},\n\n${intro}\n\nView your invoice: ${payUrl}\n\n— ${params.companyName}`,
+        html: `<p>Hi ${params.customerName},</p><p>${intro}</p><p><a href="${payUrl}">View your invoice</a></p><p>— ${params.companyName}</p>`,
+      });
+      emailSent = true;
+    } catch {
+      // best-effort
+    }
+  }
+
+  if (params.customerPhone && params.twilioPhone && process.env.TWILIO_ACCOUNT_SID) {
+    try {
+      await sendSms({
+        from: params.twilioPhone,
+        to: params.customerPhone,
+        body: `Payment received for invoice ${params.invoiceNumber}: ${amountFormatted}. View receipt: ${payUrl}`,
+      });
+      smsSent = true;
+    } catch {
+      // best-effort
+    }
+  }
+
+  return { emailSent, smsSent, payUrl };
+}

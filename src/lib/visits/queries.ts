@@ -37,6 +37,19 @@ export const visitDetailInclude = {
     include: { uploadedBy: { select: { id: true, name: true } } },
   },
   estimates: { select: { id: true, status: true, total: true, createdAt: true } },
+  invoices: {
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+    select: {
+      id: true,
+      invoiceNumber: true,
+      status: true,
+      total: true,
+      paidAt: true,
+      publicToken: true,
+      payments: { select: { amount: true, refundedAt: true } },
+    },
+  },
 } satisfies Prisma.VisitInclude;
 
 type VisitPayload = Prisma.VisitGetPayload<{ include: typeof visitInclude }>;

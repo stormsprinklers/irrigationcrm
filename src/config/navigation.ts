@@ -103,9 +103,7 @@ export const settingsSidebar: NavSection[] = [
     title: "GLOBAL SETTINGS",
     items: [
       { label: "Company", href: "/settings" },
-      { label: "Billing", href: "/settings/billing" },
       { label: "Notifications", href: "/settings/notifications" },
-      { label: "Refer a Friend", href: "/settings/refer" },
       { label: "Employees", href: "/settings/employees" },
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service Areas", href: "/settings/service-areas" },
@@ -119,8 +117,6 @@ export const settingsSidebar: NavSection[] = [
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice", href: "/settings/voice" },
       { label: "Price Book", href: "/settings/price-book" },
-      { label: "Customer Intake", href: "/settings/customer-intake" },
-      { label: "Customer Portal", href: "/settings/customer-portal" },
       { label: "Estimates", href: "/settings/estimates" },
       { label: "Invoices", href: "/settings/invoices" },
       { label: "Maintenance", href: "/settings/maintenance" },

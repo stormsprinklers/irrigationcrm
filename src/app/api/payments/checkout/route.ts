@@ -3,7 +3,7 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { prisma } from "@/lib/prisma";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
-import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
+import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 
 export async function POST(request: NextRequest) {
@@ -45,10 +45,20 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         status: { in: ["DRAFT", "SENT", "PARTIAL"] },
       },
+      include: { payments: true },
     });
 
+    const computeBalanceDue = (inv: typeof invoice) => {
+      if (!inv) return total;
+      const paid = inv.payments.reduce((sum, payment) => {
+        if (payment.refundedAt) return sum;
+        return sum + toNumber(payment.amount);
+      }, 0);
+      return Math.max(0, total - paid);
+    };
+
     if (!invoice) {
-      invoice = await prisma.invoice.create({
+      const created = await prisma.invoice.create({
         data: {
           companyId: user.companyId,
           customerId: visit.customerId,
@@ -70,11 +80,21 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+      invoice = await prisma.invoice.findFirstOrThrow({
+        where: { id: created.id },
+        include: { payments: true },
+      });
     } else {
       invoice = await prisma.invoice.update({
         where: { id: invoice.id },
         data: { subtotal, discountTotal, total, status: "SENT" },
+        include: { payments: true },
       });
+    }
+
+    const balanceDue = computeBalanceDue(invoice);
+    if (balanceDue <= 0) {
+      return badRequestResponse("This visit invoice is already paid");
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
@@ -88,8 +108,8 @@ export async function POST(request: NextRequest) {
       },
       customerEmail: visit.customer.email,
       productName: visit.title,
-      amount: total,
-      successUrl: `${appUrl}/visits/${visit.id}?payment=success`,
+      amount: balanceDue,
+      successUrl: `${appUrl}/visits/${visit.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appUrl}/visits/${visit.id}?payment=cancelled`,
     });
 

@@ -308,6 +308,15 @@ export default function VoiceNumbersPage() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1">
+                    {!n.isPrimary ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateNumber(n.id, { isPrimary: true } as Partial<PhoneNumberRow>)}
+                      >
+                        Set primary
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="outline"

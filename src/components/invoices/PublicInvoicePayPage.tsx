@@ -18,24 +18,66 @@ type Props = {
 export function PublicInvoicePayPage({ token }: Props) {
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get("payment");
+  const sessionId = searchParams.get("session_id");
   const [invoice, setInvoice] = useState<PublicInvoiceDTO | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function loadInvoice() {
+    const res = await fetch(`/api/invoices/public/${token}`);
+    const data = await res.json();
+    if (data.error) {
+      setError(data.error);
+      return null;
+    }
+    setInvoice(data);
+    setError(null);
+    return data as PublicInvoiceDTO;
+  }
+
   useEffect(() => {
-    fetch(`/api/invoices/public/${token}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) {
-          setError(data.error);
-          return;
-        }
-        setInvoice(data);
-      })
+    loadInvoice()
       .catch(() => setError("Failed to load invoice"))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    if (paymentStatus !== "success" || !sessionId) return;
+
+    let cancelled = false;
+    setConfirming(true);
+
+    async function confirmPayment() {
+      try {
+        const res = await fetch(`/api/invoices/public/${token}/confirm`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data.invoice) {
+          setInvoice(data.invoice);
+        } else if (res.status === 202) {
+          await loadInvoice();
+        } else if (!res.ok) {
+          toast.error(data.error ?? "Unable to confirm payment");
+        }
+      } catch {
+        if (!cancelled) toast.error("Unable to confirm payment");
+      } finally {
+        if (!cancelled) setConfirming(false);
+      }
+    }
+
+    void confirmPayment();
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentStatus, sessionId, token]);
 
   async function handlePay() {
     setPaying(true);
@@ -79,7 +121,13 @@ export function PublicInvoicePayPage({ token }: Props) {
       <h1 className="mt-1 text-2xl font-semibold">Invoice {invoice.invoiceNumber}</h1>
       <p className="mt-1 text-sm text-muted-foreground">Bill to {invoice.customerName}</p>
 
-      {paymentStatus === "success" && !isPaid ? (
+      {confirming ? (
+        <p className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
+          Confirming your payment...
+        </p>
+      ) : null}
+
+      {paymentStatus === "success" && !isPaid && !confirming ? (
         <p className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
           Payment submitted. This page will update once processing completes.
         </p>
@@ -126,10 +174,17 @@ export function PublicInvoicePayPage({ token }: Props) {
       {isPaid ? (
         <div className="mt-6 flex items-center gap-2 rounded-lg bg-green-50 p-4 text-green-800">
           <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <p className="text-sm font-medium">This invoice is paid. Thank you!</p>
+          <div>
+            <p className="text-sm font-medium">This invoice is paid. Thank you!</p>
+            {invoice.paidAt ? (
+              <p className="text-xs text-green-700">
+                Paid on {new Date(invoice.paidAt).toLocaleString()}
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : (
-        <Button className="mt-6 w-full" size="lg" onClick={handlePay} disabled={paying}>
+        <Button className="mt-6 w-full" size="lg" onClick={handlePay} disabled={paying || confirming}>
           <CreditCard className="h-4 w-4" />
           {paying ? "Redirecting to Stripe..." : `Pay ${formatCurrency(invoice.balanceDue)}`}
         </Button>

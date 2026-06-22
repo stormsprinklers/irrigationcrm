@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -17,10 +18,11 @@ export async function GET() {
       },
     });
 
-    const [numbers, flows, groups] = await Promise.all([
+    const [numbers, flows, groups, callerId] = await Promise.all([
       prisma.phoneNumber.count({ where: { companyId: user.companyId } }),
       prisma.callFlow.count({ where: { companyId: user.companyId } }),
       prisma.agentGroup.count({ where: { companyId: user.companyId } }),
+      getCompanyCallerId(user.companyId),
     ]);
 
     const twilioConfigured = Boolean(
@@ -31,6 +33,7 @@ export async function GET() {
 
     return NextResponse.json({
       ...company,
+      twilioPhone: callerId ?? company?.twilioPhone ?? null,
       counts: { numbers, flows, groups },
       twilioConfigured,
       webhooks: {

@@ -59,7 +59,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       customerEmail: invoice.customer.email,
       productName: invoice.visit?.title ?? `Invoice ${invoice.invoiceNumber}`,
       amount: balanceDue,
-      successUrl: `${payUrl}?payment=success`,
+      successUrl: `${payUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${payUrl}?payment=cancelled`,
     });
 

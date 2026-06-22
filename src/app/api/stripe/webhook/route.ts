@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleCheckoutSessionCompleted, handleInvoicePaid, handleInvoicePaymentFailed, handleSubscriptionDeleted, handleSubscriptionUpdated } from "@/lib/stripe/webhooks";
+import {
+  handleCheckoutSessionAsyncPaymentSucceeded,
+  handleCheckoutSessionCompleted,
+  handleInvoicePaid,
+  handleInvoicePaymentFailed,
+  handlePaymentIntentSucceeded,
+  handleSubscriptionDeleted,
+  handleSubscriptionUpdated,
+} from "@/lib/stripe/webhooks";
 import { getStripeClient } from "@/lib/stripe/client";
 
 export async function POST(request: NextRequest) {
@@ -24,6 +32,14 @@ export async function POST(request: NextRequest) {
 
   if (event.type === "checkout.session.completed") {
     await handleCheckoutSessionCompleted(event.data.object);
+  }
+
+  if (event.type === "checkout.session.async_payment_succeeded") {
+    await handleCheckoutSessionAsyncPaymentSucceeded(event.data.object);
+  }
+
+  if (event.type === "payment_intent.succeeded") {
+    await handlePaymentIntentSucceeded(event.data.object);
   }
 
   if (event.type === "invoice.paid") {

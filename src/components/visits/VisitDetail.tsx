@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import Link from "next/link";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, CheckCircle2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { CustomerContactBar } from "@/components/visits/CustomerContactBar";
@@ -73,6 +74,15 @@ type VisitDetailData = {
     total: string | number;
     createdAt: string;
   }>;
+  invoices?: Array<{
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    total: string | number;
+    paidAt: string | null;
+    publicToken: string;
+    payments: Array<{ amount: string | number; refundedAt: string | null }>;
+  }>;
 };
 
 type TimeEvent = {
@@ -106,7 +116,31 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
+function toAmount(value: string | number) {
+  return typeof value === "number" ? value : Number(value);
+}
+
+function getVisitPaymentSummary(visit: VisitDetailData) {
+  const invoice = visit.invoices?.[0];
+  if (!invoice) {
+    return { isPaid: false, amountPaid: 0, balanceDue: null as number | null, invoice: null };
+  }
+
+  const invoiceTotal = toAmount(invoice.total);
+  const amountPaid = invoice.payments.reduce((sum, payment) => {
+    if (payment.refundedAt) return sum;
+    return sum + toAmount(payment.amount);
+  }, 0);
+  const balanceDue = Math.max(0, invoiceTotal - amountPaid);
+  const isPaid = balanceDue <= 0 || invoice.status === "PAID";
+
+  return { isPaid, amountPaid, balanceDue, invoice };
+}
+
 export function VisitDetail({ visitId }: Props) {
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get("payment");
+  const sessionId = searchParams.get("session_id");
   const [visit, setVisit] = useState<VisitDetailData | null>(null);
   const [timeEvents, setTimeEvents] = useState<TimeEvent[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -133,6 +167,31 @@ export function VisitDetail({ visitId }: Props) {
       .catch(() => toast.error("Failed to load visit"))
       .finally(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    if (paymentStatus !== "success" || !sessionId) return;
+
+    async function confirmPayment() {
+      try {
+        const res = await fetch("/api/payments/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const data = await res.json();
+        if (data.confirmed || data.alreadyRecorded) {
+          await load();
+          toast.success("Payment recorded");
+        } else if (res.status !== 202) {
+          toast.error(data.error ?? "Unable to confirm payment");
+        }
+      } catch {
+        toast.error("Unable to confirm payment");
+      }
+    }
+
+    void confirmPayment();
+  }, [paymentStatus, sessionId, load]);
 
   async function handleTimeEvent(type: TimeEvent["type"]) {
     setTimeLoading(true);
@@ -177,6 +236,7 @@ export function VisitDetail({ visitId }: Props) {
   const subtotal = sumLineItems(visit.lineItems);
   const discountTotal = sumDiscounts(subtotal, visit.discounts);
   const { total } = computeTotals(subtotal, discountTotal);
+  const paymentSummary = getVisitPaymentSummary(visit);
   const jobAddress =
     formatPostalAddress(visit) ||
     (visit.property ? formatPostalAddress(visit.property) : null) ||
@@ -197,6 +257,9 @@ export function VisitDetail({ visitId }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold">{visit.title}</h1>
             <Badge variant="outline">{visit.status.replace("_", " ")}</Badge>
+            {paymentSummary.isPaid ? (
+              <Badge className="bg-green-600 hover:bg-green-600">Paid</Badge>
+            ) : null}
             <Badge variant="secondary">{visit.division}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -221,7 +284,12 @@ export function VisitDetail({ visitId }: Props) {
             ) : null}
           </div>
         </div>
-        <CollectPaymentButton visitId={visit.id} total={total} disabled={visit.status === "COMPLETED"} />
+        <CollectPaymentButton
+          visitId={visit.id}
+          total={paymentSummary.balanceDue ?? total}
+          disabled={paymentSummary.isPaid || total <= 0}
+          paid={paymentSummary.isPaid}
+        />
       </div>
 
       <TimeTrackingBar
@@ -248,6 +316,26 @@ export function VisitDetail({ visitId }: Props) {
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Visit total</p>
             <p className="text-2xl font-semibold">{formatCurrency(total)}</p>
+            {paymentSummary.isPaid ? (
+              <div className="mt-3 flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-800">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    Invoice {paymentSummary.invoice?.invoiceNumber} paid
+                  </p>
+                  {paymentSummary.invoice?.paidAt ? (
+                    <p className="text-xs text-green-700">
+                      {format(new Date(paymentSummary.invoice.paidAt), "MMM d, yyyy h:mm a")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : paymentSummary.invoice ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Invoice {paymentSummary.invoice.invoiceNumber}:{" "}
+                {formatCurrency(paymentSummary.balanceDue ?? total)} due
+              </p>
+            ) : null}
             {discountTotal > 0 ? (
               <p className="text-xs text-muted-foreground">
                 Subtotal {formatCurrency(subtotal)} · Discounts −{formatCurrency(discountTotal)}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/inbox/contacts";
+import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
 import { releaseNumber } from "@/lib/twilio/numbers";
 import { prisma } from "@/lib/prisma";
 
@@ -37,6 +38,10 @@ export async function PATCH(
         ...(trackingSource !== undefined ? { trackingSource: trackingSource || null } : {}),
       },
     });
+
+    if (number.isPrimary || number.numberType === "PRIMARY") {
+      await syncCompanyTwilioPhone(user.companyId, number.e164);
+    }
 
     return NextResponse.json(number);
   } catch {

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { VisitDetail } from "@/components/visits/VisitDetail";
 import { ContentArea } from "@/components/layout/ContentArea";
 
@@ -10,7 +11,9 @@ export default async function VisitPage({ params }: Props) {
 
   return (
     <ContentArea className="max-w-6xl">
-      <VisitDetail visitId={id} />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading visit...</p>}>
+        <VisitDetail visitId={id} />
+      </Suspense>
     </ContentArea>
   );
 }

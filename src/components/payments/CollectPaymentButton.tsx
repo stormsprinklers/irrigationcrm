@@ -9,9 +9,10 @@ type Props = {
   visitId: string;
   total: number;
   disabled?: boolean;
+  paid?: boolean;
 };
 
-export function CollectPaymentButton({ visitId, total, disabled }: Props) {
+export function CollectPaymentButton({ visitId, total, disabled, paid }: Props) {
   const [loading, setLoading] = useState(false);
 
   async function handleCollect() {
@@ -43,7 +44,7 @@ export function CollectPaymentButton({ visitId, total, disabled }: Props) {
   return (
     <Button onClick={handleCollect} disabled={disabled || loading || total <= 0}>
       <CreditCard className="h-4 w-4" />
-      {loading ? "Redirecting..." : `Collect ${formatted}`}
+      {loading ? "Redirecting..." : paid ? "Paid" : `Collect ${formatted}`}
     </Button>
   );
 }
