@@ -215,11 +215,16 @@ export async function buildInboundTwiml(params: TwilioParams) {
 export async function buildClientOutboundTwiml(params: TwilioParams) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
-  const to = params.To ?? params.to;
+  // Client SDK must send phoneNumber — Twilio overwrites reserved param names like "To".
+  const to =
+    params.phoneNumber ??
+    params.PhoneNumber ??
+    params.To ??
+    params.to;
   const companyId = params.companyId;
   const customerId = params.customerId;
 
-  if (!to || !companyId) {
+  if (!to?.trim() || !companyId) {
     response.say("Missing call destination.");
     return response.toString();
   }

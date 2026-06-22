@@ -49,19 +49,16 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white">
-      <div className="flex h-14 items-center gap-4 px-4">
-        <Link href="/" className="flex shrink-0 items-center gap-2">
+      <div className="flex h-[4.5rem] items-center gap-4 px-4">
+        <Link href="/" className="flex shrink-0 items-center">
           <Image
             src={stormBrand.logoPath}
             alt="Storm Sprinklers"
-            width={160}
-            height={160}
+            width={320}
+            height={320}
             priority
-            className="h-9 w-auto object-contain"
+            className="h-[4.5rem] w-auto bg-white object-contain"
           />
-          <span className="font-display hidden text-sm font-bold tracking-tight text-storm-navy lg:inline">
-            Storm Sprinklers
-          </span>
         </Link>
 
         <nav className="hidden items-center gap-1 xl:flex" aria-label="Primary">

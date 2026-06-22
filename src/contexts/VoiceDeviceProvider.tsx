@@ -14,6 +14,7 @@ import { useSession } from "next-auth/react";
 import { Device, Call } from "@twilio/voice-sdk";
 import { toast } from "sonner";
 import { CallWrapUpModal } from "@/components/voice/CallWrapUpModal";
+import { normalizePhone } from "@/lib/inbox/contacts";
 
 export type CallerInfo = {
   phone: string;
@@ -227,16 +228,23 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const phoneNumber = normalizePhone(to.trim());
+      if (!phoneNumber.replace(/\D/g, "").length) {
+        toast.error("Enter a valid phone number");
+        return;
+      }
+
+      // Use phoneNumber — Twilio reserves "To" on client outbound webhooks and drops it.
       const call = await device.connect({
         params: {
-          To: to,
+          phoneNumber,
           companyId: user.companyId,
           userId: user.id,
           customerId: customerId ?? "",
         },
       });
 
-      await bindCall(call, "outbound", to);
+      await bindCall(call, "outbound", phoneNumber);
     },
     [bindCall, session?.user]
   );
