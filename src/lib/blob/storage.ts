@@ -32,3 +32,18 @@ export async function uploadPrivateBlob(
     addRandomSuffix: false,
   });
 }
+
+export async function uploadPublicBlob(
+  pathname: string,
+  body: UploadBody,
+  options: UploadOptions = {}
+) {
+  assertBlobConfigured();
+
+  return put(pathname, body, {
+    access: "public",
+    token: getBlobToken(),
+    contentType: options.contentType,
+    addRandomSuffix: true,
+  });
+}

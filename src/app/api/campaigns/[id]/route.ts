@@ -55,6 +55,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.bodyText !== undefined) data.bodyText = String(body.bodyText);
     if (body.bodyHtml !== undefined) data.bodyHtml = body.bodyHtml;
     if (body.listId !== undefined) data.listId = body.listId;
+    if (body.audienceFilters !== undefined) data.audienceFilters = body.audienceFilters;
+    if (body.aiPrompt !== undefined) data.aiPrompt = body.aiPrompt;
+    if (body.dripSettings !== undefined) data.dripSettings = body.dripSettings;
     if (body.scheduledAt !== undefined) {
       data.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     }

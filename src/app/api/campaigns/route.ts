@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CampaignChannel, CampaignStatus } from "@prisma/client";
+import { CampaignChannel, CampaignStatus, CampaignType } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
@@ -20,6 +20,7 @@ export async function GET() {
       campaigns: campaigns.map((c) => ({
         id: c.id,
         name: c.name,
+        type: c.type,
         channel: c.channel,
         status: c.status,
         subject: c.subject,
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { name, channel, subject, bodyText, bodyHtml, listId, scheduledAt } = body;
+    const { name, channel, subject, bodyText, bodyHtml, listId, scheduledAt, type, audienceFilters, aiPrompt, dripSettings } = body;
 
     if (!name || !channel || !bodyText) {
       return badRequestResponse("name, channel, and bodyText are required");
@@ -53,11 +54,15 @@ export async function POST(request: NextRequest) {
       data: {
         companyId: user.companyId,
         name: String(name),
+        type: type && Object.values(CampaignType).includes(type) ? type : CampaignType.BLAST,
         channel,
         subject: subject ?? null,
         bodyText: String(bodyText),
         bodyHtml: bodyHtml ?? null,
         listId: listId ?? null,
+        audienceFilters: audienceFilters ?? undefined,
+        aiPrompt: aiPrompt ?? null,
+        dripSettings: dripSettings ?? undefined,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         status: scheduledAt ? CampaignStatus.SCHEDULED : CampaignStatus.DRAFT,
       },

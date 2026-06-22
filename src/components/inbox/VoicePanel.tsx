@@ -5,9 +5,11 @@ import { Phone, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CallDetailView } from "@/components/voice/CallDetailView";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
+import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import type { InboxScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
@@ -20,15 +22,6 @@ type Employee = {
   color?: string | null;
   photoUrl?: string | null;
   title?: string | null;
-};
-
-type CallDetail = {
-  id: string;
-  toNumber: string;
-  fromNumber: string;
-  recordingUrl?: string | null;
-  transcript?: string | null;
-  customer?: { id: string; name: string; phone?: string | null; email?: string | null } | null;
 };
 
 type QueueEntry = {
@@ -55,7 +48,8 @@ export function VoicePanel({
   const { ready, connect, activeCall } = useVoiceDevice();
   const [calling, setCalling] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [callDetail, setCallDetail] = useState<CallDetail | null>(null);
+  const [callDetail, setCallDetail] = useState<CallHistoryDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
 
   useEffect(() => {
@@ -72,12 +66,13 @@ export function VoicePanel({
       setCallDetail(null);
       return;
     }
-    fetch(`/api/inbox/voice/history?scope=${scope === "customers" ? "external" : "internal"}`)
-      .then((r) => r.json())
-      .then((calls: CallDetail[]) => {
-        setCallDetail(calls.find((c) => c.id === selectedCallId) ?? null);
-      });
-  }, [selectedCallId, scope]);
+    setLoadingDetail(true);
+    fetch(`/api/voice/calls/history/${selectedCallId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setCallDetail(data))
+      .catch(() => setCallDetail(null))
+      .finally(() => setLoadingDetail(false));
+  }, [selectedCallId]);
 
   useEffect(() => {
     if (scope !== "customers") return;
@@ -123,31 +118,23 @@ export function VoicePanel({
     setQueue((q) => q.filter((e) => e.id !== id));
   }
 
-  if (selectedCallId && callDetail) {
+  if (selectedCallId) {
     return (
-      <div className="flex h-full flex-col p-6">
-        <h3 className="text-lg font-semibold">Call details</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {callDetail.fromNumber} → {callDetail.toNumber}
-        </p>
-        {callDetail.recordingUrl && (
-          <div className="mt-4">
-            <p className="mb-2 text-sm font-medium">Recording</p>
-            <audio controls className="w-full" src={callDetail.recordingUrl}>
-              <track kind="captions" />
-            </audio>
-          </div>
-        )}
-        {callDetail.transcript && (
-          <div className="mt-4 flex-1">
-            <p className="mb-2 text-sm font-medium">Transcript</p>
-            <ScrollArea className="h-48 rounded-md border border-border p-3">
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {callDetail.transcript}
-              </p>
-            </ScrollArea>
-          </div>
-        )}
+      <div className="flex h-full flex-col">
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="font-semibold">Call details</h3>
+        </div>
+        <ScrollArea className="flex-1">
+          {loadingDetail ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading…</p>
+          ) : !callDetail ? (
+            <p className="p-4 text-sm text-muted-foreground">Call not found.</p>
+          ) : (
+            <div className="p-4">
+              <CallDetailView detail={callDetail} />
+            </div>
+          )}
+        </ScrollArea>
       </div>
     );
   }
@@ -215,9 +202,7 @@ export function VoicePanel({
           <ul className="space-y-2">
             {queue.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between text-sm">
-                <span>
-                  {entry.customer?.name ?? entry.fromNumber}
-                </span>
+                <span>{entry.customer?.name ?? entry.fromNumber}</span>
                 <Button size="sm" variant="outline" onClick={() => void acceptQueue(entry.id)}>
                   Accept
                 </Button>

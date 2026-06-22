@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Phone, Play } from "lucide-react";
+import { FileText, Phone, Play } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,8 @@ export function CallHistoryList({
             call.customer?.name ??
             call.user?.name ??
             (call.direction === "OUTBOUND" ? call.toNumber : call.fromNumber);
+          const hasRecording = Boolean(call.recordingUrl);
+          const hasTranscript = Boolean(call.transcript?.trim());
 
           return (
             <li key={call.id}>
@@ -77,12 +79,20 @@ export function CallHistoryList({
                     {call.durationSec ? ` · ${call.durationSec}s` : ""}
                   </p>
                 </div>
-                {call.recordingUrl && (
-                  <Badge variant="outline" className="shrink-0">
-                    <Play className="mr-1 h-3 w-3" />
-                    Rec
-                  </Badge>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {hasRecording ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      <Play className="mr-1 h-3 w-3" />
+                      Rec
+                    </Badge>
+                  ) : null}
+                  {hasTranscript ? (
+                    <Badge variant="outline" className="text-[10px]">
+                      <FileText className="mr-1 h-3 w-3" />
+                      Text
+                    </Badge>
+                  ) : null}
+                </div>
               </button>
             </li>
           );

@@ -5,6 +5,7 @@ import {
   type CallHistoryListItem,
   isCallAnswered,
 } from "@/lib/voice/call-history";
+import { callRecordingPlaybackPath } from "@/lib/voice/recording";
 
 const callLogInclude = {
   customer: { select: { id: true, name: true, phone: true } },
@@ -35,6 +36,8 @@ function mapCallLog(row: CallLogRow): CallHistoryListItem {
     fromNumber: row.fromNumber,
     toNumber: row.toNumber,
     answered: isCallAnswered(row.status, row.durationSec),
+    hasRecording: Boolean(row.recordingUrl),
+    hasTranscript: Boolean(row.transcript?.trim()),
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,
   };
@@ -63,7 +66,7 @@ export async function getCallHistoryDetail(
   const base = mapCallLog(row);
   return {
     ...base,
-    recordingUrl: row.recordingUrl,
+    recordingPlaybackUrl: row.recordingUrl ? callRecordingPlaybackPath(row.id) : null,
     transcript: row.transcript,
     handledBy: resolveEmployee(row),
   };

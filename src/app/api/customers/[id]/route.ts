@@ -45,6 +45,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
         ...(body.leadSource !== undefined ? { leadSource: body.leadSource ?? null } : {}),
         ...(body.doNotService !== undefined ? { doNotService: Boolean(body.doNotService) } : {}),
+        ...(body.tags !== undefined
+          ? {
+              tags: Array.isArray(body.tags)
+                ? body.tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+                : [],
+            }
+          : {}),
         ...(body.status !== undefined && canManageCustomers(user.role)
           ? { status: body.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE" }
           : {}),

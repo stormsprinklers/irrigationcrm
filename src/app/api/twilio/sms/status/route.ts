@@ -31,5 +31,35 @@ export async function POST(request: NextRequest) {
     data: { deliveryStatus },
   });
 
+  if (messageStatus === "delivered" || messageStatus === "failed" || messageStatus === "undelivered") {
+    const recipientStatus = messageStatus === "delivered" ? "delivered" : "failed";
+    const recipient = await prisma.campaignRecipient.findFirst({
+      where: { twilioMessageSid: messageSid },
+    });
+    if (recipient) {
+      await prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: {
+          status: recipientStatus,
+          ...(messageStatus === "delivered" ? { deliveredAt: new Date() } : {}),
+          ...(messageStatus !== "delivered"
+            ? { error: messageStatus === "undelivered" ? "Undelivered" : "Failed" }
+            : {}),
+        },
+      });
+
+      const all = await prisma.campaignRecipient.findMany({
+        where: { campaignId: recipient.campaignId },
+        select: { status: true, openedAt: true, clickCount: true },
+      });
+      const { buildCampaignStats } = await import("@/lib/marketing/stats");
+      const stats = buildCampaignStats(all);
+      await prisma.campaign.update({
+        where: { id: recipient.campaignId },
+        data: { statsJson: stats },
+      });
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }

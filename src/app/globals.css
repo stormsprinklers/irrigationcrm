@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "grapesjs/dist/css/grapes.min.css";
 
 @custom-variant dark (&:is(.dark *));
 

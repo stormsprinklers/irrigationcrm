@@ -22,6 +22,7 @@ export function serializeCustomer(customer: CustomerPayload): CustomerDTO {
     leadSource: customer.leadSource,
     status: customer.status,
     doNotService: customer.doNotService,
+    tags: customer.tags ?? [],
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
     propertyCount: customer._count.properties,

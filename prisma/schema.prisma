@@ -278,7 +278,20 @@ enum CampaignStatus {
   DRAFT
   SCHEDULED
   SENDING
+  ACTIVE
   COMPLETED
+  CANCELLED
+}
+
+enum CampaignType {
+  BLAST
+  DRIP
+}
+
+enum CampaignEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
   CANCELLED
 }
 
@@ -332,6 +345,11 @@ model Company {
   rachioApiKey             String?
   rachioPersonId           String?
   hydrawiseApiKey          String?
+  googleBusinessRefreshToken   String?
+  googleBusinessAccountId      String?
+  googleBusinessLocationId     String?
+  googleBusinessLocationTitle  String?
+  googleBusinessConnectedAt    DateTime?
   defaultLeadAssigneeId    String?
   flatRatePricingEnabled   Boolean  @default(false)
   materialMarkupsEnabled   Boolean  @default(true)
@@ -444,6 +462,7 @@ model Customer {
   stripeCustomerId String?
   status           CustomerStatus @default(ACTIVE)
   doNotService     Boolean        @default(false)
+  tags             String[]       @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -461,6 +480,7 @@ model Customer {
   callSessions           CallSession[]
   contactListMembers     ContactListMember[]
   campaignRecipients     CampaignRecipient[]
+  campaignEnrollments    CampaignEnrollment[]
   phones                 CustomerPhone[]
   notes                  CustomerNote[]
   attachments            CustomerAttachment[]
@@ -713,36 +733,80 @@ model ContactListMember {
 }
 
 model Campaign {
-  id          String          @id @default(cuid())
-  companyId   String
-  name        String
-  channel     CampaignChannel
-  status      CampaignStatus  @default(DRAFT)
-  subject     String?
-  bodyHtml    String?
-  bodyText    String
-  listId      String?
-  scheduledAt DateTime?
-  sentAt      DateTime?
-  statsJson   Json?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id              String          @id @default(cuid())
+  companyId       String
+  name            String
+  type            CampaignType    @default(BLAST)
+  channel         CampaignChannel
+  status          CampaignStatus  @default(DRAFT)
+  subject         String?
+  bodyHtml        String?
+  bodyText        String
+  listId          String?
+  audienceFilters Json?
+  aiPrompt        String?
+  dripSettings    Json?
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  statsJson       Json?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  company    Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  list       ContactList?        @relation(fields: [listId], references: [id], onDelete: SetNull)
-  recipients CampaignRecipient[]
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  list        ContactList?         @relation(fields: [listId], references: [id], onDelete: SetNull)
+  recipients  CampaignRecipient[]
+  steps       CampaignStep[]
+  enrollments CampaignEnrollment[]
 
   @@index([companyId, status])
 }
 
+model CampaignStep {
+  id         String          @id @default(cuid())
+  campaignId String
+  sortOrder  Int
+  channel    CampaignChannel
+  subject    String?
+  bodyHtml   String?
+  bodyText   String
+  delayDays  Int             @default(0)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, sortOrder])
+}
+
+model CampaignEnrollment {
+  id               String                   @id @default(cuid())
+  campaignId       String
+  customerId       String
+  currentStepIndex Int                      @default(0)
+  nextSendAt       DateTime
+  status           CampaignEnrollmentStatus @default(ACTIVE)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId, status, nextSendAt])
+}
+
 model CampaignRecipient {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   campaignId        String
   customerId        String?
   email             String?
   phone             String?
-  status            String   @default("pending")
+  status            String    @default("pending")
   sentAt            DateTime?
+  deliveredAt       DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  clickCount        Int       @default(0)
   error             String?
   sendgridMessageId String?
   twilioMessageSid  String?
@@ -751,6 +815,7 @@ model CampaignRecipient {
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([campaignId, status])
+  @@index([twilioMessageSid])
 }
 
 model CallFlow {

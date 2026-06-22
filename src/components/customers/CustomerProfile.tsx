@@ -28,6 +28,10 @@ import {
 } from "@/components/customers/CustomerContactActions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerNotesAttachmentsTab } from "@/components/customers/CustomerNotesAttachmentsTab";
+import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPaymentMethodsSection";
+import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap";
+import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
+import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
@@ -111,6 +115,8 @@ export function CustomerProfile({ customerId }: Props) {
   const canManage = canManageCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
   const canRefund = canIssueRefunds(userRole);
+  const canManagePayments =
+    userRole === "CSR" || userRole === "MANAGER" || userRole === "ADMIN";
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
   const [phones, setPhones] = useState<CustomerPhoneDTO[]>([]);
@@ -249,6 +255,22 @@ export function CustomerProfile({ customerId }: Props) {
         zip: customer.zip,
       })
     : null;
+  const primaryProperty = properties.find((p) => p.isPrimary) ?? properties[0];
+  const mapLocation = primaryProperty
+    ? {
+        address: primaryProperty.address,
+        city: primaryProperty.city,
+        state: primaryProperty.state,
+        zip: primaryProperty.zip,
+      }
+    : customer
+      ? {
+          address: customer.address,
+          city: customer.city,
+          state: customer.state,
+          zip: customer.zip,
+        }
+      : { address: null, city: null, state: null, zip: null };
 
   async function addProperty(e: React.FormEvent) {
     e.preventDefault();
@@ -468,6 +490,12 @@ export function CustomerProfile({ customerId }: Props) {
           Do not service — appointments cannot be booked for this customer
         </div>
       )}
+
+      <CustomerSummaryCard customerId={customerId} />
+      <CustomerPropertyMap
+        title={primaryProperty ? `${primaryProperty.name} location` : "Property location"}
+        location={mapLocation}
+      />
 
       <Tabs defaultValue="profile">
         <TabsList className="flex h-auto flex-wrap">
@@ -737,6 +765,21 @@ export function CustomerProfile({ customerId }: Props) {
               </div>
             </CardContent>
           </Card>
+          {customer && (
+            <CustomerTagsSection
+              customerId={customer.id}
+              tags={customer.tags ?? []}
+              disabled={!canManage}
+              onUpdated={(tags) => setCustomer({ ...customer, tags })}
+            />
+          )}
+          {customer && (
+            <CustomerPaymentMethodsSection
+              customerId={customer.id}
+              customerEmail={customer.email}
+              canManage={canManagePayments}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="properties" className="space-y-4">
@@ -771,6 +814,15 @@ export function CustomerProfile({ customerId }: Props) {
                     customerId={customerId}
                     propertyId={property.id}
                     propertyName={property.name}
+                  />
+                  <CustomerPropertyMap
+                    title={`${property.name} map`}
+                    location={{
+                      address: property.address,
+                      city: property.city,
+                      state: property.state,
+                      zip: property.zip,
+                    }}
                   />
                 </div>
               ))}

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -160,6 +162,9 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
 }
 
 export function EstimateDetail({ estimateId }: Props) {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const canDelete = session?.user?.role !== "TECH";
   const [estimate, setEstimate] = useState<EstimateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -169,6 +174,8 @@ export function EstimateDetail({ estimateId }: Props) {
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
   const [saving, setSaving] = useState(false);
   const [copyVisitId, setCopyVisitId] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/estimates/${estimateId}`);
@@ -357,6 +364,23 @@ export function EstimateDetail({ estimateId }: Props) {
     }
   }
 
+  async function deleteEstimate() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete estimate");
+        return;
+      }
+      toast.success("Estimate deleted");
+      router.push("/customers/estimates");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">Loading estimate...</p>;
 
   if (!estimate) {
@@ -421,6 +445,12 @@ export function EstimateDetail({ estimateId }: Props) {
             <Copy className="h-4 w-4" />
             Copy to visit
           </Button>
+          {canDelete ? (
+            <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -653,6 +683,32 @@ export function EstimateDetail({ estimateId }: Props) {
           )}
         </div>
       </div>
+
+      {deleteOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => setDeleteOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">Delete estimate?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete this estimate for {estimate.customer.name}. This cannot be
+              undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" onClick={deleteEstimate} disabled={deleting}>
+                {deleting ? "Deleting..." : "Delete estimate"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <ItemPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addLineItem} />
     </div>

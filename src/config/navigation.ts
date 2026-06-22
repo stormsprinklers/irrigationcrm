@@ -17,7 +17,7 @@ export const primaryNav: NavItem[] = [
   { label: "Timesheets", href: "/timesheets" },
   { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
-  { label: "Campaigns", href: "/campaigns" },
+  { label: "Marketing", href: "/marketing" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
 ];
@@ -98,6 +98,17 @@ export const reportingSidebar: NavSection[] = [
   },
 ];
 
+export const marketingSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Overview", href: "/marketing" },
+      { label: "Campaigns", href: "/marketing/campaigns" },
+      { label: "Insights", href: "/marketing/insights" },
+      { label: "Google Business Profile", href: "/marketing/google-business" },
+    ],
+  },
+];
+
 export const settingsSidebar: NavSection[] = [
   {
     title: "GLOBAL SETTINGS",
@@ -158,7 +169,8 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/customers") return pathname.startsWith("/customers");
   if (href === "/inbox") return pathname.startsWith("/inbox");
   if (href === "/price-book") return pathname.startsWith("/price-book");
-  if (href === "/campaigns") return pathname.startsWith("/campaigns");
+  if (href === "/marketing") return pathname.startsWith("/marketing");
+  if (href === "/campaigns") return pathname.startsWith("/campaigns") || pathname.startsWith("/marketing");
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
   if (href === "/settings") return pathname.startsWith("/settings");

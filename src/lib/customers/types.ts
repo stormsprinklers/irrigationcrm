@@ -11,6 +11,7 @@ export type CustomerDTO = {
   leadSource: string | null;
   status: "ACTIVE" | "ARCHIVED";
   doNotService: boolean;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
   propertyCount?: number;

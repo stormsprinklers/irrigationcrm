@@ -18,13 +18,28 @@ export async function POST(request: NextRequest) {
   }
 
   const callSid = params.CallSid;
+  const parentCallSid = params.ParentCallSid;
   const transcriptionText = params.TranscriptionText;
 
   if (callSid && transcriptionText) {
-    await prisma.callLog.updateMany({
-      where: { twilioCallSid: callSid },
+    const sidCandidates = [callSid, parentCallSid].filter(Boolean) as string[];
+    const updated = await prisma.callLog.updateMany({
+      where: { twilioCallSid: { in: sidCandidates } },
       data: { transcript: transcriptionText },
     });
+
+    if (updated.count === 0) {
+      const session = await prisma.callSession.findFirst({
+        where: { callSid: { in: sidCandidates } },
+        select: { id: true },
+      });
+      if (session) {
+        await prisma.callLog.updateMany({
+          where: { sessionId: session.id },
+          data: { transcript: transcriptionText },
+        });
+      }
+    }
   }
 
   return NextResponse.json({ ok: true });

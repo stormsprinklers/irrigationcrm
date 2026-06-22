@@ -8,12 +8,14 @@ export type CallHistoryListItem = {
   fromNumber: string;
   toNumber: string;
   answered: boolean;
+  hasRecording: boolean;
+  hasTranscript: boolean;
   customer: { id: string; name: string; phone: string | null } | null;
   employee: { id: string; name: string } | null;
 };
 
 export type CallHistoryDetail = CallHistoryListItem & {
-  recordingUrl: string | null;
+  recordingPlaybackUrl: string | null;
   transcript: string | null;
   handledBy: { id: string; name: string } | null;
 };

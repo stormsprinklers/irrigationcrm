@@ -246,6 +246,7 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
     recordingStatusCallback: company.recordCalls
       ? `${appBaseUrl()}/api/twilio/voice/recording`
       : undefined,
+    recordingStatusCallbackMethod: company.recordCalls ? "POST" : undefined,
   });
 
   dial.number(

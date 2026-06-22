@@ -1,39 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEnrollments } from "@/lib/maintenance-plans/permissions";
+import {
+  canManageCustomerPayments,
+  ensureStripeCustomer,
+} from "@/lib/customers/stripe";
 import { prisma } from "@/lib/prisma";
 import { getStripeClient } from "@/lib/stripe/client";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function ensureStripeCustomer(
-  customer: { id: string; name: string; email: string | null; stripeCustomerId: string | null },
-  companyId: string
-) {
-  if (customer.stripeCustomerId) return customer.stripeCustomerId;
-
-  if (!process.env.STRIPE_SECRET_KEY) return null;
-
-  const stripe = getStripeClient();
-  const stripeCustomer = await stripe.customers.create({
-    name: customer.name,
-    email: customer.email ?? undefined,
-    metadata: { customerId: customer.id, companyId },
-  });
-
-  await prisma.customer.update({
-    where: { id: customer.id },
-    data: { stripeCustomerId: stripeCustomer.id },
-  });
-
-  return stripeCustomer.id;
-}
-
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEnrollments(user.role as UserRole)) return forbiddenResponse();
+    if (!canManageCustomerPayments(user.role as UserRole)) return forbiddenResponse();
 
     const { id } = await params;
     const customer = await prisma.customer.findFirst({
@@ -72,7 +52,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function POST(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEnrollments(user.role as UserRole)) return forbiddenResponse();
+    if (!canManageCustomerPayments(user.role as UserRole)) return forbiddenResponse();
 
     const { id } = await params;
     const customer = await prisma.customer.findFirst({

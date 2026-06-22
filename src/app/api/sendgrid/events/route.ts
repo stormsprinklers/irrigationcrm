@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildCampaignStats } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 import { validateEmailWebhook } from "@/lib/inbox/email";
 
@@ -47,37 +48,43 @@ export async function POST(request: NextRequest) {
           { sendgridMessageId: { contains: messageId } },
         ],
       },
-      include: { campaign: true },
     });
     if (!recipient) continue;
 
-    let status = recipient.status;
     const eventName = evt.event?.toLowerCase();
-    if (eventName === "delivered") status = "delivered";
-    else if (eventName === "open" || eventName === "opened") status = "delivered";
-    else if (eventName === "bounce" || eventName === "dropped" || eventName === "failed") {
-      status = "failed";
+    const update: {
+      status?: string;
+      error?: string | null;
+      deliveredAt?: Date;
+      openedAt?: Date;
+    } = {};
+
+    if (eventName === "delivered") {
+      update.status = "delivered";
+      update.deliveredAt = new Date();
+    } else if (eventName === "open" || eventName === "opened") {
+      update.openedAt = new Date();
+      if (recipient.status === "sent") {
+        update.status = "delivered";
+        update.deliveredAt = recipient.deliveredAt ?? new Date();
+      }
+    } else if (eventName === "bounce" || eventName === "dropped" || eventName === "failed") {
+      update.status = "failed";
+      update.error = eventName === "bounce" ? "Bounced" : recipient.error;
     }
+
+    if (Object.keys(update).length === 0) continue;
 
     await prisma.campaignRecipient.update({
       where: { id: recipient.id },
-      data: {
-        status,
-        error: eventName === "bounce" ? "Bounced" : recipient.error,
-      },
+      data: update,
     });
 
     const all = await prisma.campaignRecipient.findMany({
       where: { campaignId: recipient.campaignId },
-      select: { status: true },
+      select: { status: true, openedAt: true, clickCount: true },
     });
-    const stats = {
-      sent: all.filter((r) => r.status === "sent" || r.status === "delivered").length,
-      delivered: all.filter((r) => r.status === "delivered").length,
-      failed: all.filter((r) => r.status === "failed" || r.status === "opt_out").length,
-      pending: all.filter((r) => r.status === "pending").length,
-      opened: all.filter((r) => r.status === "delivered").length,
-    };
+    const stats = buildCampaignStats(all);
     await prisma.campaign.update({
       where: { id: recipient.campaignId },
       data: { statsJson: stats },

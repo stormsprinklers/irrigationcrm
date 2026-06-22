@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ArrowLeft, CheckCircle2, MapPin } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { ArrowLeft, CheckCircle2, MapPin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { CustomerContactBar } from "@/components/visits/CustomerContactBar";
@@ -139,6 +140,9 @@ function getVisitPaymentSummary(visit: VisitDetailData) {
 
 export function VisitDetail({ visitId }: Props) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { data: session } = useSession();
+  const canDelete = session?.user?.role !== "TECH";
   const paymentStatus = searchParams.get("payment");
   const sessionId = searchParams.get("session_id");
   const [visit, setVisit] = useState<VisitDetailData | null>(null);
@@ -147,6 +151,8 @@ export function VisitDetail({ visitId }: Props) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [timeLoading, setTimeLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     const [visitRes, timeRes, notesRes, attachmentsRes] = await Promise.all([
@@ -212,6 +218,23 @@ export function VisitDetail({ visitId }: Props) {
       if (timeRes.ok) setTimeEvents(await timeRes.json());
     } finally {
       setTimeLoading(false);
+    }
+  }
+
+  async function deleteVisit() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete visit");
+        return;
+      }
+      toast.success("Visit deleted");
+      router.push("/schedule");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
     }
   }
 
@@ -284,12 +307,20 @@ export function VisitDetail({ visitId }: Props) {
             ) : null}
           </div>
         </div>
-        <CollectPaymentButton
-          visitId={visit.id}
-          total={paymentSummary.balanceDue ?? total}
-          disabled={paymentSummary.isPaid || total <= 0}
-          paid={paymentSummary.isPaid}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <CollectPaymentButton
+            visitId={visit.id}
+            total={paymentSummary.balanceDue ?? total}
+            disabled={paymentSummary.isPaid || total <= 0}
+            paid={paymentSummary.isPaid}
+          />
+          {canDelete ? (
+            <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <TimeTrackingBar
@@ -360,6 +391,32 @@ export function VisitDetail({ visitId }: Props) {
           <VisitEstimatesSection visitId={visit.id} estimates={visit.estimates} />
         </div>
       </div>
+
+      {deleteOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => setDeleteOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">Delete visit?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete &ldquo;{visit.title}&rdquo; and its line items, notes, and
+              attachments. This cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" onClick={deleteVisit} disabled={deleting}>
+                {deleting ? "Deleting..." : "Delete visit"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

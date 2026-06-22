@@ -50,3 +50,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return unauthorizedResponse();
   }
 }
+
+export async function DELETE(_request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    if (user.role === "TECH") return forbiddenResponse();
+
+    const { id } = await params;
+    const result = await prisma.visit.deleteMany({ where: { id, companyId: user.companyId } });
+    if (result.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch {
+    return unauthorizedResponse();
+  }
+}

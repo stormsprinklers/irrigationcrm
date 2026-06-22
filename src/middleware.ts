@@ -11,6 +11,7 @@ const publicPaths = [
   "/api/sendgrid",
   "/api/stripe/webhook",
   "/api/invoices/public",
+  "/api/marketing/google-business/callback",
 ];
 
 const authSecret =
