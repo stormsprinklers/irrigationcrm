@@ -159,9 +159,14 @@ export async function listVisits(
   return visits.map(serializeVisit);
 }
 
-export async function getScheduleSummary(companyId: string, start: Date, end: Date) {
+export async function getScheduleSummary(
+  companyId: string,
+  start: Date,
+  end: Date,
+  filters?: ScheduleFilters
+) {
   const visits = await prisma.visit.findMany({
-    where: buildVisitWhere(companyId, start, end),
+    where: buildVisitWhere(companyId, start, end, filters),
     include: { lineItems: true, discounts: true },
   });
 

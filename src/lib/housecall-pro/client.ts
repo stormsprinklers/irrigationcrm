@@ -183,7 +183,9 @@ export class HousecallProClient {
     }
 
     let lastError: Error | null = null;
+    const attempted: string[] = [];
     for (const path of paths) {
+      attempted.push(path);
       try {
         const result = await this.getPaginated(path, options);
         this.resolvedPaths.set(cacheKey, path);
@@ -195,7 +197,9 @@ export class HousecallProClient {
       }
     }
 
-    throw lastError ?? new Error(`HCP 404: none of [${paths.join(", ")}] are available`);
+    const tried = attempted.join(", ");
+    const detail = lastError?.message ?? "unknown error";
+    throw new Error(`HCP 404: tried [${tried}]. ${detail}`);
   }
 
   async downloadBinary(url: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {

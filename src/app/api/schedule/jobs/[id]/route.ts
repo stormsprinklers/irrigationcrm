@@ -5,6 +5,7 @@ import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
+import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -30,6 +31,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       const area = await resolveServiceAreaByZip(user.companyId, String(body.zip));
       if (area) serviceAreaId = area.id;
     }
+
+    const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
+    const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
+    const nextAssignedUserId =
+      body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
+
+    const availabilityError = await validateAssignmentUpdate(
+      user.companyId,
+      nextAssignedUserId,
+      nextStart,
+      nextEnd,
+      id
+    );
+    if (availabilityError) return badRequestResponse(availabilityError);
 
     const visit = await prisma.visit.update({
       where: { id },

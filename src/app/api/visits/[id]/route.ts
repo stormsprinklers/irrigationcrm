@@ -3,6 +3,7 @@ import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { getVisitForCompany } from "@/lib/visits/queries";
+import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,6 +29,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+
+    const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
+    const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
+    const nextAssignedUserId =
+      body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
+
+    const availabilityError = await validateAssignmentUpdate(
+      user.companyId,
+      nextAssignedUserId,
+      nextStart,
+      nextEnd,
+      id
+    );
+    if (availabilityError) {
+      return NextResponse.json({ error: availabilityError }, { status: 400 });
+    }
+
     await prisma.visit.update({
       where: { id },
       data: {

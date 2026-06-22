@@ -9,7 +9,11 @@ import { cn } from "@/lib/utils";
 import type { CallHistoryDetail, CallHistoryListItem } from "@/lib/voice/call-history";
 import { formatCallDuration, formatCallTime, remotePartyLabel } from "@/lib/voice/call-history";
 
-export function CsrCallHistoryPanel() {
+type Props = {
+  className?: string;
+};
+
+export function CsrCallHistoryPanel({ className }: Props) {
   const [calls, setCalls] = useState<CallHistoryListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CallHistoryDetail | null>(null);
@@ -42,7 +46,12 @@ export function CsrCallHistoryPanel() {
   }, [selectedId]);
 
   return (
-    <section className="grid h-[min(70vh,640px)] min-h-[360px] grid-rows-2 overflow-hidden rounded-lg border border-border bg-white lg:grid-cols-5 lg:grid-rows-1">
+    <section
+      className={cn(
+        "grid min-h-[280px] grid-rows-2 overflow-hidden rounded-lg border border-border bg-white lg:grid-cols-5 lg:grid-rows-1",
+        className
+      )}
+    >
       <div className="flex min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-2 lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <History className="h-4 w-4 text-muted-foreground" />
@@ -107,13 +116,15 @@ export function CsrCallHistoryPanel() {
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {!selectedId ? (
-            <p className="p-4 text-sm text-muted-foreground">Select a call to play recording or read transcript.</p>
+            <p className="p-4 text-sm text-muted-foreground">
+              Select a call to play recording or read transcript.
+            </p>
           ) : loadingDetail ? (
             <p className="p-4 text-sm text-muted-foreground">Loading…</p>
           ) : !detail ? (
             <p className="p-4 text-sm text-muted-foreground">Call not found.</p>
           ) : (
-            <div className="p-4">
+            <div className="p-4 pb-8">
               <CallDetailView detail={detail} />
             </div>
           )}

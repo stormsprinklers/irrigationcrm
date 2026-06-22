@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function InboxPage() {
-  redirect("/inbox/sms/customers");
+  redirect("/inbox/voice/desk");
 }

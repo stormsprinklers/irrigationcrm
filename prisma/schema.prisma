@@ -59,6 +59,20 @@ enum EmployeeStatus {
   ARCHIVED
 }
 
+enum TimeOffStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
+enum TimeOffType {
+  TIME_OFF
+  PTO
+  SICK
+  OTHER
+}
+
 enum PayType {
   HOURLY
   COMMISSION
@@ -450,6 +464,8 @@ model Company {
   campaigns              Campaign[]
   housecallProMigrations HousecallProMigration[]
   hcpEntityMappings      HcpEntityMapping[]
+  employeeWorkSchedules  EmployeeWorkSchedule[]
+  timeOffRequests        TimeOffRequest[]
 }
 
 model User {
@@ -501,6 +517,10 @@ model User {
   timeClockEntries       TimeClockEntry[]
   assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
   handledCallLogs        CallLog[]            @relation("HandledCallLogs")
+  workScheduleDays       EmployeeWorkSchedule[]
+  timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
+  reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
+  createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
 }
 
 model Customer {
@@ -1222,6 +1242,51 @@ model TimeClockEntry {
 
   @@index([companyId, clockInAt])
   @@index([userId, clockInAt])
+}
+
+model EmployeeWorkSchedule {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  dayOfWeek Int
+  isWorking Boolean  @default(true)
+  startTime String?
+  endTime   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek])
+  @@index([companyId])
+}
+
+model TimeOffRequest {
+  id            String        @id @default(cuid())
+  companyId     String
+  userId        String
+  startAt       DateTime
+  endAt         DateTime
+  allDay        Boolean       @default(true)
+  type          TimeOffType   @default(TIME_OFF)
+  status        TimeOffStatus @default(PENDING)
+  reason        String?
+  reviewNotes   String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdById   String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User    @relation("TimeOffEmployee", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("TimeOffReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  createdBy  User    @relation("TimeOffCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([companyId, startAt])
+  @@index([userId, startAt])
+  @@index([companyId, status])
 }
 
 model VisitNote {

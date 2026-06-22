@@ -8,6 +8,7 @@ import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queri
 import type { ScheduleFilters } from "@/lib/schedule/types";
 import { sendOperationalNotification } from "@/lib/notifications/send";
 import { buildVisitContext } from "@/lib/notifications/templates";
+import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
   return {
@@ -73,6 +74,18 @@ export async function POST(request: NextRequest) {
     if (customerId) {
       const block = await getCustomerServiceBlock(user.companyId, customerId);
       if (block) return badRequestResponse(block);
+    }
+
+    const jobStart = new Date(startAt);
+    const jobEnd = new Date(endAt);
+    if (assignedUserId) {
+      const availabilityError = await validateAssignmentUpdate(
+        user.companyId,
+        assignedUserId,
+        jobStart,
+        jobEnd
+      );
+      if (availabilityError) return badRequestResponse(availabilityError);
     }
 
     const visit = await prisma.visit.create({

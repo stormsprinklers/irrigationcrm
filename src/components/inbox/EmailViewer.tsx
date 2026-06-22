@@ -6,6 +6,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
+import {
+  EmailRecipientPicker,
+  type EmailRecipient,
+} from "@/components/inbox/EmailRecipientPicker";
 import type { InboxScope } from "@/lib/inbox/types";
 
 type EmailDetail = {
@@ -35,17 +39,23 @@ export function EmailViewer({
 }) {
   const [compose, setCompose] = useState(!emailId);
   const [email, setEmail] = useState<EmailDetail | null>(null);
-  const [to, setTo] = useState("");
+  const [recipients, setRecipients] = useState<EmailRecipient[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!emailId && initialTo) {
-      setTo(initialTo);
+      setRecipients([
+        {
+          email: initialTo,
+          name: initialName ?? initialTo,
+          customerId: initialCustomerId ?? undefined,
+        },
+      ]);
       setCompose(true);
     }
-  }, [emailId, initialTo]);
+  }, [emailId, initialTo, initialName, initialCustomerId]);
 
   useEffect(() => {
     if (!emailId) {
@@ -71,17 +81,26 @@ export function EmailViewer({
   }
 
   async function handleSend(saveAsDraft = false) {
+    const toEmails = recipients.map((r) => r.email);
+    if (!toEmails.length && !saveAsDraft) {
+      toast.error("Select at least one recipient");
+      return;
+    }
+
     setSending(true);
     const res = await fetch("/api/inbox/email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to,
+        to: toEmails,
         subject,
         bodyText: body,
         scope: scope === "customers" ? "external" : "internal",
         saveAsDraft,
-        customerId: initialCustomerId ?? email?.customer?.id,
+        customerId:
+          initialCustomerId ??
+          email?.customer?.id ??
+          recipients.find((r) => r.customerId)?.customerId,
       }),
     });
     setSending(false);
@@ -93,7 +112,7 @@ export function EmailViewer({
     }
 
     toast.success(saveAsDraft ? "Draft saved" : "Email sent");
-    setTo("");
+    setRecipients([]);
     setSubject("");
     setBody("");
     onSent?.();
@@ -101,11 +120,11 @@ export function EmailViewer({
 
   if (compose || !emailId) {
     return (
-      <div className="flex h-full flex-col p-4">
-        <h3 className="mb-4 font-semibold">
+      <div className="flex h-full flex-col overflow-auto p-4">
+        <h3 className="mb-4 shrink-0 font-semibold">
           {initialName ? `Email ${initialName}` : "Compose email"}
         </h3>
-        <Input placeholder="To" value={to} onChange={(e) => setTo(e.target.value)} className="mb-2" />
+        <EmailRecipientPicker scope={scope} value={recipients} onChange={setRecipients} />
         <Input
           placeholder="Subject"
           value={subject}
@@ -118,7 +137,7 @@ export function EmailViewer({
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           <Button onClick={() => handleSend(false)} disabled={sending}>
             <Send className="h-4 w-4" />
             Send
@@ -168,7 +187,19 @@ export function EmailViewer({
         </div>
       </div>
       <div className="border-t border-border p-4">
-        <Button variant="outline" onClick={() => setCompose(true)}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setRecipients(
+              email.toEmails.map((address) => ({
+                email: address,
+                name: address,
+                customerId: email.customer?.id,
+              }))
+            );
+            setCompose(true);
+          }}
+        >
           Reply
         </Button>
       </div>

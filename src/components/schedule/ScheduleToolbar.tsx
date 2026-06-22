@@ -4,10 +4,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Filter,
+  Menu,
   Settings,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,38 +14,26 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScheduleFiltersPanel } from "./ScheduleFilters";
-import type { ColorByMode, ScheduleFilters } from "@/lib/schedule/types";
-
-type FilterOptions = {
-  serviceAreas: { id: string; name: string; color: string }[];
-  employees: { id: string; name: string }[];
-  crews: { id: string; name: string; color: string }[];
-};
+import type { ColorByMode } from "@/lib/schedule/types";
 
 type Props = {
   weekLabel: string;
   weeklyRevenue: string;
   weeklyScheduledHours: string;
   colorBy: ColorByMode;
-  filters: ScheduleFilters;
-  filterOptions: FilterOptions;
-  filtersOpen: boolean;
-  activeFilterCount: number;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
   onColorByChange: (mode: ColorByMode) => void;
-  onFiltersChange: (filters: ScheduleFilters) => void;
-  onToggleFilters: () => void;
-  onBulkAction: (action: string) => void;
   viewMode?: "week" | "day";
   onViewModeChange?: (mode: "week" | "day") => void;
 };
 
 const COLOR_BY_LABELS: Record<ColorByMode, string> = {
   area: "Area",
-  technician: "Technician",
+  technician: "Employee",
   crew: "Crew",
   division: "Division",
 };
@@ -56,55 +43,43 @@ export function ScheduleToolbar({
   weeklyRevenue,
   weeklyScheduledHours,
   colorBy,
-  filters,
-  filterOptions,
-  filtersOpen,
-  activeFilterCount,
+  sidebarOpen,
+  onToggleSidebar,
   onPrevWeek,
   onNextWeek,
   onToday,
   onColorByChange,
-  onFiltersChange,
-  onToggleFilters,
-  onBulkAction,
   viewMode = "week",
   onViewModeChange,
 }: Props) {
   return (
-    <div className="relative flex flex-wrap items-center justify-between gap-4 border-b border-border bg-white px-4 py-3">
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-white px-4 py-2.5">
       <div className="flex items-center gap-2">
+        <Button
+          variant={sidebarOpen ? "secondary" : "outline"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={onToggleSidebar}
+          aria-label={sidebarOpen ? "Close schedule filters" : "Open schedule filters"}
+        >
+          <Menu className="h-4 w-4" />
+        </Button>
         <Button variant="outline" size="sm" onClick={onToday}>
           Today
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              Bulk actions
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => onBulkAction("reschedule")}>
-              Reschedule selected
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onBulkAction("assign")}>
-              Assign technician
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrevWeek}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-semibold">{weekLabel}</span>
+          <span className="min-w-[140px] text-center text-sm font-semibold">{weekLabel}</span>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNextWeek}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="hidden items-center gap-4 text-sm text-muted-foreground md:flex">
+        <div className="hidden items-center gap-4 text-sm text-muted-foreground lg:flex">
           <span>
             Weekly revenue: <strong className="text-foreground">{weeklyRevenue}</strong>
           </span>
@@ -116,25 +91,6 @@ export function ScheduleToolbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="relative">
-          <Button variant="outline" size="sm" onClick={onToggleFilters}>
-            <Filter className="mr-1 h-4 w-4" />
-            Filters
-            {activeFilterCount > 0 ? (
-              <Badge variant="unread" className="ml-1 h-4 min-w-4 px-1 text-[9px]">
-                {activeFilterCount}
-              </Badge>
-            ) : null}
-          </Button>
-          <ScheduleFiltersPanel
-            open={filtersOpen}
-            onClose={onToggleFilters}
-            filters={filters}
-            options={filterOptions}
-            onChange={onFiltersChange}
-          />
-        </div>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -142,7 +98,7 @@ export function ScheduleToolbar({
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent align="end">
             {(Object.keys(COLOR_BY_LABELS) as ColorByMode[]).map((mode) => (
               <DropdownMenuItem key={mode} onClick={() => onColorByChange(mode)}>
                 {COLOR_BY_LABELS[mode]}
@@ -158,7 +114,7 @@ export function ScheduleToolbar({
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onViewModeChange?.("day")}>Day</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onViewModeChange?.("week")}>Week</DropdownMenuItem>
           </DropdownMenuContent>

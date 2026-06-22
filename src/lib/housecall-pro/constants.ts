@@ -27,23 +27,9 @@ export const HCP_PARENT_DETAIL_PATHS = {
 } as const;
 
 export const HCP_PATHS = {
-  materialCategories: [
-    "/price_book/material_categories",
-    "/v1/pricebook/material_categories",
-    "/pricebook/v1/material_categories",
-    "/material_categories",
-  ],
-  materials: [
-    "/price_book/materials",
-    "/v1/pricebook/materials",
-    "/pricebook/v1/materials",
-    "/materials",
-  ],
-  services: [
-    "/price_book/services",
-    "/v1/pricebook/services",
-    "/pricebook/v1/services",
-  ],
+  materialCategories: ["/price_book/material_categories"],
+  materials: ["/price_book/materials"],
+  services: ["/price_book/services"],
 } as const;
 
 export const DEFAULT_BATCH_SIZE = 200;
