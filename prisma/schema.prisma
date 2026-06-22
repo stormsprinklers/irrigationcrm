@@ -79,6 +79,56 @@ enum PayPeriodType {
   MONTHLY
 }
 
+enum HousecallProMigrationStatus {
+  DRAFT
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum HousecallProMigrationStepStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum HousecallProMigrationStepType {
+  CONNECT
+  TAGS
+  SERVICE_ZONES
+  EMPLOYEES
+  MATERIAL_CATEGORIES
+  MATERIALS
+  PRICE_BOOK_SERVICES
+  CUSTOMERS
+  CUSTOMER_ATTACHMENTS
+  JOBS
+  JOB_ATTACHMENTS
+  ESTIMATES
+  ESTIMATE_ATTACHMENTS
+  INVOICES
+  SCHEDULE_WINDOWS
+}
+
+enum HcpEntityType {
+  TAG
+  SERVICE_ZONE
+  EMPLOYEE
+  MATERIAL_CATEGORY
+  MATERIAL
+  SERVICE
+  CUSTOMER
+  PROPERTY
+  VISIT
+  ESTIMATE
+  INVOICE
+  ATTACHMENT
+}
+
 enum VisitStatus {
   UNSCHEDULED
   SCHEDULED
@@ -394,6 +444,8 @@ model Company {
   notificationRules      NotificationRule[]
   contactLists           ContactList[]
   campaigns              Campaign[]
+  housecallProMigrations HousecallProMigration[]
+  hcpEntityMappings      HcpEntityMapping[]
 }
 
 model User {
@@ -1680,4 +1732,68 @@ model PricingForm {
   category PriceBookCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
+}
+
+model HousecallProMigration {
+  id           String                        @id @default(cuid())
+  companyId    String
+  status       HousecallProMigrationStatus   @default(DRAFT)
+  currentStep  HousecallProMigrationStepType @default(CONNECT)
+  previewJson  Json?
+  optionsJson  Json?
+  startedAt    DateTime?
+  pausedAt     DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime                      @default(now())
+  updatedAt    DateTime                      @updatedAt
+
+  company  Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  steps    HousecallProMigrationStep[]
+  mappings HcpEntityMapping[]
+
+  @@index([companyId, status])
+}
+
+model HousecallProMigrationStep {
+  id            String                          @id @default(cuid())
+  migrationId   String
+  step          HousecallProMigrationStepType
+  status        HousecallProMigrationStepStatus @default(PENDING)
+  cursor        String?
+  processed     Int                             @default(0)
+  created       Int                             @default(0)
+  updated       Int                             @default(0)
+  skipped       Int                             @default(0)
+  failed        Int                             @default(0)
+  totalEstimate Int?
+  lastError     String?
+  statsJson     Json?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime                        @default(now())
+  updatedAt     DateTime                        @updatedAt
+
+  migration HousecallProMigration @relation(fields: [migrationId], references: [id], onDelete: Cascade)
+
+  @@unique([migrationId, step])
+  @@index([migrationId, status])
+}
+
+model HcpEntityMapping {
+  id           String        @id @default(cuid())
+  companyId    String
+  migrationId  String?
+  entityType   HcpEntityType
+  hcpId        String
+  localId      String
+  metadataJson Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  company   Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  migration HousecallProMigration? @relation(fields: [migrationId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, entityType, hcpId])
+  @@index([companyId, entityType, localId])
+  @@index([migrationId])
 }

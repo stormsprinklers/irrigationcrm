@@ -1,0 +1,441 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  HousecallProMigrationStatus,
+  HousecallProMigrationStepStatus,
+  HousecallProMigrationStepType,
+} from "@prisma/client";
+import { CheckCircle2, Loader2, Pause, Play, RefreshCw, SkipForward } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MIGRATION_STEP_ORDER, STEP_LABELS } from "@/lib/housecall-pro/constants";
+
+type MigrationStep = {
+  id: string;
+  step: HousecallProMigrationStepType;
+  status: HousecallProMigrationStepStatus;
+  processed: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  totalEstimate: number | null;
+  lastError: string | null;
+  statsJson: { recentErrors?: string[] } | null;
+};
+
+type Migration = {
+  id: string;
+  status: HousecallProMigrationStatus;
+  currentStep: HousecallProMigrationStepType;
+  previewJson: Record<string, unknown> | null;
+  steps: MigrationStep[];
+};
+
+type StatusResponse = {
+  configured: boolean;
+  migration: Migration;
+};
+
+function stepBadgeVariant(status: HousecallProMigrationStepStatus) {
+  switch (status) {
+    case HousecallProMigrationStepStatus.COMPLETED:
+      return "default" as const;
+    case HousecallProMigrationStepStatus.RUNNING:
+      return "secondary" as const;
+    case HousecallProMigrationStepStatus.FAILED:
+      return "destructive" as const;
+    case HousecallProMigrationStepStatus.SKIPPED:
+      return "outline" as const;
+    default:
+      return "outline" as const;
+  }
+}
+
+function stepProgress(step: MigrationStep) {
+  if (!step.totalEstimate) return step.status === HousecallProMigrationStepStatus.COMPLETED ? 100 : 0;
+  return Math.min(100, Math.round((step.processed / step.totalEstimate) * 100));
+}
+
+export function HousecallProMigrationPanel() {
+  const [data, setData] = useState<StatusResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [autoContinue, setAutoContinue] = useState(false);
+  const [runningBatch, setRunningBatch] = useState(false);
+  const autoContinueRef = useRef(false);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/migrations/housecall-pro");
+    if (!res.ok) throw new Error("Failed to load migration status");
+    return (await res.json()) as StatusResponse;
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const next = await load();
+    setData(next);
+    return next;
+  }, [load]);
+
+  useEffect(() => {
+    refresh()
+      .catch(() => toast.error("Failed to load migration"))
+      .finally(() => setLoading(false));
+  }, [refresh]);
+
+  useEffect(() => {
+    autoContinueRef.current = autoContinue;
+  }, [autoContinue]);
+
+  useEffect(() => {
+    if (!autoContinue || !data?.migration) return;
+    const interval = setInterval(() => {
+      refresh().catch(() => undefined);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [autoContinue, data?.migration, refresh]);
+
+  async function runBatch(step: HousecallProMigrationStepType) {
+    setRunningBatch(true);
+    try {
+      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/batch`, {
+        method: "POST",
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Batch failed");
+      await refresh();
+      if (body.errors?.length) {
+        toast.message(`Batch finished with ${body.errors.length} error(s)`);
+      }
+      return body as { done: boolean };
+    } finally {
+      setRunningBatch(false);
+    }
+  }
+
+  async function handleStart() {
+    try {
+      const res = await fetch("/api/migrations/housecall-pro/start", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to start");
+      toast.success("Migration started");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start");
+    }
+  }
+
+  async function handlePause() {
+    setAutoContinue(false);
+    try {
+      const res = await fetch("/api/migrations/housecall-pro/pause", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Migration paused");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to pause");
+    }
+  }
+
+  async function handleResume() {
+    try {
+      const res = await fetch("/api/migrations/housecall-pro/resume", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Migration resumed");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resume");
+    }
+  }
+
+  async function handleAdvance() {
+    try {
+      const res = await fetch("/api/migrations/housecall-pro/advance", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Moved to next step");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to advance");
+    }
+  }
+
+  async function handleSkip(step: HousecallProMigrationStepType) {
+    if (!confirm(`Skip ${STEP_LABELS[step]}?`)) return;
+    try {
+      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/skip`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Step skipped");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to skip");
+    }
+  }
+
+  async function handleReset(step: HousecallProMigrationStepType) {
+    if (!confirm(`Reset ${STEP_LABELS[step]} and re-import?`)) return;
+    try {
+      const res = await fetch(`/api/migrations/housecall-pro/steps/${step}/reset`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("Step reset");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reset");
+    }
+  }
+
+  async function handleRunNextBatch() {
+    if (!data?.migration) return;
+    const step = data.migration.currentStep;
+    if (step === HousecallProMigrationStepType.CONNECT) return;
+    try {
+      await runBatch(step);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Batch failed");
+    }
+  }
+
+  async function handleAutoContinue() {
+    if (!data?.migration) return;
+    setAutoContinue(true);
+    const step = data.migration.currentStep;
+    try {
+      let done = false;
+      while (!done && autoContinueRef.current) {
+        const body = await runBatch(step);
+        done = body?.done ?? true;
+        if (!done) await new Promise((r) => setTimeout(r, 1000));
+        if (done) setAutoContinue(false);
+      }
+    } catch (err) {
+      setAutoContinue(false);
+      toast.error(err instanceof Error ? err.message : "Auto-continue stopped");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading migration...
+      </div>
+    );
+  }
+
+  const migration = data?.migration;
+  const preview = (migration?.previewJson ?? {}) as Record<string, number | string | boolean>;
+  const activeStep = migration?.steps.find((s) => s.step === migration.currentStep);
+  const isPaused = migration?.status === HousecallProMigrationStatus.PAUSED;
+  const isActive =
+    migration?.status === HousecallProMigrationStatus.IN_PROGRESS ||
+    migration?.status === HousecallProMigrationStatus.PAUSED;
+  const stepComplete =
+    activeStep?.status === HousecallProMigrationStepStatus.COMPLETED ||
+    activeStep?.status === HousecallProMigrationStepStatus.SKIPPED;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Housecall Pro connection</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={data?.configured ? "default" : "destructive"}>
+              {data?.configured ? "API key configured" : "HOUSECALL_PRO_API_KEY missing"}
+            </Badge>
+            {preview.companyName ? (
+              <span className="text-sm text-muted-foreground">{String(preview.companyName)}</span>
+            ) : null}
+          </div>
+
+          {preview.connected ? (
+            <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                ["Customers", preview.customers],
+                ["Jobs", preview.jobs],
+                ["Estimates", preview.estimates],
+                ["Invoices", preview.invoices],
+                ["Employees", preview.employees],
+                ["Services", preview.services],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border px-3 py-2">
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                  <div className="font-medium">{value ?? "—"}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            {!isActive ? (
+              <Button onClick={handleStart} disabled={!data?.configured || runningBatch}>
+                <Play className="mr-2 h-4 w-4" />
+                Start migration
+              </Button>
+            ) : null}
+            {migration?.status === HousecallProMigrationStatus.IN_PROGRESS ? (
+              <Button variant="outline" onClick={handlePause}>
+                <Pause className="mr-2 h-4 w-4" />
+                Pause
+              </Button>
+            ) : null}
+            {isPaused ? (
+              <Button variant="outline" onClick={handleResume}>
+                <Play className="mr-2 h-4 w-4" />
+                Resume
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => refresh().catch(() => toast.error("Refresh failed"))}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {migration && isActive ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Current step: {STEP_LABELS[migration.currentStep]}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {activeStep ? (
+              <>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${stepProgress(activeStep)}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
+                  <div>Processed: {activeStep.processed}</div>
+                  <div>Created: {activeStep.created}</div>
+                  <div>Updated: {activeStep.updated}</div>
+                  <div>Skipped: {activeStep.skipped}</div>
+                  <div>Failed: {activeStep.failed}</div>
+                </div>
+                {activeStep.lastError ? (
+                  <p className="text-sm text-destructive">{activeStep.lastError}</p>
+                ) : null}
+                {activeStep.statsJson?.recentErrors?.length ? (
+                  <ul className="max-h-32 overflow-auto rounded-md border p-3 text-xs text-muted-foreground">
+                    {activeStep.statsJson.recentErrors.map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2">
+              {migration.currentStep !== HousecallProMigrationStepType.CONNECT ? (
+                <>
+                  <Button onClick={handleRunNextBatch} disabled={runningBatch || isPaused}>
+                    {runningBatch ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    Run next batch
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={handleAutoContinue}
+                    disabled={runningBatch || autoContinue || isPaused}
+                  >
+                    Auto-continue
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleSkip(migration.currentStep)}
+                    disabled={runningBatch}
+                  >
+                    <SkipForward className="mr-2 h-4 w-4" />
+                    Skip step
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleReset(migration.currentStep)}
+                    disabled={runningBatch}
+                  >
+                    Reset step
+                  </Button>
+                </>
+              ) : null}
+              {stepComplete ? (
+                <Button variant="default" onClick={handleAdvance}>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Continue to next step
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Migration steps</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {MIGRATION_STEP_ORDER.filter((s) => s !== HousecallProMigrationStepType.CONNECT).map(
+            (step) => {
+              const row = migration?.steps.find((s) => s.step === step);
+              const isCurrent = migration?.currentStep === step;
+              return (
+                <div
+                  key={step}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 ${
+                    isCurrent ? "border-primary bg-muted/30" : ""
+                  }`}
+                >
+                  <div>
+                    <div className="font-medium">{STEP_LABELS[step]}</div>
+                    {row ? (
+                      <div className="text-xs text-muted-foreground">
+                        {row.processed}
+                        {row.totalEstimate ? ` / ${row.totalEstimate}` : ""} processed · created{" "}
+                        {row.created} · failed {row.failed}
+                      </div>
+                    ) : null}
+                  </div>
+                  <Badge variant={row ? stepBadgeVariant(row.status) : "outline"}>
+                    {row?.status ?? "PENDING"}
+                  </Badge>
+                </div>
+              );
+            }
+          )}
+        </CardContent>
+      </Card>
+
+      {migration?.status === HousecallProMigrationStatus.COMPLETED ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Migration complete</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/customers">View customers</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/schedule">View schedule</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/price-book">View price book</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}

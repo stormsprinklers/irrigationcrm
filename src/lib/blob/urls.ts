@@ -18,7 +18,7 @@ export function blobPathnameFromUrl(url: string) {
 }
 
 export function canAccessBlobPath(companyId: string, pathname: string) {
-  const match = pathname.match(/^(employees|visits|estimates|voice-clips|marketing)\/([^/]+)\//);
+  const match = pathname.match(/^(employees|visits|estimates|customers|voice-clips|marketing)\/([^/]+)\//);
   return match !== null && match[2] === companyId;
 }
 

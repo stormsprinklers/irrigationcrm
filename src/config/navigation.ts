@@ -118,6 +118,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Employees", href: "/settings/employees" },
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service Areas", href: "/settings/service-areas" },
+      { label: "Data migration", href: "/settings/migrations/housecall-pro" },
     ],
   },
   {
