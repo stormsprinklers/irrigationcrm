@@ -17,12 +17,19 @@ export async function GET(_request: Request, { params }: Params) {
     where: { id: propertyId, customerId: ctx.customerId, companyId: ctx.companyId },
     include: {
       irrigationZones: { orderBy: { sortOrder: "asc" } },
+      irrigationMapZones: { orderBy: { sortOrder: "asc" } },
+      irrigationControllers: {
+        orderBy: { sortOrder: "asc" },
+        include: { zoneStations: true },
+      },
     },
   });
   if (!property) return portalNotFoundResponse();
 
   return NextResponse.json({
     propertyDiagramUrl: property.propertyDiagramUrl,
+    aerialImageUrl: property.aerialImageUrl,
+    irrigationMapStatus: property.irrigationMapStatus,
     zones: property.irrigationZones.map((z) => ({
       id: z.id,
       stationNumber: z.stationNumber,
@@ -32,6 +39,20 @@ export async function GET(_request: Request, { params }: Params) {
       wateringGuide: z.wateringGuide,
       runMinutes: z.runMinutes,
       rachioZoneId: z.rachioZoneId,
+    })),
+    mapZones: property.irrigationMapZones.map((z) => ({
+      id: z.id,
+      name: z.name,
+      vegetationType: z.vegetationType,
+      irrigationType: z.irrigationType,
+      estimatedGpm: z.estimatedGpm,
+      baseRuntimeMinutes: z.baseRuntimeMinutes,
+    })),
+    controllers: property.irrigationControllers.map((c) => ({
+      id: c.id,
+      label: c.label,
+      stationCount: c.stationCount,
+      controllerModelId: c.controllerModelId,
     })),
   });
 }

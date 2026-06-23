@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { EmployeeStatus, PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, validateEmployeePassword } from "@/lib/employees";
+import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -84,6 +85,8 @@ export async function POST(request: NextRequest) {
       },
       select: employeeSelectFields(),
     });
+
+    pushEmployeeToLms(employee).catch(() => {});
 
     return NextResponse.json(
       {

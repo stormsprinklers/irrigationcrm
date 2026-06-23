@@ -29,6 +29,7 @@ export type CustomerPropertyDTO = {
   state: string | null;
   zip: string | null;
   isPrimary: boolean;
+  designProjectId: string | null;
   createdAt: string;
 };
 

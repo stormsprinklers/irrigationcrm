@@ -444,6 +444,7 @@ model Company {
   googleBusinessConnectedAt    DateTime?
   googleBusinessCatalogJson    Json?
   defaultLeadAssigneeId    String?
+  notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
   materialMarkupsEnabled   Boolean  @default(true)
   commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
@@ -494,6 +495,9 @@ model Company {
   checklistTemplates     ChecklistTemplate[]
   portalLoginTokens      CustomerPortalLoginToken[]
   portalOffers           PortalOffer[]
+  integrationCredentials IntegrationCredential[]
+  integrationAuditLogs   IntegrationAuditLog[]
+  marketingEvents        MarketingEvent[]
 }
 
 model User {
@@ -549,6 +553,9 @@ model User {
   timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
   reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
   createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
+  lmsUserId              String?              @unique
+  lmsSyncStatus          String?
+  lmsLastSyncedAt        DateTime?
 }
 
 model Customer {
@@ -645,6 +652,8 @@ model Lead {
   status              LeadStatus @default(NEW)
   assignedUserId      String?
   notes               String?
+  externalId          String?
+  metadata            Json?
   convertedCustomerId String?    @unique
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
@@ -654,6 +663,7 @@ model Lead {
   convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
   callLogs          CallLog[]
 
+  @@unique([companyId, externalId])
   @@index([companyId, status])
   @@index([assignedUserId])
 }
@@ -669,6 +679,14 @@ model CustomerProperty {
   zip        String?
   isPrimary  Boolean  @default(false)
   propertyDiagramUrl String?
+  latitude   Float?
+  longitude  Float?
+  mapBounds  Json?
+  aerialImageUrl    String?
+  stylizedImageUrl  String?
+  irrigationWizardStep Int?
+  irrigationMapStatus  IrrigationMapStatus?
+  designProjectId      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -679,6 +697,9 @@ model CustomerProperty {
   maintenancePlans MaintenancePlanEnrollment[]
   smartControllers PropertySmartController[]
   irrigationZones  PropertyIrrigationZone[]
+  irrigationMapZones PropertyIrrigationMapZone[]
+  irrigationValves   PropertyIrrigationValve[]
+  irrigationControllers PropertyIrrigationController[]
 
   @@index([companyId, customerId])
 }
@@ -1489,6 +1510,9 @@ model Estimate {
   subtotal        Decimal        @default(0) @db.Decimal(10, 2)
   discountTotal   Decimal        @default(0) @db.Decimal(10, 2)
   total           Decimal        @default(0) @db.Decimal(10, 2)
+  designProjectId String?
+  designVersionId String?
+  designExportMetadata Json?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -2056,4 +2080,134 @@ model PropertyIrrigationZone {
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, sortOrder])
+}
+
+enum IntegrationType {
+  WEBSITE
+  LMS
+  DESIGN
+  MAPS
+}
+
+enum IrrigationMapStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model IntegrationCredential {
+  id         String           @id @default(cuid())
+  companyId  String
+  type       IntegrationType
+  label      String
+  keyHash    String
+  keyPrefix  String
+  enabled    Boolean          @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, type])
+}
+
+model IntegrationAuditLog {
+  id              String           @id @default(cuid())
+  companyId       String
+  integrationType IntegrationType?
+  action          String
+  payloadHash     String?
+  status          String
+  error           String?
+  createdAt       DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+model MarketingEvent {
+  id         String   @id @default(cuid())
+  companyId  String
+  source     String   @default("WEBSITE")
+  eventType  String
+  externalId String?
+  sessionId  String?
+  pagePath   String?
+  metadata   Json?
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, source, externalId])
+  @@index([companyId, eventType, occurredAt])
+}
+
+model PropertyIrrigationMapZone {
+  id                  String   @id @default(cuid())
+  propertyId          String
+  name                String
+  polygonGeoJson      Json
+  vegetationType      String?
+  shadeLevel          String?
+  slopeLevel          String?
+  soilType            String?
+  irrigationType      String?
+  nozzleCount         Int?
+  estimatedGpm        Float?
+  baseRuntimeMinutes  Int?
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  zoneStations PropertyZoneStation[]
+
+  @@index([propertyId, sortOrder])
+}
+
+model PropertyIrrigationValve {
+  id         String   @id @default(cuid())
+  propertyId String
+  label      String
+  pointGeoJson Json
+  zoneIds    String[] @default([])
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model PropertyIrrigationController {
+  id                String   @id @default(cuid())
+  propertyId        String
+  label             String
+  pointGeoJson      Json
+  stationCount      Int      @default(1)
+  controllerModelId String?
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  property     CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  zoneStations PropertyZoneStation[]
+
+  @@index([propertyId])
+}
+
+model PropertyZoneStation {
+  id            String @id @default(cuid())
+  controllerId  String
+  stationNumber Int
+  mapZoneId     String?
+
+  controller PropertyIrrigationController @relation(fields: [controllerId], references: [id], onDelete: Cascade)
+  mapZone    PropertyIrrigationMapZone?   @relation(fields: [mapZoneId], references: [id], onDelete: SetNull)
+
+  @@unique([controllerId, stationNumber])
+  @@index([mapZoneId])
 }

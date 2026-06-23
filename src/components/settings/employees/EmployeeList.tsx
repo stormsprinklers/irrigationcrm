@@ -142,6 +142,17 @@ export function EmployeeList() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    {process.env.NEXT_PUBLIC_LMS_URL ? (
+                      <Button variant="outline" size="sm" asChild>
+                        <a
+                          href={`${process.env.NEXT_PUBLIC_LMS_URL.replace(/\/$/, "")}/admin/users?email=${encodeURIComponent(employee.email)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          LMS
+                        </a>
+                      </Button>
+                    ) : null}
                     <Button variant="outline" size="sm" onClick={() => setEditing(employee)}>
                       Edit
                     </Button>

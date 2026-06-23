@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canDeleteEmployee, canManageEmployees, employeeSelectFields } from "@/lib/employees";
+import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -92,6 +93,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       select: employeeSelectFields(),
     });
+
+    if (employee) pushEmployeeToLms(employee).catch(() => {});
 
     return NextResponse.json(employee);
   } catch (error) {

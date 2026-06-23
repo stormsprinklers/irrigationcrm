@@ -41,6 +41,7 @@ export function serializeProperty(property: {
   state: string | null;
   zip: string | null;
   isPrimary: boolean;
+  designProjectId?: string | null;
   createdAt: Date;
 }): CustomerPropertyDTO {
   return {
@@ -52,6 +53,7 @@ export function serializeProperty(property: {
     state: property.state,
     zip: property.zip,
     isPrimary: property.isPrimary,
+    designProjectId: property.designProjectId ?? null,
     createdAt: property.createdAt.toISOString(),
   };
 }

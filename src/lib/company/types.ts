@@ -47,6 +47,7 @@ export const companySettingsSelect = {
   rachioPersonId: true,
   hydrawiseApiKey: true,
   defaultLeadAssigneeId: true,
+  notifyLeadCreated: true,
 } as const;
 
 export type CompanySettingsDTO = {
@@ -98,6 +99,7 @@ export type CompanySettingsDTO = {
   rachioPersonId: string | null;
   hydrawiseApiKey: string | null;
   defaultLeadAssigneeId: string | null;
+  notifyLeadCreated: boolean;
 };
 
 export type BusinessHoursDay = {

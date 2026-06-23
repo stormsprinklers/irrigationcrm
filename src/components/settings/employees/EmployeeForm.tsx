@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS } from "@/lib/employees";
+import { EmployeeTrainingPanel } from "./EmployeeTrainingPanel";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
@@ -484,6 +485,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
             </div>
           </div>
         </div>
+      ) : null}
+
+      {employee ? (
+        <EmployeeTrainingPanel employeeId={employee.id} email={employee.email} />
       ) : null}
 
       <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { EmployeeStatus } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees, employeeSelectFields } from "@/lib/employees";
+import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
       select: employeeSelectFields(),
     });
+
+    pushEmployeeToLms(employee).catch(() => {});
 
     return NextResponse.json(employee);
   } catch (error) {

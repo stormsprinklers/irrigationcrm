@@ -91,6 +91,7 @@ export const reportingSidebar: NavSection[] = [
       { label: "Jobs", href: "/reporting" },
       { label: "Estimates", href: "/reporting/estimates" },
       { label: "Leads", href: "/reporting/leads" },
+      { label: "Marketing", href: "/reporting/marketing" },
       { label: "Voice", href: "/reporting/voice" },
       { label: "Service plans", href: "/reporting/service-plans" },
       { label: "Invoices", href: "/reporting/invoices" },
@@ -122,6 +123,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service Areas", href: "/settings/service-areas" },
       { label: "Data migration", href: "/settings/migrations/housecall-pro" },
+      { label: "Integrations", href: "/settings/integrations" },
     ],
   },
   {

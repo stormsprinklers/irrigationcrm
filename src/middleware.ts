@@ -16,6 +16,7 @@ const publicPaths = [
   "/api/stripe/webhook",
   "/api/invoices/public",
   "/api/marketing/google-business/callback",
+  "/api/integrations",
 ];
 
 const authSecret = getAuthSecret();

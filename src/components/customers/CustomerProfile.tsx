@@ -39,6 +39,7 @@ import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
 import { PropertyIrrigationEditor } from "@/components/customers/PropertyIrrigationEditor";
+import { PropertyIrrigationWizard } from "@/components/customers/PropertyIrrigationWizard";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -838,6 +839,17 @@ export function CustomerProfile({ customerId }: Props) {
                     propertyId={property.id}
                     propertyName={property.name}
                   />
+                  <PropertyIrrigationWizard customerId={customerId} propertyId={property.id} />
+                  {property.designProjectId && process.env.NEXT_PUBLIC_DESIGN_URL ? (
+                    <a
+                      href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary underline"
+                    >
+                      Open design project
+                    </a>
+                  ) : null}
                   <PropertyIrrigationEditor customerId={customerId} propertyId={property.id} />
                   <CustomerPropertyMap
                     title={`${property.name} map`}

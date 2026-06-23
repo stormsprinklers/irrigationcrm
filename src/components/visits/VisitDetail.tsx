@@ -17,6 +17,7 @@ import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSecti
 import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
+import { VisitIrrigationRuntimes } from "@/components/visits/VisitIrrigationRuntimes";
 import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
@@ -444,6 +445,12 @@ export function VisitDetail({ visitId }: Props) {
             propertyId={visit.property?.id ?? null}
             onUpdated={load}
           />
+          {visit.property?.id && visit.customer?.id ? (
+            <VisitIrrigationRuntimes
+              customerId={visit.customer.id}
+              propertyId={visit.property.id}
+            />
+          ) : null}
           <VisitDiscountsSection
             visitId={visit.id}
             discounts={visit.discounts}

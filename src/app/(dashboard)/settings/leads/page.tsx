@@ -55,6 +55,17 @@ export default function SettingsLeadsPage() {
             placeholder="Optional user ID"
           />
         </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="notifyLeadCreated"
+            type="checkbox"
+            checked={company.notifyLeadCreated ?? true}
+            onChange={(e) => setCompany({ ...company, notifyLeadCreated: e.target.checked })}
+          />
+          <label htmlFor="notifyLeadCreated" className="text-sm">
+            Email ADMIN and CSR when a new lead is created via website integration
+          </label>
+        </div>
       </div>
     </ContentArea>
   );
