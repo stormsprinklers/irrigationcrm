@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { ScheduleViewMode } from "@/components/schedule/WeekGrid";
 import type { ColorByMode } from "@/lib/schedule/types";
 
 type Props = {
@@ -27,8 +28,8 @@ type Props = {
   onNextWeek: () => void;
   onToday: () => void;
   onColorByChange: (mode: ColorByMode) => void;
-  viewMode?: "week" | "day";
-  onViewModeChange?: (mode: "week" | "day") => void;
+  viewMode?: ScheduleViewMode;
+  onViewModeChange?: (mode: ScheduleViewMode) => void;
 };
 
 const COLOR_BY_LABELS: Record<ColorByMode, string> = {
@@ -36,6 +37,12 @@ const COLOR_BY_LABELS: Record<ColorByMode, string> = {
   technician: "Employee",
   crew: "Crew",
   division: "Division",
+};
+
+const VIEW_LABELS: Record<ScheduleViewMode, string> = {
+  week: "Week",
+  day: "Day",
+  month: "Month",
 };
 
 export function ScheduleToolbar({
@@ -52,6 +59,8 @@ export function ScheduleToolbar({
   viewMode = "week",
   onViewModeChange,
 }: Props) {
+  const metricsHidden = viewMode === "month";
+
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-white px-4 py-2.5">
       <div className="flex items-center gap-2">
@@ -79,44 +88,50 @@ export function ScheduleToolbar({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="hidden items-center gap-4 text-sm text-muted-foreground lg:flex">
-          <span>
-            Weekly revenue: <strong className="text-foreground">{weeklyRevenue}</strong>
-          </span>
-          <span>
-            Weekly scheduled hours:{" "}
-            <strong className="text-foreground">{weeklyScheduledHours}</strong>
-          </span>
-        </div>
+        {!metricsHidden ? (
+          <div className="hidden items-center gap-4 text-sm text-muted-foreground lg:flex">
+            <span>
+              {viewMode === "day" ? "Daily" : "Weekly"} revenue:{" "}
+              <strong className="text-foreground">{weeklyRevenue}</strong>
+            </span>
+            <span>
+              {viewMode === "day" ? "Daily" : "Weekly"} scheduled hours:{" "}
+              <strong className="text-foreground">{weeklyScheduledHours}</strong>
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              Color by: {COLOR_BY_LABELS[colorBy]}
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {(Object.keys(COLOR_BY_LABELS) as ColorByMode[]).map((mode) => (
-              <DropdownMenuItem key={mode} onClick={() => onColorByChange(mode)}>
-                {COLOR_BY_LABELS[mode]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {viewMode !== "month" ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                Color by: {COLOR_BY_LABELS[colorBy]}
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {(Object.keys(COLOR_BY_LABELS) as ColorByMode[]).map((mode) => (
+                <DropdownMenuItem key={mode} onClick={() => onColorByChange(mode)}>
+                  {COLOR_BY_LABELS[mode]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
-              {viewMode === "day" ? "Day" : "Week"}
+              {VIEW_LABELS[viewMode]}
               <ChevronDown className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => onViewModeChange?.("day")}>Day</DropdownMenuItem>
             <DropdownMenuItem onClick={() => onViewModeChange?.("week")}>Week</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewModeChange?.("month")}>Month</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

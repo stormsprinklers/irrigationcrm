@@ -48,14 +48,17 @@ export function CsrCallHistoryPanel({ className }: Props) {
   return (
     <section
       className={cn(
-        "grid min-h-[280px] grid-rows-2 overflow-hidden rounded-lg border border-border bg-white lg:grid-cols-5 lg:grid-rows-1",
+        "flex min-h-0 flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex-row",
         className
       )}
     >
-      <div className="flex min-h-0 flex-col overflow-hidden border-b border-border lg:col-span-2 lg:border-b-0 lg:border-r">
+      <div className="flex min-h-[280px] min-w-0 flex-col overflow-hidden border-b border-border lg:min-h-0 lg:w-[38%] lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold">Call history</h3>
+          {calls.length > 0 ? (
+            <span className="text-xs text-muted-foreground">({calls.length})</span>
+          ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {!calls.length ? (
@@ -110,7 +113,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-col overflow-hidden lg:col-span-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:w-[62%]">
         <div className="shrink-0 border-b border-border px-4 py-3">
           <h3 className="font-semibold">Call details</h3>
         </div>
@@ -124,7 +127,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
           ) : !detail ? (
             <p className="p-4 text-sm text-muted-foreground">Call not found.</p>
           ) : (
-            <div className="p-4 pb-8">
+            <div className="p-4">
               <CallDetailView detail={detail} />
             </div>
           )}

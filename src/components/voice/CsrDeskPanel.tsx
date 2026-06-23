@@ -178,13 +178,13 @@ export function CsrDeskPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex min-h-0 flex-1 basis-0 flex-col gap-4 overflow-hidden">
       <div className="grid shrink-0 gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <section className="rounded-lg border border-border bg-white p-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">
           <Phone className="h-4 w-4" /> Queue ({queue.length})
         </h3>
-        <ScrollArea className="h-64">
+        <ScrollArea className="h-40">
           <ul className="space-y-2 text-sm">
             {queue.map((entry) => (
               <li key={entry.id} className="rounded border border-border p-2">
@@ -346,7 +346,7 @@ export function CsrDeskPanel({
       />
       </div>
 
-      <CsrCallHistoryPanel className="min-h-0 flex-1" />
+      <CsrCallHistoryPanel className="min-h-0 flex-1 basis-0" />
     </div>
   );
 }

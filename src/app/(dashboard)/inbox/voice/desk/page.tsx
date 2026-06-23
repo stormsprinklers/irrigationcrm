@@ -8,7 +8,7 @@ export default function CsrDeskPage() {
   const [bookedVisitId, setBookedVisitId] = useState<string | null>(null);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden px-6 py-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
       <PageHeader
         breadcrumb={["Inbox", "Voice", "CSR Desk"]}
         title="CSR Desk"

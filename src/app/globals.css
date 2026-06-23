@@ -104,6 +104,19 @@
   color: var(--foreground);
 }
 
+/* Native selects: OS dropdown lists stay light with dark text in dark mode */
+.dark select {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #102341;
+}
+
+.dark select option,
+.dark select optgroup {
+  color: #102341;
+  background-color: #ffffff;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

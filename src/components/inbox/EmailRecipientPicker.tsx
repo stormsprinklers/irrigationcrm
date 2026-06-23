@@ -185,7 +185,7 @@ export function EmailRecipientPicker({ scope, value, onChange, className }: Prop
             aria-label="Close recipient list"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg dark:bg-[#ffffff] dark:text-[#102341]">
             {loading ? (
               <p className="p-3 text-sm text-muted-foreground">Searching...</p>
             ) : results.length === 0 ? (
@@ -207,7 +207,7 @@ export function EmailRecipientPicker({ scope, value, onChange, className }: Prop
                         disabled={alreadyAdded || !contact.email}
                         onClick={() => addRecipient(contact)}
                         className={cn(
-                          "flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50",
+                          "flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50 dark:hover:bg-muted dark:hover:text-[#102341]",
                           alreadyAdded && "cursor-not-allowed opacity-50"
                         )}
                       >

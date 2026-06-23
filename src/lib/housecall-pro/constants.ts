@@ -26,10 +26,11 @@ export const HCP_PARENT_DETAIL_PATHS = {
   estimates: (id: string) => [`/estimates/${id}`, `/estimate/${id}`],
 } as const;
 
+/** Price book endpoints live under /api/price_book/ (not /v1/ or /pricebook/v1/). */
 export const HCP_PATHS = {
-  materialCategories: ["/price_book/material_categories"],
-  materials: ["/price_book/materials"],
-  services: ["/price_book/services"],
+  materialCategories: ["/api/price_book/material_categories"],
+  materials: ["/api/price_book/materials"],
+  services: ["/api/price_book/services"],
 } as const;
 
 export const DEFAULT_BATCH_SIZE = 200;

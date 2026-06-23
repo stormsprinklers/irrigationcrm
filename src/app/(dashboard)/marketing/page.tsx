@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { BarChart3, Globe, Mail, Megaphone, Search, Share2 } from "lucide-react";
+import { BarChart3, Globe, Mail } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SocialMetricsPlaceholder } from "@/components/marketing/SocialMetricsPlaceholder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const comingSoon = [
-  { title: "SEO tracking", icon: Search, description: "Monitor rankings and organic traffic." },
-  { title: "Google Ads", icon: Megaphone, description: "Campaign spend and conversion metrics." },
-  { title: "Meta Ads", icon: Share2, description: "Facebook and Instagram ad performance." },
+  { title: "SEO tracking", description: "Monitor rankings and organic traffic." },
+  { title: "Google Ads", description: "Campaign spend and conversion metrics." },
 ];
 
 export default function MarketingOverviewPage() {
@@ -71,12 +71,16 @@ export default function MarketingOverviewPage() {
         </Card>
       </div>
 
+      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Social metrics</h2>
+      <div className="mb-8">
+        <SocialMetricsPlaceholder />
+      </div>
+
       <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Coming soon</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         {comingSoon.map((item) => (
           <Card key={item.title} className="opacity-70">
-            <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
-              <item.icon className="h-5 w-5 text-muted-foreground" />
+            <CardHeader className="pb-2">
               <CardTitle className="text-base">{item.title}</CardTitle>
             </CardHeader>
             <CardContent>

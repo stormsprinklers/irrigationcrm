@@ -220,7 +220,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -241,8 +241,13 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div
+        className={cn(
+          "grid min-h-0 w-full flex-1 overflow-hidden",
+          canManage ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_20rem]" : "grid-cols-1"
+        )}
+      >
+        <div className="min-h-0 min-w-0 overflow-y-auto p-4">
           <div className="mb-4 flex flex-wrap items-end gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Employee</label>
@@ -266,7 +271,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : (
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid w-full gap-6 lg:grid-cols-2">
               <section className="rounded-lg border border-border p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="font-semibold">Work days</h3>
@@ -437,7 +442,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
         </div>
 
         {canManage ? (
-          <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-muted/20 p-4">
+          <aside className="min-h-0 w-full shrink-0 overflow-y-auto border-t border-border bg-muted/20 p-4 xl:w-80 xl:border-l xl:border-t-0">
             <h3 className="mb-3 font-semibold">Pending approvals</h3>
             {pendingRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">No pending requests.</p>
