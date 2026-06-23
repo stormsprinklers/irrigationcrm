@@ -206,11 +206,22 @@ export class HousecallProClient {
 
   async downloadBinary(url: string): Promise<{ buffer: ArrayBuffer; contentType: string }> {
     await this.throttle(DEFAULT_THROTTLE_MS);
-    const response = await fetch(url, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-      cache: "no-store",
-    });
+
+    const attempt = async (headers?: HeadersInit) => {
+      return fetch(url, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      });
+    };
+
+    let response = await attempt();
+    if (!response.ok) {
+      response = await attempt({ Authorization: `Bearer ${this.apiKey}` });
+    }
+    if (!response.ok) {
+      response = await attempt({ Authorization: `Token ${this.apiKey}` });
+    }
     if (!response.ok) {
       throw new Error(`HCP download failed: ${response.status}`);
     }

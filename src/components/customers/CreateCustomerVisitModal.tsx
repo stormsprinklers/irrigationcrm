@@ -43,6 +43,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
     assignedUserId: "",
     propertyId: primaryProperty?.id ?? "",
     zip: primaryProperty?.zip ?? customer.zip ?? "",
+    isCallback: false,
   });
 
   useEffect(() => {
@@ -131,6 +132,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
           address: property?.address || customer.address || undefined,
           city: property?.city || customer.city || undefined,
           state: property?.state || customer.state || undefined,
+          isCallback: form.isCallback,
         }),
       });
       if (!res.ok) {
@@ -242,6 +244,14 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
             onChange={(e) => setForm({ ...form, zip: e.target.value })}
             placeholder="Zip (if no service area)"
           />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.isCallback}
+              onChange={(e) => setForm({ ...form, isCallback: e.target.checked })}
+            />
+            Callback job
+          </label>
           <div className="flex gap-2 pt-1">
             <Button type="submit" disabled={saving}>
               {saving ? "Creating..." : "Create visit"}

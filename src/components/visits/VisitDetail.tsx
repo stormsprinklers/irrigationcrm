@@ -13,6 +13,7 @@ import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
+import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSection";
 import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
@@ -33,6 +34,7 @@ type VisitDetailData = {
   endAt: string;
   division: string;
   tags: string[];
+  isCallback?: boolean;
   enRouteEtaSeconds?: number | null;
   enRouteEtaAt?: string | null;
   enRouteCalculatedAt?: string | null;
@@ -251,6 +253,20 @@ export function VisitDetail({ visitId }: Props) {
     };
   }
 
+  async function toggleCallback(isCallback: boolean) {
+    const res = await fetch(`/api/visits/${visitId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isCallback }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to update callback flag");
+      return;
+    }
+    await load();
+  }
+
   async function deleteVisit() {
     setDeleting(true);
     try {
@@ -313,6 +329,7 @@ export function VisitDetail({ visitId }: Props) {
             {paymentSummary.isPaid ? (
               <Badge className="bg-green-600 hover:bg-green-600">Paid</Badge>
             ) : null}
+            {visit.isCallback ? <Badge variant="destructive">Callback</Badge> : null}
             <Badge variant="secondary">{visit.division}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -366,6 +383,7 @@ export function VisitDetail({ visitId }: Props) {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
           <LineItemsSection visitId={visit.id} lineItems={visit.lineItems} onUpdated={load} />
+          <VisitChecklistsSection visitId={visit.id} onUpdated={load} />
           <VisitNotesSection visitId={visit.id} notes={notes} onUpdated={load} />
           <VisitAttachmentsSection
             visitId={visit.id}
@@ -408,6 +426,18 @@ export function VisitDetail({ visitId }: Props) {
           <VisitProfitSection visitId={visit.id} />
 
           <VisitTagsSection visitId={visit.id} tags={visit.tags} onUpdated={load} />
+          {canDelete ? (
+            <div className="rounded-lg border p-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(visit.isCallback)}
+                  onChange={(e) => toggleCallback(e.target.checked)}
+                />
+                Callback job (excludes callback-specific checklists)
+              </label>
+            </div>
+          ) : null}
           <VisitMaintenancePlanSection
             visitId={visit.id}
             customerId={visit.customer?.id ?? null}

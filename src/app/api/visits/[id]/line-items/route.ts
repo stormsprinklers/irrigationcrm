@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { buildLineItemFromPriceBook } from "@/lib/price-book/pricing";
+import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { prisma } from "@/lib/prisma";
 import { computeLineItemTotal } from "@/lib/visits/totals";
 import { getVisitForCompany } from "@/lib/visits/queries";
@@ -68,6 +69,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
+    await syncVisitChecklists(id, user.companyId);
+
     const visit = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(visit, { status: 201 });
   } catch {
@@ -117,6 +120,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
+    await syncVisitChecklists(id, user.companyId);
+
     const visit = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(visit);
   } catch {
@@ -134,6 +139,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     await prisma.visitLineItem.deleteMany({
       where: { id: lineItemId, visitId: id, visit: { companyId: user.companyId } },
     });
+
+    await syncVisitChecklists(id, user.companyId);
 
     const visit = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(visit);

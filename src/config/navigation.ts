@@ -133,6 +133,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Voice", href: "/settings/voice" },
       { label: "Price Book", href: "/settings/price-book" },
       { label: "Estimates", href: "/settings/estimates" },
+      { label: "Checklists", href: "/settings/checklists" },
       { label: "Invoices", href: "/settings/invoices" },
       { label: "Maintenance", href: "/settings/maintenance" },
     ],

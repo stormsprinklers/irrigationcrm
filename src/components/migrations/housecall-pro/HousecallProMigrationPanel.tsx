@@ -141,6 +141,7 @@ export function HousecallProMigrationPanel() {
   }
 
   async function handlePause() {
+    autoContinueRef.current = false;
     setAutoContinue(false);
     try {
       const res = await fetch("/api/migrations/housecall-pro/pause", { method: "POST" });
@@ -233,19 +234,48 @@ export function HousecallProMigrationPanel() {
 
   async function handleAutoContinue() {
     if (!data?.migration) return;
+    autoContinueRef.current = true;
     setAutoContinue(true);
-    const step = data.migration.currentStep;
+
     try {
-      let done = false;
-      while (!done && autoContinueRef.current) {
+      while (autoContinueRef.current) {
+        const latest = await refresh();
+        const migration = latest?.migration;
+        if (!migration) break;
+        if (migration.status === HousecallProMigrationStatus.PAUSED) break;
+
+        const step = migration.currentStep;
+        if (step === HousecallProMigrationStepType.CONNECT) break;
+
+        const stepRow = migration.steps.find((s) => s.step === step);
+        if (
+          stepRow?.status === HousecallProMigrationStepStatus.COMPLETED ||
+          stepRow?.status === HousecallProMigrationStepStatus.SKIPPED
+        ) {
+          const adv = await fetch("/api/migrations/housecall-pro/advance", { method: "POST" });
+          if (!adv.ok) break;
+          await refresh();
+          continue;
+        }
+
         const body = await runBatch(step);
-        done = body?.done ?? true;
-        if (!done) await new Promise((r) => setTimeout(r, 1000));
-        if (done) setAutoContinue(false);
+        if (!body) break;
+
+        if (body.done) {
+          const adv = await fetch("/api/migrations/housecall-pro/advance", { method: "POST" });
+          if (!adv.ok) break;
+          const after = await refresh();
+          if (after?.migration?.status === HousecallProMigrationStatus.COMPLETED) break;
+          continue;
+        }
+
+        await new Promise((r) => setTimeout(r, 300));
       }
     } catch (err) {
-      setAutoContinue(false);
       toast.error(err instanceof Error ? err.message : "Auto-continue stopped");
+    } finally {
+      autoContinueRef.current = false;
+      setAutoContinue(false);
     }
   }
 
@@ -386,7 +416,14 @@ export function HousecallProMigrationPanel() {
                     onClick={handleAutoContinue}
                     disabled={runningBatch || autoContinue || isPaused}
                   >
-                    Auto-continue
+                    {autoContinue ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Auto-continuing…
+                      </>
+                    ) : (
+                      "Auto-continue"
+                    )}
                   </Button>
                   <Button
                     variant="outline"

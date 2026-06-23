@@ -5,6 +5,11 @@ import {
   HCP_ATTACHMENT_PATHS,
   HCP_PARENT_DETAIL_PATHS,
 } from "@/lib/housecall-pro/constants";
+import {
+  attachmentMimeType,
+  attachmentsFromRecord,
+  HCP_EXPAND_ATTACHMENTS,
+} from "@/lib/housecall-pro/expand";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import {
   countMappedParents,
@@ -93,21 +98,26 @@ async function fetchAttachments(
 ): Promise<HcpRecord[]> {
   const items: HcpRecord[] = [];
 
-  for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
+  for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
     try {
-      const data = await ctx.client.get<HcpRecord>(path);
+      const data = await ctx.client.get<HcpRecord>(path, {
+        params: { ...HCP_EXPAND_ATTACHMENTS },
+      });
+      items.push(...attachmentsFromRecord(data));
       items.push(...extractAttachmentItems(data));
+      if (items.length) break;
     } catch {
       // try next path shape
     }
   }
 
   if (!items.length) {
-    for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
+    for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
       try {
-        const data = await ctx.client.get<HcpRecord>(path);
+        const data = await ctx.client.get<HcpRecord>(path, {
+          params: { ...HCP_EXPAND_ATTACHMENTS },
+        });
         items.push(...extractAttachmentItems(data));
-        if (items.length) break;
       } catch {
         // try next path shape
       }
@@ -161,13 +171,14 @@ async function importAttachmentFile(params: {
   }
 
   const { buffer, contentType } = await params.ctx.client.downloadBinary(fileUrl);
+  const mimeType = attachmentMimeType(params.attachment, contentType);
   const pathname = `${params.blobPrefix}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const blob = await uploadPrivateBlob(pathname, buffer, { contentType });
+  const blob = await uploadPrivateBlob(pathname, buffer, { contentType: mimeType });
 
   await params.createRecord({
     blobUrl: blob.url,
     fileName,
-    mimeType: contentType,
+    mimeType,
   });
 
   await upsertMapping({
@@ -222,6 +233,10 @@ async function importParentAttachmentsBatch(params: {
     result.processed++;
     try {
       const attachments = await fetchAttachments(params.ctx, params.parentType, parent.hcpId);
+      if (!attachments.length) {
+        result.skipped++;
+        continue;
+      }
       for (const attachment of attachments) {
         try {
           await importAttachmentFile({

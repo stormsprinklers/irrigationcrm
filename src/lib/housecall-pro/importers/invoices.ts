@@ -1,4 +1,6 @@
 import { HcpEntityType, InvoiceStatus, PaymentMethod } from "@prisma/client";
+import { HCP_PATHS } from "@/lib/housecall-pro/constants";
+import { hcpRelatedId } from "@/lib/housecall-pro/expand";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
@@ -30,9 +32,12 @@ async function importSingleInvoice(
     return;
   }
 
-  const customerHcpId =
-    hcpString(record.customer_id) ??
-    hcpString((record.customer as HcpRecord | undefined)?.id);
+  const customerHcpId = hcpRelatedId(
+    record,
+    "customer_id",
+    "customer_uuid",
+    "customer"
+  );
   const customerMapping = customerHcpId
     ? await prisma.hcpEntityMapping.findUnique({
         where: {
@@ -44,12 +49,9 @@ async function importSingleInvoice(
         },
       })
     : null;
-  if (!customerMapping) {
-    result.skipped++;
-    return;
-  }
+  let customerLocalId = customerMapping?.localId ?? null;
 
-  const jobHcpId = hcpString(record.job_id) ?? hcpString(record.work_order_id);
+  const jobHcpId = hcpRelatedId(record, "job_id", "job_uuid", "work_order_id", "job");
   const visitMapping = jobHcpId
     ? await prisma.hcpEntityMapping.findUnique({
         where: {
@@ -62,7 +64,20 @@ async function importSingleInvoice(
       })
     : null;
 
-  const estimateHcpId = hcpString(record.estimate_id);
+  if (!customerLocalId && visitMapping) {
+    const visit = await prisma.visit.findUnique({
+      where: { id: visitMapping.localId },
+      select: { customerId: true },
+    });
+    customerLocalId = visit?.customerId ?? null;
+  }
+
+  if (!customerLocalId) {
+    result.skipped++;
+    return;
+  }
+
+  const estimateHcpId = hcpRelatedId(record, "estimate_id", "estimate_uuid", "estimate");
   const estimateMapping = estimateHcpId
     ? await prisma.hcpEntityMapping.findUnique({
         where: {
@@ -101,7 +116,7 @@ async function importSingleInvoice(
 
   const invoiceData = {
     companyId: ctx.companyId,
-    customerId: customerMapping.localId,
+    customerId: customerLocalId,
     visitId: visitMapping?.localId ?? null,
     estimateId: estimateMapping?.localId ?? null,
     invoiceNumber,
@@ -207,10 +222,11 @@ export async function importInvoicesBatch(ctx: ImportContext): Promise<BatchResu
   const path = source === "job_invoices" ? "/job_invoices" : "/invoices";
   const arrayKeys = source === "job_invoices" ? ["job_invoices", "invoices"] : ["invoices"];
 
-  const page = await ctx.client.getPaginated(path, {
+  const page = await ctx.client.getPaginatedFirst(HCP_PATHS.invoices, {
     cursor: pageCursor === "1" && cursorParts.length === 1 ? ctx.cursor : pageCursor,
     pageSize: ctx.batchSize,
     arrayKeys,
+    params: { "expand[]": "customer" },
   });
 
   if (page.totalEstimate != null && !ctx.cursor) {

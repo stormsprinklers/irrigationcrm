@@ -1,10 +1,87 @@
 import { HcpEntityType, PriceBookItemType } from "@prisma/client";
-import { HCP_PATHS } from "@/lib/housecall-pro/constants";
-import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
+import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
+import {
+  fetchMaterialCategoriesPage,
+  parseMaterialCategoryCursor,
+  serializeMaterialCategoryCursor,
+} from "@/lib/housecall-pro/material-categories";
 import { hcpId, hcpString, uniqueSlug } from "@/lib/housecall-pro/utils";
 import { ensureCategoryPath } from "@/lib/price-book/queries";
 import { prisma } from "@/lib/prisma";
+
+async function importCategoryRecord(
+  ctx: ImportContext,
+  record: HcpRecord,
+  existingSlugs: Set<string>,
+  result: BatchResult,
+  newChildParents: string[]
+) {
+  const id = hcpId(record);
+  const name = hcpString(record.name);
+  if (!id || !name) {
+    result.skipped++;
+    return;
+  }
+
+  newChildParents.push(id);
+
+  const mapping = await prisma.hcpEntityMapping.findUnique({
+    where: {
+      companyId_entityType_hcpId: {
+        companyId: ctx.companyId,
+        entityType: HcpEntityType.MATERIAL_CATEGORY,
+        hcpId: id,
+      },
+    },
+  });
+
+  let parentLocalId: string | null = null;
+  const parentHcpId =
+    hcpString(record.parent_id) ??
+    hcpString(record.parent_category_id) ??
+    hcpString(record.parent_uuid);
+  if (parentHcpId) {
+    parentLocalId = await prisma.hcpEntityMapping
+      .findUnique({
+        where: {
+          companyId_entityType_hcpId: {
+            companyId: ctx.companyId,
+            entityType: HcpEntityType.MATERIAL_CATEGORY,
+            hcpId: parentHcpId,
+          },
+        },
+      })
+      .then((m) => m?.localId ?? null);
+  }
+
+  if (mapping) {
+    await prisma.priceBookCategory.update({
+      where: { id: mapping.localId },
+      data: { name, parentId: parentLocalId },
+    });
+    result.updated++;
+  } else {
+    const slug = uniqueSlug(name, existingSlugs);
+    const category = await prisma.priceBookCategory.create({
+      data: {
+        companyId: ctx.companyId,
+        type: PriceBookItemType.MATERIAL,
+        name,
+        slug,
+        parentId: parentLocalId,
+      },
+    });
+    await upsertMapping({
+      companyId: ctx.companyId,
+      migrationId: ctx.migrationId,
+      entityType: HcpEntityType.MATERIAL_CATEGORY,
+      hcpId: id,
+      localId: category.id,
+    });
+    result.created++;
+  }
+}
 
 export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise<BatchResult> {
   const result: BatchResult = {
@@ -18,18 +95,8 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
     errors: [],
   };
 
-  const page = await ctx.client.getPaginatedFirst(HCP_PATHS.materialCategories, {
-    cursor: ctx.cursor,
-    pageSize: ctx.batchSize,
-    arrayKeys: ["categories", "material_categories", "data"],
-  });
-
-  if (page.totalEstimate != null && !ctx.cursor) {
-    await prisma.housecallProMigrationStep.updateMany({
-      where: { migrationId: ctx.migrationId, step: ctx.step },
-      data: { totalEstimate: page.totalEstimate },
-    });
-  }
+  let state = parseMaterialCategoryCursor(ctx.cursor);
+  const newChildParents: string[] = [];
 
   const existingSlugs = new Set(
     (
@@ -40,76 +107,98 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
     ).map((c) => c.slug)
   );
 
-  for (const record of page.items) {
-    result.processed++;
-    const id = hcpId(record);
-    const name = hcpString(record.name);
-    if (!id || !name) {
-      result.skipped++;
-      continue;
+  let pageResult;
+  if (state.phase === "roots") {
+    pageResult = await fetchMaterialCategoriesPage(ctx.client, {
+      parentUuid: null,
+      page: state.page,
+      pageSize: ctx.batchSize,
+    });
+  } else {
+    const parentUuid = state.childParentQueue[state.childParentIndex];
+    if (!parentUuid) {
+      result.done = true;
+      result.cursor = null;
+      return result;
     }
+    pageResult = await fetchMaterialCategoriesPage(ctx.client, {
+      parentUuid,
+      page: state.page,
+      pageSize: ctx.batchSize,
+    });
+  }
 
+  if (pageResult.totalEstimate != null && !ctx.cursor) {
+    await prisma.housecallProMigrationStep.updateMany({
+      where: { migrationId: ctx.migrationId, step: ctx.step },
+      data: { totalEstimate: pageResult.totalEstimate },
+    });
+  }
+
+  for (const record of pageResult.items) {
+    result.processed++;
     try {
-      const mapping = await prisma.hcpEntityMapping.findUnique({
-        where: {
-          companyId_entityType_hcpId: {
-            companyId: ctx.companyId,
-            entityType: HcpEntityType.MATERIAL_CATEGORY,
-            hcpId: id,
-          },
-        },
-      });
-
-      let parentLocalId: string | null = null;
-      const parentHcpId = hcpString(record.parent_id) ?? hcpString(record.parent_category_id);
-      if (parentHcpId) {
-        parentLocalId = await prisma.hcpEntityMapping
-          .findUnique({
-            where: {
-              companyId_entityType_hcpId: {
-                companyId: ctx.companyId,
-                entityType: HcpEntityType.MATERIAL_CATEGORY,
-                hcpId: parentHcpId,
-              },
-            },
-          })
-          .then((m) => m?.localId ?? null);
-      }
-
-      if (mapping) {
-        await prisma.priceBookCategory.update({
-          where: { id: mapping.localId },
-          data: { name, parentId: parentLocalId },
-        });
-        result.updated++;
-      } else {
-        const slug = uniqueSlug(name, existingSlugs);
-        const category = await prisma.priceBookCategory.create({
-          data: {
-            companyId: ctx.companyId,
-            type: PriceBookItemType.MATERIAL,
-            name,
-            slug,
-            parentId: parentLocalId,
-          },
-        });
-        await upsertMapping({
-          companyId: ctx.companyId,
-          migrationId: ctx.migrationId,
-          entityType: HcpEntityType.MATERIAL_CATEGORY,
-          hcpId: id,
-          localId: category.id,
-        });
-        result.created++;
-      }
+      await importCategoryRecord(ctx, record, existingSlugs, result, newChildParents);
     } catch (err) {
       result.failed++;
       result.errors.push(err instanceof Error ? err.message : "Material category import failed");
     }
   }
 
-  result.cursor = page.nextCursor;
-  result.done = !page.nextCursor;
+  if (!pageResult.nextCursor) {
+    if (state.phase === "children" && newChildParents.length) {
+      const existing = new Set(state.childParentQueue);
+      for (const id of newChildParents) {
+        if (!existing.has(id)) {
+          state.childParentQueue.push(id);
+          existing.add(id);
+        }
+      }
+    }
+  }
+
+  if (pageResult.nextCursor) {
+    state.page = Number(pageResult.nextCursor) || state.page + 1;
+    if (state.phase === "roots") {
+      state.rootsImportedIds = [...new Set([...state.rootsImportedIds, ...newChildParents])];
+    }
+    result.cursor = serializeMaterialCategoryCursor(state);
+    result.done = false;
+    return result;
+  }
+
+  if (state.phase === "roots") {
+    const queue = [...new Set([...state.rootsImportedIds, ...newChildParents])];
+    if (queue.length) {
+      result.cursor = serializeMaterialCategoryCursor({
+        phase: "children",
+        page: 1,
+        childParentQueue: queue,
+        childParentIndex: 0,
+        rootsImportedIds: [],
+      });
+      result.done = false;
+      return result;
+    }
+    result.done = true;
+    result.cursor = null;
+    return result;
+  }
+
+  const nextParentIndex = state.childParentIndex + 1;
+  if (nextParentIndex < state.childParentQueue.length) {
+    result.cursor = serializeMaterialCategoryCursor({
+      ...state,
+      childParentIndex: nextParentIndex,
+      page: 1,
+      rootsImportedIds: [],
+    });
+    result.done = false;
+    return result;
+  }
+
+  result.done = true;
+  result.cursor = null;
   return result;
 }
 

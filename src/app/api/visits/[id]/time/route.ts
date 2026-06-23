@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TimeEventType, VisitStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import {
   computeDrivingEta,
   formatVisitEtaPayload,
@@ -97,6 +98,10 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const newStatus = STATUS_MAP[type];
     if (newStatus) {
+      if (newStatus === VisitStatus.COMPLETED) {
+        const checklistError = await assertVisitCanComplete(id, user.companyId);
+        if (checklistError) return badRequestResponse(checklistError);
+      }
       visitUpdate.status = newStatus;
     }
 

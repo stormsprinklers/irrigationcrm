@@ -98,7 +98,7 @@ export async function fetchPreviewCounts(client: HousecallProClient): Promise<Pr
     countPage(client, "/customers", ["customers"]),
     countPage(client, "/jobs", ["jobs"]),
     countPage(client, "/estimates", ["estimates"]),
-    countPage(client, "/invoices", ["invoices"]),
+    countPageFirst(client, HCP_PATHS.invoices, ["invoices"]),
   ]);
 
   return {

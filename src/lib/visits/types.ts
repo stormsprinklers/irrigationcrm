@@ -22,6 +22,7 @@ export type VisitDTO = {
   division: "INSTALL" | "SERVICE";
   status: string;
   tags: string[];
+  isCallback?: boolean;
   address: string | null;
   city: string | null;
   state: string | null;

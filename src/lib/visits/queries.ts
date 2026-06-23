@@ -65,6 +65,7 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     division: visit.division,
     status: visit.status,
     tags: visit.tags,
+    isCallback: visit.isCallback,
     address: visit.address,
     city: visit.city,
     state: visit.state,

@@ -31,6 +31,7 @@ export const HCP_PATHS = {
   materialCategories: ["/api/price_book/material_categories"],
   materials: ["/api/price_book/materials"],
   services: ["/api/price_book/services"],
+  invoices: ["/api/invoices", "/invoices"],
 } as const;
 
 export const DEFAULT_BATCH_SIZE = 200;

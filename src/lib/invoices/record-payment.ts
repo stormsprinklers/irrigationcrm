@@ -110,13 +110,20 @@ export async function recordInvoicePayment(
   ]);
 
   if (invoice.visitId && nextStatus === "PAID") {
-    await prisma.visit.updateMany({
-      where: {
-        id: invoice.visitId,
-        status: { notIn: ["CANCELLED", "COMPLETED"] },
-      },
-      data: { status: "COMPLETED" },
+    const visit = await prisma.visit.findFirst({
+      where: { id: invoice.visitId, companyId: invoice.companyId },
+      select: { status: true },
     });
+    if (visit && visit.status !== "CANCELLED" && visit.status !== "COMPLETED") {
+      const { assertVisitCanComplete } = await import("@/lib/checklists/apply");
+      const checklistError = await assertVisitCanComplete(invoice.visitId, invoice.companyId);
+      if (!checklistError) {
+        await prisma.visit.update({
+          where: { id: invoice.visitId },
+          data: { status: "COMPLETED" },
+        });
+      }
+    }
   }
 
   if (invoice.company.notifyInvoicePaid) {

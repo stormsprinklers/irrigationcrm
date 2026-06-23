@@ -153,6 +153,22 @@ enum VisitStatus {
   CANCELLED
 }
 
+enum ChecklistItemType {
+  PASS_FLAG_FAIL
+  NUMBER
+  NOTE
+  MEDIA
+  MULTI_SELECT
+  CHECKBOX
+  SELECT_ONE
+}
+
+enum VisitChecklistStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum TimeEventType {
   EN_ROUTE
   START
@@ -466,6 +482,7 @@ model Company {
   hcpEntityMappings      HcpEntityMapping[]
   employeeWorkSchedules  EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]
+  checklistTemplates     ChecklistTemplate[]
 }
 
 model User {
@@ -1158,6 +1175,7 @@ model Visit {
   crewId         String?
   status         VisitStatus @default(SCHEDULED)
   tags           String[]    @default([])
+  isCallback     Boolean     @default(false)
   address        String?
   city           String?
   state          String?
@@ -1188,6 +1206,7 @@ model Visit {
   invoices     Invoice[]
   callLogs     CallLog[]         @relation("CallLogVisit")
   callSession  CallSession?      @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+  visitChecklists VisitChecklist[]
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])
@@ -1385,6 +1404,7 @@ model PriceBookItem {
   visitLineItems           VisitLineItem[]
   estimateLineItems        EstimateLineItem[]
   estimateTemplateLineItems EstimateTemplateLineItem[]
+  checklistTemplateLineItems ChecklistTemplateLineItem[]
 
   @@index([categoryId, active])
   @@index([type, active])
@@ -1870,4 +1890,96 @@ model HcpEntityMapping {
   @@unique([companyId, entityType, hcpId])
   @@index([companyId, entityType, localId])
   @@index([migrationId])
+}
+
+model ChecklistTemplate {
+  id                    String     @id @default(cuid())
+  companyId             String
+  name                  String
+  description           String?
+  active                Boolean    @default(true)
+  applyToAllJobs        Boolean    @default(false)
+  divisions             Division[] @default([])
+  excludeCallbacks      Boolean    @default(false)
+  requiredForCompletion Boolean    @default(false)
+  sortOrder             Int        @default(0)
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  company      Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items        ChecklistItemTemplate[]
+  lineItemLinks ChecklistTemplateLineItem[]
+  visitChecklists VisitChecklist[]
+
+  @@index([companyId, active, sortOrder])
+}
+
+model ChecklistItemTemplate {
+  id         String            @id @default(cuid())
+  templateId String
+  label      String
+  helpText   String?
+  type       ChecklistItemType
+  required   Boolean           @default(false)
+  sortOrder  Int               @default(0)
+  options    Json?
+  config     Json?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, sortOrder])
+}
+
+model ChecklistTemplateLineItem {
+  id              String @id @default(cuid())
+  templateId      String
+  priceBookItemId String
+
+  template      ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  priceBookItem PriceBookItem     @relation(fields: [priceBookItemId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, priceBookItemId])
+  @@index([priceBookItemId])
+}
+
+model VisitChecklist {
+  id                    String               @id @default(cuid())
+  visitId               String
+  templateId            String?
+  name                  String
+  requiredForCompletion Boolean              @default(false)
+  status                VisitChecklistStatus @default(NOT_STARTED)
+  appliedAt             DateTime             @default(now())
+  completedAt           DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  visit    Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  template ChecklistTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  items    VisitChecklistItem[]
+
+  @@unique([visitId, templateId])
+  @@index([visitId])
+}
+
+model VisitChecklistItem {
+  id               String            @id @default(cuid())
+  visitChecklistId String
+  label            String
+  helpText         String?
+  type             ChecklistItemType
+  required         Boolean           @default(false)
+  sortOrder        Int               @default(0)
+  options          Json?
+  config           Json?
+  response         Json?
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  visitChecklist VisitChecklist @relation(fields: [visitChecklistId], references: [id], onDelete: Cascade)
+
+  @@index([visitChecklistId, sortOrder])
 }

@@ -94,6 +94,7 @@ export function NewMenu() {
     assignedUserId: "",
     customerId: "",
     zip: "",
+    isCallback: false,
   });
 
   const [newEstimate, setNewEstimate] = useState({
@@ -152,6 +153,7 @@ export function NewMenu() {
       assignedUserId: "",
       customerId: "",
       zip: "",
+      isCallback: false,
     });
     setNewEstimate({ customerId: "", propertyId: "" });
     setProperties([]);
@@ -219,6 +221,7 @@ export function NewMenu() {
           address: selectedCustomer?.address || undefined,
           city: selectedCustomer?.city || undefined,
           state: selectedCustomer?.state || undefined,
+          isCallback: newVisit.isCallback,
         }),
       });
       if (!res.ok) {
@@ -406,6 +409,14 @@ export function NewMenu() {
             onChange={(e) => setNewVisit({ ...newVisit, zip: e.target.value })}
             placeholder="Zip (if no service area)"
           />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={newVisit.isCallback}
+              onChange={(e) => setNewVisit({ ...newVisit, isCallback: e.target.checked })}
+            />
+            Callback job
+          </label>
           <div className="flex gap-2 pt-1">
             <Button type="submit" disabled={saving}>
               Create

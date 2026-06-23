@@ -9,6 +9,8 @@ import type { ScheduleFilters } from "@/lib/schedule/types";
 import { sendOperationalNotification } from "@/lib/notifications/send";
 import { buildVisitContext } from "@/lib/notifications/templates";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { syncVisitChecklists } from "@/lib/checklists/apply";
+import { syncCallbackTag } from "@/lib/checklists/callback";
 
 function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
   return {
@@ -88,6 +90,10 @@ export async function POST(request: NextRequest) {
       if (availabilityError) return badRequestResponse(availabilityError);
     }
 
+    const isCallback = Boolean(body.isCallback);
+    const rawTags = Array.isArray(tags) ? tags : [];
+    const visitTags = syncCallbackTag(rawTags, isCallback);
+
     const visit = await prisma.visit.create({
       data: {
         companyId: user.companyId,
@@ -100,7 +106,8 @@ export async function POST(request: NextRequest) {
         crewId: crewId ?? null,
         customerId: customerId ?? null,
         propertyId: propertyId ?? null,
-        tags: Array.isArray(tags) ? tags : [],
+        tags: visitTags,
+        isCallback,
         address: address ?? null,
         city: city ?? null,
         state: state ?? null,
@@ -110,6 +117,8 @@ export async function POST(request: NextRequest) {
       },
       include: jobInclude,
     });
+
+    await syncVisitChecklists(visit.id, user.companyId);
 
     if (visit.customerId) {
       const customer = await prisma.customer.findUnique({

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { assertVisitCanComplete } from "@/lib/checklists/apply";
+import { syncCallbackTag } from "@/lib/checklists/callback";
 import { prisma } from "@/lib/prisma";
 import { getVisitForCompany } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
@@ -46,6 +48,26 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: availabilityError }, { status: 400 });
     }
 
+    if (body.status === VisitStatus.COMPLETED) {
+      const checklistError = await assertVisitCanComplete(id, user.companyId);
+      if (checklistError) {
+        return NextResponse.json({ error: checklistError }, { status: 400 });
+      }
+    }
+
+    let nextTags = existing.tags;
+    let nextIsCallback = existing.isCallback;
+    if (body.isCallback !== undefined) {
+      nextIsCallback = Boolean(body.isCallback);
+      nextTags = syncCallbackTag(
+        body.tags !== undefined ? (Array.isArray(body.tags) ? body.tags : []) : existing.tags,
+        nextIsCallback
+      );
+    } else if (body.tags !== undefined) {
+      nextTags = Array.isArray(body.tags) ? body.tags : [];
+      nextIsCallback = nextTags.some((t) => t.toLowerCase() === "callback");
+    }
+
     await prisma.visit.update({
       where: { id },
       data: {
@@ -56,7 +78,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.status !== undefined ? { status: body.status as VisitStatus } : {}),
         ...(body.propertyId !== undefined ? { propertyId: body.propertyId ?? null } : {}),
         ...(body.customerId !== undefined ? { customerId: body.customerId ?? null } : {}),
-        ...(body.tags !== undefined ? { tags: Array.isArray(body.tags) ? body.tags : [] } : {}),
+        ...(body.tags !== undefined || body.isCallback !== undefined ? { tags: nextTags } : {}),
+        ...(body.isCallback !== undefined ? { isCallback: nextIsCallback } : {}),
         ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId ?? null } : {}),
         ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
       },
