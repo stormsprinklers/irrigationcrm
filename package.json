@@ -5,11 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "prisma db push --accept-data-loss && next build",
+    "vercel-build": "tsx prisma/predeploy-backfill.ts && prisma db push --accept-data-loss && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push": "tsx prisma/predeploy-backfill.ts && prisma db push",
     "db:seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
