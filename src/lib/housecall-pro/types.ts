@@ -5,6 +5,8 @@ export type MigrationOptions = {
   batchSize?: number;
   defaultDivision?: Division;
   throttleMs?: number;
+  /** HCP org / CRM company names — never copy onto Customer.companyName */
+  excludeCompanyNames?: string[];
 };
 
 export type BatchCounters = {

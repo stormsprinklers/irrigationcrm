@@ -2,7 +2,7 @@ import { HcpEntityType, PriceBookItemType } from "@prisma/client";
 import { HCP_PATHS } from "@/lib/housecall-pro/constants";
 import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
-import { hcpId, hcpMoney, hcpString } from "@/lib/housecall-pro/utils";
+import { hcpId, hcpMoney, hcpQuantity, hcpString } from "@/lib/housecall-pro/utils";
 import { ensureCategoryPath } from "@/lib/price-book/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -61,7 +61,7 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
 
       const unitPrice = hcpMoney(record.price ?? record.unit_price ?? record.amount);
       const laborRate = hcpMoney(record.labor_rate);
-      const laborHours = hcpMoney(record.labor_hours);
+      const laborHours = hcpQuantity(record.labor_hours);
 
       const itemData = {
         categoryId,

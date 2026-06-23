@@ -6,8 +6,11 @@ const publicPaths = [
   "/login",
   "/pay",
   "/book",
+  "/portal",
   "/api/auth",
   "/api/book/public",
+  "/api/portal/auth",
+  "/api/portal/company",
   "/api/twilio",
   "/api/sendgrid",
   "/api/stripe/webhook",
@@ -42,6 +45,19 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
+    if (pathname.startsWith("/api/portal/")) {
+      return withNoIndex(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+    }
+    if (pathname.startsWith("/portal/")) {
+      const segments = pathname.split("/").filter(Boolean);
+      const slug = segments[1];
+      if (slug && segments[2] !== "login") {
+        const loginUrl = new URL(`/portal/${slug}/login`, request.url);
+        loginUrl.searchParams.set("callbackUrl", pathname);
+        return withNoIndex(NextResponse.redirect(loginUrl));
+      }
+      return withNoIndex(NextResponse.next());
+    }
     if (pathname.startsWith("/api/")) {
       return withNoIndex(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
     }

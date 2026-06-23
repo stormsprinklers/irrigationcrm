@@ -77,6 +77,8 @@ export function HousecallProMigrationPanel() {
   const [loading, setLoading] = useState(true);
   const [autoContinue, setAutoContinue] = useState(false);
   const [runningBatch, setRunningBatch] = useState(false);
+  const [rollbackConfirm, setRollbackConfirm] = useState("");
+  const [rollingBack, setRollingBack] = useState(false);
   const autoContinueRef = useRef(false);
   const currentStepCardRef = useRef<HTMLDivElement>(null);
 
@@ -125,6 +127,40 @@ export function HousecallProMigrationPanel() {
       return body as { done: boolean };
     } finally {
       setRunningBatch(false);
+    }
+  }
+
+  async function handleRollback() {
+    if (
+      !confirm(
+        "This permanently deletes all customers, jobs, invoices, and other records imported from Housecall Pro. Continue?"
+      )
+    ) {
+      return;
+    }
+    setRollingBack(true);
+    try {
+      const res = await fetch("/api/migrations/housecall-pro/rollback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: rollbackConfirm, migrationId: migration?.id }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Rollback failed");
+      const totalDeleted = Object.values(body.deleted ?? {}).reduce(
+        (sum: number, n) => sum + (typeof n === "number" ? n : 0),
+        0
+      );
+      toast.success(`Rollback complete — removed ${totalDeleted} imported records`);
+      if (body.errors?.length) {
+        toast.message(`${body.errors.length} record(s) could not be deleted`);
+      }
+      setRollbackConfirm("");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Rollback failed");
+    } finally {
+      setRollingBack(false);
     }
   }
 
@@ -564,6 +600,43 @@ export function HousecallProMigrationPanel() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card className="border-destructive/40">
+        <CardHeader>
+          <CardTitle className="text-base text-destructive">Roll back imported data</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Deletes all records tracked by this Housecall Pro migration (customers, visits, invoices,
+            estimates, price book items, etc.) and resets migration progress. This cannot be undone.
+          </p>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[200px] flex-1">
+              <label className="text-xs font-medium text-muted-foreground">
+                Type ROLLBACK to confirm
+              </label>
+              <Input
+                value={rollbackConfirm}
+                onChange={(e) => setRollbackConfirm(e.target.value)}
+                placeholder="ROLLBACK"
+                className="mt-1"
+              />
+            </div>
+            <Button
+              variant="destructive"
+              disabled={rollingBack || rollbackConfirm !== "ROLLBACK"}
+              onClick={() => void handleRollback()}
+            >
+              {rollingBack ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-2 h-4 w-4" />
+              )}
+              Roll back migration data
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

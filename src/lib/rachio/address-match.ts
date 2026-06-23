@@ -63,94 +63,82 @@ function pickString(...values: unknown[]): string | null {
   return null;
 }
 
-type MatchCandidate = {
-  customerId: string;
-  customerName: string;
-  propertyId: string | null;
-  propertyName: string | null;
-  fields: AddressFields;
-  matchSource: "customer" | "property";
-};
-
-export function findCustomerByExactAddress(
-  target: AddressFields,
-  customers: Array<{
+export type CustomerAddressRecord = {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  properties: Array<{
     id: string;
     name: string;
     address: string | null;
     city: string | null;
     state: string | null;
     zip: string | null;
-    properties: Array<{
-      id: string;
-      name: string;
-      address: string | null;
-      city: string | null;
-      state: string | null;
-      zip: string | null;
-    }>;
-  }>
-): CustomerAddressMatch | null {
-  const targetKey = normalizeAddressKey(target);
-  if (!targetKey) return null;
+  }>;
+};
 
-  const candidates: MatchCandidate[] = [];
+/** Build a lookup once; property-level matches win over customer-level for the same key. */
+export function buildCustomerAddressIndex(
+  customers: CustomerAddressRecord[]
+): Map<string, CustomerAddressMatch> {
+  const index = new Map<string, CustomerAddressMatch>();
+
   for (const customer of customers) {
-    candidates.push({
-      customerId: customer.id,
-      customerName: customer.name,
-      propertyId: null,
-      propertyName: null,
-      fields: {
-        address: customer.address,
-        city: customer.city,
-        state: customer.state,
-        zip: customer.zip,
-      },
-      matchSource: "customer",
-    });
     for (const property of customer.properties) {
-      candidates.push({
+      const key = normalizeAddressKey({
+        address: property.address,
+        city: property.city,
+        state: property.state,
+        zip: property.zip,
+      });
+      if (key && !index.has(key)) {
+        index.set(key, {
+          customerId: customer.id,
+          customerName: customer.name,
+          propertyId: property.id,
+          propertyName: property.name,
+          matchSource: "property",
+        });
+      }
+    }
+  }
+
+  for (const customer of customers) {
+    const key = normalizeAddressKey({
+      address: customer.address,
+      city: customer.city,
+      state: customer.state,
+      zip: customer.zip,
+    });
+    if (key && !index.has(key)) {
+      index.set(key, {
         customerId: customer.id,
         customerName: customer.name,
-        propertyId: property.id,
-        propertyName: property.name,
-        fields: {
-          address: property.address,
-          city: property.city,
-          state: property.state,
-          zip: property.zip,
-        },
-        matchSource: "property",
+        propertyId: null,
+        propertyName: null,
+        matchSource: "customer",
       });
     }
   }
 
-  const propertyMatch = candidates.find(
-    (c) => c.matchSource === "property" && normalizeAddressKey(c.fields) === targetKey
-  );
-  if (propertyMatch) {
-    return {
-      customerId: propertyMatch.customerId,
-      customerName: propertyMatch.customerName,
-      propertyId: propertyMatch.propertyId,
-      propertyName: propertyMatch.propertyName,
-      matchSource: "property",
-    };
-  }
+  return index;
+}
 
-  const customerMatch = candidates.find(
-    (c) => c.matchSource === "customer" && normalizeAddressKey(c.fields) === targetKey
-  );
-  if (customerMatch) {
-    return {
-      customerId: customerMatch.customerId,
-      customerName: customerMatch.customerName,
-      propertyId: null,
-      propertyName: null,
-      matchSource: "customer",
-    };
-  }
+export function findCustomerByAddressIndex(
+  target: AddressFields,
+  index: Map<string, CustomerAddressMatch>
+): CustomerAddressMatch | null {
+  const targetKey = normalizeAddressKey(target);
+  if (!targetKey) return null;
+  return index.get(targetKey) ?? null;
+}
 
-  return null;
+export function findCustomerByExactAddress(
+  target: AddressFields,
+  customers: CustomerAddressRecord[]
+): CustomerAddressMatch | null {
+  return findCustomerByAddressIndex(target, buildCustomerAddressIndex(customers));
 }

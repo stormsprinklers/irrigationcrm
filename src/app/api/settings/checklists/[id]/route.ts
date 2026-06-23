@@ -148,6 +148,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.requiredForCompletion !== undefined
           ? { requiredForCompletion: Boolean(body.requiredForCompletion) }
           : {}),
+        ...(body.customerVisible !== undefined
+          ? { customerVisible: Boolean(body.customerVisible) }
+          : {}),
         ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) || 0 } : {}),
       },
     });

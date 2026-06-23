@@ -17,6 +17,7 @@ export function serializeChecklistTemplate(template: TemplateWithRelations) {
     divisions: template.divisions,
     excludeCallbacks: template.excludeCallbacks,
     requiredForCompletion: template.requiredForCompletion,
+    customerVisible: template.customerVisible,
     sortOrder: template.sortOrder,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString(),

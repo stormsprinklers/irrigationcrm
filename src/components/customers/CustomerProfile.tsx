@@ -38,6 +38,7 @@ import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
+import { PropertyIrrigationEditor } from "@/components/customers/PropertyIrrigationEditor";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -119,12 +120,11 @@ export function CustomerProfile({ customerId }: Props) {
     "estimates",
     "invoices",
     "maintenance",
-    "notes",
   ]);
   const tabFromUrl = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState(
-    tabFromUrl && validTabs.has(tabFromUrl) ? tabFromUrl : "profile"
-  );
+  const initialTab =
+    tabFromUrl === "notes" ? "profile" : tabFromUrl && validTabs.has(tabFromUrl) ? tabFromUrl : "profile";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
@@ -309,6 +309,20 @@ export function CustomerProfile({ customerId }: Props) {
     setProperties((prev) => prev.filter((p) => p.id !== propertyId));
   }
 
+  async function sendPortalLink() {
+    if (!customer?.email) {
+      toast.error("Customer must have an email address");
+      return;
+    }
+    const res = await fetch(`/api/customers/${customerId}/portal-link`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to send portal link");
+      return;
+    }
+    toast.success("Portal sign-in link sent");
+  }
+
   async function openEnrollModal() {
     if (!customer) return;
 
@@ -479,6 +493,9 @@ export function CustomerProfile({ customerId }: Props) {
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => void sendPortalLink()}>
+              Send portal link
+            </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setMergeOpen(true)}>
               <GitMerge className="h-4 w-4" />
               Merge
@@ -511,10 +528,9 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
-          <TabsTrigger value="notes">Notes & attachments</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile">
+        <TabsContent value="profile" className="space-y-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">Contact information</CardTitle>
@@ -786,6 +802,7 @@ export function CustomerProfile({ customerId }: Props) {
               canManage={canManagePayments}
             />
           )}
+          <CustomerNotesAttachmentsTab customerId={customerId} />
         </TabsContent>
 
         <TabsContent value="properties" className="space-y-4">
@@ -821,6 +838,7 @@ export function CustomerProfile({ customerId }: Props) {
                     propertyId={property.id}
                     propertyName={property.name}
                   />
+                  <PropertyIrrigationEditor customerId={customerId} propertyId={property.id} />
                   <CustomerPropertyMap
                     title={`${property.name} map`}
                     location={{
@@ -1052,10 +1070,6 @@ export function CustomerProfile({ customerId }: Props) {
             </CardContent>
           </Card>
 
-        </TabsContent>
-
-        <TabsContent value="notes">
-          <CustomerNotesAttachmentsTab customerId={customerId} />
         </TabsContent>
       </Tabs>
 

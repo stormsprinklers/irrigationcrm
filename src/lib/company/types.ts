@@ -24,6 +24,15 @@ export const companySettingsSelect = {
   portalShowInvoices: true,
   portalShowEstimates: true,
   portalShowJobs: true,
+  portalSlug: true,
+  portalRescheduleLeadHours: true,
+  portalCancelLeadHours: true,
+  portalAllowSchedule: true,
+  portalShowMaintenance: true,
+  portalShowChecklists: true,
+  portalShowRachio: true,
+  portalShowOffers: true,
+  portalRachioAllowRun: true,
   notifyEstimateSent: true,
   notifyInvoicePaid: true,
   notifyVisitScheduled: true,
@@ -66,6 +75,15 @@ export type CompanySettingsDTO = {
   portalShowInvoices: boolean;
   portalShowEstimates: boolean;
   portalShowJobs: boolean;
+  portalSlug: string | null;
+  portalRescheduleLeadHours: number;
+  portalCancelLeadHours: number;
+  portalAllowSchedule: boolean;
+  portalShowMaintenance: boolean;
+  portalShowChecklists: boolean;
+  portalShowRachio: boolean;
+  portalShowOffers: boolean;
+  portalRachioAllowRun: boolean;
   notifyEstimateSent: boolean;
   notifyInvoicePaid: boolean;
   notifyVisitScheduled: boolean;

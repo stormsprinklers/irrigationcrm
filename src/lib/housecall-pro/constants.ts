@@ -20,6 +20,12 @@ export const HCP_ATTACHMENT_PATHS = {
   ],
 } as const;
 
+export const HCP_JOB_LINE_ITEMS_PATHS = (id: string) => [
+  `/jobs/${id}/line_items`,
+  `/job/${id}/line_items`,
+  `/api/jobs/${id}/line_items`,
+];
+
 export const HCP_PARENT_DETAIL_PATHS = {
   customers: (id: string) => [`/customers/${id}`, `/customer/${id}`],
   jobs: (id: string) => [`/jobs/${id}`, `/job/${id}`],

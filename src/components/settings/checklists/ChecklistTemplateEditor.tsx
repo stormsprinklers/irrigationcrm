@@ -26,6 +26,7 @@ type FormState = {
   divisions: ("INSTALL" | "SERVICE")[];
   excludeCallbacks: boolean;
   requiredForCompletion: boolean;
+  customerVisible: boolean;
   priceBookItemIds: string[];
   items: EditorItem[];
 };
@@ -58,6 +59,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
     divisions: [],
     excludeCallbacks: false,
     requiredForCompletion: false,
+    customerVisible: false,
     priceBookItemIds: [],
     items: [emptyItem()],
   });
@@ -79,6 +81,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
       divisions: data.divisions ?? [],
       excludeCallbacks: data.excludeCallbacks,
       requiredForCompletion: data.requiredForCompletion,
+      customerVisible: data.customerVisible ?? false,
       priceBookItemIds: data.priceBookItemIds ?? [],
       items: data.items?.length
         ? data.items.map((item: EditorItem) => ({
@@ -247,6 +250,16 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
               onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))}
             />
             Active
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.customerVisible}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, customerVisible: e.target.checked }))
+              }
+            />
+            Visible in customer portal (when completed)
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input

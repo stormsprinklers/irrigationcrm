@@ -1,6 +1,7 @@
 import { SmartControllerProvider } from "@prisma/client";
 import {
-  findCustomerByExactAddress,
+  buildCustomerAddressIndex,
+  findCustomerByAddressIndex,
   formatAddressLine,
   parseRachioAddress,
 } from "@/lib/rachio/address-match";
@@ -55,7 +56,6 @@ function indexRachioProperties(properties: RachioProperty[]) {
 
 async function resolveEntityAddress(
   apiKey: string,
-  personId: string,
   properties: RachioProperty[],
   propertyIndex: Map<string, RachioProperty>,
   entity: { id: string; kind: RachioDeviceKind }
@@ -96,7 +96,7 @@ export async function getRachioOverview(companyId: string): Promise<{
   const { apiKey } = await resolveCompanyRachio(companyId);
 
   const [controllers, baseStations, rachioProperties, links, customers] = await Promise.all([
-    listCompanyDevices(companyId),
+    listCompanyDevices(companyId).catch(() => []),
     listCompanyBaseStations(companyId).catch(() => []),
     listRachioProperties(apiKey, personId).catch(() => []),
     prisma.propertySmartController.findMany({
@@ -116,7 +116,27 @@ export async function getRachioOverview(companyId: string): Promise<{
       },
     }),
     prisma.customer.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        OR: [
+          {
+            address: { not: null },
+            city: { not: null },
+            state: { not: null },
+            zip: { not: null },
+          },
+          {
+            properties: {
+              some: {
+                address: { not: null },
+                city: { not: null },
+                state: { not: null },
+                zip: { not: null },
+              },
+            },
+          },
+        ],
+      },
       select: {
         id: true,
         name: true,
@@ -125,6 +145,12 @@ export async function getRachioOverview(companyId: string): Promise<{
         state: true,
         zip: true,
         properties: {
+          where: {
+            address: { not: null },
+            city: { not: null },
+            state: { not: null },
+            zip: { not: null },
+          },
           select: {
             id: true,
             name: true,
@@ -139,6 +165,7 @@ export async function getRachioOverview(companyId: string): Promise<{
   ]);
 
   const propertyIndex = indexRachioProperties(rachioProperties);
+  const customerAddressIndex = buildCustomerAddressIndex(customers);
   const linkByDeviceId = new Map(
     links
       .filter((link) => link.externalDeviceId)
@@ -148,37 +175,37 @@ export async function getRachioOverview(companyId: string): Promise<{
   const entities = [
     ...controllers.map((device) => ({ ...device, kind: "controller" as const })),
     ...baseStations.map((device) => ({ ...device, kind: "hose_timer" as const })),
-  ];
+  ].filter((entity): entity is typeof entity & { id: string } => Boolean(entity.id));
 
-  const devices: RachioDeviceOverview[] = [];
-  for (const entity of entities) {
-    const addressFields = await resolveEntityAddress(
-      apiKey,
-      personId,
-      rachioProperties,
-      propertyIndex,
-      { id: entity.id, kind: entity.kind }
-    );
-    const suggestedCustomer = findCustomerByExactAddress(addressFields, customers);
-    const link = linkByDeviceId.get(entity.id);
+  const devices = await Promise.all(
+    entities.map(async (entity) => {
+      const addressFields = await resolveEntityAddress(
+        apiKey,
+        rachioProperties,
+        propertyIndex,
+        { id: entity.id, kind: entity.kind }
+      );
+      const suggestedCustomer = findCustomerByAddressIndex(addressFields, customerAddressIndex);
+      const link = linkByDeviceId.get(entity.id);
 
-    devices.push({
-      ...entity,
-      zoneCount: entity.zoneCount ?? 0,
-      kind: entity.kind,
-      address: addressFields.address,
-      city: addressFields.city,
-      state: addressFields.state,
-      zip: addressFields.zip,
-      addressLine: addressFields.addressLine,
-      linked: Boolean(link),
-      customerId: link?.property.customer.id ?? null,
-      customerName: link?.property.customer.name ?? null,
-      propertyId: link?.property.id ?? null,
-      propertyName: link?.property.name ?? null,
-      suggestedCustomer,
-    });
-  }
+      return {
+        ...entity,
+        zoneCount: entity.zoneCount ?? 0,
+        kind: entity.kind,
+        address: addressFields.address,
+        city: addressFields.city,
+        state: addressFields.state,
+        zip: addressFields.zip,
+        addressLine: addressFields.addressLine,
+        linked: Boolean(link),
+        customerId: link?.property.customer.id ?? null,
+        customerName: link?.property.customer.name ?? null,
+        propertyId: link?.property.id ?? null,
+        propertyName: link?.property.name ?? null,
+        suggestedCustomer,
+      } satisfies RachioDeviceOverview;
+    })
+  );
 
   return {
     personId,

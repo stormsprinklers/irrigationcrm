@@ -63,6 +63,20 @@ export async function startMigration(companyId: string) {
   const client = createHousecallProClient();
   const preview = await fetchPreviewCounts(client);
   const migration = await getLatestMigration(companyId);
+  const crmCompany = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { name: true },
+  });
+  const excludeCompanyNames = [
+    preview.companyName,
+    crmCompany?.name,
+  ].filter((n): n is string => Boolean(n?.trim()));
+
+  const existingOptions = (migration.optionsJson as MigrationOptions | null) ?? {};
+  const optionsJson: MigrationOptions = {
+    ...existingOptions,
+    excludeCompanyNames,
+  };
 
   if (migration.status === HousecallProMigrationStatus.COMPLETED) {
     throw new Error("Migration already completed. Reset a step to run it again.");
@@ -78,6 +92,7 @@ export async function startMigration(companyId: string) {
       data: {
         status: HousecallProMigrationStatus.IN_PROGRESS,
         previewJson: preview,
+        optionsJson,
         pausedAt: null,
         startedAt: migration.startedAt ?? new Date(),
       },
@@ -91,6 +106,7 @@ export async function startMigration(companyId: string) {
       status: HousecallProMigrationStatus.IN_PROGRESS,
       currentStep: HousecallProMigrationStepType.TAGS,
       previewJson: preview,
+      optionsJson,
       startedAt: migration.startedAt ?? new Date(),
       steps: {
         updateMany: {

@@ -22,7 +22,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       where: { id, companyId: user.companyId },
       include: {
         customer: true,
-        company: true,
+        company: { select: { name: true, sendgridFrom: true, emailSenderName: true, emailLogoUrl: true, portalSlug: true, bookingSlug: true } },
         lineItems: { orderBy: { sortOrder: "asc" } },
       },
     });
@@ -44,7 +44,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
     };
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const estimateUrl = `${appUrl}/estimates/${estimate.id}`;
+    const portalSlug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
+    const estimateUrl = portalSlug
+      ? `${appUrl}/portal/${portalSlug}/estimates/${estimate.publicToken}`
+      : `${appUrl}/estimates/${estimate.id}`;
     const lineItemsHtml = estimate.lineItems
       .map(
         (item) =>

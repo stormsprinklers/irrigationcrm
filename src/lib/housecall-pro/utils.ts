@@ -22,13 +22,63 @@ export function hcpString(value: unknown): string | null {
 
 export function hcpMoney(value: unknown): number {
   if (value == null) return 0;
-  if (typeof value === "number") return value;
-  const cents = Number(value);
-  if (Number.isFinite(cents) && String(value).length <= 6 && cents > 1000) {
-    return cents / 100;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return 0;
+    // HCP API monetary fields are integer cents (no decimals).
+    if (Number.isInteger(value)) return value / 100;
+    return value;
   }
+  const str = String(value).trim();
+  if (!str) return 0;
+  if (str.includes(".")) {
+    const parsed = Number(str.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const cents = Number(str.replace(/[^0-9-]/g, ""));
+  if (!Number.isFinite(cents)) return 0;
+  return cents / 100;
+}
+
+/** Non-monetary numeric fields (quantity, hours, etc.) */
+export function hcpQuantity(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const parsed = Number(String(value).replace(/[^0-9.-]/g, ""));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeNameKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+/** Customer's business / property-management company — not the service provider org name. */
+export function hcpCustomerCompanyName(
+  record: HcpRecord,
+  personName: string,
+  excludeNames: string[] = []
+): string | null {
+  const exclude = new Set(excludeNames.filter(Boolean).map(normalizeNameKey));
+  const personKey = normalizeNameKey(personName);
+
+  const candidates: string[] = [];
+  if (record.company && typeof record.company === "object") {
+    const nested = hcpString((record.company as HcpRecord).name);
+    if (nested) candidates.push(nested);
+  }
+  const companyNameField = hcpString(record.company_name);
+  if (companyNameField) candidates.push(companyNameField);
+  if (typeof record.company === "string") {
+    const companyStr = hcpString(record.company);
+    if (companyStr) candidates.push(companyStr);
+  }
+
+  for (const candidate of candidates) {
+    const key = normalizeNameKey(candidate);
+    if (exclude.has(key)) continue;
+    if (key === personKey) continue;
+    return candidate;
+  }
+  return null;
 }
 
 export function hcpTags(record: HcpRecord): string[] {

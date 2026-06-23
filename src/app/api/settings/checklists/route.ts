@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
         divisions,
         excludeCallbacks: Boolean(body.excludeCallbacks),
         requiredForCompletion: Boolean(body.requiredForCompletion),
+        customerVisible: Boolean(body.customerVisible),
         sortOrder: Number(body.sortOrder) || 0,
         items: {
           create: items.map((item, index) => ({

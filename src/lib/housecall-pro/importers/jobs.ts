@@ -1,5 +1,9 @@
 import { Division, HcpEntityType } from "@prisma/client";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
+import {
+  HCP_JOB_LINE_ITEMS_PATHS,
+  HCP_PARENT_DETAIL_PATHS,
+} from "@/lib/housecall-pro/constants";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { resolveServiceAreaForMigration } from "@/lib/housecall-pro/importers/service-zones";
 import { resolvePriceBookItemId } from "@/lib/housecall-pro/importers/services";
@@ -8,6 +12,7 @@ import {
   hcpDate,
   hcpId,
   hcpMoney,
+  hcpQuantity,
   hcpString,
   hcpTags,
   lineItemsFromRecord,
@@ -24,8 +29,6 @@ function hcpCustomerDisplayName(customer: HcpRecord | undefined | null): string 
   return (
     hcpString(customer.name) ??
     (fullName || null) ??
-    hcpString(customer.company) ??
-    hcpString(customer.company_name) ??
     hcpString(customer.display_name)
   );
 }
@@ -72,6 +75,59 @@ function jobSchedule(record: HcpRecord) {
   return { startAt, endAt };
 }
 
+async function enrichJobRecord(
+  ctx: ImportContext,
+  record: HcpRecord,
+  id: string
+): Promise<HcpRecord> {
+  if (lineItemsFromRecord(record).length) return record;
+
+  let merged = { ...record };
+  for (const path of HCP_PARENT_DETAIL_PATHS.jobs(id)) {
+    try {
+      const detail = await ctx.client.get<HcpRecord>(path);
+      const job = ((detail.job as HcpRecord | undefined) ?? detail) as HcpRecord;
+      merged = { ...merged, ...job };
+      if (lineItemsFromRecord(merged).length) return merged;
+    } catch {
+      // try next path
+    }
+  }
+
+  for (const path of HCP_JOB_LINE_ITEMS_PATHS(id)) {
+    try {
+      const data = await ctx.client.get<HcpRecord>(path);
+      const items = lineItemsFromRecord(data);
+      if (items.length) {
+        return { ...merged, line_items: items };
+      }
+    } catch {
+      // try next path
+    }
+  }
+
+  return merged;
+}
+
+function jobLineItems(record: HcpRecord): HcpRecord[] {
+  const items = lineItemsFromRecord(record);
+  if (items.length) return items;
+
+  const totalCents =
+    record.total_amount ?? record.total ?? record.amount ?? record.subtotal;
+  if (totalCents != null && totalCents !== "" && totalCents !== 0) {
+    return [
+      {
+        name: "Imported job total",
+        quantity: 1,
+        unit_price: totalCents,
+        total: totalCents,
+      },
+    ];
+  }
+  return [];
+}
+
 export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> {
   const result: BatchResult = {
     done: false,
@@ -99,15 +155,16 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
     });
   }
 
-  for (const record of page.items) {
+  for (const listRecord of page.items) {
     result.processed++;
-    const id = hcpId(record);
+    const id = hcpId(listRecord);
     if (!id) {
       result.skipped++;
       continue;
     }
 
     try {
+      const record = await enrichJobRecord(ctx, listRecord, id);
       const customerHcpId =
         hcpString(record.customer_id) ??
         hcpString((record.customer as HcpRecord | undefined)?.id);
@@ -212,11 +269,11 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
         result.created++;
       }
 
-      const lineItems = lineItemsFromRecord(record);
+      const lineItems = jobLineItems(record);
       for (let i = 0; i < lineItems.length; i++) {
         const line = lineItems[i];
         const name = hcpString(line.name) ?? hcpString(line.description) ?? "Line item";
-        const quantity = hcpMoney(line.quantity) || 1;
+        const quantity = hcpQuantity(line.quantity) || 1;
         const unitPrice = hcpMoney(line.unit_price ?? line.price ?? line.amount);
         const total = hcpMoney(line.total) || quantity * unitPrice;
         const priceBookItemId = await resolvePriceBookItemId(

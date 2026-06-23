@@ -7,8 +7,18 @@ import {
   serializeMaterialCategoryCursor,
 } from "@/lib/housecall-pro/material-categories";
 import { hcpId, hcpString, uniqueSlug } from "@/lib/housecall-pro/utils";
-import { ensureCategoryPath } from "@/lib/price-book/queries";
+import { ensureCategoryPath, slugify } from "@/lib/price-book/queries";
 import { prisma } from "@/lib/prisma";
+
+function materialCategorySlug(
+  name: string,
+  parentSlug: string | null,
+  existingSlugs: Set<string>
+): string {
+  const segment = slugify(name) || "category";
+  const base = parentSlug ? `${parentSlug}-${segment}` : `material-${segment}`;
+  return uniqueSlug(base, existingSlugs);
+}
 
 async function importCategoryRecord(
   ctx: ImportContext,
@@ -37,22 +47,29 @@ async function importCategoryRecord(
   });
 
   let parentLocalId: string | null = null;
+  let parentSlug: string | null = null;
   const parentHcpId =
     hcpString(record.parent_id) ??
     hcpString(record.parent_category_id) ??
     hcpString(record.parent_uuid);
   if (parentHcpId) {
-    parentLocalId = await prisma.hcpEntityMapping
-      .findUnique({
-        where: {
-          companyId_entityType_hcpId: {
-            companyId: ctx.companyId,
-            entityType: HcpEntityType.MATERIAL_CATEGORY,
-            hcpId: parentHcpId,
-          },
+    const parentMapping = await prisma.hcpEntityMapping.findUnique({
+      where: {
+        companyId_entityType_hcpId: {
+          companyId: ctx.companyId,
+          entityType: HcpEntityType.MATERIAL_CATEGORY,
+          hcpId: parentHcpId,
         },
-      })
-      .then((m) => m?.localId ?? null);
+      },
+    });
+    if (parentMapping) {
+      parentLocalId = parentMapping.localId;
+      const parentCategory = await prisma.priceBookCategory.findUnique({
+        where: { id: parentMapping.localId },
+        select: { slug: true },
+      });
+      parentSlug = parentCategory?.slug ?? null;
+    }
   }
 
   if (mapping) {
@@ -62,24 +79,54 @@ async function importCategoryRecord(
     });
     result.updated++;
   } else {
-    const slug = uniqueSlug(name, existingSlugs);
-    const category = await prisma.priceBookCategory.create({
-      data: {
+    const slug = materialCategorySlug(name, parentSlug, existingSlugs);
+    try {
+      const category = await prisma.priceBookCategory.create({
+        data: {
+          companyId: ctx.companyId,
+          type: PriceBookItemType.MATERIAL,
+          name,
+          slug,
+          parentId: parentLocalId,
+        },
+      });
+      await upsertMapping({
         companyId: ctx.companyId,
-        type: PriceBookItemType.MATERIAL,
-        name,
-        slug,
-        parentId: parentLocalId,
-      },
-    });
-    await upsertMapping({
-      companyId: ctx.companyId,
-      migrationId: ctx.migrationId,
-      entityType: HcpEntityType.MATERIAL_CATEGORY,
-      hcpId: id,
-      localId: category.id,
-    });
-    result.created++;
+        migrationId: ctx.migrationId,
+        entityType: HcpEntityType.MATERIAL_CATEGORY,
+        hcpId: id,
+        localId: category.id,
+      });
+      result.created++;
+    } catch (err) {
+      const isSlugConflict =
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as { code?: string }).code === "P2002";
+      if (isSlugConflict) {
+        const fallbackSlug = materialCategorySlug(`${name}-${id.slice(0, 8)}`, parentSlug, existingSlugs);
+        const category = await prisma.priceBookCategory.create({
+          data: {
+            companyId: ctx.companyId,
+            type: PriceBookItemType.MATERIAL,
+            name,
+            slug: fallbackSlug,
+            parentId: parentLocalId,
+          },
+        });
+        await upsertMapping({
+          companyId: ctx.companyId,
+          migrationId: ctx.migrationId,
+          entityType: HcpEntityType.MATERIAL_CATEGORY,
+          hcpId: id,
+          localId: category.id,
+        });
+        result.created++;
+      } else {
+        throw err;
+      }
+    }
   }
 }
 
@@ -101,7 +148,7 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
   const existingSlugs = new Set(
     (
       await prisma.priceBookCategory.findMany({
-        where: { companyId: ctx.companyId, type: PriceBookItemType.MATERIAL },
+        where: { companyId: ctx.companyId },
         select: { slug: true },
       })
     ).map((c) => c.slug)

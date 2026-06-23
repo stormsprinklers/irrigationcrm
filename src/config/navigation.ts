@@ -128,6 +128,7 @@ export const settingsSidebar: NavSection[] = [
     title: "FEATURE CONFIGURATION",
     items: [
       { label: "Booking", href: "/settings/booking" },
+      { label: "Customer Portal", href: "/settings/customer-portal" },
       { label: "Leads", href: "/settings/leads" },
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice", href: "/settings/voice" },

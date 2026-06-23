@@ -415,6 +415,15 @@ model Company {
   portalShowInvoices       Boolean  @default(true)
   portalShowEstimates      Boolean  @default(true)
   portalShowJobs           Boolean  @default(true)
+  portalSlug               String?
+  portalRescheduleLeadHours Int     @default(24)
+  portalCancelLeadHours    Int      @default(24)
+  portalAllowSchedule      Boolean  @default(true)
+  portalShowMaintenance    Boolean  @default(true)
+  portalShowChecklists     Boolean  @default(true)
+  portalShowRachio         Boolean  @default(true)
+  portalShowOffers         Boolean  @default(true)
+  portalRachioAllowRun     Boolean  @default(false)
   notifyEstimateSent       Boolean  @default(true)
   notifyInvoicePaid        Boolean  @default(true)
   notifyVisitScheduled     Boolean  @default(true)
@@ -483,6 +492,8 @@ model Company {
   employeeWorkSchedules  EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]
   checklistTemplates     ChecklistTemplate[]
+  portalLoginTokens      CustomerPortalLoginToken[]
+  portalOffers           PortalOffer[]
 }
 
 model User {
@@ -577,6 +588,7 @@ model Customer {
   phones                 CustomerPhone[]
   notes                  CustomerNote[]
   attachments            CustomerAttachment[]
+  portalLoginTokens      CustomerPortalLoginToken[]
 }
 
 model CustomerPhone {
@@ -656,6 +668,7 @@ model CustomerProperty {
   state      String?
   zip        String?
   isPrimary  Boolean  @default(false)
+  propertyDiagramUrl String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -665,6 +678,7 @@ model CustomerProperty {
   estimates        Estimate[]
   maintenancePlans MaintenancePlanEnrollment[]
   smartControllers PropertySmartController[]
+  irrigationZones  PropertyIrrigationZone[]
 
   @@index([companyId, customerId])
 }
@@ -1463,6 +1477,7 @@ model Estimate {
   customerId      String
   propertyId      String?
   visitId         String?
+  publicToken     String         @unique @default(cuid())
   status          EstimateStatus @default(DRAFT)
   expiresAt       DateTime?
   depositRequired Boolean        @default(false)
@@ -1902,6 +1917,7 @@ model ChecklistTemplate {
   divisions             Division[] @default([])
   excludeCallbacks      Boolean    @default(false)
   requiredForCompletion Boolean    @default(false)
+  customerVisible       Boolean    @default(false)
   sortOrder             Int        @default(0)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
@@ -1982,4 +1998,62 @@ model VisitChecklistItem {
   visitChecklist VisitChecklist @relation(fields: [visitChecklistId], references: [id], onDelete: Cascade)
 
   @@index([visitChecklistId, sortOrder])
+}
+
+model CustomerPortalLoginToken {
+  id         String    @id @default(cuid())
+  companyId  String
+  customerId String
+  email      String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, email])
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+model PortalOffer {
+  id          String    @id @default(cuid())
+  companyId   String
+  title       String
+  description String?
+  imageUrl    String?
+  ctaLabel    String?
+  ctaUrl      String?
+  startsAt    DateTime?
+  endsAt      DateTime?
+  active      Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  targeting   Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, active, sortOrder])
+}
+
+model PropertyIrrigationZone {
+  id            String  @id @default(cuid())
+  propertyId    String
+  stationNumber Int
+  name          String
+  mapX          Float?
+  mapY          Float?
+  wateringGuide String?
+  runMinutes    Int?
+  rachioZoneId  String?
+  sortOrder     Int     @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, sortOrder])
 }

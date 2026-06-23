@@ -32,6 +32,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
         divisions: source.divisions,
         excludeCallbacks: source.excludeCallbacks,
         requiredForCompletion: source.requiredForCompletion,
+        customerVisible: source.customerVisible,
         sortOrder: source.sortOrder + 1,
         items: {
           create: source.items.map((item) => ({

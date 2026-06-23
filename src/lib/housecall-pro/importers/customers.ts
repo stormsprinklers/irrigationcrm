@@ -5,6 +5,7 @@ import {
   addressFromRecord,
   hcpAddressRecords,
   hcpCreatedAt,
+  hcpCustomerCompanyName,
   hcpId,
   hcpString,
   hcpTags,
@@ -20,8 +21,6 @@ function customerName(record: HcpRecord, id: string) {
   return (
     hcpString(record.name) ??
     (fullName || null) ??
-    hcpString(record.company) ??
-    hcpString(record.company_name) ??
     hcpString(record.display_name) ??
     hcpString(record.email) ??
     hcpString(record.phone) ??
@@ -99,7 +98,7 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         name,
         email: hcpString(record.email),
         phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
-        companyName: hcpString(record.company) ?? hcpString(record.company_name),
+        companyName: hcpCustomerCompanyName(record, name, ctx.options.excludeCompanyNames ?? []),
         address: primary?.address ?? null,
         city: primary?.city ?? null,
         state: primary?.state ?? null,

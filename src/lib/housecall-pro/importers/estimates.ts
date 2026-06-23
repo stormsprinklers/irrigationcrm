@@ -6,6 +6,7 @@ import {
   hcpDate,
   hcpId,
   hcpMoney,
+  hcpQuantity,
   hcpString,
   lineItemsFromRecord,
   mapEstimateStatus,
@@ -139,7 +140,7 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
       for (let i = 0; i < lineItems.length; i++) {
         const line = lineItems[i];
         const name = hcpString(line.name) ?? hcpString(line.description) ?? "Line item";
-        const quantity = hcpMoney(line.quantity) || 1;
+        const quantity = hcpQuantity(line.quantity) || 1;
         const unitPrice = hcpMoney(line.unit_price ?? line.price ?? line.amount);
         const total = hcpMoney(line.total) || quantity * unitPrice;
         const priceBookItemId = await resolvePriceBookItemId(

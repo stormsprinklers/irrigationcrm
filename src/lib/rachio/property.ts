@@ -53,10 +53,37 @@ export async function getLinkedDeviceContext(
   await assertPropertyAccess(companyId, customerId, propertyId);
   const link = await getLinkedRachioController(propertyId);
   if (!link?.externalDeviceId) {
-    return { link: null, device: null, apiKey: null };
+    return { link: null, device: null, apiKey: null, deviceKind: null as RachioDeviceKind | null, baseStation: null };
   }
 
   const { apiKey } = await resolveCompanyRachio(companyId);
+  const metadata = (link.metadata ?? {}) as Record<string, unknown>;
+  const deviceKind = (metadata.deviceKind as RachioDeviceKind) ?? "controller";
+
+  if (deviceKind === "hose_timer") {
+    const baseStation = await getBaseStation(apiKey, link.externalDeviceId);
+    await prisma.propertySmartController.update({
+      where: { id: link.id },
+      data: {
+        status:
+          baseStation.status === "ONLINE" || baseStation.reportedState === "ONLINE"
+            ? SmartControllerStatus.CONNECTED
+            : SmartControllerStatus.DISCONNECTED,
+        lastSyncedAt: new Date(),
+        metadata: {
+          ...metadata,
+          deviceKind,
+          deviceName: baseStation.name,
+          model: baseStation.model,
+          serialNumber: baseStation.serialNumber,
+          zoneCount: baseStation.valves?.length ?? 0,
+          deviceStatus: baseStation.status ?? baseStation.reportedState,
+        },
+      },
+    });
+    return { link, device: null, apiKey, deviceKind, baseStation };
+  }
+
   const device = await getDevice(apiKey, link.externalDeviceId);
 
   await prisma.propertySmartController.update({
@@ -68,6 +95,8 @@ export async function getLinkedDeviceContext(
           : SmartControllerStatus.DISCONNECTED,
       lastSyncedAt: new Date(),
       metadata: {
+        ...metadata,
+        deviceKind: "controller",
         deviceName: device.name,
         model: device.model,
         serialNumber: device.serialNumber,
@@ -77,7 +106,7 @@ export async function getLinkedDeviceContext(
     },
   });
 
-  return { link, device, apiKey };
+  return { link, device, apiKey, deviceKind: "controller" as const, baseStation: null };
 }
 
 async function fetchLinkedRachioEntity(apiKey: string, deviceId: string, deviceKind: RachioDeviceKind) {

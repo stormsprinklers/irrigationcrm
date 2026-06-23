@@ -222,14 +222,24 @@ export function summarizeDevices(person: RachioPerson): RachioDeviceSummary[] {
 }
 
 export function summarizeBaseStations(stations: RachioBaseStation[]): RachioDeviceSummary[] {
-  return stations.map((station) => ({
-    id: station.id,
-    name: station.name ?? "Hose timer",
-    serialNumber: station.serialNumber,
-    model: station.model,
-    status: station.status ?? station.reportedState,
-    zoneCount: station.valves?.length ?? 0,
-  }));
+  return stations.flatMap((station) => {
+    const id =
+      station.id ??
+      (station as RachioBaseStation & { baseStationId?: string }).baseStationId ??
+      (station as RachioBaseStation & { locationId?: string }).locationId;
+    if (!id) return [];
+
+    return [
+      {
+        id,
+        name: station.name ?? "Hose timer",
+        serialNumber: station.serialNumber,
+        model: station.model,
+        status: station.status ?? station.reportedState,
+        zoneCount: station.valves?.length ?? 0,
+      },
+    ];
+  });
 }
 
 export async function listCompanyBaseStations(companyId: string) {

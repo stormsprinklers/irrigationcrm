@@ -3,7 +3,6 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import {
   buildMapsPlaceEmbedUrl,
   buildMapsStreetViewEmbedUrl,
-  buildMapsViewEmbedUrl,
   geocodeAddress,
   getGoogleMapsApiKey,
 } from "@/lib/customers/maps";
@@ -24,10 +23,12 @@ export async function GET(request: NextRequest) {
     const geocoded = await geocodeAddress(query, apiKey);
 
     if (geocoded) {
+      const placeQuery = `${geocoded.lat},${geocoded.lng}`;
       return NextResponse.json({
         configured: true,
         formattedAddress: geocoded.formattedAddress,
-        placeEmbed: buildMapsViewEmbedUrl(geocoded.lat, geocoded.lng, apiKey, MAP_ZOOM),
+        // place mode shows a pin; view mode only centers the map with no marker
+        placeEmbed: buildMapsPlaceEmbedUrl(placeQuery, apiKey, MAP_ZOOM),
         streetEmbed: buildMapsStreetViewEmbedUrl(geocoded.lat, geocoded.lng, apiKey),
       });
     }

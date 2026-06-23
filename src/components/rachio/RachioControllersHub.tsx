@@ -41,27 +41,33 @@ export function RachioControllersHub({ connected }: { connected: boolean }) {
   const [propertyId, setPropertyId] = useState("");
   const [linking, setLinking] = useState(false);
 
-  const loadOverview = useCallback(async () => {
+  const loadOverview = useCallback(async (signal?: AbortSignal) => {
     if (!connected) {
       setDevices([]);
       return;
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/settings/rachio/overview");
+      const res = await fetch("/api/settings/rachio/overview", { signal });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load Rachio controllers");
-      setDevices(data.devices ?? []);
+      if (signal?.aborted) return;
+      setDevices(Array.isArray(data.devices) ? data.devices : []);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       toast.error(err instanceof Error ? err.message : "Failed to load Rachio controllers");
       setDevices([]);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [connected]);
 
   useEffect(() => {
-    void loadOverview();
+    const controller = new AbortController();
+    void loadOverview(controller.signal);
+    return () => controller.abort();
   }, [loadOverview]);
 
   useEffect(() => {
@@ -185,7 +191,7 @@ export function RachioControllersHub({ connected }: { connected: boolean }) {
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{device.name}</p>
+                      <p className="font-medium">{device.name ?? "Unnamed device"}</p>
                       <Badge variant="outline">{kindLabel(device.kind)}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
