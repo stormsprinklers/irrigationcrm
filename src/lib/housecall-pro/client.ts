@@ -127,6 +127,7 @@ export class HousecallProClient {
       pageSize?: number;
       arrayKeys: string[];
       throttleMs?: number;
+      params?: Record<string, string | number | undefined>;
     }
   ): Promise<PaginatedFetchResult<HcpRecord>> {
     const pageSize = Math.min(options.pageSize ?? DEFAULT_BATCH_SIZE, HCP_MAX_PAGE_SIZE);
@@ -156,7 +157,7 @@ export class HousecallProClient {
     }
 
     const data = await this.get<HcpRecord>(path, {
-      params: { page, page_size: pageSize },
+      params: { page, page_size: pageSize, ...options.params },
       throttleMs: options.throttleMs,
     });
 
@@ -174,6 +175,7 @@ export class HousecallProClient {
       pageSize?: number;
       arrayKeys: string[];
       throttleMs?: number;
+      params?: Record<string, string | number | undefined>;
     }
   ): Promise<PaginatedFetchResult<HcpRecord>> {
     const cacheKey = paths.join("|");

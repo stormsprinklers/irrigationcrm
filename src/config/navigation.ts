@@ -2,6 +2,8 @@ export type NavItem = {
   label: string;
   href: string;
   badge?: string;
+  /** When true, only highlight on an exact pathname match (not child routes). */
+  exact?: boolean;
 };
 
 export type NavSection = {
@@ -113,7 +115,7 @@ export const settingsSidebar: NavSection[] = [
   {
     title: "GLOBAL SETTINGS",
     items: [
-      { label: "Company", href: "/settings" },
+      { label: "Company", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
       { label: "Notifications", href: "/settings/notifications" },
       { label: "Employees", href: "/settings/employees" },
@@ -161,8 +163,9 @@ export const priceBookSettingsSidebar: NavSection[] = [
   },
 ];
 
-export function isNavActive(pathname: string, href: string) {
+export function isNavActive(pathname: string, href: string, exact?: boolean) {
   if (href === "/") return pathname === "/";
+  if (exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
