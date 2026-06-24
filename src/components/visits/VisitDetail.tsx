@@ -17,6 +17,7 @@ import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSecti
 import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
+import { VisitIrrigationMap } from "@/components/visits/VisitIrrigationMap";
 import { VisitIrrigationRuntimes } from "@/components/visits/VisitIrrigationRuntimes";
 import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
@@ -61,6 +62,9 @@ type VisitDetailData = {
     city: string | null;
     state: string | null;
     zip: string | null;
+    aerialImageUrl?: string | null;
+    propertyDiagramUrl?: string | null;
+    irrigationMapStatus?: string | null;
   } | null;
   serviceArea: { id: string; name: string; color: string };
   assignedUser: { id: string; name: string; color: string | null; photoUrl: string | null } | null;
@@ -378,6 +382,17 @@ export function VisitDetail({ visitId }: Props) {
         loading={timeLoading}
         eta={visitEta(visit)}
       />
+
+      {visit.property?.id && visit.customer?.id ? (
+        <VisitIrrigationMap
+          customerId={visit.customer.id}
+          propertyId={visit.property.id}
+          propertyName={visit.property.name}
+          aerialImageUrl={visit.property.aerialImageUrl}
+          propertyDiagramUrl={visit.property.propertyDiagramUrl}
+          irrigationMapStatus={visit.property.irrigationMapStatus}
+        />
+      ) : null}
 
       <CustomerContactBar customer={visit.customer} />
 

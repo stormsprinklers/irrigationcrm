@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Conversation = {
   id: string;
@@ -21,7 +21,7 @@ export function SmsThreadList({
   selectedId,
   onSelect,
 }: {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {

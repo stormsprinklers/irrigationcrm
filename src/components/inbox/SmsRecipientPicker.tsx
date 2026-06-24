@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 export type SmsRecipient = {
   phone: string;
@@ -33,7 +33,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 type Props = {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   value: SmsRecipient | null;
   onChange: (recipient: SmsRecipient | null) => void;
   className?: string;

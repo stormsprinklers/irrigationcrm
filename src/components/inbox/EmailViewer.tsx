@@ -10,7 +10,7 @@ import {
   EmailRecipientPicker,
   type EmailRecipient,
 } from "@/components/inbox/EmailRecipientPicker";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type EmailDetail = {
   id: string;
@@ -31,7 +31,7 @@ export function EmailViewer({
   initialName,
 }: {
   emailId: string | null;
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   onSent?: () => void;
   initialTo?: string | null;
   initialCustomerId?: string | null;

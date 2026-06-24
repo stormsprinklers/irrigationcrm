@@ -5,7 +5,7 @@ import { FileText, Phone, Play } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type CallLog = {
   id: string;
@@ -26,7 +26,7 @@ export function CallHistoryList({
   selectedId,
   onSelect,
 }: {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {

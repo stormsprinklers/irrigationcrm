@@ -12,8 +12,9 @@ import { VoicePanel } from "@/components/inbox/VoicePanel";
 import { EmailFolderNav } from "@/components/inbox/EmailFolderNav";
 import { EmailList } from "@/components/inbox/EmailList";
 import { EmailViewer } from "@/components/inbox/EmailViewer";
-import type { InboxChannel, InboxScope } from "@/lib/inbox/types";
-import { parseInboxRoute } from "@/lib/inbox/types";
+import type { InboxChannel, InboxScope, CustomerTeamScope, SocialScope } from "@/lib/inbox/types";
+import { isCustomerTeamScope, parseInboxRoute } from "@/lib/inbox/types";
+import { SocialDmMessagePane, SocialDmThreadList } from "@/components/inbox/SocialDmInbox";
 
 export function InboxChannelView({
   channel,
@@ -61,6 +62,24 @@ export function InboxChannelView({
     return <div className="p-6">Invalid inbox route</div>;
   }
 
+  if (ch === "social") {
+    const platform = sc as SocialScope;
+    return (
+      <InboxChannelLayout
+        channel={ch}
+        scope={sc}
+        list={<SocialDmThreadList platform={platform} />}
+        detail={<SocialDmMessagePane platform={platform} conversationId={selectedId} />}
+      />
+    );
+  }
+
+  if (!isCustomerTeamScope(sc)) {
+    return <div className="p-6">Invalid inbox route</div>;
+  }
+
+  const teamScope: CustomerTeamScope = sc;
+
   if (ch === "sms") {
     return (
       <div className="h-full w-full min-w-0">
@@ -77,7 +96,7 @@ export function InboxChannelView({
               </div>
               <SmsThreadList
                 key={refreshKey}
-                scope={sc}
+                scope={teamScope}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
               />
@@ -86,7 +105,7 @@ export function InboxChannelView({
           detail={
             <SmsMessagePane
               conversationId={selectedId}
-              scope={sc}
+              scope={teamScope}
               initialPhone={deepLink.phone}
               initialCustomerId={deepLink.customerId}
               initialName={deepLink.name}
@@ -108,14 +127,14 @@ export function InboxChannelView({
         scope={sc}
         list={
           <CallHistoryList
-            scope={sc}
+            scope={teamScope}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
         }
         detail={
           <VoicePanel
-            scope={sc}
+            scope={teamScope}
             selectedCallId={selectedId}
             initialPhone={deepLink.phone}
             initialCustomerId={deepLink.customerId}
@@ -141,7 +160,7 @@ export function InboxChannelView({
           </div>
           <EmailList
             key={`${emailFolder}-${refreshKey}`}
-            scope={sc}
+            scope={teamScope}
             folder={emailFolder}
             selectedId={selectedId}
             onSelect={setSelectedId}
@@ -151,7 +170,7 @@ export function InboxChannelView({
       detail={
         <EmailViewer
           emailId={selectedId}
-          scope={sc}
+          scope={teamScope}
           onSent={() => setRefreshKey((k) => k + 1)}
           initialTo={deepLink.email}
           initialCustomerId={deepLink.customerId}

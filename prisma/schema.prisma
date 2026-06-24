@@ -443,6 +443,11 @@ model Company {
   googleBusinessLocationTitle  String?
   googleBusinessConnectedAt    DateTime?
   googleBusinessCatalogJson    Json?
+  metaWebhookVerifyToken       String?   @unique
+  metaAppSecret                String?
+  metaPageId                   String?
+  metaInstagramAccountId        String?
+  metaWebhookVerifiedAt        DateTime?
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
@@ -496,6 +501,7 @@ model Company {
   portalLoginTokens      CustomerPortalLoginToken[]
   portalOffers           PortalOffer[]
   integrationCredentials IntegrationCredential[]
+  metaWebhookEvents      MetaWebhookEvent[]
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
 }
@@ -2120,6 +2126,19 @@ model IntegrationAuditLog {
   status          String
   error           String?
   createdAt       DateTime         @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+model MetaWebhookEvent {
+  id        String   @id @default(cuid())
+  companyId String
+  object    String?
+  field     String?
+  payload   Json
+  createdAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

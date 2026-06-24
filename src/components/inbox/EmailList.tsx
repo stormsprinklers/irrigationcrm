@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Email = {
   id: string;
@@ -23,7 +23,7 @@ export function EmailList({
   selectedId,
   onSelect,
 }: {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   folder: string;
   selectedId: string | null;
   onSelect: (id: string) => void;

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Plus } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { MarketingMetricGrid } from "@/components/marketing/MarketingMetricGrid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,26 +29,46 @@ type CampaignRow = {
   sentAt: string | null;
   createdAt: string;
   statsJson?: { opened?: number; clicked?: number; delivered?: number } | null;
+  delivered?: number;
+  opened?: number;
+  clicked?: number;
+  deliveryRate?: number;
+  openRate?: number;
+  clickRate?: number;
+};
+
+type InsightsData = {
+  summary: {
+    campaignCount: number;
+    activeDrip: number;
+    deliveryRate: number;
+    openRate: number;
+    clickRate: number;
+  };
+  campaigns: CampaignRow[];
 };
 
 export default function MarketingCampaignsPage() {
-  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/marketing/campaigns")
+    fetch("/api/marketing/insights")
       .then((r) => r.json())
-      .then((data) => setCampaigns(data.campaigns ?? []))
+      .then(setData)
       .catch(() => toast.error("Failed to load campaigns"))
       .finally(() => setLoading(false));
   }, []);
+
+  const summary = data?.summary;
+  const campaigns = data?.campaigns ?? [];
 
   return (
     <ContentArea>
       <PageHeader
         breadcrumb={["Marketing", "Campaigns"]}
         title="Campaigns"
-        subtitle="Email blasts, SMS campaigns, and drip sequences."
+        subtitle="Email blasts, SMS campaigns, drip sequences, and performance insights."
         actions={
           <Button size="sm" asChild>
             <Link href="/marketing/campaigns/new">
@@ -57,6 +78,20 @@ export default function MarketingCampaignsPage() {
           </Button>
         }
       />
+
+      <MarketingMetricGrid
+        className="mb-8"
+        columns={5}
+        comingSoon={false}
+        metrics={[
+          { label: "Total campaigns", value: loading ? "—" : summary?.campaignCount ?? 0 },
+          { label: "Active drips", value: loading ? "—" : summary?.activeDrip ?? 0 },
+          { label: "Delivery rate", value: loading ? "—" : `${summary?.deliveryRate ?? 0}%` },
+          { label: "Open rate", value: loading ? "—" : `${summary?.openRate ?? 0}%` },
+          { label: "Click rate", value: loading ? "—" : `${summary?.clickRate ?? 0}%` },
+        ]}
+      />
+
       <div className="rounded-lg border border-border bg-white">
         <Table>
           <TableHeader>
@@ -66,21 +101,22 @@ export default function MarketingCampaignsPage() {
               <TableHead>Channel</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Recipients</TableHead>
-              <TableHead>Opens</TableHead>
+              <TableHead>Delivered</TableHead>
+              <TableHead>Open %</TableHead>
+              <TableHead>Click %</TableHead>
               <TableHead>Sent</TableHead>
-              <TableHead>Created</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : campaigns.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   No campaigns yet. Create your first marketing campaign.
                 </TableCell>
               </TableRow>
@@ -88,23 +124,31 @@ export default function MarketingCampaignsPage() {
               campaigns.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
-                    <Link href={`/marketing/campaigns/${c.id}`} className="font-medium hover:underline">
+                    <Link
+                      href={`/marketing/campaigns/${c.id}`}
+                      className="font-medium hover:underline"
+                    >
                       {c.name}
                     </Link>
                   </TableCell>
                   <TableCell>{c.type}</TableCell>
                   <TableCell>{c.channel}</TableCell>
                   <TableCell>
-                    <Badge variant={c.status === "COMPLETED" || c.status === "ACTIVE" ? "default" : "secondary"}>
+                    <Badge
+                      variant={
+                        c.status === "COMPLETED" || c.status === "ACTIVE" ? "default" : "secondary"
+                      }
+                    >
                       {c.status}
                     </Badge>
                   </TableCell>
                   <TableCell>{c.recipientCount}</TableCell>
-                  <TableCell>{c.statsJson?.opened ?? "—"}</TableCell>
+                  <TableCell>{c.delivered ?? "—"}</TableCell>
+                  <TableCell>{c.openRate != null ? `${c.openRate}%` : "—"}</TableCell>
+                  <TableCell>{c.clickRate != null ? `${c.clickRate}%` : "—"}</TableCell>
                   <TableCell>
                     {c.sentAt ? format(new Date(c.sentAt), "MMM d, yyyy") : "—"}
                   </TableCell>
-                  <TableCell>{format(new Date(c.createdAt), "MMM d, yyyy")}</TableCell>
                 </TableRow>
               ))
             )}

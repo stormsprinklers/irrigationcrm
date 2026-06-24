@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 export type EmailRecipient = {
   email: string;
@@ -32,7 +32,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 type Props = {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   value: EmailRecipient[];
   onChange: (recipients: EmailRecipient[]) => void;
   className?: string;

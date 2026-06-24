@@ -10,7 +10,7 @@ import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Employee = {
@@ -39,7 +39,7 @@ export function VoicePanel({
   initialCustomerId,
   initialName,
 }: {
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   selectedCallId: string | null;
   initialPhone?: string | null;
   initialCustomerId?: string | null;

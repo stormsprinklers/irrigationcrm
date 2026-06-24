@@ -13,7 +13,7 @@ import {
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { cn } from "@/lib/utils";
-import type { InboxScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Message = {
   id: string;
@@ -88,7 +88,7 @@ export function SmsMessagePane({
   onSent,
 }: {
   conversationId: string | null;
-  scope: InboxScope;
+  scope: CustomerTeamScope;
   initialPhone?: string | null;
   initialCustomerId?: string | null;
   initialName?: string | null;

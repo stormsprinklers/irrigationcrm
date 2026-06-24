@@ -14,6 +14,7 @@ const publicPaths = [
   "/api/twilio",
   "/api/sendgrid",
   "/api/stripe/webhook",
+  "/api/meta",
   "/api/invoices/public",
   "/api/marketing/google-business/callback",
   "/api/integrations",

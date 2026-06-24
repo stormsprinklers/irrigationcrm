@@ -123,8 +123,15 @@ export function CustomerProfile({ customerId }: Props) {
     "maintenance",
   ]);
   const tabFromUrl = searchParams.get("tab");
+  const propertyIdFromUrl = searchParams.get("propertyId");
   const initialTab =
-    tabFromUrl === "notes" ? "profile" : tabFromUrl && validTabs.has(tabFromUrl) ? tabFromUrl : "profile";
+    tabFromUrl === "notes"
+      ? "profile"
+      : tabFromUrl && validTabs.has(tabFromUrl)
+        ? tabFromUrl
+        : propertyIdFromUrl
+          ? "properties"
+          : "profile";
   const [activeTab, setActiveTab] = useState(initialTab);
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
@@ -171,8 +178,20 @@ export function CustomerProfile({ customerId }: Props) {
   useEffect(() => {
     if (tabFromUrl && validTabs.has(tabFromUrl)) {
       setActiveTab(tabFromUrl);
+    } else if (propertyIdFromUrl) {
+      setActiveTab("properties");
     }
-  }, [tabFromUrl]);
+  }, [tabFromUrl, propertyIdFromUrl]);
+
+  useEffect(() => {
+    if (activeTab !== "properties" || !propertyIdFromUrl || loading) return;
+    const el = document.getElementById(`property-${propertyIdFromUrl}`);
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [activeTab, propertyIdFromUrl, loading, properties.length]);
 
   const load = useCallback(async () => {
     const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
@@ -813,7 +832,7 @@ export function CustomerProfile({ customerId }: Props) {
             </CardHeader>
             <CardContent className="space-y-4">
               {properties.map((property) => (
-                <div key={property.id} className="space-y-3">
+                <div key={property.id} id={`property-${property.id}`} className="scroll-mt-6 space-y-3">
                   <div className="flex items-start justify-between rounded-md border p-3">
                     <div>
                       <div className="font-medium">

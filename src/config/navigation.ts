@@ -59,6 +59,13 @@ export const inboxSidebar: NavSection[] = [
       { label: "Team", href: "/inbox/email/team" },
     ],
   },
+  {
+    title: "SOCIAL",
+    items: [
+      { label: "Facebook DMs", href: "/inbox/social/facebook" },
+      { label: "Instagram DMs", href: "/inbox/social/instagram" },
+    ],
+  },
 ];
 
 export const priceBookSidebar: NavSection[] = [
@@ -106,7 +113,9 @@ export const marketingSidebar: NavSection[] = [
     items: [
       { label: "Overview", href: "/marketing" },
       { label: "Campaigns", href: "/marketing/campaigns" },
-      { label: "Insights", href: "/marketing/insights" },
+      { label: "Social Media", href: "/marketing/social" },
+      { label: "SEO", href: "/marketing/seo" },
+      { label: "Ads", href: "/marketing/ads" },
       { label: "Google Business Profile", href: "/marketing/google-business" },
     ],
   },
