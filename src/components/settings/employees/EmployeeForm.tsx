@@ -21,6 +21,7 @@ export type EmployeeRecord = {
   phone: string | null;
   role: keyof typeof ROLE_LABELS;
   title: string | null;
+  websiteTeamSlug: string | null;
   status: "ACTIVE" | "ARCHIVED";
   division: "INSTALL" | "SERVICE" | null;
   color: string | null;
@@ -55,6 +56,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     phone: "",
     role: "CSR" as (typeof ROLES)[number],
     title: "",
+    websiteTeamSlug: "",
     division: "" as "" | "INSTALL" | "SERVICE",
     color: "#2563EB",
     photoUrl: "",
@@ -88,6 +90,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         phone: "",
         role: "CSR",
         title: "",
+        websiteTeamSlug: "",
         division: "",
         color: "#2563EB",
         photoUrl: "",
@@ -114,6 +117,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       phone: employee.phone ?? "",
       role: employee.role,
       title: employee.title ?? "",
+      websiteTeamSlug: employee.websiteTeamSlug ?? "",
       division: employee.division ?? "",
       color: employee.color ?? "#2563EB",
       photoUrl: employee.photoUrl ?? "",
@@ -208,6 +212,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         phone: form.phone || null,
         role: form.role,
         title: form.title || null,
+        websiteTeamSlug: form.websiteTeamSlug || null,
         division: form.division || null,
         color: form.color,
         photoUrl: form.photoUrl || null,
@@ -315,6 +320,17 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         <div>
           <label className="text-sm font-medium">Title</label>
           <Input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="Lead Technician" />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Website team slug</label>
+          <Input
+            value={form.websiteTeamSlug}
+            onChange={(e) => setForm((p) => ({ ...p, websiteTeamSlug: e.target.value }))}
+            placeholder="jason-beadle"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Used for {"{about_technician_link}"} in customer messages (/team/slug on your website).
+          </p>
         </div>
         <div>
           <label className="text-sm font-medium">Role</label>

@@ -6,6 +6,7 @@ import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { canManageEnrollments } from "@/lib/maintenance-plans/permissions";
 import { applyPlanDiscountsToVisit } from "@/lib/maintenance-plans/discounts";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
+import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 
@@ -99,6 +100,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await applyPlanDiscountsToVisit(visit.id, planVisit.enrollmentId);
     await syncVisitChecklists(visit.id, user.companyId);
+
+    void onVisitTimeChanged({
+      visitId: visit.id,
+      companyId: user.companyId,
+      isInitialSchedule: true,
+    }).catch(() => {});
 
     return NextResponse.json(visit, { status: 201 });
   } catch {

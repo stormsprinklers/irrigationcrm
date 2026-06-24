@@ -432,6 +432,18 @@ model Company {
   notifyInvoicePaid        Boolean  @default(true)
   notifyVisitScheduled     Boolean  @default(true)
   notifyVisitEnRoute       Boolean  @default(true)
+  notifyVisitTimeUpdated   Boolean  @default(true)
+  notifyVisitCancelled     Boolean  @default(true)
+  notifyVisitCompleted     Boolean  @default(true)
+  notifyReviewRequest      Boolean  @default(true)
+  notifyFeedbackSurvey     Boolean  @default(true)
+  notifyEstimateFollowUp   Boolean  @default(false)
+  googleReviewUrl          String?
+  websiteBaseUrl           String?
+  arrivalWindowHours       Int      @default(3)
+  feedbackSurveyDelayHours Int      @default(24)
+  reviewRequestDelayHours  Int      @default(2)
+  estimateFollowUpIntervalDays Int  @default(3)
   leadSources              String[] @default([])
   intakeRequiredFields     String[] @default([])
   businessHours            Json?
@@ -499,6 +511,8 @@ model Company {
   voiceClips             VoiceClip[]
   notificationTemplates  NotificationTemplate[]
   notificationRules      NotificationRule[]
+  notificationDeliveries NotificationDelivery[]
+  notificationJobs       NotificationJob[]
   contactLists           ContactList[]
   campaigns              Campaign[]
   housecallProMigrations HousecallProMigration[]
@@ -529,6 +543,7 @@ model User {
   division     Division?
   color        String?
   photoUrl     String?
+  websiteTeamSlug String?
   address      String?
   city         String?
   state        String?
@@ -615,6 +630,8 @@ model Customer {
   notes                  CustomerNote[]
   attachments            CustomerAttachment[]
   portalLoginTokens      CustomerPortalLoginToken[]
+  notificationDeliveries NotificationDelivery[]
+  feedbackSurveyResponses FeedbackSurveyResponse[]
 }
 
 model CustomerPhone {
@@ -852,6 +869,94 @@ model NotificationRule {
 
   @@unique([companyId, event, templateId])
   @@index([companyId, event])
+}
+
+model NotificationDelivery {
+  id            String   @id @default(cuid())
+  companyId     String
+  customerId    String?
+  event         String
+  channel       Channel
+  visitId       String?
+  invoiceId     String?
+  estimateId    String?
+  emailSent     Boolean  @default(false)
+  smsSent       Boolean  @default(false)
+  emailFailedAt DateTime?
+  createdAt     DateTime @default(now())
+
+  company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  links    TrackedLink[]
+
+  @@index([companyId, createdAt])
+  @@index([customerId])
+}
+
+model TrackedLink {
+  id              String    @id @default(cuid())
+  deliveryId      String
+  kind            String
+  destinationUrl  String
+  token           String    @unique
+  clickedAt       DateTime?
+  clickCount      Int       @default(0)
+  createdAt       DateTime  @default(now())
+
+  delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+}
+
+model NotificationJob {
+  id          String    @id @default(cuid())
+  companyId   String
+  visitId     String?
+  estimateId  String?
+  event       String
+  runAt       DateTime
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  visit    Visit?    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  estimate Estimate? @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([runAt, processedAt])
+  @@index([companyId])
+  @@index([estimateId])
+}
+
+model FeedbackSurveyToken {
+  id        String   @id @default(cuid())
+  visitId   String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  visit     Visit                    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  responses FeedbackSurveyResponse[]
+
+  @@index([visitId])
+}
+
+model FeedbackSurveyResponse {
+  id          String   @id @default(cuid())
+  companyId   String
+  visitId     String
+  customerId  String?
+  tokenId     String?
+  rating      Int
+  comment     String?
+  submittedAt DateTime @default(now())
+
+  visit    Visit                @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  customer Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  token    FeedbackSurveyToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([visitId])
 }
 
 model ContactList {
@@ -1299,6 +1404,9 @@ model Visit {
   callLogs     CallLog[]         @relation("CallLogVisit")
   callSession  CallSession?      @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
   visitChecklists VisitChecklist[]
+  notificationJobs NotificationJob[]
+  feedbackSurveyResponses FeedbackSurveyResponse[]
+  feedbackSurveyTokens FeedbackSurveyToken[]
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])
@@ -1590,6 +1698,7 @@ model Estimate {
   attachments EstimateAttachment[]
   discounts   Discount[]        @relation("EstimateDiscounts")
   invoices    Invoice[]
+  notificationJobs NotificationJob[]
 
   @@index([companyId, status])
   @@index([companyId, needsScheduling])

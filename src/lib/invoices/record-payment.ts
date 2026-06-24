@@ -1,5 +1,5 @@
 import type { InvoiceStatus } from "@prisma/client";
-import { notifyInvoiceReceipt } from "@/lib/invoices/notify";
+import { notifyInvoiceViaTemplates } from "@/lib/notifications/invoice-notify";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -134,18 +134,11 @@ export async function recordInvoicePayment(
   }
 
   if (invoice.company.notifyInvoicePaid) {
-    await notifyInvoiceReceipt({
-      customerName: invoice.customer.name,
-      customerEmail: invoice.customer.email,
-      customerPhone: invoice.customer.phone,
-      companyName: invoice.company.name,
-      sendgridFrom: invoice.company.sendgridFrom,
-      emailSenderName: invoice.company.emailSenderName,
-      emailLogoUrl: invoice.company.emailLogoUrl,
-      twilioPhone: invoice.company.twilioPhone,
-      invoiceNumber: invoice.invoiceNumber,
-      amount: params.amount,
-      publicToken: invoice.publicToken,
+    await notifyInvoiceViaTemplates({
+      invoiceId: invoice.id,
+      companyId: invoice.companyId,
+      event: "INVOICE_PAID_RECEIPT",
+      smsBackupOnly: true,
     });
   }
 

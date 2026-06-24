@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { notifyInvoicePayment } from "@/lib/invoices/notify";
+import { notifyInvoiceViaTemplates } from "@/lib/notifications/invoice-notify";
+import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { getInvoiceForCompany } from "@/lib/invoices/queries";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
@@ -27,20 +28,12 @@ export async function POST(_request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Invoice has no balance due" }, { status: 400 });
     }
 
-    const { emailSent, smsSent, payUrl } = await notifyInvoicePayment({
-      customerName: invoice.customer.name,
-      customerEmail: invoice.customer.email,
-      customerPhone: invoice.customer.phone,
-      companyName: invoice.company.name,
-      sendgridFrom: invoice.company.sendgridFrom,
-      emailSenderName: invoice.company.emailSenderName,
-      emailLogoUrl: invoice.company.emailLogoUrl,
-      twilioPhone: invoice.company.twilioPhone,
-      invoiceNumber: invoice.invoiceNumber,
-      balanceDue,
-      publicToken: invoice.publicToken,
-      kind: "remind",
+    const { emailSent, smsSent } = await notifyInvoiceViaTemplates({
+      invoiceId: id,
+      companyId: user.companyId,
+      event: "INVOICE_REMINDER",
     });
+    const payUrl = getInvoicePayUrl(invoice.publicToken);
 
     if (!emailSent && !smsSent) {
       return NextResponse.json(

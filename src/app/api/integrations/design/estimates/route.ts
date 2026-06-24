@@ -5,6 +5,7 @@ import { uploadIntegrationAttachment } from "@/lib/integrations/attachments";
 import { logIntegrationAudit } from "@/lib/integrations/audit";
 import { designEstimateSchema } from "@/lib/integrations/schemas";
 import { computeEstimateExpiry } from "@/lib/estimates/queries";
+import { onEstimateSent } from "@/lib/notifications/estimate-followup";
 import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
 import { prisma } from "@/lib/prisma";
 
@@ -145,6 +146,10 @@ export async function POST(request: NextRequest) {
       payload: { externalId: input.externalId, estimateId: estimate.id },
       status: "success",
     });
+
+    if (status === EstimateStatus.SENT) {
+      void onEstimateSent(estimate.id, auth.companyId).catch(() => {});
+    }
 
     const crmUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
     return NextResponse.json(

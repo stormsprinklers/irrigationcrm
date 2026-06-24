@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (!canManageEmployees(user.role)) return forbiddenResponse();
 
     const body = await request.json();
-    const { name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary } = body;
+    const { name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary, websiteTeamSlug } = body;
 
     if (!name || !email) return badRequestResponse("Name and email are required");
 
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
         hourlyRate: hourlyRate != null ? Number(hourlyRate) : null,
         commissionPercent: commissionPercent != null ? Number(commissionPercent) : null,
         annualSalary: annualSalary != null ? Number(annualSalary) : null,
+        websiteTeamSlug: websiteTeamSlug ? String(websiteTeamSlug) : null,
         passwordHash,
         serviceAreas: serviceAreaIds?.length
           ? {

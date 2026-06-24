@@ -37,6 +37,18 @@ export const companySettingsSelect = {
   notifyInvoicePaid: true,
   notifyVisitScheduled: true,
   notifyVisitEnRoute: true,
+  notifyVisitTimeUpdated: true,
+  notifyVisitCancelled: true,
+  notifyVisitCompleted: true,
+  notifyReviewRequest: true,
+  notifyFeedbackSurvey: true,
+  notifyEstimateFollowUp: true,
+  googleReviewUrl: true,
+  websiteBaseUrl: true,
+  arrivalWindowHours: true,
+  feedbackSurveyDelayHours: true,
+  reviewRequestDelayHours: true,
+  estimateFollowUpIntervalDays: true,
   leadSources: true,
   intakeRequiredFields: true,
   businessHours: true,
@@ -89,6 +101,18 @@ export type CompanySettingsDTO = {
   notifyInvoicePaid: boolean;
   notifyVisitScheduled: boolean;
   notifyVisitEnRoute: boolean;
+  notifyVisitTimeUpdated: boolean;
+  notifyVisitCancelled: boolean;
+  notifyVisitCompleted: boolean;
+  notifyReviewRequest: boolean;
+  notifyFeedbackSurvey: boolean;
+  notifyEstimateFollowUp: boolean;
+  googleReviewUrl: string | null;
+  websiteBaseUrl: string | null;
+  arrivalWindowHours: number;
+  feedbackSurveyDelayHours: number;
+  reviewRequestDelayHours: number;
+  estimateFollowUpIntervalDays: number;
   leadSources: string[];
   intakeRequiredFields: string[];
   businessHours: unknown;

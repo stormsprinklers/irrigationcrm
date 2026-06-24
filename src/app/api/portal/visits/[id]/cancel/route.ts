@@ -8,6 +8,7 @@ import {
   portalUnauthorizedResponse,
 } from "@/lib/portal/auth";
 import { portalFeatureEnabled } from "@/lib/portal/permissions";
+import { onVisitCancelled } from "@/lib/notifications/visit-events";
 import {
   assertVisitReschedulable,
   assertVisitWithinLeadHours,
@@ -43,6 +44,8 @@ export async function POST(_request: Request, { params }: Params) {
     where: { id },
     data: { status: VisitStatus.CANCELLED },
   });
+
+  void onVisitCancelled(id, ctx.companyId).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

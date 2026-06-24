@@ -14,6 +14,7 @@ import {
   computeDepositAmount,
   handleEstimateApprovedWithoutDeposit,
 } from "@/lib/estimates/booking";
+import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { createEstimateDepositCheckout } from "@/lib/estimates/deposit-checkout";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -79,6 +80,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
     include: { lineItems: { orderBy: { sortOrder: "asc" } } },
   });
+
+  void onEstimateClosed(estimate.id).catch(() => {});
 
   const depositAmount = computeDepositAmount(updated);
   let depositCheckoutUrl: string | null = null;

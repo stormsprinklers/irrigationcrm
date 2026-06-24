@@ -5,6 +5,7 @@ import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 import { prisma } from "@/lib/prisma";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
+import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { getVisitForCompany } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
@@ -90,6 +91,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     await clearNeedsSchedulingForVisit(id);
+
+    const startChanged =
+      body.startAt !== undefined &&
+      new Date(body.startAt).getTime() !== existing.startAt.getTime();
+    const cancelled =
+      body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
+
+    if (cancelled && existing.customerId) {
+      void onVisitCancelled(id, user.companyId).catch(() => {});
+    } else if (startChanged && existing.customerId && body.status !== VisitStatus.CANCELLED) {
+      void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
+    }
 
     const visit = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(visit);

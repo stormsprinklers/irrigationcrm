@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import {
-  buildVisitContext,
-  type NotificationEvent,
-} from "@/lib/notifications/templates";
-import { sendOperationalNotification } from "@/lib/notifications/send";
+import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import {
   requirePortalCustomer,
   portalForbiddenResponse,
@@ -88,23 +84,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
-  sendOperationalNotification({
-    companyId: ctx.companyId,
-    event: "VISIT_SCHEDULED" as NotificationEvent,
-    recipient: {
-      customerId: ctx.customerId,
-      name: ctx.customer.name,
-      email: ctx.customer.email,
-      phone: ctx.customer.phone,
-    },
-    context: buildVisitContext({
-      customerName: ctx.customer.name,
-      companyName: ctx.company.name,
-      visitTitle: updated.title,
-      startAt: slotStart,
-      address: [updated.address, updated.city, updated.state, updated.zip].filter(Boolean).join(", "),
-    }),
-  }).catch(() => {});
+  void onVisitTimeChanged({ visitId: id, companyId: ctx.companyId }).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

@@ -5,6 +5,7 @@ import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
+import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
@@ -74,6 +75,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     await clearNeedsSchedulingForVisit(id);
 
+    const startChanged =
+      body.startAt !== undefined &&
+      new Date(body.startAt).getTime() !== existing.startAt.getTime();
+    const cancelled =
+      body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
+
+    if (cancelled && existing.customerId) {
+      void onVisitCancelled(id, user.companyId).catch(() => {});
+    } else if (startChanged && existing.customerId && visit.status !== VisitStatus.CANCELLED) {
+      void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
+    }
+
     return NextResponse.json(serializeJob(visit));
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
@@ -91,6 +104,9 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await prisma.visit.update({ where: { id }, data: { status: VisitStatus.CANCELLED } });
+    if (existing.customerId) {
+      void onVisitCancelled(id, user.companyId).catch(() => {});
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();

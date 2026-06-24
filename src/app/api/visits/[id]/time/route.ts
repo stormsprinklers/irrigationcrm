@@ -8,8 +8,9 @@ import {
   MapsEtaError,
   resolveVisitDestination,
 } from "@/lib/maps/eta";
-import { buildEnRouteContext } from "@/lib/notifications/templates";
+import { buildEnRouteContext } from "@/lib/notifications/context";
 import { ensureDefaultNotificationTemplates, sendOperationalNotification } from "@/lib/notifications/send";
+import { onVisitCompleted } from "@/lib/notifications/visit-events";
 import { completeMaintenancePlanVisit } from "@/lib/maintenance-plans/discounts";
 import { prisma } from "@/lib/prisma";
 import { getVisitForCompany } from "@/lib/visits/queries";
@@ -152,6 +153,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (visitUpdate.status === VisitStatus.COMPLETED) {
       await completeMaintenancePlanVisit(id);
+      void onVisitCompleted(id, user.companyId).catch((err) =>
+        console.error("Visit completed notification error:", err)
+      );
     }
 
     const updated = await getVisitForCompany(user.companyId, id);
@@ -177,13 +181,14 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
         context: buildEnRouteContext({
           customerName: updated.customer.name,
-          companyName: "",
+          companyName: "placeholder",
           technicianName,
           visitTitle: updated.title,
           etaSeconds: updated.enRouteEtaSeconds,
           etaAt: updated.enRouteEtaAt,
           visitAddress: destination,
         }),
+        options: { visitId: id },
       }).catch((err) => console.error("VISIT_EN_ROUTE notification error:", err));
     }
 

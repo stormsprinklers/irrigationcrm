@@ -3,8 +3,13 @@ import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
-import { isContactBlocked } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
+import { assertCustomerCanReceiveNotifications } from "./guard";
+import {
+  createTrackedLink,
+  injectTrackedUrlsInText,
+  type TrackedLinkKind,
+} from "./tracked-links";
 import { renderTemplate, type NotificationEvent, type TemplateContext } from "./templates";
 
 export type NotificationRecipient = {
@@ -18,15 +23,78 @@ export type SendResult = {
   emailSent: boolean;
   smsSent: boolean;
   skipped: string[];
+  deliveryIds: string[];
 };
+
+export type SendOptions = {
+  visitId?: string;
+  invoiceId?: string;
+  estimateId?: string;
+  /** Only send SMS (skip email). */
+  smsOnly?: boolean;
+  /** Only send SMS if email fails or customer has no email. */
+  smsBackupOnly?: boolean;
+  /** Raw link placeholders to replace with tracked URLs. */
+  linkPlaceholders?: Partial<Record<TrackedLinkKind, string>>;
+};
+
+const EVENT_TOGGLE_MAP: Record<NotificationEvent, keyof CompanyNotifyFlags | null> = {
+  VISIT_SCHEDULED: "notifyVisitScheduled",
+  VISIT_TIME_UPDATED: "notifyVisitTimeUpdated",
+  VISIT_CANCELLED: "notifyVisitCancelled",
+  VISIT_COMPLETED: "notifyVisitCompleted",
+  VISIT_EN_ROUTE: "notifyVisitEnRoute",
+  REVIEW_REQUEST: "notifyReviewRequest",
+  INVOICE_SENT: null,
+  INVOICE_REMINDER: null,
+  INVOICE_PAID_RECEIPT: "notifyInvoicePaid",
+  ESTIMATE_SENT: "notifyEstimateSent",
+  ESTIMATE_FOLLOW_UP: "notifyEstimateFollowUp",
+  FEEDBACK_SURVEY: "notifyFeedbackSurvey",
+};
+
+type CompanyNotifyFlags = {
+  notifyVisitScheduled: boolean;
+  notifyVisitTimeUpdated: boolean;
+  notifyVisitCancelled: boolean;
+  notifyVisitCompleted: boolean;
+  notifyVisitEnRoute: boolean;
+  notifyReviewRequest: boolean;
+  notifyInvoicePaid: boolean;
+  notifyEstimateSent: boolean;
+  notifyEstimateFollowUp: boolean;
+  notifyFeedbackSurvey: boolean;
+};
+
+async function isEventEnabled(
+  company: CompanyNotifyFlags,
+  event: NotificationEvent
+): Promise<boolean> {
+  const key = EVENT_TOGGLE_MAP[event];
+  if (!key) return true;
+  return company[key];
+}
 
 export async function sendOperationalNotification(params: {
   companyId: string;
   event: NotificationEvent;
   recipient: NotificationRecipient;
   context: TemplateContext;
+  options?: SendOptions;
 }): Promise<SendResult> {
-  const result: SendResult = { emailSent: false, smsSent: false, skipped: [] };
+  const result: SendResult = { emailSent: false, smsSent: false, skipped: [], deliveryIds: [] };
+  const options = params.options ?? {};
+
+  const guard = await assertCustomerCanReceiveNotifications({
+    companyId: params.companyId,
+    customerId: params.recipient.customerId,
+    phone: params.recipient.phone,
+    email: params.recipient.email,
+  });
+  if (!guard.allowed) {
+    result.skipped.push(guard.reason);
+    return result;
+  }
 
   const company = await prisma.company.findUnique({
     where: { id: params.companyId },
@@ -37,23 +105,21 @@ export async function sendOperationalNotification(params: {
       emailSenderName: true,
       emailLogoUrl: true,
       notifyVisitScheduled: true,
+      notifyVisitTimeUpdated: true,
+      notifyVisitCancelled: true,
+      notifyVisitCompleted: true,
       notifyVisitEnRoute: true,
-      notifyEstimateSent: true,
+      notifyReviewRequest: true,
       notifyInvoicePaid: true,
+      notifyEstimateSent: true,
+      notifyEstimateFollowUp: true,
+      notifyFeedbackSurvey: true,
     },
   });
   if (!company) return result;
 
-  if (params.event === "VISIT_SCHEDULED" && !company.notifyVisitScheduled) {
-    result.skipped.push("visit notifications disabled");
-    return result;
-  }
-  if (params.event === "VISIT_EN_ROUTE" && !company.notifyVisitEnRoute) {
-    result.skipped.push("on-my-way notifications disabled");
-    return result;
-  }
-  if (params.event === "ESTIMATE_SENT" && !company.notifyEstimateSent) {
-    result.skipped.push("estimate notifications disabled");
+  if (!(await isEventEnabled(company, params.event))) {
+    result.skipped.push(`${params.event} notifications disabled`);
     return result;
   }
 
@@ -61,57 +127,105 @@ export async function sendOperationalNotification(params: {
     where: { companyId: params.companyId, event: params.event, enabled: true },
     include: { template: true },
   });
-
   if (rules.length === 0) return result;
 
-  const blocked = await isContactBlocked(
-    params.companyId,
-    params.recipient.phone,
-    params.recipient.email
-  );
-  if (blocked) {
-    result.skipped.push("contact blocked");
-    return result;
-  }
+  const linkPlaceholders = Object.fromEntries(
+    Object.entries(options.linkPlaceholders ?? {}).filter(([, v]) => Boolean(v))
+  ) as NonNullable<SendOptions["linkPlaceholders"]>;
 
-  const context: TemplateContext = {
-    companyName: company.name,
-    customerName: params.recipient.name ?? "Customer",
+  const baseContext: TemplateContext = {
     ...params.context,
+    companyName: company.name,
+    company_name: company.name,
+    customerName: params.recipient.name ?? params.context.customerName ?? "Customer",
   };
 
-  for (const rule of rules) {
-    const body = renderTemplate(rule.template.body, context);
+  const branding = {
+    companyName: company.name,
+    sendgridFrom: company.sendgridFrom,
+    emailSenderName: company.emailSenderName,
+    emailLogoUrl: company.emailLogoUrl,
+  };
 
-    if (rule.template.channel === Channel.EMAIL) {
+  let emailAttempted = false;
+  let emailFailed = false;
+
+  for (const rule of rules) {
+    if (options.smsOnly && rule.template.channel === Channel.EMAIL) continue;
+    if (options.smsBackupOnly && rule.template.channel === Channel.SMS) continue;
+
+    const delivery = await prisma.notificationDelivery.create({
+      data: {
+        companyId: params.companyId,
+        customerId: params.recipient.customerId ?? null,
+        event: params.event,
+        channel: rule.template.channel,
+        visitId: options.visitId ?? null,
+        invoiceId: options.invoiceId ?? null,
+        estimateId: options.estimateId ?? null,
+      },
+    });
+    result.deliveryIds.push(delivery.id);
+
+    const urlMap: Record<string, string> = {};
+    for (const [kind, dest] of Object.entries(linkPlaceholders)) {
+      if (!dest || typeof dest !== "string") continue;
+      const tracked = await createTrackedLink({
+        deliveryId: delivery.id,
+        kind: kind as TrackedLinkKind,
+        destinationUrl: dest,
+      });
+      const snakeKey = `{${kind}_link}`;
+      urlMap[snakeKey] = tracked;
+      if (kind === "portal") urlMap["{portal_link}"] = tracked;
+      if (kind === "invoice") urlMap["{invoice_link}"] = tracked;
+      if (kind === "review") urlMap["{review_link}"] = tracked;
+      if (kind === "survey") urlMap["{survey_link}"] = tracked;
+      if (kind === "technician") urlMap["{about_technician_link}"] = tracked;
+      if (kind === "estimate") urlMap["{estimate_link}"] = tracked;
+    }
+
+    let body = renderTemplate(rule.template.body, baseContext);
+    body = injectTrackedUrlsInText(body, urlMap);
+
+    if (rule.template.channel === Channel.EMAIL && !options.smsOnly) {
       const to = params.recipient.email;
-      if (!to || !isEmailConfigured()) continue;
-      const branding = {
-        companyName: company.name,
-        sendgridFrom: company.sendgridFrom,
-        emailSenderName: company.emailSenderName,
-        emailLogoUrl: company.emailLogoUrl,
-      };
+      if (!to || !isEmailConfigured()) {
+        emailFailed = true;
+        continue;
+      }
+      emailAttempted = true;
       try {
         const subject = renderTemplate(
           rule.template.subject ?? `${company.name} notification`,
-          context
+          baseContext
         );
         await sendCompanyEmail(branding, {
           to: [to],
-          subject,
+          subject: injectTrackedUrlsInText(subject, urlMap),
           text: body,
           html: body.split("\n").map((line) => `<p>${line}</p>`).join(""),
         });
+        await prisma.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: { emailSent: true },
+        });
         result.emailSent = true;
       } catch {
-        // best-effort
+        emailFailed = true;
+        await prisma.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: { emailFailedAt: new Date() },
+        });
       }
     }
 
     if (rule.template.channel === Channel.SMS) {
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone || !process.env.TWILIO_ACCOUNT_SID) continue;
+      if (options.smsBackupOnly && !emailFailed && emailAttempted && result.emailSent) continue;
+      if (options.smsBackupOnly && !emailAttempted && params.recipient.email) continue;
+
       try {
         await sendSms({
           from: company.twilioPhone,
@@ -119,7 +233,52 @@ export async function sendOperationalNotification(params: {
           body,
           statusCallback: twilioSmsStatusCallbackUrl(),
         });
+        await prisma.notificationDelivery.update({
+          where: { id: delivery.id },
+          data: { smsSent: true },
+        });
         result.smsSent = true;
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  if (options.smsBackupOnly && emailAttempted && !result.emailSent && !result.smsSent) {
+    const smsRules = rules.filter((r) => r.template.channel === Channel.SMS);
+    for (const rule of smsRules) {
+      const delivery = await prisma.notificationDelivery.create({
+        data: {
+          companyId: params.companyId,
+          customerId: params.recipient.customerId ?? null,
+          event: params.event,
+          channel: Channel.SMS,
+          visitId: options.visitId ?? null,
+          invoiceId: options.invoiceId ?? null,
+          estimateId: options.estimateId ?? null,
+        },
+      });
+      result.deliveryIds.push(delivery.id);
+
+      const urlMap: Record<string, string> = {};
+      for (const [kind, dest] of Object.entries(linkPlaceholders)) {
+        if (!dest) continue;
+        const tracked = await createTrackedLink({
+          deliveryId: delivery.id,
+          kind: kind as TrackedLinkKind,
+          destinationUrl: dest,
+        });
+        if (kind === "invoice") urlMap["{invoice_link}"] = tracked;
+      }
+
+      const body = injectTrackedUrlsInText(renderTemplate(rule.template.body, baseContext), urlMap);
+      const to = params.recipient.phone;
+      if (!to || !company.twilioPhone) continue;
+      try {
+        await sendSms({ from: company.twilioPhone, to, body, statusCallback: twilioSmsStatusCallbackUrl() });
+        await prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { smsSent: true } });
+        result.smsSent = true;
+        break;
       } catch {
         // best-effort
       }
@@ -131,6 +290,18 @@ export async function sendOperationalNotification(params: {
 
 export async function ensureDefaultNotificationTemplates(companyId: string) {
   const { DEFAULT_TEMPLATES } = await import("./templates");
+
+  const defaultEnabled = new Set<NotificationEvent>([
+    "VISIT_SCHEDULED",
+    "VISIT_EN_ROUTE",
+    "VISIT_TIME_UPDATED",
+    "VISIT_CANCELLED",
+    "VISIT_COMPLETED",
+    "REVIEW_REQUEST",
+    "INVOICE_PAID_RECEIPT",
+    "FEEDBACK_SURVEY",
+    "ESTIMATE_FOLLOW_UP",
+  ]);
 
   for (const tpl of DEFAULT_TEMPLATES) {
     const existing = await prisma.notificationTemplate.findFirst({
@@ -160,8 +331,7 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
           companyId,
           event: tpl.event,
           templateId: template.id,
-          enabled:
-            tpl.event === "VISIT_SCHEDULED" || tpl.event === "VISIT_EN_ROUTE",
+          enabled: defaultEnabled.has(tpl.event),
         },
       });
     }

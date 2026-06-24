@@ -6,8 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
 import type { ScheduleFilters } from "@/lib/schedule/types";
-import { sendOperationalNotification } from "@/lib/notifications/send";
-import { buildVisitContext } from "@/lib/notifications/templates";
+import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
@@ -121,33 +120,11 @@ export async function POST(request: NextRequest) {
     await syncVisitChecklists(visit.id, user.companyId);
 
     if (visit.customerId) {
-      const customer = await prisma.customer.findUnique({
-        where: { id: visit.customerId },
-        select: { name: true, email: true, phone: true },
-      });
-      const company = await prisma.company.findUnique({
-        where: { id: user.companyId },
-        select: { name: true },
-      });
-      if (customer && company) {
-        sendOperationalNotification({
-          companyId: user.companyId,
-          event: "VISIT_SCHEDULED",
-          recipient: {
-            customerId: visit.customerId,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-          },
-          context: buildVisitContext({
-            customerName: customer.name,
-            companyName: company.name,
-            visitTitle: visit.title,
-            startAt: visit.startAt,
-            address: [visit.address, visit.city, visit.state, visit.zip].filter(Boolean).join(", "),
-          }),
-        }).catch(() => {});
-      }
+      void onVisitTimeChanged({
+        visitId: visit.id,
+        companyId: user.companyId,
+        isInitialSchedule: true,
+      }).catch(() => {});
     }
 
     return NextResponse.json(serializeJob(visit), { status: 201 });

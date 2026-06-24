@@ -127,7 +127,7 @@ export const settingsSidebar: NavSection[] = [
     items: [
       { label: "Company", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
-      { label: "Notifications", href: "/settings/notifications" },
+      { label: "Communications", href: "/settings/notifications" },
       { label: "Employees", href: "/settings/employees" },
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service Areas", href: "/settings/service-areas" },

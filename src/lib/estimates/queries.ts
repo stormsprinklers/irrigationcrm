@@ -1,4 +1,5 @@
 import { EstimateStatus, Prisma } from "@prisma/client";
+import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { EstimateDTO, EstimateListItem } from "./types";
@@ -125,6 +126,7 @@ export async function applyEstimateExpiry(estimateId: string, status: EstimateSt
       where: { id: estimateId },
       data: { status: EstimateStatus.EXPIRED },
     });
+    void onEstimateClosed(estimateId).catch(() => {});
     return EstimateStatus.EXPIRED;
   }
   return status;

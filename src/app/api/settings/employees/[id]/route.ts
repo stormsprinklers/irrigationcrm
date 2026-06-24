@@ -53,6 +53,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ...(fields.division !== undefined ? { division: fields.division ?? null } : {}),
           ...(fields.color !== undefined ? { color: fields.color ?? null } : {}),
           ...(fields.photoUrl !== undefined ? { photoUrl: fields.photoUrl ?? null } : {}),
+          ...(fields.websiteTeamSlug !== undefined
+            ? { websiteTeamSlug: fields.websiteTeamSlug ?? null }
+            : {}),
           ...(fields.address !== undefined ? { address: fields.address ?? null } : {}),
           ...(fields.city !== undefined ? { city: fields.city ?? null } : {}),
           ...(fields.state !== undefined ? { state: fields.state ?? null } : {}),

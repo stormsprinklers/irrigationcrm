@@ -3,6 +3,7 @@ import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
+import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest, { params }: Params) {
         approvedAt: new Date(),
       },
     });
+
+    void onEstimateClosed(id).catch(() => {});
 
     const updated = await getEstimateForCompany(user.companyId, id);
     return NextResponse.json(updated);

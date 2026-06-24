@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { DepositType, EstimateStatus } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
+import { onEstimateClosed, onEstimateSent, onEstimateStatusChange } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -28,10 +29,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    const newStatus = body.status !== undefined ? (body.status as EstimateStatus) : undefined;
     await prisma.estimate.update({
       where: { id },
       data: {
-        ...(body.status !== undefined ? { status: body.status as EstimateStatus } : {}),
+        ...(newStatus !== undefined ? { status: newStatus } : {}),
         ...(body.propertyId !== undefined ? { propertyId: body.propertyId ?? null } : {}),
         ...(body.visitId !== undefined ? { visitId: body.visitId ?? null } : {}),
         ...(body.expiresAt !== undefined ? { expiresAt: body.expiresAt ? new Date(body.expiresAt) : null } : {}),
@@ -41,9 +43,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.installDurationDays !== undefined
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
           : {}),
-        ...(body.status === EstimateStatus.APPROVED ? { approvedAt: new Date() } : {}),
+        ...(newStatus === EstimateStatus.APPROVED ? { approvedAt: new Date() } : {}),
       },
     });
+
+    if (newStatus !== undefined && newStatus !== existing.status) {
+      void onEstimateStatusChange(id, newStatus).catch(() => {});
+      if (newStatus === EstimateStatus.SENT) {
+        void onEstimateSent(id, user.companyId).catch(() => {});
+      }
+    }
 
     if (body.installDurationDays !== undefined) {
       await prisma.visit.updateMany({
@@ -67,6 +76,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const result = await prisma.estimate.deleteMany({ where: { id, companyId: user.companyId } });
     if (result.count === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    void onEstimateClosed(id).catch(() => {});
     return NextResponse.json({ ok: true });
   } catch {
     return unauthorizedResponse();

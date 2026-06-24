@@ -5,11 +5,7 @@ import { DEFAULT_BUSINESS_HOURS } from "@/lib/company/types";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
-import {
-  buildVisitContext,
-  type NotificationEvent,
-} from "@/lib/notifications/templates";
-import { sendOperationalNotification } from "@/lib/notifications/send";
+import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -209,22 +205,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   }
 
-  sendOperationalNotification({
+  void onVisitTimeChanged({
+    visitId: visit.id,
     companyId: company.id,
-    event: "VISIT_SCHEDULED" as NotificationEvent,
-    recipient: {
-      customerId: customer.id,
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone,
-    },
-    context: buildVisitContext({
-      customerName: customer.name,
-      companyName: company.name,
-      visitTitle,
-      startAt: slotStart,
-      address: [address, city, state, zip].filter(Boolean).join(", "),
-    }),
+    isInitialSchedule: true,
   }).catch(() => {});
 
   return NextResponse.json(

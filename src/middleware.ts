@@ -11,6 +11,7 @@ const publicPaths = [
   "/api/book/public",
   "/api/portal/auth",
   "/api/portal/company",
+  "/api/portal/feedback",
   "/api/twilio",
   "/api/sendgrid",
   "/api/stripe/webhook",
@@ -18,6 +19,7 @@ const publicPaths = [
   "/api/invoices/public",
   "/api/marketing/google-business/callback",
   "/api/integrations",
+  "/api/track",
 ];
 
 const authSecret = getAuthSecret();

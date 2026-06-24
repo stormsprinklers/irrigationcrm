@@ -55,6 +55,7 @@ export function employeeSelectFields() {
     division: true,
     color: true,
     photoUrl: true,
+    websiteTeamSlug: true,
     address: true,
     city: true,
     state: true,
