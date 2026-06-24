@@ -444,6 +444,7 @@ model Company {
   googleBusinessConnectedAt    DateTime?
   googleBusinessCatalogJson    Json?
   metaWebhookVerifyToken       String?   @unique
+  metaAppId                    String?
   metaAppSecret                String?
   metaPageId                   String?
   metaInstagramAccountId        String?

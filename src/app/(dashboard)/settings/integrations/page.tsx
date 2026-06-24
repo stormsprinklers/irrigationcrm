@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, AlertCircle, Circle, XCircle, RefreshCw } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -43,6 +44,15 @@ type IntegrationStatus = {
   envHints: string[];
 };
 
+type MetaStatus = {
+  status: "connected" | "configured" | "not_configured" | "awaiting_verification";
+  message: string;
+  callbackUrl: string | null;
+  webhookVerifiedAt: string | null;
+  lastWebhookEventAt: string | null;
+  setupUrl: string;
+};
+
 const INTEGRATION_TYPES = ["WEBSITE", "LMS", "DESIGN", "MAPS"] as const;
 
 const STATUS_LABELS: Record<IntegrationStatusState, string> = {
@@ -79,6 +89,7 @@ function statusBadgeVariant(
 export default function SettingsIntegrationsPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [statuses, setStatuses] = useState<IntegrationStatus[]>([]);
+  const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null);
   const [urls, setUrls] = useState<IntegrationUrls | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -90,10 +101,16 @@ export default function SettingsIntegrationsPage() {
   const loadStatus = useCallback(async () => {
     setCheckingStatus(true);
     try {
-      const res = await fetch("/api/settings/integrations/status");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const [statusRes, metaRes] = await Promise.all([
+        fetch("/api/settings/integrations/status"),
+        fetch("/api/integrations/meta/status"),
+      ]);
+      if (!statusRes.ok) throw new Error();
+      const data = await statusRes.json();
       setStatuses(data.statuses ?? []);
+      if (metaRes.ok) {
+        setMetaStatus(await metaRes.json());
+      }
     } catch {
       toast.error("Failed to check integration status");
     } finally {
@@ -221,6 +238,55 @@ export default function SettingsIntegrationsPage() {
             )}
           </div>
 
+          {metaStatus ? (
+            <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon
+                    status={
+                      metaStatus.status === "connected"
+                        ? "connected"
+                        : metaStatus.status === "awaiting_verification"
+                          ? "configured"
+                          : metaStatus.status === "configured"
+                            ? "configured"
+                            : "not_configured"
+                    }
+                  />
+                  <span className="font-medium text-sm">Meta (Facebook &amp; Instagram)</span>
+                </div>
+                <Badge
+                  variant={
+                    metaStatus.status === "connected"
+                      ? "success"
+                      : metaStatus.status === "not_configured"
+                        ? "secondary"
+                        : "outline"
+                  }
+                >
+                  {metaStatus.status === "connected"
+                    ? "Connected"
+                    : metaStatus.status === "awaiting_verification"
+                      ? "Awaiting verification"
+                      : metaStatus.status === "configured"
+                        ? "Configured"
+                        : "Not configured"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">{metaStatus.message}</p>
+              {metaStatus.callbackUrl ? (
+                <p className="text-xs font-mono text-muted-foreground break-all">
+                  Webhook: {metaStatus.callbackUrl}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={metaStatus.setupUrl}>Open Meta setup</Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {urls && (
             <div className="rounded-lg border border-border bg-white p-6 space-y-2">
               <h2 className="font-medium">Spoke URLs</h2>
@@ -319,7 +385,13 @@ CRM_INTEGRATION_KEY=crm_int_...
 
 # CRM → LMS (shared secret, not a crm_int key)
 LMS_INTEGRATION_URL=https://your-lms.example.com
-LMS_INTEGRATION_KEY=same-as-lms-INTEGRATION_API_KEY`}</pre>
+LMS_INTEGRATION_KEY=same-as-lms-INTEGRATION_API_KEY
+
+# Meta (Facebook / Instagram) — Vercel on CRM only
+NEXT_PUBLIC_APP_URL=https://your-crm.example.com
+META_APP_ID=optional-default-app-id
+# Webhook: {NEXT_PUBLIC_APP_URL}/api/meta/webhook
+# App Secret, verify token, Page ID → Marketing → Social in CRM`}</pre>
           </div>
         </div>
       )}

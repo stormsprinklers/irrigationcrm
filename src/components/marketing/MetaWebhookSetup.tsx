@@ -1,16 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { format } from "date-fns";
-import { Check, Copy, RefreshCw } from "lucide-react";
+import { Check, Copy, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { MarketingSectionCard } from "@/components/marketing/MarketingMetricGrid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { META_WEBHOOK_FIELDS } from "@/lib/meta/config";
 
 type SocialSettings = {
   callbackUrl: string;
+  metaAppId: string | null;
   verifyToken: string | null;
   verifyTokenPreview: string | null;
   hasVerifyToken: boolean;
@@ -36,6 +39,7 @@ export function MetaWebhookSetup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [verifyToken, setVerifyToken] = useState("");
+  const [metaAppId, setMetaAppId] = useState("");
   const [metaPageId, setMetaPageId] = useState("");
   const [metaInstagramAccountId, setMetaInstagramAccountId] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
@@ -46,6 +50,7 @@ export function MetaWebhookSetup() {
     const data = (await res.json()) as SocialSettings;
     setSettings(data);
     setVerifyToken(data.verifyToken ?? "");
+    setMetaAppId(data.metaAppId ?? "");
     setMetaPageId(data.metaPageId ?? "");
     setMetaInstagramAccountId(data.metaInstagramAccountId ?? "");
     setMetaAppSecret("");
@@ -69,6 +74,7 @@ export function MetaWebhookSetup() {
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
       setSettings((prev) => (prev ? { ...prev, ...data } : data));
       setVerifyToken(data.verifyToken ?? "");
+      setMetaAppId(data.metaAppId ?? "");
       setMetaPageId(data.metaPageId ?? "");
       setMetaInstagramAccountId(data.metaInstagramAccountId ?? "");
       setMetaAppSecret("");
@@ -92,7 +98,7 @@ export function MetaWebhookSetup() {
     <div className="space-y-6">
       <MarketingSectionCard
         title="Meta webhook connection"
-        description="Use these values in the Meta App Dashboard → Webhooks to receive Facebook Page, Instagram, and messaging events."
+        description="Connect your Meta app to receive Facebook Page and Instagram messaging events."
         action={
           verified ? (
             <Badge className="bg-green-600 hover:bg-green-600">Verified</Badge>
@@ -120,8 +126,8 @@ export function MetaWebhookSetup() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Paste this as the Callback URL in Meta for your app (same URL for Facebook and Instagram
-              products).
+              Meta Developer Console → your app → Webhooks → Configure. Use this URL for Page and
+              Instagram products.
             </p>
           </div>
 
@@ -165,9 +171,6 @@ export function MetaWebhookSetup() {
                 Save token
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enter the same value in Meta under Verify Token when subscribing to webhook fields.
-            </p>
           </div>
 
           {settings.webhookVerifiedAt ? (
@@ -181,10 +184,21 @@ export function MetaWebhookSetup() {
       </MarketingSectionCard>
 
       <MarketingSectionCard
-        title="Routing &amp; security"
-        description="Page ID routes incoming events to your company. App Secret validates webhook signatures."
+        title="App &amp; page routing"
+        description="Credentials from Meta App Dashboard → App settings → Basic. Page ID routes events to this company."
       >
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2 sm:col-span-2">
+            <label htmlFor="meta-app-id" className="text-sm font-medium">
+              App ID
+            </label>
+            <Input
+              id="meta-app-id"
+              value={metaAppId}
+              onChange={(e) => setMetaAppId(e.target.value)}
+              placeholder="Numeric App ID from Meta"
+            />
+          </div>
           <div className="space-y-2">
             <label htmlFor="meta-page-id" className="text-sm font-medium">
               Facebook Page ID
@@ -193,7 +207,7 @@ export function MetaWebhookSetup() {
               id="meta-page-id"
               value={metaPageId}
               onChange={(e) => setMetaPageId(e.target.value)}
-              placeholder="Page ID from Meta"
+              placeholder="Page ID from Meta Business Suite"
             />
           </div>
           <div className="space-y-2">
@@ -204,7 +218,7 @@ export function MetaWebhookSetup() {
               id="meta-ig-id"
               value={metaInstagramAccountId}
               onChange={(e) => setMetaInstagramAccountId(e.target.value)}
-              placeholder="Optional — for Instagram webhooks"
+              placeholder="Instagram professional account ID"
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
@@ -216,8 +230,15 @@ export function MetaWebhookSetup() {
               type="password"
               value={metaAppSecret}
               onChange={(e) => setMetaAppSecret(e.target.value)}
-              placeholder={settings.hasAppSecret ? `Configured (${settings.appSecretPreview})` : "From Meta App Dashboard"}
+              placeholder={
+                settings.hasAppSecret
+                  ? `Configured (${settings.appSecretPreview})`
+                  : "App Secret from Meta — stored encrypted in CRM"
+              }
             />
+            <p className="text-xs text-muted-foreground">
+              Used to validate webhook signatures. Do not put this in Vercel — save it here only.
+            </p>
           </div>
         </div>
         <div className="mt-4 flex justify-end">
@@ -226,13 +247,14 @@ export function MetaWebhookSetup() {
             disabled={saving}
             onClick={() =>
               void save({
+                metaAppId,
                 metaPageId,
                 metaInstagramAccountId,
                 ...(metaAppSecret.trim() ? { metaAppSecret: metaAppSecret.trim() } : {}),
               })
             }
           >
-            {saving ? "Saving..." : "Save routing settings"}
+            {saving ? "Saving..." : "Save app settings"}
           </Button>
         </div>
 
@@ -243,32 +265,78 @@ export function MetaWebhookSetup() {
           </p>
         ) : (
           <p className="mt-4 text-xs text-muted-foreground">
-            No webhook events received yet. After Meta verifies the URL, subscribe to fields (e.g.{" "}
-            <code className="text-[11px]">messages</code>, <code className="text-[11px]">feed</code>
-            ).
+            No webhook events received yet. After verification, subscribe to messaging fields below.
           </p>
         )}
       </MarketingSectionCard>
 
+      <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
+        <p className="font-medium text-foreground">Subscribe to these webhook fields in Meta</p>
+        <ul className="mt-3 space-y-3">
+          {META_WEBHOOK_FIELDS.map((group) => (
+            <li key={group.product}>
+              <p className="font-medium text-foreground">{group.product}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {group.fields.map((f) => (
+                  <code key={f} className="mr-2 text-[11px]">
+                    {f}
+                  </code>
+                ))}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Environment variables (Vercel)</p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            <code className="text-xs">NEXT_PUBLIC_APP_URL</code> — required; must match your
+            production CRM URL
+          </li>
+          <li>
+            <code className="text-xs">META_APP_ID</code> — optional; pre-fills App ID above if not
+            set per company
+          </li>
+        </ul>
+        <p className="mt-3 text-xs">
+          Verify token, App Secret, Page ID, and Instagram ID are configured in this CRM (not
+          Vercel). See also{" "}
+          <Link href="/settings/integrations" className="text-primary underline">
+            Settings → Integrations
+          </Link>{" "}
+          for connection status.
+        </p>
+      </div>
+
       <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
         <p className="font-medium text-foreground">Meta setup checklist</p>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
-          <li>Generate and save a verify token above, then copy the callback URL and token.</li>
+          <li>Set NEXT_PUBLIC_APP_URL in Vercel and redeploy.</li>
+          <li>Generate and save a verify token above; copy callback URL and token.</li>
           <li>
             In{" "}
             <a
               href="https://developers.facebook.com/apps/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-primary underline"
+              className="inline-flex items-center gap-0.5 text-primary underline"
             >
               Meta for Developers
+              <ExternalLink className="h-3 w-3" />
             </a>
-            , open your app → Webhooks → Configure.
+            , open your app → Webhooks → paste URL and token → Verify and Save.
           </li>
-          <li>Paste the callback URL and verify token, then click Verify and Save.</li>
-          <li>Subscribe to Page and Instagram fields you need (messages, feed, etc.).</li>
-          <li>Enter your Facebook Page ID so events route to this CRM account.</li>
+          <li>Add Messenger and Instagram products; subscribe to fields listed above.</li>
+          <li>Save App ID, App Secret, and Facebook Page ID in this CRM.</li>
+          <li>
+            DMs will appear in{" "}
+            <Link href="/inbox/social/facebook" className="text-primary underline">
+              Inbox → Social
+            </Link>{" "}
+            once message processing is enabled.
+          </li>
         </ol>
       </div>
     </div>

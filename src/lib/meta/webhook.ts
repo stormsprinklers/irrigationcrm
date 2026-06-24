@@ -60,18 +60,24 @@ type MetaWebhookBody = {
   }>;
 };
 
+async function findCompanyForMetaEntry(entryId: string) {
+  return prisma.company.findFirst({
+    where: {
+      OR: [{ metaPageId: entryId }, { metaInstagramAccountId: entryId }],
+    },
+    select: { id: true },
+  });
+}
+
 export async function processMetaWebhookPayload(body: MetaWebhookBody) {
   const entries = body.entry ?? [];
   const stored: string[] = [];
 
   for (const entry of entries) {
-    const pageId = entry.id;
-    if (!pageId) continue;
+    const entryId = entry.id;
+    if (!entryId) continue;
 
-    const company = await prisma.company.findFirst({
-      where: { metaPageId: pageId },
-      select: { id: true },
-    });
+    const company = await findCompanyForMetaEntry(entryId);
 
     if (!company) continue;
 

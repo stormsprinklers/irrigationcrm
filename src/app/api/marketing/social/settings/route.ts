@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: {
+        metaAppId: true,
         metaWebhookVerifyToken: true,
         metaAppSecret: true,
         metaPageId: true,
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       callbackUrl,
+      metaAppId: company.metaAppId ?? process.env.META_APP_ID?.trim() ?? null,
       verifyToken: company.metaWebhookVerifyToken,
       verifyTokenPreview: maskSecret(company.metaWebhookVerifyToken),
       hasVerifyToken: Boolean(company.metaWebhookVerifyToken),
@@ -63,12 +65,18 @@ export async function PATCH(request: NextRequest) {
 
     const body = await request.json();
     const data: {
+      metaAppId?: string | null;
       metaWebhookVerifyToken?: string;
       metaAppSecret?: string | null;
       metaPageId?: string | null;
       metaInstagramAccountId?: string | null;
       metaWebhookVerifiedAt?: null;
     } = {};
+
+    if (body.metaAppId !== undefined) {
+      const appId = typeof body.metaAppId === "string" ? body.metaAppId.trim() : "";
+      data.metaAppId = appId || null;
+    }
 
     if (body.regenerateVerifyToken) {
       data.metaWebhookVerifyToken = generateMetaVerifyToken();
@@ -109,6 +117,7 @@ export async function PATCH(request: NextRequest) {
       where: { id: user.companyId },
       data,
       select: {
+        metaAppId: true,
         metaWebhookVerifyToken: true,
         metaAppSecret: true,
         metaPageId: true,
@@ -121,6 +130,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       callbackUrl,
+      metaAppId: company.metaAppId ?? process.env.META_APP_ID?.trim() ?? null,
       verifyToken: company.metaWebhookVerifyToken,
       verifyTokenPreview: maskSecret(company.metaWebhookVerifyToken),
       hasVerifyToken: Boolean(company.metaWebhookVerifyToken),
