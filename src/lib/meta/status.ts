@@ -67,7 +67,7 @@ export async function getMetaIntegrationStatus(
   } else if (!hasPageAccessToken) {
     status = "configured";
     message =
-      "Webhook verified. Add a Page Access Token in Marketing → Social to load followers and recent posts.";
+      "Webhook verified. Add a Meta access token (User token from Graph API Explorer) in Marketing → Social to load followers and recent posts.";
   } else if (lastEvent) {
     status = "connected";
     message = "Receiving webhook events from Meta.";

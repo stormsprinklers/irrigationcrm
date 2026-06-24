@@ -3,6 +3,7 @@ import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/l
 import { canManageCustomers } from "@/lib/customers/permissions";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { generateMetaVerifyToken, maskSecret } from "@/lib/meta/webhook";
+import { resolvePageAccessToken } from "@/lib/meta/token";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -125,6 +126,59 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "No changes provided" }, { status: 400 });
     }
 
+    const existing = await prisma.company.findUnique({
+      where: { id: user.companyId },
+      select: {
+        metaAppId: true,
+        metaAppSecret: true,
+        metaPageId: true,
+        metaInstagramAccountId: true,
+      },
+    });
+
+    let tokenResolution: {
+      source: "page_token" | "user_token";
+      pageName: string | null;
+      instagramAccountId: string | null;
+    } | null = null;
+
+    if (data.metaPageAccessToken) {
+      const pageId = data.metaPageId ?? existing?.metaPageId;
+      if (!pageId) {
+        return NextResponse.json(
+          { error: "Save your Facebook Page ID before adding an access token." },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const resolved = await resolvePageAccessToken({
+          token: data.metaPageAccessToken,
+          pageId,
+          appId: data.metaAppId ?? existing?.metaAppId ?? process.env.META_APP_ID?.trim() ?? null,
+          appSecret: data.metaAppSecret ?? existing?.metaAppSecret ?? null,
+        });
+        data.metaPageAccessToken = resolved.pageToken;
+        tokenResolution = {
+          source: resolved.source,
+          pageName: resolved.pageName,
+          instagramAccountId: resolved.instagramAccountId,
+        };
+        if (
+          resolved.instagramAccountId &&
+          data.metaInstagramAccountId === undefined &&
+          !existing?.metaInstagramAccountId
+        ) {
+          data.metaInstagramAccountId = resolved.instagramAccountId;
+        }
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Could not resolve Page access token" },
+          { status: 400 }
+        );
+      }
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data,
@@ -156,6 +210,7 @@ export async function PATCH(request: NextRequest) {
       appSecretPreview: maskSecret(company.metaAppSecret),
       webhookVerifiedAt: company.metaWebhookVerifiedAt?.toISOString() ?? null,
       lastSyncedAt: company.metaSocialSyncedAt?.toISOString() ?? null,
+      tokenResolution,
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Unique constraint")) {

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { fetchMetaSocialData, type FetchedSocialPost } from "@/lib/meta/graph";
+import { resolvePageAccessToken } from "@/lib/meta/token";
 import type { MetaSocialDashboard, MetaSocialMetrics } from "@/lib/meta/types";
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000;
@@ -86,6 +87,8 @@ export async function getMetaSocialDashboard(
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
+      metaAppId: true,
+      metaAppSecret: true,
       metaPageId: true,
       metaInstagramAccountId: true,
       metaPageAccessToken: true,
@@ -125,10 +128,35 @@ export async function getMetaSocialDashboard(
 
   if (options?.forceSync || stale) {
     try {
+      const resolved = await resolvePageAccessToken({
+        token: company.metaPageAccessToken,
+        pageId: company.metaPageId,
+        appId: company.metaAppId ?? process.env.META_APP_ID?.trim() ?? null,
+        appSecret: company.metaAppSecret,
+      });
+
+      const instagramAccountId =
+        company.metaInstagramAccountId ?? resolved.instagramAccountId ?? null;
+
+      if (
+        resolved.source === "user_token" ||
+        (!company.metaInstagramAccountId && resolved.instagramAccountId)
+      ) {
+        await prisma.company.update({
+          where: { id: companyId },
+          data: {
+            metaPageAccessToken: resolved.pageToken,
+            ...(resolved.instagramAccountId && !company.metaInstagramAccountId
+              ? { metaInstagramAccountId: resolved.instagramAccountId }
+              : {}),
+          },
+        });
+      }
+
       const { metrics, posts } = await fetchMetaSocialData({
         pageId: company.metaPageId,
-        pageAccessToken: company.metaPageAccessToken,
-        instagramAccountId: company.metaInstagramAccountId,
+        pageAccessToken: resolved.pageToken,
+        instagramAccountId,
       });
 
       await upsertSocialPosts(companyId, posts);

@@ -84,7 +84,11 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
       setMetaInstagramAccountId(data.metaInstagramAccountId ?? "");
       setMetaAppSecret("");
       setMetaPageAccessToken("");
-      toast.success("Saved");
+      toast.success(
+        data.tokenResolution?.source === "user_token"
+          ? `Saved — resolved Page token for ${data.tokenResolution.pageName ?? "your Page"}`
+          : "Saved"
+      );
       onSaved?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save");
@@ -230,7 +234,7 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
           </div>
           <div className="space-y-2 sm:col-span-2">
             <label htmlFor="meta-page-access-token" className="text-sm font-medium">
-              Page Access Token
+              Meta access token
             </label>
             <Input
               id="meta-page-access-token"
@@ -240,11 +244,16 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
               placeholder={
                 settings.hasPageAccessToken
                   ? `Configured (${settings.pageAccessTokenPreview})`
-                  : "Long-lived Page token from Meta Graph API Explorer"
+                  : "User token from Graph API Explorer (we resolve the Page token)"
               }
             />
             <p className="text-xs text-muted-foreground">
-              Required to load followers, reach, and recent posts. In{" "}
+              Graph API Explorer only issues a <strong>User token</strong> — that is expected. Save
+              your Facebook Page ID first, then paste the User token here. The CRM exchanges it for
+              the correct Page token via <code className="text-[11px]">/me/accounts</code>.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              In{" "}
               <a
                 href="https://developers.facebook.com/tools/explorer/"
                 target="_blank"
@@ -253,11 +262,13 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
               >
                 Graph API Explorer
               </a>
-              , select your app and Page, then generate a token with{" "}
+              , select your app, click <strong>Generate Access Token</strong>, and include:{" "}
+              <code className="text-[11px]">pages_show_list</code>,{" "}
               <code className="text-[11px]">pages_read_engagement</code>,{" "}
               <code className="text-[11px]">pages_read_user_content</code>,{" "}
               <code className="text-[11px]">read_insights</code>, and{" "}
-              <code className="text-[11px]">instagram_basic</code>.
+              <code className="text-[11px]">instagram_basic</code>. Tokens expire in about an hour —
+              save App ID and App Secret too so we can exchange for a longer-lived token.
             </p>
           </div>
           <div className="space-y-2 sm:col-span-2">
@@ -371,7 +382,7 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
             , open your app → Webhooks → paste URL and token → Verify and Save.
           </li>
           <li>Add Messenger and Instagram products; subscribe to fields listed above.</li>
-          <li>Save App ID, App Secret, Page Access Token, and Facebook Page ID in this CRM.</li>
+          <li>Save App ID, App Secret, Facebook Page ID, and Meta access token in this CRM.</li>
           <li>Open Recent posts and click Refresh to sync metrics from Meta.</li>
           <li>
             DMs will appear in{" "}

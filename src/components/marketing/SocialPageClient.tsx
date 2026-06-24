@@ -200,8 +200,9 @@ export function SocialPageClient() {
 
       {dashboard?.needsPageToken ? (
         <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          Add a <strong className="font-medium text-foreground">Page Access Token</strong> in the Meta
-          webhooks tab to load followers, reach, and recent posts from the Graph API.
+          Add a <strong className="font-medium text-foreground">Meta access token</strong> (User token
+          from Graph API Explorer is fine) in the Meta webhooks tab to load followers, reach, and
+          recent posts.
         </p>
       ) : null}
 
