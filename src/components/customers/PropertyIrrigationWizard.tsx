@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   IRRIGATION_TYPES,
-  SHADE_LEVELS,
-  SOIL_TYPES,
-  SLOPE_LEVELS,
   VEGETATION_TYPES,
   WIZARD_STEPS,
 } from "@/lib/irrigation/constants";
@@ -20,6 +18,7 @@ import type {
   SoilType,
   VegetationType,
 } from "@/lib/irrigation/types";
+import { formatAddressQuery } from "@/lib/customers/maps";
 import { toast } from "sonner";
 
 type MapZone = {
@@ -49,10 +48,13 @@ const defaultZone = (): MapZone => ({
 
 export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [step, setStep] = useState(1);
-  const [address, setAddress] = useState("");
+  const [addressQuery, setAddressQuery] = useState("");
   const [aerialImageUrl, setAerialImageUrl] = useState("");
   const [zones, setZones] = useState<MapZone[]>([defaultZone()]);
   const [saving, setSaving] = useState(false);
+  const [capturingAerial, setCapturingAerial] = useState(false);
+  const [propertyLoaded, setPropertyLoaded] = useState(false);
+  const autoCaptureAttempted = useRef(false);
 
   useEffect(() => {
     fetch(`/api/customers/${customerId}/properties/${propertyId}/irrigation-map`)
@@ -60,7 +62,14 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
       .then((data) => {
         const p = data.property;
         if (!p) return;
-        setAddress(p.address ?? "");
+        setAddressQuery(
+          formatAddressQuery({
+            address: p.address,
+            city: p.city,
+            state: p.state,
+            zip: p.zip,
+          }) ?? ""
+        );
         setAerialImageUrl(p.aerialImageUrl ?? "");
         setStep(p.irrigationWizardStep ?? 1);
         if (p.irrigationMapZones?.length) {
@@ -77,8 +86,41 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           );
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPropertyLoaded(true));
   }, [customerId, propertyId]);
+
+  const captureAerial = useCallback(async () => {
+    if (!addressQuery.trim()) {
+      toast.error("Add a property address before capturing an aerial image");
+      return;
+    }
+
+    setCapturingAerial(true);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/properties/${propertyId}/irrigation-map/aerial`,
+        { method: "POST" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to capture aerial image");
+      }
+      setAerialImageUrl(data.aerialImageUrl ?? "");
+      toast.success("Aerial image captured from Google Maps");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to capture aerial image");
+    } finally {
+      setCapturingAerial(false);
+    }
+  }, [addressQuery, customerId, propertyId]);
+
+  useEffect(() => {
+    if (!propertyLoaded || autoCaptureAttempted.current) return;
+    if (aerialImageUrl || !addressQuery.trim()) return;
+    autoCaptureAttempted.current = true;
+    void captureAerial();
+  }, [propertyLoaded, aerialImageUrl, addressQuery, captureAerial]);
 
   async function save(publish = false) {
     setSaving(true);
@@ -136,15 +178,55 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         {step === 1 && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Property address</label>
-            <Input value={address} readOnly className="bg-muted" />
-            <label className="text-sm font-medium">Aerial / diagram image URL</label>
-            <Input
-              value={aerialImageUrl}
-              onChange={(e) => setAerialImageUrl(e.target.value)}
-              placeholder="https://..."
-            />
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Property address</label>
+              <Input value={addressQuery} readOnly className="bg-muted" />
+              {!addressQuery.trim() ? (
+                <p className="text-xs text-muted-foreground">
+                  Edit the property address above to enable aerial capture.
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium">Aerial satellite image</label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void captureAerial()}
+                  disabled={capturingAerial || !addressQuery.trim()}
+                >
+                  {capturingAerial ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {capturingAerial ? "Capturing..." : aerialImageUrl ? "Refresh" : "Capture"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Captured from Google Maps satellite imagery at the property location.
+              </p>
+              {capturingAerial && !aerialImageUrl ? (
+                <div className="flex h-48 items-center justify-center rounded-md border border-dashed bg-muted/30 text-sm text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading satellite screenshot...
+                </div>
+              ) : aerialImageUrl ? (
+                <img
+                  src={aerialImageUrl}
+                  alt="Aerial satellite view of property"
+                  className="max-h-80 w-full rounded-md border object-cover"
+                />
+              ) : (
+                <div className="flex h-48 items-center justify-center rounded-md border border-dashed bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+                  No aerial image yet. Add an address and capture from Google Maps.
+                </div>
+              )}
+            </div>
           </div>
         )}
 

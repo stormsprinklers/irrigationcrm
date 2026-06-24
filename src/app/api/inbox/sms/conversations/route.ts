@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
+import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
 
     const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
 
+    const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
+
     if (scope === Scope.EXTERNAL) {
       if (!to) return badRequestResponse("Recipient phone required");
 
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
         from: company.twilioPhone,
         to: normalizedTo,
         body: messageBody,
-        statusCallback: `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/sms/status`,
+        statusCallback,
       });
 
       const conversation = await findOrCreateSmsConversation({
@@ -109,7 +112,7 @@ export async function POST(request: NextRequest) {
         from: company.twilioPhone,
         to: normalizedTo,
         body: messageBody,
-        statusCallback: `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/sms/status`,
+        statusCallback,
       });
 
       const conversation = await findOrCreateSmsConversation({

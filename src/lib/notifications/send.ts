@@ -2,6 +2,7 @@ import { Channel } from "@prisma/client";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
+import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
 import { renderTemplate, type NotificationEvent, type TemplateContext } from "./templates";
@@ -116,7 +117,7 @@ export async function sendOperationalNotification(params: {
           from: company.twilioPhone,
           to,
           body,
-          statusCallback: `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/sms/status`,
+          statusCallback: twilioSmsStatusCallbackUrl(),
         });
         result.smsSent = true;
       } catch {

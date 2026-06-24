@@ -7,6 +7,7 @@ import {
 import { getDefaultFromEmail } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
+import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
@@ -147,7 +148,6 @@ async function sendToRecipient(
     emailLogoUrl: campaign.company.emailLogoUrl,
   };
   const fromPhone = campaign.company.twilioPhone;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   const blocked = await isContactBlocked(
     campaign.companyId,
@@ -178,7 +178,7 @@ async function sendToRecipient(
       from: fromPhone,
       to: normalizePhone(phone),
       body,
-      statusCallback: `${appUrl}/api/twilio/sms/status`,
+      statusCallback: twilioSmsStatusCallbackUrl(),
     });
     await prisma.campaignRecipient.update({
       where: { id: recipient.id },

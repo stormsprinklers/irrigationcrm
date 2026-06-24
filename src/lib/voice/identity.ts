@@ -1,3 +1,5 @@
+import { getAppBaseUrl } from "@/lib/app-url";
+
 export function voiceClientIdentity(companyId: string, userId: string) {
   return `${companyId}_${userId}`;
 }
@@ -12,5 +14,5 @@ export function parseVoiceClientIdentity(identity: string) {
 }
 
 export function appBaseUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return getAppBaseUrl();
 }
