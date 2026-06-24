@@ -38,9 +38,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.depositRequired !== undefined ? { depositRequired: Boolean(body.depositRequired) } : {}),
         ...(body.depositType !== undefined ? { depositType: body.depositType as DepositType | null } : {}),
         ...(body.depositAmount !== undefined ? { depositAmount: body.depositAmount ?? null } : {}),
+        ...(body.installDurationDays !== undefined
+          ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
+          : {}),
         ...(body.status === EstimateStatus.APPROVED ? { approvedAt: new Date() } : {}),
       },
     });
+
+    if (body.installDurationDays !== undefined) {
+      await prisma.visit.updateMany({
+        where: { estimateId: id, companyId: user.companyId },
+        data: { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) },
+      });
+    }
 
     const estimate = await getEstimateForCompany(user.companyId, id);
     return NextResponse.json(estimate);

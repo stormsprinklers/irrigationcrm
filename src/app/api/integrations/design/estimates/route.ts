@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EstimateStatus, IntegrationType } from "@prisma/client";
+import { EstimateStatus, IntegrationType, DepositType, Prisma } from "@prisma/client";
 import { authenticateIntegration, isIntegrationContext } from "@/lib/integrations/auth";
+import { uploadIntegrationAttachment } from "@/lib/integrations/attachments";
 import { logIntegrationAudit } from "@/lib/integrations/audit";
 import { designEstimateSchema } from "@/lib/integrations/schemas";
 import { computeEstimateExpiry } from "@/lib/estimates/queries";
@@ -61,7 +62,12 @@ export async function POST(request: NextRequest) {
     const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
     const status = input.status === "SENT" ? EstimateStatus.SENT : EstimateStatus.DRAFT;
 
-    const lineItemsData = input.lineItems.map((item, index) => {
+    const combinedLineItems = [
+      ...input.lineItems,
+      ...(input.premiumOption?.lineItems ?? []),
+    ];
+
+    const lineItemsData = combinedLineItems.map((item, index) => {
       const total = computeLineItemTotal(item.quantity, item.unitPrice);
       return {
         name: item.name,
@@ -83,13 +89,19 @@ export async function POST(request: NextRequest) {
         propertyId: input.propertyId ?? null,
         status,
         expiresAt,
-        depositRequired: company.estimateDepositRequired,
-        depositType: company.estimateDepositType,
-        depositAmount: company.estimateDepositAmount,
+        depositRequired: true,
+        depositType: DepositType.PERCENT,
+        depositAmount: 50,
         designProjectId: input.designProjectId ?? null,
         designVersionId: input.designVersionId ?? null,
+        quoteTier: input.quoteTier ?? "STANDARD",
+        estimatedManHours: input.estimatedManHours ?? null,
+        installDurationDays: input.installDurationDays ?? company.defaultInstallDurationDays ?? 4,
+        designInternalBom: (input.designInternalBom ?? undefined) as Prisma.InputJsonValue | undefined,
+        premiumOptionTotal: input.premiumOptionTotal ?? input.premiumOption?.sellTotal ?? null,
         designExportMetadata: {
           ...(input.designExportMetadata ?? {}),
+          ...(input.premiumOption ? { premiumOption: input.premiumOption } : {}),
           ...(input.notes ? { exportNotes: input.notes } : {}),
         },
         subtotal: totals.subtotal,
@@ -98,6 +110,33 @@ export async function POST(request: NextRequest) {
         lineItems: { create: lineItemsData },
       },
     });
+
+    if (input.propertyId && input.designProjectId) {
+      await prisma.customerProperty.updateMany({
+        where: { id: input.propertyId, companyId: auth.companyId },
+        data: { designProjectId: input.designProjectId },
+      });
+    }
+
+    if (input.attachments?.length) {
+      for (const file of input.attachments) {
+        const blobUrl = await uploadIntegrationAttachment({
+          companyId: auth.companyId,
+          folder: "estimates",
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          base64: file.base64,
+        });
+        await prisma.estimateAttachment.create({
+          data: {
+            estimateId: estimate.id,
+            blobUrl,
+            fileName: file.fileName,
+            mimeType: file.mimeType,
+          },
+        });
+      }
+    }
 
     await logIntegrationAudit({
       companyId: auth.companyId,

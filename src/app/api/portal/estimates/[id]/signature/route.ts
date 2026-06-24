@@ -10,6 +10,12 @@ import {
 } from "@/lib/portal/auth";
 import { portalFeatureEnabled } from "@/lib/portal/permissions";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
+import {
+  computeDepositAmount,
+  handleEstimateApprovedWithoutDeposit,
+} from "@/lib/estimates/booking";
+import { createEstimateDepositCheckout } from "@/lib/estimates/deposit-checkout";
+import { toNumber } from "@/lib/visits/totals";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -34,6 +40,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const body = await request.json();
   const signature = body.signature as string | undefined;
+  const selectedQuoteTier = (body.selectedQuoteTier as string | undefined) ?? "STANDARD";
+
   if (!signature?.startsWith("data:image/")) {
     return NextResponse.json({ error: "signature must be a base64 data URL" }, { status: 400 });
   }
@@ -53,6 +61,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     { contentType: mimeType }
   );
 
+  let total = toNumber(estimate.total);
+  if (selectedQuoteTier === "PREMIUM" && estimate.premiumOptionTotal != null) {
+    total = toNumber(estimate.premiumOptionTotal);
+  }
+
   const updated = await prisma.estimate.update({
     where: { id: estimate.id },
     data: {
@@ -60,9 +73,31 @@ export async function POST(request: NextRequest, { params }: Params) {
       signedAt: new Date(),
       status: EstimateStatus.APPROVED,
       approvedAt: new Date(),
+      selectedQuoteTier,
+      total,
+      subtotal: total,
     },
     include: { lineItems: { orderBy: { sortOrder: "asc" } } },
   });
 
-  return NextResponse.json({ estimate: serializePortalEstimate(updated) });
+  const depositAmount = computeDepositAmount(updated);
+  let depositCheckoutUrl: string | null = null;
+
+  if (depositAmount > 0) {
+    const origin = request.nextUrl.origin;
+    const slug = ctx.company.portalSlug ?? "portal";
+    const checkout = await createEstimateDepositCheckout({
+      estimateId: updated.id,
+      successUrl: `${origin}/portal/${slug}/estimates/${updated.publicToken}?deposit=success`,
+      cancelUrl: `${origin}/portal/${slug}/estimates/${updated.publicToken}?deposit=cancelled`,
+    });
+    depositCheckoutUrl = checkout.url ?? null;
+  } else {
+    await handleEstimateApprovedWithoutDeposit(updated.id);
+  }
+
+  return NextResponse.json({
+    estimate: serializePortalEstimate(updated),
+    depositCheckoutUrl,
+  });
 }

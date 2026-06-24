@@ -30,6 +30,12 @@ export const designEstimateLineItemSchema = z.object({
   unitPrice: z.number().nonnegative(),
 });
 
+export const designEstimateAttachmentSchema = z.object({
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  base64: z.string().min(1),
+});
+
 export const designEstimateSchema = z.object({
   externalId: z.string().min(1),
   customerId: z.string().min(1),
@@ -40,6 +46,18 @@ export const designEstimateSchema = z.object({
   notes: z.string().optional().nullable(),
   lineItems: z.array(designEstimateLineItemSchema).min(1),
   designExportMetadata: z.record(z.string(), z.unknown()).optional(),
+  quoteTier: z.enum(["STANDARD", "PREMIUM"]).optional(),
+  estimatedManHours: z.number().optional(),
+  installDurationDays: z.number().int().positive().optional(),
+  designInternalBom: z.array(z.record(z.string(), z.unknown())).optional(),
+  premiumOptionTotal: z.number().optional(),
+  premiumOption: z
+    .object({
+      sellTotal: z.number(),
+      lineItems: z.array(designEstimateLineItemSchema),
+    })
+    .optional(),
+  attachments: z.array(designEstimateAttachmentSchema).optional(),
 });
 
 export type WebsiteLeadInput = z.infer<typeof websiteLeadSchema>;

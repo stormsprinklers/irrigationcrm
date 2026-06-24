@@ -116,14 +116,21 @@ export async function recordInvoicePayment(
     });
     if (visit && visit.status !== "CANCELLED" && visit.status !== "COMPLETED") {
       const { assertVisitCanComplete } = await import("@/lib/checklists/apply");
-      const checklistError = await assertVisitCanComplete(invoice.visitId, invoice.companyId);
+      const checklistError = await assertVisitCanComplete(invoice.visitId!, invoice.companyId);
       if (!checklistError) {
         await prisma.visit.update({
-          where: { id: invoice.visitId },
+          where: { id: invoice.visitId! },
           data: { status: "COMPLETED" },
         });
       }
     }
+  }
+
+  if (invoice.estimateId && nextStatus === "PAID") {
+    const { finalizeEstimateBooking } = await import("@/lib/estimates/booking");
+    await finalizeEstimateBooking(invoice.estimateId).catch((err) => {
+      console.error("Estimate booking finalize failed:", err);
+    });
   }
 
   if (invoice.company.notifyInvoicePaid) {

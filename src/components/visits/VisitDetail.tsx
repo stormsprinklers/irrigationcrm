@@ -18,6 +18,7 @@ import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
 import { VisitIrrigationMap } from "@/components/visits/VisitIrrigationMap";
+import { VisitInstallPlanSection } from "@/components/visits/VisitInstallPlanSection";
 import { VisitIrrigationRuntimes } from "@/components/visits/VisitIrrigationRuntimes";
 import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
@@ -66,6 +67,9 @@ type VisitDetailData = {
     propertyDiagramUrl?: string | null;
     irrigationMapStatus?: string | null;
   } | null;
+  designExportMetadata?: Record<string, unknown> | null;
+  installDurationDays?: number | null;
+  designProjectId?: string | null;
   serviceArea: { id: string; name: string; color: string };
   assignedUser: { id: string; name: string; color: string | null; photoUrl: string | null } | null;
   lineItems: Array<{
@@ -382,6 +386,21 @@ export function VisitDetail({ visitId }: Props) {
         loading={timeLoading}
         eta={visitEta(visit)}
       />
+
+      {visit.designExportMetadata ? (
+        <VisitInstallPlanSection
+          designExportMetadata={visit.designExportMetadata}
+          estimatedManHours={
+            typeof (visit.designExportMetadata as Record<string, unknown>)?.estimatedManHours ===
+            "number"
+              ? ((visit.designExportMetadata as Record<string, unknown>).estimatedManHours as number)
+              : null
+          }
+          installDurationDays={visit.installDurationDays ?? 4}
+          visitId={visit.id}
+          onDurationUpdated={load}
+        />
+      ) : null}
 
       {visit.property?.id && visit.customer?.id ? (
         <VisitIrrigationMap

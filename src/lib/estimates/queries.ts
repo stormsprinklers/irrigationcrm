@@ -82,6 +82,16 @@ export function serializeEstimate(estimate: EstimatePayload, notes?: EstimateDTO
       mimeType: a.mimeType,
       createdAt: a.createdAt.toISOString(),
     })),
+    designProjectId: estimate.designProjectId ?? null,
+    designVersionId: estimate.designVersionId ?? null,
+    designExportMetadata: (estimate.designExportMetadata as Record<string, unknown> | null) ?? null,
+    estimatedManHours: estimate.estimatedManHours ?? null,
+    installDurationDays: estimate.installDurationDays ?? null,
+    needsScheduling: estimate.needsScheduling ?? false,
+    designInternalBom: estimate.designInternalBom ?? null,
+    premiumOptionTotal:
+      estimate.premiumOptionTotal != null ? toNumber(estimate.premiumOptionTotal) : null,
+    selectedQuoteTier: estimate.selectedQuoteTier ?? null,
   };
 }
 

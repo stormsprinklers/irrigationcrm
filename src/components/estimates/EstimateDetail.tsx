@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,14 @@ type EstimateData = {
     mimeType: string;
     createdAt: string;
   }>;
+  designProjectId?: string | null;
+  designVersionId?: string | null;
+  designExportMetadata?: Record<string, unknown> | null;
+  designInternalBom?: Array<Record<string, unknown>> | null;
+  estimatedManHours?: number | null;
+  installDurationDays?: number | null;
+  needsScheduling?: boolean;
+  premiumOptionTotal?: number | null;
 };
 
 type Props = { estimateId: string };
@@ -456,6 +465,26 @@ export function EstimateDetail({ estimateId }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {estimate.designProjectId ? (
+            <EstimateDesignSection
+              estimateId={estimate.id}
+              designProjectId={estimate.designProjectId}
+              designVersionId={estimate.designVersionId ?? null}
+              designExportMetadata={estimate.designExportMetadata ?? null}
+              designInternalBom={(estimate.designInternalBom as EstimateData["designInternalBom"]) ?? null}
+              estimatedManHours={estimate.estimatedManHours ?? null}
+              installDurationDays={estimate.installDurationDays ?? null}
+              needsScheduling={estimate.needsScheduling ?? false}
+              premiumOptionTotal={estimate.premiumOptionTotal ?? null}
+              onUpdated={() => {
+                fetch(`/api/estimates/${estimateId}`)
+                  .then((r) => r.json())
+                  .then((data) => setEstimate(data))
+                  .catch(() => {});
+              }}
+            />
+          ) : null}
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
               <CardTitle className="text-base">Line items</CardTitle>

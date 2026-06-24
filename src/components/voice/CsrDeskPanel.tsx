@@ -67,6 +67,15 @@ export function CsrDeskPanel({
     employees: [],
   });
   const [saving, setSaving] = useState(false);
+  const [needsScheduling, setNeedsScheduling] = useState<
+    Array<{
+      id: string;
+      customer: { id: string; name: string; phone: string | null };
+      property: { id: string; name: string; address: string | null; city: string | null } | null;
+      total: number;
+      installDurationDays: number | null;
+    }>
+  >([]);
   const times = defaultVisitTimes();
   const [visitForm, setVisitForm] = useState({
     title: "Service call",
@@ -80,6 +89,13 @@ export function CsrDeskPanel({
 
   const callerPhone = activeCall?.remoteNumber ?? activeCall?.callerInfo?.phone;
   const customerId = activeCall?.callerInfo?.customerId ?? customer?.id;
+
+  useEffect(() => {
+    fetch("/api/estimates/needs-scheduling")
+      .then((r) => r.json())
+      .then((data) => setNeedsScheduling(data.estimates ?? []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const loadQueue = () => {
@@ -190,6 +206,27 @@ export function CsrDeskPanel({
 
   return (
     <div className="flex min-h-0 flex-1 basis-0 flex-col gap-4 overflow-hidden">
+      {needsScheduling.length > 0 ? (
+        <section className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <h3 className="mb-2 flex items-center gap-2 font-semibold text-amber-900">
+            <Calendar className="h-4 w-4" /> Needs scheduling ({needsScheduling.length})
+          </h3>
+          <ul className="space-y-1 text-sm">
+            {needsScheduling.slice(0, 5).map((est) => (
+              <li key={est.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {est.customer.name}
+                  {est.property?.city ? ` · ${est.property.city}` : ""}
+                  {est.installDurationDays ? ` · ${est.installDurationDays}-day install` : ""}
+                </span>
+                <Button variant="link" className="h-auto p-0" asChild>
+                  <Link href="/schedule/needs-scheduling">Schedule</Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="grid shrink-0 gap-4 lg:grid-cols-2 xl:grid-cols-4">
       <section className="rounded-lg border border-border bg-white p-4">
         <h3 className="mb-3 flex items-center gap-2 font-semibold">

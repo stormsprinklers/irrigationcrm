@@ -4,6 +4,7 @@ import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorized
 import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
+import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
@@ -64,9 +65,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.city !== undefined ? { city: body.city ?? null } : {}),
         ...(body.state !== undefined ? { state: body.state ?? null } : {}),
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
+        ...(body.installDurationDays !== undefined
+          ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
+          : {}),
       },
       include: jobInclude,
     });
+
+    await clearNeedsSchedulingForVisit(id);
 
     return NextResponse.json(serializeJob(visit));
   } catch (error) {

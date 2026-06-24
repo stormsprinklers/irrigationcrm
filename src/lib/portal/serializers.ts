@@ -92,6 +92,12 @@ export function serializePortalEstimate(estimate: {
   signedAt: Date | null;
   signatureBlobUrl: string | null;
   createdAt: Date;
+  depositRequired?: boolean;
+  depositType?: string | null;
+  depositAmount?: { toNumber?: () => number } | number | null;
+  designProjectId?: string | null;
+  premiumOptionTotal?: { toNumber?: () => number } | number | null;
+  selectedQuoteTier?: string | null;
   lineItems: Array<{
     name: string;
     description: string | null;
@@ -101,6 +107,16 @@ export function serializePortalEstimate(estimate: {
     sortOrder: number;
   }>;
 }) {
+  const hasDesign = Boolean(estimate.designProjectId);
+  const lineItems = estimate.lineItems.map((item) => ({
+    name: item.name,
+    description: item.description,
+    quantity: toNumber(item.quantity as never),
+    unitPrice: toNumber(item.unitPrice as never),
+    total: toNumber(item.total as never),
+    sortOrder: item.sortOrder,
+  }));
+
   return {
     id: estimate.id,
     publicToken: estimate.publicToken,
@@ -112,14 +128,20 @@ export function serializePortalEstimate(estimate: {
     signedAt: estimate.signedAt?.toISOString() ?? null,
     signatureBlobUrl: estimate.signatureBlobUrl,
     createdAt: estimate.createdAt.toISOString(),
-    lineItems: estimate.lineItems.map((item) => ({
-      name: item.name,
-      description: item.description,
-      quantity: toNumber(item.quantity as never),
-      unitPrice: toNumber(item.unitPrice as never),
-      total: toNumber(item.total as never),
-      sortOrder: item.sortOrder,
-    })),
+    depositRequired: estimate.depositRequired ?? false,
+    depositType: estimate.depositType ?? null,
+    depositAmount:
+      estimate.depositAmount != null ? toNumber(estimate.depositAmount as never) : null,
+    hasDesign,
+    designProjectId: estimate.designProjectId ?? null,
+    premiumOptionTotal:
+      estimate.premiumOptionTotal != null
+        ? toNumber(estimate.premiumOptionTotal as never)
+        : null,
+    selectedQuoteTier: estimate.selectedQuoteTier ?? null,
+    lineItems: hasDesign
+      ? lineItems.filter((item) => item.name.toLowerCase().includes("installation"))
+      : lineItems,
   };
 }
 

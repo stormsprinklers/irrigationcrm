@@ -82,6 +82,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [saving, setSaving] = useState(false);
   const [capturingAerial, setCapturingAerial] = useState(false);
   const [propertyLoaded, setPropertyLoaded] = useState(false);
+  const [importingDesign, setImportingDesign] = useState(false);
   const autoCaptureAttempted = useRef(false);
 
   useEffect(() => {
@@ -157,6 +158,54 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     autoCaptureAttempted.current = true;
     void captureAerial();
   }, [propertyLoaded, aerialImageUrl, addressQuery, captureAerial]);
+
+  async function importFromDesign() {
+    setImportingDesign(true);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/properties/${propertyId}/design-seed`
+      );
+      const data = await res.json();
+      if (!data.seed) {
+        toast.error(data.reason ?? "No design data to import");
+        return;
+      }
+      const seed = data.seed as {
+        zoneCount: number;
+        zones: Array<{
+          name: string;
+          vegetationType: VegetationType;
+          shadeLevel: ShadeLevel;
+          slopeLevel: SlopeLevel;
+          soilType: SoilType;
+          irrigationType: IrrigationType;
+          nozzleCount: number;
+        }>;
+        shutoffValveLocation?: string;
+        controllerLocation?: string;
+      };
+      setZoneCount(seed.zoneCount);
+      setZones((prev) =>
+        seed.zones.map((z, i) => ({
+          name: z.name || `Zone ${i + 1}`,
+          polygon: prev[i]?.polygon ?? null,
+          vegetationType: z.vegetationType,
+          shadeLevel: z.shadeLevel,
+          slopeLevel: z.slopeLevel,
+          soilType: z.soilType,
+          irrigationType: z.irrigationType,
+          nozzleCount: z.nozzleCount,
+        }))
+      );
+      if (seed.shutoffValveLocation) setShutoffValveLocation(seed.shutoffValveLocation);
+      if (seed.controllerLocation) setControllerLocation(seed.controllerLocation);
+      toast.success("Imported zone settings from design (draw polygons on aerial next)");
+    } catch {
+      toast.error("Failed to import from design");
+    } finally {
+      setImportingDesign(false);
+    }
+  }
 
   async function save(publish = false) {
     setSaving(true);
@@ -316,6 +365,23 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
 
         {step === 2 && (
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2">
+              <p className="text-sm text-muted-foreground">
+                Pre-fill zone count and settings from a linked design project.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void importFromDesign()}
+                disabled={importingDesign}
+              >
+                {importingDesign ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Import from design
+              </Button>
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">How many irrigation zones?</label>
               <Input

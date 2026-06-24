@@ -36,7 +36,7 @@ export async function getHomeSummary(
 ): Promise<Omit<HomeSummaryDTO, "greeting">> {
   const { start, end } = getRangeBounds(dateRange);
 
-  const [openEstimates, unscheduledVisits, openInvoices, completedVisits, newCustomers, paidInvoices] =
+  const [openEstimates, unscheduledVisits, needsSchedulingEstimates, openInvoices, completedVisits, newCustomers, paidInvoices] =
     await Promise.all([
       prisma.estimate.findMany({
         where: { companyId, status: { in: [EstimateStatus.DRAFT, EstimateStatus.SENT] } },
@@ -45,6 +45,10 @@ export async function getHomeSummary(
       prisma.visit.findMany({
         where: { companyId, status: VisitStatus.UNSCHEDULED },
         include: { lineItems: true, discounts: true },
+      }),
+      prisma.estimate.findMany({
+        where: { companyId, needsScheduling: true },
+        select: { id: true, total: true },
       }),
       prisma.invoice.findMany({
         where: { companyId, status: { in: [InvoiceStatus.SENT, InvoiceStatus.PARTIAL] } },
@@ -109,7 +113,7 @@ export async function getHomeSummary(
     {
       title: "Jobs",
       highlight: {
-        label: `${unscheduledVisits.length} Unscheduled job${unscheduledVisits.length === 1 ? "" : "s"}`,
+        label: `${unscheduledVisits.length} Unscheduled · ${needsSchedulingEstimates.length} need scheduling`,
         value: formatCurrency(unscheduledTotal),
       },
       linkLabel: "View all jobs",

@@ -51,6 +51,15 @@ export type EstimateDTO = {
     mimeType: string;
     createdAt: string;
   }>;
+  designProjectId?: string | null;
+  designVersionId?: string | null;
+  designExportMetadata?: Record<string, unknown> | null;
+  estimatedManHours?: number | null;
+  installDurationDays?: number | null;
+  needsScheduling?: boolean;
+  designInternalBom?: unknown;
+  premiumOptionTotal?: number | null;
+  selectedQuoteTier?: string | null;
 };
 
 export type EstimateListItem = Pick<

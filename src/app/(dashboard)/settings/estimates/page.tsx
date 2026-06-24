@@ -13,6 +13,9 @@ type EstimateSettings = {
   estimateDepositRequired: boolean;
   estimateDepositType: "PERCENT" | "FIXED" | null;
   estimateDepositAmount: string | number | null;
+  defaultInstallDurationDays: number;
+  supplierEmail: string | null;
+  supplierPartsAutoSend: boolean;
 };
 
 export default function SettingsEstimatesPage() {
@@ -123,6 +126,41 @@ export default function SettingsEstimatesPage() {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-white p-4">
+          <h3 className="mb-4 text-lg font-semibold">Install & supplier</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Default install duration (days)</label>
+              <Input
+                type="number"
+                min={1}
+                value={settings.defaultInstallDurationDays ?? 4}
+                onChange={(e) =>
+                  setSettings({ ...settings, defaultInstallDurationDays: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Supplier email (parts list)</label>
+              <Input
+                type="email"
+                value={settings.supplierEmail ?? ""}
+                onChange={(e) => setSettings({ ...settings, supplierEmail: e.target.value || null })}
+                placeholder="orders@supplier.com"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={settings.supplierPartsAutoSend ?? false}
+                onCheckedChange={(checked) =>
+                  setSettings({ ...settings, supplierPartsAutoSend: Boolean(checked) })
+                }
+              />
+              <label className="text-sm">Email parts list to supplier when estimate is approved</label>
+            </div>
           </div>
         </section>
 

@@ -406,6 +406,9 @@ model Company {
   estimateDepositRequired  Boolean  @default(false)
   estimateDepositType      DepositType?
   estimateDepositAmount    Decimal? @db.Decimal(10, 2)
+  defaultInstallDurationDays Int    @default(4)
+  supplierEmail            String?
+  supplierPartsAutoSend    Boolean  @default(false)
   invoicePrefix            String?  @default("INV")
   invoiceTerms             String?
   invoiceFooter            String?
@@ -1271,6 +1274,11 @@ model Visit {
   enRouteOriginLng      Decimal?  @db.Decimal(10, 7)
   maintenancePlanVisitId String?     @unique
   callSessionId          String?
+  designProjectId        String?
+  designVersionId        String?
+  designExportMetadata   Json?
+  installDurationDays    Int?
+  estimateId             String?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -1562,6 +1570,14 @@ model Estimate {
   designProjectId String?
   designVersionId String?
   designExportMetadata Json?
+  quoteTier              String?
+  selectedQuoteTier      String?
+  estimatedManHours      Float?
+  installDurationDays    Int        @default(4)
+  needsScheduling        Boolean    @default(false)
+  depositPaidAt          DateTime?
+  designInternalBom      Json?
+  premiumOptionTotal     Decimal?   @db.Decimal(10, 2)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -1576,6 +1592,7 @@ model Estimate {
   invoices    Invoice[]
 
   @@index([companyId, status])
+  @@index([companyId, needsScheduling])
   @@index([customerId])
   @@index([visitId])
 }
@@ -2316,6 +2333,7 @@ model PropertyIrrigationMapZone {
   nozzleCount         Int?
   estimatedGpm        Float?
   baseRuntimeMinutes  Int?
+  designVersionId     String?
   sortOrder           Int      @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

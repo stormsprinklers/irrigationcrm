@@ -13,6 +13,9 @@ export async function GET() {
         estimateDepositRequired: true,
         estimateDepositType: true,
         estimateDepositAmount: true,
+        defaultInstallDurationDays: true,
+        supplierEmail: true,
+        supplierPartsAutoSend: true,
       },
     });
     return NextResponse.json(company);
@@ -44,12 +47,22 @@ export async function PATCH(request: NextRequest) {
         ...(body.estimateDepositAmount !== undefined
           ? { estimateDepositAmount: body.estimateDepositAmount ?? null }
           : {}),
+        ...(body.defaultInstallDurationDays !== undefined
+          ? { defaultInstallDurationDays: Number(body.defaultInstallDurationDays) }
+          : {}),
+        ...(body.supplierEmail !== undefined ? { supplierEmail: body.supplierEmail || null } : {}),
+        ...(body.supplierPartsAutoSend !== undefined
+          ? { supplierPartsAutoSend: Boolean(body.supplierPartsAutoSend) }
+          : {}),
       },
       select: {
         estimateExpiryDays: true,
         estimateDepositRequired: true,
         estimateDepositType: true,
         estimateDepositAmount: true,
+        defaultInstallDurationDays: true,
+        supplierEmail: true,
+        supplierPartsAutoSend: true,
       },
     });
 

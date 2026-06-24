@@ -4,6 +4,7 @@ import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/l
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 import { prisma } from "@/lib/prisma";
+import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { getVisitForCompany } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
@@ -82,8 +83,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.isCallback !== undefined ? { isCallback: nextIsCallback } : {}),
         ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId ?? null } : {}),
         ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
+        ...(body.installDurationDays !== undefined
+          ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
+          : {}),
       },
     });
+
+    await clearNeedsSchedulingForVisit(id);
 
     const visit = await getVisitForCompany(user.companyId, id);
     return NextResponse.json(visit);
