@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Check, Copy, ExternalLink, RefreshCw } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { MarketingSectionCard } from "@/components/marketing/MarketingMetricGrid";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,21 @@ type SocialSettings = {
   lastWebhookEvent: { at: string; object: string | null; field: string | null } | null;
 };
 
+type ConnectionDiagnostics = {
+  tokenAppId: string | null;
+  expectedAppId: string | null;
+  tokenType: string | null;
+  tokenValid: boolean | null;
+  tokenScopes: string[];
+  tokenExpiresAt: string | null;
+  meId: string | null;
+  meName: string | null;
+  managedPages: Array<{ id: string; name: string }>;
+  resolvedPageName: string | null;
+  postsProbeOk: boolean;
+  error: string | null;
+};
+
 async function copyText(value: string, label: string) {
   try {
     await navigator.clipboard.writeText(value);
@@ -41,6 +56,10 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
   const [settings, setSettings] = useState<SocialSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [connectionDiagnostics, setConnectionDiagnostics] = useState<ConnectionDiagnostics | null>(
+    null
+  );
   const [verifyToken, setVerifyToken] = useState("");
   const [metaAppId, setMetaAppId] = useState("");
   const [metaPageId, setMetaPageId] = useState("");
@@ -94,6 +113,43 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
       toast.error(error instanceof Error ? error.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function testConnection() {
+    if (!metaPageId.trim() && !settings?.metaPageId) {
+      toast.error("Save your Facebook Page ID first.");
+      return;
+    }
+
+    setTesting(true);
+    setConnectionDiagnostics(null);
+    try {
+      const res = await fetch("/api/marketing/social/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          metaPageId: metaPageId.trim() || undefined,
+          ...(metaPageAccessToken.trim()
+            ? { metaPageAccessToken: metaPageAccessToken.trim() }
+            : {}),
+        }),
+      });
+      const data = await res.json();
+      if (data.diagnostics) setConnectionDiagnostics(data.diagnostics as ConnectionDiagnostics);
+      if (!res.ok) {
+        throw new Error(
+          data.error ?? data.diagnostics?.error ?? "Meta connection test failed"
+        );
+      }
+      toast.success(`Connected to ${data.resolved?.pageName ?? "your Page"}`);
+      setMetaPageAccessToken("");
+      await load();
+      onSaved?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Meta connection test failed");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -291,10 +347,25 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
             </p>
           </div>
         </div>
-        <div className="mt-4 flex justify-end">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button
             type="button"
-            disabled={saving}
+            variant="outline"
+            disabled={testing || saving || (!metaPageId.trim() && !settings.metaPageId)}
+            onClick={() => void testConnection()}
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              "Test connection"
+            )}
+          </Button>
+          <Button
+            type="button"
+            disabled={saving || testing}
             onClick={() =>
               void save({
                 metaAppId,
@@ -310,6 +381,54 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
             {saving ? "Saving..." : "Save app settings"}
           </Button>
         </div>
+
+        {connectionDiagnostics ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Connection diagnostics</p>
+            <ul className="mt-2 space-y-1">
+              {connectionDiagnostics.expectedAppId &&
+              connectionDiagnostics.tokenAppId &&
+              connectionDiagnostics.expectedAppId !== connectionDiagnostics.tokenAppId ? (
+                <li className="text-destructive">
+                  App mismatch: token is for app {connectionDiagnostics.tokenAppId}, but CRM App ID
+                  is {connectionDiagnostics.expectedAppId}. Regenerate the token in Graph API
+                  Explorer using the CRM App ID.
+                </li>
+              ) : null}
+              {connectionDiagnostics.tokenType ? (
+                <li>Token type: {connectionDiagnostics.tokenType}</li>
+              ) : null}
+              {connectionDiagnostics.tokenValid != null ? (
+                <li>Token valid: {connectionDiagnostics.tokenValid ? "yes" : "no"}</li>
+              ) : null}
+              {connectionDiagnostics.meName ? (
+                <li>
+                  Logged in as: {connectionDiagnostics.meName} ({connectionDiagnostics.meId})
+                </li>
+              ) : null}
+              {connectionDiagnostics.managedPages.length > 0 ? (
+                <li>
+                  Pages on this token:{" "}
+                  {connectionDiagnostics.managedPages
+                    .map((page) => `${page.name} (${page.id})`)
+                    .join(", ")}
+                </li>
+              ) : null}
+              {connectionDiagnostics.tokenScopes.length > 0 ? (
+                <li>Scopes: {connectionDiagnostics.tokenScopes.join(", ")}</li>
+              ) : null}
+              {connectionDiagnostics.resolvedPageName ? (
+                <li>Resolved Page: {connectionDiagnostics.resolvedPageName}</li>
+              ) : null}
+              {connectionDiagnostics.postsProbeOk ? (
+                <li className="text-green-700">Posts API: OK</li>
+              ) : null}
+              {connectionDiagnostics.error ? (
+                <li className="text-destructive">{connectionDiagnostics.error}</li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
 
         {settings.lastWebhookEvent ? (
           <p className="mt-4 text-xs text-muted-foreground">

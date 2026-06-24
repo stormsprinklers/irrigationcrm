@@ -184,7 +184,13 @@ export async function getMetaSocialDashboard(
         syncError: null,
       };
     } catch (error) {
-      syncError = error instanceof Error ? error.message : "Failed to sync from Meta";
+      const message = error instanceof Error ? error.message : "Failed to sync from Meta";
+      syncError = message;
+
+      if (message.toLowerCase().includes("invalid oauth")) {
+        syncError =
+          "Stored Meta token is invalid or expired. Open Meta webhooks, paste a fresh User token from Graph API Explorer, click Test connection, then Refresh.";
+      }
     }
   }
 
