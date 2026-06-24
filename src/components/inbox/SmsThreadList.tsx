@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Conversation = {
@@ -38,7 +39,7 @@ export function SmsThreadList({
       setLoading(false);
     }
     load();
-    const interval = setInterval(load, 8000);
+    const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
   }, [scope]);
 
@@ -58,10 +59,13 @@ export function SmsThreadList({
     <ScrollArea className="h-full">
       <ul>
         {threads.map((thread) => {
+          const displayPhone = thread.participantPhone
+            ? formatPhoneDisplay(thread.participantPhone)
+            : null;
           const label =
             thread.customer?.name ??
             thread.title ??
-            thread.participantPhone ??
+            displayPhone ??
             "Conversation";
           const snippet = thread.messages[0]?.body ?? "";
           const initials = label.slice(0, 2).toUpperCase();
@@ -83,16 +87,24 @@ export function SmsThreadList({
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   {thread.customer?.name ? (
-                    <CustomerNameWithBadge
-                      name={thread.customer.name}
-                      doNotService={thread.customer.doNotService}
-                      nameClassName="truncate text-sm font-semibold"
-                      className="max-w-full"
-                    />
+                    <>
+                      <CustomerNameWithBadge
+                        name={thread.customer.name}
+                        doNotService={thread.customer.doNotService}
+                        nameClassName="truncate text-sm font-semibold"
+                        className="max-w-full"
+                      />
+                      {displayPhone ? (
+                        <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+                      ) : null}
+                      <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                    </>
                   ) : (
-                    <p className="truncate text-sm font-semibold">{label}</p>
+                    <>
+                      <p className="truncate text-sm font-semibold">{label}</p>
+                      <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                    </>
                   )}
-                  <p className="truncate text-sm text-muted-foreground">{snippet}</p>
                 </div>
                 {scope === "customers" && thread.participantPhone && (
                   <Badge variant="outline" className="shrink-0 text-[10px]">

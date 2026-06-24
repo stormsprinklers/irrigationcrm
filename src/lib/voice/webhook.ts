@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { validateTwilioSignature } from "@/lib/inbox/twilio";
+import { getTwilioWebhookUrl, validateTwilioSignature } from "@/lib/inbox/twilio";
 
 export async function parseTwilioWebhook(request: NextRequest) {
   const formData = await request.formData();
@@ -9,9 +9,10 @@ export async function parseTwilioWebhook(request: NextRequest) {
   });
 
   const signature = request.headers.get("x-twilio-signature") ?? "";
+  const webhookUrl = getTwilioWebhookUrl(request);
   if (
     process.env.TWILIO_AUTH_TOKEN &&
-    !validateTwilioSignature(signature, request.url, params)
+    !validateTwilioSignature(signature, webhookUrl, params)
   ) {
     return null;
   }

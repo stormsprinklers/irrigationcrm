@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 
 export async function GET(request: NextRequest) {
@@ -57,6 +58,14 @@ export async function POST(request: NextRequest) {
       const blocked = await isContactBlocked(user.companyId, normalizedTo, null);
       if (blocked) return forbiddenResponse("Contact is blocked");
 
+      const resolvedCustomer =
+        customerId
+          ? await prisma.customer.findFirst({
+              where: { id: customerId, companyId: user.companyId },
+              select: { id: true },
+            })
+          : await findCustomerByPhone(user.companyId, normalizedTo);
+
       const twilioMessage = await sendSms({
         from: company.twilioPhone,
         to: normalizedTo,
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         scope: Scope.EXTERNAL,
         participantPhone: normalizedTo,
-        customerId,
+        customerId: resolvedCustomer?.id,
       });
 
       const message = await prisma.message.create({

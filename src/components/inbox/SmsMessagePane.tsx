@@ -172,40 +172,50 @@ export function SmsMessagePane({
     onSent?.(data.conversation.id);
   }
 
-  const headerName = conversationId
-    ? (conversation?.customer?.name ??
-      conversation?.title ??
-      (conversation?.participantPhone
-        ? formatPhoneDisplay(conversation.participantPhone)
-        : null) ??
-      "Conversation")
-    : recipient?.name ?? (initialName ? `Message ${initialName}` : "New message");
+  const displayPhone = conversation?.participantPhone
+    ? formatPhoneDisplay(conversation.participantPhone)
+    : recipient?.phone
+      ? formatPhoneDisplay(recipient.phone)
+      : initialPhone && isCompose
+        ? formatPhoneDisplay(initialPhone)
+        : null;
+
+  const displayName =
+    conversation?.customer?.name ??
+    recipient?.name ??
+    conversation?.title ??
+    (initialName && !conversationId ? initialName : null) ??
+    null;
+
+  const headerTitle =
+    displayName ?? displayPhone ?? (conversationId ? "Conversation" : "New message");
 
   const headerSubtitle =
-    conversation?.participantPhone
-      ? formatPhoneDisplay(conversation.participantPhone)
-      : recipient?.phone
-        ? formatPhoneDisplay(recipient.phone)
-        : initialPhone && isCompose
-          ? formatPhoneDisplay(initialPhone)
-          : null;
+    displayName && displayPhone && displayName !== displayPhone ? displayPhone : null;
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <div className="min-w-0">
           {conversation?.customer?.name ? (
-            <CustomerNameWithBadge
-              name={conversation.customer.name}
-              doNotService={conversation.customer.doNotService}
-              nameClassName="truncate font-semibold"
-            />
+            <>
+              <CustomerNameWithBadge
+                name={conversation.customer.name}
+                doNotService={conversation.customer.doNotService}
+                nameClassName="truncate font-semibold"
+              />
+              {displayPhone ? (
+                <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+              ) : null}
+            </>
           ) : (
-            <h3 className="truncate font-semibold">{headerName}</h3>
+            <>
+              <h3 className="truncate font-semibold">{headerTitle}</h3>
+              {headerSubtitle ? (
+                <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
+              ) : null}
+            </>
           )}
-          {headerSubtitle ? (
-            <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
-          ) : null}
         </div>
         {scope === "customers" && conversation?.customer && (
           <BlockContactAction

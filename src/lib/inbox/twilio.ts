@@ -1,4 +1,16 @@
 import twilio from "twilio";
+import type { NextRequest } from "next/server";
+import { normalizePhone } from "@/lib/inbox/phone";
+
+export function getTwilioWebhookUrl(request: NextRequest) {
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost ?? request.headers.get("host") ?? request.nextUrl.host;
+  const proto =
+    forwardedProto ??
+    (request.nextUrl.protocol ? request.nextUrl.protocol.replace(":", "") : "https");
+  return `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`;
+}
 
 export function getTwilioClient() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
