@@ -15,12 +15,9 @@ import { Device, Call } from "@twilio/voice-sdk";
 import { toast } from "sonner";
 import { CallWrapUpModal } from "@/components/voice/CallWrapUpModal";
 import { normalizePhone } from "@/lib/inbox/contacts";
+import type { CallerInfo } from "@/lib/voice/caller-info";
 
-export type CallerInfo = {
-  phone: string;
-  name?: string | null;
-  customerId?: string | null;
-};
+export type { CallerInfo };
 
 export type ActiveCallState = {
   call: Call;
@@ -58,6 +55,9 @@ async function lookupCaller(phone: string): Promise<CallerInfo> {
       phone,
       name: data.name ?? null,
       customerId: data.customerId ?? null,
+      city: data.city ?? null,
+      mostRecentVisitAt: data.mostRecentVisitAt ?? null,
+      doNotService: data.doNotService ?? false,
     };
   } catch {
     return { phone };

@@ -12,6 +12,7 @@ import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { formatCallerVisitDate } from "@/lib/voice/caller-info";
 
 type Employee = {
   id: string;
@@ -29,7 +30,13 @@ type QueueEntry = {
   fromNumber: string;
   toNumber: string;
   queueEnteredAt: string | null;
-  customer?: { id: string; name: string; phone?: string | null } | null;
+  customer?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    city?: string | null;
+    mostRecentVisitAt?: string | null;
+  } | null;
 };
 
 export function VoicePanel({
@@ -201,8 +208,19 @@ export function VoicePanel({
           </div>
           <ul className="space-y-2">
             {queue.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between text-sm">
-                <span>{entry.customer?.name ?? entry.fromNumber}</span>
+              <li key={entry.id} className="flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{entry.customer?.name ?? entry.fromNumber}</p>
+                  {entry.customer ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[entry.customer.city, entry.customer.mostRecentVisitAt
+                        ? `Last visit ${formatCallerVisitDate(entry.customer.mostRecentVisitAt)}`
+                        : null]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                </div>
                 <Button size="sm" variant="outline" onClick={() => void acceptQueue(entry.id)}>
                   Accept
                 </Button>

@@ -10,6 +10,7 @@ import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
+import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { renderIvrGather, renderIvrNode, type FlowContext } from "./ivr";
@@ -32,11 +33,9 @@ function isWithinBusinessHours(businessHours: unknown): boolean {
 }
 
 async function resolveCustomer(companyId: string, phone: string) {
-  const normalized = normalizePhone(phone);
-  return prisma.customer.findFirst({
-    where: { companyId, phone: normalized },
-    select: { id: true, name: true, phone: true },
-  });
+  const lookup = await lookupCustomerByPhone(companyId, phone);
+  if (!lookup.customerId) return null;
+  return { id: lookup.customerId, name: lookup.name ?? "", phone: lookup.phone };
 }
 
 async function createInboundSession(params: {

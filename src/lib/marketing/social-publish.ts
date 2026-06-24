@@ -1,4 +1,5 @@
 import { SocialPostSubmissionStatus } from "@prisma/client";
+import { resolveMediaUrlForMeta } from "@/lib/marketing/media-url";
 import { publishSocialSubmission } from "@/lib/meta/publish";
 import { resolvePageAccessToken } from "@/lib/meta/token";
 import { prisma } from "@/lib/prisma";
@@ -51,7 +52,7 @@ export async function processDueSocialPosts(limit = 20) {
         instagramAccountId: company.metaInstagramAccountId,
         pageAccessToken: resolved.pageToken,
         caption: submission.caption,
-        mediaUrls: submission.media.map((item) => item.blobUrl),
+        mediaUrls: submission.media.map((item) => resolveMediaUrlForMeta(item.blobUrl)),
         scheduledAt: null,
       });
 

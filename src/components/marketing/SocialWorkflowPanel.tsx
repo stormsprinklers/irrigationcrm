@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { MarketingSectionCard } from "@/components/marketing/MarketingMetricGrid";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -209,7 +210,7 @@ function PostComposer({
         {media.map((item) => (
           <div key={item.blobUrl} className="relative h-20 w-20 overflow-hidden rounded border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.blobUrl} alt={item.fileName} className="h-full w-full object-cover" />
+            <img src={blobProxyUrl(item.blobUrl)} alt={item.fileName} className="h-full w-full object-cover" />
             <button
               type="button"
               className="absolute right-0 top-0 bg-black/60 p-0.5 text-white"
@@ -355,7 +356,7 @@ function SubmissionRow({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={item.id}
-                  src={item.blobUrl}
+                  src={blobProxyUrl(item.blobUrl)}
                   alt={item.fileName}
                   className="h-14 w-14 rounded object-cover"
                 />

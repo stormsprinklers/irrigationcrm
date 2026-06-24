@@ -2,6 +2,7 @@
 
 import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 
 export function IncomingCallModal() {
@@ -10,7 +11,10 @@ export function IncomingCallModal() {
   if (!incomingCall) return null;
 
   const { callerInfo } = incomingCall;
-  const displayName = callerInfo?.name ?? callerInfo?.phone ?? "Unknown caller";
+  const isKnownCustomer = Boolean(callerInfo?.customerId && callerInfo?.name);
+  const displayName = isKnownCustomer
+    ? callerInfo!.name!
+    : (callerInfo?.phone ?? "Unknown caller");
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
@@ -19,9 +23,10 @@ export function IncomingCallModal() {
         <p className="text-sm text-muted-foreground">Answer or decline</p>
         <div className="py-8 text-center">
           <p className="text-2xl font-semibold">{displayName}</p>
-          {callerInfo?.name && (
-            <p className="mt-1 text-muted-foreground">{callerInfo.phone}</p>
-          )}
+          {isKnownCustomer ? (
+            <CallerIdDetails callerInfo={callerInfo} className="mt-2 text-base" />
+          ) : null}
+          <p className="mt-2 text-muted-foreground">{callerInfo?.phone}</p>
         </div>
         <div className="flex gap-3">
           <Button variant="destructive" className="flex-1" onClick={rejectIncoming}>

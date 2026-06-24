@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CallSessionStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 
 export async function GET() {
   try {
@@ -12,13 +13,30 @@ export async function GET() {
         queueEnteredAt: { not: null },
         status: CallSessionStatus.RINGING,
       },
-      include: {
-        customer: { select: { id: true, name: true, phone: true } },
-      },
       orderBy: { queueEnteredAt: "asc" },
     });
 
-    return NextResponse.json({ queue: waiting });
+    const queue = await Promise.all(
+      waiting.map(async (entry) => {
+        const lookup = await lookupCustomerByPhone(user.companyId, entry.fromNumber);
+        return {
+          id: entry.id,
+          fromNumber: entry.fromNumber,
+          queueEnteredAt: entry.queueEnteredAt?.toISOString() ?? null,
+          customer: lookup.customerId
+            ? {
+                id: lookup.customerId,
+                name: lookup.name,
+                phone: lookup.phone,
+                city: lookup.city,
+                mostRecentVisitAt: lookup.mostRecentVisitAt,
+              }
+            : null,
+        };
+      })
+    );
+
+    return NextResponse.json({ queue });
   } catch {
     return unauthorizedResponse();
   }

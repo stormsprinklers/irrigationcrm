@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Calendar, Phone, User } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,12 +13,19 @@ import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { CsrCallHistoryPanel } from "@/components/voice/CsrCallHistoryPanel";
+import { formatCallerVisitDate } from "@/lib/voice/caller-info";
 
 type QueueEntry = {
   id: string;
   fromNumber: string;
   queueEnteredAt: string | null;
-  customer?: { id: string; name: string; phone?: string | null } | null;
+  customer?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+    city?: string | null;
+    mostRecentVisitAt?: string | null;
+  } | null;
 };
 
 type CustomerDetail = {
@@ -25,6 +33,8 @@ type CustomerDetail = {
   name: string;
   phone?: string | null;
   email?: string | null;
+  city?: string | null;
+  mostRecentVisitAt?: string | null;
   doNotService?: boolean;
 };
 
@@ -91,33 +101,34 @@ export function CsrDeskPanel({
     fetch(`/api/voice/caller-lookup?phone=${encodeURIComponent(callerPhone)}`)
       .then((r) => r.json())
       .then((lookup) => {
-        if (lookup.customerId) {
-          return fetch(`/api/customers/${lookup.customerId}`)
-            .then((r) => r.json())
-            .then((data) => {
-              if (data.error) {
-                setCustomer({
-                  id: lookup.customerId,
-                  name: lookup.name ?? "Customer",
-                  phone: lookup.phone,
-                  doNotService: lookup.doNotService,
-                });
-                return;
-              }
-              setCustomer({
-                id: data.id,
-                name: data.name,
-                phone: data.phone,
-                email: data.email,
-                doNotService: data.doNotService,
-              });
-            });
+        if (!lookup.customerId) {
+          setCustomer(null);
+          return;
         }
-        setCustomer(
-          lookup.name
-            ? { id: "", name: lookup.name, phone: lookup.phone }
-            : null
-        );
+        return fetch(`/api/customers/${lookup.customerId}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.error) {
+              setCustomer({
+                id: lookup.customerId,
+                name: lookup.name ?? "Customer",
+                phone: lookup.phone,
+                city: lookup.city,
+                mostRecentVisitAt: lookup.mostRecentVisitAt,
+                doNotService: lookup.doNotService,
+              });
+              return;
+            }
+            setCustomer({
+              id: data.id,
+              name: data.name,
+              phone: data.phone,
+              email: data.email,
+              city: lookup.city ?? data.city,
+              mostRecentVisitAt: lookup.mostRecentVisitAt,
+              doNotService: data.doNotService,
+            });
+          });
       })
       .catch(() => setCustomer(null));
   }, [callerPhone]);
@@ -189,6 +200,15 @@ export function CsrDeskPanel({
             {queue.map((entry) => (
               <li key={entry.id} className="rounded border border-border p-2">
                 <p className="font-medium">{entry.customer?.name ?? entry.fromNumber}</p>
+                {entry.customer ? (
+                  <p className="text-xs text-muted-foreground">
+                    {[entry.customer.city, entry.customer.mostRecentVisitAt
+                      ? `Last visit ${formatCallerVisitDate(entry.customer.mostRecentVisitAt)}`
+                      : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                ) : null}
                 <p className="text-xs text-muted-foreground">{entry.fromNumber}</p>
               </li>
             ))}
@@ -209,9 +229,27 @@ export function CsrDeskPanel({
         {activeCall ? (
           <div className="space-y-2 text-sm">
             <CustomerNameWithBadge
-              name={customer?.name ?? activeCall.callerInfo?.name ?? callerPhone ?? "Unknown caller"}
-              doNotService={customer?.doNotService}
+              name={
+                customer?.name ??
+                activeCall.callerInfo?.name ??
+                callerPhone ??
+                "Unknown caller"
+              }
+              doNotService={customer?.doNotService ?? activeCall.callerInfo?.doNotService}
               nameClassName="text-lg font-semibold"
+            />
+            <CallerIdDetails
+              callerInfo={
+                activeCall.callerInfo ??
+                (customer?.id
+                  ? {
+                      phone: callerPhone ?? "",
+                      customerId: customer.id,
+                      city: customer.city,
+                      mostRecentVisitAt: customer.mostRecentVisitAt,
+                    }
+                  : null)
+              }
             />
             <p className="text-muted-foreground">{callerPhone}</p>
             {customer?.email && <p>{customer.email}</p>}

@@ -11,6 +11,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 
@@ -47,9 +48,10 @@ export function ActiveCallBar() {
   if (!activeCall) return null;
 
   const label =
-    activeCall.callerInfo?.name ??
-    activeCall.remoteNumber ??
-    (activeCall.direction === "inbound" ? "Incoming" : "Outbound");
+    activeCall.callerInfo?.customerId && activeCall.callerInfo?.name
+      ? activeCall.callerInfo.name
+      : (activeCall.remoteNumber ??
+        (activeCall.direction === "inbound" ? "Incoming" : "Outbound"));
 
   return (
     <>
@@ -57,6 +59,7 @@ export function ActiveCallBar() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="truncate font-semibold">{label}</p>
+            <CallerIdDetails callerInfo={activeCall.callerInfo} className="truncate text-xs" />
             <p className="text-sm text-muted-foreground">
               {formatDuration(seconds)}
               {activeCall.onHold ? " · On hold" : ""}
