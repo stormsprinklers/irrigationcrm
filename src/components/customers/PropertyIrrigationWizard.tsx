@@ -19,6 +19,7 @@ import type {
   VegetationType,
 } from "@/lib/irrigation/types";
 import { formatAddressQuery } from "@/lib/customers/maps";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { toast } from "sonner";
 
 type MapZone = {
@@ -217,7 +218,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
                 </div>
               ) : aerialImageUrl ? (
                 <img
-                  src={aerialImageUrl}
+                  src={blobProxyUrl(aerialImageUrl) ?? aerialImageUrl}
                   alt="Aerial satellite view of property"
                   className="max-h-80 w-full rounded-md border object-cover"
                 />

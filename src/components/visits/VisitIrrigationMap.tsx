@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Props = {
   customerId: string;
@@ -26,7 +27,7 @@ export function VisitIrrigationMap({
   propertyDiagramUrl,
   irrigationMapStatus,
 }: Props) {
-  const mapImageUrl = propertyDiagramUrl || aerialImageUrl;
+  const mapImageUrl = blobProxyUrl(propertyDiagramUrl || aerialImageUrl);
   const editHref = setupUrl(customerId, propertyId);
 
   if (!mapImageUrl) {

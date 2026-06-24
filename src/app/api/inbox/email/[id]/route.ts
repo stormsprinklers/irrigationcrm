@@ -12,7 +12,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     const email = await prisma.emailMessage.findFirst({
       where: { id, companyId: user.companyId },
-      include: { customer: true },
+      include: { customer: true, attachments: true },
     });
 
     if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 });

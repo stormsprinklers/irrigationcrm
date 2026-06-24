@@ -2,6 +2,52 @@ import { NextRequest, NextResponse } from "next/server";
 import { EmailFolder, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
+import { uploadPrivateBlob, assertBlobConfigured } from "@/lib/blob/storage";
+import { safeFileName } from "@/lib/inbox/attachments";
+
+async function saveInboundAttachments(
+  companyId: string,
+  emailMessageId: string,
+  formData: FormData
+) {
+  try {
+    assertBlobConfigured();
+  } catch {
+    return;
+  }
+
+  const attachmentInfoRaw = formData.get("attachment-info");
+  if (!attachmentInfoRaw) return;
+
+  let attachmentInfo: Record<string, { filename?: string; type?: string }> = {};
+  try {
+    attachmentInfo = JSON.parse(String(attachmentInfoRaw));
+  } catch {
+    return;
+  }
+
+  for (const [fieldName, meta] of Object.entries(attachmentInfo)) {
+    const file = formData.get(fieldName);
+    if (!file || !(file instanceof File) || file.size <= 0) continue;
+
+    const safeName = safeFileName(meta.filename ?? file.name);
+    const blob = await uploadPrivateBlob(
+      `inbox/${companyId}/email/inbound/${emailMessageId}/${Date.now()}-${safeName}`,
+      file,
+      { contentType: meta.type ?? file.type }
+    );
+
+    await prisma.emailAttachment.create({
+      data: {
+        emailMessageId,
+        blobUrl: blob.url,
+        fileName: meta.filename ?? file.name,
+        mimeType: meta.type ?? file.type,
+        sizeBytes: file.size,
+      },
+    });
+  }
+}
 
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") ?? "";
@@ -11,9 +57,10 @@ export async function POST(request: NextRequest) {
   let subject = "(No subject)";
   let text = "";
   let html = "";
+  let formData: FormData | null = null;
 
   if (contentType.includes("multipart/form-data") || contentType.includes("application/x-www-form-urlencoded")) {
-    const formData = await request.formData();
+    formData = await request.formData();
     from = String(formData.get("from") ?? "");
     to = String(formData.get("to") ?? "");
     subject = String(formData.get("subject") ?? "(No subject)");
@@ -63,7 +110,7 @@ export async function POST(request: NextRequest) {
     where: { companyId: company.id, email: fromAddress },
   });
 
-  await prisma.emailMessage.create({
+  const emailMessage = await prisma.emailMessage.create({
     data: {
       companyId: company.id,
       scope: Scope.EXTERNAL,
@@ -77,6 +124,14 @@ export async function POST(request: NextRequest) {
       isRead: false,
     },
   });
+
+  if (formData) {
+    try {
+      await saveInboundAttachments(company.id, emailMessage.id, formData);
+    } catch (error) {
+      console.error("Inbound email attachment save failed", error);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

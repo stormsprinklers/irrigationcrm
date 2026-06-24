@@ -143,6 +143,11 @@ export async function sendEmail(params: {
   text?: string;
   html?: string;
   replyTo?: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    content: string;
+  }>;
 }): Promise<SendEmailResult> {
   if (!isEmailConfigured()) {
     throw new Error(getTwilioEmailAuthStatus().issues[0] ?? "Twilio email not configured");
@@ -167,8 +172,13 @@ export async function sendEmail(params: {
       subject: params.subject,
       html,
       ...(text ? { text } : {}),
+      ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     },
   };
+
+  if (params.replyTo?.trim()) {
+    payload.replyTo = { address: params.replyTo.trim() };
+  }
 
   const res = await fetch(TWILIO_EMAIL_API, {
     method: "POST",

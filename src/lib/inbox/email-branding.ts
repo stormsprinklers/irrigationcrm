@@ -68,6 +68,11 @@ export async function sendCompanyEmail(
     html: string;
     replyTo?: string;
     fromOverride?: string | null;
+    attachments?: Array<{
+      filename: string;
+      contentType: string;
+      content: string;
+    }>;
   }
 ): Promise<SendEmailResult> {
   const from =
@@ -84,5 +89,6 @@ export async function sendCompanyEmail(
     text: params.text,
     html: wrapBrandedEmailHtml(params.html, branding),
     replyTo: params.replyTo,
+    attachments: params.attachments,
   });
 }

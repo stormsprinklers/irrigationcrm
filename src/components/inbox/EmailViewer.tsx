@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, Mail, Send, Trash2 } from "lucide-react";
+import { Archive, Download, Mail, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,23 @@ import {
   EmailRecipientPicker,
   type EmailRecipient,
 } from "@/components/inbox/EmailRecipientPicker";
+import { InboxAttachmentPicker } from "@/components/inbox/InboxAttachmentPicker";
+import { blobProxyUrl } from "@/lib/blob/urls";
+import {
+  isImageMimeType,
+  plainTextToEmailHtml,
+  sanitizeEmailHtml,
+  type PendingAttachment,
+} from "@/lib/inbox/attachments";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
+
+type EmailAttachment = {
+  id: string;
+  blobUrl: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number | null;
+};
 
 type EmailDetail = {
   id: string;
@@ -20,7 +36,48 @@ type EmailDetail = {
   bodyText?: string | null;
   bodyHtml?: string | null;
   customer?: { id: string; name: string; email?: string | null } | null;
+  attachments?: EmailAttachment[];
 };
+
+function EmailAttachmentList({ attachments }: { attachments: EmailAttachment[] }) {
+  if (!attachments.length) return null;
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <p className="mb-2 text-sm font-medium">Attachments</p>
+      <ul className="space-y-2">
+        {attachments.map((file) => {
+          const href = blobProxyUrl(file.blobUrl) ?? file.blobUrl;
+          return (
+            <li key={file.id}>
+              {isImageMimeType(file.mimeType) ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={href}
+                    alt={file.fileName}
+                    className="max-h-48 rounded-md border border-border object-cover"
+                  />
+                  <span className="mt-1 block text-xs text-muted-foreground">{file.fileName}</span>
+                </a>
+              ) : (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50"
+                >
+                  <Download className="h-4 w-4" />
+                  {file.fileName}
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export function EmailViewer({
   emailId,
@@ -42,6 +99,7 @@ export function EmailViewer({
   const [recipients, setRecipients] = useState<EmailRecipient[]>([]);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
@@ -95,6 +153,8 @@ export function EmailViewer({
         to: toEmails,
         subject,
         bodyText: body,
+        bodyHtml: body.trim() ? plainTextToEmailHtml(body) : undefined,
+        attachments,
         scope: scope === "customers" ? "external" : "internal",
         saveAsDraft,
         customerId:
@@ -115,6 +175,7 @@ export function EmailViewer({
     setRecipients([]);
     setSubject("");
     setBody("");
+    setAttachments([]);
     onSent?.();
   }
 
@@ -133,12 +194,21 @@ export function EmailViewer({
         />
         <textarea
           className="mb-3 min-h-[200px] flex-1 rounded-md border border-input p-3 text-sm"
-          placeholder="Message..."
+          placeholder="Message... (URLs will become clickable links)"
           value={body}
           onChange={(e) => setBody(e.target.value)}
         />
+        <InboxAttachmentPicker
+          channel="email"
+          attachments={attachments}
+          onChange={setAttachments}
+          className="mb-3"
+        />
         <div className="flex shrink-0 gap-2">
-          <Button onClick={() => handleSend(false)} disabled={sending}>
+          <Button
+            onClick={() => handleSend(false)}
+            disabled={sending || (!body.trim() && !attachments.length)}
+          >
             <Send className="h-4 w-4" />
             Send
           </Button>
@@ -153,6 +223,8 @@ export function EmailViewer({
   if (!email) {
     return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
   }
+
+  const htmlBody = email.bodyHtml ? sanitizeEmailHtml(email.bodyHtml) : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -182,9 +254,17 @@ export function EmailViewer({
         </div>
       </div>
       <div className="flex-1 overflow-auto p-4">
-        <div className="prose prose-sm max-w-none text-sm whitespace-pre-wrap">
-          {email.bodyText ?? email.bodyHtml ?? ""}
-        </div>
+        {htmlBody ? (
+          <div
+            className="prose prose-sm max-w-none text-sm"
+            dangerouslySetInnerHTML={{ __html: htmlBody }}
+          />
+        ) : (
+          <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
+            {email.bodyText ?? ""}
+          </div>
+        )}
+        <EmailAttachmentList attachments={email.attachments ?? []} />
       </div>
       <div className="border-t border-border p-4">
         <Button
@@ -197,6 +277,7 @@ export function EmailViewer({
                 customerId: email.customer?.id,
               }))
             );
+            setSubject(email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`);
             setCompose(true);
           }}
         >

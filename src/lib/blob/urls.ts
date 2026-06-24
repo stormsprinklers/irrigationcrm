@@ -18,19 +18,22 @@ export function blobPathnameFromUrl(url: string) {
 }
 
 export function canAccessBlobPath(companyId: string, pathname: string) {
-  const match = pathname.match(/^(employees|visits|estimates|customers|voice-clips|marketing)\/([^/]+)\//);
+  const match = pathname.match(
+    /^(employees|visits|estimates|customers|voice-clips|marketing|inbox)\/([^/]+)\//
+  );
   return match !== null && match[2] === companyId;
 }
 
-/** Serve private blobs through the authenticated app proxy. */
+/** Serve private blobs through the authenticated app proxy; pass through external URLs. */
 export function blobProxyUrl(storedUrl: string | null | undefined) {
   if (!storedUrl) return undefined;
 
-  const pathname = isBlobStorageUrl(storedUrl)
-    ? blobPathnameFromUrl(storedUrl)
-    : storedUrl.replace(/^\/+/, "");
+  if (!isBlobStorageUrl(storedUrl)) {
+    return storedUrl;
+  }
 
-  if (!pathname) return undefined;
+  const pathname = blobPathnameFromUrl(storedUrl);
+  if (!pathname) return storedUrl;
 
   return `/api/blob?pathname=${encodeURIComponent(pathname)}`;
 }

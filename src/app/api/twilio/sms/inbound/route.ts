@@ -12,6 +12,7 @@ import {
   findOrCreateSmsConversation,
   getCompanyByTwilioPhone,
 } from "@/lib/inbox/conversations";
+import { parseTwilioMediaParams, downloadTwilioMedia } from "@/lib/inbox/twilio-media";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -130,14 +131,40 @@ export async function POST(request: NextRequest) {
       if (duplicate) return NextResponse.json({ ok: true });
     }
 
-    await prisma.message.create({
+    const mediaItems = parseTwilioMediaParams(params);
+
+    const message = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: MessageDirection.INBOUND,
-        body: body.trim() || "[Media message]",
+        body: body.trim() || (mediaItems.length ? "[Media message]" : ""),
         twilioMessageSid: messageSid || null,
       },
     });
+
+    if (mediaItems.length) {
+      const saved = await Promise.all(
+        mediaItems.map((item, index) =>
+          downloadTwilioMedia({
+            mediaUrl: item.url,
+            companyId: company.id,
+            messageId: message.id,
+            mimeType: item.contentType,
+            index,
+          })
+        )
+      );
+
+      await prisma.messageMedia.createMany({
+        data: saved.map((item) => ({
+          messageId: message.id,
+          blobUrl: item.blobUrl,
+          fileName: item.fileName,
+          mimeType: item.mimeType,
+          sizeBytes: item.sizeBytes,
+        })),
+      });
+    }
 
     await prisma.conversation.update({
       where: { id: conversation.id },

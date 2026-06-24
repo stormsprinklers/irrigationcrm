@@ -11,7 +11,11 @@ import {
   type SmsRecipient,
 } from "@/components/inbox/SmsRecipientPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { InboxAttachmentPicker } from "@/components/inbox/InboxAttachmentPicker";
+import { MessageMediaGallery, type MessageMediaItem } from "@/components/inbox/MessageMediaGallery";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { formatSmsMessageTime } from "@/lib/inbox/message-time";
+import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 
@@ -21,6 +25,7 @@ type Message = {
   direction: "INBOUND" | "OUTBOUND";
   sentAt: string;
   sender?: { name: string } | null;
+  media?: MessageMediaItem[];
 };
 
 type Conversation = {
@@ -41,6 +46,8 @@ function ComposeBar({
   onBodyChange,
   onSubmit,
   sending,
+  attachments,
+  onAttachmentsChange,
   placeholder = "Type a message...",
   multiline = false,
 }: {
@@ -48,14 +55,22 @@ function ComposeBar({
   onBodyChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   sending: boolean;
+  attachments: PendingAttachment[];
+  onAttachmentsChange: (attachments: PendingAttachment[]) => void;
   placeholder?: string;
   multiline?: boolean;
 }) {
   return (
     <form
       onSubmit={onSubmit}
-      className="flex shrink-0 items-end gap-2 border-t border-border bg-white p-4"
+      className="flex shrink-0 flex-col gap-2 border-t border-border bg-white p-4"
     >
+      <InboxAttachmentPicker
+        channel="sms"
+        attachments={attachments}
+        onChange={onAttachmentsChange}
+      />
+      <div className="flex items-end gap-2">
       {multiline ? (
         <textarea
           rows={3}
@@ -72,9 +87,10 @@ function ComposeBar({
           className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
-      <Button type="submit" size="icon" className="shrink-0" disabled={sending || !body.trim()}>
+      <Button type="submit" size="icon" className="shrink-0" disabled={sending || (!body.trim() && !attachments.length)}>
         <Send className="h-4 w-4" />
       </Button>
+      </div>
     </form>
   );
 }
@@ -98,6 +114,7 @@ export function SmsMessagePane({
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [recipient, setRecipient] = useState<SmsRecipient | null>(null);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
 
   const isCompose = !conversationId;
@@ -137,7 +154,7 @@ export function SmsMessagePane({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!body.trim()) return;
+    if (!body.trim() && !attachments.length) return;
 
     const toPhone = recipient?.phone ?? conversation?.participantPhone;
     if (!toPhone?.trim()) {
@@ -152,6 +169,7 @@ export function SmsMessagePane({
       body: JSON.stringify({
         to: toPhone,
         body,
+        media: attachments,
         customerId: recipient?.customerId ?? conversation?.customer?.id ?? initialCustomerId ?? undefined,
         userId: recipient?.userId,
         title: recipient?.name ?? conversation?.title ?? undefined,
@@ -168,6 +186,7 @@ export function SmsMessagePane({
 
     const data = await res.json();
     setBody("");
+    setAttachments([]);
     toast.success("Message sent");
     onSent?.(data.conversation.id);
   }
@@ -251,7 +270,20 @@ export function SmsMessagePane({
                     {msg.sender?.name && msg.direction === "OUTBOUND" && scope === "team" && (
                       <p className="mb-1 text-[10px] opacity-70">{msg.sender.name}</p>
                     )}
-                    {msg.body}
+                    {msg.body && msg.body !== "[Media message]" ? (
+                      <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                    ) : null}
+                    <MessageMediaGallery media={msg.media ?? []} />
+                    <p
+                      className={cn(
+                        "mt-1 text-[10px] leading-none",
+                        msg.direction === "OUTBOUND"
+                          ? "text-right text-white/70"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {formatSmsMessageTime(msg.sentAt)}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -271,6 +303,8 @@ export function SmsMessagePane({
         onBodyChange={setBody}
         onSubmit={handleSend}
         sending={sending}
+        attachments={attachments}
+        onAttachmentsChange={setAttachments}
         multiline
       />
     </div>

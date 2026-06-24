@@ -105,12 +105,14 @@ export async function sendSms(params: {
   to: string;
   body: string;
   statusCallback?: string;
+  mediaUrl?: string[];
 }) {
   const client = getTwilioClient();
   return client.messages.create({
     from: params.from,
     to: params.to,
-    body: params.body,
+    body: params.body || undefined,
+    mediaUrl: params.mediaUrl?.length ? params.mediaUrl : undefined,
     statusCallback: params.statusCallback,
   });
 }

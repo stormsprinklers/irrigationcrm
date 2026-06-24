@@ -4,7 +4,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { uploadPublicBlob } from "@/lib/blob/storage";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { formatAddressQuery } from "@/lib/customers/maps";
 import {
   fetchGoogleSatelliteScreenshot,
@@ -47,8 +47,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
       lng: location.lng,
     });
 
-    const blob = await uploadPublicBlob(
-      `irrigation-aerial/${user.companyId}/${propertyId}/satellite.png`,
+    const blob = await uploadPrivateBlob(
+      `customers/${user.companyId}/${customerId}/properties/${propertyId}/irrigation-aerial.png`,
       imageBuffer,
       { contentType: "image/png" }
     );
