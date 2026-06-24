@@ -138,10 +138,11 @@ export async function getMetaSocialDashboard(
       const instagramAccountId =
         company.metaInstagramAccountId ?? resolved.instagramAccountId ?? null;
 
-      if (
-        resolved.source === "user_token" ||
-        (!company.metaInstagramAccountId && resolved.instagramAccountId)
-      ) {
+  if (
+    resolved.source === "user_token" ||
+    resolved.source === "granular_user_token" ||
+    (!company.metaInstagramAccountId && resolved.instagramAccountId)
+  ) {
         await prisma.company.update({
           where: { id: companyId },
           data: {

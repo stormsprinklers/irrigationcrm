@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     let tokenResolution: {
-      source: "page_token" | "user_token";
+      source: "page_token" | "user_token" | "granular_user_token";
       pageName: string | null;
       instagramAccountId: string | null;
     } | null = null;

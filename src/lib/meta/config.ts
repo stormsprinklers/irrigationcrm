@@ -52,7 +52,7 @@ export const META_CRM_SETTINGS = [
     field: "Meta access token",
     where: "Marketing → Social → Meta webhooks",
     description:
-      "User token from Graph API Explorer (include pages_show_list). The CRM resolves the Page token automatically.",
+      "User token from Graph API Explorer (include pages_show_list and business_management for Business Suite pages). The CRM resolves the Page token automatically.",
   },
   {
     field: "Instagram account ID",
