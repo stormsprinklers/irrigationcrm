@@ -2,7 +2,7 @@ import { Channel, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/inbox/phone";
 
-async function findSmsConversationByPhone(params: {
+export async function findSmsConversationByPhone(params: {
   companyId: string;
   scope: Scope;
   participantPhone: string;
@@ -29,6 +29,25 @@ async function findSmsConversationByPhone(params: {
       return digits.length >= 10 && rowNormalized.replace(/\D/g, "").endsWith(digits);
     }) ?? null
   );
+}
+
+/** Prefer an existing thread so replies land in the same inbox tab as outbound. */
+export async function findExistingSmsConversationAnyScope(params: {
+  companyId: string;
+  participantPhone: string;
+}) {
+  const external = await findSmsConversationByPhone({
+    companyId: params.companyId,
+    scope: Scope.EXTERNAL,
+    participantPhone: params.participantPhone,
+  });
+  if (external) return external;
+
+  return findSmsConversationByPhone({
+    companyId: params.companyId,
+    scope: Scope.INTERNAL,
+    participantPhone: params.participantPhone,
+  });
 }
 
 export async function findOrCreateSmsConversation(params: {
@@ -119,17 +138,22 @@ export async function findOrCreateSmsConversation(params: {
 
 export async function getCompanyByTwilioPhone(phone: string) {
   const normalized = normalizePhone(phone);
+  const digits = normalized.replace(/\D/g, "");
+  const last10 = digits.length >= 10 ? digits.slice(-10) : digits;
+  const variants = new Set(
+    [phone, normalized, last10, last10 ? `+1${last10}` : ""].filter(Boolean)
+  );
 
   const direct = await prisma.company.findFirst({
     where: {
-      OR: [{ twilioPhone: phone }, { twilioPhone: normalized }],
+      OR: [...variants].map((value) => ({ twilioPhone: value })),
     },
   });
   if (direct) return direct;
 
   const tracked = await prisma.phoneNumber.findFirst({
     where: {
-      OR: [{ e164: phone }, { e164: normalized }],
+      OR: [...variants].map((value) => ({ e164: value })),
     },
     include: { company: true },
   });

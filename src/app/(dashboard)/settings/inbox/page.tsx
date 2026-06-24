@@ -28,12 +28,24 @@ export default function SettingsInboxPage() {
   const [saving, setSaving] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [testingEmail, setTestingEmail] = useState(false);
+  const [webhookInfo, setWebhookInfo] = useState<{
+    urls?: { smsInbound: string; base: string };
+    appUrl?: string | null;
+  } | null>(null);
+  const [configuringWebhooks, setConfiguringWebhooks] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/inbox")
       .then((r) => r.json())
       .then(setSettings)
       .catch(() => toast.error("Failed to load inbox settings"));
+
+    fetch("/api/settings/voice/webhooks")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setWebhookInfo(data);
+      })
+      .catch(() => {});
   }, []);
 
   async function handleSave(e: React.FormEvent) {
@@ -82,6 +94,22 @@ export default function SettingsInboxPage() {
       toast.success(`Test email sent to ${data.to}`);
     } finally {
       setTestingEmail(false);
+    }
+  }
+
+  async function registerTwilioWebhooks() {
+    setConfiguringWebhooks(true);
+    try {
+      const res = await fetch("/api/settings/voice/webhooks", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to register webhooks");
+        return;
+      }
+      toast.success(data.message ?? "Twilio webhooks registered");
+      setWebhookInfo((prev) => ({ ...prev, urls: data.urls }));
+    } finally {
+      setConfiguringWebhooks(false);
     }
   }
 
@@ -212,9 +240,35 @@ export default function SettingsInboxPage() {
         </section>
 
         <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
-          <p className="font-medium text-foreground">Twilio webhook URLs</p>
-          <ul className="mt-2 space-y-1 text-muted-foreground">
-            <li>SMS inbound: /api/twilio/sms/inbound</li>
+          <p className="font-medium text-foreground">Twilio SMS inbound (required for replies)</p>
+          <p className="mt-2 text-muted-foreground">
+            Twilio receiving a text in its logs only means the carrier delivered it to Twilio.
+            Your app must have an <strong>SMS webhook</strong> registered so Twilio forwards
+            inbound messages to the CRM. If you use A2P, the webhook must be set on the{" "}
+            <strong>Messaging Service</strong> as well as each phone number.
+          </p>
+          <p className="mt-2 break-all font-mono text-xs text-foreground">
+            {webhookInfo?.urls?.smsInbound ??
+              `${process.env.NEXT_PUBLIC_APP_URL ?? "YOUR_APP_URL"}/api/twilio/sms/inbound`}
+          </p>
+          {!webhookInfo?.appUrl ? (
+            <p className="mt-2 text-amber-700">
+              Set <code className="text-xs">NEXT_PUBLIC_APP_URL</code> in Vercel to your production
+              URL before registering webhooks.
+            </p>
+          ) : null}
+          <div className="mt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={configuringWebhooks}
+              onClick={registerTwilioWebhooks}
+            >
+              {configuringWebhooks ? "Registering..." : "Register webhooks with Twilio"}
+            </Button>
+          </div>
+          <ul className="mt-3 space-y-1 text-muted-foreground">
             <li>Voice inbound: /api/twilio/voice/inbound</li>
             <li>Voice client (TwiML App): /api/twilio/voice/client</li>
             <li>Voice status: /api/twilio/voice/status</li>

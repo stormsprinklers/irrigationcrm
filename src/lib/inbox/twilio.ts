@@ -1,15 +1,56 @@
 import twilio from "twilio";
 import type { NextRequest } from "next/server";
-import { normalizePhone } from "@/lib/inbox/phone";
+import { getAppBaseUrl } from "@/lib/app-url";
+
+function firstHeaderValue(value: string | null) {
+  if (!value) return null;
+  return value.split(",")[0]?.trim() || null;
+}
 
 export function getTwilioWebhookUrl(request: NextRequest) {
-  const forwardedProto = request.headers.get("x-forwarded-proto");
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = forwardedHost ?? request.headers.get("host") ?? request.nextUrl.host;
+  const forwardedProto = firstHeaderValue(request.headers.get("x-forwarded-proto"));
+  const forwardedHost = firstHeaderValue(request.headers.get("x-forwarded-host"));
+  const host =
+    forwardedHost ?? request.headers.get("host") ?? request.nextUrl.host;
   const proto =
     forwardedProto ??
     (request.nextUrl.protocol ? request.nextUrl.protocol.replace(":", "") : "https");
   return `${proto}://${host}${request.nextUrl.pathname}${request.nextUrl.search}`;
+}
+
+/** Twilio signs the exact public URL; try common proxy / env variants. */
+export function getTwilioWebhookUrlCandidates(request: NextRequest) {
+  const path = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  const candidates = new Set<string>();
+
+  candidates.add(getTwilioWebhookUrl(request));
+  candidates.add(request.url);
+
+  const configuredBase = getAppBaseUrl();
+  if (configuredBase) {
+    candidates.add(`${configuredBase}${path}`);
+  }
+
+  const host = firstHeaderValue(request.headers.get("x-forwarded-host")) ?? request.headers.get("host");
+  if (host) {
+    candidates.add(`https://${host}${path}`);
+    candidates.add(`http://${host}${path}`);
+  }
+
+  return [...candidates].filter(Boolean);
+}
+
+export function isValidTwilioWebhookRequest(
+  request: NextRequest,
+  params: Record<string, string>
+) {
+  const signature = request.headers.get("x-twilio-signature") ?? "";
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) return true;
+
+  return getTwilioWebhookUrlCandidates(request).some((url) =>
+    twilio.validateRequest(authToken, signature, url, params)
+  );
 }
 
 export function getTwilioClient() {

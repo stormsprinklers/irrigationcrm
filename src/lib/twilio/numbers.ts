@@ -7,17 +7,83 @@ function webhookBase() {
   return appBaseUrl();
 }
 
+export function twilioWebhookUrls() {
+  const base = webhookBase();
+  return {
+    base,
+    smsInbound: `${base}/api/twilio/sms/inbound`,
+    smsStatus: `${base}/api/twilio/sms/status`,
+    voiceInbound: `${base}/api/twilio/voice/inbound`,
+    voiceStatus: `${base}/api/twilio/voice/status`,
+  };
+}
+
 export async function configureNumberWebhooks(twilioSid: string) {
   const client = getTwilioClient();
-  const base = webhookBase();
+  const urls = twilioWebhookUrls();
   await client.incomingPhoneNumbers(twilioSid).update({
-    voiceUrl: `${base}/api/twilio/voice/inbound`,
+    voiceUrl: urls.voiceInbound,
     voiceMethod: "POST",
-    statusCallback: `${base}/api/twilio/voice/status`,
+    statusCallback: urls.voiceStatus,
     statusCallbackMethod: "POST",
-    smsUrl: `${base}/api/twilio/sms/inbound`,
+    smsUrl: urls.smsInbound,
     smsMethod: "POST",
   });
+}
+
+export async function configureMessagingServiceWebhooks() {
+  const client = getTwilioClient();
+  const urls = twilioWebhookUrls();
+  const services = await client.messaging.v1.services.list({ limit: 50 });
+  let updated = 0;
+
+  for (const service of services) {
+    await client.messaging.v1.services(service.sid).update({
+      inboundRequestUrl: urls.smsInbound,
+      inboundMethod: "POST",
+    });
+    updated++;
+  }
+
+  return { messagingServices: updated };
+}
+
+export async function configureAllSmsWebhooks(companyId?: string) {
+  const client = getTwilioClient();
+  const numbers = await client.incomingPhoneNumbers.list({ limit: 100 });
+  let phoneNumbers = 0;
+
+  for (const number of numbers) {
+    await configureNumberWebhooks(number.sid);
+    phoneNumbers++;
+  }
+
+  const messaging = await configureMessagingServiceWebhooks();
+
+  if (companyId) {
+    const existing = await prisma.phoneNumber.findMany({
+      where: { companyId },
+      select: { e164: true, twilioSid: true, id: true },
+    });
+    const byE164 = new Map(existing.map((row) => [row.e164, row]));
+
+    for (const number of numbers) {
+      const normalized = normalizePhone(number.phoneNumber);
+      const found = byE164.get(normalized);
+      if (found && !found.twilioSid) {
+        await prisma.phoneNumber.update({
+          where: { id: found.id },
+          data: { twilioSid: number.sid },
+        });
+      }
+    }
+  }
+
+  return {
+    phoneNumbers,
+    messagingServices: messaging.messagingServices,
+    urls: twilioWebhookUrls(),
+  };
 }
 
 export async function listAccountNumbers() {
@@ -118,6 +184,11 @@ export async function syncAccountNumbers(companyId: string) {
         });
         updated++;
       }
+      try {
+        await configureNumberWebhooks(num.sid);
+      } catch (error) {
+        console.error("Failed to configure webhooks for", num.e164, error);
+      }
       continue;
     }
 
@@ -130,6 +201,11 @@ export async function syncAccountNumbers(companyId: string) {
         numberType: "TRACKING",
       },
     });
+    try {
+      await configureNumberWebhooks(num.sid);
+    } catch (error) {
+      console.error("Failed to configure webhooks for", num.e164, error);
+    }
     imported++;
   }
 
