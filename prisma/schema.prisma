@@ -448,6 +448,9 @@ model Company {
   metaAppSecret                String?
   metaPageId                   String?
   metaInstagramAccountId        String?
+  metaPageAccessToken          String?
+  metaSocialSyncedAt           DateTime?
+  metaSocialMetricsJson        Json?
   metaWebhookVerifiedAt        DateTime?
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
@@ -503,6 +506,7 @@ model Company {
   portalOffers           PortalOffer[]
   integrationCredentials IntegrationCredential[]
   metaWebhookEvents      MetaWebhookEvent[]
+  socialPosts            SocialPost[]
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
 }
@@ -2177,6 +2181,28 @@ model MetaWebhookEvent {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
+}
+
+model SocialPost {
+  id          String    @id @default(cuid())
+  companyId   String
+  platform    String
+  externalId  String
+  postType    String    @default("post")
+  caption     String?
+  permalink   String?
+  publishedAt DateTime?
+  likes       Int       @default(0)
+  comments    Int       @default(0)
+  shares      Int       @default(0)
+  reach       Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, platform, externalId])
+  @@index([companyId, publishedAt])
 }
 
 model MarketingEvent {

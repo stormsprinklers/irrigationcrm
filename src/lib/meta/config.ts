@@ -49,6 +49,12 @@ export const META_CRM_SETTINGS = [
     description: "Routes incoming webhook events to your company account.",
   },
   {
+    field: "Page Access Token",
+    where: "Marketing → Social → Meta webhooks",
+    description:
+      "Long-lived Page token with pages_read_engagement, pages_read_user_content, read_insights, and instagram_basic. Powers metrics and recent posts.",
+  },
+  {
     field: "Instagram account ID",
     where: "Marketing → Social → Meta webhooks",
     description: "Optional; use if Instagram webhooks use a different object ID.",

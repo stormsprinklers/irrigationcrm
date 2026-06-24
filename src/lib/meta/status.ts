@@ -9,6 +9,7 @@ export type MetaIntegrationStatus = {
   hasVerifyToken: boolean;
   hasAppSecret: boolean;
   hasPageId: boolean;
+  hasPageAccessToken: boolean;
   hasAppId: boolean;
   lastWebhookEventAt: string | null;
   setupUrl: "/marketing/social";
@@ -28,6 +29,7 @@ export async function getMetaIntegrationStatus(
       metaAppId: true,
       metaAppSecret: true,
       metaPageId: true,
+      metaPageAccessToken: true,
       metaWebhookVerifyToken: true,
       metaWebhookVerifiedAt: true,
     },
@@ -42,6 +44,7 @@ export async function getMetaIntegrationStatus(
   const hasVerifyToken = Boolean(company?.metaWebhookVerifyToken);
   const hasAppSecret = Boolean(company?.metaAppSecret);
   const hasPageId = Boolean(company?.metaPageId);
+  const hasPageAccessToken = Boolean(company?.metaPageAccessToken);
   const hasAppId = Boolean(company?.metaAppId || env.appId);
   const verified = Boolean(company?.metaWebhookVerifiedAt);
   const hasAppUrl = Boolean(env.callbackUrl);
@@ -61,6 +64,10 @@ export async function getMetaIntegrationStatus(
     status = "configured";
     message =
       "Webhook verified. Add your App Secret and Facebook Page ID so events are validated and routed.";
+  } else if (!hasPageAccessToken) {
+    status = "configured";
+    message =
+      "Webhook verified. Add a Page Access Token in Marketing → Social to load followers and recent posts.";
   } else if (lastEvent) {
     status = "connected";
     message = "Receiving webhook events from Meta.";
@@ -78,6 +85,7 @@ export async function getMetaIntegrationStatus(
     hasVerifyToken,
     hasAppSecret,
     hasPageId,
+    hasPageAccessToken,
     hasAppId,
     lastWebhookEventAt: lastEvent?.createdAt.toISOString() ?? null,
     setupUrl: "/marketing/social",

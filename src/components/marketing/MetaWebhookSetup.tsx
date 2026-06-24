@@ -21,7 +21,10 @@ type SocialSettings = {
   metaInstagramAccountId: string | null;
   hasAppSecret: boolean;
   appSecretPreview: string | null;
+  hasPageAccessToken: boolean;
+  pageAccessTokenPreview: string | null;
   webhookVerifiedAt: string | null;
+  lastSyncedAt: string | null;
   lastWebhookEvent: { at: string; object: string | null; field: string | null } | null;
 };
 
@@ -34,7 +37,7 @@ async function copyText(value: string, label: string) {
   }
 }
 
-export function MetaWebhookSetup() {
+export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
   const [settings, setSettings] = useState<SocialSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,6 +46,7 @@ export function MetaWebhookSetup() {
   const [metaPageId, setMetaPageId] = useState("");
   const [metaInstagramAccountId, setMetaInstagramAccountId] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
+  const [metaPageAccessToken, setMetaPageAccessToken] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/marketing/social/settings");
@@ -54,6 +58,7 @@ export function MetaWebhookSetup() {
     setMetaPageId(data.metaPageId ?? "");
     setMetaInstagramAccountId(data.metaInstagramAccountId ?? "");
     setMetaAppSecret("");
+    setMetaPageAccessToken("");
   }, []);
 
   useEffect(() => {
@@ -78,7 +83,9 @@ export function MetaWebhookSetup() {
       setMetaPageId(data.metaPageId ?? "");
       setMetaInstagramAccountId(data.metaInstagramAccountId ?? "");
       setMetaAppSecret("");
+      setMetaPageAccessToken("");
       toast.success("Saved");
+      onSaved?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save");
     } finally {
@@ -222,6 +229,38 @@ export function MetaWebhookSetup() {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
+            <label htmlFor="meta-page-access-token" className="text-sm font-medium">
+              Page Access Token
+            </label>
+            <Input
+              id="meta-page-access-token"
+              type="password"
+              value={metaPageAccessToken}
+              onChange={(e) => setMetaPageAccessToken(e.target.value)}
+              placeholder={
+                settings.hasPageAccessToken
+                  ? `Configured (${settings.pageAccessTokenPreview})`
+                  : "Long-lived Page token from Meta Graph API Explorer"
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              Required to load followers, reach, and recent posts. In{" "}
+              <a
+                href="https://developers.facebook.com/tools/explorer/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                Graph API Explorer
+              </a>
+              , select your app and Page, then generate a token with{" "}
+              <code className="text-[11px]">pages_read_engagement</code>,{" "}
+              <code className="text-[11px]">pages_read_user_content</code>,{" "}
+              <code className="text-[11px]">read_insights</code>, and{" "}
+              <code className="text-[11px]">instagram_basic</code>.
+            </p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
             <label htmlFor="meta-app-secret" className="text-sm font-medium">
               App Secret
             </label>
@@ -251,6 +290,9 @@ export function MetaWebhookSetup() {
                 metaPageId,
                 metaInstagramAccountId,
                 ...(metaAppSecret.trim() ? { metaAppSecret: metaAppSecret.trim() } : {}),
+                ...(metaPageAccessToken.trim()
+                  ? { metaPageAccessToken: metaPageAccessToken.trim() }
+                  : {}),
               })
             }
           >
@@ -329,7 +371,8 @@ export function MetaWebhookSetup() {
             , open your app → Webhooks → paste URL and token → Verify and Save.
           </li>
           <li>Add Messenger and Instagram products; subscribe to fields listed above.</li>
-          <li>Save App ID, App Secret, and Facebook Page ID in this CRM.</li>
+          <li>Save App ID, App Secret, Page Access Token, and Facebook Page ID in this CRM.</li>
+          <li>Open Recent posts and click Refresh to sync metrics from Meta.</li>
           <li>
             DMs will appear in{" "}
             <Link href="/inbox/social/facebook" className="text-primary underline">

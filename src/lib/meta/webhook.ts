@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { upsertSocialPostFromFeedWebhook } from "@/lib/meta/sync";
 
 export function generateMetaVerifyToken() {
   return randomBytes(24).toString("hex");
@@ -91,6 +92,15 @@ export async function processMetaWebhookPayload(body: MetaWebhookBody) {
         payload: body as object,
       },
     });
+
+    for (const change of entry.changes ?? []) {
+      if (change.field === "feed" && change.value && typeof change.value === "object") {
+        await upsertSocialPostFromFeedWebhook(
+          company.id,
+          change.value as Record<string, unknown>
+        );
+      }
+    }
 
     stored.push(company.id);
   }

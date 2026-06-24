@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
         metaAppSecret: true,
         metaPageId: true,
         metaInstagramAccountId: true,
+        metaPageAccessToken: true,
         metaWebhookVerifiedAt: true,
+        metaSocialSyncedAt: true,
       },
     });
 
@@ -42,9 +44,12 @@ export async function GET(request: NextRequest) {
       hasVerifyToken: Boolean(company.metaWebhookVerifyToken),
       metaPageId: company.metaPageId,
       metaInstagramAccountId: company.metaInstagramAccountId,
+      hasPageAccessToken: Boolean(company.metaPageAccessToken),
+      pageAccessTokenPreview: maskSecret(company.metaPageAccessToken),
       hasAppSecret: Boolean(company.metaAppSecret),
       appSecretPreview: maskSecret(company.metaAppSecret),
       webhookVerifiedAt: company.metaWebhookVerifiedAt?.toISOString() ?? null,
+      lastSyncedAt: company.metaSocialSyncedAt?.toISOString() ?? null,
       lastWebhookEvent: lastEvent
         ? {
             at: lastEvent.createdAt.toISOString(),
@@ -70,6 +75,7 @@ export async function PATCH(request: NextRequest) {
       metaAppSecret?: string | null;
       metaPageId?: string | null;
       metaInstagramAccountId?: string | null;
+      metaPageAccessToken?: string | null;
       metaWebhookVerifiedAt?: null;
     } = {};
 
@@ -109,6 +115,12 @@ export async function PATCH(request: NextRequest) {
       data.metaInstagramAccountId = igId || null;
     }
 
+    if (body.metaPageAccessToken !== undefined) {
+      const token =
+        typeof body.metaPageAccessToken === "string" ? body.metaPageAccessToken.trim() : "";
+      data.metaPageAccessToken = token || null;
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "No changes provided" }, { status: 400 });
     }
@@ -122,7 +134,9 @@ export async function PATCH(request: NextRequest) {
         metaAppSecret: true,
         metaPageId: true,
         metaInstagramAccountId: true,
+        metaPageAccessToken: true,
         metaWebhookVerifiedAt: true,
+        metaSocialSyncedAt: true,
       },
     });
 
@@ -136,9 +150,12 @@ export async function PATCH(request: NextRequest) {
       hasVerifyToken: Boolean(company.metaWebhookVerifyToken),
       metaPageId: company.metaPageId,
       metaInstagramAccountId: company.metaInstagramAccountId,
+      hasPageAccessToken: Boolean(company.metaPageAccessToken),
+      pageAccessTokenPreview: maskSecret(company.metaPageAccessToken),
       hasAppSecret: Boolean(company.metaAppSecret),
       appSecretPreview: maskSecret(company.metaAppSecret),
       webhookVerifiedAt: company.metaWebhookVerifiedAt?.toISOString() ?? null,
+      lastSyncedAt: company.metaSocialSyncedAt?.toISOString() ?? null,
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Unique constraint")) {
