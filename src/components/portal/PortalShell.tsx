@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, FileText, Home, LogOut, MapPin, Percent, Wrench } from "lucide-react";
+import { Calendar, FileText, Home, LogOut, Percent, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { resolvePortalLogoUrl } from "@/lib/portal/branding";
 import { cn } from "@/lib/utils";
 
 type Features = {
@@ -28,6 +29,7 @@ type Props = {
 export function PortalShell({ slug, companyName, emailLogoUrl, features, children }: Props) {
   const pathname = usePathname();
   const base = `/portal/${slug}`;
+  const logoUrl = resolvePortalLogoUrl(emailLogoUrl);
 
   const nav = [
     { href: base, label: "Home", icon: Home, show: true },
@@ -43,27 +45,34 @@ export function PortalShell({ slug, companyName, emailLogoUrl, features, childre
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            {emailLogoUrl ? (
+    <div className="portal-shell min-h-screen bg-[#f8fafc]">
+      <header className="sticky top-0 z-50 border-b border-black/5 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+        <div className="portal-container flex items-center justify-between gap-4 py-3">
+          <Link href={base} className="flex shrink-0 items-center">
+            {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={emailLogoUrl} alt="" className="h-8 w-auto object-contain" />
-            ) : null}
-            <div>
-              <p className="text-xs text-muted-foreground">Customer portal</p>
-              <p className="font-semibold">{companyName}</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => void logout()}>
+              <img
+                src={logoUrl}
+                alt={`${companyName} home`}
+                className="h-14 w-auto max-w-[220px] object-contain sm:h-16"
+              />
+            ) : (
+              <span className="font-display text-lg uppercase tracking-wide text-storm-navy">{companyName}</span>
+            )}
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-storm-navy hover:text-storm-coral"
+            onClick={() => void logout()}
+          >
             <LogOut className="mr-1 h-4 w-4" />
             Sign out
           </Button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div className="portal-container py-6">
         <nav className="mb-6 flex flex-wrap gap-2">
           {nav.map((item) => {
             const active =
@@ -74,8 +83,10 @@ export function PortalShell({ slug, companyName, emailLogoUrl, features, childre
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm",
-                  active ? "bg-primary text-primary-foreground" : "bg-white border border-border hover:bg-muted"
+                  "inline-flex min-h-11 items-center gap-1.5 rounded px-3 py-2 text-sm font-semibold transition-colors",
+                  active
+                    ? "bg-storm-coral text-white"
+                    : "border border-storm-ice bg-white text-storm-navy hover:bg-storm-ice/60"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -94,9 +105,8 @@ export function PortalPropertyLink({ slug, propertyId, label }: { slug: string; 
   return (
     <Link
       href={`/portal/${slug}/properties/${propertyId}`}
-      className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+      className="text-sm font-medium text-storm-sky hover:text-storm-coral hover:underline"
     >
-      <MapPin className="h-3.5 w-3.5" />
       {label}
     </Link>
   );

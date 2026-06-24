@@ -118,7 +118,7 @@ export const DEFAULT_TEMPLATES: Array<{
     name: "Technician on the way",
     channel: "SMS",
     event: "VISIT_EN_ROUTE",
-    body: "Hi {customer_first_name}, {technician_first_name} is on the way. ETA: {technician_eta}. — {company_name}",
+    body: "Hi {customer_first_name}, {technician_first_name} is on the way. {technician_eta}. — {company_name}",
   },
   {
     slug: "review_request",

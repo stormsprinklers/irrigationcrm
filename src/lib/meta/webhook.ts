@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { upsertSocialPostFromFeedWebhook } from "@/lib/meta/sync";
+import { processMetaMessagingWebhook } from "@/lib/meta/messaging";
 
 export function generateMetaVerifyToken() {
   return randomBytes(24).toString("hex");
@@ -57,7 +58,7 @@ type MetaWebhookBody = {
     id?: string;
     time?: number;
     changes?: Array<{ field?: string; value?: unknown }>;
-    messaging?: unknown[];
+    messaging?: Array<Record<string, unknown>>;
   }>;
 };
 
@@ -73,6 +74,11 @@ async function findCompanyForMetaEntry(entryId: string) {
 export async function processMetaWebhookPayload(body: MetaWebhookBody) {
   const entries = body.entry ?? [];
   const stored: string[] = [];
+
+  if (body.object === "page" || body.object === "instagram") {
+    const messagingCompanies = await processMetaMessagingWebhook(body as Parameters<typeof processMetaMessagingWebhook>[0]);
+    stored.push(...messagingCompanies);
+  }
 
   for (const entry of entries) {
     const entryId = entry.id;

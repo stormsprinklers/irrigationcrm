@@ -46,8 +46,8 @@ export function PortalLoginForm({ slug, error }: Props) {
 
   if (sent) {
     return (
-      <div className="rounded-lg border border-border bg-white p-6 text-center">
-        <h2 className="text-lg font-semibold">Check your email</h2>
+      <div className="portal-card text-center">
+        <h2 className="font-display text-lg uppercase text-storm-navy">Check your email</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           If we found an account for {email}, we sent a sign-in link. It expires in 15 minutes.
         </p>
@@ -76,19 +76,19 @@ export function PortalLoginForm({ slug, error }: Props) {
 
   return (
     <form
-      className="space-y-4 rounded-lg border border-border bg-white p-6"
+      className="portal-card space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
       }}
     >
       {error ? (
-        <p className="text-sm text-destructive">
+        <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
           {error === "expired" ? "That link expired. Request a new one." : "Invalid sign-in link."}
         </p>
       ) : null}
       <div>
-        <label className="text-sm font-medium">Email address</label>
+        <label className="text-sm font-medium text-storm-navy">Email address</label>
         <Input
           type="email"
           required
@@ -98,7 +98,7 @@ export function PortalLoginForm({ slug, error }: Props) {
           className="mt-1"
         />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full bg-storm-coral hover:bg-storm-coral/90" disabled={loading}>
         {loading ? "Sending..." : "Email me a sign-in link"}
       </Button>
     </form>

@@ -22,6 +22,7 @@ export async function GET(_request: Request, { params }: Params) {
   const visit = await getCustomerVisit(ctx.companyId, ctx.customerId, id);
   if (!visit) return portalNotFoundResponse();
 
+  // Internal visit notes are never exposed to portal customers (see serializePortalVisit).
   return NextResponse.json({
     visit: serializePortalVisit(visit),
     policies: {

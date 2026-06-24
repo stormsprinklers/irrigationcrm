@@ -29,6 +29,8 @@ enum Channel {
   SMS
   INTERNAL_CHAT
   EMAIL
+  FACEBOOK
+  INSTAGRAM
 }
 
 enum CallDirection {
@@ -1180,6 +1182,7 @@ model Conversation {
   scope            Scope
   customerId       String?
   participantPhone String?
+  participantMetaId String?
   title            String?
   lastMessageAt    DateTime @default(now())
   createdAt        DateTime @default(now())
@@ -1189,6 +1192,7 @@ model Conversation {
   messages Message[]
 
   @@index([companyId, channel, scope, lastMessageAt])
+  @@index([companyId, channel, participantMetaId])
 }
 
 model Message {
@@ -1198,6 +1202,7 @@ model Message {
   direction        MessageDirection
   body             String
   twilioMessageSid String?          @unique
+  metaMessageId    String?          @unique
   deliveryStatus   String?
   sentAt           DateTime         @default(now())
   readAt           DateTime?

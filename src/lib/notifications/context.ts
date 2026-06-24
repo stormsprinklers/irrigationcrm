@@ -3,9 +3,13 @@ import { resolvePortalSlug } from "@/lib/portal/company";
 import { formatArrivalWindow, formatVisitDate } from "./arrival-window";
 import { firstNameFromName, splitCustomerName } from "./name-utils";
 import type { TemplateContext } from "./templates";
+import { formatTimeInTimezone } from "./timezone";
+
+export const EN_ROUTE_ETA_FALLBACK = "They'll be there soon";
 
 type CompanySlice = {
   name: string;
+  timezone?: string | null;
   portalSlug?: string | null;
   bookingSlug?: string | null;
   googleReviewUrl?: string | null;
@@ -83,6 +87,7 @@ export function buildNotificationContext(params: {
 
   const arrivalHours = params.company.arrivalWindowHours ?? 3;
   const startAt = params.visit?.startAt;
+  const timezone = params.company.timezone;
 
   const portalSlug = resolvePortalSlug({
     portalSlug: params.company.portalSlug ?? null,
@@ -105,8 +110,11 @@ export function buildNotificationContext(params: {
 
   const etaMinutes =
     params.etaSeconds != null ? String(Math.max(1, Math.round(params.etaSeconds / 60))) : "";
-  const etaTime =
-    params.etaAt?.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) ?? "";
+  const etaTime = params.etaAt ? formatTimeInTimezone(params.etaAt, timezone) : "";
+  const technicianEta =
+    etaTime && etaMinutes
+      ? `${etaTime} (about ${etaMinutes} min)`
+      : etaTime || EN_ROUTE_ETA_FALLBACK;
 
   const ctx: TemplateContext = {
     // snake_case (primary)
@@ -115,11 +123,11 @@ export function buildNotificationContext(params: {
     customer_address: visitAddress,
     technician_first_name: technicianFirst,
     company_name: params.company.name,
-    visit_date: startAt ? formatVisitDate(startAt) : "",
-    visit_arrival_window: startAt ? formatArrivalWindow(startAt, arrivalHours) : "",
+    visit_date: startAt ? formatVisitDate(startAt, timezone) : "",
+    visit_arrival_window: startAt ? formatArrivalWindow(startAt, arrivalHours, timezone) : "",
     invoice_amount: params.invoice ? formatCurrency(params.invoice.amount) : "",
     review_link: params.company.googleReviewUrl ?? "",
-    technician_eta: etaTime && etaMinutes ? `${etaTime} (about ${etaMinutes} min)` : etaTime,
+    technician_eta: technicianEta,
     portal_link: params.portalUrl ?? portalHome,
     invoice_link: invoiceLink,
     about_technician_link: aboutTechnician,
@@ -130,10 +138,8 @@ export function buildNotificationContext(params: {
     companyName: params.company.name,
     visitTitle: params.visit?.title ?? "",
     visit_title: params.visit?.title ?? "",
-    visitDate: startAt ? formatVisitDate(startAt) : "",
-    visitTime: startAt
-      ? startAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-      : "",
+    visitDate: startAt ? formatVisitDate(startAt, timezone) : "",
+    visitTime: startAt ? formatTimeInTimezone(startAt, timezone) : "",
     visitAddress,
     technicianName: params.technician?.name ?? "",
     etaMinutes,
@@ -154,11 +160,13 @@ export function buildVisitContext(params: {
   startAt: Date;
   address?: string | null;
   arrivalWindowHours?: number;
+  timezone?: string | null;
 }): TemplateContext {
   return buildNotificationContext({
     company: {
       name: params.companyName,
       arrivalWindowHours: params.arrivalWindowHours ?? 3,
+      timezone: params.timezone,
     },
     customer: { name: params.customerName },
     visit: {
@@ -174,20 +182,21 @@ export function buildEnRouteContext(params: {
   companyName: string;
   technicianName: string;
   visitTitle: string;
-  etaSeconds: number;
-  etaAt: Date;
+  etaSeconds?: number | null;
+  etaAt?: Date | null;
   visitAddress?: string | null;
+  timezone?: string | null;
 }): TemplateContext {
   return buildNotificationContext({
-    company: { name: params.companyName },
+    company: { name: params.companyName, timezone: params.timezone },
     customer: { name: params.customerName },
     visit: {
       title: params.visitTitle,
-      startAt: params.etaAt,
+      startAt: params.etaAt ?? new Date(),
       address: params.visitAddress,
     },
     technician: { name: params.technicianName },
-    etaSeconds: params.etaSeconds,
-    etaAt: params.etaAt,
+    etaSeconds: params.etaSeconds ?? null,
+    etaAt: params.etaAt ?? null,
   });
 }

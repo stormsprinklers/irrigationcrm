@@ -34,7 +34,9 @@ export async function POST(request: NextRequest) {
 
   if (pageId) {
     const company = await prisma.company.findFirst({
-      where: { metaPageId: pageId },
+      where: {
+        OR: [{ metaPageId: pageId }, { metaInstagramAccountId: pageId }],
+      },
       select: { metaAppSecret: true },
     });
 

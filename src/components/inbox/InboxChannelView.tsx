@@ -68,8 +68,21 @@ export function InboxChannelView({
       <InboxChannelLayout
         channel={ch}
         scope={sc}
-        list={<SocialDmThreadList platform={platform} />}
-        detail={<SocialDmMessagePane platform={platform} conversationId={selectedId} />}
+        list={
+          <SocialDmThreadList
+            key={refreshKey}
+            platform={platform}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        }
+        detail={
+          <SocialDmMessagePane
+            platform={platform}
+            conversationId={selectedId}
+            onSent={() => setRefreshKey((k) => k + 1)}
+          />
+        }
       />
     );
   }

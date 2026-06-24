@@ -50,7 +50,8 @@ export async function middleware(request: NextRequest) {
 
   if (!token) {
     if (pathname.startsWith("/api/portal/")) {
-      return withNoIndex(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
+      // Portal APIs authenticate via customer session cookie in route handlers.
+      return withNoIndex(NextResponse.next());
     }
     if (pathname.startsWith("/portal/")) {
       const segments = pathname.split("/").filter(Boolean);

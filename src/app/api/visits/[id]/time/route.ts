@@ -77,6 +77,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
         property: { select: { address: true, city: true, state: true, zip: true } },
         assignedUser: { select: { id: true, name: true } },
+        company: { select: { name: true, timezone: true } },
       },
     });
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -161,12 +162,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const updated = await getVisitForCompany(user.companyId, id);
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    if (
-      type === TimeEventType.EN_ROUTE &&
-      updated.enRouteEtaSeconds &&
-      updated.enRouteEtaAt &&
-      updated.customer?.phone
-    ) {
+    if (type === TimeEventType.EN_ROUTE && updated.customer?.phone) {
       await ensureDefaultNotificationTemplates(user.companyId);
       const technicianName = updated.assignedUser?.name ?? user.name;
       const destination = resolveVisitDestination(updated);
@@ -181,12 +177,13 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
         context: buildEnRouteContext({
           customerName: updated.customer.name,
-          companyName: "placeholder",
+          companyName: visit.company.name,
           technicianName,
           visitTitle: updated.title,
           etaSeconds: updated.enRouteEtaSeconds,
           etaAt: updated.enRouteEtaAt,
           visitAddress: destination,
+          timezone: visit.company.timezone,
         }),
         options: { visitId: id },
       }).catch((err) => console.error("VISIT_EN_ROUTE notification error:", err));

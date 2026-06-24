@@ -113,7 +113,12 @@ export function PublicInvoicePayPage({ token }: Props) {
     );
   }
 
-  const isPaid = invoice.balanceDue <= 0 || invoice.status === "PAID";
+  const isPaid =
+    invoice.balanceDue <= 0 ||
+    invoice.status === "PAID" ||
+    invoice.status === "REFUNDED" ||
+    invoice.status === "VOID";
+  const isRefunded = invoice.status === "REFUNDED";
 
   return (
     <main className="mx-auto max-w-lg p-8">
@@ -165,13 +170,19 @@ export function PublicInvoicePayPage({ token }: Props) {
             <span>−{formatCurrency(invoice.amountPaid)}</span>
           </div>
         ) : null}
-        <div className="flex justify-between text-base font-semibold">
-          <span>Balance due</span>
-          <span>{formatCurrency(invoice.balanceDue)}</span>
-        </div>
+        {!isPaid ? (
+          <div className="flex justify-between text-base font-semibold">
+            <span>Balance due</span>
+            <span>{formatCurrency(invoice.balanceDue)}</span>
+          </div>
+        ) : null}
       </div>
 
-      {isPaid ? (
+      {isRefunded ? (
+        <div className="mt-6 rounded-lg bg-muted p-4 text-sm text-muted-foreground">
+          This invoice has been refunded and is no longer payable.
+        </div>
+      ) : isPaid ? (
         <div className="mt-6 flex items-center gap-2 rounded-lg bg-green-50 p-4 text-green-800">
           <CheckCircle2 className="h-5 w-5 shrink-0" />
           <div>

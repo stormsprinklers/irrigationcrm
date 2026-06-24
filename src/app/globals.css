@@ -133,3 +133,20 @@
     letter-spacing: -0.02em;
   }
 }
+
+.portal-container {
+  @apply mx-auto w-full max-w-[1140px] px-5;
+}
+
+.portal-card {
+  @apply rounded-lg border-2 border-storm-ice bg-white p-5;
+}
+
+.portal-section-title {
+  font-family: var(--font-display);
+  @apply text-base font-bold uppercase tracking-wide text-storm-navy;
+}
+
+.portal-shell .font-display {
+  font-family: var(--font-display);
+}

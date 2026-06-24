@@ -1,6 +1,8 @@
 import type { VisitStatus } from "@prisma/client";
 import { toNumber } from "@/lib/visits/totals";
+import { getPortalInvoiceDisplay } from "./invoice-display";
 
+/** Portal visit payload — internal visit notes are intentionally excluded. */
 export function serializePortalVisit(visit: {
   id: string;
   title: string;
@@ -68,13 +70,18 @@ export function serializePortalInvoice(invoice: {
     return sum + amt;
   }, 0);
 
+  const balanceDue = Math.max(0, total - amountPaid);
+  const display = getPortalInvoiceDisplay({ status: invoice.status, balanceDue });
+
   return {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     status: invoice.status,
     total,
     amountPaid,
-    balanceDue: Math.max(0, total - amountPaid),
+    balanceDue: display.balanceDue,
+    isPayable: display.isPayable,
+    statusLabel: display.statusLabel,
     publicToken: invoice.publicToken,
     createdAt: invoice.createdAt.toISOString(),
     paidAt: invoice.paidAt?.toISOString() ?? null,

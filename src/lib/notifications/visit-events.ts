@@ -35,6 +35,7 @@ export async function notifyVisitEvent(params: {
   const context = buildNotificationContext({
     company: {
       name: company.name,
+      timezone: company.timezone,
       portalSlug: company.portalSlug,
       bookingSlug: company.bookingSlug,
       googleReviewUrl: company.googleReviewUrl,

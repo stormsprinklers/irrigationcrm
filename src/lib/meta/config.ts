@@ -74,5 +74,12 @@ export const META_PUBLISH_PERMISSIONS = [
 
 export const META_WEBHOOK_FIELDS = [
   { product: "Page", fields: ["messages", "messaging_postbacks", "message_echoes", "feed"] },
-  { product: "Instagram", fields: ["messages", "messaging_postbacks", "comments"] },
+  { product: "Instagram", fields: ["messages", "messaging_postbacks", "message_echoes", "comments"] },
+] as const;
+
+export const META_MESSAGING_PERMISSIONS = [
+  "pages_messaging",
+  "pages_manage_metadata",
+  "instagram_manage_messages",
+  "instagram_basic",
 ] as const;
