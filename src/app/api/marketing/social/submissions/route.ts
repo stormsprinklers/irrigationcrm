@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SocialPostSubmissionStatus } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import {
+  canBypassSocialReview,
   canSubmitSocialPosts,
   canViewSocialMarketing,
 } from "@/lib/marketing/social-permissions";
@@ -55,6 +56,34 @@ export async function POST(request: NextRequest) {
     }
 
     const media = Array.isArray(body.media) ? body.media : [];
+    const autoApprove = body.autoApprove === true && canBypassSocialReview(user.role);
+    const scheduledAtRaw = body.scheduledAt;
+
+    let status: SocialPostSubmissionStatus = SocialPostSubmissionStatus.DRAFT;
+    let scheduledAt: Date | null = null;
+    let approvedAt: Date | null = null;
+    let reviewedAt: Date | null = null;
+    let reviewedById: string | null = null;
+    let submittedAt: Date | null = null;
+
+    if (autoApprove) {
+      const now = new Date();
+      approvedAt = now;
+      reviewedAt = now;
+      reviewedById = user.id;
+      submittedAt = now;
+
+      if (scheduledAtRaw === "now" || scheduledAtRaw) {
+        scheduledAt =
+          scheduledAtRaw === "now" ? now : new Date(scheduledAtRaw as string);
+        if (Number.isNaN(scheduledAt.getTime())) {
+          return NextResponse.json({ error: "Invalid scheduledAt." }, { status: 400 });
+        }
+        status = SocialPostSubmissionStatus.SCHEDULED;
+      } else {
+        status = SocialPostSubmissionStatus.APPROVED;
+      }
+    }
 
     const submission = await prisma.socialPostSubmission.create({
       data: {
@@ -62,7 +91,12 @@ export async function POST(request: NextRequest) {
         platform,
         postType: postType || "post",
         caption: caption || null,
-        status: SocialPostSubmissionStatus.DRAFT,
+        status,
+        scheduledAt,
+        submittedAt,
+        approvedAt,
+        reviewedAt,
+        reviewedById,
         createdById: user.id,
         media: {
           create: media

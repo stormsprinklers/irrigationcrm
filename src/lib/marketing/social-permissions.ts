@@ -26,6 +26,11 @@ export function canReviewSocialPosts(role: string) {
   return REVIEW_ROLES.has(role);
 }
 
+/** Admins can publish and schedule without the review queue. */
+export function canBypassSocialReview(role: string) {
+  return role === UserRole.ADMIN;
+}
+
 export function canManageSocialSettings(role: string) {
   return REVIEW_ROLES.has(role);
 }

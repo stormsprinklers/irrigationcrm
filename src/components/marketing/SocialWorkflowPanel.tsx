@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  canBypassSocialReview,
   canReviewSocialPosts,
   canSubmitSocialPosts,
 } from "@/lib/marketing/social-permissions";
@@ -81,13 +82,16 @@ function statusBadge(status: string) {
 function PostComposer({
   onCreated,
   onClose,
+  canBypassReview,
 }: {
   onCreated: () => void;
   onClose: () => void;
+  canBypassReview: boolean;
 }) {
   const [platform, setPlatform] = useState<"facebook" | "instagram">("facebook");
   const [postType, setPostType] = useState("post");
   const [caption, setCaption] = useState("");
+  const [scheduleAt, setScheduleAt] = useState("");
   const [media, setMedia] = useState<Array<{ blobUrl: string; fileName: string; mimeType: string }>>(
     []
   );
@@ -113,24 +117,42 @@ function PostComposer({
     }
   }
 
-  async function save(submitForReview: boolean) {
+  async function save(options: {
+    submitForReview?: boolean;
+    autoApprove?: boolean;
+    scheduledAt?: string;
+  }) {
     setSaving(true);
     try {
       const res = await fetch("/api/marketing/social/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform, postType, caption, media }),
+        body: JSON.stringify({
+          platform,
+          postType,
+          caption,
+          media,
+          autoApprove: options.autoApprove,
+          scheduledAt: options.scheduledAt,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create post");
 
-      if (submitForReview) {
-        const submitRes = await fetch(`/api/marketing/social/submissions/${data.submission.id}/submit`, {
-          method: "POST",
-        });
+      if (options.submitForReview && !options.autoApprove) {
+        const submitRes = await fetch(
+          `/api/marketing/social/submissions/${data.submission.id}/submit`,
+          { method: "POST" }
+        );
         const submitData = await submitRes.json();
         if (!submitRes.ok) throw new Error(submitData.error ?? "Failed to submit for review");
         toast.success("Submitted for review");
+      } else if (options.scheduledAt === "now") {
+        toast.success("Queued to publish now");
+      } else if (options.scheduledAt) {
+        toast.success("Post scheduled");
+      } else if (options.autoApprove) {
+        toast.success("Post approved — pick a time to schedule below or publish now");
       } else {
         toast.success("Draft saved");
       }
@@ -216,13 +238,59 @@ function PostComposer({
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="button" variant="outline" disabled={saving} onClick={() => void save(false)}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={saving}
+          onClick={() => void save({})}
+        >
           Save draft
         </Button>
-        <Button type="button" disabled={saving} onClick={() => void save(true)}>
-          {saving ? "Saving..." : "Submit for review"}
-        </Button>
+        {canBypassReview ? (
+          <>
+            <Input
+              type="datetime-local"
+              value={scheduleAt}
+              onChange={(e) => setScheduleAt(e.target.value)}
+              className="w-auto text-xs"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving || !scheduleAt}
+              onClick={() =>
+                void save({
+                  autoApprove: true,
+                  scheduledAt: new Date(scheduleAt).toISOString(),
+                })
+              }
+            >
+              Schedule
+            </Button>
+            <Button
+              type="button"
+              disabled={saving}
+              onClick={() => void save({ autoApprove: true, scheduledAt: "now" })}
+            >
+              Publish now
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            disabled={saving}
+            onClick={() => void save({ submitForReview: true })}
+          >
+            {saving ? "Saving..." : "Submit for review"}
+          </Button>
+        )}
       </div>
+      {canBypassReview ? (
+        <p className="text-xs text-muted-foreground">
+          As an admin you can publish or schedule directly. Use &quot;Submit for review&quot; only when
+          testing the Social Media Manager workflow.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -231,11 +299,13 @@ function SubmissionRow({
   submission,
   canReview,
   canSubmit,
+  canBypassReview,
   onChanged,
 }: {
   submission: SocialSubmission;
   canReview: boolean;
   canSubmit: boolean;
+  canBypassReview: boolean;
   onChanged: () => void;
 }) {
   const [revisionComment, setRevisionComment] = useState("");
@@ -352,7 +422,9 @@ function SubmissionRow({
           ) : null}
 
           {canSubmit &&
-          (submission.status === "APPROVED" || submission.status === "FAILED") ? (
+          (submission.status === "APPROVED" ||
+            submission.status === "FAILED" ||
+            (canBypassReview && submission.status === "DRAFT")) ? (
             <>
               <Input
                 type="datetime-local"
@@ -414,6 +486,7 @@ export function SocialWorkflowPanel({ tab }: { tab: "review" | "scheduled" | "mi
   const role = session?.user?.role ?? "";
   const canReview = canReviewSocialPosts(role);
   const canSubmit = canSubmitSocialPosts(role);
+  const canBypassReview = canBypassSocialReview(role);
   const [submissions, setSubmissions] = useState<SocialSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
@@ -465,6 +538,7 @@ export function SocialWorkflowPanel({ tab }: { tab: "review" | "scheduled" | "mi
           </div>
           {showComposer ? (
             <PostComposer
+              canBypassReview={canBypassReview}
               onCreated={() => {
                 void load();
               }}
@@ -495,6 +569,7 @@ export function SocialWorkflowPanel({ tab }: { tab: "review" | "scheduled" | "mi
               submission={submission}
               canReview={canReview}
               canSubmit={canSubmit}
+              canBypassReview={canBypassReview}
               onChanged={() => void load()}
             />
           ))}

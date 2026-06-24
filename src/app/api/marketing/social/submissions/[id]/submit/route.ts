@@ -7,7 +7,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canSubmitSocialPosts } from "@/lib/marketing/social-permissions";
+import { canBypassSocialReview, canSubmitSocialPosts } from "@/lib/marketing/social-permissions";
 import {
   canEditSubmission,
   serializeSubmission,
@@ -38,10 +38,18 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
     const submission = await prisma.socialPostSubmission.update({
       where: { id },
-      data: {
-        status: SocialPostSubmissionStatus.PENDING_REVIEW,
-        submittedAt: new Date(),
-      },
+      data: canBypassSocialReview(user.role)
+        ? {
+            status: SocialPostSubmissionStatus.APPROVED,
+            submittedAt: new Date(),
+            approvedAt: new Date(),
+            reviewedAt: new Date(),
+            reviewedById: user.id,
+          }
+        : {
+            status: SocialPostSubmissionStatus.PENDING_REVIEW,
+            submittedAt: new Date(),
+          },
       include: submissionInclude,
     });
 

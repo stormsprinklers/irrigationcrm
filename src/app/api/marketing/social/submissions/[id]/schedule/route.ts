@@ -7,7 +7,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canSubmitSocialPosts } from "@/lib/marketing/social-permissions";
+import { canBypassSocialReview, canSubmitSocialPosts } from "@/lib/marketing/social-permissions";
 import { serializeSubmission, submissionInclude } from "@/lib/marketing/social-submissions";
 import { prisma } from "@/lib/prisma";
 
@@ -26,7 +26,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       where: { id, companyId: user.companyId },
     });
     if (!existing) return notFoundResponse();
-    if (existing.status !== SocialPostSubmissionStatus.APPROVED) {
+
+    const canSchedule =
+      existing.status === SocialPostSubmissionStatus.APPROVED ||
+      (canBypassSocialReview(user.role) &&
+        existing.status === SocialPostSubmissionStatus.DRAFT);
+
+    if (!canSchedule) {
       return badRequestResponse("Only approved posts can be scheduled.");
     }
 
@@ -39,12 +45,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return badRequestResponse("Invalid scheduledAt.");
     }
 
+    const now = new Date();
     const submission = await prisma.socialPostSubmission.update({
       where: { id },
       data: {
         status: SocialPostSubmissionStatus.SCHEDULED,
         scheduledAt,
         publishError: null,
+        ...(existing.status === SocialPostSubmissionStatus.DRAFT
+          ? {
+              approvedAt: now,
+              reviewedAt: now,
+              reviewedById: user.id,
+              submittedAt: now,
+            }
+          : {}),
       },
       include: submissionInclude,
     });
