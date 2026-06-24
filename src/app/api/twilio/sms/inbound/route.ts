@@ -63,11 +63,19 @@ export async function POST(request: NextRequest) {
     where: { companyId: company.id, phone: normalizedFrom },
   });
 
+  const employee = await prisma.user.findFirst({
+    where: { companyId: company.id, phone: normalizedFrom, status: "ACTIVE" },
+    select: { id: true, name: true },
+  });
+
+  const scope = employee && !customer ? Scope.INTERNAL : Scope.EXTERNAL;
+
   const conversation = await findOrCreateSmsConversation({
     companyId: company.id,
-    scope: Scope.EXTERNAL,
+    scope,
     participantPhone: normalizedFrom,
     customerId: customer?.id,
+    title: employee?.name,
   });
 
   await prisma.message.create({

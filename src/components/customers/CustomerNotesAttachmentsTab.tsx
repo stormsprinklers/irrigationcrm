@@ -36,6 +36,15 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function isImageAttachment(mimeType: string, fileName: string) {
+  if (mimeType.startsWith("image/")) return true;
+  return /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(fileName);
+}
+
+function attachmentUrl(attachment: Attachment) {
+  return blobProxyUrl(attachment.blobUrl) ?? attachment.blobUrl;
+}
+
 export function CustomerNotesAttachmentsTab({ customerId }: Props) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -186,30 +195,77 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
           {attachments.length === 0 ? (
             <p className="text-sm text-muted-foreground">No attachments yet.</p>
           ) : (
-            <div className="space-y-2">
-              {attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className="flex items-center justify-between rounded-md border p-3"
-                >
-                  <a
-                    href={blobProxyUrl(attachment.blobUrl) ?? attachment.blobUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm hover:underline"
+            <div className="grid gap-3 sm:grid-cols-2">
+              {attachments.map((attachment) => {
+                const url = attachmentUrl(attachment);
+                const isImage = isImageAttachment(attachment.mimeType, attachment.fileName);
+
+                if (isImage) {
+                  return (
+                    <div
+                      key={attachment.id}
+                      className="overflow-hidden rounded-md border bg-muted/20"
+                    >
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block"
+                        title="Open full size"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={url}
+                          alt={attachment.fileName}
+                          className="max-h-56 w-full object-contain bg-muted/30"
+                        />
+                      </a>
+                      <div className="flex items-start justify-between gap-2 border-t bg-background p-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{attachment.fileName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {attachment.uploadedBy.name} ·{" "}
+                            {new Date(attachment.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          onClick={() => removeAttachment(attachment.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={attachment.id}
+                    className="flex items-center justify-between rounded-md border p-3 sm:col-span-2"
                   >
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{attachment.fileName}</span>
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeAttachment(attachment.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-w-0 items-center gap-2 text-sm hover:underline"
+                    >
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{attachment.fileName}</span>
+                    </a>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      onClick={() => removeAttachment(attachment.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

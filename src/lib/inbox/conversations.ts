@@ -20,7 +20,19 @@ export async function findOrCreateSmsConversation(params: {
     if (existing) return existing;
   }
 
-  if (params.scope === Scope.INTERNAL && params.title) {
+  if (params.scope === Scope.INTERNAL && params.participantPhone) {
+    const existing = await prisma.conversation.findFirst({
+      where: {
+        companyId: params.companyId,
+        channel: Channel.SMS,
+        scope: Scope.INTERNAL,
+        participantPhone: params.participantPhone,
+      },
+    });
+    if (existing) return existing;
+  }
+
+  if (params.scope === Scope.INTERNAL && params.title && !params.participantPhone) {
     const existing = await prisma.conversation.findFirst({
       where: {
         companyId: params.companyId,
@@ -35,7 +47,10 @@ export async function findOrCreateSmsConversation(params: {
   return prisma.conversation.create({
     data: {
       companyId: params.companyId,
-      channel: params.scope === Scope.INTERNAL ? Channel.INTERNAL_CHAT : Channel.SMS,
+      channel:
+        params.scope === Scope.INTERNAL && !params.participantPhone
+          ? Channel.INTERNAL_CHAT
+          : Channel.SMS,
       scope: params.scope,
       participantPhone: params.participantPhone,
       customerId: params.customerId,

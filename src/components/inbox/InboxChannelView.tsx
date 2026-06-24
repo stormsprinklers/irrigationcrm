@@ -68,11 +68,20 @@ export function InboxChannelView({
           channel={ch}
           scope={sc}
           list={
-            <SmsThreadList
-              scope={sc}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b border-border px-4 py-2">
+                <span className="text-sm font-medium">Conversations</span>
+                <Button variant="ghost" size="icon" onClick={() => setSelectedId(null)}>
+                  <PenSquare className="h-4 w-4" />
+                </Button>
+              </div>
+              <SmsThreadList
+                key={refreshKey}
+                scope={sc}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+              />
+            </div>
           }
           detail={
             <SmsMessagePane
@@ -81,6 +90,10 @@ export function InboxChannelView({
               initialPhone={deepLink.phone}
               initialCustomerId={deepLink.customerId}
               initialName={deepLink.name}
+              onSent={(id) => {
+                setSelectedId(id);
+                setRefreshKey((k) => k + 1);
+              }}
             />
           }
         />

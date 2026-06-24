@@ -25,20 +25,27 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const scope = request.nextUrl.searchParams.get("scope") ?? "external";
+    const forChannel = request.nextUrl.searchParams.get("for");
     const search = request.nextUrl.searchParams.get("search")?.trim();
     const tag = request.nextUrl.searchParams.get("tag")?.trim();
     const role = request.nextUrl.searchParams.get("role")?.trim();
+    const forSms = forChannel === "sms";
 
     if (scope === "internal") {
       const where: Prisma.UserWhereInput = {
         companyId: user.companyId,
         status: "ACTIVE",
-        email: { not: "" },
+        ...(forSms
+          ? { phone: { not: null }, NOT: { phone: "" } }
+          : { email: { not: "" } }),
       };
 
       if (search) {
         where.OR = [
           { name: { contains: search, mode: "insensitive" } },
+          ...(forSms
+            ? [{ phone: { contains: search.replace(/\D/g, "") || search } }]
+            : []),
           { email: { contains: search, mode: "insensitive" } },
         ];
       }
@@ -74,13 +81,17 @@ export async function GET(request: NextRequest) {
     const where: Prisma.CustomerWhereInput = {
       companyId: user.companyId,
       status: "ACTIVE",
-      email: { not: null },
-      NOT: { email: "" },
+      ...(forSms
+        ? { phone: { not: null }, NOT: { phone: "" } }
+        : { email: { not: null }, NOT: { email: "" } }),
     };
 
     if (search) {
       where.OR = [
         { name: { contains: search, mode: "insensitive" } },
+        ...(forSms
+          ? [{ phone: { contains: search.replace(/\D/g, "") || search } }]
+          : []),
         { email: { contains: search, mode: "insensitive" } },
       ];
     }

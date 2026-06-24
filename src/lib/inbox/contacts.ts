@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { normalizePhone } from "@/lib/inbox/phone";
+
+export { normalizePhone, formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export async function isContactBlocked(
   companyId: string,
@@ -72,20 +75,4 @@ export async function unblockCustomer(companyId: string, blockedId: string) {
   });
   if (!entry) return null;
   return prisma.blockedContact.delete({ where: { id: blockedId } });
-}
-
-export function normalizePhone(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.startsWith("1") && digits.length === 11) return `+${digits}`;
-  if (phone.startsWith("+")) return phone;
-  return `+${digits}`;
-}
-
-export function formatPhoneDisplay(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  return phone;
 }

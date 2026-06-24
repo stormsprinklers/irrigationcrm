@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
+import {
+  SmsRecipientPicker,
+  type SmsRecipient,
+} from "@/components/inbox/SmsRecipientPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { cn } from "@/lib/utils";
 import type { InboxScope } from "@/lib/inbox/types";
 
@@ -61,11 +65,11 @@ function ComposeBar({
           onChange={(e) => onBodyChange(e.target.value)}
         />
       ) : (
-        <Input
+        <input
           placeholder={placeholder}
           value={body}
           onChange={(e) => onBodyChange(e.target.value)}
-          className="min-w-0 flex-1"
+          className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
       <Button type="submit" size="icon" className="shrink-0" disabled={sending || !body.trim()}>
@@ -81,23 +85,35 @@ export function SmsMessagePane({
   initialPhone,
   initialCustomerId,
   initialName,
+  onSent,
 }: {
   conversationId: string | null;
   scope: InboxScope;
   initialPhone?: string | null;
   initialCustomerId?: string | null;
   initialName?: string | null;
+  onSent?: (conversationId: string) => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
-  const [to, setTo] = useState("");
+  const [recipient, setRecipient] = useState<SmsRecipient | null>(null);
   const [sending, setSending] = useState(false);
 
+  const isCompose = !conversationId;
+
   useEffect(() => {
-    if (conversationId || !initialPhone) return;
-    setTo(initialPhone);
-  }, [conversationId, initialPhone]);
+    if (conversationId) return;
+    if (initialPhone || initialName) {
+      setRecipient({
+        phone: initialPhone ?? "",
+        name: initialName ?? formatPhoneDisplay(initialPhone ?? ""),
+        ...(initialCustomerId ? { customerId: initialCustomerId } : {}),
+      });
+    } else {
+      setRecipient(null);
+    }
+  }, [conversationId, initialPhone, initialCustomerId, initialName]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -112,9 +128,6 @@ export function SmsMessagePane({
         const data = await res.json();
         setConversation(data.conversation);
         setMessages(data.messages);
-        if (data.conversation.participantPhone) {
-          setTo(data.conversation.participantPhone);
-        }
       }
     }
     load();
@@ -126,8 +139,9 @@ export function SmsMessagePane({
     e.preventDefault();
     if (!body.trim()) return;
 
-    if (scope === "customers" && !conversationId && !to.trim()) {
-      toast.error("Enter a phone number");
+    const toPhone = recipient?.phone ?? conversation?.participantPhone;
+    if (!toPhone?.trim()) {
+      toast.error("Select a recipient");
       return;
     }
 
@@ -136,35 +150,45 @@ export function SmsMessagePane({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to: to || conversation?.participantPhone,
+        to: toPhone,
         body,
-        customerId: conversation?.customer?.id ?? initialCustomerId ?? undefined,
+        customerId: recipient?.customerId ?? conversation?.customer?.id ?? initialCustomerId ?? undefined,
+        userId: recipient?.userId,
+        title: recipient?.name ?? conversation?.title ?? undefined,
         scope: scope === "customers" ? "external" : "internal",
-        title: conversation?.title,
       }),
     });
     setSending(false);
 
     if (!res.ok) {
-      toast.error("Failed to send message");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to send message");
       return;
     }
 
+    const data = await res.json();
     setBody("");
     toast.success("Message sent");
+    onSent?.(data.conversation.id);
   }
 
   const headerName = conversationId
     ? (conversation?.customer?.name ??
       conversation?.title ??
-      conversation?.participantPhone ??
+      (conversation?.participantPhone
+        ? formatPhoneDisplay(conversation.participantPhone)
+        : null) ??
       "Conversation")
-    : initialName
-      ? `Message ${initialName}`
-      : "New message";
+    : recipient?.name ?? (initialName ? `Message ${initialName}` : "New message");
 
   const headerSubtitle =
-    conversation?.participantPhone ?? (initialPhone && !conversationId ? initialPhone : null);
+    conversation?.participantPhone
+      ? formatPhoneDisplay(conversation.participantPhone)
+      : recipient?.phone
+        ? formatPhoneDisplay(recipient.phone)
+        : initialPhone && isCompose
+          ? formatPhoneDisplay(initialPhone)
+          : null;
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
@@ -193,13 +217,9 @@ export function SmsMessagePane({
         )}
       </div>
 
-      {scope === "customers" && !conversationId && (
+      {isCompose && (
         <div className="shrink-0 border-b border-border px-4 py-3">
-          <Input
-            placeholder="Phone number"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <SmsRecipientPicker scope={scope} value={recipient} onChange={setRecipient} />
         </div>
       )}
 
@@ -229,7 +249,7 @@ export function SmsMessagePane({
               <div className="flex flex-1 items-center justify-center py-12 text-center text-sm text-muted-foreground">
                 {conversationId
                   ? "No messages in this conversation yet."
-                  : "Compose a message below to start the conversation."}
+                  : "Select a recipient and compose a message below."}
               </div>
             )}
           </div>

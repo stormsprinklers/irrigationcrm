@@ -49,7 +49,7 @@ export function SmsThreadList({
   if (!threads.length) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        No conversations yet. Start a new message.
+        No conversations yet. Click the compose icon above to start a new message.
       </div>
     );
   }

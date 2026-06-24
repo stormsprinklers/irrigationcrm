@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const conversations = await prisma.conversation.findMany({
       where: {
         companyId: user.companyId,
-        channel: scope === Scope.INTERNAL ? Channel.INTERNAL_CHAT : Channel.SMS,
+        channel: Channel.SMS,
         scope,
       },
       include: {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { to, body: messageBody, customerId, scope: scopeParam, title } = body;
+    const { to, body: messageBody, customerId, scope: scopeParam, title, userId } = body;
 
     if (!messageBody?.trim()) return badRequestResponse("Message body required");
 
@@ -86,27 +86,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ conversation, message });
     }
 
-    const conversation = await findOrCreateSmsConversation({
-      companyId: user.companyId,
-      scope: Scope.INTERNAL,
-      title: title ?? "Direct Message",
-    });
+    if (scope === Scope.INTERNAL) {
+      if (!to) return badRequestResponse("Recipient phone required");
 
-    const message = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: user.id,
-        direction: "OUTBOUND",
+      const company = await prisma.company.findUnique({ where: { id: user.companyId } });
+      if (!company?.twilioPhone) return badRequestResponse("Twilio phone not configured");
+
+      const normalizedTo = normalizePhone(to);
+      const blocked = await isContactBlocked(user.companyId, normalizedTo, null);
+      if (blocked) return forbiddenResponse("Contact is blocked");
+
+      let recipientTitle = title?.trim() || undefined;
+      if (!recipientTitle && userId) {
+        const employee = await prisma.user.findFirst({
+          where: { id: userId, companyId: user.companyId },
+          select: { name: true },
+        });
+        recipientTitle = employee?.name;
+      }
+
+      const twilioMessage = await sendSms({
+        from: company.twilioPhone,
+        to: normalizedTo,
         body: messageBody,
-      },
-    });
+        statusCallback: `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/sms/status`,
+      });
 
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { lastMessageAt: new Date() },
-    });
+      const conversation = await findOrCreateSmsConversation({
+        companyId: user.companyId,
+        scope: Scope.INTERNAL,
+        participantPhone: normalizedTo,
+        title: recipientTitle,
+      });
 
-    return NextResponse.json({ conversation, message });
+      const message = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: user.id,
+          direction: "OUTBOUND",
+          body: messageBody,
+          twilioMessageSid: twilioMessage.sid,
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: new Date() },
+      });
+
+      return NextResponse.json({ conversation, message });
+    }
+
+    return badRequestResponse("Invalid scope");
   } catch (error) {
     console.error(error);
     return NextResponse.json(

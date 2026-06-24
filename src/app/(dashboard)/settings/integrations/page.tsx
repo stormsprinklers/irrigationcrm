@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, AlertCircle, Circle, XCircle, RefreshCw } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -24,16 +26,80 @@ type IntegrationUrls = {
   website: string;
 };
 
+type IntegrationStatusState =
+  | "connected"
+  | "configured"
+  | "not_configured"
+  | "error"
+  | "disabled";
+
+type IntegrationStatus = {
+  type: string;
+  label: string;
+  status: IntegrationStatusState;
+  message: string;
+  lastUsedAt: string | null;
+  spokeUrl: string | null;
+  envHints: string[];
+};
+
 const INTEGRATION_TYPES = ["WEBSITE", "LMS", "DESIGN", "MAPS"] as const;
+
+const STATUS_LABELS: Record<IntegrationStatusState, string> = {
+  connected: "Connected",
+  configured: "Configured",
+  not_configured: "Not configured",
+  error: "Error",
+  disabled: "Disabled",
+};
+
+function StatusIcon({ status }: { status: IntegrationStatusState }) {
+  switch (status) {
+    case "connected":
+      return <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />;
+    case "configured":
+      return <Circle className="h-4 w-4 text-amber-500 shrink-0" />;
+    case "error":
+      return <XCircle className="h-4 w-4 text-red-600 shrink-0" />;
+    case "disabled":
+      return <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0" />;
+    default:
+      return <Circle className="h-4 w-4 text-muted-foreground shrink-0" />;
+  }
+}
+
+function statusBadgeVariant(
+  status: IntegrationStatusState
+): "default" | "secondary" | "destructive" | "outline" | "success" {
+  if (status === "connected") return "success";
+  if (status === "error") return "destructive";
+  return "secondary";
+}
 
 export default function SettingsIntegrationsPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [statuses, setStatuses] = useState<IntegrationStatus[]>([]);
   const [urls, setUrls] = useState<IntegrationUrls | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkingStatus, setCheckingStatus] = useState(false);
   const [newType, setNewType] = useState<(typeof INTEGRATION_TYPES)[number]>("WEBSITE");
   const [newLabel, setNewLabel] = useState("");
   const [creating, setCreating] = useState(false);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    setCheckingStatus(true);
+    try {
+      const res = await fetch("/api/settings/integrations/status");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setStatuses(data.statuses ?? []);
+    } catch {
+      toast.error("Failed to check integration status");
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -51,7 +117,8 @@ export default function SettingsIntegrationsPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadStatus();
+  }, [load, loadStatus]);
 
   async function createKey() {
     setCreating(true);
@@ -66,6 +133,7 @@ export default function SettingsIntegrationsPage() {
       setRevealedKey(data.rawKey);
       toast.success("Integration key created — copy it now");
       await load();
+      await loadStatus();
       setNewLabel("");
     } catch {
       toast.error("Failed to create key");
@@ -81,6 +149,7 @@ export default function SettingsIntegrationsPage() {
       if (!res.ok) throw new Error();
       toast.success("Key revoked");
       await load();
+      await loadStatus();
     } catch {
       toast.error("Failed to revoke key");
     }
@@ -88,12 +157,70 @@ export default function SettingsIntegrationsPage() {
 
   return (
     <ContentArea className="max-w-3xl">
-      <PageHeader breadcrumb={["Settings", "Integrations"]} title="Integrations" />
+      <PageHeader
+        breadcrumb={["Settings", "Integrations"]}
+        title="Integrations"
+        actions={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={loadStatus}
+            disabled={checkingStatus || loading}
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${checkingStatus ? "animate-spin" : ""}`} />
+            {checkingStatus ? "Checking…" : "Refresh status"}
+          </Button>
+        }
+      />
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
       ) : (
         <div className="space-y-6">
+          <div className="rounded-lg border border-border bg-white p-6 space-y-4">
+            <div>
+              <h2 className="font-medium">Connection status</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Live check for LMS; inbound spokes show status when their API key has been used.
+              </p>
+            </div>
+            {statuses.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Checking integrations…</p>
+            ) : (
+              <ul className="space-y-3">
+                {statuses.map((item) => (
+                  <li
+                    key={item.type}
+                    className="rounded-md border border-border p-3 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <StatusIcon status={item.status} />
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </div>
+                      <Badge variant={statusBadgeVariant(item.status)}>
+                        {STATUS_LABELS[item.status]}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{item.message}</p>
+                    {item.spokeUrl ? (
+                      <p className="text-xs font-mono text-muted-foreground break-all">
+                        URL: {item.spokeUrl}
+                      </p>
+                    ) : null}
+                    {item.envHints.length > 0 && item.status !== "connected" ? (
+                      <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                        {item.envHints.map((hint) => (
+                          <li key={hint}>{hint}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {urls && (
             <div className="rounded-lg border border-border bg-white p-6 space-y-2">
               <h2 className="font-medium">Spoke URLs</h2>
@@ -113,12 +240,18 @@ export default function SettingsIntegrationsPage() {
 
           {revealedKey && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-2">
-              <p className="text-sm font-medium text-amber-900">Copy this key now — it won&apos;t be shown again</p>
+              <p className="text-sm font-medium text-amber-900">
+                Copy this key now — it won&apos;t be shown again
+              </p>
               <code className="block text-xs break-all bg-white p-2 rounded border">{revealedKey}</code>
-              <Button size="sm" variant="outline" onClick={() => {
-                navigator.clipboard.writeText(revealedKey);
-                toast.success("Copied");
-              }}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(revealedKey);
+                  toast.success("Copied");
+                }}
+              >
                 Copy to clipboard
               </Button>
             </div>
@@ -135,7 +268,9 @@ export default function SettingsIntegrationsPage() {
                   onChange={(e) => setNewType(e.target.value as typeof newType)}
                 >
                   {INTEGRATION_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -163,7 +298,8 @@ export default function SettingsIntegrationsPage() {
                       <p className="text-sm font-medium">{c.label}</p>
                       <p className="text-xs text-muted-foreground">
                         {c.type} · {c.keyPrefix}… · {c.enabled ? "Active" : "Disabled"}
-                        {c.lastUsedAt && ` · Last used ${new Date(c.lastUsedAt).toLocaleDateString()}`}
+                        {c.lastUsedAt &&
+                          ` · Last used ${new Date(c.lastUsedAt).toLocaleString()}`}
                       </p>
                     </div>
                     <Button size="sm" variant="destructive" onClick={() => revoke(c.id)}>
@@ -177,9 +313,13 @@ export default function SettingsIntegrationsPage() {
 
           <div className="rounded-lg border border-border bg-white p-6 text-sm text-muted-foreground space-y-2">
             <h2 className="font-medium text-foreground">Environment variables (spokes)</h2>
-            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">{`CRM_INTEGRATION_URL=https://your-crm.example.com/api/integrations
+            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">{`# Website / Design → CRM
+CRM_INTEGRATION_URL=https://your-crm.example.com/api/integrations
 CRM_INTEGRATION_KEY=crm_int_...
-CRM_COMPANY_ID=optional-if-single-tenant`}</pre>
+
+# CRM → LMS (shared secret, not a crm_int key)
+LMS_INTEGRATION_URL=https://your-lms.example.com
+LMS_INTEGRATION_KEY=same-as-lms-INTEGRATION_API_KEY`}</pre>
           </div>
         </div>
       )}
