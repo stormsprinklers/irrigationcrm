@@ -12,6 +12,7 @@ enum UserRole {
   MANAGER
   CSR
   TECH
+  SOCIAL_MEDIA_MANAGER
 }
 
 enum CustomerStatus {
@@ -507,6 +508,7 @@ model Company {
   integrationCredentials IntegrationCredential[]
   metaWebhookEvents      MetaWebhookEvent[]
   socialPosts            SocialPost[]
+  socialPostSubmissions  SocialPostSubmission[]
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
 }
@@ -567,6 +569,9 @@ model User {
   lmsUserId              String?              @unique
   lmsSyncStatus          String?
   lmsLastSyncedAt        DateTime?
+  socialPostSubmissions  SocialPostSubmission[] @relation("SocialSubmissionAuthor")
+  reviewedSocialPosts    SocialPostSubmission[] @relation("SocialSubmissionReviewer")
+  socialPostReviewComments SocialPostReviewComment[]
 }
 
 model Customer {
@@ -2203,6 +2208,81 @@ model SocialPost {
 
   @@unique([companyId, platform, externalId])
   @@index([companyId, publishedAt])
+}
+
+enum SocialPostSubmissionStatus {
+  DRAFT
+  PENDING_REVIEW
+  REVISION_REQUESTED
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  REJECTED
+  FAILED
+}
+
+model SocialPostSubmission {
+  id             String                     @id @default(cuid())
+  companyId      String
+  platform       String
+  postType       String                     @default("post")
+  caption        String?
+  status         SocialPostSubmissionStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+  rejectedAt     DateTime?
+  reviewedAt     DateTime?
+  externalPostId String?
+  permalink      String?
+  publishError   String?
+  copiedFromId   String?
+  createdById    String
+  reviewedById   String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  company    Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy  User                        @relation("SocialSubmissionAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  reviewedBy User?                       @relation("SocialSubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  copiedFrom SocialPostSubmission?       @relation("SocialSubmissionCopy", fields: [copiedFromId], references: [id], onDelete: SetNull)
+  copies     SocialPostSubmission[]      @relation("SocialSubmissionCopy")
+  media      SocialPostSubmissionMedia[]
+  comments   SocialPostReviewComment[]
+
+  @@index([companyId, status])
+  @@index([companyId, scheduledAt])
+  @@index([createdById, status])
+}
+
+model SocialPostSubmissionMedia {
+  id           String   @id @default(cuid())
+  submissionId String
+  blobUrl      String
+  fileName     String
+  mimeType     String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  submission SocialPostSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, sortOrder])
+}
+
+model SocialPostReviewComment {
+  id                String   @id @default(cuid())
+  submissionId      String
+  authorId          String
+  body              String
+  isRevisionRequest Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  submission SocialPostSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  author     User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
 }
 
 model MarketingEvent {

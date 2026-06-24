@@ -52,9 +52,71 @@ type IgMediaNode = {
 type InsightsResponse = {
   data?: Array<{
     name?: string;
+    period?: string;
     values?: Array<{ value?: number }>;
   }>;
 };
+
+async function graphGetSafe<T>(path: string, params: Record<string, string>) {
+  try {
+    return { ok: true as const, data: await graphGet<T>(path, params) };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Meta Graph API error",
+    };
+  }
+}
+
+function totalInsightValue(insights: InsightsResponse): number | null {
+  const values = insights.data?.[0]?.values;
+  if (!values?.length) return null;
+
+  if (values.length === 1) {
+    return values[0].value ?? null;
+  }
+
+  return values.reduce((sum, row) => sum + (row.value ?? 0), 0);
+}
+
+/** Facebook Page reach for the last 7 days via Meta Page Insights API. */
+async function fetchPageReach7d(pageId: string, token: string): Promise<number | null> {
+  const attempts: Array<Record<string, string>> = [
+    {
+      metric: "page_impressions_unique",
+      period: "day",
+      date_preset: "last_7d",
+    },
+    {
+      metric: "page_total_media_view_unique",
+      period: "day",
+      date_preset: "last_7d",
+    },
+    {
+      metric: "page_impressions_unique",
+      period: "week",
+    },
+    {
+      metric: "page_posts_impressions_unique",
+      period: "day",
+      date_preset: "last_7d",
+    },
+  ];
+
+  for (const params of attempts) {
+    const result = await graphGetSafe<InsightsResponse>(`/${pageId}/insights`, {
+      ...params,
+      access_token: token,
+    });
+
+    if (!result.ok) continue;
+
+    const total = totalInsightValue(result.data);
+    if (total != null) return total;
+  }
+
+  return null;
+}
 
 export type FetchedSocialPost = {
   platform: "facebook" | "instagram";
@@ -131,20 +193,7 @@ export async function fetchMetaSocialData(params: {
     }));
   }
 
-  let reach7d: number | null = null;
-  try {
-    const since = Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000);
-    const insights = await graphGet<InsightsResponse>(`/${pageId}/insights`, {
-      metric: "page_impressions_unique",
-      period: "day",
-      since: String(since),
-      access_token: token,
-    });
-    reach7d =
-      insights.data?.[0]?.values?.reduce((sum, row) => sum + (row.value ?? 0), 0) ?? null;
-  } catch {
-    reach7d = null;
-  }
+  const reach7d = await fetchPageReach7d(pageId, token);
 
   const allPosts = [...facebookPosts, ...instagramPosts];
   const totalEngagement = allPosts.reduce(

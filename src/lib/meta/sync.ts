@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { fetchMetaSocialData, type FetchedSocialPost } from "@/lib/meta/graph";
 import { resolvePageAccessToken } from "@/lib/meta/token";
+import { getSubmissionCounts } from "@/lib/marketing/social-submissions";
 import type { MetaSocialDashboard, MetaSocialMetrics } from "@/lib/meta/types";
 
 const SYNC_INTERVAL_MS = 5 * 60 * 1000;
@@ -15,6 +16,15 @@ function parseCachedMetrics(value: unknown): MetaSocialMetrics | null {
     engagementRate: typeof m.engagementRate === "number" ? m.engagementRate : null,
     pendingApprovals: 0,
     scheduledPosts: 0,
+  };
+}
+
+async function withQueueMetrics(companyId: string, metrics: Omit<MetaSocialMetrics, "pendingApprovals" | "scheduledPosts">) {
+  const counts = await getSubmissionCounts(companyId);
+  return {
+    ...metrics,
+    pendingApprovals: counts.pendingApprovals,
+    scheduledPosts: counts.scheduledPosts,
   };
 }
 
@@ -98,11 +108,12 @@ export async function getMetaSocialDashboard(
   });
 
   if (!company?.metaPageId) {
+    const metrics = await withQueueMetrics(companyId, emptyMetrics());
     return {
       configured: false,
       needsPageToken: true,
       lastSyncedAt: null,
-      metrics: emptyMetrics(),
+      metrics,
       posts: [],
       syncError: null,
     };
@@ -110,11 +121,12 @@ export async function getMetaSocialDashboard(
 
   if (!company.metaPageAccessToken) {
     const cachedPosts = await loadPostsFromDb(companyId);
+    const metrics = await withQueueMetrics(companyId, emptyMetrics());
     return {
       configured: false,
       needsPageToken: true,
       lastSyncedAt: company.metaSocialSyncedAt?.toISOString() ?? null,
-      metrics: emptyMetrics(),
+      metrics,
       posts: cachedPosts.map(mapDbPost),
       syncError: null,
     };
@@ -161,11 +173,7 @@ export async function getMetaSocialDashboard(
       });
 
       await upsertSocialPosts(companyId, posts);
-      const metricsPayload = {
-        ...metrics,
-        pendingApprovals: 0,
-        scheduledPosts: 0,
-      };
+      const metricsPayload = await withQueueMetrics(companyId, metrics);
       await prisma.company.update({
         where: { id: companyId },
         data: {
@@ -197,12 +205,18 @@ export async function getMetaSocialDashboard(
 
   const dbPosts = await loadPostsFromDb(companyId);
   const cachedMetrics = parseCachedMetrics(company.metaSocialMetricsJson) ?? emptyMetrics();
+  const metrics = await withQueueMetrics(companyId, {
+    facebookFollowers: cachedMetrics.facebookFollowers,
+    instagramFollowers: cachedMetrics.instagramFollowers,
+    reach7d: cachedMetrics.reach7d,
+    engagementRate: cachedMetrics.engagementRate,
+  });
 
   return {
     configured: true,
     needsPageToken: false,
     lastSyncedAt: company.metaSocialSyncedAt?.toISOString() ?? null,
-    metrics: cachedMetrics,
+    metrics,
     posts: dbPosts.map(mapDbPost),
     syncError,
   };

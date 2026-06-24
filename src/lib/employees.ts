@@ -5,6 +5,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   MANAGER: "Manager",
   CSR: "CSR",
   TECH: "Technician",
+  SOCIAL_MEDIA_MANAGER: "Social Media Manager",
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
@@ -12,6 +13,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   MANAGER: "Manage schedule, employees, and customers",
   CSR: "Handle inbox, customers, and scheduling",
   TECH: "View assigned jobs and team inbox",
+  SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
 };
 
 export const PAY_TYPE_LABELS: Record<string, string> = {

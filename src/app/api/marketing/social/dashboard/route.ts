@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageCustomers } from "@/lib/customers/permissions";
+import { canViewSocialMarketing } from "@/lib/marketing/social-permissions";
 import { getMetaSocialDashboard } from "@/lib/meta/sync";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
+    if (!canViewSocialMarketing(user.role)) return forbiddenResponse();
 
     const forceSync =
       request.nextUrl.searchParams.get("sync") === "1" ||

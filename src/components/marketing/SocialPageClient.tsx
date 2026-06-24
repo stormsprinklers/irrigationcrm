@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { MetaWebhookSetup } from "@/components/marketing/MetaWebhookSetup";
+import { SocialWorkflowSection } from "@/components/marketing/SocialWorkflowPanel";
 import {
   MarketingEmptyTable,
   MarketingMetricGrid,
@@ -228,6 +229,7 @@ export function SocialPageClient() {
             },
             {
               label: "Reach (7d)",
+              hint: "Facebook Page insights (requires read_insights)",
               value: formatCount(metrics?.reach7d),
             },
             {
@@ -297,68 +299,24 @@ export function SocialPageClient() {
         </TabsContent>
 
         <TabsContent value="review" className="space-y-6">
-          <MarketingSectionCard
-            title="Submit content for approval"
-            description="Social media managers upload images and videos here. Designated admins approve before scheduling."
-            action={
-              <Badge variant="outline" className="text-xs">
-                Admin approval required
-              </Badge>
-            }
-          >
-            <div className="mb-6 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-6 py-10 text-center">
-              <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm font-medium">Upload images or videos</p>
-              <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                Drag and drop media, add caption and platform (post or story). Submissions enter the
-                review queue for management approval before they are scheduled.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Button size="sm" variant="outline" disabled>
-                  <Facebook className="mr-1.5 h-4 w-4 text-[#1877F2]" />
-                  Facebook
-                </Button>
-                <Button size="sm" variant="outline" disabled>
-                  <Instagram className="mr-1.5 h-4 w-4 text-[#E4405F]" />
-                  Instagram
-                </Button>
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground">Media upload — coming soon</p>
-            </div>
-
-            <h3 className="mb-3 text-sm font-medium">Pending review</h3>
-            <MarketingEmptyTable
-              columns={[
-                "Submitted by",
-                "Platform",
-                "Type",
-                "Caption",
-                "Scheduled for",
-                "Status",
-                "Actions",
-              ]}
-              message="No submissions awaiting review. Approved posts move to the scheduled queue."
-            />
-          </MarketingSectionCard>
+          <SocialWorkflowSection
+            title="Review queue"
+            description="Social media managers submit posts here. Admins approve, request revisions, or reject."
+            tab="review"
+          />
         </TabsContent>
 
-        <TabsContent value="scheduled">
-          <MarketingSectionCard
-            title="Approved & scheduled"
-            description="Content approved by management, queued for automatic publishing."
-          >
-            <MarketingEmptyTable
-              columns={[
-                "Platform",
-                "Type",
-                "Caption",
-                "Scheduled",
-                "Approved by",
-                "Status",
-              ]}
-              message="No scheduled posts. Approved content will appear here once integrations are connected."
-            />
-          </MarketingSectionCard>
+        <TabsContent value="scheduled" className="space-y-6">
+          <SocialWorkflowSection
+            title="Scheduled posts"
+            description="Approved posts queued for publishing. The CRM publishes due posts automatically."
+            tab="scheduled"
+          />
+          <SocialWorkflowSection
+            title="Ready to schedule"
+            description="Approved posts and revision requests. Edit, reschedule, or copy to the other platform."
+            tab="mine"
+          />
         </TabsContent>
       </Tabs>
 

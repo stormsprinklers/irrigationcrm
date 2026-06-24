@@ -45,7 +45,7 @@ type Props = {
   onCancel: () => void;
 };
 
-const ROLES = ["ADMIN", "MANAGER", "CSR", "TECH"] as const;
+const ROLES = ["ADMIN", "MANAGER", "CSR", "TECH", "SOCIAL_MEDIA_MANAGER"] as const;
 const PAY_TYPES = ["", "HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
 
 export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Props) {

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { canSubmitSocialPosts } from "@/lib/marketing/social-permissions";
 import { uploadPublicBlob } from "@/lib/blob/storage";
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
+    if (!canSubmitSocialPosts(user.role)) return forbiddenResponse();
     const formData = await request.formData();
     const file = formData.get("file");
 

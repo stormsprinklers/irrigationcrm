@@ -514,6 +514,12 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
           </li>
           <li>Add Messenger and Instagram products; subscribe to fields listed above.</li>
           <li>Save App ID, App Secret, Facebook Page ID, and Meta access token in this CRM.</li>
+          <li>
+            For <strong>publishing</strong>, also add:{" "}
+            <code className="text-[11px]">pages_manage_posts</code> and{" "}
+            <code className="text-[11px]">instagram_content_publish</code> when regenerating your
+            token.
+          </li>
           <li>Open Recent posts and click Refresh to sync metrics from Meta.</li>
           <li>
             DMs will appear in{" "}

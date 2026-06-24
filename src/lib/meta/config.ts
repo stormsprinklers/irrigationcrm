@@ -61,6 +61,17 @@ export const META_CRM_SETTINGS = [
   },
 ] as const;
 
+export const META_PUBLISH_PERMISSIONS = [
+  "pages_manage_posts",
+  "pages_read_engagement",
+  "pages_read_user_content",
+  "instagram_content_publish",
+  "instagram_basic",
+  "pages_show_list",
+  "business_management",
+  "read_insights",
+] as const;
+
 export const META_WEBHOOK_FIELDS = [
   { product: "Page", fields: ["messages", "messaging_postbacks", "message_echoes", "feed"] },
   { product: "Instagram", fields: ["messages", "messaging_postbacks", "comments"] },

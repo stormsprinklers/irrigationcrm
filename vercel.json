@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/marketing/drip",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing/social-publish",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
