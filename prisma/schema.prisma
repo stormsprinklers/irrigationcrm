@@ -690,6 +690,9 @@ model CustomerProperty {
   mapBounds  Json?
   aerialImageUrl    String?
   stylizedImageUrl  String?
+  irrigationZoneCount     Int?
+  shutoffValveLocation    String?
+  controllerLocation      String?
   irrigationWizardStep Int?
   irrigationMapStatus  IrrigationMapStatus?
   designProjectId      String?

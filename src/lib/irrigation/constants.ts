@@ -46,11 +46,23 @@ export const IRRIGATION_TYPES: {
 ];
 
 export const WIZARD_STEPS = [
-  { step: 1, title: "Property", description: "Locate the property and create a presentation image" },
-  { step: 2, title: "Zones", description: "Draw zones and label conditions for each" },
-  { step: 3, title: "Irrigation", description: "Nozzle counts and flow rates" },
-  { step: 4, title: "Equipment", description: "Valves and controllers" },
-  { step: 5, title: "Review", description: "Publish and share with your customer" },
+  { step: 1, title: "Property", description: "Locate the property and capture a satellite image" },
+  { step: 2, title: "System overview", description: "How many zones, and where is the shutoff valve and controller?" },
+  { step: 3, title: "Zone map", description: "Draw a polygon on the aerial image for each zone" },
+  { step: 4, title: "Zone conditions", description: "Vegetation, shade, slope, and soil for each zone" },
+  { step: 5, title: "Irrigation", description: "Nozzle types and counts per zone" },
+  { step: 6, title: "Review", description: "Publish and share with your customer" },
+] as const;
+
+export const ZONE_MAP_COLORS = [
+  "#22c55e",
+  "#3b82f6",
+  "#f59e0b",
+  "#ec4899",
+  "#8b5cf6",
+  "#14b8a6",
+  "#ef4444",
+  "#6366f1",
 ] as const;
 
 export const VALVE_CAPACITY_GPM = 18;

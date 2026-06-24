@@ -30,6 +30,10 @@ export type CustomerPropertyDTO = {
   zip: string | null;
   isPrimary: boolean;
   designProjectId: string | null;
+  irrigationZoneCount: number | null;
+  shutoffValveLocation: string | null;
+  controllerLocation: string | null;
+  irrigationMapStatus: string | null;
   createdAt: string;
 };
 

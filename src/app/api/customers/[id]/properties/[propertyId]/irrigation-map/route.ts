@@ -99,6 +99,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ...(p.irrigationWizardStep != null
             ? { irrigationWizardStep: Number(p.irrigationWizardStep) }
             : {}),
+          ...(p.irrigationZoneCount != null
+            ? { irrigationZoneCount: Number(p.irrigationZoneCount) }
+            : {}),
+          ...(p.shutoffValveLocation !== undefined
+            ? {
+                shutoffValveLocation: p.shutoffValveLocation
+                  ? String(p.shutoffValveLocation)
+                  : null,
+              }
+            : {}),
+          ...(p.controllerLocation !== undefined
+            ? {
+                controllerLocation: p.controllerLocation
+                  ? String(p.controllerLocation)
+                  : null,
+              }
+            : {}),
         },
       });
     }

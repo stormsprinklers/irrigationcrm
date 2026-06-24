@@ -40,6 +40,7 @@ import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal"
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
 import { PropertyIrrigationEditor } from "@/components/customers/PropertyIrrigationEditor";
 import { PropertyIrrigationWizard } from "@/components/customers/PropertyIrrigationWizard";
+import { PropertyIrrigationSummary } from "@/components/customers/PropertyIrrigationSummary";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -848,6 +849,12 @@ export function CustomerProfile({ customerId }: Props) {
                           .filter(Boolean)
                           .join(", ")}
                       </p>
+                      <PropertyIrrigationSummary
+                        zoneCount={property.irrigationZoneCount}
+                        shutoffValveLocation={property.shutoffValveLocation}
+                        controllerLocation={property.controllerLocation}
+                        irrigationMapStatus={property.irrigationMapStatus}
+                      />
                     </div>
                     <Button variant="ghost" size="icon" onClick={() => deleteProperty(property.id)}>
                       <Trash2 className="h-4 w-4" />

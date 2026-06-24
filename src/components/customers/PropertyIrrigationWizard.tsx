@@ -5,12 +5,19 @@ import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AerialZoneMapEditor } from "@/components/customers/AerialZoneMapEditor";
 import {
   IRRIGATION_TYPES,
+  SHADE_LEVELS,
+  SLOPE_LEVELS,
+  SOIL_TYPES,
   VEGETATION_TYPES,
   WIZARD_STEPS,
+  ZONE_MAP_COLORS,
 } from "@/lib/irrigation/constants";
 import { calculateZoneSchedule } from "@/lib/irrigation/runtime";
+import { polygonFromGeoJson, polygonToGeoJson } from "@/lib/irrigation/image-polygon";
+import type { ImagePolygon } from "@/lib/irrigation/image-polygon";
 import type {
   IrrigationType,
   ShadeLevel,
@@ -24,6 +31,7 @@ import { toast } from "sonner";
 
 type MapZone = {
   name: string;
+  polygon: ImagePolygon | null;
   vegetationType: VegetationType;
   shadeLevel: ShadeLevel;
   slopeLevel: SlopeLevel;
@@ -37,21 +45,40 @@ type Props = {
   propertyId: string;
 };
 
-const defaultZone = (): MapZone => ({
-  name: "Zone 1",
-  vegetationType: "grass",
-  shadeLevel: "full_sun",
-  slopeLevel: "flat",
-  soilType: "loam",
-  irrigationType: "spray",
-  nozzleCount: 4,
-});
+function defaultZone(index: number): MapZone {
+  return {
+    name: `Zone ${index + 1}`,
+    polygon: null,
+    vegetationType: "grass",
+    shadeLevel: "full_sun",
+    slopeLevel: "flat",
+    soilType: "loam",
+    irrigationType: "spray",
+    nozzleCount: 4,
+  };
+}
+
+function zonesForCount(count: number, existing: MapZone[]): MapZone[] {
+  const n = Math.max(1, Math.min(24, count));
+  return Array.from({ length: n }, (_, i) => {
+    const prev = existing[i];
+    return prev
+      ? { ...prev, name: prev.name || `Zone ${i + 1}` }
+      : defaultZone(i);
+  });
+}
+
+const MAX_STEP = WIZARD_STEPS.length;
 
 export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [step, setStep] = useState(1);
   const [addressQuery, setAddressQuery] = useState("");
   const [aerialImageUrl, setAerialImageUrl] = useState("");
-  const [zones, setZones] = useState<MapZone[]>([defaultZone()]);
+  const [zoneCount, setZoneCount] = useState(1);
+  const [shutoffValveLocation, setShutoffValveLocation] = useState("");
+  const [controllerLocation, setControllerLocation] = useState("");
+  const [zones, setZones] = useState<MapZone[]>([defaultZone(0)]);
+  const [activeZoneIndex, setActiveZoneIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [capturingAerial, setCapturingAerial] = useState(false);
   const [propertyLoaded, setPropertyLoaded] = useState(false);
@@ -72,19 +99,27 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           }) ?? ""
         );
         setAerialImageUrl(p.aerialImageUrl ?? "");
-        setStep(p.irrigationWizardStep ?? 1);
+        setZoneCount(p.irrigationZoneCount ?? p.irrigationMapZones?.length ?? 1);
+        setShutoffValveLocation(p.shutoffValveLocation ?? "");
+        setControllerLocation(p.controllerLocation ?? "");
+        setStep(Math.min(p.irrigationWizardStep ?? 1, MAX_STEP));
+
         if (p.irrigationMapZones?.length) {
-          setZones(
-            p.irrigationMapZones.map((z: Record<string, string | number | null>, i: number) => ({
+          const loaded = p.irrigationMapZones.map(
+            (z: Record<string, string | number | null | unknown>, i: number) => ({
               name: String(z.name ?? `Zone ${i + 1}`),
+              polygon: polygonFromGeoJson(z.polygonGeoJson),
               vegetationType: (z.vegetationType as VegetationType) ?? "grass",
               shadeLevel: (z.shadeLevel as ShadeLevel) ?? "full_sun",
               slopeLevel: (z.slopeLevel as SlopeLevel) ?? "flat",
               soilType: (z.soilType as SoilType) ?? "loam",
               irrigationType: (z.irrigationType as IrrigationType) ?? "spray",
               nozzleCount: Number(z.nozzleCount ?? 4),
-            }))
+            })
           );
+          setZones(loaded);
+        } else if (p.irrigationZoneCount) {
+          setZones(zonesForCount(p.irrigationZoneCount, []));
         }
       })
       .catch(() => {})
@@ -136,7 +171,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         });
         return {
           name: z.name,
-          polygonGeoJson: { type: "Polygon", coordinates: [] },
+          polygonGeoJson: polygonToGeoJson(z.polygon),
           vegetationType: z.vegetationType,
           shadeLevel: z.shadeLevel,
           slopeLevel: z.slopeLevel,
@@ -154,7 +189,13 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            property: { aerialImageUrl, irrigationWizardStep: step },
+            property: {
+              aerialImageUrl,
+              irrigationWizardStep: step,
+              irrigationZoneCount: zoneCount,
+              shutoffValveLocation: shutoffValveLocation.trim() || null,
+              controllerLocation: controllerLocation.trim() || null,
+            },
             mapZones,
             publish,
           }),
@@ -169,12 +210,57 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     }
   }
 
+  function validateStep(): boolean {
+    if (step === 1 && !aerialImageUrl) {
+      toast.error("Capture an aerial image before continuing");
+      return false;
+    }
+    if (step === 2) {
+      if (!zoneCount || zoneCount < 1) {
+        toast.error("Enter how many zones are on the property");
+        return false;
+      }
+      if (!shutoffValveLocation.trim()) {
+        toast.error("Enter the shutoff valve location");
+        return false;
+      }
+      if (!controllerLocation.trim()) {
+        toast.error("Enter the controller location");
+        return false;
+      }
+    }
+    if (step === 3) {
+      const missing = zones.filter((z) => !z.polygon?.length);
+      if (missing.length) {
+        toast.error(`Draw polygons for: ${missing.map((z) => z.name).join(", ")}`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function goNext() {
+    if (!validateStep()) return;
+    setStep((s) => Math.min(s + 1, MAX_STEP));
+  }
+
   const currentStep = WIZARD_STEPS.find((s) => s.step === step) ?? WIZARD_STEPS[0];
+  const aerialDisplayUrl = aerialImageUrl
+    ? (blobProxyUrl(aerialImageUrl) ?? aerialImageUrl)
+    : "";
+
+  const mapZones = zones.map((z, i) => ({
+    name: z.name,
+    polygon: z.polygon,
+    color: ZONE_MAP_COLORS[i % ZONE_MAP_COLORS.length],
+  }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Irrigation wizard — {currentStep.title}</CardTitle>
+        <CardTitle className="text-base">
+          Irrigation wizard — Step {step} of {MAX_STEP}: {currentStep.title}
+        </CardTitle>
         <p className="text-sm text-muted-foreground">{currentStep.description}</p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -208,17 +294,14 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
                   {capturingAerial ? "Capturing..." : aerialImageUrl ? "Refresh" : "Capture"}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Captured from Google Maps satellite imagery at the property location.
-              </p>
               {capturingAerial && !aerialImageUrl ? (
                 <div className="flex h-48 items-center justify-center rounded-md border border-dashed bg-muted/30 text-sm text-muted-foreground">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Loading satellite screenshot...
                 </div>
-              ) : aerialImageUrl ? (
+              ) : aerialDisplayUrl ? (
                 <img
-                  src={blobProxyUrl(aerialImageUrl) ?? aerialImageUrl}
+                  src={aerialDisplayUrl}
                   alt="Aerial satellite view of property"
                   className="max-h-80 w-full rounded-md border object-cover"
                 />
@@ -231,7 +314,61 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           </div>
         )}
 
-        {(step === 2 || step === 3) &&
+        {step === 2 && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">How many irrigation zones?</label>
+              <Input
+                type="number"
+                min={1}
+                max={24}
+                value={zoneCount}
+                onChange={(e) => {
+                  const n = Math.max(1, Math.min(24, Number(e.target.value) || 1));
+                  setZoneCount(n);
+                  setZones((prev) => zonesForCount(n, prev));
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                This count is shown on the property profile for your team and customers.
+              </p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Shutoff valve location</label>
+              <Input
+                value={shutoffValveLocation}
+                onChange={(e) => setShutoffValveLocation(e.target.value)}
+                placeholder="e.g. North side of house, near AC unit"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Controller location</label>
+              <Input
+                value={controllerLocation}
+                onChange={(e) => setControllerLocation(e.target.value)}
+                placeholder="e.g. Garage wall, east side of property"
+              />
+            </div>
+          </div>
+        )}
+
+        {step === 3 && aerialDisplayUrl && (
+          <AerialZoneMapEditor
+            imageUrl={aerialDisplayUrl}
+            zones={mapZones}
+            activeZoneIndex={activeZoneIndex}
+            onActiveZoneChange={setActiveZoneIndex}
+            onZonePolygonChange={(index, polygon) => {
+              setZones((prev) => {
+                const next = [...prev];
+                next[index] = { ...next[index], polygon };
+                return next;
+              });
+            }}
+          />
+        )}
+
+        {step === 4 &&
           zones.map((zone, i) => (
             <div key={i} className="rounded border p-3 space-y-2">
               <Input
@@ -242,70 +379,140 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
                   setZones(next);
                 }}
               />
-              {step === 2 && (
+              <select
+                className="w-full rounded border px-2 py-1 text-sm"
+                value={zone.vegetationType}
+                onChange={(e) => {
+                  const next = [...zones];
+                  next[i] = { ...next[i], vegetationType: e.target.value as VegetationType };
+                  setZones(next);
+                }}
+              >
+                {VEGETATION_TYPES.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <div className="grid gap-2 sm:grid-cols-3">
                 <select
                   className="w-full rounded border px-2 py-1 text-sm"
-                  value={zone.vegetationType}
+                  value={zone.shadeLevel}
                   onChange={(e) => {
                     const next = [...zones];
-                    next[i] = { ...next[i], vegetationType: e.target.value as VegetationType };
+                    next[i] = { ...next[i], shadeLevel: e.target.value as ShadeLevel };
                     setZones(next);
                   }}
                 >
-                  {VEGETATION_TYPES.map((v) => (
-                    <option key={v.value} value={v.value}>{v.label}</option>
+                  {SHADE_LEVELS.map((v) => (
+                    <option key={v.value} value={v.value}>
+                      {v.label}
+                    </option>
                   ))}
                 </select>
-              )}
-              {step === 3 && (
-                <>
-                  <select
-                    className="w-full rounded border px-2 py-1 text-sm"
-                    value={zone.irrigationType}
-                    onChange={(e) => {
-                      const next = [...zones];
-                      next[i] = { ...next[i], irrigationType: e.target.value as IrrigationType };
-                      setZones(next);
-                    }}
-                  >
-                    {IRRIGATION_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={zone.nozzleCount}
-                    onChange={(e) => {
-                      const next = [...zones];
-                      next[i] = { ...next[i], nozzleCount: Number(e.target.value) };
-                      setZones(next);
-                    }}
-                    placeholder="Nozzle count"
-                  />
-                </>
-              )}
+                <select
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={zone.slopeLevel}
+                  onChange={(e) => {
+                    const next = [...zones];
+                    next[i] = { ...next[i], slopeLevel: e.target.value as SlopeLevel };
+                    setZones(next);
+                  }}
+                >
+                  {SLOPE_LEVELS.map((v) => (
+                    <option key={v.value} value={v.value}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={zone.soilType}
+                  onChange={(e) => {
+                    const next = [...zones];
+                    next[i] = { ...next[i], soilType: e.target.value as SoilType };
+                    setZones(next);
+                  }}
+                >
+                  {SOIL_TYPES.map((v) => (
+                    <option key={v.value} value={v.value}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           ))}
 
-        {step === 5 && (
-          <ul className="space-y-2 text-sm">
-            {zones.map((z) => {
-              const schedule = calculateZoneSchedule({
-                vegetationType: z.vegetationType,
-                irrigationType: z.irrigationType,
-                shadeLevel: z.shadeLevel,
-                soilType: z.soilType,
-                slopeLevel: z.slopeLevel,
-              });
-              return (
-                <li key={z.name} className="rounded border p-2">
-                  <strong>{z.name}</strong> — {schedule.adjustedRuntimeMinutes} min,{" "}
-                  {schedule.daysLabel}
-                </li>
-              );
-            })}
-          </ul>
+        {step === 5 &&
+          zones.map((zone, i) => (
+            <div key={i} className="rounded border p-3 space-y-2">
+              <p className="text-sm font-medium">{zone.name}</p>
+              <select
+                className="w-full rounded border px-2 py-1 text-sm"
+                value={zone.irrigationType}
+                onChange={(e) => {
+                  const next = [...zones];
+                  next[i] = { ...next[i], irrigationType: e.target.value as IrrigationType };
+                  setZones(next);
+                }}
+              >
+                {IRRIGATION_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="number"
+                min={1}
+                value={zone.nozzleCount}
+                onChange={(e) => {
+                  const next = [...zones];
+                  next[i] = { ...next[i], nozzleCount: Number(e.target.value) };
+                  setZones(next);
+                }}
+                placeholder="Nozzle count"
+              />
+            </div>
+          ))}
+
+        {step === 6 && (
+          <div className="space-y-4">
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p>
+                <strong>{zoneCount}</strong> zone{zoneCount === 1 ? "" : "s"} · Shutoff:{" "}
+                {shutoffValveLocation || "—"} · Controller: {controllerLocation || "—"}
+              </p>
+            </div>
+            {aerialDisplayUrl && (
+              <AerialZoneMapEditor
+                imageUrl={aerialDisplayUrl}
+                zones={mapZones}
+                activeZoneIndex={0}
+                onActiveZoneChange={() => {}}
+                onZonePolygonChange={() => {}}
+                readOnly
+              />
+            )}
+            <ul className="space-y-2 text-sm">
+              {zones.map((z) => {
+                const schedule = calculateZoneSchedule({
+                  vegetationType: z.vegetationType,
+                  irrigationType: z.irrigationType,
+                  shadeLevel: z.shadeLevel,
+                  soilType: z.soilType,
+                  slopeLevel: z.slopeLevel,
+                });
+                return (
+                  <li key={z.name} className="rounded border p-2">
+                    <strong>{z.name}</strong> — {schedule.adjustedRuntimeMinutes} min,{" "}
+                    {schedule.daysLabel}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -314,8 +521,8 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
               Back
             </Button>
           )}
-          {step < 5 ? (
-            <Button onClick={() => setStep((s) => s + 1)}>Next</Button>
+          {step < MAX_STEP ? (
+            <Button onClick={goNext}>Next</Button>
           ) : (
             <Button onClick={() => save(true)} disabled={saving}>
               {saving ? "Publishing..." : "Publish to portal"}
@@ -324,11 +531,6 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           <Button variant="secondary" onClick={() => save(false)} disabled={saving}>
             Save draft
           </Button>
-          {step === 2 && (
-            <Button variant="outline" onClick={() => setZones((z) => [...z, defaultZone()])}>
-              Add zone
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>

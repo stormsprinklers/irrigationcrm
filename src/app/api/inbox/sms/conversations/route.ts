@@ -109,7 +109,10 @@ async function sendSmsMessage(params: {
           }
         : {}),
     },
-    include: { media: true },
+    include: {
+      media: true,
+      sender: { select: { id: true, name: true, email: true } },
+    },
   });
 
   await prisma.conversation.update({

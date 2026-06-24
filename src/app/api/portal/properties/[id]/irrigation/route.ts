@@ -30,6 +30,9 @@ export async function GET(_request: Request, { params }: Params) {
     propertyDiagramUrl: property.propertyDiagramUrl,
     aerialImageUrl: property.aerialImageUrl,
     irrigationMapStatus: property.irrigationMapStatus,
+    irrigationZoneCount: property.irrigationZoneCount,
+    shutoffValveLocation: property.shutoffValveLocation,
+    controllerLocation: property.controllerLocation,
     zones: property.irrigationZones.map((z) => ({
       id: z.id,
       stationNumber: z.stationNumber,

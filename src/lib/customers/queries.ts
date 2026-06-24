@@ -42,6 +42,10 @@ export function serializeProperty(property: {
   zip: string | null;
   isPrimary: boolean;
   designProjectId?: string | null;
+  irrigationZoneCount?: number | null;
+  shutoffValveLocation?: string | null;
+  controllerLocation?: string | null;
+  irrigationMapStatus?: string | null;
   createdAt: Date;
 }): CustomerPropertyDTO {
   return {
@@ -54,6 +58,10 @@ export function serializeProperty(property: {
     zip: property.zip,
     isPrimary: property.isPrimary,
     designProjectId: property.designProjectId ?? null,
+    irrigationZoneCount: property.irrigationZoneCount ?? null,
+    shutoffValveLocation: property.shutoffValveLocation ?? null,
+    controllerLocation: property.controllerLocation ?? null,
+    irrigationMapStatus: property.irrigationMapStatus ?? null,
     createdAt: property.createdAt.toISOString(),
   };
 }

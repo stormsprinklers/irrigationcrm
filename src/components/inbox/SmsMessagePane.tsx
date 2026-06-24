@@ -257,7 +257,21 @@ export function SmsMessagePane({
           <div className="flex min-h-full flex-col p-4">
             {messages.length > 0 ? (
               <div className="space-y-3">
-                {messages.map((msg) => (
+                {messages.map((msg) => {
+                  const attribution =
+                    msg.direction === "OUTBOUND"
+                      ? msg.sender?.name ?? "Team"
+                      : scope === "customers"
+                        ? conversation?.customer?.name ??
+                          (conversation?.participantPhone
+                            ? formatPhoneDisplay(conversation.participantPhone)
+                            : "Customer")
+                        : conversation?.title ??
+                          (conversation?.participantPhone
+                            ? formatPhoneDisplay(conversation.participantPhone)
+                            : "Team member");
+
+                  return (
                   <div
                     key={msg.id}
                     className={cn(
@@ -267,25 +281,24 @@ export function SmsMessagePane({
                         : "bg-white text-foreground shadow-sm"
                     )}
                   >
-                    {msg.sender?.name && msg.direction === "OUTBOUND" && scope === "team" && (
-                      <p className="mb-1 text-[10px] opacity-70">{msg.sender.name}</p>
-                    )}
                     {msg.body && msg.body !== "[Media message]" ? (
                       <p className="whitespace-pre-wrap break-words">{msg.body}</p>
                     ) : null}
                     <MessageMediaGallery media={msg.media ?? []} />
                     <p
                       className={cn(
-                        "mt-1 text-[10px] leading-none",
+                        "mt-1 text-[10px] leading-snug",
                         msg.direction === "OUTBOUND"
                           ? "text-right text-white/70"
                           : "text-muted-foreground"
                       )}
                     >
-                      {formatSmsMessageTime(msg.sentAt)}
+                      <span className="font-medium">{attribution}</span>
+                      <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
                     </p>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-1 items-center justify-center py-12 text-center text-sm text-muted-foreground">
