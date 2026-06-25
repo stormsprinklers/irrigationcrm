@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm, type EmployeeRecord } from "./EmployeeForm";
 import { CrewManager } from "./CrewManager";
-import { ROLE_LABELS } from "@/lib/employees";
+import { ROLE_LABELS, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
@@ -65,11 +65,16 @@ export function EmployeeList() {
     await load();
   }
 
-  const filtered = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = employees.filter((e) => {
+    const fullName = formatEmployeeName(e.firstName, e.lastName).toLowerCase();
+    const query = search.toLowerCase();
+    return (
+      fullName.includes(query) ||
+      e.firstName.toLowerCase().includes(query) ||
+      e.lastName.toLowerCase().includes(query) ||
+      e.email.toLowerCase().includes(query)
+    );
+  });
 
   if (creating || editing) {
     return (
@@ -115,24 +120,24 @@ export function EmployeeList() {
             <p className="text-sm text-muted-foreground">No employees found</p>
           ) : (
             <div className="divide-y rounded-lg border border-border">
-              {filtered.map((employee) => (
+              {filtered.map((employee) => {
+                const nameParts = employee.firstName
+                  ? { firstName: employee.firstName, lastName: employee.lastName }
+                  : splitFullName(employee.name);
+                const displayName = formatEmployeeName(nameParts.firstName, nameParts.lastName);
+                return (
                 <div key={employee.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 ring-2 ring-offset-1" style={{ outlineColor: employee.color ?? undefined }}>
                       {employee.photoUrl ? (
-                        <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
+                        <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={displayName} />
                       ) : null}
                       <AvatarFallback style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}>
-                        {employee.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
+                        {employeeInitials(nameParts.firstName, nameParts.lastName)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">{employee.name}</p>
+                      <p className="font-medium">{displayName}</p>
                       <p className="text-sm text-muted-foreground">{employee.email}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <Badge variant="secondary">{ROLE_LABELS[employee.role]}</Badge>
@@ -170,7 +175,8 @@ export function EmployeeList() {
                     </Button>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
         </TabsContent>

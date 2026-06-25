@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { EmployeeStatus, PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, validateEmployeePassword } from "@/lib/employees";
+import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
         companyId: user.companyId,
         ...(status && status !== "ALL" ? { status } : {}),
       },
-      orderBy: [{ status: "asc" }, { name: "asc" }],
+      orderBy: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
       select: employeeSelectFields(),
     });
 
@@ -32,9 +32,12 @@ export async function POST(request: NextRequest) {
     if (!canManageEmployees(user.role)) return forbiddenResponse();
 
     const body = await request.json();
-    const { name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary, websiteTeamSlug } = body;
+    const { firstName, lastName, name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary, websiteTeamSlug } = body;
 
-    if (!name || !email) return badRequestResponse("Name and email are required");
+    if (!email) return badRequestResponse("Email is required");
+
+    const nameFields = parseEmployeeNameFields({ firstName, lastName, name });
+    if ("error" in nameFields) return badRequestResponse(nameFields.error);
 
     const existing = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
     if (existing) return badRequestResponse("Email already in use");
@@ -59,12 +62,14 @@ export async function POST(request: NextRequest) {
     const employee = await prisma.user.create({
       data: {
         companyId: user.companyId,
-        name: String(name),
+        firstName: nameFields.firstName,
+        lastName: nameFields.lastName,
+        name: nameFields.name,
         email: String(email).toLowerCase(),
         phone: phone ?? null,
         role: (role as UserRole) ?? UserRole.CSR,
         title: title ?? null,
-        division: division ?? null,
+        division: resolveEmployeeDivision((role as UserRole) ?? UserRole.CSR, division ?? null),
         color: color ?? "#2563EB",
         address: address ?? null,
         city: city ?? null,

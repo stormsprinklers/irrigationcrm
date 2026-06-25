@@ -1,4 +1,4 @@
-import { EmployeeStatus, UserRole } from "@prisma/client";
+import { Division, EmployeeStatus, UserRole } from "@prisma/client";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Admin",
@@ -23,6 +23,19 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 /** Field roles with limited office/admin access (service techs and installers). */
 export function isFieldRole(role: string) {
   return role === "TECH" || role === "INSTALLER";
+}
+
+export function defaultDivisionForRole(role: string): Division | null {
+  if (role === "TECH") return Division.SERVICE;
+  return null;
+}
+
+export function resolveEmployeeDivision(
+  role: string,
+  division: Division | null | undefined
+): Division | null {
+  if (division) return division;
+  return defaultDivisionForRole(role);
 }
 
 export const PAY_TYPE_LABELS: Record<string, string> = {
@@ -52,9 +65,56 @@ export function validateEmployeePassword(password: string) {
   return null;
 }
 
+export function splitFullName(name: string): { firstName: string; lastName: string } {
+  const trimmed = name.trim();
+  if (!trimmed) return { firstName: "", lastName: "" };
+  const space = trimmed.indexOf(" ");
+  if (space === -1) return { firstName: trimmed, lastName: "" };
+  return {
+    firstName: trimmed.slice(0, space),
+    lastName: trimmed.slice(space + 1).trim(),
+  };
+}
+
+export function formatEmployeeName(firstName: string, lastName?: string | null) {
+  return [firstName.trim(), lastName?.trim()].filter(Boolean).join(" ");
+}
+
+export function employeeInitials(firstName: string, lastName?: string | null) {
+  const first = firstName.trim()[0] ?? "";
+  const last = lastName?.trim()[0] ?? "";
+  const initials = `${first}${last}`.toUpperCase();
+  return initials || "?";
+}
+
+export function parseEmployeeNameFields(input: {
+  firstName?: unknown;
+  lastName?: unknown;
+  name?: unknown;
+}):
+  | { firstName: string; lastName: string; name: string }
+  | { error: string } {
+  if (input.firstName !== undefined && input.firstName !== null) {
+    const firstName = String(input.firstName).trim();
+    if (!firstName) return { error: "First name is required" };
+    const lastName = input.lastName != null ? String(input.lastName).trim() : "";
+    return { firstName, lastName, name: formatEmployeeName(firstName, lastName) };
+  }
+
+  if (input.name !== undefined && String(input.name).trim()) {
+    const { firstName, lastName } = splitFullName(String(input.name));
+    if (!firstName) return { error: "First name is required" };
+    return { firstName, lastName, name: formatEmployeeName(firstName, lastName) };
+  }
+
+  return { error: "First name is required" };
+}
+
 export function employeeSelectFields() {
   return {
     id: true,
+    firstName: true,
+    lastName: true,
     name: true,
     email: true,
     phone: true,

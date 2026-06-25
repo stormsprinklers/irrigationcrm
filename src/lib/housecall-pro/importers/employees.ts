@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { HcpEntityType } from "@prisma/client";
 import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
+import { formatEmployeeName, resolveEmployeeDivision, splitFullName } from "@/lib/employees";
 import {
   hcpId,
   hcpString,
@@ -60,10 +61,18 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
         },
       });
 
+      const role = mapEmployeeRole(record.role);
+      const firstName =
+        hcpString(record.first_name) ?? splitFullName(name).firstName;
+      const lastName =
+        hcpString(record.last_name) ?? splitFullName(name).lastName;
       const userData = {
-        name,
+        firstName,
+        lastName,
+        name: formatEmployeeName(firstName, lastName),
         phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
-        role: mapEmployeeRole(record.role),
+        role,
+        division: resolveEmployeeDivision(role, null),
         status: mapEmployeeStatus(record),
         tags: hcpTags(record),
         color: hcpString(record.color_hex) ?? "#2563EB",

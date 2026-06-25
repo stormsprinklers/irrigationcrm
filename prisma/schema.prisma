@@ -537,6 +537,8 @@ model Company {
 model User {
   id           String         @id @default(cuid())
   companyId    String
+  firstName    String         @default("")
+  lastName     String         @default("")
   name         String
   email        String         @unique
   passwordHash String?

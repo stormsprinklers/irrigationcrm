@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canDeleteEmployee, canManageEmployees, employeeSelectFields } from "@/lib/employees";
+import { canDeleteEmployee, canManageEmployees, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision } from "@/lib/employees";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -41,16 +41,39 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (dup) return badRequestResponse("Email already in use");
     }
 
+    const nextRole = fields.role !== undefined ? (fields.role as UserRole) : existing.role;
+    const resolvedDivision =
+      fields.role !== undefined || fields.division !== undefined
+        ? resolveEmployeeDivision(
+            nextRole,
+            fields.division !== undefined ? fields.division ?? null : existing.division
+          )
+        : undefined;
+
+    const nameFields =
+      fields.firstName !== undefined || fields.lastName !== undefined || fields.name !== undefined
+        ? parseEmployeeNameFields({
+            firstName: fields.firstName ?? existing.firstName,
+            lastName: fields.lastName ?? existing.lastName,
+            name: fields.name,
+          })
+        : null;
+    if (nameFields && "error" in nameFields) return badRequestResponse(nameFields.error);
+
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },
         data: {
-          ...(fields.name !== undefined ? { name: String(fields.name) } : {}),
+          ...(nameFields ? {
+            firstName: nameFields.firstName,
+            lastName: nameFields.lastName,
+            name: nameFields.name,
+          } : {}),
           ...(fields.email !== undefined ? { email: String(fields.email).toLowerCase() } : {}),
           ...(fields.phone !== undefined ? { phone: fields.phone ?? null } : {}),
           ...(fields.role !== undefined ? { role: fields.role as UserRole } : {}),
           ...(fields.title !== undefined ? { title: fields.title ?? null } : {}),
-          ...(fields.division !== undefined ? { division: fields.division ?? null } : {}),
+          ...(resolvedDivision !== undefined ? { division: resolvedDivision } : {}),
           ...(fields.color !== undefined ? { color: fields.color ?? null } : {}),
           ...(fields.photoUrl !== undefined ? { photoUrl: fields.photoUrl ?? null } : {}),
           ...(fields.websiteTeamSlug !== undefined

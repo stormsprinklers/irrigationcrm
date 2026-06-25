@@ -9,13 +9,15 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS } from "@/lib/employees";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { EmployeeTrainingPanel } from "./EmployeeTrainingPanel";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
 export type EmployeeRecord = {
   id: string;
+  firstName: string;
+  lastName: string;
   name: string;
   email: string;
   phone: string | null;
@@ -51,7 +53,8 @@ const PAY_TYPES = ["", "HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
 
 export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Props) {
   const [form, setForm] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     role: "CSR" as (typeof ROLES)[number],
@@ -85,7 +88,8 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   useEffect(() => {
     if (!employee) {
       setForm({
-        name: "",
+        firstName: "",
+        lastName: "",
         email: "",
         phone: "",
         role: "CSR",
@@ -111,8 +115,13 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       return;
     }
 
+    const nameParts = employee.firstName
+      ? { firstName: employee.firstName, lastName: employee.lastName }
+      : splitFullName(employee.name);
+
     setForm({
-      name: employee.name,
+      firstName: nameParts.firstName,
+      lastName: nameParts.lastName,
       email: employee.email,
       phone: employee.phone ?? "",
       role: employee.role,
@@ -207,7 +216,8 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       }
 
       const payload: Record<string, unknown> = {
-        name: form.name,
+        firstName: form.firstName,
+        lastName: form.lastName,
         email: form.email,
         phone: form.phone || null,
         role: form.role,
@@ -262,19 +272,15 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     }
   }
 
-  const initials = form.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const displayName = formatEmployeeName(form.firstName, form.lastName);
+  const initials = employeeInitials(form.firstName, form.lastName);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-white p-4">
       <div className="flex items-center gap-4">
         <Avatar className="h-16 w-16 ring-2" style={{ outlineColor: form.color }}>
           {form.photoUrl ? (
-            <AvatarImage src={blobProxyUrl(form.photoUrl)} alt={form.name} />
+            <AvatarImage src={blobProxyUrl(form.photoUrl)} alt={displayName} />
           ) : null}
           <AvatarFallback style={{ backgroundColor: form.color, color: "#fff" }}>
             {initials || "?"}
@@ -306,8 +312,12 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-medium">Name</label>
-          <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
+          <label className="text-sm font-medium">First name</label>
+          <Input value={form.firstName} onChange={(e) => setForm((p) => ({ ...p, firstName: e.target.value }))} required />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Last name</label>
+          <Input value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} />
         </div>
         <div>
           <label className="text-sm font-medium">Email</label>
@@ -337,7 +347,14 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           <select
             className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
             value={form.role}
-            onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as (typeof ROLES)[number] }))}
+            onChange={(e) => {
+              const nextRole = e.target.value as (typeof ROLES)[number];
+              setForm((p) => ({
+                ...p,
+                role: nextRole,
+                ...(nextRole === "TECH" ? { division: "SERVICE" } : {}),
+              }));
+            }}
           >
             {ROLES.map((role) => (
               <option key={role} value={role}>

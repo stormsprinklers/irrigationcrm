@@ -154,6 +154,8 @@ async function main() {
     },
     create: {
       email: "admin@stormsprinklers.com",
+      firstName: "Dev",
+      lastName: "Admin",
       name: "Dev Admin",
       passwordHash: devAdminPasswordHash,
       phone: "+18015550199",
@@ -178,6 +180,8 @@ async function main() {
     },
     create: {
       email: "tech@stormsprinklers.com",
+      firstName: "Jordan",
+      lastName: "Tech",
       name: "Jordan Tech",
       passwordHash,
       phone: "+18015550101",
@@ -206,6 +210,8 @@ async function main() {
     },
     create: {
       email: "mike@stormsprinklers.com",
+      firstName: "Mike",
+      lastName: "Keller",
       name: "Mike Keller",
       passwordHash,
       phone: "+18015550102",
@@ -231,6 +237,8 @@ async function main() {
     },
     create: {
       email: "sarah@stormsprinklers.com",
+      firstName: "Sarah",
+      lastName: "Mitchell",
       name: "Sarah Mitchell",
       passwordHash,
       phone: "+18015550103",
