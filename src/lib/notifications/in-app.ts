@@ -49,7 +49,7 @@ export async function notifyInboundEmail(params: {
     type: AppNotificationType.INBOX_EMAIL,
     title: `New email from ${params.fromEmail}`,
     body: params.subject,
-    href: `/inbox/email/customers?emailId=${params.emailId}`,
+    href: `/inbox/leads?emailId=${params.emailId}`,
   });
 }
 
@@ -82,7 +82,7 @@ export async function notifyWebsiteFormInbox(params: {
       type: AppNotificationType.INBOX_LEAD,
       title: `Website form: ${params.name}`,
       body: label,
-      href: `/inbox/email/customers?emailId=${params.emailId}`,
+      href: `/inbox/leads?emailId=${params.emailId}`,
     });
     return;
   }
@@ -93,7 +93,7 @@ export async function notifyWebsiteFormInbox(params: {
       type: AppNotificationType.INBOX_LEAD,
       title: `Website form: ${params.name}`,
       body: label,
-      href: `/inbox/sms/customers?conversationId=${params.conversationId}`,
+      href: `/inbox/leads?conversationId=${params.conversationId}`,
     });
   }
 }

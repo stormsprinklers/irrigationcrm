@@ -53,11 +53,8 @@ export const inboxSidebar: NavSection[] = [
     ],
   },
   {
-    title: "EMAIL",
-    items: [
-      { label: "Customers", href: "/inbox/email/customers" },
-      { label: "Team", href: "/inbox/email/team" },
-    ],
+    title: "LEADS",
+    items: [{ label: "Leads", href: "/inbox/leads" }],
   },
   {
     title: "SOCIAL",

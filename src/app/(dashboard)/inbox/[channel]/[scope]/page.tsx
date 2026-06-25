@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { InboxChannelView } from "@/components/inbox/InboxChannelView";
 
 type PageProps = {
@@ -6,5 +7,8 @@ type PageProps = {
 
 export default async function InboxChannelPage({ params }: PageProps) {
   const { channel, scope } = await params;
+  if (channel === "email") {
+    redirect("/inbox/leads");
+  }
   return <InboxChannelView channel={channel} scope={scope} />;
 }

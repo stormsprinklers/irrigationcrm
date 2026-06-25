@@ -15,5 +15,10 @@ export function buildInboxCustomerUrl(
   if (params.email) search.set("email", params.email);
   if (params.name) search.set("name", params.name);
   const qs = search.toString();
+
+  if (channel === "email") {
+    return `/inbox/compose${qs ? `?${qs}` : ""}`;
+  }
+
   return `/inbox/${channel}/customers${qs ? `?${qs}` : ""}`;
 }
