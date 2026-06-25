@@ -193,40 +193,34 @@ export function AerialZoneMapEditor({
             const isActive = index === activeZoneIndex;
             return (
               <div key={`${zone.name}-${index}`} className="flex items-center gap-1">
-                <div
+                <button
+                  type="button"
                   className={cn(
-                    "inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm",
-                    isActive ? "border-primary bg-primary text-primary-foreground" : "bg-background"
+                    "inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm transition-colors",
+                    isActive
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted"
                   )}
+                  onClick={() => {
+                    onActiveZoneChange(index);
+                    setDraftPoints([]);
+                  }}
                 >
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2"
-                    onClick={() => {
-                      onActiveZoneChange(index);
-                      setDraftPoints([]);
-                    }}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                    {onZoneRename ? (
-                      <Input
-                        value={zone.name}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => onZoneRename(index, e.target.value)}
-                        className={cn(
-                          "h-6 w-20 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0",
-                          isActive ? "text-primary-foreground" : ""
-                        )}
-                      />
-                    ) : (
-                      zone.name
-                    )}
-                    {hasPolygon ? <Check className="h-3 w-3 opacity-70" /> : null}
-                  </button>
-                </div>
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="max-w-[6rem] truncate">{zone.name}</span>
+                  {hasPolygon ? <Check className="h-3 w-3 opacity-70" /> : null}
+                </button>
+                {isActive && onZoneRename ? (
+                  <Input
+                    value={zone.name}
+                    onChange={(e) => onZoneRename(index, e.target.value)}
+                    aria-label={`Rename ${zone.name}`}
+                    className="h-7 w-24 text-xs"
+                  />
+                ) : null}
                 {onZoneRemove && zones.length > 1 ? (
                   <Button
                     type="button"
@@ -247,6 +241,34 @@ export function AerialZoneMapEditor({
               Add zone
             </Button>
           ) : null}
+        </div>
+      )}
+
+      {readOnly && zones.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {zones.map((zone, index) => {
+            const color = zone.color ?? ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length];
+            const isActive = index === activeZoneIndex;
+            return (
+              <button
+                key={`${zone.name}-${index}`}
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm transition-colors",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted"
+                )}
+                onClick={() => onActiveZoneChange(index)}
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="max-w-[6rem] truncate">{zone.name}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

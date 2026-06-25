@@ -10,6 +10,7 @@ import {
 } from "@/components/customers/AerialZoneMapEditor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   IRRIGATION_MAP_MARKER_KINDS,
   MAP_MARKER_STYLES,
@@ -165,6 +166,10 @@ export function PropertyIrrigationMapEditor({
   useEffect(() => {
     void loadMap();
   }, [loadMap]);
+
+  useEffect(() => {
+    setActiveZoneIndex((index) => Math.min(index, Math.max(0, zones.length - 1)));
+  }, [zones.length]);
 
   const mapZones: ZoneMapEntry[] = zones.map((zone, index) => ({
     name: zone.name,
@@ -449,15 +454,45 @@ export function PropertyIrrigationMapEditor({
               onZoneRemove={isEditing ? handleZoneRemove : undefined}
             />
             {isEditing && zones.length > 0 && activeZoneIndex < zones.length ? (
-              <IrrigationZoneAttributesPanel
-                zoneName={zones[activeZoneIndex]?.name ?? `Zone ${activeZoneIndex + 1}`}
-                attributes={zones[activeZoneIndex] ?? {}}
-                onChange={(attrs) =>
-                  setZones((prev) =>
-                    prev.map((zone, i) => (i === activeZoneIndex ? { ...zone, ...attrs } : zone))
-                  )
-                }
-              />
+              <div className="space-y-3">
+                {zones.length > 1 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Zone attributes:</span>
+                    {zones.map((zone, index) => {
+                      const color = ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length];
+                      const isActive = index === activeZoneIndex;
+                      return (
+                        <button
+                          key={`attr-tab-${index}`}
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                            isActive
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "bg-background hover:bg-muted"
+                          )}
+                          onClick={() => setActiveZoneIndex(index)}
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: color }}
+                          />
+                          {zone.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <IrrigationZoneAttributesPanel
+                  zoneName={zones[activeZoneIndex]?.name ?? `Zone ${activeZoneIndex + 1}`}
+                  attributes={zones[activeZoneIndex] ?? {}}
+                  onChange={(attrs) =>
+                    setZones((prev) =>
+                      prev.map((zone, i) => (i === activeZoneIndex ? { ...zone, ...attrs } : zone))
+                    )
+                  }
+                />
+              </div>
             ) : null}
           </>
         )}
