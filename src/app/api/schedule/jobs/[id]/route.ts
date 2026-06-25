@@ -8,6 +8,7 @@ import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -39,6 +40,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextAssignedUserId =
       body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
 
+    const nextStatus =
+      body.status !== undefined ? (body.status as VisitStatus) : existing.status;
+
     const availabilityError = await validateAssignmentUpdate(
       user.companyId,
       nextAssignedUserId,
@@ -47,6 +51,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       id
     );
     if (availabilityError) return badRequestResponse(availabilityError);
+
+    const assignmentError = validateScheduledVisitAssignment(nextStatus, nextAssignedUserId);
+    if (assignmentError) return badRequestResponse(assignmentError);
 
     const visit = await prisma.visit.update({
       where: { id },

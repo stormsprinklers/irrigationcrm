@@ -8,6 +8,7 @@ import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queri
 import type { ScheduleFilters } from "@/lib/schedule/types";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 
@@ -76,6 +77,9 @@ export async function POST(request: NextRequest) {
       const block = await getCustomerServiceBlock(user.companyId, customerId);
       if (block) return badRequestResponse(block);
     }
+
+    const assignmentError = validateScheduledVisitAssignment(VisitStatus.SCHEDULED, assignedUserId);
+    if (assignmentError) return badRequestResponse(assignmentError);
 
     const jobStart = new Date(startAt);
     const jobEnd = new Date(endAt);

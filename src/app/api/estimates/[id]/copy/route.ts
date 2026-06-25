@@ -3,6 +3,7 @@ import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
+import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,6 +47,12 @@ export async function POST(request: NextRequest, { params }: Params) {
         serviceAreaId = area?.id;
       }
       if (!serviceAreaId) return badRequestResponse("serviceAreaId or valid zip is required");
+
+      const assignmentError = validateScheduledVisitAssignment(
+        VisitStatus.SCHEDULED,
+        schedule.assignedUserId
+      );
+      if (assignmentError) return badRequestResponse(assignmentError);
 
       const visit = await prisma.visit.create({
         data: {

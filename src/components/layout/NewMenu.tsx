@@ -203,6 +203,10 @@ export function NewMenu() {
       toast.error("This customer is marked DO NOT SERVICE and cannot be scheduled");
       return;
     }
+    if (!newVisit.assignedUserId) {
+      toast.error("Assign a technician before scheduling this visit");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -396,8 +400,9 @@ export function NewMenu() {
             value={newVisit.assignedUserId}
             onChange={(e) => setNewVisit({ ...newVisit, assignedUserId: e.target.value })}
             className={selectClassName}
+            required
           >
-            <option value="">Assign to (optional)</option>
+            <option value="">Assign technician (required)</option>
             {filterOptions.employees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.name}

@@ -9,7 +9,7 @@ import { isFieldRole } from "@/lib/employees";
 import { ArrowLeft, CheckCircle2, MapPin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
-import { CustomerContactBar } from "@/components/visits/CustomerContactBar";
+import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
@@ -52,6 +52,7 @@ type VisitDetailData = {
     name: string;
     phone: string | null;
     email: string | null;
+    doNotService?: boolean;
     address: string | null;
     city: string | null;
     state: string | null;
@@ -345,6 +346,11 @@ export function VisitDetail({ visitId }: Props) {
           <p className="mt-1 text-sm text-muted-foreground">
             {format(new Date(visit.startAt), "EEE, MMM d")} ·{" "}
             {format(new Date(visit.startAt), "h:mm a")} – {format(new Date(visit.endAt), "h:mm a")}
+            {visit.assignedUser ? (
+              <> · Technician: {visit.assignedUser.name}</>
+            ) : (
+              <> · <span className="text-amber-700">Unassigned</span></>
+            )}
           </p>
           <div className="mt-2 flex items-start gap-2">
             <p className="text-sm text-muted-foreground">{location}</p>
@@ -414,7 +420,7 @@ export function VisitDetail({ visitId }: Props) {
         />
       ) : null}
 
-      <CustomerContactBar customer={visit.customer} />
+      <CustomerVisitPanel customer={visit.customer} visitId={visit.id} />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">

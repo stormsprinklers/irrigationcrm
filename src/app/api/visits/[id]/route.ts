@@ -8,6 +8,7 @@ import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { getVisitForCompany } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -39,6 +40,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextAssignedUserId =
       body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
 
+    const nextStatus =
+      body.status !== undefined ? (body.status as VisitStatus) : existing.status;
+
     const availabilityError = await validateAssignmentUpdate(
       user.companyId,
       nextAssignedUserId,
@@ -48,6 +52,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
     if (availabilityError) {
       return NextResponse.json({ error: availabilityError }, { status: 400 });
+    }
+
+    const assignmentError = validateScheduledVisitAssignment(nextStatus, nextAssignedUserId);
+    if (assignmentError) {
+      return NextResponse.json({ error: assignmentError }, { status: 400 });
     }
 
     if (body.status === VisitStatus.COMPLETED) {

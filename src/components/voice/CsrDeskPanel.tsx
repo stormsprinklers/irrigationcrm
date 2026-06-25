@@ -171,6 +171,10 @@ export function CsrDeskPanel({
       toast.error("Service area required");
       return;
     }
+    if (!visitForm.assignedUserId) {
+      toast.error("Assign a technician before scheduling this visit");
+      return;
+    }
     setSaving(true);
     const startAt = new Date(`${visitForm.date}T${visitForm.startTime}`);
     const endAt = new Date(`${visitForm.date}T${visitForm.endTime}`);
@@ -395,8 +399,9 @@ export function CsrDeskPanel({
                 value={visitForm.assignedUserId}
                 onChange={(e) => setVisitForm({ ...visitForm, assignedUserId: e.target.value })}
                 className={selectClass}
+                required
               >
-                <option value="">Unassigned</option>
+                <option value="">Assign technician (required)</option>
                 {filterOptions.employees.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name}

@@ -112,6 +112,11 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
       return;
     }
 
+    if (!form.assignedUserId) {
+      toast.error("Assign a technician before scheduling this visit");
+      return;
+    }
+
     const property = properties.find((p) => p.id === form.propertyId);
 
     setSaving(true);
@@ -231,8 +236,9 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
             value={form.assignedUserId}
             onChange={(e) => setForm({ ...form, assignedUserId: e.target.value })}
             className={selectClassName}
+            required
           >
-            <option value="">Assign to (optional)</option>
+            <option value="">Assign technician (required)</option>
             {filterOptions.employees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.name}

@@ -9,6 +9,8 @@ import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
+import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ planVisitId: string }> };
 
@@ -69,6 +71,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       ? new Date(body.endAt)
       : new Date(startAt.getTime() + 2 * 60 * 60 * 1000);
 
+    const assignedUserId = body.assignedUserId as string | undefined;
+    const assignmentError = validateScheduledVisitAssignment(VisitStatus.SCHEDULED, assignedUserId);
+    if (assignmentError) return badRequestResponse(assignmentError);
+
+    const availabilityError = await validateAssignmentUpdate(
+      user.companyId,
+      assignedUserId ?? null,
+      startAt,
+      endAt
+    );
+    if (availabilityError) return badRequestResponse(availabilityError);
+
     const visit = await prisma.$transaction(async (tx) => {
       const created = await tx.visit.create({
         data: {
@@ -80,6 +94,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           endAt,
           division: Division.SERVICE,
           serviceAreaId,
+          assignedUserId: assignedUserId ?? null,
           status: VisitStatus.SCHEDULED,
           tags: ["maintenance-plan"],
           address: property.address ?? null,
