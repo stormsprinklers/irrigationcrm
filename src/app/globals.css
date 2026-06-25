@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "grapesjs/dist/css/grapes.min.css";
+@import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -149,4 +150,48 @@
 
 .portal-shell .font-display {
   font-family: var(--font-display);
+}
+
+.gbp-rank-marker-icon {
+  background: transparent;
+  border: none;
+}
+
+.gbp-rank-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
+}
+
+.leaflet-tooltip.gbp-map-tooltip {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: #fff;
+  color: var(--foreground);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.leaflet-tooltip.gbp-map-tooltip::before {
+  border-top-color: #fff;
+}
+
+.gbp-ranking-tooltip {
+  min-width: 12rem;
+  max-width: 16rem;
+  padding: 0.75rem;
+}
+
+.gbp-ranking-tooltip ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

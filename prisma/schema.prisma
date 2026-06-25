@@ -532,6 +532,43 @@ model Company {
   socialPostSubmissions  SocialPostSubmission[]
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
+  localSeoKeywords     LocalSeoKeyword[]
+  localSeoTargetCities LocalSeoTargetCity[]
+}
+
+model LocalSeoKeyword {
+  id        String   @id @default(cuid())
+  companyId String
+  keyword   String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, keyword])
+  @@index([companyId])
+}
+
+model LocalSeoTargetCity {
+  id            String   @id @default(cuid())
+  companyId     String
+  serpApiId     String?
+  googleId      Int?
+  name          String
+  canonicalName String
+  countryCode   String   @default("US")
+  targetType    String   @default("City")
+  latitude      Float
+  longitude     Float
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, canonicalName])
+  @@index([companyId])
 }
 
 model User {
