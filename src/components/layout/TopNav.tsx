@@ -10,6 +10,7 @@ import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,8 @@ export function TopNav() {
 
         <div className="ml-auto flex items-center gap-1">
           <NewMenu />
+
+          <NotificationBell />
 
           <Button
             variant="ghost"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Archive, Download, Mail, Send, Trash2 } from "lucide-react";
+import { Archive, Download, Mail, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,6 +101,27 @@ export function EmailViewer({
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
+  const isReplying = compose && Boolean(emailId);
+
+  function cancelCompose() {
+    setCompose(false);
+    setRecipients([]);
+    setSubject("");
+    setBody("");
+    setAttachments([]);
+  }
+
+  useEffect(() => {
+    if (!isReplying) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelCompose();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isReplying]);
 
   useEffect(() => {
     if (!emailId && initialTo) {
@@ -172,19 +193,34 @@ export function EmailViewer({
     }
 
     toast.success(saveAsDraft ? "Draft saved" : "Email sent");
-    setRecipients([]);
-    setSubject("");
-    setBody("");
-    setAttachments([]);
+    if (!saveAsDraft) {
+      setRecipients([]);
+      setSubject("");
+      setBody("");
+      setAttachments([]);
+      if (emailId) setCompose(false);
+    }
     onSent?.();
   }
 
   if (compose || !emailId) {
+    const heading = isReplying
+      ? "Reply"
+      : initialName
+        ? `Email ${initialName}`
+        : "Compose email";
+
     return (
       <div className="flex h-full flex-col overflow-auto p-4">
-        <h3 className="mb-4 shrink-0 font-semibold">
-          {initialName ? `Email ${initialName}` : "Compose email"}
-        </h3>
+        <div className="mb-4 flex shrink-0 items-center justify-between gap-2">
+          <h3 className="font-semibold">{heading}</h3>
+          {isReplying ? (
+            <Button type="button" variant="ghost" size="sm" onClick={cancelCompose}>
+              <X className="mr-1 h-4 w-4" />
+              Cancel
+            </Button>
+          ) : null}
+        </div>
         <EmailRecipientPicker scope={scope} value={recipients} onChange={setRecipients} />
         <Input
           placeholder="Subject"
@@ -270,13 +306,13 @@ export function EmailViewer({
         <Button
           variant="outline"
           onClick={() => {
-            setRecipients(
-              email.toEmails.map((address) => ({
-                email: address,
-                name: address,
+            setRecipients([
+              {
+                email: email.fromEmail,
+                name: email.customer?.name ?? email.fromEmail,
                 customerId: email.customer?.id,
-              }))
-            );
+              },
+            ]);
             setSubject(email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`);
             setCompose(true);
           }}

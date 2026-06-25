@@ -521,6 +521,7 @@ model Company {
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
   voiceClips             VoiceClip[]
+  appNotifications       AppNotification[]
   notificationTemplates  NotificationTemplate[]
   notificationRules      NotificationRule[]
   notificationDeliveries NotificationDelivery[]
@@ -682,6 +683,7 @@ model User {
   socialPostSubmissions  SocialPostSubmission[] @relation("SocialSubmissionAuthor")
   reviewedSocialPosts    SocialPostSubmission[] @relation("SocialSubmissionReviewer")
   socialPostReviewComments SocialPostReviewComment[]
+  appNotifications         AppNotification[]
 }
 
 model Customer {
@@ -927,6 +929,31 @@ model VoiceClip {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+model AppNotification {
+  id        String              @id @default(cuid())
+  companyId String
+  userId    String
+  type      AppNotificationType
+  title     String
+  body      String?
+  href      String?
+  isRead    Boolean             @default(false)
+  createdAt DateTime            @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([companyId, createdAt])
+}
+
+enum AppNotificationType {
+  INBOX_EMAIL
+  INBOX_SMS
+  INBOX_LEAD
+  LEAD_CREATED
 }
 
 model NotificationTemplate {

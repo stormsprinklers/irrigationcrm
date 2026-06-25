@@ -1,6 +1,7 @@
 import { EmailFolder, MessageDirection, Scope } from "@prisma/client";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
+import { notifyWebsiteFormInbox } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 
 function formatLeadInboxBody(input: WebsiteLeadInput) {
@@ -53,7 +54,7 @@ export async function createInboxEntriesFromWebsiteLead(
   const threadId = `website-lead:${leadId}`;
 
   if (input.email?.trim()) {
-    await prisma.emailMessage.create({
+    const emailMessage = await prisma.emailMessage.create({
       data: {
         companyId,
         scope: Scope.EXTERNAL,
@@ -66,6 +67,12 @@ export async function createInboxEntriesFromWebsiteLead(
         threadId,
       },
     });
+    await notifyWebsiteFormInbox({
+      companyId,
+      emailId: emailMessage.id,
+      name: input.name,
+      source: input.source,
+    }).catch((err) => console.error("In-app notification failed for website form", err));
   } else if (input.phone?.trim()) {
     const conversation = await findOrCreateSmsConversation({
       companyId,
@@ -86,8 +93,14 @@ export async function createInboxEntriesFromWebsiteLead(
       where: { id: conversation.id },
       data: { lastMessageAt: new Date(), title: input.name },
     });
+    await notifyWebsiteFormInbox({
+      companyId,
+      conversationId: conversation.id,
+      name: input.name,
+      source: input.source,
+    }).catch((err) => console.error("In-app notification failed for website form", err));
   } else {
-    await prisma.emailMessage.create({
+    const emailMessage = await prisma.emailMessage.create({
       data: {
         companyId,
         scope: Scope.EXTERNAL,
@@ -100,5 +113,11 @@ export async function createInboxEntriesFromWebsiteLead(
         threadId,
       },
     });
+    await notifyWebsiteFormInbox({
+      companyId,
+      emailId: emailMessage.id,
+      name: input.name,
+      source: input.source,
+    }).catch((err) => console.error("In-app notification failed for website form", err));
   }
 }

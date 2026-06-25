@@ -42,6 +42,18 @@ export function InboxChannelView({
   const sc = parsed?.scope;
 
   useEffect(() => {
+    if (ch !== "email" || sc !== "customers") return;
+    const emailId = searchParams.get("emailId");
+    if (emailId) setSelectedId(emailId);
+  }, [ch, sc, searchParams]);
+
+  useEffect(() => {
+    if (ch !== "sms" || sc !== "customers") return;
+    const conversationId = searchParams.get("conversationId");
+    if (conversationId) setSelectedId(conversationId);
+  }, [ch, sc, searchParams]);
+
+  useEffect(() => {
     if (!ch || !sc) return;
     if (ch !== "sms" || sc !== "customers") return;
     if (!deepLink.customerId && !deepLink.phone) return;

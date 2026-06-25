@@ -13,6 +13,8 @@ import {
   getCompanyByTwilioPhone,
 } from "@/lib/inbox/conversations";
 import { parseTwilioMediaParams, downloadTwilioMedia } from "@/lib/inbox/twilio-media";
+import { notifyInboundSms } from "@/lib/notifications/in-app";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -173,6 +175,13 @@ export async function POST(request: NextRequest) {
         ...(customer && !conversation.customerId ? { customerId: customer.id } : {}),
       },
     });
+
+    notifyInboundSms({
+      companyId: company.id,
+      conversationId: conversation.id,
+      fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
+      preview: body.trim() || (mediaItems.length ? "[Media message]" : "New message"),
+    }).catch((err) => console.error("In-app notification failed for inbound SMS", err));
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { EmailFolder, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
+import { notifyInboundEmail } from "@/lib/notifications/in-app";
 import { uploadPrivateBlob, assertBlobConfigured } from "@/lib/blob/storage";
 import { safeFileName } from "@/lib/inbox/attachments";
 
@@ -132,6 +133,13 @@ export async function POST(request: NextRequest) {
       console.error("Inbound email attachment save failed", error);
     }
   }
+
+  notifyInboundEmail({
+    companyId: company.id,
+    emailId: emailMessage.id,
+    fromEmail: fromAddress,
+    subject,
+  }).catch((err) => console.error("In-app notification failed for inbound email", err));
 
   return NextResponse.json({ ok: true });
 }
