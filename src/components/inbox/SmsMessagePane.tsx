@@ -5,6 +5,7 @@ import { Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AddContactInfoDialog } from "@/components/inbox/AddContactInfoDialog";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import {
   SmsRecipientPicker,
@@ -26,6 +27,8 @@ type Message = {
   sentAt: string;
   sender?: { name: string } | null;
   media?: MessageMediaItem[];
+  contactInfoDetected?: boolean;
+  contactInfoAppliedAt?: string | null;
 };
 
 type Conversation = {
@@ -116,6 +119,7 @@ export function SmsMessagePane({
   const [recipient, setRecipient] = useState<SmsRecipient | null>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
+  const [contactInfoMessageId, setContactInfoMessageId] = useState<string | null>(null);
 
   const isCompose = !conversationId;
 
@@ -144,7 +148,14 @@ export function SmsMessagePane({
       if (res.ok) {
         const data = await res.json();
         setConversation(data.conversation);
-        setMessages(data.messages);
+        setMessages(
+          data.messages.map((msg: Message & { contactInfoAppliedAt?: string | Date | null }) => ({
+            ...msg,
+            contactInfoAppliedAt: msg.contactInfoAppliedAt
+              ? new Date(msg.contactInfoAppliedAt).toISOString()
+              : null,
+          }))
+        );
       }
     }
     load();
@@ -275,27 +286,61 @@ export function SmsMessagePane({
                   <div
                     key={msg.id}
                     className={cn(
-                      "max-w-[75%] rounded-2xl px-4 py-2 text-sm",
-                      msg.direction === "OUTBOUND"
-                        ? "ml-auto bg-primary text-white"
-                        : "bg-white text-foreground shadow-sm"
+                      "flex max-w-[85%] flex-col gap-1.5",
+                      msg.direction === "OUTBOUND" ? "ml-auto items-end" : "items-start"
                     )}
                   >
-                    {msg.body && msg.body !== "[Media message]" ? (
-                      <p className="whitespace-pre-wrap break-words">{msg.body}</p>
-                    ) : null}
-                    <MessageMediaGallery media={msg.media ?? []} />
-                    <p
+                    <div
                       className={cn(
-                        "mt-1 text-[10px] leading-snug",
+                        "rounded-2xl px-4 py-2 text-sm",
                         msg.direction === "OUTBOUND"
-                          ? "text-right text-white/70"
-                          : "text-muted-foreground"
+                          ? "bg-primary text-white"
+                          : "bg-white text-foreground shadow-sm"
                       )}
                     >
-                      <span className="font-medium">{attribution}</span>
-                      <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
-                    </p>
+                      {msg.body && msg.body !== "[Media message]" ? (
+                        <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                      ) : null}
+                      <MessageMediaGallery media={msg.media ?? []} />
+                      <p
+                        className={cn(
+                          "mt-1 text-[10px] leading-snug",
+                          msg.direction === "OUTBOUND"
+                            ? "text-right text-white/70"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        <span className="font-medium">{attribution}</span>
+                        <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
+                      </p>
+                    </div>
+
+                    {scope === "customers" &&
+                    msg.direction === "INBOUND" &&
+                    msg.contactInfoDetected ? (
+                      <div className="flex flex-col items-start gap-1 px-1">
+                        {msg.contactInfoAppliedAt ? (
+                          <span className="text-[10px] font-medium text-green-700">
+                            Contact info added
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[10px] font-medium text-amber-700">
+                              Contact info detected
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 border-amber-300 bg-amber-50 text-xs text-amber-900 hover:bg-amber-100"
+                              onClick={() => setContactInfoMessageId(msg.id)}
+                            >
+                              + Add contact info
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                   );
                 })}
@@ -320,6 +365,26 @@ export function SmsMessagePane({
         onAttachmentsChange={setAttachments}
         multiline
       />
+
+      {contactInfoMessageId ? (
+        <AddContactInfoDialog
+          open
+          messageId={contactInfoMessageId}
+          onClose={() => setContactInfoMessageId(null)}
+          onApplied={(customer) => {
+            setConversation((prev) =>
+              prev ? { ...prev, customer: { ...customer, doNotService: prev.customer?.doNotService } } : prev
+            );
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === contactInfoMessageId
+                  ? { ...msg, contactInfoAppliedAt: new Date().toISOString() }
+                  : msg
+              )
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 }

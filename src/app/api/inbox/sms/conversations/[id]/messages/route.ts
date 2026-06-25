@@ -62,7 +62,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       orderBy: { sentAt: "asc" },
     });
 
-    return NextResponse.json({ conversation, messages });
+    return NextResponse.json({
+      conversation,
+      messages: messages.map((msg) => ({
+        ...msg,
+        sentAt: msg.sentAt.toISOString(),
+        readAt: msg.readAt?.toISOString() ?? null,
+        contactInfoAppliedAt: msg.contactInfoAppliedAt?.toISOString() ?? null,
+      })),
+    });
   } catch {
     return unauthorizedResponse();
   }

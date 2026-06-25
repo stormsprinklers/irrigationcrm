@@ -1330,6 +1330,9 @@ model Message {
   deliveryStatus   String?
   sentAt           DateTime         @default(now())
   readAt           DateTime?
+  contactInfoDetected Boolean       @default(false)
+  parsedContactInfo   Json?
+  contactInfoAppliedAt DateTime?
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)

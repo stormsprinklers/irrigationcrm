@@ -1,6 +1,8 @@
 import { EmailFolder, MessageDirection, Scope } from "@prisma/client";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
+import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
+import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
 import { notifyWebsiteFormInbox } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 
@@ -81,13 +83,23 @@ export async function createInboxEntriesFromWebsiteLead(
       title: input.name,
     });
 
-    await prisma.message.create({
+    const inboundBody = `[Website form — ${input.source ?? "contact"}]\n\n${body}`;
+    const contactInfoDetected = messageSharesContactInfo(inboundBody);
+
+    const createdMessage = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: MessageDirection.INBOUND,
-        body: `[Website form — ${input.source ?? "contact"}]\n\n${body}`,
+        body: inboundBody,
+        contactInfoDetected,
       },
     });
+
+    if (contactInfoDetected) {
+      void processInboundMessageContactInfo(createdMessage.id).catch((err) =>
+        console.error("Lead SMS contact info processing failed", err)
+      );
+    }
 
     await prisma.conversation.update({
       where: { id: conversation.id },

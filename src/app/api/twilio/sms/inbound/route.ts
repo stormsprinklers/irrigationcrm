@@ -13,6 +13,8 @@ import {
   getCompanyByTwilioPhone,
 } from "@/lib/inbox/conversations";
 import { parseTwilioMediaParams, downloadTwilioMedia } from "@/lib/inbox/twilio-media";
+import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
+import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
 import { notifyInboundSms } from "@/lib/notifications/in-app";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
@@ -135,12 +137,16 @@ export async function POST(request: NextRequest) {
 
     const mediaItems = parseTwilioMediaParams(params);
 
+    const contactInfoDetected =
+      scope === Scope.EXTERNAL && body.trim() ? messageSharesContactInfo(body) : false;
+
     const message = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: MessageDirection.INBOUND,
         body: body.trim() || (mediaItems.length ? "[Media message]" : ""),
         twilioMessageSid: messageSid || null,
+        contactInfoDetected,
       },
     });
 
@@ -182,6 +188,12 @@ export async function POST(request: NextRequest) {
       fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
       preview: body.trim() || (mediaItems.length ? "[Media message]" : "New message"),
     }).catch((err) => console.error("In-app notification failed for inbound SMS", err));
+
+    if (contactInfoDetected) {
+      void processInboundMessageContactInfo(message.id).catch((err) =>
+        console.error("SMS contact info processing failed", err)
+      );
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error) {
