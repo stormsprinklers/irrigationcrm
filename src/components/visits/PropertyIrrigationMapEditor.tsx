@@ -26,6 +26,18 @@ import {
   type ImagePolygon,
 } from "@/lib/irrigation/image-polygon";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import {
+  defaultZoneAttributes,
+  IrrigationZoneAttributesPanel,
+} from "@/components/irrigation/IrrigationZoneAttributesPanel";
+import { calculateZoneSchedule } from "@/lib/irrigation/runtime";
+import type {
+  IrrigationType,
+  ShadeLevel,
+  SlopeLevel,
+  SoilType,
+  VegetationType,
+} from "@/lib/irrigation/types";
 
 type MapZoneState = {
   name: string;
@@ -144,7 +156,7 @@ export function PropertyIrrigationMapEditor({
           })
         ),
       ];
-      setMarkers(loadedMarkers);
+      setMarkers(loadedMarkers.filter((m) => m.point != null));
     } finally {
       setLoading(false);
     }
@@ -197,18 +209,34 @@ export function PropertyIrrigationMapEditor({
               waterSource: waterSource || null,
               irrigationZoneCount: zones.length,
             },
-            mapZones: zones.map((zone) => ({
-              name: zone.name,
-              polygonGeoJson: polygonToGeoJson(zone.polygon),
-              vegetationType: zone.vegetationType,
-              shadeLevel: zone.shadeLevel,
-              slopeLevel: zone.slopeLevel,
-              soilType: zone.soilType,
-              irrigationType: zone.irrigationType,
-              nozzleCount: zone.nozzleCount,
-              estimatedGpm: zone.estimatedGpm,
-              baseRuntimeMinutes: zone.baseRuntimeMinutes,
-            })),
+            mapZones: zones.map((zone) => {
+              const schedule =
+                zone.vegetationType && zone.irrigationType
+                  ? calculateZoneSchedule({
+                      vegetationType: zone.vegetationType as VegetationType,
+                      irrigationType: zone.irrigationType as IrrigationType,
+                      shadeLevel: (zone.shadeLevel as ShadeLevel) ?? "full_sun",
+                      soilType: (zone.soilType as SoilType) ?? "loam",
+                      slopeLevel: (zone.slopeLevel as SlopeLevel) ?? "flat",
+                    })
+                  : null;
+              return {
+                name: zone.name,
+                polygonGeoJson: polygonToGeoJson(zone.polygon),
+                vegetationType: zone.vegetationType,
+                shadeLevel: zone.shadeLevel,
+                slopeLevel: zone.slopeLevel,
+                soilType: zone.soilType,
+                irrigationType: zone.irrigationType,
+                nozzleCount: zone.nozzleCount,
+                estimatedGpm:
+                  zone.nozzleCount != null
+                    ? Math.round(zone.nozzleCount * 0.5 * 100) / 100
+                    : zone.estimatedGpm,
+                baseRuntimeMinutes:
+                  schedule?.adjustedRuntimeMinutes ?? zone.baseRuntimeMinutes,
+              };
+            }),
             valves,
             controllers,
             mapMarkers,
@@ -239,7 +267,10 @@ export function PropertyIrrigationMapEditor({
   }
 
   function handleZoneAdd() {
-    setZones((prev) => [...prev, { name: `Zone ${prev.length + 1}`, polygon: null }]);
+    setZones((prev) => [
+      ...prev,
+      { name: `Zone ${prev.length + 1}`, polygon: null, ...defaultZoneAttributes() },
+    ]);
     setActiveZoneIndex(zones.length);
   }
 
@@ -298,7 +329,14 @@ export function PropertyIrrigationMapEditor({
                 </Button>
               </>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setMarkerPlacement(null);
+                  setEditing(true);
+                }}
+              >
                 <Pencil className="mr-1.5 h-3.5 w-3.5" />
                 Edit map
               </Button>
@@ -390,6 +428,7 @@ export function PropertyIrrigationMapEditor({
               </div>
             )}
             <AerialZoneMapEditor
+              key={isEditing ? "edit" : "view"}
               imageUrl={mapImageUrl}
               zones={zones.length ? mapZones : [{ name: "Zone 1", polygon: null }]}
               activeZoneIndex={activeZoneIndex}
@@ -409,6 +448,17 @@ export function PropertyIrrigationMapEditor({
               onZoneAdd={isEditing ? handleZoneAdd : undefined}
               onZoneRemove={isEditing ? handleZoneRemove : undefined}
             />
+            {isEditing && zones.length > 0 && activeZoneIndex < zones.length ? (
+              <IrrigationZoneAttributesPanel
+                zoneName={zones[activeZoneIndex]?.name ?? `Zone ${activeZoneIndex + 1}`}
+                attributes={zones[activeZoneIndex] ?? {}}
+                onChange={(attrs) =>
+                  setZones((prev) =>
+                    prev.map((zone, i) => (i === activeZoneIndex ? { ...zone, ...attrs } : zone))
+                  )
+                }
+              />
+            ) : null}
           </>
         )}
       </div>

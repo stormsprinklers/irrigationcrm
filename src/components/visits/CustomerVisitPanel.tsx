@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { ChevronRight, Mail, MessageSquare, Phone } from "lucide-react";
+import { ChevronRight, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -52,9 +52,11 @@ function formatMoney(value: string | number) {
 type Props = {
   customer: Customer | null;
   visitId?: string;
+  jobAddress?: string | null;
+  mapsUrl?: string | null;
 };
 
-export function CustomerVisitPanel({ customer, visitId }: Props) {
+export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl }: Props) {
   const [tab, setTab] = useState<"contact" | "history">("contact");
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -119,40 +121,61 @@ export function CustomerVisitPanel({ customer, visitId }: Props) {
       </div>
 
       {tab === "contact" ? (
-        <div className="flex flex-wrap items-center gap-2 p-3">
-          <Link
-            href={`/customers/${customer.id}`}
-            className="mr-1 font-medium text-primary hover:underline"
-          >
-            <CustomerNameWithBadge
-              name={customer.name}
-              doNotService={customer.doNotService}
-              nameClassName="font-medium"
-            />
-          </Link>
-          {customer.phone ? (
-            <>
+        <div className="space-y-3 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/customers/${customer.id}`}
+              className="mr-1 font-medium text-primary hover:underline"
+            >
+              <CustomerNameWithBadge
+                name={customer.name}
+                doNotService={customer.doNotService}
+                nameClassName="font-medium"
+              />
+            </Link>
+            {customer.phone ? (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={buildInboxCustomerUrl("voice", linkParams)}>
+                    <Phone className="h-4 w-4" />
+                    Call
+                  </Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={buildInboxCustomerUrl("sms", linkParams)}>
+                    <MessageSquare className="h-4 w-4" />
+                    Text
+                  </Link>
+                </Button>
+              </>
+            ) : null}
+            {customer.email ? (
               <Button variant="outline" size="sm" asChild>
-                <Link href={buildInboxCustomerUrl("voice", linkParams)}>
-                  <Phone className="h-4 w-4" />
-                  Call
+                <Link href={buildInboxCustomerUrl("email", linkParams)}>
+                  <Mail className="h-4 w-4" />
+                  Email
                 </Link>
               </Button>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={buildInboxCustomerUrl("sms", linkParams)}>
-                  <MessageSquare className="h-4 w-4" />
-                  Text
-                </Link>
-              </Button>
-            </>
-          ) : null}
-          {customer.email ? (
-            <Button variant="outline" size="sm" asChild>
-              <Link href={buildInboxCustomerUrl("email", linkParams)}>
-                <Mail className="h-4 w-4" />
-                Email
-              </Link>
-            </Button>
+            ) : null}
+          </div>
+          {jobAddress ? (
+            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+              <p className="min-w-0 flex-1">{jobAddress}</p>
+              {mapsUrl ? (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  asChild
+                  title="Navigate with Google Maps"
+                >
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                    <MapPin className="h-4 w-4" />
+                    <span className="sr-only">Open in Google Maps</span>
+                  </a>
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : (

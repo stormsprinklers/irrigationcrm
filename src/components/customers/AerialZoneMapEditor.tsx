@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  IRRIGATION_MAP_MARKER_KINDS,
   MAP_MARKER_STYLES,
   ZONE_MAP_COLORS,
   type IrrigationMapMarkerKind,
@@ -71,7 +70,7 @@ export function AerialZoneMapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const [draftPoints, setDraftPoints] = useState<ImagePolygon>([]);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -84,7 +83,7 @@ export function AerialZoneMapEditor({
   }, [focusOnZones, zones, markers]);
 
   const croppedLayout = useMemo(() => {
-    if (!cropBounds) return null;
+    if (!cropBounds || !containerWidth) return null;
     return computeCroppedMapLayout(
       cropBounds,
       naturalSize.width,
@@ -94,14 +93,27 @@ export function AerialZoneMapEditor({
     );
   }, [cropBounds, naturalSize, containerWidth]);
 
-  const measure = useCallback(() => {
+  const useCrop = Boolean(croppedLayout && focusOnZones);
+
+  const syncOverlaySize = useCallback(() => {
     const img = containerRef.current?.querySelector("img");
     if (!img) return;
-    setSize({ width: img.clientWidth, height: img.clientHeight });
+
     if (img.naturalWidth && img.naturalHeight) {
       setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
     }
-  }, []);
+
+    if (useCrop && croppedLayout) {
+      setOverlaySize({ width: croppedLayout.innerWidth, height: croppedLayout.innerHeight });
+      return;
+    }
+
+    const width = img.clientWidth;
+    const height = img.clientHeight;
+    if (width > 0 && height > 0) {
+      setOverlaySize({ width, height });
+    }
+  }, [useCrop, croppedLayout]);
 
   useEffect(() => {
     const el = outerRef.current;
@@ -115,9 +127,20 @@ export function AerialZoneMapEditor({
   }, []);
 
   useEffect(() => {
-    if (!croppedLayout) return;
-    setSize({ width: croppedLayout.innerWidth, height: croppedLayout.innerHeight });
-  }, [croppedLayout]);
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => syncOverlaySize());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [syncOverlaySize]);
+
+  useEffect(() => {
+    syncOverlaySize();
+  }, [syncOverlaySize, useCrop, croppedLayout, imageUrl, readOnly, focusOnZones]);
+
+  useEffect(() => {
+    setDraftPoints([]);
+  }, [markerPlacement, readOnly]);
 
   function toNormalized(clientX: number, clientY: number): ImagePoint | null {
     const img = containerRef.current?.querySelector("img");
@@ -130,8 +153,9 @@ export function AerialZoneMapEditor({
     return [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000];
   }
 
-  function handleImageClick(e: React.MouseEvent) {
+  function handleMapClick(e: React.MouseEvent) {
     if (readOnly) return;
+    e.stopPropagation();
     const point = toNormalized(e.clientX, e.clientY);
     if (!point) return;
 
@@ -155,129 +179,9 @@ export function AerialZoneMapEditor({
   }
 
   const activeZone = zones[activeZoneIndex];
-  const displayWidth = croppedLayout?.innerWidth ?? size.width;
-  const displayHeight = croppedLayout?.innerHeight ?? size.height;
-  const useCrop = Boolean(croppedLayout);
+  const { width: displayWidth, height: displayHeight } = overlaySize;
   const placingMarker = Boolean(markerPlacement);
-
-  const mapViewport = (
-    <div
-      ref={containerRef}
-      className={cn(
-        "relative",
-        !useCrop && "inline-block max-w-full",
-        !readOnly && !useCrop && (placingMarker ? "cursor-pointer" : "cursor-crosshair")
-      )}
-      style={
-        useCrop
-          ? {
-              width: croppedLayout!.innerWidth,
-              height: croppedLayout!.innerHeight,
-              left:
-                croppedLayout!.offsetLeft +
-                Math.max(0, (containerWidth - croppedLayout!.outerWidth) / 2),
-              top: croppedLayout!.offsetTop,
-              position: "absolute",
-            }
-          : undefined
-      }
-      onClick={handleImageClick}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={imageUrl}
-        alt="Property aerial"
-        className={cn(
-          "block",
-          useCrop ? "h-full w-full object-fill" : "max-h-[28rem] w-full object-contain"
-        )}
-        onLoad={measure}
-      />
-      {displayWidth > 0 && displayHeight > 0 && (
-        <svg
-          className="pointer-events-none absolute left-0 top-0"
-          width={displayWidth}
-          height={displayHeight}
-          viewBox={`0 0 ${displayWidth} ${displayHeight}`}
-        >
-          {zones.map((zone, index) => {
-            if (!zone.polygon?.length) return null;
-            const color = zone.color ?? ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length];
-            const [cx, cy] = polygonCentroid(zone.polygon);
-            return (
-              <g key={`${zone.name}-${index}`}>
-                <polygon
-                  points={polygonToSvgPoints(zone.polygon, displayWidth, displayHeight)}
-                  fill={color}
-                  fillOpacity={index === activeZoneIndex ? 0.45 : 0.3}
-                  stroke={color}
-                  strokeWidth={2}
-                />
-                <text
-                  x={cx * displayWidth}
-                  y={cy * displayHeight}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="fill-white text-[11px] font-semibold"
-                  style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.55)", strokeWidth: 3 }}
-                >
-                  {zone.name}
-                </text>
-              </g>
-            );
-          })}
-          {markers.map((marker) => {
-            if (!marker.point) return null;
-            const style = MAP_MARKER_STYLES[marker.type];
-            const [x, y] = marker.point;
-            return (
-              <g key={marker.id}>
-                <circle
-                  cx={x * displayWidth}
-                  cy={y * displayHeight}
-                  r={10}
-                  fill={style.color}
-                  stroke="#fff"
-                  strokeWidth={2}
-                />
-                <text
-                  x={x * displayWidth}
-                  y={y * displayHeight}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className="fill-white text-[9px] font-bold"
-                >
-                  {style.short}
-                </text>
-              </g>
-            );
-          })}
-          {!readOnly && draftPoints.length > 0 && (
-            <>
-              <polyline
-                points={polygonToSvgPoints(draftPoints, displayWidth, displayHeight)}
-                fill="none"
-                stroke="#ffffff"
-                strokeWidth={2}
-                strokeDasharray="4 4"
-              />
-              {draftPoints.map(([x, y], i) => (
-                <circle
-                  key={i}
-                  cx={x * displayWidth}
-                  cy={y * displayHeight}
-                  r={4}
-                  fill="#ffffff"
-                  stroke="#111827"
-                  strokeWidth={1.5}
-                />
-              ))}
-            </>
-          )}
-        </svg>
-      )}
-    </div>
-  );
+  const canInteract = !readOnly && displayWidth > 0 && displayHeight > 0;
 
   return (
     <div className="space-y-3">
@@ -286,34 +190,43 @@ export function AerialZoneMapEditor({
           {zones.map((zone, index) => {
             const color = zone.color ?? ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length];
             const hasPolygon = Boolean(zone.polygon?.length);
+            const isActive = index === activeZoneIndex;
             return (
               <div key={`${zone.name}-${index}`} className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={index === activeZoneIndex ? "default" : "outline"}
-                  onClick={() => {
-                    onActiveZoneChange(index);
-                    setDraftPoints([]);
-                  }}
-                  className="gap-2"
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: color }}
-                  />
-                  {onZoneRename ? (
-                    <Input
-                      value={zone.name}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => onZoneRename(index, e.target.value)}
-                      className="h-6 w-20 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0"
-                    />
-                  ) : (
-                    zone.name
+                <div
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md border px-2 py-1 text-sm",
+                    isActive ? "border-primary bg-primary text-primary-foreground" : "bg-background"
                   )}
-                  {hasPolygon ? <Check className="h-3 w-3 opacity-70" /> : null}
-                </Button>
+                >
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2"
+                    onClick={() => {
+                      onActiveZoneChange(index);
+                      setDraftPoints([]);
+                    }}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    {onZoneRename ? (
+                      <Input
+                        value={zone.name}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => onZoneRename(index, e.target.value)}
+                        className={cn(
+                          "h-6 w-20 border-0 bg-transparent px-1 text-xs shadow-none focus-visible:ring-0",
+                          isActive ? "text-primary-foreground" : ""
+                        )}
+                      />
+                    ) : (
+                      zone.name
+                    )}
+                    {hasPolygon ? <Check className="h-3 w-3 opacity-70" /> : null}
+                  </button>
+                </div>
                 {onZoneRemove && zones.length > 1 ? (
                   <Button
                     type="button"
@@ -348,21 +261,127 @@ export function AerialZoneMapEditor({
       <div
         ref={outerRef}
         className={cn(
-          "overflow-hidden rounded-md border bg-muted/20",
-          useCrop ? "relative w-full" : "inline-block max-w-full",
-          !readOnly && !useCrop && (placingMarker ? "cursor-pointer" : "cursor-crosshair")
+          "relative w-full overflow-hidden rounded-md border bg-muted/20",
+          canInteract && (placingMarker ? "cursor-pointer" : "cursor-crosshair")
         )}
         style={
-          useCrop
-            ? {
-                width: "100%",
-                height: croppedLayout!.outerHeight,
-              }
-            : undefined
+          useCrop && croppedLayout
+            ? { height: croppedLayout.outerHeight, minHeight: 120 }
+            : { minHeight: 200 }
         }
-        onClick={!useCrop ? handleImageClick : undefined}
+        onClick={handleMapClick}
       >
-        {mapViewport}
+        <div
+          ref={containerRef}
+          className={cn("relative", useCrop && "absolute")}
+          style={
+            useCrop && croppedLayout
+              ? {
+                  width: croppedLayout.innerWidth,
+                  height: croppedLayout.innerHeight,
+                  left:
+                    croppedLayout.offsetLeft +
+                    Math.max(0, (containerWidth - croppedLayout.outerWidth) / 2),
+                  top: croppedLayout.offsetTop,
+                }
+              : { width: "100%" }
+          }
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt="Property aerial"
+            className={cn(
+              "block w-full select-none",
+              useCrop ? "h-full object-fill" : "max-h-[28rem] object-contain"
+            )}
+            draggable={false}
+            onLoad={syncOverlaySize}
+          />
+          {displayWidth > 0 && displayHeight > 0 && (
+            <svg
+              className="pointer-events-none absolute left-0 top-0"
+              width={displayWidth}
+              height={displayHeight}
+              viewBox={`0 0 ${displayWidth} ${displayHeight}`}
+            >
+              {zones.map((zone, index) => {
+                if (!zone.polygon?.length) return null;
+                const color = zone.color ?? ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length];
+                const [cx, cy] = polygonCentroid(zone.polygon);
+                return (
+                  <g key={`${zone.name}-${index}`}>
+                    <polygon
+                      points={polygonToSvgPoints(zone.polygon, displayWidth, displayHeight)}
+                      fill={color}
+                      fillOpacity={index === activeZoneIndex ? 0.45 : 0.3}
+                      stroke={color}
+                      strokeWidth={2}
+                    />
+                    <text
+                      x={cx * displayWidth}
+                      y={cy * displayHeight}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-white text-[11px] font-semibold"
+                      style={{ paintOrder: "stroke", stroke: "rgba(0,0,0,0.55)", strokeWidth: 3 }}
+                    >
+                      {zone.name}
+                    </text>
+                  </g>
+                );
+              })}
+              {markers.map((marker) => {
+                if (!marker.point) return null;
+                const style = MAP_MARKER_STYLES[marker.type];
+                const [x, y] = marker.point;
+                return (
+                  <g key={marker.id}>
+                    <circle
+                      cx={x * displayWidth}
+                      cy={y * displayHeight}
+                      r={10}
+                      fill={style.color}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                    <text
+                      x={x * displayWidth}
+                      y={y * displayHeight}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-white text-[9px] font-bold"
+                    >
+                      {style.short}
+                    </text>
+                  </g>
+                );
+              })}
+              {!readOnly && draftPoints.length > 0 && (
+                <>
+                  <polyline
+                    points={polygonToSvgPoints(draftPoints, displayWidth, displayHeight)}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                  />
+                  {draftPoints.map(([x, y], i) => (
+                    <circle
+                      key={i}
+                      cx={x * displayWidth}
+                      cy={y * displayHeight}
+                      r={4}
+                      fill="#ffffff"
+                      stroke="#111827"
+                      strokeWidth={1.5}
+                    />
+                  ))}
+                </>
+              )}
+            </svg>
+          )}
+        </div>
       </div>
 
       {!readOnly && !placingMarker && (
@@ -402,7 +421,10 @@ export function AerialZoneMapEditor({
       {markers.length > 0 && onMarkerRemove && !readOnly ? (
         <ul className="space-y-1 text-xs">
           {markers.map((marker) => (
-            <li key={marker.id} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+            <li
+              key={marker.id}
+              className="flex items-center justify-between gap-2 rounded border px-2 py-1"
+            >
               <span>
                 <span
                   className="mr-1.5 inline-block h-2 w-2 rounded-full"
@@ -410,8 +432,15 @@ export function AerialZoneMapEditor({
                 />
                 {MAP_MARKER_STYLES[marker.type].label}
                 {marker.label ? ` — ${marker.label}` : ""}
+                {!marker.point ? " (location not set)" : ""}
               </span>
-              <Button type="button" size="icon" variant="ghost" className="h-6 w-6" onClick={() => onMarkerRemove(marker.id)}>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                onClick={() => onMarkerRemove(marker.id)}
+              >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </li>

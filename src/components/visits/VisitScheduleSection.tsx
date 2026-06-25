@@ -3,23 +3,41 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import type { VisitStatus } from "@prisma/client";
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
+type EmployeeOption = {
+  id: string;
+  name: string;
+  photoUrl?: string | null;
+  color?: string | null;
+};
+
 type Props = {
   visitId: string;
   startAt: string;
   endAt: string;
   status: string;
-  assignedUser: { id: string; name: string } | null;
+  assignedUser: EmployeeOption | null;
   canEdit: boolean;
   onUpdated: () => Promise<void>;
 };
+
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 function toDateInput(iso: string) {
   return iso.slice(0, 10);
@@ -30,6 +48,22 @@ function toTimeInput(iso: string) {
   const hours = String(d.getHours()).padStart(2, "0");
   const minutes = String(d.getMinutes()).padStart(2, "0");
   return `${hours}:${minutes}`;
+}
+
+function TechnicianAvatar({ employee }: { employee: EmployeeOption }) {
+  return (
+    <Avatar className="h-8 w-8 shrink-0">
+      {employee.photoUrl ? (
+        <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
+      ) : null}
+      <AvatarFallback
+        className="text-xs"
+        style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}
+      >
+        {getInitials(employee.name)}
+      </AvatarFallback>
+    </Avatar>
+  );
 }
 
 export function VisitScheduleSection({
@@ -45,7 +79,7 @@ export function VisitScheduleSection({
   const [startTime, setStartTime] = useState(toTimeInput(startAt));
   const [endTime, setEndTime] = useState(toTimeInput(endAt));
   const [assignedUserId, setAssignedUserId] = useState(assignedUser?.id ?? "");
-  const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -70,6 +104,9 @@ export function VisitScheduleSection({
     }
     return list;
   }, [employees, assignedUser]);
+
+  const selectedEmployee =
+    employeeOptions.find((e) => e.id === assignedUserId) ?? assignedUser ?? null;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -155,19 +192,22 @@ export function VisitScheduleSection({
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               Assigned technician
             </label>
-            <select
-              value={assignedUserId}
-              onChange={(e) => setAssignedUserId(e.target.value)}
-              className={selectClassName}
-              required
-            >
-              <option value="">Select technician</option>
-              {employeeOptions.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              {selectedEmployee ? <TechnicianAvatar employee={selectedEmployee} /> : null}
+              <select
+                value={assignedUserId}
+                onChange={(e) => setAssignedUserId(e.target.value)}
+                className={selectClassName}
+                required
+              >
+                <option value="">Select technician</option>
+                {employeeOptions.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <Button type="submit" size="sm" className="w-full" disabled={saving}>
             {saving ? "Saving..." : "Save schedule"}
@@ -189,7 +229,16 @@ export function VisitScheduleSection({
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Technician</dt>
-            <dd className="font-medium">{assignedUser?.name ?? "Unassigned"}</dd>
+            <dd className="font-medium">
+              {assignedUser ? (
+                <span className="flex items-center gap-2">
+                  <TechnicianAvatar employee={assignedUser} />
+                  {assignedUser.name}
+                </span>
+              ) : (
+                "Unassigned"
+              )}
+            </dd>
           </div>
         </dl>
       )}

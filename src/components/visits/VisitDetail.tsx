@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
-import { ArrowLeft, CheckCircle2, MapPin, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
@@ -323,7 +323,6 @@ export function VisitDetail({ visitId }: Props) {
     (visit.property ? formatPostalAddress(visit.property) : null) ||
     (visit.customer ? formatPostalAddress(visit.customer) : null);
   const mapsUrl = jobAddress ? googleMapsDirectionsUrl(jobAddress) : null;
-  const location = jobAddress || visit.serviceArea.name;
 
   return (
     <div className="space-y-6">
@@ -347,23 +346,6 @@ export function VisitDetail({ visitId }: Props) {
           <p className="mt-1 text-sm text-muted-foreground">
             {format(new Date(visit.startAt), "EEE, MMM d, yyyy")}
           </p>
-          <div className="mt-2 flex items-start gap-2">
-            <p className="text-sm text-muted-foreground">{location}</p>
-            {mapsUrl ? (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 shrink-0"
-                asChild
-                title="Navigate with Google Maps"
-              >
-                <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                  <MapPin className="h-4 w-4" />
-                  <span className="sr-only">Open in Google Maps</span>
-                </a>
-              </Button>
-            ) : null}
-          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CollectPaymentButton
@@ -415,7 +397,12 @@ export function VisitDetail({ visitId }: Props) {
         />
       ) : null}
 
-      <CustomerVisitPanel customer={visit.customer} visitId={visit.id} />
+      <CustomerVisitPanel
+        customer={visit.customer}
+        visitId={visit.id}
+        jobAddress={jobAddress}
+        mapsUrl={mapsUrl}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
@@ -442,7 +429,12 @@ export function VisitDetail({ visitId }: Props) {
             status={visit.status}
             assignedUser={
               visit.assignedUser
-                ? { id: visit.assignedUser.id, name: visit.assignedUser.name }
+                ? {
+                    id: visit.assignedUser.id,
+                    name: visit.assignedUser.name,
+                    photoUrl: visit.assignedUser.photoUrl,
+                    color: visit.assignedUser.color,
+                  }
                 : null
             }
             canEdit={canEditSchedule}
