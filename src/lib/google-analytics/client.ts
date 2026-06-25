@@ -1,3 +1,7 @@
+/**
+ * @deprecated GA4 CRM OAuth client — archived. API routes return 410. Use lib/marketing/website-analytics.ts.
+ * See DEPRECATED.md in this folder.
+ */
 import {
   createOAuthState,
   exchangeOAuthCode,

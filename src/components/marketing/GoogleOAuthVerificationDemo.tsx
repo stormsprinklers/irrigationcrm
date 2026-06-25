@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { format } from "date-fns";
-import { BarChart3, Building2, Globe, Search, Shield, Video } from "lucide-react";
+import { Building2, Globe, Search, Shield, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,13 +11,11 @@ import {
   MarketingSectionCard,
 } from "@/components/marketing/MarketingMetricGrid";
 import {
-  buildDemoGa4Dashboard,
   buildDemoGbpPerformance,
   buildDemoGscDashboard,
-  DEMO_GA4_MEASUREMENT_ID,
-  DEMO_GA4_PROPERTY_ID,
   DEMO_GBP_LOCATION,
   DEMO_GSC_SITE,
+  DEMO_WEBSITE_ORGANIC_CONVERSIONS,
   OAUTH_DEMO_SCOPES,
   OAUTH_FLOW_STEPS,
 } from "@/lib/marketing/oauth-verification-demo-data";
@@ -36,7 +34,6 @@ function formatPosition(value: number) {
 }
 
 export function GoogleOAuthVerificationDemo() {
-  const ga4 = buildDemoGa4Dashboard();
   const gsc = buildDemoGscDashboard();
   const gbp = buildDemoGbpPerformance();
   const connectedAt = format(new Date(), "MMM d, yyyy");
@@ -60,10 +57,7 @@ export function GoogleOAuthVerificationDemo() {
             Preview URL: /marketing/google-oauth-demo
           </Badge>
           <Badge variant="outline" className="border-amber-400 bg-white text-amber-950">
-            GA4 property {DEMO_GA4_PROPERTY_ID}
-          </Badge>
-          <Badge variant="outline" className="border-amber-400 bg-white text-amber-950">
-            Measurement ID {DEMO_GA4_MEASUREMENT_ID}
+            GSC: {DEMO_GSC_SITE}
           </Badge>
           <Button size="sm" variant="outline" asChild className="bg-white">
             <Link href="/marketing/seo">Live SEO dashboard</Link>
@@ -122,6 +116,10 @@ export function GoogleOAuthVerificationDemo() {
             </Card>
           ))}
         </div>
+        <p className="text-sm text-muted-foreground">
+          Website traffic and conversions are tracked natively in the CRM (Marketing → SEO → Website
+          analytics) and do not require a Google Analytics OAuth scope.
+        </p>
       </section>
 
       <section className="space-y-4">
@@ -205,8 +203,8 @@ export function GoogleOAuthVerificationDemo() {
                 { label: "Pages with impressions", value: formatCount(gsc.overview.pagesWithImpressions) },
                 {
                   label: "Organic conversions",
-                  value: formatCount(ga4.overview.organicConversions),
-                  hint: "From linked GA4",
+                  value: formatCount(DEMO_WEBSITE_ORGANIC_CONVERSIONS),
+                  hint: "Native website tracking",
                 },
               ]}
             />
@@ -238,128 +236,6 @@ export function GoogleOAuthVerificationDemo() {
         </Card>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Google Analytics 4 preview</h2>
-          <Badge className="bg-primary">analytics.readonly — verification focus</Badge>
-        </div>
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Property ID: {DEMO_GA4_PROPERTY_ID} · {DEMO_GA4_MEASUREMENT_ID}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Website traffic from {ga4.overview.startDate} to {ga4.overview.endDate} · Connected{" "}
-              {connectedAt}
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="rounded-md border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-              <p className="font-medium">Why analytics.readonly is required</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>
-                  List GA4 properties the signed-in user can access (Admin API accountSummaries)
-                </li>
-                <li>
-                  Display organic sessions, conversions, engagement rate, and top pages (Data API
-                  runReport)
-                </li>
-                <li>
-                  Complement Search Console clicks/impressions with on-site conversion data
-                  (generate_lead, booking_completed, phone_call)
-                </li>
-                <li>
-                  More limited scopes do not expose GA4 reporting data; we only request read-only
-                  access and never modify Analytics configuration
-                </li>
-              </ul>
-            </div>
-
-            <MarketingMetricGrid
-              comingSoon={false}
-              columns={6}
-              metrics={[
-                {
-                  label: "Organic sessions",
-                  value: formatCount(ga4.overview.organicSessions),
-                  hint: "Organic Search channel",
-                },
-                { label: "Total sessions", value: formatCount(ga4.overview.totalSessions) },
-                { label: "Conversions", value: formatCount(ga4.overview.conversions) },
-                {
-                  label: "Organic conversions",
-                  value: formatCount(ga4.overview.organicConversions),
-                },
-                { label: "Engagement rate", value: formatPercent(ga4.overview.engagementRate) },
-                { label: "GA4 property", value: ga4.overview.propertyId },
-              ]}
-            />
-
-            <MarketingSectionCard
-              title="Top pages (GA4)"
-              description="runReport with dimension pagePath — read-only"
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="px-3 py-2 font-medium">Page path</th>
-                      <th className="px-3 py-2 font-medium">Page views</th>
-                      <th className="px-3 py-2 font-medium">Sessions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ga4.pages.map((row) => (
-                      <tr key={row.pagePath} className="border-b last:border-b-0">
-                        <td className="px-3 py-2 font-mono text-xs">{row.pagePath}</td>
-                        <td className="px-3 py-2">{formatCount(row.screenPageViews)}</td>
-                        <td className="px-3 py-2">{formatCount(row.sessions)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </MarketingSectionCard>
-
-            <MarketingSectionCard
-              title="Conversion events"
-              description="Key events tracked via GTM on stormsprinklers.com"
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="px-3 py-2 font-medium">Event</th>
-                      <th className="px-3 py-2 font-medium">Event count</th>
-                      <th className="px-3 py-2 font-medium">Conversions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ga4.conversions.map((row) => (
-                      <tr key={row.eventName} className="border-b last:border-b-0">
-                        <td className="px-3 py-2 font-medium">{row.eventName}</td>
-                        <td className="px-3 py-2">{formatCount(row.eventCount)}</td>
-                        <td className="px-3 py-2">
-                          {row.conversions > 0 ? formatCount(row.conversions) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </MarketingSectionCard>
-
-            <Button size="sm" asChild>
-              <Link href="/api/marketing/google-analytics">
-                <Globe className="mr-2 h-4 w-4" />
-                Connect Google Analytics (live OAuth)
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </section>
-
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -374,11 +250,15 @@ export function GoogleOAuthVerificationDemo() {
             marketing metrics inside the CRM dashboard.
           </p>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Read-only scopes only — no write access to Analytics, Search Console, or GBP</li>
+            <li>Read-only scopes only — no write access to Search Console or GBP reporting APIs</li>
             <li>Tokens stored server-side per company; not shared across tenants</li>
             <li>Data displayed only to authenticated CRM admins of that company</li>
             <li>Disconnect removes stored refresh tokens immediately</li>
             <li>No data resale, no advertising use, no sharing with unrelated third parties</li>
+            <li>
+              Website analytics (page views, UTMs, conversions) are collected first-party and do not
+              use Google Analytics OAuth
+            </li>
           </ul>
         </CardContent>
       </Card>

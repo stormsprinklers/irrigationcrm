@@ -1,3 +1,4 @@
+/** @deprecated GA4 CRM OAuth types — archived. See DEPRECATED.md */
 export const GOOGLE_ANALYTICS_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
 export type Ga4Property = {

@@ -467,6 +467,7 @@ model Company {
   googleSearchConsoleRefreshToken String?
   googleSearchConsoleSiteUrl      String?
   googleSearchConsoleConnectedAt  DateTime?
+  // @deprecated GA4 CRM OAuth — use native website analytics. See lib/google-analytics/DEPRECATED.md
   googleAnalyticsRefreshToken     String?
   googleAnalyticsPropertyId       String?
   googleAnalyticsConnectedAt      DateTime?

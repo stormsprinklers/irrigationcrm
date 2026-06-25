@@ -1,53 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageCustomers } from "@/lib/customers/permissions";
-import {
-  buildGoogleAnalyticsAuthUrl,
-  isGoogleAnalyticsConfigured,
-} from "@/lib/google-analytics/client";
+import { NextRequest } from "next/server";
+import { deprecatedGa4JsonResponse } from "@/lib/google-analytics/deprecated";
 
-export async function GET(request: NextRequest) {
-  try {
-    const user = await requireSessionUser();
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
-
-    if (!isGoogleAnalyticsConfigured()) {
-      return NextResponse.json(
-        {
-          error:
-            "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET on the server (Vercel environment variables).",
-        },
-        { status: 503 }
-      );
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
-    const redirectUri = `${appUrl}/api/marketing/google-analytics/callback`;
-    const url = buildGoogleAnalyticsAuthUrl(user.companyId, redirectUri);
-
-    return NextResponse.redirect(url);
-  } catch {
-    return unauthorizedResponse();
-  }
+/** @deprecated Use native website analytics. See lib/google-analytics/DEPRECATED.md */
+export async function GET(_request: NextRequest) {
+  return deprecatedGa4JsonResponse();
 }
 
-export async function DELETE() {
-  try {
-    const user = await requireSessionUser();
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
-
-    const { prisma } = await import("@/lib/prisma");
-    await prisma.company.update({
-      where: { id: user.companyId },
-      data: {
-        googleAnalyticsRefreshToken: null,
-        googleAnalyticsPropertyId: null,
-        googleAnalyticsConnectedAt: null,
-      },
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch {
-    return unauthorizedResponse();
-  }
+/** @deprecated */
+export async function DELETE(_request: NextRequest) {
+  return deprecatedGa4JsonResponse();
 }

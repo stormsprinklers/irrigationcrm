@@ -1,4 +1,3 @@
-import type { Ga4DashboardData } from "@/lib/google-analytics/types";
 import type { GbpPerformanceSummary } from "@/lib/google-business/types";
 import type { GscDashboardData } from "@/lib/google-search-console/types";
 
@@ -26,51 +25,13 @@ export const OAUTH_DEMO_SCOPES = [
     redirectPath: "/api/marketing/search-console/callback",
     crmPath: "/marketing/seo",
   },
-  {
-    id: "analytics.readonly",
-    scope: "https://www.googleapis.com/auth/analytics.readonly",
-    product: "Google Analytics 4",
-    purpose:
-      "Read GA4 session, conversion, and page-level reports so owners can monitor organic traffic and key events alongside Search Console data.",
-    apis: ["Google Analytics Data API (runReport)", "Google Analytics Admin API (accountSummaries)"],
-    redirectPath: "/api/marketing/google-analytics/callback",
-    crmPath: "/marketing/seo",
-  },
 ] as const;
 
-export const DEMO_GA4_PROPERTY_ID = "381923905";
-export const DEMO_GA4_MEASUREMENT_ID = "G-7ZFJ52TXXN";
 export const DEMO_GSC_SITE = "sc-domain:stormsprinklers.com";
 export const DEMO_GBP_LOCATION = "Storm Sprinklers — Utah County";
 
-export function buildDemoGa4Dashboard(): Ga4DashboardData {
-  return {
-    overview: {
-      propertyId: DEMO_GA4_PROPERTY_ID,
-      startDate: DEMO_START,
-      endDate: DEMO_END,
-      totalSessions: 4820,
-      organicSessions: 2140,
-      conversions: 186,
-      organicConversions: 94,
-      engagementRate: 0.612,
-    },
-    pages: [
-      { pagePath: "/", screenPageViews: 3240, sessions: 1890 },
-      { pagePath: "/sprinkler-repair", screenPageViews: 1180, sessions: 720 },
-      { pagePath: "/book", screenPageViews: 890, sessions: 540 },
-      { pagePath: "/pricing", screenPageViews: 640, sessions: 410 },
-      { pagePath: "/contact", screenPageViews: 520, sessions: 380 },
-      { pagePath: "/sprinkler-installation", screenPageViews: 480, sessions: 290 },
-    ],
-    conversions: [
-      { eventName: "generate_lead", eventCount: 142, conversions: 98 },
-      { eventName: "phone_call", eventCount: 88, conversions: 52 },
-      { eventName: "booking_completed", eventCount: 64, conversions: 36 },
-      { eventName: "pricing_completed", eventCount: 41, conversions: 0 },
-    ],
-  };
-}
+/** Sample organic conversion count for Search Console preview (native website tracking). */
+export const DEMO_WEBSITE_ORGANIC_CONVERSIONS = 94;
 
 export function buildDemoGscDashboard(): GscDashboardData {
   return {
@@ -173,13 +134,13 @@ export const OAUTH_FLOW_STEPS = [
     step: 1,
     title: "User initiates connect",
     detail:
-      "An authenticated CRM admin clicks Connect on Marketing → SEO (or Google Business Profile). The app redirects to Google OAuth with only the scope required for that integration.",
+      "An authenticated CRM admin clicks Connect on Marketing → SEO or Google Business Profile. The app redirects to Google OAuth with only the scope required for that integration.",
   },
   {
     step: 2,
     title: "Google consent screen",
     detail:
-      "The user signs in with their Google account and grants read-only access to their own Search Console / Analytics / Business Profile data.",
+      "The user signs in with their Google account and grants read-only access to their own Search Console or Business Profile data.",
   },
   {
     step: 3,
