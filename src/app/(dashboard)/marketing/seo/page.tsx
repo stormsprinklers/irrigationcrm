@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { GoogleAnalyticsPanel } from "@/components/marketing/GoogleAnalyticsPanel";
 import { SearchConsolePanel } from "@/components/marketing/SearchConsolePanel";
 import { SerpRankingPanel } from "@/components/marketing/SerpRankingPanel";
+import { WebsiteAnalyticsPanel } from "@/components/marketing/WebsiteAnalyticsPanel";
 
 export default function MarketingSeoPage() {
   return (
@@ -19,14 +19,16 @@ export default function MarketingSeoPage() {
       </div>
 
       <div className="mb-8">
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading website analytics...</p>}>
+          <WebsiteAnalyticsPanel />
+        </Suspense>
+      </div>
+
+      <div className="mb-8">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading Search Console...</p>}>
           <SearchConsolePanel />
         </Suspense>
       </div>
-
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading Google Analytics...</p>}>
-        <GoogleAnalyticsPanel />
-      </Suspense>
     </ContentArea>
   );
 }

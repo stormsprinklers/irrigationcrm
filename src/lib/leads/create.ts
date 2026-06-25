@@ -1,6 +1,7 @@
 import { LeadStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
+import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 
 export async function createLeadFromIntegration(
@@ -43,6 +44,9 @@ export async function createLeadFromIntegration(
   });
 
   notifyLeadCreated(companyId, lead).catch(() => {});
+  createInboxEntriesFromWebsiteLead(companyId, lead.id, input).catch((err) => {
+    console.error("Failed to create inbox entry for website lead", err);
+  });
 
   return { lead, created: true };
 }
