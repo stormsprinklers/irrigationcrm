@@ -8,12 +8,12 @@ export default function CsrDeskPage() {
   const [bookedVisitId, setBookedVisitId] = useState<string | null>(null);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-4 py-3">
       <PageHeader
         breadcrumb={["Inbox", "Voice", "CSR Desk"]}
         title="CSR Desk"
         subtitle="Take calls, book appointments, and manage the queue"
-        className="mb-4 shrink-0"
+        className="mb-2 shrink-0"
       />
       {bookedVisitId ? (
         <p className="mb-3 shrink-0 text-sm text-green-700">

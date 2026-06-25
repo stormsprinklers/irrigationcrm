@@ -205,9 +205,10 @@ export function CsrDeskPanel({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 basis-0 flex-col gap-4 overflow-hidden">
+    <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+      <div className="space-y-3">
       {needsScheduling.length > 0 ? (
-        <section className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
           <h3 className="mb-2 flex items-center gap-2 font-semibold text-amber-900">
             <Calendar className="h-4 w-4" /> Needs scheduling ({needsScheduling.length})
           </h3>
@@ -227,12 +228,12 @@ export function CsrDeskPanel({
           </ul>
         </section>
       ) : null}
-      <div className="grid shrink-0 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-      <section className="rounded-lg border border-border bg-white p-4">
-        <h3 className="mb-3 flex items-center gap-2 font-semibold">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-2 xl:grid-cols-4">
+      <section className="rounded-lg border border-border bg-white p-3">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Phone className="h-4 w-4" /> Queue ({queue.length})
         </h3>
-        <ScrollArea className="h-40">
+        <ScrollArea className="h-24">
           <ul className="space-y-2 text-sm">
             {queue.map((entry) => (
               <li key={entry.id} className="rounded border border-border p-2">
@@ -259,8 +260,8 @@ export function CsrDeskPanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-border bg-white p-4">
-        <h3 className="mb-3 flex items-center gap-2 font-semibold">
+      <section className="rounded-lg border border-border bg-white p-3">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <User className="h-4 w-4" /> Customer
         </h3>
         {activeCall ? (
@@ -301,15 +302,15 @@ export function CsrDeskPanel({
         )}
       </section>
 
-      <section className="rounded-lg border border-border bg-white p-4">
-        <h3 className="mb-3 flex items-center gap-2 font-semibold">
+      <section className="rounded-lg border border-border bg-white p-3">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Phone className="h-4 w-4" /> Outbound dialer
         </h3>
         <VoiceDialer compact />
       </section>
 
-      <section className="rounded-lg border border-border bg-white p-4">
-        <h3 className="mb-3 font-semibold">Actions</h3>
+      <section className="rounded-lg border border-border bg-white p-3">
+        <h3 className="mb-2 text-sm font-semibold">Actions</h3>
         <div className="flex flex-col gap-2">
           <Button
             variant="outline"
@@ -331,6 +332,7 @@ export function CsrDeskPanel({
           </Button>
         </div>
       </section>
+      </div>
 
       {bookOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
@@ -421,7 +423,7 @@ export function CsrDeskPanel({
       />
       </div>
 
-      <CsrCallHistoryPanel className="min-h-0 flex-1 basis-0" />
+      <CsrCallHistoryPanel className="min-h-0" />
     </div>
   );
 }

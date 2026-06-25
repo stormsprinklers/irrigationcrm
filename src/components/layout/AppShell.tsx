@@ -6,9 +6,9 @@ import { IncomingCallModal } from "@/components/voice/IncomingCallModal";
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <VoiceDeviceProvider>
-      <div className="flex min-h-screen flex-col bg-page">
+      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
         <TopNav />
-        <main className="flex-1 pb-16">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-auto pb-16 xl:pb-0">{children}</main>
         <ActiveCallBar />
         <IncomingCallModal />
       </div>

@@ -526,8 +526,8 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
           scheduled revenue
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div className="grid grid-cols-7 gap-px rounded-lg border border-border bg-border">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="grid h-full min-h-full grid-cols-7 gap-px border-t border-border bg-border">
           {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
             <div
               key={label}

@@ -1,5 +1,9 @@
 import { ScheduleView } from "@/components/schedule/ScheduleView";
 
 export default function SchedulePage() {
-  return <ScheduleView />;
+  return (
+    <div className="h-full w-full">
+      <ScheduleView />
+    </div>
+  );
 }

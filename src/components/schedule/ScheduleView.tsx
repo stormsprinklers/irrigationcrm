@@ -184,7 +184,7 @@ export function ScheduleView() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <ScheduleToolbar
         weekLabel={periodLabel}
         weeklyRevenue={summary.revenueFormatted}

@@ -48,11 +48,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-1 basis-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex-row",
+        "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex-row",
         className
       )}
     >
-      <div className="flex min-h-[280px] min-w-0 flex-col overflow-hidden border-b border-border lg:min-h-0 lg:w-[38%] lg:border-b-0 lg:border-r">
+      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-b border-border lg:h-auto lg:w-[34%] lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold">Call history</h3>
@@ -113,7 +113,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
         </div>
       </div>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:w-[62%]">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:w-[66%]">
         <div className="shrink-0 border-b border-border px-4 py-3">
           <h3 className="font-semibold">Call details</h3>
         </div>

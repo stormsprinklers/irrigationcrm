@@ -82,6 +82,9 @@ export const priceBookSidebar: NavSection[] = [
 
 export const reportingSidebar: NavSection[] = [
   {
+    items: [{ label: "KPI Dashboard", href: "/reporting" }],
+  },
+  {
     items: [{ label: "Business insights", href: "/reporting/insights", badge: "New" }],
   },
   {
@@ -95,7 +98,6 @@ export const reportingSidebar: NavSection[] = [
   {
     title: "ALL REPORTS",
     items: [
-      { label: "Jobs", href: "/reporting" },
       { label: "Estimates", href: "/reporting/estimates" },
       { label: "Leads", href: "/reporting/leads" },
       { label: "Marketing", href: "/reporting/marketing" },

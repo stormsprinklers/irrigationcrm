@@ -399,6 +399,7 @@ export async function getServicePlansChurn(companyId: string) {
 }
 
 export const REPORT_LINKS = [
+  { title: "KPI Dashboard", href: "/reporting" },
   { title: "Business insights", href: "/reporting/insights" },
   { title: "Tech performance", href: "/reporting/tech-performance" },
   { title: "Financial", href: "/reporting/financial" },
@@ -416,6 +417,7 @@ export const JOBS_REPORT_CATEGORIES = [
   {
     title: "Overview",
     links: [
+      { label: "KPI Dashboard", href: "/reporting" },
       { label: "Business insights", href: "/reporting/insights" },
       { label: "Tech performance", href: "/reporting/tech-performance" },
       { label: "Financial summary", href: "/reporting/financial" },
@@ -424,7 +426,6 @@ export const JOBS_REPORT_CATEGORIES = [
   {
     title: "Operations",
     links: [
-      { label: "Jobs report", href: "/reporting" },
       { label: "CSR metrics", href: "/reporting/csr" },
       { label: "Voice analytics", href: "/reporting/voice" },
     ],
