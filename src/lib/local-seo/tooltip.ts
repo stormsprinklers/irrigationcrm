@@ -12,22 +12,22 @@ export function buildRankingTooltipHtml(ranking: SerpApiCityRanking, businessNam
   const topRows = ranking.topBusinesses
     .map((business) => {
       const label = business.isOurs ? `${escapeHtml(business.name)} (You)` : escapeHtml(business.name);
-      return `<li><span class="font-medium">${business.rank}.</span> ${label}</li>`;
+      return `<li><span class="gbp-ranking-tooltip-rank">${business.rank}.</span> ${label}</li>`;
     })
     .join("");
 
   const ourRow =
     ranking.ourRank != null && ranking.ourRank > 3
-      ? `<div class="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
-          <span class="font-medium text-foreground">#${ranking.ourRank}</span>
+      ? `<div class="gbp-ranking-tooltip-ours">
+          <span class="gbp-ranking-tooltip-rank">#${ranking.ourRank}</span>
           ${escapeHtml(businessName)} (You)
         </div>`
       : "";
 
   return `
     <div class="gbp-ranking-tooltip">
-      <p class="mb-2 text-sm font-semibold">${escapeHtml(ranking.cityName)}</p>
-      <ol class="space-y-1 text-xs">${topRows}</ol>
+      <p class="gbp-ranking-tooltip-title">${escapeHtml(ranking.cityName)}</p>
+      <ol>${topRows}</ol>
       ${ourRow}
     </div>
   `;

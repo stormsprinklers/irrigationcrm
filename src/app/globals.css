@@ -173,11 +173,15 @@
 
 .leaflet-tooltip.gbp-map-tooltip {
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
   background: #fff;
-  color: var(--foreground);
+  color: #0f172a;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  white-space: normal;
+  width: max-content;
+  max-width: 20rem;
+  height: auto;
 }
 
 .leaflet-tooltip.gbp-map-tooltip::before {
@@ -186,12 +190,51 @@
 
 .gbp-ranking-tooltip {
   min-width: 12rem;
-  max-width: 16rem;
+  max-width: 20rem;
   padding: 0.75rem;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.gbp-ranking-tooltip-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0f172a;
 }
 
 .gbp-ranking-tooltip ol {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.gbp-ranking-tooltip ol li {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.gbp-ranking-tooltip ol li + li {
+  margin-top: 0.25rem;
+}
+
+.gbp-ranking-tooltip-rank {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.gbp-ranking-tooltip-ours {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
