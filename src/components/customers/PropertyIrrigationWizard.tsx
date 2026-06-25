@@ -12,6 +12,7 @@ import {
   SLOPE_LEVELS,
   SOIL_TYPES,
   VEGETATION_TYPES,
+  WATER_SOURCE_OPTIONS,
   WIZARD_STEPS,
   ZONE_MAP_COLORS,
 } from "@/lib/irrigation/constants";
@@ -77,6 +78,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [zoneCount, setZoneCount] = useState(1);
   const [shutoffValveLocation, setShutoffValveLocation] = useState("");
   const [controllerLocation, setControllerLocation] = useState("");
+  const [waterSource, setWaterSource] = useState("");
   const [zones, setZones] = useState<MapZone[]>([defaultZone(0)]);
   const [activeZoneIndex, setActiveZoneIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -103,6 +105,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         setZoneCount(p.irrigationZoneCount ?? p.irrigationMapZones?.length ?? 1);
         setShutoffValveLocation(p.shutoffValveLocation ?? "");
         setControllerLocation(p.controllerLocation ?? "");
+        setWaterSource(p.waterSource ?? "");
         setStep(Math.min(p.irrigationWizardStep ?? 1, MAX_STEP));
 
         if (p.irrigationMapZones?.length) {
@@ -244,6 +247,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
               irrigationZoneCount: zoneCount,
               shutoffValveLocation: shutoffValveLocation.trim() || null,
               controllerLocation: controllerLocation.trim() || null,
+              waterSource: waterSource || null,
             },
             mapZones,
             publish,
@@ -398,6 +402,21 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
               <p className="text-xs text-muted-foreground">
                 This count is shown on the property profile for your team and customers.
               </p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium">Water source</label>
+              <select
+                value={waterSource}
+                onChange={(e) => setWaterSource(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              >
+                <option value="">Select water source</option>
+                {WATER_SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium">Shutoff valve location</label>

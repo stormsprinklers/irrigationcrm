@@ -7,6 +7,11 @@ import {
   computeVisitCommission,
 } from "@/lib/compensation/commission";
 import {
+  getOvertimeSettings,
+  type CompanyPayDefaults,
+} from "@/lib/compensation/defaults";
+import { computeHourlyPayWithOvertime } from "@/lib/compensation/overtime";
+import {
   effectiveHourlyCost,
   usesCommissionPay,
   usesHourlyPay,
@@ -61,7 +66,8 @@ type UserPaySummary = {
 export async function summarizePayPeriod(
   user: UserPaySummary,
   companyId: string,
-  periodBounds: { start: Date; end: Date }
+  periodBounds: { start: Date; end: Date },
+  companyPay: CompanyPayDefaults
 ) {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: companyId },
@@ -75,16 +81,26 @@ export async function summarizePayPeriod(
     },
   });
 
-  const clockedHours = clockEntries.reduce(
-    (sum, entry) => sum + computeEntryDurationHours(entry),
-    0
-  );
-
   const hourlyRate = effectiveHourlyCost(user);
-  const hourlyPay =
-    usesHourlyPay(user.payType) && hourlyRate != null
-      ? Math.round(clockedHours * hourlyRate * 100) / 100
-      : 0;
+  const overtimeSettings = getOvertimeSettings(companyPay);
+
+  let clockedHours = 0;
+  let regularHours = 0;
+  let overtimeHours = 0;
+  let hourlyPay = 0;
+
+  if (usesHourlyPay(user.payType) && hourlyRate != null) {
+    const breakdown = computeHourlyPayWithOvertime(clockEntries, hourlyRate, overtimeSettings);
+    clockedHours = breakdown.totalHours;
+    regularHours = breakdown.regularHours;
+    overtimeHours = breakdown.overtimeHours;
+    hourlyPay = breakdown.hourlyPay;
+  } else {
+    clockedHours = clockEntries.reduce(
+      (sum, entry) => sum + computeEntryDurationHours(entry),
+      0
+    );
+  }
 
   let commissionPay = 0;
   if (usesCommissionPay(user.payType) && user.commissionPercent != null) {
@@ -126,6 +142,8 @@ export async function summarizePayPeriod(
 
   return {
     clockedHours: Math.round(clockedHours * 100) / 100,
+    regularHours: Math.round(regularHours * 100) / 100,
+    overtimeHours: Math.round(overtimeHours * 100) / 100,
     hourlyPay,
     commissionPay,
     projectedPayout,
@@ -139,6 +157,11 @@ export async function listPayPeriodSummaries(companyId: string, date = new Date(
       payPeriodType: true,
       payPeriodAnchorDate: true,
       commissionBasis: true,
+      defaultTechnicianPayType: true,
+      defaultTechnicianHourlyRate: true,
+      defaultTechnicianCommissionPercent: true,
+      overtimeWeeklyThresholdHours: true,
+      overtimeRateMultiplier: true,
     },
   });
 
@@ -163,7 +186,7 @@ export async function listPayPeriodSummaries(companyId: string, date = new Date(
       payType: employee.payType,
       periodStart: bounds.start.toISOString(),
       periodEnd: bounds.end.toISOString(),
-      ...(await summarizePayPeriod(employee, companyId, bounds)),
+      ...(await summarizePayPeriod(employee, companyId, bounds, company)),
     }))
   );
 

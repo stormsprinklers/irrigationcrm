@@ -13,6 +13,16 @@ import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string; propertyId: string }> };
 
+const propertyInclude = {
+  irrigationMapZones: { orderBy: { sortOrder: "asc" as const } },
+  irrigationValves: { orderBy: { sortOrder: "asc" as const } },
+  irrigationControllers: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { zoneStations: true },
+  },
+  irrigationMapMarkers: { orderBy: { sortOrder: "asc" as const } },
+};
+
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
@@ -20,14 +30,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
     const property = await prisma.customerProperty.findFirst({
       where: { id: propertyId, customerId, companyId: user.companyId },
-      include: {
-        irrigationMapZones: { orderBy: { sortOrder: "asc" } },
-        irrigationValves: { orderBy: { sortOrder: "asc" } },
-        irrigationControllers: {
-          orderBy: { sortOrder: "asc" },
-          include: { zoneStations: true },
-        },
-      },
+      include: propertyInclude,
     });
     if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -102,6 +105,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ...(p.irrigationZoneCount != null
             ? { irrigationZoneCount: Number(p.irrigationZoneCount) }
             : {}),
+          ...(p.waterSource !== undefined
+            ? {
+                waterSource: p.waterSource ? (p.waterSource as "SECONDARY" | "CULINARY" | "BOTH") : null,
+              }
+            : {}),
           ...(p.shutoffValveLocation !== undefined
             ? {
                 shutoffValveLocation: p.shutoffValveLocation
@@ -141,10 +149,51 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       });
     }
 
+    if (Array.isArray(body.valves)) {
+      await prisma.propertyIrrigationValve.deleteMany({ where: { propertyId } });
+      await prisma.propertyIrrigationValve.createMany({
+        data: body.valves.map((v: Record<string, unknown>, index: number) => ({
+          propertyId,
+          label: String(v.label ?? `Valve ${index + 1}`),
+          pointGeoJson: v.pointGeoJson ?? { type: "Point", coordinates: [] },
+          zoneIds: Array.isArray(v.zoneIds) ? v.zoneIds.map(String) : [],
+          sortOrder: index,
+        })),
+      });
+    }
+
+    if (Array.isArray(body.controllers)) {
+      await prisma.propertyIrrigationController.deleteMany({ where: { propertyId } });
+      for (const [index, c] of (body.controllers as Record<string, unknown>[]).entries()) {
+        await prisma.propertyIrrigationController.create({
+          data: {
+            propertyId,
+            label: String(c.label ?? `Timer ${index + 1}`),
+            pointGeoJson: c.pointGeoJson ?? { type: "Point", coordinates: [] },
+            stationCount: c.stationCount != null ? Number(c.stationCount) : 1,
+            sortOrder: index,
+          },
+        });
+      }
+    }
+
+    if (Array.isArray(body.mapMarkers)) {
+      await prisma.propertyIrrigationMapMarker.deleteMany({ where: { propertyId } });
+      await prisma.propertyIrrigationMapMarker.createMany({
+        data: body.mapMarkers.map((m: Record<string, unknown>, index: number) => ({
+          propertyId,
+          type: m.type as "POC" | "FILTER" | "BACKFLOW",
+          label: m.label ? String(m.label) : null,
+          pointGeoJson: m.pointGeoJson ?? { type: "Point", coordinates: [] },
+          sortOrder: index,
+        })),
+      });
+    }
+
     const updated = await prisma.customerProperty.findFirst({
       where: { id: propertyId },
       include: {
-        irrigationMapZones: { orderBy: { sortOrder: "asc" } },
+        ...propertyInclude,
         irrigationZones: { orderBy: { sortOrder: "asc" } },
       },
     });

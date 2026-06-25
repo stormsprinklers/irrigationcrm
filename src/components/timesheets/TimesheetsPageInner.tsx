@@ -33,6 +33,8 @@ type PaySummary = {
   userName: string;
   payType: string | null;
   clockedHours: number;
+  regularHours?: number;
+  overtimeHours?: number;
   hourlyPay: number;
   commissionPay: number;
   projectedPayout: number;
@@ -194,13 +196,14 @@ export function TimesheetsPageInner() {
         <section className="mt-10">
           <h2 className="mb-3 text-lg font-semibold">Current pay period preview</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Hybrid employees receive the higher of hourly or commission pay. Configure rates in{" "}
-            <Link href="/settings/employees" className="text-primary hover:underline">
-              Employees
-            </Link>{" "}
-            and commission basis in{" "}
+            Hybrid employees receive the higher of hourly pay (with overtime after the weekly
+            threshold) or commission. Configure defaults in{" "}
             <Link href="/settings/compensation" className="text-primary hover:underline">
               Compensation
+            </Link>
+            ; override rates per employee in{" "}
+            <Link href="/settings/employees" className="text-primary hover:underline">
+              Employees
             </Link>
             .
           </p>
@@ -211,6 +214,7 @@ export function TimesheetsPageInner() {
                   <TableHead>Employee</TableHead>
                   <TableHead>Pay type</TableHead>
                   <TableHead>Clocked hours</TableHead>
+                  <TableHead>OT hours</TableHead>
                   <TableHead>Hourly pay</TableHead>
                   <TableHead>Commission</TableHead>
                   <TableHead>Projected payout</TableHead>
@@ -222,6 +226,11 @@ export function TimesheetsPageInner() {
                     <TableCell>{row.userName}</TableCell>
                     <TableCell>{row.payType ?? "—"}</TableCell>
                     <TableCell>{row.clockedHours.toFixed(2)}h</TableCell>
+                    <TableCell>
+                      {row.overtimeHours != null && row.overtimeHours > 0
+                        ? `${row.overtimeHours.toFixed(2)}h`
+                        : "—"}
+                    </TableCell>
                     <TableCell>{formatCurrency(row.hourlyPay)}</TableCell>
                     <TableCell>{formatCurrency(row.commissionPay)}</TableCell>
                     <TableCell className="font-medium">{formatCurrency(row.projectedPayout)}</TableCell>

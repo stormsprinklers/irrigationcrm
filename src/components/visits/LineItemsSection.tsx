@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
+import { sumDiscounts } from "@/lib/visits/totals";
 
 type LineItem = {
   id: string;
@@ -18,9 +19,17 @@ type LineItem = {
   total: string | number;
 };
 
+type Discount = {
+  id: string;
+  label: string | null;
+  type: "PERCENT" | "FIXED";
+  amount: string | number;
+};
+
 type Props = {
   visitId: string;
   lineItems: LineItem[];
+  discounts: Discount[];
   onUpdated: () => Promise<void>;
 };
 
@@ -30,9 +39,19 @@ function formatCurrency(value: string | number) {
   );
 }
 
-export function LineItemsSection({ visitId, lineItems, onUpdated }: Props) {
+function formatDiscount(discount: Discount) {
+  const amount = Number(discount.amount);
+  if (discount.type === "PERCENT") return `${amount}%`;
+  return formatCurrency(amount);
+}
+
+export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [discountLabel, setDiscountLabel] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
+  const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
+  const [discountSaving, setDiscountSaving] = useState(false);
 
   async function addFromPriceBook(item: PriceBookItemDTO) {
     setSaving(true);
@@ -83,7 +102,47 @@ export function LineItemsSection({ visitId, lineItems, onUpdated }: Props) {
     await onUpdated();
   }
 
+  async function addDiscount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!discountAmount) return;
+    setDiscountSaving(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}/discounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: discountLabel || null,
+          type: discountType,
+          amount: Number(discountAmount),
+        }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to add discount");
+        return;
+      }
+      setDiscountLabel("");
+      setDiscountAmount("");
+      await onUpdated();
+    } finally {
+      setDiscountSaving(false);
+    }
+  }
+
+  async function removeDiscount(discountId: string) {
+    const res = await fetch(
+      `/api/visits/${visitId}/discounts?discountId=${encodeURIComponent(discountId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      toast.error("Failed to remove discount");
+      return;
+    }
+    await onUpdated();
+  }
+
   const subtotal = lineItems.reduce((sum, item) => sum + Number(item.total), 0);
+  const discountTotal = sumDiscounts(subtotal, discounts);
+  const total = Math.max(0, subtotal - discountTotal);
 
   return (
     <>
@@ -95,7 +154,7 @@ export function LineItemsSection({ visitId, lineItems, onUpdated }: Props) {
             Add item
           </Button>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {lineItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">No line items yet.</p>
           ) : (
@@ -134,8 +193,73 @@ export function LineItemsSection({ visitId, lineItems, onUpdated }: Props) {
               </div>
             ))
           )}
-          <div className="flex justify-end border-t pt-3 text-sm font-semibold">
-            Subtotal: {formatCurrency(subtotal)}
+
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm font-medium">Discounts</p>
+            <form onSubmit={addDiscount} className="grid gap-2 sm:grid-cols-[1fr_100px_120px_auto]">
+              <Input
+                value={discountLabel}
+                onChange={(e) => setDiscountLabel(e.target.value)}
+                placeholder="Label (optional)"
+              />
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(e.target.value)}
+                placeholder="Amount"
+                required
+              />
+              <select
+                value={discountType}
+                onChange={(e) => setDiscountType(e.target.value as "PERCENT" | "FIXED")}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="FIXED">Fixed ($)</option>
+                <option value="PERCENT">Percent (%)</option>
+              </select>
+              <Button type="submit" disabled={discountSaving}>
+                Add
+              </Button>
+            </form>
+
+            {discounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No discounts applied.</p>
+            ) : (
+              <div className="space-y-2">
+                {discounts.map((discount) => (
+                  <div
+                    key={discount.id}
+                    className="flex items-center justify-between rounded-md border p-3 text-sm"
+                  >
+                    <span>
+                      {discount.label ?? "Discount"} — {formatDiscount(discount)}
+                    </span>
+                    <Button variant="ghost" size="icon" onClick={() => removeDiscount(discount.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1 border-t pt-3 text-sm">
+            <div className="flex justify-end gap-4">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="font-medium">{formatCurrency(subtotal)}</span>
+            </div>
+            {discountTotal > 0 ? (
+              <div className="flex justify-end gap-4 text-muted-foreground">
+                <span>Discounts</span>
+                <span>−{formatCurrency(discountTotal)}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-4 pt-1 font-semibold">
+              <span>Total</span>
+              <span>{formatCurrency(total)}</span>
+            </div>
           </div>
         </CardContent>
       </Card>

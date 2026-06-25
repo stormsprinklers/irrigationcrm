@@ -81,9 +81,38 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   const [cropFileName, setCropFileName] = useState("photo.jpg");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [techPayDefaults, setTechPayDefaults] = useState<{
+    payType: string;
+    hourlyRate: number;
+    commissionPercent: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+
+  useEffect(() => {
+    fetch("/api/settings/compensation")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setTechPayDefaults({
+          payType: data.defaultTechnicianPayType,
+          hourlyRate: data.defaultTechnicianHourlyRate,
+          commissionPercent: data.defaultTechnicianCommissionPercent,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  function applyTechnicianPayDefaults() {
+    if (!techPayDefaults) return;
+    setForm((prev) => ({
+      ...prev,
+      payType: techPayDefaults.payType as (typeof PAY_TYPES)[number],
+      hourlyRate: String(techPayDefaults.hourlyRate),
+      commissionPercent: String(techPayDefaults.commissionPercent),
+    }));
+  }
 
   useEffect(() => {
     if (!employee) {
@@ -349,11 +378,22 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
             value={form.role}
             onChange={(e) => {
               const nextRole = e.target.value as (typeof ROLES)[number];
-              setForm((p) => ({
-                ...p,
-                role: nextRole,
-                ...(nextRole === "TECH" ? { division: "SERVICE" } : {}),
-              }));
+              setForm((p) => {
+                const next = {
+                  ...p,
+                  role: nextRole,
+                  ...(nextRole === "TECH" ? { division: "SERVICE" as const } : {}),
+                };
+                if (nextRole === "TECH" && !employee && techPayDefaults && !p.payType) {
+                  return {
+                    ...next,
+                    payType: techPayDefaults.payType as (typeof PAY_TYPES)[number],
+                    hourlyRate: String(techPayDefaults.hourlyRate),
+                    commissionPercent: String(techPayDefaults.commissionPercent),
+                  };
+                }
+                return next;
+              });
             }}
           >
             {ROLES.map((role) => (
@@ -406,7 +446,20 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       </div>
 
       <div className="rounded-md border border-border p-4">
-        <h3 className="mb-3 text-sm font-semibold">Compensation</h3>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Compensation</h3>
+          {!employee && form.role === "TECH" && techPayDefaults ? (
+            <Button type="button" size="sm" variant="outline" onClick={applyTechnicianPayDefaults}>
+              Use technician defaults
+            </Button>
+          ) : null}
+        </div>
+        {form.payType === "HYBRID" ? (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Hybrid employees are paid the higher of hourly earnings (including overtime) or
+            commission on completed jobs.
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="text-sm font-medium">Pay type</label>

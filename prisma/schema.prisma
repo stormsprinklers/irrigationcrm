@@ -487,6 +487,11 @@ model Company {
   commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
   payPeriodType            PayPeriodType   @default(BIWEEKLY)
   payPeriodAnchorDate      DateTime?
+  defaultTechnicianPayType           PayType  @default(HYBRID)
+  defaultTechnicianHourlyRate        Decimal  @default(25) @db.Decimal(10, 2)
+  defaultTechnicianCommissionPercent Decimal  @default(20) @db.Decimal(5, 2)
+  overtimeWeeklyThresholdHours       Decimal  @default(40) @db.Decimal(5, 2)
+  overtimeRateMultiplier             Decimal  @default(1.5) @db.Decimal(4, 2)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -819,6 +824,7 @@ model CustomerProperty {
   controllerLocation      String?
   irrigationWizardStep Int?
   irrigationMapStatus  IrrigationMapStatus?
+  waterSource          PropertyWaterSource?
   designProjectId      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -833,6 +839,7 @@ model CustomerProperty {
   irrigationMapZones PropertyIrrigationMapZone[]
   irrigationValves   PropertyIrrigationValve[]
   irrigationControllers PropertyIrrigationController[]
+  irrigationMapMarkers PropertyIrrigationMapMarker[]
 
   @@index([companyId, customerId])
 }
@@ -2391,6 +2398,18 @@ enum IrrigationMapStatus {
   PUBLISHED
 }
 
+enum PropertyWaterSource {
+  SECONDARY
+  CULINARY
+  BOTH
+}
+
+enum IrrigationMapMarkerType {
+  POC
+  FILTER
+  BACKFLOW
+}
+
 model IntegrationCredential {
   id         String           @id @default(cuid())
   companyId  String
@@ -2618,4 +2637,19 @@ model PropertyZoneStation {
 
   @@unique([controllerId, stationNumber])
   @@index([mapZoneId])
+}
+
+model PropertyIrrigationMapMarker {
+  id           String                  @id @default(cuid())
+  propertyId   String
+  type         IrrigationMapMarkerType
+  label        String?
+  pointGeoJson Json
+  sortOrder    Int                     @default(0)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, sortOrder])
 }

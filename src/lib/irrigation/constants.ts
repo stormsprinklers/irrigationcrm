@@ -65,6 +65,33 @@ export const ZONE_MAP_COLORS = [
   "#6366f1",
 ] as const;
 
+export type IrrigationMapMarkerKind = "POC" | "TIMER" | "VALVE" | "FILTER" | "BACKFLOW";
+
+export const MAP_MARKER_STYLES: Record<
+  IrrigationMapMarkerKind,
+  { label: string; color: string; short: string }
+> = {
+  POC: { label: "POC", color: "#2563EB", short: "P" },
+  TIMER: { label: "Timer", color: "#7C3AED", short: "T" },
+  VALVE: { label: "Valve", color: "#DC2626", short: "V" },
+  FILTER: { label: "Filter", color: "#059669", short: "F" },
+  BACKFLOW: { label: "Backflow", color: "#D97706", short: "B" },
+};
+
+export const WATER_SOURCE_OPTIONS = [
+  { value: "SECONDARY", label: "Secondary water" },
+  { value: "CULINARY", label: "Culinary water" },
+  { value: "BOTH", label: "Both secondary and culinary" },
+] as const;
+
+export const IRRIGATION_MAP_MARKER_KINDS: IrrigationMapMarkerKind[] = [
+  "POC",
+  "TIMER",
+  "VALVE",
+  "FILTER",
+  "BACKFLOW",
+];
+
 export const VALVE_CAPACITY_GPM = 18;
 
 export const VEGETATION_COLORS: Record<VegetationType, string> = {

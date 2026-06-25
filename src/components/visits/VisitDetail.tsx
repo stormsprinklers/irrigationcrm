@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { isFieldRole } from "@/lib/employees";
+import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
 import { ArrowLeft, CheckCircle2, MapPin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
@@ -15,12 +15,11 @@ import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSection";
-import { VisitDiscountsSection } from "@/components/visits/VisitDiscountsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
-import { VisitIrrigationMap } from "@/components/visits/VisitIrrigationMap";
+import { VisitIrrigationSection } from "@/components/visits/VisitIrrigationSection";
 import { VisitInstallPlanSection } from "@/components/visits/VisitInstallPlanSection";
-import { VisitIrrigationRuntimes } from "@/components/visits/VisitIrrigationRuntimes";
+import { VisitScheduleSection } from "@/components/visits/VisitScheduleSection";
 import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
@@ -162,6 +161,8 @@ export function VisitDetail({ visitId }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const canDelete = !isFieldRole(session?.user?.role ?? "");
+  const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
+  const showProfit = canViewProfitMargins(session?.user?.role ?? "");
   const paymentStatus = searchParams.get("payment");
   const sessionId = searchParams.get("session_id");
   const [visit, setVisit] = useState<VisitDetailData | null>(null);
@@ -344,13 +345,7 @@ export function VisitDetail({ visitId }: Props) {
             <Badge variant="secondary">{visit.division}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {format(new Date(visit.startAt), "EEE, MMM d")} ·{" "}
-            {format(new Date(visit.startAt), "h:mm a")} – {format(new Date(visit.endAt), "h:mm a")}
-            {visit.assignedUser ? (
-              <> · Technician: {visit.assignedUser.name}</>
-            ) : (
-              <> · <span className="text-amber-700">Unassigned</span></>
-            )}
+            {format(new Date(visit.startAt), "EEE, MMM d, yyyy")}
           </p>
           <div className="mt-2 flex items-start gap-2">
             <p className="text-sm text-muted-foreground">{location}</p>
@@ -410,7 +405,7 @@ export function VisitDetail({ visitId }: Props) {
       ) : null}
 
       {visit.property?.id && visit.customer?.id ? (
-        <VisitIrrigationMap
+        <VisitIrrigationSection
           customerId={visit.customer.id}
           propertyId={visit.property.id}
           propertyName={visit.property.name}
@@ -424,7 +419,12 @@ export function VisitDetail({ visitId }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-6">
-          <LineItemsSection visitId={visit.id} lineItems={visit.lineItems} onUpdated={load} />
+          <LineItemsSection
+            visitId={visit.id}
+            lineItems={visit.lineItems}
+            discounts={visit.discounts}
+            onUpdated={load}
+          />
           <VisitChecklistsSection visitId={visit.id} onUpdated={load} />
           <VisitNotesSection visitId={visit.id} notes={notes} onUpdated={load} />
           <VisitAttachmentsSection
@@ -435,6 +435,19 @@ export function VisitDetail({ visitId }: Props) {
         </div>
 
         <div className="space-y-6">
+          <VisitScheduleSection
+            visitId={visit.id}
+            startAt={visit.startAt}
+            endAt={visit.endAt}
+            status={visit.status}
+            assignedUser={
+              visit.assignedUser
+                ? { id: visit.assignedUser.id, name: visit.assignedUser.name }
+                : null
+            }
+            canEdit={canEditSchedule}
+            onUpdated={load}
+          />
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Visit total</p>
             <p className="text-2xl font-semibold">{formatCurrency(total)}</p>
@@ -465,7 +478,7 @@ export function VisitDetail({ visitId }: Props) {
             ) : null}
           </div>
 
-          <VisitProfitSection visitId={visit.id} />
+          {showProfit ? <VisitProfitSection visitId={visit.id} /> : null}
 
           <VisitTagsSection visitId={visit.id} tags={visit.tags} onUpdated={load} />
           {canDelete ? (
@@ -484,17 +497,6 @@ export function VisitDetail({ visitId }: Props) {
             visitId={visit.id}
             customerId={visit.customer?.id ?? null}
             propertyId={visit.property?.id ?? null}
-            onUpdated={load}
-          />
-          {visit.property?.id && visit.customer?.id ? (
-            <VisitIrrigationRuntimes
-              customerId={visit.customer.id}
-              propertyId={visit.property.id}
-            />
-          ) : null}
-          <VisitDiscountsSection
-            visitId={visit.id}
-            discounts={visit.discounts}
             onUpdated={load}
           />
           <VisitEstimatesSection visitId={visit.id} estimates={visit.estimates} />

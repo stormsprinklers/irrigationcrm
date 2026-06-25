@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { EmployeeStatus, PayType, UserRole } from "@prisma/client";
+import { EmployeeStatus, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
+import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -59,6 +60,24 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(plainPassword, 10);
 
+    const company = await prisma.company.findUniqueOrThrow({
+      where: { id: user.companyId },
+      select: {
+        defaultTechnicianPayType: true,
+        defaultTechnicianHourlyRate: true,
+        defaultTechnicianCommissionPercent: true,
+        overtimeWeeklyThresholdHours: true,
+        overtimeRateMultiplier: true,
+      },
+    });
+
+    const employeeRole = (role as UserRole) ?? UserRole.CSR;
+    const resolvedPay = resolveCreateEmployeePay(
+      employeeRole,
+      { payType, hourlyRate, commissionPercent },
+      company
+    );
+
     const employee = await prisma.user.create({
       data: {
         companyId: user.companyId,
@@ -67,9 +86,9 @@ export async function POST(request: NextRequest) {
         name: nameFields.name,
         email: String(email).toLowerCase(),
         phone: phone ?? null,
-        role: (role as UserRole) ?? UserRole.CSR,
+        role: employeeRole,
         title: title ?? null,
-        division: resolveEmployeeDivision((role as UserRole) ?? UserRole.CSR, division ?? null),
+        division: resolveEmployeeDivision(employeeRole, division ?? null),
         color: color ?? "#2563EB",
         address: address ?? null,
         city: city ?? null,
@@ -77,9 +96,9 @@ export async function POST(request: NextRequest) {
         zip: zip ?? null,
         birthDate: birthDate ? new Date(birthDate) : null,
         tags: Array.isArray(tags) ? tags : [],
-        payType: payType ? (payType as PayType) : null,
-        hourlyRate: hourlyRate != null ? Number(hourlyRate) : null,
-        commissionPercent: commissionPercent != null ? Number(commissionPercent) : null,
+        payType: resolvedPay.payType,
+        hourlyRate: resolvedPay.hourlyRate,
+        commissionPercent: resolvedPay.commissionPercent,
         annualSalary: annualSalary != null ? Number(annualSalary) : null,
         websiteTeamSlug: websiteTeamSlug ? String(websiteTeamSlug) : null,
         passwordHash,

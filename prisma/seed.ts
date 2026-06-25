@@ -175,8 +175,9 @@ async function main() {
       division: Division.INSTALL,
       color: "#16A34A",
       tags: ["install", "senior"],
-      payType: PayType.HOURLY,
-      hourlyRate: 28,
+      payType: PayType.HYBRID,
+      hourlyRate: 25,
+      commissionPercent: 20,
     },
     create: {
       email: "tech@stormsprinklers.com",
@@ -191,8 +192,9 @@ async function main() {
       division: Division.INSTALL,
       color: "#16A34A",
       tags: ["install", "senior"],
-      payType: PayType.HOURLY,
-      hourlyRate: 28,
+      payType: PayType.HYBRID,
+      hourlyRate: 25,
+      commissionPercent: 20,
     },
   });
 
@@ -205,8 +207,8 @@ async function main() {
       color: "#EA580C",
       tags: ["service"],
       payType: PayType.HYBRID,
-      hourlyRate: 24,
-      commissionPercent: 8,
+      hourlyRate: 25,
+      commissionPercent: 20,
     },
     create: {
       email: "mike@stormsprinklers.com",
@@ -222,8 +224,8 @@ async function main() {
       color: "#EA580C",
       tags: ["service"],
       payType: PayType.HYBRID,
-      hourlyRate: 24,
-      commissionPercent: 8,
+      hourlyRate: 25,
+      commissionPercent: 20,
     },
   });
 

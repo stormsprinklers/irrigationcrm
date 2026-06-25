@@ -41,11 +41,15 @@ export function resolveEmployeeDivision(
 export const PAY_TYPE_LABELS: Record<string, string> = {
   HOURLY: "Hourly",
   COMMISSION: "Commission",
-  HYBRID: "Hybrid (higher of hourly or commission)",
+  HYBRID: "Hybrid (higher of hourly + OT or commission)",
   SALARY: "Salary (yearly)",
 };
 
 export function canManageEmployees(role: string) {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
+export function canViewProfitMargins(role: string) {
   return role === "ADMIN" || role === "MANAGER";
 }
 

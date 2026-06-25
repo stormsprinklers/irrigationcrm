@@ -5,12 +5,18 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PAY_TYPE_LABELS } from "@/lib/employees";
 import { toast } from "sonner";
 
 type CompensationSettings = {
   commissionBasis: string;
   payPeriodType: string;
   payPeriodAnchorDate: string | null;
+  defaultTechnicianPayType: string;
+  defaultTechnicianHourlyRate: number;
+  defaultTechnicianCommissionPercent: number;
+  overtimeWeeklyThresholdHours: number;
+  overtimeRateMultiplier: number;
 };
 
 const COMMISSION_BASIS_OPTIONS = [
@@ -41,6 +47,8 @@ const PAY_PERIOD_OPTIONS = [
   { value: "BIWEEKLY", label: "Biweekly" },
   { value: "MONTHLY", label: "Monthly" },
 ];
+
+const PAY_TYPE_OPTIONS = ["HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
 
 export default function SettingsCompensationPage() {
   const [settings, setSettings] = useState<CompensationSettings | null>(null);
@@ -88,10 +96,109 @@ export default function SettingsCompensationPage() {
       <PageHeader
         breadcrumb={["Settings", "Compensation"]}
         title="Compensation"
-        subtitle="Company-wide commission basis and pay period settings"
+        subtitle="Company-wide pay defaults, commission basis, and overtime rules"
       />
 
       <form onSubmit={handleSave} className="space-y-6">
+        <section className="rounded-lg border border-border bg-white p-4">
+          <h3 className="mb-1 text-lg font-semibold">Default technician pay</h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Applied automatically when you add a new technician unless you override pay on
+            their profile. Hybrid pays the higher of hourly (with overtime) or commission.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium">Pay type</label>
+              <select
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
+                value={settings.defaultTechnicianPayType}
+                onChange={(e) =>
+                  setSettings({ ...settings, defaultTechnicianPayType: e.target.value })
+                }
+              >
+                {PAY_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {PAY_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Hourly rate ($)</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={settings.defaultTechnicianHourlyRate}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    defaultTechnicianHourlyRate: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Commission (%)</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                value={settings.defaultTechnicianCommissionPercent}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    defaultTechnicianCommissionPercent: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-white p-4">
+          <h3 className="mb-1 text-lg font-semibold">Overtime</h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Hourly and hybrid employees earn overtime on hours over the weekly threshold.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Weekly threshold (hours)</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.5"
+                value={settings.overtimeWeeklyThresholdHours}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    overtimeWeeklyThresholdHours: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Overtime multiplier</label>
+              <Input
+                type="number"
+                min={1}
+                step="0.1"
+                value={settings.overtimeRateMultiplier}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    overtimeRateMultiplier: Number(e.target.value),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                e.g. 1.5 = time and a half after {settings.overtimeWeeklyThresholdHours}h/week
+              </p>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-lg border border-border bg-white p-4">
           <h3 className="mb-4 text-lg font-semibold">Commission basis</h3>
           <p className="mb-4 text-sm text-muted-foreground">
