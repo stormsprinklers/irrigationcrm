@@ -1,0 +1,6372 @@
+[
+  {
+    "id": "585069b8ee19ad271e9bac06",
+    "google_id": 1026902,
+    "google_parent_id": 21177,
+    "name": "Alpine",
+    "canonical_name": "Alpine,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -111.7779865,
+      40.4532833
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac07",
+    "google_id": 1026903,
+    "google_parent_id": 21177,
+    "name": "American Fork",
+    "canonical_name": "American Fork,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 150000,
+    "gps": [
+      -111.7957645,
+      40.3768954
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac08",
+    "google_id": 1026904,
+    "google_parent_id": 21177,
+    "name": "Bear River City",
+    "canonical_name": "Bear River City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -112.1266165,
+      41.61465339999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac09",
+    "google_id": 1026905,
+    "google_parent_id": 21177,
+    "name": "Beaver",
+    "canonical_name": "Beaver,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 14000,
+    "gps": [
+      -112.6410518,
+      38.2769149
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0a",
+    "google_id": 1026906,
+    "google_parent_id": 21177,
+    "name": "Bicknell",
+    "canonical_name": "Bicknell,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -111.5440702,
+      38.3408133
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0b",
+    "google_id": 1026907,
+    "google_parent_id": 21177,
+    "name": "Blanding",
+    "canonical_name": "Blanding,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 7000,
+    "gps": [
+      -109.478177,
+      37.6241646
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0c",
+    "google_id": 1026908,
+    "google_parent_id": 21177,
+    "name": "Bluff",
+    "canonical_name": "Bluff,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -109.5517877,
+      37.2844448
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c7564",
+    "google_id": 9051610,
+    "google_parent_id": 21177,
+    "name": "Bluffdale",
+    "canonical_name": "Bluffdale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 64000,
+    "gps": [
+      -111.9388244,
+      40.4896711
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0d",
+    "google_id": 1026909,
+    "google_parent_id": 21177,
+    "name": "Bountiful",
+    "canonical_name": "Bountiful,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 110000,
+    "gps": [
+      -111.880771,
+      40.8893895
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0e",
+    "google_id": 1026910,
+    "google_parent_id": 21177,
+    "name": "Brigham City",
+    "canonical_name": "Brigham City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 46000,
+    "gps": [
+      -112.0155015,
+      41.5102129
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac0f",
+    "google_id": 1026911,
+    "google_parent_id": 21177,
+    "name": "Castle Dale",
+    "canonical_name": "Castle Dale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -111.019613,
+      39.212192
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac10",
+    "google_id": 1026912,
+    "google_parent_id": 21177,
+    "name": "Cedar City",
+    "canonical_name": "Cedar City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 91000,
+    "gps": [
+      -113.0618931,
+      37.67747689999999
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c75c4",
+    "google_id": 9051706,
+    "google_parent_id": 21177,
+    "name": "Cedar Hills",
+    "canonical_name": "Cedar Hills,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 13000,
+    "gps": [
+      -111.7585414,
+      40.41411739999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac11",
+    "google_id": 1026913,
+    "google_parent_id": 21177,
+    "name": "Centerville",
+    "canonical_name": "Centerville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 46000,
+    "gps": [
+      -111.8721601,
+      40.9180005
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac12",
+    "google_id": 1026914,
+    "google_parent_id": 21177,
+    "name": "Central",
+    "canonical_name": "Central,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.6246009,
+      37.4166853
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac13",
+    "google_id": 1026915,
+    "google_parent_id": 21177,
+    "name": "Clearfield",
+    "canonical_name": "Clearfield,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 70000,
+    "gps": [
+      -112.0260538,
+      41.1107771
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c75e6",
+    "google_id": 9051740,
+    "google_parent_id": 21177,
+    "name": "Clinton",
+    "canonical_name": "Clinton,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 41000,
+    "gps": [
+      -112.0504983,
+      41.139666
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac14",
+    "google_id": 1026916,
+    "google_parent_id": 21177,
+    "name": "Coalville",
+    "canonical_name": "Coalville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -111.3993634,
+      40.9177251
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac15",
+    "google_id": 1026917,
+    "google_parent_id": 21177,
+    "name": "Corinne",
+    "canonical_name": "Corinne,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -112.1102262,
+      41.5510441
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c760c",
+    "google_id": 9051778,
+    "google_parent_id": 21177,
+    "name": "Cottonwood Heights",
+    "canonical_name": "Cottonwood Heights,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 101000,
+    "gps": [
+      -111.8162931,
+      40.6183158
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac16",
+    "google_id": 1026918,
+    "google_parent_id": 21177,
+    "name": "Dammeron Valley",
+    "canonical_name": "Dammeron Valley,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.6720186,
+      37.3045087
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac17",
+    "google_id": 1026919,
+    "google_parent_id": 21177,
+    "name": "Delta",
+    "canonical_name": "Delta,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 10000,
+    "gps": [
+      -112.57717,
+      39.3521777
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac18",
+    "google_id": 1026920,
+    "google_parent_id": 21177,
+    "name": "Draper",
+    "canonical_name": "Draper,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 246000,
+    "gps": [
+      -111.8638226,
+      40.5246711
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac19",
+    "google_id": 1026921,
+    "google_parent_id": 21177,
+    "name": "Duchesne",
+    "canonical_name": "Duchesne,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 16000,
+    "gps": [
+      -110.4029329,
+      40.1632913
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1a",
+    "google_id": 1026922,
+    "google_parent_id": 21177,
+    "name": "Dugway",
+    "canonical_name": "Dugway,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -112.7444097,
+      40.22105320000001
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c765a",
+    "google_id": 9051856,
+    "google_parent_id": 21177,
+    "name": "Eagle Mountain",
+    "canonical_name": "Eagle Mountain,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 67000,
+    "gps": [
+      -112.006882,
+      40.31411689999999
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c766d",
+    "google_id": 9051875,
+    "google_parent_id": 21177,
+    "name": "East Millcreek",
+    "canonical_name": "East Millcreek,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 98000,
+    "gps": [
+      -111.8104888,
+      40.6999471
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1b",
+    "google_id": 1026923,
+    "google_parent_id": 21177,
+    "name": "Eden",
+    "canonical_name": "Eden,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -111.8127212,
+      41.3007423
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1c",
+    "google_id": 1026924,
+    "google_parent_id": 21177,
+    "name": "Emery",
+    "canonical_name": "Emery,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -111.2487809,
+      38.9230307
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5def3a",
+    "google_id": 9194246,
+    "google_parent_id": 21177,
+    "name": "Enoch",
+    "canonical_name": "Enoch,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 12000,
+    "gps": [
+      -113.0243929,
+      37.7733096
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1d",
+    "google_id": 1026925,
+    "google_parent_id": 21177,
+    "name": "Enterprise",
+    "canonical_name": "Enterprise,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -113.7191329,
+      37.5735867
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1e",
+    "google_id": 1026926,
+    "google_parent_id": 21177,
+    "name": "Ephraim",
+    "canonical_name": "Ephraim,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 15000,
+    "gps": [
+      -111.5863052,
+      39.3596841
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de7e5",
+    "google_id": 9192342,
+    "google_parent_id": 21177,
+    "name": "Erda",
+    "canonical_name": "Erda,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -112.3043923,
+      40.6127217
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac1f",
+    "google_id": 1026927,
+    "google_parent_id": 21177,
+    "name": "Escalante",
+    "canonical_name": "Escalante,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -111.602119,
+      37.7702663
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac20",
+    "google_id": 1026928,
+    "google_parent_id": 21177,
+    "name": "Eureka",
+    "canonical_name": "Eureka,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -112.1202235,
+      39.9541166
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac21",
+    "google_id": 1026929,
+    "google_parent_id": 21177,
+    "name": "Fairview",
+    "canonical_name": "Fairview,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -111.4396325,
+      39.626351
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac22",
+    "google_id": 1026930,
+    "google_parent_id": 21177,
+    "name": "Farmington",
+    "canonical_name": "Farmington,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 80000,
+    "gps": [
+      -111.8874392,
+      40.9804999
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c76ab",
+    "google_id": 9051937,
+    "google_parent_id": 21177,
+    "name": "Farr West",
+    "canonical_name": "Farr West,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 23000,
+    "gps": [
+      -112.0277203,
+      41.2971651
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac23",
+    "google_id": 1026931,
+    "google_parent_id": 21177,
+    "name": "Fillmore",
+    "canonical_name": "Fillmore,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 8000,
+    "gps": [
+      -112.3397377,
+      38.9638553
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac24",
+    "google_id": 1026932,
+    "google_parent_id": 21177,
+    "name": "Fort Duchesne",
+    "canonical_name": "Fort Duchesne,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -109.8545901,
+      40.2880155
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de504",
+    "google_id": 9191593,
+    "google_parent_id": 21177,
+    "name": "Fruit Heights",
+    "canonical_name": "Fruit Heights,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 10000,
+    "gps": [
+      -111.9021622,
+      41.0321662
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5ddf0a",
+    "google_id": 9190044,
+    "google_parent_id": 21177,
+    "name": "Granite",
+    "canonical_name": "Granite,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -111.7897859,
+      40.5686443
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac25",
+    "google_id": 1026933,
+    "google_parent_id": 21177,
+    "name": "Grantsville",
+    "canonical_name": "Grantsville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 17000,
+    "gps": [
+      -112.4643988,
+      40.5999425
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c7727",
+    "google_id": 9052061,
+    "google_parent_id": 21177,
+    "name": "Green River",
+    "canonical_name": "Green River,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -110.1596352,
+      38.9955607
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac26",
+    "google_id": 1026934,
+    "google_parent_id": 21177,
+    "name": "Gunlock",
+    "canonical_name": "Gunlock,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.7662578,
+      37.2843711
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c773c",
+    "google_id": 9052082,
+    "google_parent_id": 21177,
+    "name": "Gunnison",
+    "canonical_name": "Gunnison,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -111.8182582,
+      39.1552391
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5df069",
+    "google_id": 9194551,
+    "google_parent_id": 21177,
+    "name": "Harrisville",
+    "canonical_name": "Harrisville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 16000,
+    "gps": [
+      -111.9882754,
+      41.2813323
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac27",
+    "google_id": 1026935,
+    "google_parent_id": 21177,
+    "name": "Heber City",
+    "canonical_name": "Heber City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 44000,
+    "gps": [
+      -111.4133234,
+      40.5070087
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c7766",
+    "google_id": 9052124,
+    "google_parent_id": 21177,
+    "name": "Herriman",
+    "canonical_name": "Herriman,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 110000,
+    "gps": [
+      -112.0329938,
+      40.5141147
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c776a",
+    "google_id": 9052128,
+    "google_parent_id": 21177,
+    "name": "Highland",
+    "canonical_name": "Highland,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 44000,
+    "gps": [
+      -111.7979285,
+      40.4248665
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac28",
+    "google_id": 1026936,
+    "google_parent_id": 21177,
+    "name": "Hildale",
+    "canonical_name": "Hildale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -112.9668812,
+      37.0035953
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac29",
+    "google_id": 1026937,
+    "google_parent_id": 21177,
+    "name": "Hill Air Force Base",
+    "canonical_name": "Hill Air Force Base,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 24000,
+    "gps": [
+      -111.9939817,
+      41.1321102
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c7778",
+    "google_id": 9052142,
+    "google_parent_id": 21177,
+    "name": "Holladay",
+    "canonical_name": "Holladay,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 79000,
+    "gps": [
+      -111.8246557,
+      40.6688363
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c7785",
+    "google_id": 9052155,
+    "google_parent_id": 21177,
+    "name": "Hooper",
+    "canonical_name": "Hooper,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 15000,
+    "gps": [
+      -112.1224431,
+      41.1638323
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2a",
+    "google_id": 1026938,
+    "google_parent_id": 21177,
+    "name": "Huntington",
+    "canonical_name": "Huntington,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -110.9646113,
+      39.3266354
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2b",
+    "google_id": 1026939,
+    "google_parent_id": 21177,
+    "name": "Hurricane",
+    "canonical_name": "Hurricane,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 66000,
+    "gps": [
+      -113.2899484,
+      37.1752607
+    ]
+  },
+  {
+    "id": "660725bb914a81973742cc79",
+    "google_id": 9236892,
+    "google_parent_id": 21177,
+    "name": "Hyde Park",
+    "canonical_name": "Hyde Park,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 9000,
+    "gps": [
+      -111.8193052,
+      41.7991057
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2c",
+    "google_id": 1026940,
+    "google_parent_id": 21177,
+    "name": "Hyrum",
+    "canonical_name": "Hyrum,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 14000,
+    "gps": [
+      -111.8521653,
+      41.6340996
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2d",
+    "google_id": 1026941,
+    "google_parent_id": 21177,
+    "name": "Ivins",
+    "canonical_name": "Ivins,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 24000,
+    "gps": [
+      -113.6794057,
+      37.1685907
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2e",
+    "google_id": 1026942,
+    "google_parent_id": 21177,
+    "name": "Junction",
+    "canonical_name": "Junction,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -112.2199252,
+      38.2374788
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac2f",
+    "google_id": 1026943,
+    "google_parent_id": 21177,
+    "name": "Kamas",
+    "canonical_name": "Kamas,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 9000,
+    "gps": [
+      -111.2807384,
+      40.643007
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac30",
+    "google_id": 1026944,
+    "google_parent_id": 21177,
+    "name": "Kanab",
+    "canonical_name": "Kanab,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 29000,
+    "gps": [
+      -112.5263145,
+      37.0474855
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac31",
+    "google_id": 1026945,
+    "google_parent_id": 21177,
+    "name": "Kaysville",
+    "canonical_name": "Kaysville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 65000,
+    "gps": [
+      -111.9385521,
+      41.0352216
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c77c3",
+    "google_id": 9052217,
+    "google_parent_id": 21177,
+    "name": "Kearns",
+    "canonical_name": "Kearns,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 60000,
+    "gps": [
+      -111.9963275,
+      40.6599468
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac32",
+    "google_id": 1026946,
+    "google_parent_id": 21177,
+    "name": "La Verkin",
+    "canonical_name": "La Verkin,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 13000,
+    "gps": [
+      -113.2721584,
+      37.2051385
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac33",
+    "google_id": 1026947,
+    "google_parent_id": 21177,
+    "name": "Layton",
+    "canonical_name": "Layton,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 200000,
+    "gps": [
+      -111.9710529,
+      41.0602216
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac34",
+    "google_id": 1026948,
+    "google_parent_id": 21177,
+    "name": "Leeds",
+    "canonical_name": "Leeds,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -113.3591167,
+      37.2385931
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac35",
+    "google_id": 1026949,
+    "google_parent_id": 21177,
+    "name": "Lehi",
+    "canonical_name": "Lehi,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 231000,
+    "gps": [
+      -111.8507662,
+      40.3916172
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac36",
+    "google_id": 1026950,
+    "google_parent_id": 21177,
+    "name": "Lewiston",
+    "canonical_name": "Lewiston,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -111.8563372,
+      41.9757598
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac37",
+    "google_id": 1026951,
+    "google_parent_id": 21177,
+    "name": "Lindon",
+    "canonical_name": "Lindon,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 62000,
+    "gps": [
+      -111.7207608,
+      40.3432857
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac38",
+    "google_id": 1026952,
+    "google_parent_id": 21177,
+    "name": "Logan",
+    "canonical_name": "Logan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 131000,
+    "gps": [
+      -111.8338359,
+      41.7369803
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac39",
+    "google_id": 1026953,
+    "google_parent_id": 21177,
+    "name": "Magna",
+    "canonical_name": "Magna,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 57000,
+    "gps": [
+      -112.1016088,
+      40.7091121
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3a",
+    "google_id": 1026954,
+    "google_parent_id": 21177,
+    "name": "Manila",
+    "canonical_name": "Manila,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -109.7226498,
+      40.98801419999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3b",
+    "google_id": 1026955,
+    "google_parent_id": 21177,
+    "name": "Manti",
+    "canonical_name": "Manti,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 8000,
+    "gps": [
+      -111.6368627,
+      39.2682951
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3c",
+    "google_id": 1026956,
+    "google_parent_id": 21177,
+    "name": "Mantua",
+    "canonical_name": "Mantua,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -111.9438329,
+      41.4957692
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c786e",
+    "google_id": 9052388,
+    "google_parent_id": 21177,
+    "name": "Mapleton",
+    "canonical_name": "Mapleton,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 20000,
+    "gps": [
+      -111.5785281,
+      40.1302338
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5dee65",
+    "google_id": 9194025,
+    "google_parent_id": 21177,
+    "name": "Marriott-Slaterville",
+    "canonical_name": "Marriott-Slaterville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 20000,
+    "gps": [
+      -112.0251795,
+      41.25179989999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3d",
+    "google_id": 1026957,
+    "google_parent_id": 21177,
+    "name": "Midvale",
+    "canonical_name": "Midvale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 161000,
+    "gps": [
+      -111.8999353,
+      40.6110589
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3e",
+    "google_id": 1026958,
+    "google_parent_id": 21177,
+    "name": "Midway",
+    "canonical_name": "Midway,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 12000,
+    "gps": [
+      -111.4743545,
+      40.5121772
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac3f",
+    "google_id": 1026959,
+    "google_parent_id": 21177,
+    "name": "Milford",
+    "canonical_name": "Milford,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 1000,
+    "gps": [
+      -113.0107892,
+      38.3969108
+    ]
+  },
+  {
+    "id": "585069e7ee19ad271e9c78a3",
+    "google_id": 9052441,
+    "google_parent_id": 21177,
+    "name": "Millcreek",
+    "canonical_name": "Millcreek,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 156000,
+    "gps": [
+      -111.8754907,
+      40.6868914
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac40",
+    "google_id": 1026960,
+    "google_parent_id": 21177,
+    "name": "Moab",
+    "canonical_name": "Moab,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 61000,
+    "gps": [
+      -109.5498395,
+      38.5733155
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac41",
+    "google_id": 1026961,
+    "google_parent_id": 21177,
+    "name": "Monroe",
+    "canonical_name": "Monroe,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -112.1207573,
+      38.6299724
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac42",
+    "google_id": 1026962,
+    "google_parent_id": 21177,
+    "name": "Monticello",
+    "canonical_name": "Monticello,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -109.3428948,
+      37.8713829
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac43",
+    "google_id": 1026963,
+    "google_parent_id": 21177,
+    "name": "Morgan",
+    "canonical_name": "Morgan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -111.6768769,
+      41.03605599999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac44",
+    "google_id": 1026964,
+    "google_parent_id": 21177,
+    "name": "Mount Pleasant",
+    "canonical_name": "Mount Pleasant,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 9000,
+    "gps": [
+      -111.4554659,
+      39.5469073
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c78db",
+    "google_id": 9052497,
+    "google_parent_id": 21177,
+    "name": "Murray",
+    "canonical_name": "Murray,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 257000,
+    "gps": [
+      -111.8879909,
+      40.6668916
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac45",
+    "google_id": 1026965,
+    "google_parent_id": 21177,
+    "name": "Nephi",
+    "canonical_name": "Nephi,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 17000,
+    "gps": [
+      -111.8363216,
+      39.7102336
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac46",
+    "google_id": 1026966,
+    "google_parent_id": 21177,
+    "name": "New Harmony",
+    "canonical_name": "New Harmony,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.3096739,
+      37.4794243
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac47",
+    "google_id": 1026967,
+    "google_parent_id": 21177,
+    "name": "Newcastle",
+    "canonical_name": "Newcastle,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.5491639,
+      37.6672286
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de68e",
+    "google_id": 9191995,
+    "google_parent_id": 21177,
+    "name": "Nibley",
+    "canonical_name": "Nibley,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 7000,
+    "gps": [
+      -111.8329984,
+      41.6743765
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de5e3",
+    "google_id": 9191822,
+    "google_parent_id": 21177,
+    "name": "North Logan",
+    "canonical_name": "North Logan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 27000,
+    "gps": [
+      -111.8046654,
+      41.7693747
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7910",
+    "google_id": 9052550,
+    "google_parent_id": 21177,
+    "name": "North Ogden",
+    "canonical_name": "North Ogden,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 40000,
+    "gps": [
+      -111.9602196,
+      41.3071645
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac48",
+    "google_id": 1026968,
+    "google_parent_id": 21177,
+    "name": "North Salt Lake",
+    "canonical_name": "North Salt Lake,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 74000,
+    "gps": [
+      -111.9068824,
+      40.8485564
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac49",
+    "google_id": 1026969,
+    "google_parent_id": 21177,
+    "name": "Ogden",
+    "canonical_name": "Ogden,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 220000,
+    "gps": [
+      -111.9738304,
+      41.223
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4a",
+    "google_id": 1026970,
+    "google_parent_id": 21177,
+    "name": "Orangeville",
+    "canonical_name": "Orangeville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -111.0535024,
+      39.227191
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4b",
+    "google_id": 1026971,
+    "google_parent_id": 21177,
+    "name": "Orem",
+    "canonical_name": "Orem,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 293000,
+    "gps": [
+      -111.6946475,
+      40.2968979
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4c",
+    "google_id": 1026972,
+    "google_parent_id": 21177,
+    "name": "Panguitch",
+    "canonical_name": "Panguitch,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -112.4357638,
+      37.82275509999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4d",
+    "google_id": 1026973,
+    "google_parent_id": 21177,
+    "name": "Park City",
+    "canonical_name": "Park City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 69000,
+    "gps": [
+      -111.4979729,
+      40.6460622
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4e",
+    "google_id": 1026974,
+    "google_parent_id": 21177,
+    "name": "Parowan",
+    "canonical_name": "Parowan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -112.8279996,
+      37.8421975
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac4f",
+    "google_id": 1026975,
+    "google_parent_id": 21177,
+    "name": "Payson",
+    "canonical_name": "Payson,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 50000,
+    "gps": [
+      -111.7321518,
+      40.0443989
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de229",
+    "google_id": 9190852,
+    "google_parent_id": 21177,
+    "name": "Perry",
+    "canonical_name": "Perry,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 15000,
+    "gps": [
+      -112.0366907,
+      41.4609689
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7992",
+    "google_id": 9052680,
+    "google_parent_id": 21177,
+    "name": "Plain City",
+    "canonical_name": "Plain City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 12000,
+    "gps": [
+      -112.0860538,
+      41.2979981
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac51",
+    "google_id": 1026977,
+    "google_parent_id": 21177,
+    "name": "Pleasant Grove",
+    "canonical_name": "Pleasant Grove,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 85000,
+    "gps": [
+      -111.73854,
+      40.3641184
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7998",
+    "google_id": 9052686,
+    "google_parent_id": 21177,
+    "name": "Pleasant View",
+    "canonical_name": "Pleasant View,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 20000,
+    "gps": [
+      -111.9921649,
+      41.3182755
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac52",
+    "google_id": 1026978,
+    "google_parent_id": 21177,
+    "name": "Price",
+    "canonical_name": "Price,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 19000,
+    "gps": [
+      -110.8107148,
+      39.5994095
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac53",
+    "google_id": 1026979,
+    "google_parent_id": 21177,
+    "name": "Providence",
+    "canonical_name": "Providence,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 16000,
+    "gps": [
+      -111.817165,
+      41.7063204
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac54",
+    "google_id": 1026980,
+    "google_parent_id": 21177,
+    "name": "Provo",
+    "canonical_name": "Provo,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 278000,
+    "gps": [
+      -111.6585337,
+      40.2338438
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac55",
+    "google_id": 1026981,
+    "google_parent_id": 21177,
+    "name": "Randolph",
+    "canonical_name": "Randolph,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -111.1821409,
+      41.6657759
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac56",
+    "google_id": 1026982,
+    "google_parent_id": 21177,
+    "name": "Richfield",
+    "canonical_name": "Richfield,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 19000,
+    "gps": [
+      -112.0840943,
+      38.7724673
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac57",
+    "google_id": 1026983,
+    "google_parent_id": 21177,
+    "name": "Richmond",
+    "canonical_name": "Richmond,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 4000,
+    "gps": [
+      -111.8135571,
+      41.9227056
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c79da",
+    "google_id": 9052752,
+    "google_parent_id": 21177,
+    "name": "Riverdale",
+    "canonical_name": "Riverdale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 53000,
+    "gps": [
+      -112.0038311,
+      41.1768888
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac58",
+    "google_id": 1026984,
+    "google_parent_id": 21177,
+    "name": "Riverton",
+    "canonical_name": "Riverton,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 114000,
+    "gps": [
+      -111.9391023,
+      40.521893
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac59",
+    "google_id": 1026985,
+    "google_parent_id": 21177,
+    "name": "Rockville",
+    "canonical_name": "Rockville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -113.0382745,
+      37.1610939
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5a",
+    "google_id": 1026986,
+    "google_parent_id": 21177,
+    "name": "Roosevelt",
+    "canonical_name": "Roosevelt,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 20000,
+    "gps": [
+      -109.9887605,
+      40.299403
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5b",
+    "google_id": 1026987,
+    "google_parent_id": 21177,
+    "name": "Roy",
+    "canonical_name": "Roy,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 76000,
+    "gps": [
+      -112.0263313,
+      41.1616108
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5c",
+    "google_id": 1026988,
+    "google_parent_id": 21177,
+    "name": "Rush Valley",
+    "canonical_name": "Rush Valley,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -112.4505084,
+      40.36299959999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5d",
+    "google_id": 1026989,
+    "google_parent_id": 21177,
+    "name": "Salem",
+    "canonical_name": "Salem,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 17000,
+    "gps": [
+      -111.673536,
+      40.0530105
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5e",
+    "google_id": 1026990,
+    "google_parent_id": 21177,
+    "name": "Salt Lake City",
+    "canonical_name": "Salt Lake City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2770000,
+    "gps": [
+      -111.8910474,
+      40.7607793
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac5f",
+    "google_id": 1026991,
+    "google_parent_id": 21177,
+    "name": "Sandy",
+    "canonical_name": "Sandy,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 283000,
+    "gps": [
+      -111.8389726,
+      40.5649781
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac60",
+    "google_id": 1026992,
+    "google_parent_id": 21177,
+    "name": "Santa Clara",
+    "canonical_name": "Santa Clara,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 12000,
+    "gps": [
+      -113.6541266,
+      37.1330355
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac61",
+    "google_id": 1026993,
+    "google_parent_id": 21177,
+    "name": "Santaquin",
+    "canonical_name": "Santaquin,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 25000,
+    "gps": [
+      -111.7852106,
+      39.9755101
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7a13",
+    "google_id": 9052809,
+    "google_parent_id": 21177,
+    "name": "Saratoga Springs",
+    "canonical_name": "Saratoga Springs,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 123000,
+    "gps": [
+      -111.9044877,
+      40.3301898
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de97a",
+    "google_id": 9192754,
+    "google_parent_id": 21177,
+    "name": "Silver Summit",
+    "canonical_name": "Silver Summit,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 12000,
+    "gps": [
+      -111.5110576,
+      40.7601592
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac62",
+    "google_id": 1026994,
+    "google_parent_id": 21177,
+    "name": "Smithfield",
+    "canonical_name": "Smithfield,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 37000,
+    "gps": [
+      -111.8327229,
+      41.8382622
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7a5d",
+    "google_id": 9052883,
+    "google_parent_id": 21177,
+    "name": "Snyderville",
+    "canonical_name": "Snyderville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 39000,
+    "gps": [
+      -111.5110576,
+      40.7020685
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac63",
+    "google_id": 1026995,
+    "google_parent_id": 21177,
+    "name": "South Jordan",
+    "canonical_name": "South Jordan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 300000,
+    "gps": [
+      -111.929658,
+      40.5621704
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5df2f4",
+    "google_id": 9195213,
+    "google_parent_id": 21177,
+    "name": "South Ogden",
+    "canonical_name": "South Ogden,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 46000,
+    "gps": [
+      -111.9600418,
+      41.1761798
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7a5c",
+    "google_id": 9052882,
+    "google_parent_id": 21177,
+    "name": "South Salt Lake",
+    "canonical_name": "South Salt Lake,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 153000,
+    "gps": [
+      -111.8882691,
+      40.7188354
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7a61",
+    "google_id": 9052887,
+    "google_parent_id": 21177,
+    "name": "South Weber",
+    "canonical_name": "South Weber,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -111.9302184,
+      41.1324438
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac64",
+    "google_id": 1026996,
+    "google_parent_id": 21177,
+    "name": "Spanish Fork",
+    "canonical_name": "Spanish Fork,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 93000,
+    "gps": [
+      -111.654923,
+      40.114955
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac65",
+    "google_id": 1026997,
+    "google_parent_id": 21177,
+    "name": "Springdale",
+    "canonical_name": "Springdale,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 24000,
+    "gps": [
+      -112.9985515,
+      37.1888713
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac66",
+    "google_id": 1026998,
+    "google_parent_id": 21177,
+    "name": "Springville",
+    "canonical_name": "Springville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 81000,
+    "gps": [
+      -111.6107526,
+      40.1652335
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac67",
+    "google_id": 1026999,
+    "google_parent_id": 21177,
+    "name": "St. George",
+    "canonical_name": "St. George,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 294000,
+    "gps": [
+      -113.5684164,
+      37.0965278
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7a88",
+    "google_id": 9052926,
+    "google_parent_id": 21177,
+    "name": "Stansbury Park",
+    "canonical_name": "Stansbury Park,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 10000,
+    "gps": [
+      -112.2960589,
+      40.63772170000001
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac68",
+    "google_id": 1027000,
+    "google_parent_id": 21177,
+    "name": "Sterling",
+    "canonical_name": "Sterling,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -111.69242,
+      39.1935732
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5dea4a",
+    "google_id": 9192963,
+    "google_parent_id": 21177,
+    "name": "Summit Park",
+    "canonical_name": "Summit Park,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 23000,
+    "gps": [
+      -111.6131415,
+      40.7457117
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac69",
+    "google_id": 1027001,
+    "google_parent_id": 21177,
+    "name": "Syracuse",
+    "canonical_name": "Syracuse,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 53000,
+    "gps": [
+      -112.0646657,
+      41.0893878
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7aac",
+    "google_id": 9052962,
+    "google_parent_id": 21177,
+    "name": "Taylorsville",
+    "canonical_name": "Taylorsville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 155000,
+    "gps": [
+      -111.9388258,
+      40.66772479999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6a",
+    "google_id": 1027002,
+    "google_parent_id": 21177,
+    "name": "Tooele",
+    "canonical_name": "Tooele,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 68000,
+    "gps": [
+      -112.29828,
+      40.53077760000001
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6b",
+    "google_id": 1027003,
+    "google_parent_id": 21177,
+    "name": "Toquerville",
+    "canonical_name": "Toquerville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -113.2846707,
+      37.2533157
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7acf",
+    "google_id": 9052997,
+    "google_parent_id": 21177,
+    "name": "Torrey",
+    "canonical_name": "Torrey,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 2000,
+    "gps": [
+      -111.4190654,
+      38.2988691
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6c",
+    "google_id": 1027004,
+    "google_parent_id": 21177,
+    "name": "Tremonton",
+    "canonical_name": "Tremonton,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 21000,
+    "gps": [
+      -112.1655079,
+      41.71187279999999
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7ada",
+    "google_id": 9053008,
+    "google_parent_id": 21177,
+    "name": "Tropic",
+    "canonical_name": "Tropic,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 6000,
+    "gps": [
+      -112.0821359,
+      37.6252615
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6d",
+    "google_id": 1027005,
+    "google_parent_id": 21177,
+    "name": "Vernal",
+    "canonical_name": "Vernal,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 35000,
+    "gps": [
+      -109.5287479,
+      40.4555157
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6e",
+    "google_id": 1027006,
+    "google_parent_id": 21177,
+    "name": "Veyo",
+    "canonical_name": "Veyo,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -113.6931998,
+      37.3378932
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de40d",
+    "google_id": 9191341,
+    "google_parent_id": 21177,
+    "name": "Vineyard",
+    "canonical_name": "Vineyard,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 37000,
+    "gps": [
+      -111.7495419,
+      40.3056601
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac6f",
+    "google_id": 1027007,
+    "google_parent_id": 21177,
+    "name": "Virgin",
+    "canonical_name": "Virgin,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 7000,
+    "gps": [
+      -113.1882792,
+      37.208316
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac70",
+    "google_id": 1027008,
+    "google_parent_id": 21177,
+    "name": "Washington",
+    "canonical_name": "Washington,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 96000,
+    "gps": [
+      -113.5082867,
+      37.1305373
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5debf1",
+    "google_id": 9193388,
+    "google_parent_id": 21177,
+    "name": "Washington Terrace",
+    "canonical_name": "Washington Terrace,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 18000,
+    "gps": [
+      -111.9766083,
+      41.172722
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de29d",
+    "google_id": 9190970,
+    "google_parent_id": 21177,
+    "name": "Wellsville",
+    "canonical_name": "Wellsville,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 8000,
+    "gps": [
+      -111.9338342,
+      41.6385432
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac71",
+    "google_id": 1027009,
+    "google_parent_id": 21177,
+    "name": "Wendover",
+    "canonical_name": "Wendover,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 3000,
+    "gps": [
+      -114.0375102,
+      40.7371524
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7b3a",
+    "google_id": 9053104,
+    "google_parent_id": 21177,
+    "name": "West Bountiful",
+    "canonical_name": "West Bountiful,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 23000,
+    "gps": [
+      -111.9018828,
+      40.8938339
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7b43",
+    "google_id": 9053113,
+    "google_parent_id": 21177,
+    "name": "West Haven",
+    "canonical_name": "West Haven,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 47000,
+    "gps": [
+      -112.0510533,
+      41.2029998
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac72",
+    "google_id": 1027010,
+    "google_parent_id": 21177,
+    "name": "West Jordan",
+    "canonical_name": "West Jordan,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 271000,
+    "gps": [
+      -111.9391031,
+      40.6096698
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5de167",
+    "google_id": 9190655,
+    "google_parent_id": 21177,
+    "name": "West Point",
+    "canonical_name": "West Point,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 19000,
+    "gps": [
+      -112.08411,
+      41.1182767
+    ]
+  },
+  {
+    "id": "585069e8ee19ad271e9c7b54",
+    "google_id": 9053130,
+    "google_parent_id": 21177,
+    "name": "West Valley City",
+    "canonical_name": "West Valley City,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 348000,
+    "gps": [
+      -112.0010501,
+      40.6916132
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac73",
+    "google_id": 1027011,
+    "google_parent_id": 21177,
+    "name": "Woodruff",
+    "canonical_name": "Woodruff,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 0,
+    "gps": [
+      -111.1624159,
+      41.52188779999999
+    ]
+  },
+  {
+    "id": "585069b8ee19ad271e9bac74",
+    "google_id": 1027012,
+    "google_parent_id": 21177,
+    "name": "Woods Cross",
+    "canonical_name": "Woods Cross,Utah,United States",
+    "country_code": "US",
+    "target_type": "City",
+    "reach": 34000,
+    "gps": [
+      -111.89216,
+      40.8716119
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3764",
+    "google_id": 9029669,
+    "google_parent_id": 21177,
+    "name": "84001",
+    "canonical_name": "84001,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -110.2593928,
+      40.2849128
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3765",
+    "google_id": 9029670,
+    "google_parent_id": 21177,
+    "name": "84002",
+    "canonical_name": "84002,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.3070512,
+      40.4329179
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3766",
+    "google_id": 9029671,
+    "google_parent_id": 21177,
+    "name": "84003",
+    "canonical_name": "84003,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 190000,
+    "gps": [
+      -111.7972384,
+      40.3935912
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3767",
+    "google_id": 9029672,
+    "google_parent_id": 21177,
+    "name": "84004",
+    "canonical_name": "84004,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 19000,
+    "gps": [
+      -111.7495419,
+      40.46131889999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3768",
+    "google_id": 9029673,
+    "google_parent_id": 21177,
+    "name": "84005",
+    "canonical_name": "84005,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 70000,
+    "gps": [
+      -111.9880199,
+      40.3363082
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3769",
+    "google_id": 9029674,
+    "google_parent_id": 21177,
+    "name": "84006",
+    "canonical_name": "84006,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.1191757,
+      40.5914444
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376a",
+    "google_id": 9029675,
+    "google_parent_id": 21177,
+    "name": "84007",
+    "canonical_name": "84007,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.1998238,
+      40.4035232
+    ]
+  },
+  {
+    "id": "66826b74914a81594d5df8b6",
+    "google_id": 9196758,
+    "google_parent_id": 21177,
+    "name": "84009",
+    "canonical_name": "84009,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 73000,
+    "gps": [
+      -112.0178286,
+      40.5584836
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376b",
+    "google_id": 9029676,
+    "google_parent_id": 21177,
+    "name": "84010",
+    "canonical_name": "84010,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 121000,
+    "gps": [
+      -111.8449346,
+      40.8684042
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376c",
+    "google_id": 9029677,
+    "google_parent_id": 21177,
+    "name": "84013",
+    "canonical_name": "84013,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -112.1191757,
+      40.2809139
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376d",
+    "google_id": 9029678,
+    "google_parent_id": 21177,
+    "name": "84014",
+    "canonical_name": "84014,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 49000,
+    "gps": [
+      -111.8687825,
+      40.9215101
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376e",
+    "google_id": 9029679,
+    "google_parent_id": 21177,
+    "name": "84015",
+    "canonical_name": "84015,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 127000,
+    "gps": [
+      -112.0595603,
+      41.1333549
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c376f",
+    "google_id": 9029681,
+    "google_parent_id": 21177,
+    "name": "84017",
+    "canonical_name": "84017,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 18000,
+    "gps": [
+      -111.1414226,
+      40.9185984
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3770",
+    "google_id": 9029682,
+    "google_parent_id": 21177,
+    "name": "84018",
+    "canonical_name": "84018,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -111.4514369,
+      41.1864105
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3771",
+    "google_id": 9029683,
+    "google_parent_id": 21177,
+    "name": "84020",
+    "canonical_name": "84020,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 248000,
+    "gps": [
+      -111.8687825,
+      40.4960215
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3772",
+    "google_id": 9029684,
+    "google_parent_id": 21177,
+    "name": "84021",
+    "canonical_name": "84021,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 19000,
+    "gps": [
+      -110.5692179,
+      40.0906425
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3773",
+    "google_id": 9029685,
+    "google_parent_id": 21177,
+    "name": "84022",
+    "canonical_name": "84022,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.6675398,
+      40.3054744
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3774",
+    "google_id": 9029686,
+    "google_parent_id": 21177,
+    "name": "84023",
+    "canonical_name": "84023,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -109.4259114,
+      40.922044
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3775",
+    "google_id": 9029687,
+    "google_parent_id": 21177,
+    "name": "84024",
+    "canonical_name": "84024,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.4156647,
+      41.0105151
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3776",
+    "google_id": 9029688,
+    "google_parent_id": 21177,
+    "name": "84025",
+    "canonical_name": "84025,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 85000,
+    "gps": [
+      -111.9164779,
+      40.9698029
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3777",
+    "google_id": 9029689,
+    "google_parent_id": 21177,
+    "name": "84026",
+    "canonical_name": "84026,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -109.866327,
+      40.3262949
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3778",
+    "google_id": 9029690,
+    "google_parent_id": 21177,
+    "name": "84027",
+    "canonical_name": "84027,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -110.83145,
+      40.1399781
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3779",
+    "google_id": 9029691,
+    "google_parent_id": 21177,
+    "name": "84028",
+    "canonical_name": "84028,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 6000,
+    "gps": [
+      -111.4275888,
+      41.9355566
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377a",
+    "google_id": 9029692,
+    "google_parent_id": 21177,
+    "name": "84029",
+    "canonical_name": "84029,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 29000,
+    "gps": [
+      -112.762883,
+      40.6725315
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377b",
+    "google_id": 9029693,
+    "google_parent_id": 21177,
+    "name": "84031",
+    "canonical_name": "84031,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.7599266,
+      40.5249055
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377c",
+    "google_id": 9029694,
+    "google_parent_id": 21177,
+    "name": "84032",
+    "canonical_name": "84032,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 57000,
+    "gps": [
+      -111.3321974,
+      40.4940545
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377d",
+    "google_id": 9029695,
+    "google_parent_id": 21177,
+    "name": "84033",
+    "canonical_name": "84033,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.5110576,
+      40.9919446
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377e",
+    "google_id": 9029696,
+    "google_parent_id": 21177,
+    "name": "84034",
+    "canonical_name": "84034,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.9060624,
+      40.042709
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c377f",
+    "google_id": 9029697,
+    "google_parent_id": 21177,
+    "name": "84035",
+    "canonical_name": "84035,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -109.2355764,
+      40.2499367
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3780",
+    "google_id": 9029698,
+    "google_parent_id": 21177,
+    "name": "84036",
+    "canonical_name": "84036,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 20000,
+    "gps": [
+      -111.1414226,
+      40.6861495
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3781",
+    "google_id": 9029699,
+    "google_parent_id": 21177,
+    "name": "84037",
+    "canonical_name": "84037,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 80000,
+    "gps": [
+      -111.9641728,
+      41.0180102
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3782",
+    "google_id": 9029700,
+    "google_parent_id": 21177,
+    "name": "84038",
+    "canonical_name": "84038,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.3321974,
+      41.8022046
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3783",
+    "google_id": 9029701,
+    "google_parent_id": 21177,
+    "name": "84039",
+    "canonical_name": "84039,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -109.8306051,
+      40.4013279
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3784",
+    "google_id": 9029702,
+    "google_parent_id": 21177,
+    "name": "84040",
+    "canonical_name": "84040,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 35000,
+    "gps": [
+      -111.8926303,
+      41.0899369
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3785",
+    "google_id": 9029703,
+    "google_parent_id": 21177,
+    "name": "84041",
+    "canonical_name": "84041,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 181000,
+    "gps": [
+      -111.9880199,
+      41.0709042
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3786",
+    "google_id": 9029704,
+    "google_parent_id": 21177,
+    "name": "84042",
+    "canonical_name": "84042,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 56000,
+    "gps": [
+      -111.7197315,
+      40.3456087
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3787",
+    "google_id": 9029705,
+    "google_parent_id": 21177,
+    "name": "84043",
+    "canonical_name": "84043,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 277000,
+    "gps": [
+      -111.8926303,
+      40.4136016
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3788",
+    "google_id": 9029706,
+    "google_parent_id": 21177,
+    "name": "84044",
+    "canonical_name": "84044,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 69000,
+    "gps": [
+      -112.1072528,
+      40.7388429
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3789",
+    "google_id": 9029707,
+    "google_parent_id": 21177,
+    "name": "84045",
+    "canonical_name": "84045,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 106000,
+    "gps": [
+      -111.8807064,
+      40.2895017
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378a",
+    "google_id": 9029708,
+    "google_parent_id": 21177,
+    "name": "84046",
+    "canonical_name": "84046,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -109.8067916,
+      40.9326558
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378b",
+    "google_id": 9029709,
+    "google_parent_id": 21177,
+    "name": "84047",
+    "canonical_name": "84047,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 172000,
+    "gps": [
+      -111.8985922,
+      40.61129589999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378c",
+    "google_id": 9029710,
+    "google_parent_id": 21177,
+    "name": "84049",
+    "canonical_name": "84049,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -111.5468301,
+      40.5107651
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378d",
+    "google_id": 9029711,
+    "google_parent_id": 21177,
+    "name": "84050",
+    "canonical_name": "84050,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 31000,
+    "gps": [
+      -111.7137694,
+      41.0388494
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378e",
+    "google_id": 9029712,
+    "google_parent_id": 21177,
+    "name": "84051",
+    "canonical_name": "84051,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.5006901,
+      40.3264277
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c378f",
+    "google_id": 9029713,
+    "google_parent_id": 21177,
+    "name": "84052",
+    "canonical_name": "84052,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -109.9854145,
+      40.1280816
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e2b",
+    "google_id": 9053857,
+    "google_parent_id": 21177,
+    "name": "84053",
+    "canonical_name": "84053,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.0687883,
+      40.4370269
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3790",
+    "google_id": 9029714,
+    "google_parent_id": 21177,
+    "name": "84054",
+    "canonical_name": "84054,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 74000,
+    "gps": [
+      -111.9343636,
+      40.8458036
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3791",
+    "google_id": 9029715,
+    "google_parent_id": 21177,
+    "name": "84055",
+    "canonical_name": "84055,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.9745074,
+      40.81490429999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3792",
+    "google_id": 9029716,
+    "google_parent_id": 21177,
+    "name": "84056",
+    "canonical_name": "84056,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 17000,
+    "gps": [
+      -111.9939817,
+      41.1225148
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3793",
+    "google_id": 9029717,
+    "google_parent_id": 21177,
+    "name": "84057",
+    "canonical_name": "84057,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 135000,
+    "gps": [
+      -111.7018452,
+      40.3150359
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3794",
+    "google_id": 9029718,
+    "google_parent_id": 21177,
+    "name": "84058",
+    "canonical_name": "84058,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 155000,
+    "gps": [
+      -111.7733902,
+      40.2814786
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3795",
+    "google_id": 9029719,
+    "google_parent_id": 21177,
+    "name": "84060",
+    "canonical_name": "84060,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 76000,
+    "gps": [
+      -111.4991334,
+      40.6365451
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3796",
+    "google_id": 9029720,
+    "google_parent_id": 21177,
+    "name": "84061",
+    "canonical_name": "84061,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -111.2964262,
+      41.0336025
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3797",
+    "google_id": 9029721,
+    "google_parent_id": 21177,
+    "name": "84062",
+    "canonical_name": "84062,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 96000,
+    "gps": [
+      -111.7256936,
+      40.3882329
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3798",
+    "google_id": 9029722,
+    "google_parent_id": 21177,
+    "name": "84063",
+    "canonical_name": "84063,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -109.8067916,
+      40.150096
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3799",
+    "google_id": 9029723,
+    "google_parent_id": 21177,
+    "name": "84064",
+    "canonical_name": "84064,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.1414226,
+      41.7629175
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379a",
+    "google_id": 9029724,
+    "google_parent_id": 21177,
+    "name": "84065",
+    "canonical_name": "84065,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 157000,
+    "gps": [
+      -111.9403254,
+      40.4818161
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379b",
+    "google_id": 9029725,
+    "google_parent_id": 21177,
+    "name": "84066",
+    "canonical_name": "84066,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 24000,
+    "gps": [
+      -110.0926112,
+      40.2562647
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379c",
+    "google_id": 9029726,
+    "google_parent_id": 21177,
+    "name": "84067",
+    "canonical_name": "84067,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 77000,
+    "gps": [
+      -112.0357137,
+      41.176494
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379d",
+    "google_id": 9029728,
+    "google_parent_id": 21177,
+    "name": "84069",
+    "canonical_name": "84069,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.4529878,
+      40.3300401
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379e",
+    "google_id": 9029729,
+    "google_parent_id": 21177,
+    "name": "84070",
+    "canonical_name": "84070,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 206000,
+    "gps": [
+      -111.8866683,
+      40.5749102
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c379f",
+    "google_id": 9029730,
+    "google_parent_id": 21177,
+    "name": "84071",
+    "canonical_name": "84071,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.3576199,
+      40.3882581
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a0",
+    "google_id": 9029731,
+    "google_parent_id": 21177,
+    "name": "84072",
+    "canonical_name": "84072,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.7360863,
+      40.3536565
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a1",
+    "google_id": 9029732,
+    "google_parent_id": 21177,
+    "name": "84073",
+    "canonical_name": "84073,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.4500422,
+      40.3675693
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a2",
+    "google_id": 9029733,
+    "google_parent_id": 21177,
+    "name": "84074",
+    "canonical_name": "84074,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 92000,
+    "gps": [
+      -112.3099336,
+      40.5916513
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a3",
+    "google_id": 9029734,
+    "google_parent_id": 21177,
+    "name": "84075",
+    "canonical_name": "84075,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 56000,
+    "gps": [
+      -112.1191757,
+      41.0541918
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a4",
+    "google_id": 9029736,
+    "google_parent_id": 21177,
+    "name": "84078",
+    "canonical_name": "84078,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 41000,
+    "gps": [
+      -109.5285205,
+      40.4553668
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a5",
+    "google_id": 9029737,
+    "google_parent_id": 21177,
+    "name": "84080",
+    "canonical_name": "84080,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.4053046,
+      40.1063265
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a6",
+    "google_id": 9029738,
+    "google_parent_id": 21177,
+    "name": "84081",
+    "canonical_name": "84081,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 105000,
+    "gps": [
+      -112.0357137,
+      40.5984908
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a7",
+    "google_id": 9029739,
+    "google_parent_id": 21177,
+    "name": "84082",
+    "canonical_name": "84082,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.3321974,
+      40.3381971
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a8",
+    "google_id": 9029740,
+    "google_parent_id": 21177,
+    "name": "84083",
+    "canonical_name": "84083,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 15000,
+    "gps": [
+      -113.8584737,
+      41.1663079
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37a9",
+    "google_id": 9029741,
+    "google_parent_id": 21177,
+    "name": "84084",
+    "canonical_name": "84084,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 101000,
+    "gps": [
+      -111.9701346,
+      40.626106
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37aa",
+    "google_id": 9029742,
+    "google_parent_id": 21177,
+    "name": "84085",
+    "canonical_name": "84085,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -109.925868,
+      40.46270519999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ab",
+    "google_id": 9029743,
+    "google_parent_id": 21177,
+    "name": "84086",
+    "canonical_name": "84086,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.1652687,
+      41.5101958
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ac",
+    "google_id": 9029744,
+    "google_parent_id": 21177,
+    "name": "84087",
+    "canonical_name": "84087,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 46000,
+    "gps": [
+      -111.9403254,
+      40.9072728
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ad",
+    "google_id": 9029745,
+    "google_parent_id": 21177,
+    "name": "84088",
+    "canonical_name": "84088,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 142000,
+    "gps": [
+      -111.9641728,
+      40.5934061
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ae",
+    "google_id": 9029746,
+    "google_parent_id": 21177,
+    "name": "84092",
+    "canonical_name": "84092,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 64000,
+    "gps": [
+      -111.7376178,
+      40.5510478
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37af",
+    "google_id": 9029747,
+    "google_parent_id": 21177,
+    "name": "84093",
+    "canonical_name": "84093,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 58000,
+    "gps": [
+      -111.8270486,
+      40.596417
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b0",
+    "google_id": 9029748,
+    "google_parent_id": 21177,
+    "name": "84094",
+    "canonical_name": "84094,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 70000,
+    "gps": [
+      -111.8628205,
+      40.569948
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b1",
+    "google_id": 9029749,
+    "google_parent_id": 21177,
+    "name": "84095",
+    "canonical_name": "84095,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 180000,
+    "gps": [
+      -111.9386203,
+      40.5623204
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b2",
+    "google_id": 9029750,
+    "google_parent_id": 21177,
+    "name": "84096",
+    "canonical_name": "84096,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 202000,
+    "gps": [
+      -112.0714835,
+      40.4847454
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b3",
+    "google_id": 9029751,
+    "google_parent_id": 21177,
+    "name": "84097",
+    "canonical_name": "84097,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 110000,
+    "gps": [
+      -111.6750157,
+      40.3032488
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b4",
+    "google_id": 9029752,
+    "google_parent_id": 21177,
+    "name": "84098",
+    "canonical_name": "84098,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 77000,
+    "gps": [
+      -111.5468301,
+      40.743503
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b5",
+    "google_id": 9029753,
+    "google_parent_id": 21177,
+    "name": "84101",
+    "canonical_name": "84101,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 344000,
+    "gps": [
+      -111.8985922,
+      40.7563925
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b6",
+    "google_id": 9029754,
+    "google_parent_id": 21177,
+    "name": "84102",
+    "canonical_name": "84102,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 116000,
+    "gps": [
+      -111.8658015,
+      40.76049
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b7",
+    "google_id": 9029755,
+    "google_parent_id": 21177,
+    "name": "84103",
+    "canonical_name": "84103,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 170000,
+    "gps": [
+      -111.8449346,
+      40.810506
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b8",
+    "google_id": 9029756,
+    "google_parent_id": 21177,
+    "name": "84104",
+    "canonical_name": "84104,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 305000,
+    "gps": [
+      -111.9880199,
+      40.7434064
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37b9",
+    "google_id": 9029757,
+    "google_parent_id": 21177,
+    "name": "84105",
+    "canonical_name": "84105,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 103000,
+    "gps": [
+      -111.8628205,
+      40.7345053
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ba",
+    "google_id": 9029758,
+    "google_parent_id": 21177,
+    "name": "84106",
+    "canonical_name": "84106,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 178000,
+    "gps": [
+      -111.8508966,
+      40.70786390000001
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37bb",
+    "google_id": 9029759,
+    "google_parent_id": 21177,
+    "name": "84107",
+    "canonical_name": "84107,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 214000,
+    "gps": [
+      -111.8866683,
+      40.6620696
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37bc",
+    "google_id": 9029760,
+    "google_parent_id": 21177,
+    "name": "84108",
+    "canonical_name": "84108,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 128000,
+    "gps": [
+      -111.7376178,
+      40.7834328
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37bd",
+    "google_id": 9029761,
+    "google_parent_id": 21177,
+    "name": "84109",
+    "canonical_name": "84109,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 77000,
+    "gps": [
+      -111.7376178,
+      40.7060732
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37be",
+    "google_id": 9029763,
+    "google_parent_id": 21177,
+    "name": "84111",
+    "canonical_name": "84111,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 215000,
+    "gps": [
+      -111.8836874,
+      40.7569389
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37bf",
+    "google_id": 9029764,
+    "google_parent_id": 21177,
+    "name": "84112",
+    "canonical_name": "84112,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 36000,
+    "gps": [
+      -111.8419536,
+      40.7652201
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c0",
+    "google_id": 9029765,
+    "google_parent_id": 21177,
+    "name": "84113",
+    "canonical_name": "84113,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 17000,
+    "gps": [
+      -111.8337558,
+      40.76020159999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c1",
+    "google_id": 9029766,
+    "google_parent_id": 21177,
+    "name": "84115",
+    "canonical_name": "84115,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 213000,
+    "gps": [
+      -111.8985922,
+      40.7177351
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c2",
+    "google_id": 9029767,
+    "google_parent_id": 21177,
+    "name": "84116",
+    "canonical_name": "84116,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 430000,
+    "gps": [
+      -112.0237903,
+      40.8038325
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c3",
+    "google_id": 9029768,
+    "google_parent_id": 21177,
+    "name": "84117",
+    "canonical_name": "84117,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 74000,
+    "gps": [
+      -111.8389726,
+      40.6618507
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c4",
+    "google_id": 9029769,
+    "google_parent_id": 21177,
+    "name": "84118",
+    "canonical_name": "84118,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 75000,
+    "gps": [
+      -112.0059052,
+      40.6479987
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c5",
+    "google_id": 9029770,
+    "google_parent_id": 21177,
+    "name": "84119",
+    "canonical_name": "84119,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 206000,
+    "gps": [
+      -111.9641728,
+      40.7095135
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c6",
+    "google_id": 9029771,
+    "google_parent_id": 21177,
+    "name": "84120",
+    "canonical_name": "84120,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 146000,
+    "gps": [
+      -112.0118669,
+      40.6999925
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c7",
+    "google_id": 9029772,
+    "google_parent_id": 21177,
+    "name": "84121",
+    "canonical_name": "84121,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 98000,
+    "gps": [
+      -111.8171374,
+      40.6210656
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c8",
+    "google_id": 9029774,
+    "google_parent_id": 21177,
+    "name": "84123",
+    "canonical_name": "84123,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 138000,
+    "gps": [
+      -111.9164779,
+      40.6609843
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37c9",
+    "google_id": 9029775,
+    "google_parent_id": 21177,
+    "name": "84124",
+    "canonical_name": "84124,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 56000,
+    "gps": [
+      -111.7912764,
+      40.6712875
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ca",
+    "google_id": 9029776,
+    "google_parent_id": 21177,
+    "name": "84128",
+    "canonical_name": "84128,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 72000,
+    "gps": [
+      -112.0416754,
+      40.6988631
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37cb",
+    "google_id": 9029777,
+    "google_parent_id": 21177,
+    "name": "84132",
+    "canonical_name": "84132,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 16000,
+    "gps": [
+      -111.8367368,
+      40.7704811
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37cc",
+    "google_id": 9029778,
+    "google_parent_id": 21177,
+    "name": "84138",
+    "canonical_name": "84138,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -111.887041,
+      40.7662354
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37cd",
+    "google_id": 9029779,
+    "google_parent_id": 21177,
+    "name": "84143",
+    "canonical_name": "84143,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.8795885,
+      40.779186
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e2c",
+    "google_id": 9053858,
+    "google_parent_id": 21177,
+    "name": "84148",
+    "canonical_name": "84148,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.8397178,
+      40.7590201
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ce",
+    "google_id": 9029781,
+    "google_parent_id": 21177,
+    "name": "84150",
+    "canonical_name": "84150,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -111.891885,
+      40.7716119
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37cf",
+    "google_id": 9029783,
+    "google_parent_id": 21177,
+    "name": "84184",
+    "canonical_name": "84184,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9585836,
+      40.7266352
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d0",
+    "google_id": 9029784,
+    "google_parent_id": 21177,
+    "name": "84190",
+    "canonical_name": "84190,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.8874136,
+      40.7266023
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d1",
+    "google_id": 9029785,
+    "google_parent_id": 21177,
+    "name": "84199",
+    "canonical_name": "84199,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.9410707,
+      40.726803
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d2",
+    "google_id": 9029786,
+    "google_parent_id": 21177,
+    "name": "84201",
+    "canonical_name": "84201,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0124189,
+      41.2930223
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e2d",
+    "google_id": 9053859,
+    "google_parent_id": 21177,
+    "name": "84301",
+    "canonical_name": "84301,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.1281179,
+      41.6184911
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d3",
+    "google_id": 9029787,
+    "google_parent_id": 21177,
+    "name": "84302",
+    "canonical_name": "84302,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 61000,
+    "gps": [
+      -112.0714835,
+      41.5228536
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d4",
+    "google_id": 9029788,
+    "google_parent_id": 21177,
+    "name": "84304",
+    "canonical_name": "84304,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0118669,
+      41.8293493
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d5",
+    "google_id": 9029789,
+    "google_parent_id": 21177,
+    "name": "84305",
+    "canonical_name": "84305,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0714835,
+      41.9403892
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d6",
+    "google_id": 9029790,
+    "google_parent_id": 21177,
+    "name": "84306",
+    "canonical_name": "84306,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.0595603,
+      41.7818439
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d7",
+    "google_id": 9029791,
+    "google_parent_id": 21177,
+    "name": "84307",
+    "canonical_name": "84307,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 6000,
+    "gps": [
+      -112.4768287,
+      41.4214163
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d8",
+    "google_id": 9029792,
+    "google_parent_id": 21177,
+    "name": "84308",
+    "canonical_name": "84308,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9760964,
+      41.9595725
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37d9",
+    "google_id": 9029793,
+    "google_parent_id": 21177,
+    "name": "84309",
+    "canonical_name": "84309,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0893682,
+      41.7046832
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37da",
+    "google_id": 9029794,
+    "google_parent_id": 21177,
+    "name": "84310",
+    "canonical_name": "84310,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -111.8091625,
+      41.3270443
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37db",
+    "google_id": 9029795,
+    "google_parent_id": 21177,
+    "name": "84311",
+    "canonical_name": "84311,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.1072528,
+      41.84802639999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37dc",
+    "google_id": 9029796,
+    "google_parent_id": 21177,
+    "name": "84312",
+    "canonical_name": "84312,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -112.2145571,
+      41.7978981
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37dd",
+    "google_id": 9029797,
+    "google_parent_id": 21177,
+    "name": "84313",
+    "canonical_name": "84313,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.9060624,
+      41.7233495
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37de",
+    "google_id": 9029798,
+    "google_parent_id": 21177,
+    "name": "84314",
+    "canonical_name": "84314,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -112.0893682,
+      41.6476935
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37df",
+    "google_id": 9029799,
+    "google_parent_id": 21177,
+    "name": "84315",
+    "canonical_name": "84315,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 14000,
+    "gps": [
+      -112.166867,
+      41.15968609999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e0",
+    "google_id": 9029800,
+    "google_parent_id": 21177,
+    "name": "84316",
+    "canonical_name": "84316,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -112.4768287,
+      41.8011265
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e1",
+    "google_id": 9029801,
+    "google_parent_id": 21177,
+    "name": "84317",
+    "canonical_name": "84317,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 6000,
+    "gps": [
+      -111.642224,
+      41.3025786
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e2",
+    "google_id": 9029802,
+    "google_parent_id": 21177,
+    "name": "84318",
+    "canonical_name": "84318,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 9000,
+    "gps": [
+      -111.8151245,
+      41.7975609
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e3",
+    "google_id": 9029803,
+    "google_parent_id": 21177,
+    "name": "84319",
+    "canonical_name": "84319,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 15000,
+    "gps": [
+      -111.6779967,
+      41.610803
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e4",
+    "google_id": 9029804,
+    "google_parent_id": 21177,
+    "name": "84320",
+    "canonical_name": "84320,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.8449346,
+      41.9574298
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e5",
+    "google_id": 9029805,
+    "google_parent_id": 21177,
+    "name": "84321",
+    "canonical_name": "84321,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 129000,
+    "gps": [
+      -111.689921,
+      41.7131433
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e6",
+    "google_id": 9029806,
+    "google_parent_id": 21177,
+    "name": "84322",
+    "canonical_name": "84322,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.8434441,
+      41.6577331
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e7",
+    "google_id": 9029807,
+    "google_parent_id": 21177,
+    "name": "84324",
+    "canonical_name": "84324,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.9403254,
+      41.4824398
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e8",
+    "google_id": 9029808,
+    "google_parent_id": 21177,
+    "name": "84325",
+    "canonical_name": "84325,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.0237903,
+      41.72262780000001
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37e9",
+    "google_id": 9029809,
+    "google_parent_id": 21177,
+    "name": "84326",
+    "canonical_name": "84326,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.8248128,
+      41.6834322
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ea",
+    "google_id": 9029810,
+    "google_parent_id": 21177,
+    "name": "84327",
+    "canonical_name": "84327,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9969626,
+      41.8631287
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37eb",
+    "google_id": 9029811,
+    "google_parent_id": 21177,
+    "name": "84328",
+    "canonical_name": "84328,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.7853143,
+      41.5037666
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ec",
+    "google_id": 9029812,
+    "google_parent_id": 21177,
+    "name": "84329",
+    "canonical_name": "84329,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.429984,
+      41.7516584
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e2f",
+    "google_id": 9053861,
+    "google_parent_id": 21177,
+    "name": "84330",
+    "canonical_name": "84330,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.1251372,
+      41.8870033
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ed",
+    "google_id": 9029813,
+    "google_parent_id": 21177,
+    "name": "84331",
+    "canonical_name": "84331,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.262246,
+      41.9395491
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ee",
+    "google_id": 9029814,
+    "google_parent_id": 21177,
+    "name": "84332",
+    "canonical_name": "84332,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 17000,
+    "gps": [
+      -111.8151245,
+      41.7025897
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ef",
+    "google_id": 9029815,
+    "google_parent_id": 21177,
+    "name": "84333",
+    "canonical_name": "84333,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 6000,
+    "gps": [
+      -111.689921,
+      41.9029897
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f0",
+    "google_id": 9029816,
+    "google_parent_id": 21177,
+    "name": "84334",
+    "canonical_name": "84334,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.149728,
+      41.7903072
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f1",
+    "google_id": 9029817,
+    "google_parent_id": 21177,
+    "name": "84335",
+    "canonical_name": "84335,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 42000,
+    "gps": [
+      -111.8807064,
+      41.8271776
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f2",
+    "google_id": 9029818,
+    "google_parent_id": 21177,
+    "name": "84336",
+    "canonical_name": "84336,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 7000,
+    "gps": [
+      -112.858217,
+      41.8731037
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f3",
+    "google_id": 9029819,
+    "google_parent_id": 21177,
+    "name": "84337",
+    "canonical_name": "84337,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 33000,
+    "gps": [
+      -112.28609,
+      41.6885603
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f4",
+    "google_id": 9029820,
+    "google_parent_id": 21177,
+    "name": "84338",
+    "canonical_name": "84338,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9462873,
+      41.9135246
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f5",
+    "google_id": 9029821,
+    "google_parent_id": 21177,
+    "name": "84339",
+    "canonical_name": "84339,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 14000,
+    "gps": [
+      -111.9760964,
+      41.6181609
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f6",
+    "google_id": 9029822,
+    "google_parent_id": 21177,
+    "name": "84340",
+    "canonical_name": "84340,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 18000,
+    "gps": [
+      -112.0237903,
+      41.3798231
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f7",
+    "google_id": 9029823,
+    "google_parent_id": 21177,
+    "name": "84341",
+    "canonical_name": "84341,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 57000,
+    "gps": [
+      -111.7972384,
+      41.7773889
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f8",
+    "google_id": 9029824,
+    "google_parent_id": 21177,
+    "name": "84401",
+    "canonical_name": "84401,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 140000,
+    "gps": [
+      -111.9737732,
+      41.2231225
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37f9",
+    "google_id": 9029825,
+    "google_parent_id": 21177,
+    "name": "84403",
+    "canonical_name": "84403,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 105000,
+    "gps": [
+      -111.8926303,
+      41.1859156
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37fa",
+    "google_id": 9029826,
+    "google_parent_id": 21177,
+    "name": "84404",
+    "canonical_name": "84404,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 149000,
+    "gps": [
+      -112.1907122,
+      41.32709029999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37fb",
+    "google_id": 9029827,
+    "google_parent_id": 21177,
+    "name": "84405",
+    "canonical_name": "84405,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 112000,
+    "gps": [
+      -111.9880199,
+      41.1668743
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37fc",
+    "google_id": 9029828,
+    "google_parent_id": 21177,
+    "name": "84408",
+    "canonical_name": "84408,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9484298,
+      41.1952366
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37fd",
+    "google_id": 9029829,
+    "google_parent_id": 21177,
+    "name": "84414",
+    "canonical_name": "84414,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 54000,
+    "gps": [
+      -111.9641728,
+      41.3248634
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37fe",
+    "google_id": 9029830,
+    "google_parent_id": 21177,
+    "name": "84501",
+    "canonical_name": "84501,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 28000,
+    "gps": [
+      -110.8107201,
+      39.599386
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c37ff",
+    "google_id": 9029831,
+    "google_parent_id": 21177,
+    "name": "84511",
+    "canonical_name": "84511,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 10000,
+    "gps": [
+      -109.4259114,
+      37.5617484
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3800",
+    "google_id": 9029832,
+    "google_parent_id": 21177,
+    "name": "84512",
+    "canonical_name": "84512,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -109.5211063,
+      37.1340054
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3801",
+    "google_id": 9029833,
+    "google_parent_id": 21177,
+    "name": "84513",
+    "canonical_name": "84513,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -110.9864294,
+      39.1921309
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e27",
+    "google_id": 9053853,
+    "google_parent_id": 21177,
+    "name": "84515",
+    "canonical_name": "84515,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -109.140438,
+      38.911433
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3802",
+    "google_id": 9029834,
+    "google_parent_id": 21177,
+    "name": "84516",
+    "canonical_name": "84516,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.0818084,
+      39.1343595
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3803",
+    "google_id": 9029835,
+    "google_parent_id": 21177,
+    "name": "84518",
+    "canonical_name": "84518,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.8672131,
+      39.3536381
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3804",
+    "google_id": 9029836,
+    "google_parent_id": 21177,
+    "name": "84520",
+    "canonical_name": "84520,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -110.4500422,
+      39.5796427
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3805",
+    "google_id": 9029837,
+    "google_parent_id": 21177,
+    "name": "84521",
+    "canonical_name": "84521,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -110.83145,
+      39.4297949
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3806",
+    "google_id": 9029838,
+    "google_parent_id": 21177,
+    "name": "84522",
+    "canonical_name": "84522,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.2606554,
+      38.9509875
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3807",
+    "google_id": 9029839,
+    "google_parent_id": 21177,
+    "name": "84523",
+    "canonical_name": "84523,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.2368084,
+      39.0950382
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3808",
+    "google_id": 9029840,
+    "google_parent_id": 21177,
+    "name": "84525",
+    "canonical_name": "84525,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 22000,
+    "gps": [
+      -110.1879106,
+      39.0495889
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3809",
+    "google_id": 9029841,
+    "google_parent_id": 21177,
+    "name": "84526",
+    "canonical_name": "84526,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -110.9983515,
+      39.7348165
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380a",
+    "google_id": 9029842,
+    "google_parent_id": 21177,
+    "name": "84528",
+    "canonical_name": "84528,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.0698858,
+      39.4246716
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380b",
+    "google_id": 9029843,
+    "google_parent_id": 21177,
+    "name": "84529",
+    "canonical_name": "84529,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.7956878,
+      39.7235022
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380c",
+    "google_id": 9029844,
+    "google_parent_id": 21177,
+    "name": "84530",
+    "canonical_name": "84530,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -109.140438,
+      38.2638416
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380d",
+    "google_id": 9029845,
+    "google_parent_id": 21177,
+    "name": "84531",
+    "canonical_name": "84531,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -109.8067916,
+      37.1673281
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380e",
+    "google_id": 9029846,
+    "google_parent_id": 21177,
+    "name": "84532",
+    "canonical_name": "84532,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 76000,
+    "gps": [
+      -109.4735066,
+      38.5719944
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c380f",
+    "google_id": 9029847,
+    "google_parent_id": 21177,
+    "name": "84533",
+    "canonical_name": "84533,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -110.4262088,
+      37.42761309999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3810",
+    "google_id": 9029848,
+    "google_parent_id": 21177,
+    "name": "84534",
+    "canonical_name": "84534,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -109.2355764,
+      37.264872
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3811",
+    "google_id": 9029849,
+    "google_parent_id": 21177,
+    "name": "84535",
+    "canonical_name": "84535,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -109.2831531,
+      37.9544337
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3812",
+    "google_id": 9029850,
+    "google_parent_id": 21177,
+    "name": "84536",
+    "canonical_name": "84536,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 8000,
+    "gps": [
+      -110.2355647,
+      37.1332934
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3813",
+    "google_id": 9029851,
+    "google_parent_id": 21177,
+    "name": "84537",
+    "canonical_name": "84537,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.2606554,
+      39.3487969
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3814",
+    "google_id": 9029852,
+    "google_parent_id": 21177,
+    "name": "84539",
+    "canonical_name": "84539,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -110.2713072,
+      39.7805379
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3815",
+    "google_id": 9029853,
+    "google_parent_id": 21177,
+    "name": "84540",
+    "canonical_name": "84540,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -109.4735066,
+      39.2157449
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3816",
+    "google_id": 9029854,
+    "google_parent_id": 21177,
+    "name": "84542",
+    "canonical_name": "84542,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -110.7301263,
+      39.5428412
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3817",
+    "google_id": 9029855,
+    "google_parent_id": 21177,
+    "name": "84601",
+    "canonical_name": "84601,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 125000,
+    "gps": [
+      -111.7256936,
+      40.2128559
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3818",
+    "google_id": 9029857,
+    "google_parent_id": 21177,
+    "name": "84604",
+    "canonical_name": "84604,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 177000,
+    "gps": [
+      -111.667931,
+      40.25803519999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3819",
+    "google_id": 9029858,
+    "google_parent_id": 21177,
+    "name": "84606",
+    "canonical_name": "84606,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 99000,
+    "gps": [
+      -111.6302998,
+      40.2120325
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381a",
+    "google_id": 9029859,
+    "google_parent_id": 21177,
+    "name": "84620",
+    "canonical_name": "84620,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.9641728,
+      38.9243215
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381b",
+    "google_id": 9029860,
+    "google_parent_id": 21177,
+    "name": "84621",
+    "canonical_name": "84621,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.8151245,
+      39.0480643
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381c",
+    "google_id": 9029861,
+    "google_parent_id": 21177,
+    "name": "84622",
+    "canonical_name": "84622,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.8210866,
+      39.1114526
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381d",
+    "google_id": 9029863,
+    "google_parent_id": 21177,
+    "name": "84624",
+    "canonical_name": "84624,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -112.5245093,
+      39.4356084
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381e",
+    "google_id": 9029864,
+    "google_parent_id": 21177,
+    "name": "84626",
+    "canonical_name": "84626,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0237903,
+      39.8703358
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c381f",
+    "google_id": 9029865,
+    "google_parent_id": 21177,
+    "name": "84627",
+    "canonical_name": "84627,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 18000,
+    "gps": [
+      -111.5229817,
+      39.3578596
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3820",
+    "google_id": 9029866,
+    "google_parent_id": 21177,
+    "name": "84628",
+    "canonical_name": "84628,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -112.166867,
+      39.9200912
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3821",
+    "google_id": 9029867,
+    "google_parent_id": 21177,
+    "name": "84629",
+    "canonical_name": "84629,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.4275888,
+      39.7711431
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3822",
+    "google_id": 9029868,
+    "google_parent_id": 21177,
+    "name": "84630",
+    "canonical_name": "84630,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.8330106,
+      39.27764639999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3823",
+    "google_id": 9029869,
+    "google_parent_id": 21177,
+    "name": "84631",
+    "canonical_name": "84631,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 18000,
+    "gps": [
+      -112.3814624,
+      38.9505004
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3824",
+    "google_id": 9029870,
+    "google_parent_id": 21177,
+    "name": "84632",
+    "canonical_name": "84632,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.642224,
+      39.63104269999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3825",
+    "google_id": 9029871,
+    "google_parent_id": 21177,
+    "name": "84633",
+    "canonical_name": "84633,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.9284017,
+      39.9284652
+    ]
+  },
+  {
+    "id": "5b18b3875f59e41ee7211bd9",
+    "google_id": 9029872,
+    "google_parent_id": 21177,
+    "name": "84634",
+    "canonical_name": "84634,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -111.7972384,
+      39.1558199
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3826",
+    "google_id": 9029873,
+    "google_parent_id": 21177,
+    "name": "84635",
+    "canonical_name": "84635,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.7867174,
+      39.480264
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3827",
+    "google_id": 9029874,
+    "google_parent_id": 21177,
+    "name": "84636",
+    "canonical_name": "84636,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.2503239,
+      39.12557
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3828",
+    "google_id": 9029875,
+    "google_parent_id": 21177,
+    "name": "84637",
+    "canonical_name": "84637,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 9000,
+    "gps": [
+      -112.5006693,
+      38.7077331
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e2a",
+    "google_id": 9053856,
+    "google_parent_id": 21177,
+    "name": "84638",
+    "canonical_name": "84638,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.262246,
+      39.5083274
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3829",
+    "google_id": 9029876,
+    "google_parent_id": 21177,
+    "name": "84639",
+    "canonical_name": "84639,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -111.9045541,
+      39.52044679999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382a",
+    "google_id": 9029877,
+    "google_parent_id": 21177,
+    "name": "84640",
+    "canonical_name": "84640,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.3695412,
+      39.496556
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382b",
+    "google_id": 9029878,
+    "google_parent_id": 21177,
+    "name": "84642",
+    "canonical_name": "84642,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 9000,
+    "gps": [
+      -111.6541483,
+      39.2630749
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382c",
+    "google_id": 9029879,
+    "google_parent_id": 21177,
+    "name": "84643",
+    "canonical_name": "84643,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.7018452,
+      39.0950277
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e28",
+    "google_id": 9053854,
+    "google_parent_id": 21177,
+    "name": "84644",
+    "canonical_name": "84644,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.423186,
+      38.8676081
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382d",
+    "google_id": 9029880,
+    "google_parent_id": 21177,
+    "name": "84645",
+    "canonical_name": "84645,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 11000,
+    "gps": [
+      -111.8330106,
+      39.8689088
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382e",
+    "google_id": 9029881,
+    "google_parent_id": 21177,
+    "name": "84646",
+    "canonical_name": "84646,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -111.5826028,
+      39.5341527
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c382f",
+    "google_id": 9029882,
+    "google_parent_id": 21177,
+    "name": "84647",
+    "canonical_name": "84647,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 12000,
+    "gps": [
+      -111.3321974,
+      39.473762
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3830",
+    "google_id": 9029883,
+    "google_parent_id": 21177,
+    "name": "84648",
+    "canonical_name": "84648,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 29000,
+    "gps": [
+      -111.8091625,
+      39.6968079
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3831",
+    "google_id": 9029884,
+    "google_parent_id": 21177,
+    "name": "84649",
+    "canonical_name": "84649,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.28609,
+      39.3655481
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3832",
+    "google_id": 9029885,
+    "google_parent_id": 21177,
+    "name": "84651",
+    "canonical_name": "84651,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 63000,
+    "gps": [
+      -111.7376178,
+      39.9268916
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3833",
+    "google_id": 9029886,
+    "google_parent_id": 21177,
+    "name": "84652",
+    "canonical_name": "84652,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.8926303,
+      39.0378247
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3834",
+    "google_id": 9029887,
+    "google_parent_id": 21177,
+    "name": "84653",
+    "canonical_name": "84653,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 20000,
+    "gps": [
+      -111.6302998,
+      39.9968961
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3835",
+    "google_id": 9029888,
+    "google_parent_id": 21177,
+    "name": "84654",
+    "canonical_name": "84654,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 20000,
+    "gps": [
+      -111.6183755,
+      38.8623836
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3836",
+    "google_id": 9029889,
+    "google_parent_id": 21177,
+    "name": "84655",
+    "canonical_name": "84655,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 29000,
+    "gps": [
+      -111.8687825,
+      39.989216
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3837",
+    "google_id": 9029890,
+    "google_parent_id": 21177,
+    "name": "84656",
+    "canonical_name": "84656,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 8000,
+    "gps": [
+      -112.0714835,
+      39.23055069999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3838",
+    "google_id": 9029891,
+    "google_parent_id": 21177,
+    "name": "84657",
+    "canonical_name": "84657,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.9403254,
+      38.8493768
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3839",
+    "google_id": 9029892,
+    "google_parent_id": 21177,
+    "name": "84660",
+    "canonical_name": "84660,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 116000,
+    "gps": [
+      -111.689921,
+      40.1319937
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383a",
+    "google_id": 9029893,
+    "google_parent_id": 21177,
+    "name": "84662",
+    "canonical_name": "84662,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.4872092,
+      39.4340486
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383b",
+    "google_id": 9029894,
+    "google_parent_id": 21177,
+    "name": "84663",
+    "canonical_name": "84663,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 87000,
+    "gps": [
+      -111.610758,
+      40.1652412
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383c",
+    "google_id": 9029895,
+    "google_parent_id": 21177,
+    "name": "84664",
+    "canonical_name": "84664,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 19000,
+    "gps": [
+      -111.5587544,
+      40.1087327
+    ]
+  },
+  {
+    "id": "585069e9ee19ad271e9c7e29",
+    "google_id": 9053855,
+    "google_parent_id": 21177,
+    "name": "84665",
+    "canonical_name": "84665,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.7018452,
+      39.1942968
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383d",
+    "google_id": 9029897,
+    "google_parent_id": 21177,
+    "name": "84701",
+    "canonical_name": "84701,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 22000,
+    "gps": [
+      -111.9760964,
+      38.6927489
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383e",
+    "google_id": 9029898,
+    "google_parent_id": 21177,
+    "name": "84710",
+    "canonical_name": "84710,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.5006693,
+      37.4617158
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c383f",
+    "google_id": 9029899,
+    "google_parent_id": 21177,
+    "name": "84711",
+    "canonical_name": "84711,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0580699,
+      38.7002795
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3840",
+    "google_id": 9029900,
+    "google_parent_id": 21177,
+    "name": "84712",
+    "canonical_name": "84712,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9284017,
+      37.9390334
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3841",
+    "google_id": 9029901,
+    "google_parent_id": 21177,
+    "name": "84713",
+    "canonical_name": "84713,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 25000,
+    "gps": [
+      -112.6437026,
+      38.2793326
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3842",
+    "google_id": 9029902,
+    "google_parent_id": 21177,
+    "name": "84714",
+    "canonical_name": "84714,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -113.7156809,
+      37.7959589
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3843",
+    "google_id": 9029903,
+    "google_parent_id": 21177,
+    "name": "84715",
+    "canonical_name": "84715,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -111.5468301,
+      38.3353755
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3844",
+    "google_id": 9029904,
+    "google_parent_id": 21177,
+    "name": "84716",
+    "canonical_name": "84716,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.4275888,
+      37.9344779
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3845",
+    "google_id": 9029905,
+    "google_parent_id": 21177,
+    "name": "84717",
+    "canonical_name": "84717,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.9847908,
+      37.0035842
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3846",
+    "google_id": 9029906,
+    "google_parent_id": 21177,
+    "name": "84718",
+    "canonical_name": "84718,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.0595603,
+      37.5591539
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3847",
+    "google_id": 9029907,
+    "google_parent_id": 21177,
+    "name": "84719",
+    "canonical_name": "84719,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -112.8343844,
+      37.6775836
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3848",
+    "google_id": 9029908,
+    "google_parent_id": 21177,
+    "name": "84720",
+    "canonical_name": "84720,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 66000,
+    "gps": [
+      -113.0618938,
+      37.67733339999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3849",
+    "google_id": 9029909,
+    "google_parent_id": 21177,
+    "name": "84721",
+    "canonical_name": "84721,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 79000,
+    "gps": [
+      -113.1441558,
+      37.8355754
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384a",
+    "google_id": 9029910,
+    "google_parent_id": 21177,
+    "name": "84722",
+    "canonical_name": "84722,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.5966577,
+      37.4792087
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384b",
+    "google_id": 9029911,
+    "google_parent_id": 21177,
+    "name": "84723",
+    "canonical_name": "84723,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.274168,
+      38.162988
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384c",
+    "google_id": 9029912,
+    "google_parent_id": 21177,
+    "name": "84724",
+    "canonical_name": "84724,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -112.1609056,
+      38.6911188
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384d",
+    "google_id": 9029913,
+    "google_parent_id": 21177,
+    "name": "84725",
+    "canonical_name": "84725,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -113.8822686,
+      37.5393984
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384e",
+    "google_id": 9029914,
+    "google_parent_id": 21177,
+    "name": "84726",
+    "canonical_name": "84726,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -111.6183755,
+      37.8170209
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c384f",
+    "google_id": 9029915,
+    "google_parent_id": 21177,
+    "name": "84728",
+    "canonical_name": "84728,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.9060624,
+      39.3413752
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3850",
+    "google_id": 9029916,
+    "google_parent_id": 21177,
+    "name": "84729",
+    "canonical_name": "84729,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.5960268,
+      37.3614655
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3851",
+    "google_id": 9029917,
+    "google_parent_id": 21177,
+    "name": "84730",
+    "canonical_name": "84730,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9865295,
+      38.7617869
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3852",
+    "google_id": 9029918,
+    "google_parent_id": 21177,
+    "name": "84731",
+    "canonical_name": "84731,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.8463007,
+      38.2880706
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3853",
+    "google_id": 9029919,
+    "google_parent_id": 21177,
+    "name": "84732",
+    "canonical_name": "84732,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.910516,
+      38.42047609999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3854",
+    "google_id": 9029920,
+    "google_parent_id": 21177,
+    "name": "84733",
+    "canonical_name": "84733,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -114.025014,
+      37.3476653
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3855",
+    "google_id": 9029921,
+    "google_parent_id": 21177,
+    "name": "84734",
+    "canonical_name": "84734,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -110.6168921,
+      38.36879190000001
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3856",
+    "google_id": 9029922,
+    "google_parent_id": 21177,
+    "name": "84735",
+    "canonical_name": "84735,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -112.4529878,
+      37.6332848
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3857",
+    "google_id": 9029923,
+    "google_parent_id": 21177,
+    "name": "84736",
+    "canonical_name": "84736,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9760964,
+      37.5653176
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3858",
+    "google_id": 9029924,
+    "google_parent_id": 21177,
+    "name": "84737",
+    "canonical_name": "84737,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 96000,
+    "gps": [
+      -113.2394452,
+      37.088313
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3859",
+    "google_id": 9029925,
+    "google_parent_id": 21177,
+    "name": "84738",
+    "canonical_name": "84738,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 18000,
+    "gps": [
+      -113.7394824,
+      37.1257078
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385a",
+    "google_id": 9029926,
+    "google_parent_id": 21177,
+    "name": "84739",
+    "canonical_name": "84739,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.2264794,
+      38.65312610000001
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385b",
+    "google_id": 9029927,
+    "google_parent_id": 21177,
+    "name": "84740",
+    "canonical_name": "84740,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.2199757,
+      38.2368298
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385c",
+    "google_id": 9029928,
+    "google_parent_id": 21177,
+    "name": "84741",
+    "canonical_name": "84741,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 39000,
+    "gps": [
+      -112.1430215,
+      37.1052853
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385d",
+    "google_id": 9029929,
+    "google_parent_id": 21177,
+    "name": "84742",
+    "canonical_name": "84742,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -113.1560676,
+      37.5207329
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385e",
+    "google_id": 9029930,
+    "google_parent_id": 21177,
+    "name": "84743",
+    "canonical_name": "84743,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.1310986,
+      38.171256
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c385f",
+    "google_id": 9029931,
+    "google_parent_id": 21177,
+    "name": "84744",
+    "canonical_name": "84744,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.9284017,
+      38.5021458
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3860",
+    "google_id": 9029932,
+    "google_parent_id": 21177,
+    "name": "84745",
+    "canonical_name": "84745,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 14000,
+    "gps": [
+      -113.215624,
+      37.2757957
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3861",
+    "google_id": 9029933,
+    "google_parent_id": 21177,
+    "name": "84746",
+    "canonical_name": "84746,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -113.3704466,
+      37.2942937
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3862",
+    "google_id": 9029934,
+    "google_parent_id": 21177,
+    "name": "84747",
+    "canonical_name": "84747,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -111.6541483,
+      38.4051315
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3863",
+    "google_id": 9029935,
+    "google_parent_id": 21177,
+    "name": "84749",
+    "canonical_name": "84749,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.5468301,
+      38.4157752
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3864",
+    "google_id": 9029936,
+    "google_parent_id": 21177,
+    "name": "84750",
+    "canonical_name": "84750,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.2264794,
+      38.4132233
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3865",
+    "google_id": 9029937,
+    "google_parent_id": 21177,
+    "name": "84751",
+    "canonical_name": "84751,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.9773703,
+      38.4109847
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3866",
+    "google_id": 9029938,
+    "google_parent_id": 21177,
+    "name": "84752",
+    "canonical_name": "84752,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -112.9297109,
+      38.2209179
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3867",
+    "google_id": 9029939,
+    "google_parent_id": 21177,
+    "name": "84753",
+    "canonical_name": "84753,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.8108805,
+      38.0159877
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3868",
+    "google_id": 9029940,
+    "google_parent_id": 21177,
+    "name": "84754",
+    "canonical_name": "84754,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 7000,
+    "gps": [
+      -112.0953297,
+      38.5293146
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3869",
+    "google_id": 9029941,
+    "google_parent_id": 21177,
+    "name": "84755",
+    "canonical_name": "84755,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 7000,
+    "gps": [
+      -112.7867174,
+      37.2011839
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386a",
+    "google_id": 9029942,
+    "google_parent_id": 21177,
+    "name": "84756",
+    "canonical_name": "84756,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.5609459,
+      37.6177034
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386b",
+    "google_id": 9029943,
+    "google_parent_id": 21177,
+    "name": "84757",
+    "canonical_name": "84757,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -113.2632655,
+      37.4682347
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386c",
+    "google_id": 9029944,
+    "google_parent_id": 21177,
+    "name": "84758",
+    "canonical_name": "84758,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 6000,
+    "gps": [
+      -112.739048,
+      37.3326589
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386d",
+    "google_id": 9029945,
+    "google_parent_id": 21177,
+    "name": "84759",
+    "canonical_name": "84759,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 12000,
+    "gps": [
+      -112.3814624,
+      37.8294377
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386e",
+    "google_id": 9029946,
+    "google_parent_id": 21177,
+    "name": "84760",
+    "canonical_name": "84760,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 10000,
+    "gps": [
+      -112.6913764,
+      37.9484732
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c386f",
+    "google_id": 9029947,
+    "google_parent_id": 21177,
+    "name": "84761",
+    "canonical_name": "84761,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -112.8343844,
+      37.8791367
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3870",
+    "google_id": 9029948,
+    "google_parent_id": 21177,
+    "name": "84762",
+    "canonical_name": "84762,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -112.739048,
+      37.494798
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3871",
+    "google_id": 9029949,
+    "google_parent_id": 21177,
+    "name": "84763",
+    "canonical_name": "84763,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -113.0428974,
+      37.1338095
+    ]
+  },
+  {
+    "id": "5b18b38b5f59e41ee7211bda",
+    "google_id": 9029950,
+    "google_parent_id": 21177,
+    "name": "84764",
+    "canonical_name": "84764,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 20000,
+    "gps": [
+      -112.1549442,
+      37.6215335
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3872",
+    "google_id": 9029951,
+    "google_parent_id": 21177,
+    "name": "84765",
+    "canonical_name": "84765,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 13000,
+    "gps": [
+      -113.6561725,
+      37.13317929999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3873",
+    "google_id": 9029952,
+    "google_parent_id": 21177,
+    "name": "84766",
+    "canonical_name": "84766,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 3000,
+    "gps": [
+      -112.3814624,
+      38.5522531
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3874",
+    "google_id": 9029953,
+    "google_parent_id": 21177,
+    "name": "84767",
+    "canonical_name": "84767,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 8000,
+    "gps": [
+      -112.9177957,
+      37.3268012
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3875",
+    "google_id": 9029954,
+    "google_parent_id": 21177,
+    "name": "84770",
+    "canonical_name": "84770,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 144000,
+    "gps": [
+      -113.5966577,
+      37.19633719999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3876",
+    "google_id": 9029955,
+    "google_parent_id": 21177,
+    "name": "84772",
+    "canonical_name": "84772,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 5000,
+    "gps": [
+      -112.941626,
+      37.827007
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3877",
+    "google_id": 9029956,
+    "google_parent_id": 21177,
+    "name": "84773",
+    "canonical_name": "84773,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 0,
+    "gps": [
+      -111.3083499,
+      38.2197732
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3878",
+    "google_id": 9029957,
+    "google_parent_id": 21177,
+    "name": "84774",
+    "canonical_name": "84774,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 10000,
+    "gps": [
+      -113.2989944,
+      37.2889071
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3879",
+    "google_id": 9029958,
+    "google_parent_id": 21177,
+    "name": "84775",
+    "canonical_name": "84775,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 8000,
+    "gps": [
+      -110.9506636,
+      37.94308729999999
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387a",
+    "google_id": 9029959,
+    "google_parent_id": 21177,
+    "name": "84776",
+    "canonical_name": "84776,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 7000,
+    "gps": [
+      -112.0834066,
+      37.6355931
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387b",
+    "google_id": 9029960,
+    "google_parent_id": 21177,
+    "name": "84779",
+    "canonical_name": "84779,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 9000,
+    "gps": [
+      -113.1203315,
+      37.3764602
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387c",
+    "google_id": 9029961,
+    "google_parent_id": 21177,
+    "name": "84780",
+    "canonical_name": "84780,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 93000,
+    "gps": [
+      -113.5014213,
+      37.17582
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387d",
+    "google_id": 9029962,
+    "google_parent_id": 21177,
+    "name": "84781",
+    "canonical_name": "84781,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 1000,
+    "gps": [
+      -113.5014213,
+      37.4185294
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387e",
+    "google_id": 9029963,
+    "google_parent_id": 21177,
+    "name": "84782",
+    "canonical_name": "84782,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 2000,
+    "gps": [
+      -113.7394824,
+      37.4489851
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c387f",
+    "google_id": 9029964,
+    "google_parent_id": 21177,
+    "name": "84783",
+    "canonical_name": "84783,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 4000,
+    "gps": [
+      -113.7394824,
+      37.2471039
+    ]
+  },
+  {
+    "id": "585069d9ee19ad271e9c3880",
+    "google_id": 9029965,
+    "google_parent_id": 21177,
+    "name": "84790",
+    "canonical_name": "84790,Utah,United States",
+    "country_code": "US",
+    "target_type": "Postal Code",
+    "reach": 220000,
+    "gps": [
+      -113.5490415,
+      37.0441957
+    ]
+  }
+]

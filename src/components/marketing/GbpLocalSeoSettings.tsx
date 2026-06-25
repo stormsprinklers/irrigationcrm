@@ -48,6 +48,14 @@ function draftToCityRecord(city: DraftCity, index: number): Omit<LocalSeoTargetC
   };
 }
 
+function formatLocationTitle(city: DraftCity) {
+  return city.targetType === "Postal Code" ? `ZIP ${city.name}` : city.name;
+}
+
+function locationTypeLabel(targetType: string) {
+  return targetType === "Postal Code" ? "ZIP" : "City";
+}
+
 type Props = {
   onSaved?: () => void;
 };
@@ -60,6 +68,12 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
   const [newKeyword, setNewKeyword] = useState("");
   const [cityQuery, setCityQuery] = useState("");
   const [cityResults, setCityResults] = useState<SerpApiLocation[]>([]);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [locationStats, setLocationStats] = useState<{
+    total: number;
+    cities: number;
+    postalCodes: number;
+  } | null>(null);
   const [searchingCities, setSearchingCities] = useState(false);
 
   const load = useCallback(async () => {
@@ -88,31 +102,44 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
     }
   }, []);
 
+  const loadCityResults = useCallback(async (query: string) => {
+    setSearchingCities(true);
+    try {
+      const params = new URLSearchParams({ limit: "500" });
+      if (query.trim()) params.set("q", query.trim());
+      const res = await fetch(`/api/marketing/local-seo/locations/search?${params}`);
+      const data = await res.json();
+      if (res.ok) {
+        setCityResults(data.locations ?? []);
+        if (typeof data.totalUtahLocations === "number") {
+          setLocationStats({
+            total: data.totalUtahLocations,
+            cities: data.totalUtahCities ?? 0,
+            postalCodes: data.totalUtahPostalCodes ?? 0,
+          });
+        }
+      }
+    } finally {
+      setSearchingCities(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!cityQuery.trim()) {
-      setCityResults([]);
-      return;
-    }
+    if (!cityPickerOpen) return;
 
-    const timer = window.setTimeout(async () => {
-      setSearchingCities(true);
-      try {
-        const res = await fetch(
-          `/api/marketing/local-seo/locations/search?q=${encodeURIComponent(cityQuery.trim())}`
-        );
-        const data = await res.json();
-        if (res.ok) setCityResults(data.locations ?? []);
-      } finally {
-        setSearchingCities(false);
-      }
-    }, 250);
+    const timer = window.setTimeout(
+      () => {
+        void loadCityResults(cityQuery);
+      },
+      cityQuery.trim() ? 250 : 0
+    );
 
     return () => window.clearTimeout(timer);
-  }, [cityQuery]);
+  }, [cityQuery, cityPickerOpen, loadCityResults]);
 
   const cityKeys = useMemo(
     () => new Set(cities.map((city) => city.canonicalName.toLowerCase())),
@@ -143,6 +170,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
     setCities((current) => [...current, draft]);
     setCityQuery("");
     setCityResults([]);
+    setCityPickerOpen(false);
   }
 
   function removeCity(canonicalName: string) {
@@ -186,8 +214,11 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
       <CardHeader>
         <CardTitle className="text-base">Local ranking targets</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Choose keywords and cities to track on the map. City search uses sample Utah locations for
-          now; SerpAPI location search will replace this in the next step.
+          Choose keywords and Utah locations to track on the map. The catalog includes{" "}
+          {locationStats
+            ? `${locationStats.cities} cities and ${locationStats.postalCodes} ZIP codes`
+            : "159 cities and 296 ZIP codes"}{" "}
+          from SerpAPI — click the search field to browse or type to filter.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -231,7 +262,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
         </div>
 
         <div>
-          <label className="text-sm font-medium">Target cities</label>
+          <label className="text-sm font-medium">Target cities & ZIP codes</label>
           <div className="mt-2 space-y-2">
             {cities.map((city) => (
               <div
@@ -239,7 +270,12 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
                 className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="font-medium">{city.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{formatLocationTitle(city)}</p>
+                    <Badge variant="outline" className="text-[10px]">
+                      {locationTypeLabel(city.targetType)}
+                    </Badge>
+                  </div>
                   <p className="truncate text-xs text-muted-foreground">{city.canonicalName}</p>
                 </div>
                 <Button
@@ -263,14 +299,21 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
               className="pl-9"
               value={cityQuery}
               onChange={(event) => setCityQuery(event.target.value)}
-              placeholder="Search cities (e.g. Draper, Sandy)"
+              onFocus={() => setCityPickerOpen(true)}
+              placeholder="Search Utah cities or ZIP codes (e.g. Draper, 84020)"
             />
           </div>
-          {searchingCities ? (
-            <p className="mt-2 text-xs text-muted-foreground">Searching...</p>
+          {cityPickerOpen && searchingCities ? (
+            <p className="mt-2 text-xs text-muted-foreground">Loading cities...</p>
           ) : null}
-          {cityResults.length > 0 ? (
+          {cityPickerOpen && cityResults.length > 0 ? (
             <div className="mt-2 overflow-hidden rounded-md border">
+              <p className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {cityQuery.trim()
+                  ? `${cityResults.length} matching locations`
+                  : `Showing ${cityResults.length} of ${locationStats?.total ?? cityResults.length} Utah locations`}
+              </p>
+              <div className="max-h-64 overflow-y-auto">
               {cityResults.map((location) => (
                 <button
                   key={location.id}
@@ -279,7 +322,16 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
                   onClick={() => addCity(location)}
                 >
                   <span>
-                    <span className="font-medium">{location.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {location.target_type === "Postal Code"
+                          ? `ZIP ${location.name}`
+                          : location.name}
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {locationTypeLabel(location.target_type)}
+                      </Badge>
+                    </span>
                     <span className="block text-xs text-muted-foreground">
                       {location.canonical_name}
                     </span>
@@ -287,6 +339,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
                   <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </button>
               ))}
+              </div>
             </div>
           ) : null}
         </div>

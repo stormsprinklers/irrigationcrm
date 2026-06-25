@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { searchSampleLocations } from "@/lib/local-seo/sample-locations";
+import {
+  getUtahLocationStats,
+  searchUtahLocations,
+} from "@/lib/local-seo/utah-locations";
 
 export async function GET(request: NextRequest) {
   try {
     await requireSessionUser();
     const query = request.nextUrl.searchParams.get("q") ?? "";
-    const locations = searchSampleLocations(query);
+    const limitParam = Number(request.nextUrl.searchParams.get("limit") ?? "50");
+    const limit = Number.isFinite(limitParam) ? Math.min(500, Math.max(1, limitParam)) : 50;
+
+    const locations = searchUtahLocations(query, limit);
+    const stats = getUtahLocationStats();
+
     return NextResponse.json({
       locations,
-      source: "sample",
-      note: "Sample Utah cities for development. SerpAPI location search will replace this.",
+      source: "utah-catalog",
+      totalUtahLocations: stats.total,
+      totalUtahCities: stats.cities,
+      totalUtahPostalCodes: stats.postalCodes,
+      showing: locations.length,
     });
   } catch {
     return unauthorizedResponse();

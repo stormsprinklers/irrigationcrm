@@ -534,6 +534,39 @@ model Company {
   marketingEvents        MarketingEvent[]
   localSeoKeywords     LocalSeoKeyword[]
   localSeoTargetCities LocalSeoTargetCity[]
+  localSeoSerpSearches LocalSeoSerpSearch[]
+  localSeoRankingCaches LocalSeoRankingCache[]
+}
+
+model LocalSeoSerpSearch {
+  id        String   @id @default(cuid())
+  companyId String
+  endpoint  String
+  keyword   String?
+  cityId    String?
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([companyId, createdAt])
+  @@index([endpoint, createdAt])
+}
+
+model LocalSeoRankingCache {
+  id            String   @id @default(cuid())
+  companyId     String
+  keyword       String
+  cityId        String
+  ourRank       Int?
+  topBusinesses Json
+  fetchedAt     DateTime @default(now())
+
+  company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  city    LocalSeoTargetCity @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, keyword, cityId])
+  @@index([companyId, keyword])
 }
 
 model LocalSeoKeyword {
@@ -566,6 +599,7 @@ model LocalSeoTargetCity {
   updatedAt     DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rankingCaches LocalSeoRankingCache[]
 
   @@unique([companyId, canonicalName])
   @@index([companyId])

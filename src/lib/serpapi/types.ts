@@ -35,4 +35,16 @@ export type SerpApiRankingsResponse = {
   source: "mock" | "serpapi";
   updatedAt: string;
   cities: SerpApiCityRanking[];
+  quota?: {
+    hourlyLimit: number;
+    monthlyLimit: number;
+    hourlyUsed: number;
+    monthlyUsed: number;
+    hourlyRemaining: number;
+    monthlyRemaining: number;
+    searchesThisRequest: number;
+    citiesSkipped?: number;
+    message?: string;
+  };
+  cacheStatus?: "full" | "partial" | "cache_only";
 };
