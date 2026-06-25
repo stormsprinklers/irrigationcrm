@@ -464,6 +464,9 @@ model Company {
   organicSearchWebsiteUrl      String?
   googleBusinessConnectedAt    DateTime?
   googleBusinessCatalogJson    Json?
+  googleSearchConsoleRefreshToken String?
+  googleSearchConsoleSiteUrl      String?
+  googleSearchConsoleConnectedAt  DateTime?
   metaWebhookVerifyToken       String?   @unique
   metaAppId                    String?
   metaAppSecret                String?

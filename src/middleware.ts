@@ -18,6 +18,7 @@ const publicPaths = [
   "/api/meta",
   "/api/invoices/public",
   "/api/marketing/google-business/callback",
+  "/api/marketing/search-console/callback",
   "/api/integrations",
   "/api/track",
 ];
