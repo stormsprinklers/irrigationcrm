@@ -17,6 +17,7 @@ import type {
   GscDashboardData,
   GscSite,
 } from "@/lib/google-search-console/types";
+import type { Ga4Summary } from "@/lib/google-analytics/types";
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -44,6 +45,7 @@ export function SearchConsolePanel() {
   const [status, setStatus] = useState<GscConnectionStatus | null>(null);
   const [sites, setSites] = useState<GscSite[]>([]);
   const [dashboard, setDashboard] = useState<GscDashboardData | null>(null);
+  const [gaSummary, setGaSummary] = useState<Ga4Summary | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [loadingSites, setLoadingSites] = useState(false);
@@ -90,6 +92,15 @@ export function SearchConsolePanel() {
     }
   }, []);
 
+  const loadGaSummary = useCallback(async (rangeDays: number) => {
+    try {
+      const res = await fetch(`/api/marketing/google-analytics/summary?days=${rangeDays}`);
+      if (res.ok) setGaSummary(await res.json());
+    } catch {
+      /* optional */
+    }
+  }, []);
+
   useEffect(() => {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
@@ -113,7 +124,8 @@ export function SearchConsolePanel() {
   useEffect(() => {
     if (!status?.connected || !status.siteUrl) return;
     void loadDashboard(days);
-  }, [status?.connected, status?.siteUrl, days, loadDashboard]);
+    void loadGaSummary(days);
+  }, [status?.connected, status?.siteUrl, days, loadDashboard, loadGaSummary]);
 
   async function saveSite(siteUrl: string) {
     setSavingSite(true);
@@ -332,8 +344,11 @@ export function SearchConsolePanel() {
             },
             {
               label: "Organic conversions",
-              value: "—",
-              hint: "Requires Google Analytics",
+              value:
+                gaSummary?.connected && gaSummary.organicConversions != null
+                  ? formatCount(gaSummary.organicConversions)
+                  : "—",
+              hint: gaSummary?.connected ? "Google Analytics" : "Connect Google Analytics below",
             },
           ]}
         />

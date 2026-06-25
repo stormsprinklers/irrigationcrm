@@ -467,6 +467,9 @@ model Company {
   googleSearchConsoleRefreshToken String?
   googleSearchConsoleSiteUrl      String?
   googleSearchConsoleConnectedAt  DateTime?
+  googleAnalyticsRefreshToken     String?
+  googleAnalyticsPropertyId       String?
+  googleAnalyticsConnectedAt      DateTime?
   metaWebhookVerifyToken       String?   @unique
   metaAppId                    String?
   metaAppSecret                String?

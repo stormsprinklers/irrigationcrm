@@ -19,6 +19,7 @@ const publicPaths = [
   "/api/invoices/public",
   "/api/marketing/google-business/callback",
   "/api/marketing/search-console/callback",
+  "/api/marketing/google-analytics/callback",
   "/api/integrations",
   "/api/track",
 ];
