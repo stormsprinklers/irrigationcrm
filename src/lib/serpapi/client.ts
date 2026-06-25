@@ -1,9 +1,14 @@
+import { SERPAPI_DEVICE } from "@/lib/serpapi/constants";
 import {
   businessNamesMatch,
   canonicalNameToSerpLocation,
   parseGoogleLocalRankings,
   type GoogleLocalResult,
 } from "@/lib/serpapi/parse-local-results";
+import {
+  parseOrganicRankings,
+  type GoogleOrganicResult,
+} from "@/lib/serpapi/parse-organic-results";
 import type { SerpApiRankingBusiness } from "@/lib/serpapi/types";
 
 export function isSerpApiConfigured() {
@@ -23,12 +28,13 @@ type SerpApiFetchOptions = {
   endpoint: string;
 };
 
-type GoogleLocalApiResponse = {
+type SerpApiResponse = {
   search_metadata?: {
     status?: string;
     error?: string;
   };
   local_results?: GoogleLocalResult[];
+  organic_results?: GoogleOrganicResult[];
   error?: string;
 };
 
@@ -57,6 +63,13 @@ export async function serpApiFetch<T>(
   return data;
 }
 
+function applyCommonSearchParams(url: URL) {
+  url.searchParams.set("google_domain", "google.com");
+  url.searchParams.set("gl", "us");
+  url.searchParams.set("hl", "en");
+  url.searchParams.set("device", SERPAPI_DEVICE);
+}
+
 export async function fetchGoogleLocalResults(params: {
   keyword: string;
   location: string;
@@ -66,11 +79,9 @@ export async function fetchGoogleLocalResults(params: {
   url.searchParams.set("engine", "google_local");
   url.searchParams.set("q", params.keyword);
   url.searchParams.set("location", params.location);
-  url.searchParams.set("google_domain", "google.com");
-  url.searchParams.set("gl", "us");
-  url.searchParams.set("hl", "en");
+  applyCommonSearchParams(url);
 
-  const data = await serpApiFetch<GoogleLocalApiResponse>(url, {
+  const data = await serpApiFetch<SerpApiResponse>(url, {
     apiKey,
     endpoint: "google_local",
   });
@@ -80,6 +91,29 @@ export async function fetchGoogleLocalResults(params: {
   }
 
   return data.local_results ?? [];
+}
+
+export async function fetchGoogleOrganicResults(params: {
+  keyword: string;
+  location: string;
+}) {
+  const apiKey = getSerpApiApiKey();
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google");
+  url.searchParams.set("q", params.keyword);
+  url.searchParams.set("location", params.location);
+  applyCommonSearchParams(url);
+
+  const data = await serpApiFetch<SerpApiResponse>(url, {
+    apiKey,
+    endpoint: "google",
+  });
+
+  if (data.search_metadata?.status === "Error") {
+    throw new Error(data.search_metadata.error ?? data.error ?? "SerpAPI google search error");
+  }
+
+  return data.organic_results ?? [];
 }
 
 export async function fetchLocalPackRankings(params: {
@@ -94,6 +128,26 @@ export async function fetchLocalPackRankings(params: {
   });
 
   const parsed = parseGoogleLocalRankings(localResults, params.businessName);
+
+  return {
+    locationUsed: location,
+    ourRank: parsed.ourRank,
+    topBusinesses: parsed.topBusinesses as SerpApiRankingBusiness[],
+  };
+}
+
+export async function fetchOrganicRankings(params: {
+  keyword: string;
+  canonicalName: string;
+  websiteUrl: string;
+}) {
+  const location = canonicalNameToSerpLocation(params.canonicalName);
+  const organicResults = await fetchGoogleOrganicResults({
+    keyword: params.keyword,
+    location,
+  });
+
+  const parsed = parseOrganicRankings(organicResults, params.websiteUrl);
 
   return {
     locationUsed: location,

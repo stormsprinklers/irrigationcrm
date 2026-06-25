@@ -1,10 +1,5 @@
-import type { LocalSeoTargetCityRecord } from "@/lib/local-seo/types";
+import type { RankingCity } from "@/lib/local-seo/ranking-types";
 import type { SerpApiCityRanking, SerpApiRankingBusiness } from "@/lib/serpapi/types";
-
-type RankingCity = Pick<
-  LocalSeoTargetCityRecord,
-  "id" | "name" | "canonicalName" | "latitude" | "longitude"
->;
 
 const COMPETITOR_NAMES = [
   "Utah Sprinkler Pros",

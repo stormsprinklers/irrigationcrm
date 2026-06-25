@@ -135,6 +135,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Service Areas", href: "/settings/service-areas" },
       { label: "Data migration", href: "/settings/migrations/housecall-pro" },
       { label: "Integrations", href: "/settings/integrations" },
+      { label: "Search rankings", href: "/settings/serp-rankings" },
     ],
   },
   {

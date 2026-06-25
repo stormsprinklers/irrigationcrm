@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { LocalSeoSettings, LocalSeoTargetCityRecord } from "@/lib/local-seo/types";
+import type { LocalSeoTargetCityRecord, SerpRankingsSettings } from "@/lib/local-seo/types";
 import type { SerpApiLocation } from "@/lib/serpapi/types";
 
 type DraftCity = {
@@ -56,16 +56,79 @@ function locationTypeLabel(targetType: string) {
   return targetType === "Postal Code" ? "ZIP" : "City";
 }
 
-type Props = {
-  onSaved?: () => void;
+type KeywordSectionProps = {
+  title: string;
+  description: string;
+  keywords: string[];
+  newKeyword: string;
+  onNewKeywordChange: (value: string) => void;
+  onAdd: () => void;
+  onRemove: (keyword: string) => void;
+  placeholder: string;
 };
 
-export function GbpLocalSeoSettings({ onSaved }: Props) {
+function KeywordSection({
+  title,
+  description,
+  keywords,
+  newKeyword,
+  onNewKeywordChange,
+  onAdd,
+  onRemove,
+  placeholder,
+}: KeywordSectionProps) {
+  return (
+    <div>
+      <label className="text-sm font-medium">{title}</label>
+      <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {keywords.map((keyword) => (
+          <Badge key={keyword} variant="secondary" className="gap-1 pr-1">
+            {keyword}
+            <button
+              type="button"
+              className="rounded-full p-0.5 hover:bg-muted"
+              onClick={() => onRemove(keyword)}
+              aria-label={`Remove ${keyword}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ))}
+        {keywords.length === 0 ? (
+          <span className="text-sm text-muted-foreground">No keywords yet</span>
+        ) : null}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Input
+          value={newKeyword}
+          onChange={(event) => onNewKeywordChange(event.target.value)}
+          placeholder={placeholder}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAdd();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" onClick={onAdd}>
+          <Plus className="mr-1 h-4 w-4" />
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function SerpRankingsSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [keywords, setKeywords] = useState<string[]>([]);
+  const [gbpKeywords, setGbpKeywords] = useState<string[]>([]);
+  const [organicKeywords, setOrganicKeywords] = useState<string[]>([]);
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [cities, setCities] = useState<DraftCity[]>([]);
-  const [newKeyword, setNewKeyword] = useState("");
+  const [newGbpKeyword, setNewGbpKeyword] = useState("");
+  const [newOrganicKeyword, setNewOrganicKeyword] = useState("");
   const [cityQuery, setCityQuery] = useState("");
   const [cityResults, setCityResults] = useState<SerpApiLocation[]>([]);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
@@ -79,10 +142,12 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/marketing/local-seo/settings");
-      const data = (await res.json()) as LocalSeoSettings;
+      const res = await fetch("/api/settings/serp-rankings");
+      const data = (await res.json()) as SerpRankingsSettings;
       if (!res.ok) throw new Error((data as { error?: string }).error ?? "Failed to load settings");
-      setKeywords(data.keywords.map((keyword) => keyword.keyword));
+      setGbpKeywords(data.gbpKeywords.map((keyword) => keyword.keyword));
+      setOrganicKeywords(data.organicKeywords.map((keyword) => keyword.keyword));
+      setWebsiteUrl(data.organicSearchWebsiteUrl ?? "");
       setCities(
         data.cities.map((city) => ({
           serpApiId: city.serpApiId,
@@ -96,7 +161,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
         }))
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load local SEO settings");
+      toast.error(err instanceof Error ? err.message : "Failed to load search ranking settings");
     } finally {
       setLoading(false);
     }
@@ -146,25 +211,26 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
     [cities]
   );
 
-  function addKeyword() {
-    const value = newKeyword.trim();
-    if (!value) return;
-    if (keywords.some((keyword) => keyword.toLowerCase() === value.toLowerCase())) {
+  function addKeyword(
+    value: string,
+    keywords: string[],
+    setKeywords: (next: string[]) => void,
+    clearInput: () => void
+  ) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (keywords.some((keyword) => keyword.toLowerCase() === trimmed.toLowerCase())) {
       toast.error("Keyword already added");
       return;
     }
-    setKeywords((current) => [...current, value]);
-    setNewKeyword("");
-  }
-
-  function removeKeyword(keyword: string) {
-    setKeywords((current) => current.filter((item) => item !== keyword));
+    setKeywords([...keywords, trimmed]);
+    clearInput();
   }
 
   function addCity(location: SerpApiLocation) {
     const draft = locationToDraft(location);
     if (cityKeys.has(draft.canonicalName.toLowerCase())) {
-      toast.error("City already added");
+      toast.error("Location already added");
       return;
     }
     setCities((current) => [...current, draft]);
@@ -180,19 +246,20 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
   async function save() {
     setSaving(true);
     try {
-      const res = await fetch("/api/marketing/local-seo/settings", {
+      const res = await fetch("/api/settings/serp-rankings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          keywords,
+          gbpKeywords,
+          organicKeywords,
+          organicSearchWebsiteUrl: websiteUrl,
           cities: cities.map((city, index) => draftToCityRecord(city, index)),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save settings");
-      toast.success("Local SEO settings saved");
+      toast.success("Search ranking settings saved");
       await load();
-      onSaved?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -204,7 +271,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading local SEO settings...
+        Loading search ranking settings...
       </div>
     );
   }
@@ -212,57 +279,68 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Local ranking targets</CardTitle>
+        <CardTitle className="text-base">Search ranking targets</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Choose keywords and Utah locations to track on the map. The catalog includes{" "}
-          {locationStats
-            ? `${locationStats.cities} cities and ${locationStats.postalCodes} ZIP codes`
-            : "159 cities and 296 ZIP codes"}{" "}
-          from SerpAPI — click the search field to browse or type to filter.
+          Configure keywords and Utah locations for Google Business Profile local pack and organic
+          website rankings. All SerpAPI searches use mobile results.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
         <div>
-          <label className="text-sm font-medium">Keywords / search terms</label>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {keywords.map((keyword) => (
-              <Badge key={keyword} variant="secondary" className="gap-1 pr-1">
-                {keyword}
-                <button
-                  type="button"
-                  className="rounded-full p-0.5 hover:bg-muted"
-                  onClick={() => removeKeyword(keyword)}
-                  aria-label={`Remove ${keyword}`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            ))}
-            {keywords.length === 0 ? (
-              <span className="text-sm text-muted-foreground">No keywords yet</span>
-            ) : null}
-          </div>
-          <div className="mt-2 flex gap-2">
-            <Input
-              value={newKeyword}
-              onChange={(event) => setNewKeyword(event.target.value)}
-              placeholder='e.g. "sprinkler repair"'
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addKeyword();
-                }
-              }}
-            />
-            <Button type="button" variant="outline" onClick={addKeyword}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
-          </div>
+          <label className="text-sm font-medium">Website URL (organic SEO)</label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Used to find your site in Google organic search results on the SEO map.
+          </p>
+          <Input
+            className="mt-2"
+            value={websiteUrl}
+            onChange={(event) => setWebsiteUrl(event.target.value)}
+            placeholder="https://www.example.com"
+          />
         </div>
+
+        <KeywordSection
+          title="GBP keywords"
+          description="Tracked on Marketing → Google Business Profile."
+          keywords={gbpKeywords}
+          newKeyword={newGbpKeyword}
+          onNewKeywordChange={setNewGbpKeyword}
+          onAdd={() =>
+            addKeyword(newGbpKeyword, gbpKeywords, setGbpKeywords, () => setNewGbpKeyword(""))
+          }
+          onRemove={(keyword) => setGbpKeywords((current) => current.filter((item) => item !== keyword))}
+          placeholder='e.g. "sprinkler repair"'
+        />
+
+        <KeywordSection
+          title="Organic keywords"
+          description="Tracked on Marketing → SEO."
+          keywords={organicKeywords}
+          newKeyword={newOrganicKeyword}
+          onNewKeywordChange={setNewOrganicKeyword}
+          onAdd={() =>
+            addKeyword(
+              newOrganicKeyword,
+              organicKeywords,
+              setOrganicKeywords,
+              () => setNewOrganicKeyword("")
+            )
+          }
+          onRemove={(keyword) =>
+            setOrganicKeywords((current) => current.filter((item) => item !== keyword))
+          }
+          placeholder='e.g. "sprinkler installation utah"'
+        />
 
         <div>
           <label className="text-sm font-medium">Target cities & ZIP codes</label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Shared by both GBP and organic maps. The catalog includes{" "}
+            {locationStats
+              ? `${locationStats.cities} cities and ${locationStats.postalCodes} ZIP codes`
+              : "159 cities and 296 ZIP codes"}{" "}
+            from SerpAPI.
+          </p>
           <div className="mt-2 space-y-2">
             {cities.map((city) => (
               <div
@@ -289,7 +367,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
               </div>
             ))}
             {cities.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No cities selected yet</p>
+              <p className="text-sm text-muted-foreground">No locations selected yet</p>
             ) : null}
           </div>
 
@@ -304,7 +382,7 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
             />
           </div>
           {cityPickerOpen && searchingCities ? (
-            <p className="mt-2 text-xs text-muted-foreground">Loading cities...</p>
+            <p className="mt-2 text-xs text-muted-foreground">Loading locations...</p>
           ) : null}
           {cityPickerOpen && cityResults.length > 0 ? (
             <div className="mt-2 overflow-hidden rounded-md border">
@@ -314,38 +392,38 @@ export function GbpLocalSeoSettings({ onSaved }: Props) {
                   : `Showing ${cityResults.length} of ${locationStats?.total ?? cityResults.length} Utah locations`}
               </p>
               <div className="max-h-64 overflow-y-auto">
-              {cityResults.map((location) => (
-                <button
-                  key={location.id}
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
-                  onClick={() => addCity(location)}
-                >
-                  <span>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium">
-                        {location.target_type === "Postal Code"
-                          ? `ZIP ${location.name}`
-                          : location.name}
+                {cityResults.map((location) => (
+                  <button
+                    key={location.id}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
+                    onClick={() => addCity(location)}
+                  >
+                    <span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {location.target_type === "Postal Code"
+                            ? `ZIP ${location.name}`
+                            : location.name}
+                        </span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {locationTypeLabel(location.target_type)}
+                        </Badge>
                       </span>
-                      <Badge variant="outline" className="text-[10px]">
-                        {locationTypeLabel(location.target_type)}
-                      </Badge>
+                      <span className="block text-xs text-muted-foreground">
+                        {location.canonical_name}
+                      </span>
                     </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {location.canonical_name}
-                    </span>
-                  </span>
-                  <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
+                    <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
               </div>
             </div>
           ) : null}
         </div>
 
         <Button type="button" onClick={save} disabled={saving}>
-          {saving ? "Saving..." : "Save targets"}
+          {saving ? "Saving..." : "Save settings"}
         </Button>
       </CardContent>
     </Card>

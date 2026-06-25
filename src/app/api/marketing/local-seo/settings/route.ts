@@ -24,6 +24,7 @@ function mapSettings(
       id: keyword.id,
       keyword: keyword.keyword,
       sortOrder: keyword.sortOrder,
+      channel: "GBP" as const,
     })),
     cities: cities.map((city) => ({
       id: city.id,
@@ -45,7 +46,7 @@ export async function GET() {
     const user = await requireSessionUser();
     const [keywords, cities] = await Promise.all([
       prisma.localSeoKeyword.findMany({
-        where: { companyId: user.companyId },
+        where: { companyId: user.companyId, channel: "GBP" },
         orderBy: [{ sortOrder: "asc" }, { keyword: "asc" }],
         select: { id: true, keyword: true, sortOrder: true },
       }),
@@ -84,6 +85,7 @@ type CityInput = {
   longitude?: number;
 };
 
+/** @deprecated Use /api/settings/serp-rankings */
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireSessionUser();
@@ -136,13 +138,16 @@ export async function PUT(request: NextRequest) {
     }>;
 
     await prisma.$transaction(async (tx) => {
-      await tx.localSeoKeyword.deleteMany({ where: { companyId: user.companyId } });
+      await tx.localSeoKeyword.deleteMany({
+        where: { companyId: user.companyId, channel: "GBP" },
+      });
       await tx.localSeoTargetCity.deleteMany({ where: { companyId: user.companyId } });
 
       if (normalizedKeywords.length) {
         await tx.localSeoKeyword.createMany({
           data: normalizedKeywords.map((keyword: { keyword: string; sortOrder: number }) => ({
             companyId: user.companyId,
+            channel: "GBP",
             keyword: keyword.keyword,
             sortOrder: keyword.sortOrder,
           })),
@@ -161,7 +166,7 @@ export async function PUT(request: NextRequest) {
 
     const [nextKeywords, nextCities] = await Promise.all([
       prisma.localSeoKeyword.findMany({
-        where: { companyId: user.companyId },
+        where: { companyId: user.companyId, channel: "GBP" },
         orderBy: [{ sortOrder: "asc" }, { keyword: "asc" }],
         select: { id: true, keyword: true, sortOrder: true },
       }),

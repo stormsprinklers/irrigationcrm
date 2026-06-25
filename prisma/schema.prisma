@@ -461,6 +461,7 @@ model Company {
   googleBusinessAccountId      String?
   googleBusinessLocationId     String?
   googleBusinessLocationTitle  String?
+  organicSearchWebsiteUrl      String?
   googleBusinessConnectedAt    DateTime?
   googleBusinessCatalogJson    Json?
   metaWebhookVerifyToken       String?   @unique
@@ -554,33 +555,40 @@ model LocalSeoSerpSearch {
 }
 
 model LocalSeoRankingCache {
-  id            String   @id @default(cuid())
+  id            String           @id @default(cuid())
   companyId     String
+  channel       LocalSeoChannel  @default(GBP)
   keyword       String
   cityId        String
   ourRank       Int?
   topBusinesses Json
-  fetchedAt     DateTime @default(now())
+  fetchedAt     DateTime         @default(now())
 
   company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   city    LocalSeoTargetCity @relation(fields: [cityId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, keyword, cityId])
-  @@index([companyId, keyword])
+  @@unique([companyId, channel, keyword, cityId])
+  @@index([companyId, channel, keyword])
+}
+
+enum LocalSeoChannel {
+  GBP
+  ORGANIC
 }
 
 model LocalSeoKeyword {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   companyId String
+  channel   LocalSeoChannel @default(GBP)
   keyword   String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, keyword])
-  @@index([companyId])
+  @@unique([companyId, channel, keyword])
+  @@index([companyId, channel])
 }
 
 model LocalSeoTargetCity {

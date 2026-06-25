@@ -1,7 +1,12 @@
+import type { LocalSeoChannel } from "@prisma/client";
+
+export type SerpRankingsChannel = LocalSeoChannel;
+
 export type LocalSeoKeywordRecord = {
   id: string;
   keyword: string;
   sortOrder: number;
+  channel: SerpRankingsChannel;
 };
 
 export type LocalSeoTargetCityRecord = {
@@ -17,6 +22,14 @@ export type LocalSeoTargetCityRecord = {
   sortOrder: number;
 };
 
+export type SerpRankingsSettings = {
+  organicSearchWebsiteUrl: string | null;
+  gbpKeywords: LocalSeoKeywordRecord[];
+  organicKeywords: LocalSeoKeywordRecord[];
+  cities: LocalSeoTargetCityRecord[];
+};
+
+/** @deprecated Use SerpRankingsSettings */
 export type LocalSeoSettings = {
   keywords: LocalSeoKeywordRecord[];
   cities: LocalSeoTargetCityRecord[];

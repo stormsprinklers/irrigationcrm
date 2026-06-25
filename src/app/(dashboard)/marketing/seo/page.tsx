@@ -5,6 +5,7 @@ import {
   MarketingMetricGrid,
   MarketingSectionCard,
 } from "@/components/marketing/MarketingMetricGrid";
+import { SerpRankingPanel } from "@/components/marketing/SerpRankingPanel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function MarketingSeoPage() {
@@ -15,6 +16,10 @@ export default function MarketingSeoPage() {
         title="SEO"
         subtitle="Organic search visibility, rankings, and site health."
       />
+
+      <div className="mb-8">
+        <SerpRankingPanel variant="organic" />
+      </div>
 
       <MarketingMetricGrid
         className="mb-8"
@@ -29,24 +34,11 @@ export default function MarketingSeoPage() {
         ]}
       />
 
-      <Tabs defaultValue="keywords" className="space-y-6">
+      <Tabs defaultValue="pages" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="keywords">Keywords</TabsTrigger>
           <TabsTrigger value="pages">Top pages</TabsTrigger>
           <TabsTrigger value="technical">Technical health</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="keywords">
-          <MarketingSectionCard
-            title="Keyword rankings"
-            description="Track target keywords and position changes over time."
-          >
-            <MarketingEmptyTable
-              columns={["Keyword", "Position", "Change", "Volume", "URL", "Last checked"]}
-              message="Connect Google Search Console to track keyword rankings and organic performance."
-            />
-          </MarketingSectionCard>
-        </TabsContent>
 
         <TabsContent value="pages">
           <MarketingSectionCard

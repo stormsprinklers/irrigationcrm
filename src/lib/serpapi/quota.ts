@@ -16,15 +16,15 @@ function startOfUtcMonth(date: Date) {
 }
 
 export async function getSerpApiQuotaUsage(
-  countSearches: (args: { since: Date; endpoint?: string }) => Promise<number>
+  countSearches: (args: { since: Date }) => Promise<number>
 ): Promise<SerpApiQuotaSnapshot> {
   const now = new Date();
   const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
   const monthStart = startOfUtcMonth(now);
 
   const [hourlyUsed, monthlyUsed] = await Promise.all([
-    countSearches({ since: hourAgo, endpoint: "google_local" }),
-    countSearches({ since: monthStart, endpoint: "google_local" }),
+    countSearches({ since: hourAgo }),
+    countSearches({ since: monthStart }),
   ]);
 
   return {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getSerpRankings } from "@/lib/local-seo/serp-rankings-service";
+import { normalizeWebsiteHost } from "@/lib/serpapi/parse-organic-results";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -14,12 +15,12 @@ export async function GET(request: NextRequest) {
       prisma.company.findUnique({
         where: { id: user.companyId },
         select: {
-          name: true,
-          googleBusinessLocationTitle: true,
+          organicSearchWebsiteUrl: true,
+          website: true,
         },
       }),
       prisma.localSeoKeyword.findMany({
-        where: { companyId: user.companyId, channel: "GBP" },
+        where: { companyId: user.companyId, channel: "ORGANIC" },
         orderBy: [{ sortOrder: "asc" }, { keyword: "asc" }],
         select: { keyword: true },
       }),
@@ -40,18 +41,24 @@ export async function GET(request: NextRequest) {
 
     const selectedKeyword = keyword || keywords[0]?.keyword;
     if (!selectedKeyword) {
-      return badRequestResponse("Add at least one GBP keyword in Settings → Search rankings");
+      return badRequestResponse("Add at least one organic keyword in Settings → Search rankings");
     }
     if (cities.length === 0) {
       return badRequestResponse("Add at least one target location in Settings → Search rankings");
     }
 
-    const trackedName = company.googleBusinessLocationTitle ?? company.name;
+    const websiteUrl = company.organicSearchWebsiteUrl ?? company.website;
+    if (!websiteUrl?.trim()) {
+      return badRequestResponse("Set your website URL in Settings → Search rankings");
+    }
+
+    const trackedName = normalizeWebsiteHost(websiteUrl) || websiteUrl;
     const data = await getSerpRankings({
       companyId: user.companyId,
-      channel: "GBP",
+      channel: "ORGANIC",
       keyword: selectedKeyword,
       trackedName,
+      websiteUrl,
       cities,
       refresh,
       forceMock: mock,
