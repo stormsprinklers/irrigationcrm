@@ -13,6 +13,7 @@ type Crew = {
   color: string;
   division: "INSTALL" | "SERVICE" | null;
   members: { user: { id: string; name: string } }[];
+  _count?: { visits: number };
 };
 
 type Props = {
@@ -66,9 +67,14 @@ export function CrewManager({ employees }: Props) {
     await load();
   }
 
-  async function deleteCrew(id: string) {
-    if (!confirm("Delete this crew?")) return;
-    const res = await fetch(`/api/settings/crews/${id}`, { method: "DELETE" });
+  async function deleteCrew(crew: Crew) {
+    const visitCount = crew._count?.visits ?? 0;
+    const message =
+      visitCount > 0
+        ? `Delete "${crew.name}"? ${visitCount} visit${visitCount === 1 ? "" : "s"} linked to this crew will remain on the schedule but will no longer be assigned to the crew.`
+        : `Delete "${crew.name}"?`;
+    if (!confirm(message)) return;
+    const res = await fetch(`/api/settings/crews/${crew.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
       toast.error(data.error ?? "Delete failed");
@@ -109,6 +115,7 @@ export function CrewManager({ employees }: Props) {
                 {crew.division ? <Badge variant="outline">{crew.division}</Badge> : null}
                 <span className="text-sm text-muted-foreground">
                   {crew.members.map((m) => m.user.name).join(", ") || "No members"}
+                  {crew._count?.visits ? ` · ${crew._count.visits} visit${crew._count.visits === 1 ? "" : "s"}` : ""}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -122,7 +129,7 @@ export function CrewManager({ employees }: Props) {
                 >
                   Edit members
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => deleteCrew(crew.id)}>
+                <Button variant="ghost" size="sm" onClick={() => deleteCrew(crew)}>
                   Delete
                 </Button>
               </div>

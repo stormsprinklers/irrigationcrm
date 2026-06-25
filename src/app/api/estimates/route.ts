@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { computeEstimateExpiry, getEstimateForCompany, listEstimates } from "@/lib/estimates/queries";
 import { getTemplateLineItemsForEstimate } from "@/lib/price-book/extras";
 import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const body = await request.json();
     if (!body.customerId) return badRequestResponse("customerId is required");

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division } from "@prisma/client";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 
@@ -47,12 +47,17 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const existing = await prisma.crew.findFirst({
       where: { id, companyId: user.companyId },
-      include: { _count: { select: { visits: true } } },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (existing._count.visits > 0) return badRequestResponse("Cannot delete crew with scheduled visits");
 
-    await prisma.crew.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.visit.updateMany({
+        where: { companyId: user.companyId, crewId: id },
+        data: { crewId: null },
+      }),
+      prisma.crew.delete({ where: { id } }),
+    ]);
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {

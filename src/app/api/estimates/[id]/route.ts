@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DepositType, EstimateStatus } from "@prisma/client";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed, onEstimateSent, onEstimateStatusChange } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +22,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.estimate.findFirst({ where: { id, companyId: user.companyId } });
@@ -71,7 +71,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const result = await prisma.estimate.deleteMany({ where: { id, companyId: user.companyId } });

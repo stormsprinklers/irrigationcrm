@@ -57,5 +57,5 @@ export async function createCardSetupCheckoutSession(params: {
 }
 
 export function canManageCustomerPayments(role: UserRole) {
-  return role === "CSR" || role === "MANAGER" || role === "ADMIN";
+  return role === "CSR" || role === "SALES" || role === "MANAGER" || role === "ADMIN";
 }

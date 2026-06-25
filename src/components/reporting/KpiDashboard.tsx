@@ -1,31 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, Wrench, Headphones, UsersRound, TrendingUp } from "lucide-react";
+import { Wrench, Headphones, UsersRound, TrendingUp, HardHat } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { buildReportRangeQuery, PRESET_RANGE_LABELS, type ReportRangeInput } from "@/lib/reporting/date-range";
 import type {
   KpiCrewCard,
   KpiDashboardReport,
-  KpiDateRange,
   KpiPersonCard,
 } from "@/lib/reporting/kpi-dashboard";
 import { cn } from "@/lib/utils";
-
-const RANGE_LABELS: Record<KpiDateRange, string> = {
-  ytd: "Year to date",
-  mtd: "Month to date",
-  last30: "Last 30 days",
-};
 
 function getInitials(name: string) {
   return name
@@ -139,16 +128,16 @@ function Section({
 }
 
 export function KpiDashboard() {
-  const [range, setRange] = useState<KpiDateRange>("ytd");
+  const [rangeInput, setRangeInput] = useState<ReportRangeInput>({ preset: "ytd" });
   const [data, setData] = useState<KpiDashboardReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const load = useCallback(async (nextRange: KpiDateRange) => {
+  const load = useCallback(async (nextRange: ReportRangeInput) => {
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(`/api/reporting/kpi-dashboard?range=${nextRange}`);
+      const res = await fetch(`/api/reporting/kpi-dashboard?${buildReportRangeQuery(nextRange)}`);
       if (!res.ok) throw new Error("Failed to load");
       setData(await res.json());
     } catch {
@@ -159,8 +148,14 @@ export function KpiDashboard() {
   }, []);
 
   useEffect(() => {
-    load(range);
-  }, [range, load]);
+    load(rangeInput);
+  }, [rangeInput, load]);
+
+  const rangeLabel =
+    data?.rangeLabel ??
+    (rangeInput.preset === "custom"
+      ? `${rangeInput.start} – ${rangeInput.end}`
+      : PRESET_RANGE_LABELS[rangeInput.preset]);
 
   return (
     <ContentArea className="max-w-[1400px]">
@@ -169,24 +164,11 @@ export function KpiDashboard() {
         title="KPI Dashboard"
         subtitle="Team performance across technicians, CSRs, crews, and sales"
         actions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-sm font-medium"
-              >
-                {RANGE_LABELS[range]}
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {(Object.keys(RANGE_LABELS) as KpiDateRange[]).map((key) => (
-                <DropdownMenuItem key={key} onClick={() => setRange(key)}>
-                  {RANGE_LABELS[key]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <ReportDateRangeControl
+            value={rangeInput}
+            label={rangeLabel}
+            onChange={setRangeInput}
+          />
         }
       />
 
@@ -234,6 +216,19 @@ export function KpiDashboard() {
           </Section>
 
           <Section
+            title="Installers"
+            icon={HardHat}
+            emptyMessage="No solo installers found."
+            hasItems={data.installers.length > 0}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {data.installers.map((installer) => (
+                <PersonKpiCard key={installer.id} person={installer} />
+              ))}
+            </div>
+          </Section>
+
+          <Section
             title="CSRs"
             icon={Headphones}
             emptyMessage="No CSRs found."
@@ -262,7 +257,7 @@ export function KpiDashboard() {
           <Section
             title="Salespeople"
             icon={TrendingUp}
-            emptyMessage='No salespeople found. Tag employees with "sales" or set title to include Sales.'
+            emptyMessage='No salespeople found. Assign the Sales role in Settings → Employees.'
             hasItems={data.salespeople.length > 0}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

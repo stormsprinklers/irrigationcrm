@@ -22,7 +22,7 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
     where: {
       companyId,
       status: "ACTIVE",
-      role: { in: [UserRole.ADMIN, UserRole.CSR] },
+      role: { in: [UserRole.ADMIN, UserRole.CSR, UserRole.SALES] },
       email: { not: "" },
     },
     select: { email: true, name: true },

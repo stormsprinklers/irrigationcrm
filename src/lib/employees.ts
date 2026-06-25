@@ -5,6 +5,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   MANAGER: "Manager",
   CSR: "CSR",
   TECH: "Technician",
+  INSTALLER: "Installer",
+  SALES: "Sales",
   SOCIAL_MEDIA_MANAGER: "Social Media Manager",
 };
 
@@ -12,9 +14,16 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   ADMIN: "Full access including delete and billing settings",
   MANAGER: "Manage schedule, employees, and customers",
   CSR: "Handle inbox, customers, and scheduling",
-  TECH: "View assigned jobs and team inbox",
+  TECH: "Service technician — view assigned service jobs and team inbox",
+  INSTALLER: "Install crew member — view assigned install jobs and team inbox",
+  SALES: "Manage leads, estimates, and customer sales pipeline",
   SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
 };
+
+/** Field roles with limited office/admin access (service techs and installers). */
+export function isFieldRole(role: string) {
+  return role === "TECH" || role === "INSTALLER";
+}
 
 export const PAY_TYPE_LABELS: Record<string, string> = {
   HOURLY: "Hourly",

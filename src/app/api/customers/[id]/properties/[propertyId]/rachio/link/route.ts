@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { linkRachioDevice, unlinkRachioDevice } from "@/lib/rachio/property";
 import { RachioApiError } from "@/lib/rachio/types";
 
@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string; propertyId: string }> };
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id: customerId, propertyId } = await params;
     const body = await request.json();
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id: customerId, propertyId } = await params;
     await unlinkRachioDevice(user.companyId, customerId, propertyId);

@@ -29,6 +29,8 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: "Manager",
   CSR: "CSR",
   TECH: "Technician",
+  INSTALLER: "Installer",
+  SALES: "Sales",
 };
 
 type Props = {

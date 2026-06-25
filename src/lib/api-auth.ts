@@ -29,6 +29,13 @@ export function forbiddenResponse(message = "Forbidden") {
   return NextResponse.json({ error: message }, { status: 403 });
 }
 
+/** Block service technicians and installers from office-only API actions. */
+export function forbiddenForFieldRole(role: string) {
+  if (role === "TECH" || role === "INSTALLER") {
+    return forbiddenResponse();
+  }
+}
+
 export function notFoundResponse(message = "Not found") {
   return NextResponse.json({ error: message }, { status: 404 });
 }

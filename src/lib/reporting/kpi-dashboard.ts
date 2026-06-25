@@ -7,11 +7,15 @@ import {
   LeadStatus,
   VisitStatus,
 } from "@prisma/client";
-import { endOfDay, startOfDay, startOfMonth, startOfYear, subDays } from "date-fns";
 import { computeVisitWorkHours, visitRevenue } from "@/lib/compensation/commission";
+import {
+  type ReportPresetRange,
+  type ReportRangeInput,
+  resolveReportRange,
+} from "@/lib/reporting/date-range";
 import { prisma } from "@/lib/prisma";
 
-export type KpiDateRange = "ytd" | "mtd" | "last30";
+export type KpiDateRange = ReportPresetRange | "custom";
 
 export type KpiMetric = { label: string; value: string };
 
@@ -35,6 +39,7 @@ export type KpiDashboardReport = {
   rangeLabel: string;
   company: KpiMetric[];
   technicians: KpiPersonCard[];
+  installers: KpiPersonCard[];
   csrs: KpiPersonCard[];
   crews: KpiCrewCard[];
   salespeople: KpiPersonCard[];
@@ -55,20 +60,6 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function getRangeBounds(range: KpiDateRange) {
-  const now = new Date();
-  const end = endOfDay(now);
-  if (range === "mtd") return { start: startOfMonth(now), end };
-  if (range === "last30") return { start: startOfDay(subDays(now, 30)), end };
-  return { start: startOfYear(now), end };
-}
-
-const RANGE_LABELS: Record<KpiDateRange, string> = {
-  ytd: "Year to date",
-  mtd: "Month to date",
-  last30: "Last 30 days",
-};
-
 function estimateConversionRate(
   estimates: Array<{ status: EstimateStatus }>
 ) {
@@ -88,17 +79,17 @@ function isSalesperson(user: {
   tags: string[];
   division: Division | null;
 }) {
+  if (user.role === "SALES") return true;
   if (user.tags.some((t) => t.toLowerCase() === "sales")) return true;
   if (user.title?.toLowerCase().includes("sales")) return true;
-  if (user.role === "MANAGER" && user.division === Division.INSTALL) return true;
   return false;
 }
 
 export async function getKpiDashboardReport(
   companyId: string,
-  range: KpiDateRange = "ytd"
+  rangeInput: ReportRangeInput = { preset: "ytd" }
 ): Promise<KpiDashboardReport> {
-  const { start, end } = getRangeBounds(range);
+  const { start, end, label: rangeLabel, preset: range } = resolveReportRange(rangeInput);
 
   const [
     users,
@@ -256,64 +247,74 @@ export async function getKpiDashboardReport(
     },
   ];
 
-  const techUsers = users.filter(
-    (u) => u.role === "TECH" && u.crewMemberships.length === 0
-  );
-
-  const technicians: KpiPersonCard[] = techUsers.map((tech) => {
-    const techVisits = visitRevenues.filter(
-      (v) => v.visit.assignedUserId === tech.id && v.visit.crewId == null
+  function buildSoloFieldWorkerCards(
+    role: "TECH" | "INSTALLER",
+    estimateDivision: Division
+  ): KpiPersonCard[] {
+    const workers = users.filter(
+      (u) => u.role === role && u.crewMemberships.length === 0
     );
-    const revenue = techVisits.reduce((s, v) => s + v.revenue, 0);
-    const visitCount = techVisits.length;
 
-    let totalHours = 0;
-    for (const { visit } of techVisits) {
-      const hoursByUser = computeVisitWorkHours(visit.timeEvents);
-      totalHours += hoursByUser.get(tech.id) ?? 0;
-    }
+    const cards = workers.map((worker) => {
+      const workerVisits = visitRevenues.filter(
+        (v) => v.visit.assignedUserId === worker.id && v.visit.crewId == null
+      );
+      const revenue = workerVisits.reduce((s, v) => s + v.revenue, 0);
+      const visitCount = workerVisits.length;
 
-    const techEstimates = estimates.filter(
-      (e) =>
-        e.visit?.assignedUserId === tech.id &&
-        e.visit.crewId == null &&
-        e.visit.division === Division.SERVICE
+      let totalHours = 0;
+      for (const { visit } of workerVisits) {
+        const hoursByUser = computeVisitWorkHours(visit.timeEvents);
+        totalHours += hoursByUser.get(worker.id) ?? 0;
+      }
+
+      const workerEstimates = estimates.filter(
+        (e) =>
+          e.visit?.assignedUserId === worker.id &&
+          e.visit.crewId == null &&
+          e.visit.division === estimateDivision
+      );
+      const conversionRate = estimateConversionRate(workerEstimates);
+
+      const reviewCount = feedback.filter(
+        (f) => f.visit.assignedUserId === worker.id && f.visit.crewId == null
+      ).length;
+
+      return {
+        id: worker.id,
+        name: worker.name,
+        photoUrl: worker.photoUrl,
+        color: worker.color,
+        metrics: [
+          { label: "Total revenue", value: formatCurrency(revenue) },
+          {
+            label: "Revenue / hour",
+            value: totalHours > 0 ? formatCurrency(revenue / totalHours) : "—",
+          },
+          {
+            label: "Average ticket",
+            value: visitCount > 0 ? formatCurrency(revenue / visitCount) : "—",
+          },
+          {
+            label: "Conversion rate",
+            value: workerEstimates.length > 0 ? formatPercent(conversionRate) : "—",
+          },
+          { label: "Reviews", value: String(reviewCount) },
+        ],
+      };
+    });
+
+    cards.sort(
+      (a, b) =>
+        parseFloat(b.metrics[0].value.replace(/[^0-9.-]/g, "") || "0") -
+        parseFloat(a.metrics[0].value.replace(/[^0-9.-]/g, "") || "0")
     );
-    const conversionRate = estimateConversionRate(techEstimates);
 
-    const reviewCount = feedback.filter(
-      (f) => f.visit.assignedUserId === tech.id && f.visit.crewId == null
-    ).length;
+    return cards;
+  }
 
-    return {
-      id: tech.id,
-      name: tech.name,
-      photoUrl: tech.photoUrl,
-      color: tech.color,
-      metrics: [
-        { label: "Total revenue", value: formatCurrency(revenue) },
-        {
-          label: "Revenue / hour",
-          value: totalHours > 0 ? formatCurrency(revenue / totalHours) : "—",
-        },
-        {
-          label: "Average ticket",
-          value: visitCount > 0 ? formatCurrency(revenue / visitCount) : "—",
-        },
-        {
-          label: "Conversion rate",
-          value: techEstimates.length > 0 ? formatPercent(conversionRate) : "—",
-        },
-        { label: "Reviews", value: String(reviewCount) },
-      ],
-    };
-  });
-
-  technicians.sort(
-    (a, b) =>
-      parseFloat(b.metrics[0].value.replace(/[^0-9.-]/g, "")) -
-      parseFloat(a.metrics[0].value.replace(/[^0-9.-]/g, ""))
-  );
+  const technicians = buildSoloFieldWorkerCards("TECH", Division.SERVICE);
+  const installers = buildSoloFieldWorkerCards("INSTALLER", Division.INSTALL);
 
   const csrUsers = users.filter((u) => u.role === "CSR");
 
@@ -519,9 +520,10 @@ export async function getKpiDashboardReport(
 
   return {
     range,
-    rangeLabel: RANGE_LABELS[range],
+    rangeLabel,
     company,
     technicians,
+    installers,
     csrs,
     crews: crewCards,
     salespeople,

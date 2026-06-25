@@ -3,7 +3,7 @@ import { Prisma, UserRole } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-const ROLE_OPTIONS = ["ADMIN", "MANAGER", "CSR", "TECH"] as const;
+const ROLE_OPTIONS = ["ADMIN", "MANAGER", "CSR", "TECH", "INSTALLER", "SALES"] as const;
 
 async function getDistinctCustomerTags(companyId: string) {
   const rows = await prisma.customer.findMany({

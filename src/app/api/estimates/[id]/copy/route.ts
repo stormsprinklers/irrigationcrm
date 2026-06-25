@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 
@@ -9,7 +9,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const estimate = await prisma.estimate.findFirst({

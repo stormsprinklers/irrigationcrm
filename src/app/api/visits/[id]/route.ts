@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 import { prisma } from "@/lib/prisma";
@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
@@ -114,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const result = await prisma.visit.deleteMany({ where: { id, companyId: user.companyId } });

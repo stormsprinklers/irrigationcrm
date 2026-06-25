@@ -12,6 +12,8 @@ enum UserRole {
   MANAGER
   CSR
   TECH
+  INSTALLER
+  SALES
   SOCIAL_MEDIA_MANAGER
 }
 

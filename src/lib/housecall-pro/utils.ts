@@ -129,7 +129,9 @@ export function mapEmployeeRole(role: unknown): UserRole {
   const value = String(role ?? "").toLowerCase();
   if (value.includes("admin") || value.includes("owner")) return UserRole.ADMIN;
   if (value.includes("manager")) return UserRole.MANAGER;
+  if (value.includes("install")) return UserRole.INSTALLER;
   if (value.includes("tech") || value.includes("field")) return UserRole.TECH;
+  if (value.includes("sales")) return UserRole.SALES;
   return UserRole.CSR;
 }
 

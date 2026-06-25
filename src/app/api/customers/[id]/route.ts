@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { prisma } from "@/lib/prisma";
@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.customer.findFirst({ where: { id, companyId: user.companyId } });
@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.customer.findFirst({ where: { id, companyId: user.companyId } });

@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { isFieldRole } from "@/lib/employees";
 import { ArrowLeft, CheckCircle2, MapPin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
@@ -159,7 +160,7 @@ export function VisitDetail({ visitId }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
-  const canDelete = session?.user?.role !== "TECH";
+  const canDelete = !isFieldRole(session?.user?.role ?? "");
   const paymentStatus = searchParams.get("payment");
   const sessionId = searchParams.get("session_id");
   const [visit, setVisit] = useState<VisitDetailData | null>(null);

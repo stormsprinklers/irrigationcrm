@@ -15,6 +15,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { isFieldRole } from "@/lib/employees";
 import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
@@ -173,7 +174,7 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
 export function EstimateDetail({ estimateId }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
-  const canDelete = session?.user?.role !== "TECH";
+  const canDelete = !isFieldRole(session?.user?.role ?? "");
   const [estimate, setEstimate] = useState<EstimateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);

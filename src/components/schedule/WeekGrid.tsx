@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   eachDayOfInterval,
@@ -18,7 +18,14 @@ import type { ColorByMode, ScheduleJobDTO } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
-const SCHEDULE_HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+const SCHEDULE_START_HOUR = 4;
+const SCHEDULE_END_HOUR = 22;
+const SCHEDULE_HOURS = Array.from(
+  { length: SCHEDULE_END_HOUR - SCHEDULE_START_HOUR + 1 },
+  (_, i) => SCHEDULE_START_HOUR + i
+);
+const DEFAULT_VIEW_START_HOUR = 7;
+const DEFAULT_VIEW_END_HOUR = 16;
 const HOUR_HEIGHT = 56;
 const TIME_GUTTER = 60;
 const DAY_MIN_WIDTH = 132;
@@ -165,13 +172,44 @@ type TimeGridProps = {
 };
 
 function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showUnassigned }: TimeGridProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [weekDayWidth, setWeekDayWidth] = useState(DAY_MIN_WIDTH);
+
   const startHour = SCHEDULE_HOURS[0];
-  const endHour = SCHEDULE_HOURS[SCHEDULE_HOURS.length - 1] + 1;
+  const endHour = SCHEDULE_END_HOUR + 1;
   const totalHours = endHour - startHour;
   const gridHeight = totalHours * HOUR_HEIGHT;
   const isDayView = viewMode === "day";
-  const dayWidth = isDayView ? columns.length * TECH_COL_WIDTH : DAY_MIN_WIDTH;
-  const gridMinWidth = TIME_GUTTER + dayCount * dayWidth;
+  const dayWidth = isDayView ? columns.length * TECH_COL_WIDTH : weekDayWidth;
+  const gridMinWidth = TIME_GUTTER + dayCount * (isDayView ? dayWidth : DAY_MIN_WIDTH);
+
+  useEffect(() => {
+    if (isDayView) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      const available = el.clientWidth - TIME_GUTTER;
+      setWeekDayWidth(Math.max(DAY_MIN_WIDTH, Math.floor(available / dayCount)));
+    };
+
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [dayCount, isDayView]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const viewStartPx = (DEFAULT_VIEW_START_HOUR - startHour) * HOUR_HEIGHT;
+    const viewEndPx = (DEFAULT_VIEW_END_HOUR - startHour + 1) * HOUR_HEIGHT;
+    const businessCenter = (viewStartPx + viewEndPx) / 2;
+    const targetScroll = Math.max(0, businessCenter - el.clientHeight / 2);
+
+    el.scrollTop = targetScroll;
+  }, [weekStart, dayCount, viewMode, startHour]);
 
   const visibleColumnIds = useMemo(() => {
     const ids = new Set(columns.map((c) => c.id));
@@ -223,10 +261,10 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="relative" style={{ minWidth: gridMinWidth }}>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+        <div className="relative w-full" style={{ minWidth: gridMinWidth }}>
           <div className="sticky top-0 z-30 border-b border-border bg-white shadow-sm">
-            <div className="flex border-b border-border">
+            <div className="flex w-full border-b border-border">
               <div
                 className="sticky left-0 z-40 shrink-0 border-r border-border bg-muted/30"
                 style={{ width: TIME_GUTTER }}
@@ -236,8 +274,11 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
                 return (
                   <div
                     key={day.toISOString()}
-                    className="shrink-0 border-r border-border px-2 py-2 text-center last:border-r-0"
-                    style={{ width: dayWidth }}
+                    className={cn(
+                      "border-r border-border px-2 py-2 text-center last:border-r-0",
+                      !isDayView && "min-w-0 flex-1"
+                    )}
+                    style={isDayView ? { width: dayWidth, flexShrink: 0 } : { minWidth: DAY_MIN_WIDTH }}
                   >
                     <p className="text-xs text-muted-foreground">{format(day, "EEE")}</p>
                     <p
@@ -254,14 +295,14 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
             </div>
 
             {multiDayRowHeight > 0 ? (
-              <div className="flex border-b border-border bg-muted/20">
+              <div className="flex w-full border-b border-border bg-muted/20">
                 <div
                   className="sticky left-0 z-40 shrink-0 border-r border-border bg-muted/20"
                   style={{ width: TIME_GUTTER }}
                 />
                 <div
-                  className="relative shrink-0"
-                  style={{ width: dayCount * dayWidth, height: multiDayRowHeight }}
+                  className="relative min-w-0 flex-1"
+                  style={{ height: multiDayRowHeight }}
                 >
                   {multiDayLanes.map(({ job, lane }) => {
                     const jobStart = startOfDay(new Date(job.startAt));
@@ -355,7 +396,7 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
             ) : null}
           </div>
 
-          <div className="relative flex">
+          <div className="relative flex w-full">
             <div
               className="sticky left-0 z-20 shrink-0 border-r border-border bg-white"
               style={{ width: TIME_GUTTER }}
@@ -431,8 +472,15 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
               return (
                 <div
                   key={`grid-${day.toISOString()}`}
-                  className="relative shrink-0 border-r border-border last:border-r-0"
-                  style={{ width: dayWidth, height: gridHeight }}
+                  className={cn(
+                    "relative border-r border-border last:border-r-0",
+                    !isDayView && "min-w-0 flex-1"
+                  )}
+                  style={
+                    isDayView
+                      ? { width: dayWidth, flexShrink: 0, height: gridHeight }
+                      : { minWidth: DAY_MIN_WIDTH, height: gridHeight }
+                  }
                 >
                   {SCHEDULE_HOURS.map((hour) => (
                     <div

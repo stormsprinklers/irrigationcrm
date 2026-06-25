@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { serializeProperty } from "@/lib/customers/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string; propertyId: string }> };
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id, propertyId } = await params;
     const existing = await prisma.customerProperty.findFirst({
@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (user.role === "TECH") return forbiddenResponse();
+    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id, propertyId } = await params;
     const result = await prisma.customerProperty.deleteMany({
