@@ -98,6 +98,13 @@ export async function POST(request: NextRequest) {
     }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+    const mobileReturn = body.mobileReturn === true || body.platform === "ios";
+    const successUrl = mobileReturn
+      ? `stormcrm://payment-return?visitId=${visit.id}&session_id={CHECKOUT_SESSION_ID}`
+      : `${appUrl}/visits/${visit.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = mobileReturn
+      ? `stormcrm://payment-return?visitId=${visit.id}&payment=cancelled`
+      : `${appUrl}/visits/${visit.id}?payment=cancelled`;
 
     const session = await createInvoiceCheckoutSession({
       invoice: {
@@ -109,8 +116,8 @@ export async function POST(request: NextRequest) {
       customerEmail: visit.customer.email,
       productName: visit.title,
       amount: balanceDue,
-      successUrl: `${appUrl}/visits/${visit.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${appUrl}/visits/${visit.id}?payment=cancelled`,
+      successUrl,
+      cancelUrl,
     });
 
     return NextResponse.json({

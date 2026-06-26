@@ -543,6 +543,7 @@ model Company {
   portalLoginTokens      CustomerPortalLoginToken[]
   portalOffers           PortalOffer[]
   integrationCredentials IntegrationCredential[]
+  mobileSessions         MobileSession[]
   metaWebhookEvents      MetaWebhookEvent[]
   socialPosts            SocialPost[]
   socialPostSubmissions  SocialPostSubmission[]
@@ -667,6 +668,7 @@ model User {
   crewMemberships    CrewMember[]
   assignedVisits     Visit[]              @relation("AssignedVisits")
   assignedLeads      Lead[]               @relation("AssignedLeads")
+  mobileSessions     MobileSession[]
   defaultLeadFor     Company[]            @relation("DefaultLeadAssignee")
   visitTimeEvents    VisitTimeEvent[]
   visitNotes         VisitNote[]
@@ -2459,6 +2461,25 @@ enum IrrigationMapMarkerType {
   POC
   FILTER
   BACKFLOW
+}
+
+model MobileSession {
+  id               String    @id @default(cuid())
+  userId           String
+  companyId        String
+  deviceName       String?
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
 }
 
 model IntegrationCredential {

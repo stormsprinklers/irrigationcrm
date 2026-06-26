@@ -22,6 +22,8 @@ const publicPaths = [
   "/api/marketing/google-analytics/callback",
   "/api/integrations",
   "/api/track",
+  "/api/mobile/auth/login",
+  "/api/mobile/auth/refresh",
 ];
 
 const authSecret = getAuthSecret();
@@ -51,6 +53,11 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
+    const bearerAuth = request.headers.get("authorization")?.startsWith("Bearer ");
+    if (bearerAuth && pathname.startsWith("/api/")) {
+      return withNoIndex(NextResponse.next());
+    }
+
     if (pathname.startsWith("/api/portal/")) {
       // Portal APIs authenticate via customer session cookie in route handlers.
       return withNoIndex(NextResponse.next());
