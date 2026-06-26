@@ -6,9 +6,11 @@ import {
   HCP_PARENT_DETAIL_PATHS,
 } from "@/lib/housecall-pro/constants";
 import {
+  attachmentFileUrl,
   attachmentMimeType,
-  attachmentsFromRecord,
+  collectAttachmentsFromResponse,
   HCP_EXPAND_ATTACHMENTS,
+  type HcpAttachmentParentType,
 } from "@/lib/housecall-pro/expand";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import {
@@ -20,55 +22,9 @@ import { hcpId, hcpString } from "@/lib/housecall-pro/utils";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { prisma } from "@/lib/prisma";
 
-type AttachmentParentType = "customers" | "jobs" | "estimates";
-
-const ATTACHMENT_ARRAY_KEYS = [
-  "attachments",
-  "files",
-  "photos",
-  "images",
-  "documents",
-  "job_attachments",
-  "estimate_attachments",
-  "customer_attachments",
-] as const;
-
 function parseAttachmentCursor(cursor: string | null) {
   const offset = Number(cursor ?? "0");
   return Number.isFinite(offset) ? offset : 0;
-}
-
-function attachmentFileUrl(attachment: HcpRecord): string | null {
-  return (
-    hcpString(attachment.url) ??
-    hcpString(attachment.download_url) ??
-    hcpString(attachment.file_url) ??
-    hcpString(attachment.signed_url) ??
-    hcpString(attachment.href) ??
-    hcpString(attachment.link)
-  );
-}
-
-function extractAttachmentItems(data: HcpRecord): HcpRecord[] {
-  const items: HcpRecord[] = [];
-  for (const key of ATTACHMENT_ARRAY_KEYS) {
-    const value = data[key];
-    if (Array.isArray(value)) {
-      items.push(...(value as HcpRecord[]));
-    }
-  }
-  if (Array.isArray(data.links)) {
-    for (const link of data.links as HcpRecord[]) {
-      const type = hcpString(link.type)?.toLowerCase();
-      if (!type || type === "file" || type === "link") {
-        items.push(link);
-      }
-    }
-  }
-  if (Array.isArray(data.data)) {
-    items.push(...(data.data as HcpRecord[]));
-  }
-  return items;
 }
 
 function dedupeAttachments(items: HcpRecord[]): HcpRecord[] {
@@ -93,34 +49,30 @@ function stableAttachmentId(attachment: HcpRecord, fileUrl: string): string {
 
 async function fetchAttachments(
   ctx: ImportContext,
-  parentType: AttachmentParentType,
+  parentType: HcpAttachmentParentType,
   parentHcpId: string
 ): Promise<HcpRecord[]> {
   const items: HcpRecord[] = [];
+  const detailParams = [{ ...HCP_EXPAND_ATTACHMENTS }, {}];
 
   for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
-    try {
-      const data = await ctx.client.get<HcpRecord>(path, {
-        params: { ...HCP_EXPAND_ATTACHMENTS },
-      });
-      items.push(...attachmentsFromRecord(data));
-      items.push(...extractAttachmentItems(data));
-      if (items.length) break;
-    } catch {
-      // try next path shape
+    for (const params of detailParams) {
+      try {
+        const data = await ctx.client.get<HcpRecord>(path, { params });
+        items.push(...collectAttachmentsFromResponse(data, parentType));
+        if (items.length) return dedupeAttachments(items);
+      } catch {
+        // try next path / param set
+      }
     }
   }
 
-  if (!items.length) {
-    for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
-      try {
-        const data = await ctx.client.get<HcpRecord>(path, {
-          params: { ...HCP_EXPAND_ATTACHMENTS },
-        });
-        items.push(...extractAttachmentItems(data));
-      } catch {
-        // try next path shape
-      }
+  for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
+    try {
+      const data = await ctx.client.get<HcpRecord>(path);
+      items.push(...collectAttachmentsFromResponse(data, parentType));
+    } catch {
+      // try next path shape
     }
   }
 
@@ -131,7 +83,7 @@ async function importAttachmentFile(params: {
   ctx: ImportContext;
   parentHcpId: string;
   parentLocalId: string;
-  parentType: AttachmentParentType;
+  parentType: HcpAttachmentParentType;
   entityType: HcpEntityType;
   attachment: HcpRecord;
   blobPrefix: string;
@@ -153,6 +105,7 @@ async function importAttachmentFile(params: {
     hcpString(params.attachment.file_name) ??
     hcpString(params.attachment.name) ??
     hcpString(params.attachment.fileName) ??
+    hcpString(params.attachment.title) ??
     `attachment-${attachmentId}`;
 
   const mappingKey = `${params.parentType}:${params.parentHcpId}:${attachmentId}`;
@@ -195,7 +148,7 @@ async function importAttachmentFile(params: {
 async function importParentAttachmentsBatch(params: {
   ctx: ImportContext;
   parentEntityType: HcpEntityType;
-  parentType: AttachmentParentType;
+  parentType: HcpAttachmentParentType;
   blobPrefix: string;
   createRecord: (
     parentLocalId: string,
@@ -229,16 +182,27 @@ async function importParentAttachmentsBatch(params: {
     });
   }
 
+  let loggedEmptySample = false;
+
   for (const parent of mappedParents) {
     result.processed++;
     try {
       const attachments = await fetchAttachments(params.ctx, params.parentType, parent.hcpId);
       if (!attachments.length) {
         result.skipped++;
+        if (!loggedEmptySample) {
+          loggedEmptySample = true;
+          result.errors.push(
+            `No attachments from HCP for ${params.parentType} ${parent.hcpId} (detail + /attachments endpoints)`
+          );
+        }
         continue;
       }
+
+      let filesWithoutUrl = 0;
       for (const attachment of attachments) {
         try {
+          const beforeSkipped = result.skipped;
           await importAttachmentFile({
             ctx: params.ctx,
             parentHcpId: parent.hcpId,
@@ -250,10 +214,17 @@ async function importParentAttachmentsBatch(params: {
             createRecord: async (data) => params.createRecord(parent.localId, data),
             result,
           });
+          if (result.skipped > beforeSkipped) filesWithoutUrl++;
         } catch (err) {
           result.failed++;
           result.errors.push(err instanceof Error ? err.message : "Attachment file failed");
         }
+      }
+
+      if (filesWithoutUrl > 0 && filesWithoutUrl === attachments.length) {
+        result.errors.push(
+          `${filesWithoutUrl} attachment(s) on ${params.parentType} ${parent.hcpId} had no downloadable URL`
+        );
       }
     } catch (err) {
       result.failed++;

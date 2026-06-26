@@ -4,19 +4,19 @@ export const HCP_BASE_URL = "https://api.housecallpro.com";
 
 export const HCP_ATTACHMENT_PATHS = {
   customers: (id: string) => [
+    `/api/customers/${id}/attachments`,
     `/customers/${id}/attachments`,
     `/customer/${id}/attachments`,
-    `/api/customers/${id}/attachments`,
   ],
   jobs: (id: string) => [
+    `/api/jobs/${id}/attachments`,
     `/jobs/${id}/attachments`,
     `/job/${id}/attachments`,
-    `/api/jobs/${id}/attachments`,
   ],
   estimates: (id: string) => [
+    `/api/estimates/${id}/attachments`,
     `/estimates/${id}/attachments`,
     `/estimate/${id}/attachments`,
-    `/api/estimates/${id}/attachments`,
   ],
 } as const;
 
@@ -27,9 +27,17 @@ export const HCP_JOB_LINE_ITEMS_PATHS = (id: string) => [
 ];
 
 export const HCP_PARENT_DETAIL_PATHS = {
-  customers: (id: string) => [`/customers/${id}`, `/customer/${id}`],
-  jobs: (id: string) => [`/jobs/${id}`, `/job/${id}`],
-  estimates: (id: string) => [`/estimates/${id}`, `/estimate/${id}`],
+  customers: (id: string) => [
+    `/api/customers/${id}`,
+    `/customers/${id}`,
+    `/customer/${id}`,
+  ],
+  jobs: (id: string) => [`/api/jobs/${id}`, `/jobs/${id}`, `/job/${id}`],
+  estimates: (id: string) => [
+    `/api/estimates/${id}`,
+    `/estimates/${id}`,
+    `/estimate/${id}`,
+  ],
 } as const;
 
 /** Price book endpoints live under /api/price_book/ (not /v1/ or /pricebook/v1/). */
