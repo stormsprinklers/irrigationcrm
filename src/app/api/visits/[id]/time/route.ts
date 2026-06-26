@@ -4,7 +4,6 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import {
   computeDrivingEta,
-  formatVisitEtaPayload,
   MapsEtaError,
   resolveVisitDestination,
 } from "@/lib/maps/eta";
@@ -13,7 +12,7 @@ import { ensureDefaultNotificationTemplates, sendOperationalNotification } from 
 import { onVisitCompleted } from "@/lib/notifications/visit-events";
 import { completeMaintenancePlanVisit } from "@/lib/maintenance-plans/discounts";
 import { prisma } from "@/lib/prisma";
-import { getVisitForCompany } from "@/lib/visits/queries";
+import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,23 +36,6 @@ function parseOrigin(body: Record<string, unknown>) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
   return { lat, lng };
-}
-
-function serializeVisitResponse(
-  visit: NonNullable<Awaited<ReturnType<typeof getVisitForCompany>>>,
-  extras?: { etaWarning?: string }
-) {
-  return {
-    ...visit,
-    startAt: visit.startAt.toISOString(),
-    endAt: visit.endAt.toISOString(),
-    enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,
-    enRouteCalculatedAt: visit.enRouteCalculatedAt?.toISOString() ?? null,
-    enRouteOriginLat: visit.enRouteOriginLat ? Number(visit.enRouteOriginLat) : null,
-    enRouteOriginLng: visit.enRouteOriginLng ? Number(visit.enRouteOriginLng) : null,
-    eta: formatVisitEtaPayload(visit),
-    ...(extras?.etaWarning ? { etaWarning: extras.etaWarning } : {}),
-  };
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -189,7 +171,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       }).catch((err) => console.error("VISIT_EN_ROUTE notification error:", err));
     }
 
-    return NextResponse.json(serializeVisitResponse(updated, { etaWarning }));
+    return NextResponse.json(await serializeVisitDetail(updated, { etaWarning }));
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

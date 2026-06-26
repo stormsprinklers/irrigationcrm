@@ -53,6 +53,8 @@ export async function POST(request: NextRequest, { params }: Params) {
         city: body.city ?? null,
         state: body.state ?? null,
         zip: body.zip ?? null,
+        ...(body.latitude != null ? { latitude: Number(body.latitude) } : {}),
+        ...(body.longitude != null ? { longitude: Number(body.longitude) } : {}),
         isPrimary: Boolean(body.isPrimary),
       },
     });

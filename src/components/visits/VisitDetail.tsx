@@ -373,14 +373,16 @@ export function VisitDetail({ visitId }: Props) {
         eta={visitEta(visit)}
       />
 
-      {visit.status === "IN_PROGRESS" || visit.status === "PAUSED" ? (
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" onClick={() => setPartsRunOpen(true)}>
-            <Wrench className="h-4 w-4" />
-            Parts Run
-          </Button>
-        </div>
+      {visit.customer?.id ? (
+        <VisitIrrigationSection customerId={visit.customer.id} property={visit.property} />
       ) : null}
+
+      <div className="flex justify-end">
+        <Button type="button" variant="outline" onClick={() => setPartsRunOpen(true)}>
+          <Wrench className="h-4 w-4" />
+          Parts Run
+        </Button>
+      </div>
 
       <PartsRunDialog
         visitId={visit.id}
@@ -406,17 +408,6 @@ export function VisitDetail({ visitId }: Props) {
           installDurationDays={visit.installDurationDays ?? 4}
           visitId={visit.id}
           onDurationUpdated={load}
-        />
-      ) : null}
-
-      {visit.property?.id && visit.customer?.id ? (
-        <VisitIrrigationSection
-          customerId={visit.customer.id}
-          propertyId={visit.property.id}
-          propertyName={visit.property.name}
-          aerialImageUrl={visit.property.aerialImageUrl}
-          propertyDiagramUrl={visit.property.propertyDiagramUrl}
-          irrigationMapStatus={visit.property.irrigationMapStatus}
         />
       ) : null}
 

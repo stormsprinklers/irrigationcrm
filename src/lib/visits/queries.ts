@@ -1,4 +1,5 @@
 import { Division, Prisma, VisitStatus } from "@prisma/client";
+import { formatVisitEtaPayload } from "@/lib/maps/eta";
 import { prisma } from "@/lib/prisma";
 import { sumDiscounts, sumLineItems } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
@@ -237,6 +238,39 @@ export async function getVisitForCompany(companyId: string, visitId: string) {
     where: { id: visitId, companyId },
     include: visitDetailInclude,
   });
+}
+
+export type VisitDetailRecord = NonNullable<Awaited<ReturnType<typeof getVisitForCompany>>>;
+
+export async function resolveVisitProperty(visit: VisitDetailRecord) {
+  if (visit.property) return visit.property;
+  if (!visit.customerId) return null;
+
+  return prisma.customerProperty.findFirst({
+    where: { companyId: visit.companyId, customerId: visit.customerId },
+    orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+    select: visitInclude.property.select,
+  });
+}
+
+export async function serializeVisitDetail(
+  visit: VisitDetailRecord,
+  extras?: { etaWarning?: string }
+) {
+  const property = await resolveVisitProperty(visit);
+
+  return {
+    ...visit,
+    property,
+    startAt: visit.startAt.toISOString(),
+    endAt: visit.endAt.toISOString(),
+    enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,
+    enRouteCalculatedAt: visit.enRouteCalculatedAt?.toISOString() ?? null,
+    enRouteOriginLat: visit.enRouteOriginLat ? Number(visit.enRouteOriginLat) : null,
+    enRouteOriginLng: visit.enRouteOriginLng ? Number(visit.enRouteOriginLng) : null,
+    eta: formatVisitEtaPayload(visit),
+    ...(extras?.etaWarning ? { etaWarning: extras.etaWarning } : {}),
+  };
 }
 
 export async function nextInvoiceNumber(companyId: string) {

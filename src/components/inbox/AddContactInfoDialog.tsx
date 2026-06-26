@@ -5,6 +5,7 @@ import { UserPlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { ParsedSmsContactInfo } from "@/lib/inbox/contact-info-types";
 
@@ -146,11 +147,20 @@ export function AddContactInfoDialog({ open, messageId, onClose, onApplied }: Pr
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">
                   Home address
                 </label>
-                <Input
+                <AddressAutocompleteInput
                   value={form.homeAddress}
-                  onChange={(e) => setForm((f) => ({ ...f, homeAddress: e.target.value }))}
-                  autoComplete="street-address"
+                  onChange={(homeAddress) => setForm((f) => ({ ...f, homeAddress }))}
+                  onResolved={(resolved) =>
+                    setForm((f) => ({
+                      ...f,
+                      homeAddress: resolved.formattedAddress || f.homeAddress,
+                    }))
+                  }
+                  placeholder="Start typing an address..."
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Pick a suggestion to autofill, or type the address manually.
+                </p>
               </div>
 
               <div>

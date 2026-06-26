@@ -15,34 +15,31 @@ import { getVisitForCompany } from "@/lib/visits/queries";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-async function resolveVisitOrigin(
-  visit: NonNullable<Awaited<ReturnType<typeof getVisitForCompany>>>,
-  originLat?: number | null,
-  originLng?: number | null
+async function resolvePropertyOrigin(
+  visit: NonNullable<Awaited<ReturnType<typeof getVisitForCompany>>>
 ) {
-  if (originLat != null && originLng != null) {
-    return { lat: originLat, lng: originLng };
-  }
-
   if (visit.property?.latitude != null && visit.property.longitude != null) {
     return { lat: visit.property.latitude, lng: visit.property.longitude };
   }
 
-  const destination = resolveVisitDestination({
-    address: visit.address,
-    city: visit.city,
-    state: visit.state,
-    zip: visit.zip,
-    property: visit.property,
-    customer: visit.customer,
-  });
+  const propertyAddress = visit.property ? formatPostalAddress(visit.property) : null;
+  const fallbackAddress =
+    propertyAddress ??
+    resolveVisitDestination({
+      address: visit.address,
+      city: visit.city,
+      state: visit.state,
+      zip: visit.zip,
+      property: visit.property,
+      customer: visit.customer,
+    });
 
-  if (!destination) return null;
+  if (!fallbackAddress) return null;
 
   const apiKey = getGoogleMapsApiKey();
   if (!apiKey) return null;
 
-  const geocoded = await geocodeAddress(destination, apiKey);
+  const geocoded = await geocodeAddress(fallbackAddress, apiKey);
   if (!geocoded) return null;
   return { lat: geocoded.lat, lng: geocoded.lng };
 }
@@ -54,18 +51,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const visit = await getVisitForCompany(user.companyId, id);
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const url = new URL(request.url);
-    const originLat = url.searchParams.get("originLat");
-    const originLng = url.searchParams.get("originLng");
-
-    const origin = await resolveVisitOrigin(
-      visit,
-      originLat ? Number(originLat) : null,
-      originLng ? Number(originLng) : null
-    );
+    const origin = await resolvePropertyOrigin(visit);
 
     if (!origin) {
-      return badRequestResponse("Could not determine job location for routing");
+      return badRequestResponse("Could not determine property location for routing");
     }
 
     const [suppliers, company] = await Promise.all([

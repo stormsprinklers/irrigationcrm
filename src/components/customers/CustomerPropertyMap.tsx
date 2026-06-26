@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2, MapPin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +22,6 @@ type Props = {
 type EmbedResponse = {
   configured: boolean;
   placeEmbed: string | null;
-  streetEmbed: string | null;
   formattedAddress?: string | null;
 };
 
@@ -44,7 +43,7 @@ export function CustomerPropertyMap({ title = "Property location", location }: P
     fetch(`/api/maps/embed?q=${encodeURIComponent(query)}`)
       .then((r) => r.json())
       .then((data: EmbedResponse) => setEmbeds(data))
-      .catch(() => setEmbeds({ configured: false, placeEmbed: null, streetEmbed: null }))
+      .catch(() => setEmbeds({ configured: false, placeEmbed: null }))
       .finally(() => setLoading(false));
   }, [query]);
 
@@ -86,55 +85,24 @@ export function CustomerPropertyMap({ title = "Property location", location }: P
           </div>
         ) : !embeds?.configured ? (
           <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            Set <code className="text-xs">GOOGLE_MAPS_API_KEY</code> on the server to show map and
-            Street View embeds.
+            Set <code className="text-xs">GOOGLE_MAPS_API_KEY</code> on the server to show a map
+            embed.
           </p>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {embeds.placeEmbed ? (
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Map
-                </p>
-                <div className="overflow-hidden rounded-lg border">
-                  <iframe
-                    title="Property map"
-                    src={embeds.placeEmbed}
-                    className="h-56 w-full border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
-            ) : null}
-            {embeds.streetEmbed ? (
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Street view
-                </p>
-                <div className="overflow-hidden rounded-lg border">
-                  <iframe
-                    title="Property street view"
-                    src={embeds.streetEmbed}
-                    className="h-56 w-full border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Street view
-                </p>
-                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  Street View is not available for this address.
-                </p>
-              </div>
-            )}
+        ) : embeds.placeEmbed ? (
+          <div className="overflow-hidden rounded-lg border">
+            <iframe
+              title="Property map"
+              src={embeds.placeEmbed}
+              className="h-56 w-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
           </div>
+        ) : (
+          <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            Map preview is not available for this address.
+          </p>
         )}
       </CardContent>
     </Card>

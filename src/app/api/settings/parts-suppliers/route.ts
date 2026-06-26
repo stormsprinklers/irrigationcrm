@@ -64,11 +64,23 @@ export async function POST(request: NextRequest) {
     }
 
     const place = await getPlaceDetails(placeId);
-    const supplier = await prisma.partsSupplier.create({
-      data: {
+    const supplierData = placeToSupplierData(place, timezone);
+
+    const supplier = await prisma.partsSupplier.upsert({
+      where: {
+        companyId_googlePlaceId: {
+          companyId: user.companyId,
+          googlePlaceId: placeId,
+        },
+      },
+      create: {
         companyId: user.companyId,
         sortOrder: body.sortOrder ?? 0,
-        ...placeToSupplierData(place, timezone),
+        ...supplierData,
+      },
+      update: {
+        ...supplierData,
+        isActive: true,
       },
     });
 

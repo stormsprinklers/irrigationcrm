@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, MapPin, Phone, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,15 +14,22 @@ export function PartsSuppliersManager() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const [syncingId, setSyncingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const configuredPlaceIds = useMemo(
+    () =>
+      new Set(
+        suppliers.map((supplier) => supplier.googlePlaceId).filter((id): id is string => Boolean(id))
+      ),
+    [suppliers]
+  );
+
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const res = await fetch("/api/settings/parts-suppliers");
       if (res.ok) setSuppliers(await res.json());
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -52,6 +59,8 @@ export function PartsSuppliersManager() {
   }
 
   async function addSupplier(googlePlaceId: string) {
+    if (configuredPlaceIds.has(googlePlaceId)) return;
+
     setAddingId(googlePlaceId);
     try {
       const res = await fetch("/api/settings/parts-suppliers", {
@@ -65,27 +74,9 @@ export function PartsSuppliersManager() {
         return;
       }
       toast.success(`Added ${data.name}`);
-      setResults([]);
-      setQuery("");
-      await load();
+      await load({ silent: true });
     } finally {
       setAddingId(null);
-    }
-  }
-
-  async function syncSupplier(id: string) {
-    setSyncingId(id);
-    try {
-      const res = await fetch(`/api/settings/parts-suppliers/${id}`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Sync failed");
-        return;
-      }
-      toast.success("Hours and phone updated from Google");
-      await load();
-    } finally {
-      setSyncingId(null);
     }
   }
 
@@ -99,7 +90,7 @@ export function PartsSuppliersManager() {
       toast.error("Failed to update supplier");
       return;
     }
-    await load();
+    await load({ silent: true });
   }
 
   async function removeSupplier(id: string) {
@@ -109,7 +100,7 @@ export function PartsSuppliersManager() {
       toast.error("Failed to remove supplier");
       return;
     }
-    await load();
+    await load({ silent: true });
   }
 
   return (
@@ -118,7 +109,7 @@ export function PartsSuppliersManager() {
         <h2 className="text-sm font-semibold">Add supplier</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Search by business name and city, or paste a Google Maps link. Hours and phone are pulled
-          from the Google Business Profile.
+          automatically from Google when you add a supplier.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Input
@@ -138,28 +129,39 @@ export function PartsSuppliersManager() {
 
         {results.length > 0 ? (
           <ul className="mt-4 divide-y rounded-md border">
-            {results.map((result) => (
-              <li key={result.googlePlaceId} className="flex items-start justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <p className="font-medium">{result.name}</p>
-                  <p className="text-sm text-muted-foreground">{result.formattedAddress}</p>
-                  {result.phone ? (
-                    <p className="text-sm text-muted-foreground">{result.phone}</p>
-                  ) : null}
-                  {result.weekdayHours[0] ? (
-                    <p className="text-xs text-muted-foreground">{result.weekdayHours[0]}</p>
-                  ) : null}
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void addSupplier(result.googlePlaceId)}
-                  disabled={addingId === result.googlePlaceId}
-                >
-                  {addingId === result.googlePlaceId ? "Adding..." : "Add"}
-                </Button>
-              </li>
-            ))}
+            {results.map((result) => {
+              const isAdded = configuredPlaceIds.has(result.googlePlaceId);
+              const isAdding = addingId === result.googlePlaceId;
+
+              return (
+                <li key={result.googlePlaceId} className="flex items-start justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="font-medium">{result.name}</p>
+                    <p className="text-sm text-muted-foreground">{result.formattedAddress}</p>
+                    {result.phone ? (
+                      <p className="text-sm text-muted-foreground">{result.phone}</p>
+                    ) : null}
+                    {result.weekdayHours[0] ? (
+                      <p className="text-xs text-muted-foreground">{result.weekdayHours[0]}</p>
+                    ) : null}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={isAdded ? "outline" : "default"}
+                    className={
+                      isAdded
+                        ? "border-primary bg-background text-primary hover:bg-background hover:text-primary"
+                        : undefined
+                    }
+                    onClick={() => void addSupplier(result.googlePlaceId)}
+                    disabled={isAdded || isAdding}
+                  >
+                    {isAdding ? "Adding..." : isAdded ? "Added" : "Add"}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </section>
@@ -198,20 +200,10 @@ export function PartsSuppliersManager() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-1 text-xs text-amber-700">No hours on file — sync from Google</p>
+                    <p className="mt-1 text-xs text-muted-foreground">No hours on file from Google</p>
                   )}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void syncSupplier(supplier.id)}
-                    disabled={syncingId === supplier.id}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    {syncingId === supplier.id ? "Syncing..." : "Sync"}
-                  </Button>
                   <Button
                     type="button"
                     variant="outline"

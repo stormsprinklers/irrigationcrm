@@ -6,7 +6,7 @@ import { syncCallbackTag } from "@/lib/checklists/callback";
 import { prisma } from "@/lib/prisma";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
-import { getVisitForCompany } from "@/lib/visits/queries";
+import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 
@@ -18,7 +18,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const visit = await getVisitForCompany(user.companyId, id);
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(visit);
+    return NextResponse.json(await serializeVisitDetail(visit));
   } catch {
     return unauthorizedResponse();
   }
@@ -114,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const visit = await getVisitForCompany(user.companyId, id);
-    return NextResponse.json(visit);
+    return NextResponse.json(visit ? await serializeVisitDetail(visit) : { error: "Not found" });
   } catch {
     return unauthorizedResponse();
   }

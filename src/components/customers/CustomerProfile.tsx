@@ -32,6 +32,7 @@ import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPa
 import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap";
 import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
 import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection";
+import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
@@ -171,7 +172,15 @@ export function CustomerProfile({ customerId }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [newProperty, setNewProperty] = useState({ name: "", address: "", city: "", state: "", zip: "" });
+  const [newProperty, setNewProperty] = useState({
+    name: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
+  });
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
@@ -311,7 +320,15 @@ export function CustomerProfile({ customerId }: Props) {
       toast.error("Failed to add property");
       return;
     }
-    setNewProperty({ name: "", address: "", city: "", state: "", zip: "" });
+    setNewProperty({
+      name: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      latitude: null,
+      longitude: null,
+    });
     const propsRes = await fetch(`/api/customers/${customerId}/properties`);
     if (propsRes.ok) {
       const data = await propsRes.json();
@@ -662,54 +679,23 @@ export function CustomerProfile({ customerId }: Props) {
                       }
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="mb-1 block text-sm font-medium">Address</label>
-                    <Input
-                      value={profileCustomer.address ?? ""}
-                      onChange={(e) =>
-                        setDraftCustomer({
-                          ...profileCustomer,
-                          address: e.target.value || null,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">City</label>
-                    <Input
-                      value={profileCustomer.city ?? ""}
-                      onChange={(e) =>
-                        setDraftCustomer({
-                          ...profileCustomer,
-                          city: e.target.value || null,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">State</label>
-                    <Input
-                      value={profileCustomer.state ?? ""}
-                      onChange={(e) =>
-                        setDraftCustomer({
-                          ...profileCustomer,
-                          state: e.target.value || null,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">ZIP</label>
-                    <Input
-                      value={profileCustomer.zip ?? ""}
-                      onChange={(e) =>
-                        setDraftCustomer({
-                          ...profileCustomer,
-                          zip: e.target.value || null,
-                        })
-                      }
-                    />
-                  </div>
+                  <AddressFields
+                    value={{
+                      address: profileCustomer.address ?? "",
+                      city: profileCustomer.city ?? "",
+                      state: profileCustomer.state ?? "",
+                      zip: profileCustomer.zip ?? "",
+                    }}
+                    onChange={(fields) =>
+                      setDraftCustomer({
+                        ...profileCustomer,
+                        address: fields.address || null,
+                        city: fields.city || null,
+                        state: fields.state || null,
+                        zip: fields.zip || null,
+                      })
+                    }
+                  />
                   <div>
                     <label className="mb-1 block text-sm font-medium">Lead source</label>
                     <Input
@@ -895,28 +881,14 @@ export function CustomerProfile({ customerId }: Props) {
                   onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
                   placeholder="Property name"
                   required
+                  className="sm:col-span-2"
                 />
-                <Input
-                  value={newProperty.address}
-                  onChange={(e) => setNewProperty({ ...newProperty, address: e.target.value })}
-                  placeholder="Address"
+                <AddressFields
+                  addressLabel="Property address"
+                  value={newProperty}
+                  onChange={(fields) => setNewProperty((prev) => ({ ...prev, ...fields }))}
                 />
-                <Input
-                  value={newProperty.city}
-                  onChange={(e) => setNewProperty({ ...newProperty, city: e.target.value })}
-                  placeholder="City"
-                />
-                <Input
-                  value={newProperty.state}
-                  onChange={(e) => setNewProperty({ ...newProperty, state: e.target.value })}
-                  placeholder="State"
-                />
-                <Input
-                  value={newProperty.zip}
-                  onChange={(e) => setNewProperty({ ...newProperty, zip: e.target.value })}
-                  placeholder="ZIP"
-                />
-                <Button type="submit">
+                <Button type="submit" className="sm:col-span-2">
                   <Plus className="h-4 w-4" />
                   Add property
                 </Button>

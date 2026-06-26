@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Loader2, MapPin, Phone, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { requestCurrentPosition } from "@/lib/maps/geolocation";
 import { todayHoursLabel } from "@/lib/parts-suppliers/hours";
 import type { PartsRunOption } from "@/lib/parts-suppliers/types";
 
@@ -28,14 +27,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
       setLoading(true);
       setMessage(null);
       try {
-        const position = await requestCurrentPosition();
-        const qs = new URLSearchParams();
-        if (position.ok) {
-          qs.set("originLat", String(position.lat));
-          qs.set("originLng", String(position.lng));
-        }
-
-        const res = await fetch(`/api/visits/${visitId}/parts-run?${qs.toString()}`);
+        const res = await fetch(`/api/visits/${visitId}/parts-run`);
         const data = await res.json();
         if (!res.ok) {
           toast.error(data.error ?? "Could not load parts suppliers");
@@ -105,14 +97,14 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
 
         <div className="space-y-3 p-4">
           <p className="text-sm text-muted-foreground">
-            Pick a nearby open supplier. Your job timer will pause and Google Maps will open for
-            directions.
+            Pick the closest open supplier to this job site. If the visit is in progress, your job
+            timer will pause and Google Maps will open for directions.
           </p>
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Finding open suppliers near you...
+              Finding open suppliers near this job site...
             </div>
           ) : options.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
