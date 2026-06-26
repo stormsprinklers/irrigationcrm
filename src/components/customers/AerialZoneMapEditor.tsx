@@ -284,31 +284,33 @@ export function AerialZoneMapEditor({
         ref={outerRef}
         className={cn(
           "relative w-full overflow-hidden rounded-md border bg-muted/20",
-          canInteract && (placingMarker ? "cursor-pointer" : "cursor-crosshair")
+          canInteract && (placingMarker ? "cursor-pointer" : "cursor-crosshair"),
+          readOnly && "pointer-events-none"
         )}
         style={
           useCrop && croppedLayout
             ? { height: croppedLayout.outerHeight, minHeight: 120 }
             : { minHeight: 200 }
         }
-        onClick={handleMapClick}
+        onClick={readOnly ? undefined : handleMapClick}
       >
-        <div
-          ref={containerRef}
-          className={cn("relative", useCrop && "absolute")}
-          style={
-            useCrop && croppedLayout
-              ? {
-                  width: croppedLayout.innerWidth,
-                  height: croppedLayout.innerHeight,
-                  left:
-                    croppedLayout.offsetLeft +
-                    Math.max(0, (containerWidth - croppedLayout.outerWidth) / 2),
-                  top: croppedLayout.offsetTop,
-                }
-              : { width: "100%" }
-          }
-        >
+        <div className="absolute inset-0 overflow-hidden">
+          <div
+            ref={containerRef}
+            className={cn("relative", useCrop && "absolute")}
+            style={
+              useCrop && croppedLayout
+                ? {
+                    width: croppedLayout.innerWidth,
+                    height: croppedLayout.innerHeight,
+                    left:
+                      croppedLayout.offsetLeft +
+                      Math.max(0, (containerWidth - croppedLayout.outerWidth) / 2),
+                    top: croppedLayout.offsetTop,
+                  }
+                : { width: "100%" }
+            }
+          >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imageUrl}
@@ -403,6 +405,7 @@ export function AerialZoneMapEditor({
               )}
             </svg>
           )}
+          </div>
         </div>
       </div>
 
