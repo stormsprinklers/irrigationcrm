@@ -505,6 +505,7 @@ model Company {
   emailMessages          EmailMessage[]
   internalGroups         InternalGroup[]
   serviceAreas           ServiceArea[]
+  partsSuppliers         PartsSupplier[]
   crews                  Crew[]
   visits                 Visit[]
   properties             CustomerProperty[]
@@ -1442,6 +1443,33 @@ model ServiceArea {
 
   @@unique([companyId, slug])
   @@index([companyId, sortOrder])
+}
+
+model PartsSupplier {
+  id            String    @id @default(cuid())
+  companyId     String
+  name          String
+  googlePlaceId String?
+  address       String?
+  city          String?
+  state         String?
+  zip           String?
+  latitude      Float?
+  longitude     Float?
+  phone         String?
+  hoursJson     Json?
+  weekdayHours  String[]  @default([])
+  timezone      String?
+  isActive      Boolean   @default(true)
+  sortOrder     Int       @default(0)
+  lastSyncedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, googlePlaceId])
+  @@index([companyId, isActive, sortOrder])
 }
 
 model ServiceAreaZip {

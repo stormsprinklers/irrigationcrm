@@ -6,13 +6,14 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
-import { ArrowLeft, CheckCircle2, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
+import { PartsRunDialog } from "@/components/visits/PartsRunDialog";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
@@ -173,6 +174,7 @@ export function VisitDetail({ visitId }: Props) {
   const [timeLoading, setTimeLoading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [partsRunOpen, setPartsRunOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [visitRes, timeRes, notesRes, attachmentsRes] = await Promise.all([
@@ -369,6 +371,27 @@ export function VisitDetail({ visitId }: Props) {
         onEvent={handleTimeEvent}
         loading={timeLoading}
         eta={visitEta(visit)}
+      />
+
+      {visit.status === "IN_PROGRESS" || visit.status === "PAUSED" ? (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={() => setPartsRunOpen(true)}>
+            <Wrench className="h-4 w-4" />
+            Parts Run
+          </Button>
+        </div>
+      ) : null}
+
+      <PartsRunDialog
+        visitId={visit.id}
+        open={partsRunOpen}
+        onOpenChange={setPartsRunOpen}
+        onPaused={async () => {
+          const timeRes = await fetch(`/api/visits/${visitId}/time`);
+          if (timeRes.ok) setTimeEvents(await timeRes.json());
+          const visitRes = await fetch(`/api/visits/${visitId}`);
+          if (visitRes.ok) setVisit(await visitRes.json());
+        }}
       />
 
       {visit.designExportMetadata ? (

@@ -25,6 +25,8 @@ export const visitInclude = {
       city: true,
       state: true,
       zip: true,
+      latitude: true,
+      longitude: true,
       aerialImageUrl: true,
       propertyDiagramUrl: true,
       irrigationMapStatus: true,
