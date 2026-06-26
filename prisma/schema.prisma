@@ -436,6 +436,7 @@ model Company {
   notifyInvoicePaid        Boolean  @default(true)
   notifyVisitScheduled     Boolean  @default(true)
   notifyVisitEnRoute       Boolean  @default(true)
+  notifyVisitEnRouteIncludeTechnicianPhoto Boolean @default(false)
   notifyVisitTimeUpdated   Boolean  @default(true)
   notifyVisitCancelled     Boolean  @default(true)
   notifyVisitCompleted     Boolean  @default(true)

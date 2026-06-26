@@ -5,6 +5,7 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import { assertCustomerCanReceiveNotifications } from "./guard";
+import { technicianPhotoMediaUrl } from "./technician-photo";
 import {
   createTrackedLink,
   injectTrackedUrlsInText,
@@ -30,6 +31,8 @@ export type SendOptions = {
   visitId?: string;
   invoiceId?: string;
   estimateId?: string;
+  /** Assigned technician for visit notifications (e.g. en-route MMS photo). */
+  technicianUserId?: string;
   /** Only send SMS (skip email). */
   smsOnly?: boolean;
   /** Only send SMS if email fails or customer has no email. */
@@ -109,6 +112,7 @@ export async function sendOperationalNotification(params: {
       notifyVisitCancelled: true,
       notifyVisitCompleted: true,
       notifyVisitEnRoute: true,
+      notifyVisitEnRouteIncludeTechnicianPhoto: true,
       notifyReviewRequest: true,
       notifyInvoicePaid: true,
       notifyEstimateSent: true,
@@ -128,6 +132,22 @@ export async function sendOperationalNotification(params: {
     include: { template: true },
   });
   if (rules.length === 0) return result;
+
+  let technicianPhotoUrl: string | null = null;
+  if (
+    params.event === "VISIT_EN_ROUTE" &&
+    company.notifyVisitEnRouteIncludeTechnicianPhoto &&
+    options.technicianUserId
+  ) {
+    const technician = await prisma.user.findFirst({
+      where: { id: options.technicianUserId, companyId: params.companyId },
+      select: { photoUrl: true },
+    });
+    technicianPhotoUrl = technicianPhotoMediaUrl({
+      userId: options.technicianUserId,
+      photoUrl: technician?.photoUrl,
+    });
+  }
 
   const linkPlaceholders = Object.fromEntries(
     Object.entries(options.linkPlaceholders ?? {}).filter(([, v]) => Boolean(v))
@@ -231,6 +251,8 @@ export async function sendOperationalNotification(params: {
           from: company.twilioPhone,
           to,
           body,
+          mediaUrl:
+            params.event === "VISIT_EN_ROUTE" && technicianPhotoUrl ? [technicianPhotoUrl] : undefined,
           statusCallback: twilioSmsStatusCallbackUrl(),
         });
         await prisma.notificationDelivery.update({
@@ -275,7 +297,13 @@ export async function sendOperationalNotification(params: {
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone) continue;
       try {
-        await sendSms({ from: company.twilioPhone, to, body, statusCallback: twilioSmsStatusCallbackUrl() });
+        await sendSms({
+          from: company.twilioPhone,
+          to,
+          body,
+          mediaUrl: params.event === "VISIT_EN_ROUTE" && technicianPhotoUrl ? [technicianPhotoUrl] : undefined,
+          statusCallback: twilioSmsStatusCallbackUrl(),
+        });
         await prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { smsSent: true } });
         result.smsSent = true;
         break;

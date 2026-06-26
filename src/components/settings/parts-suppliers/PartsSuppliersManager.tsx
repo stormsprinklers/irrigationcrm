@@ -128,7 +128,7 @@ export function PartsSuppliersManager() {
         </div>
 
         {results.length > 0 ? (
-          <ul className="mt-4 divide-y rounded-md border">
+          <ul className="mt-4 max-h-[32rem] divide-y overflow-y-auto rounded-md border">
             {results.map((result) => {
               const isAdded = configuredPlaceIds.has(result.googlePlaceId);
               const isAdding = addingId === result.googlePlaceId;
@@ -175,7 +175,7 @@ export function PartsSuppliersManager() {
         ) : suppliers.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">No suppliers configured yet.</p>
         ) : (
-          <ul className="divide-y">
+          <ul className="max-h-[32rem] divide-y overflow-y-auto">
             {suppliers.map((supplier) => (
               <li key={supplier.id} className="flex items-start justify-between gap-3 p-4">
                 <div className="min-w-0">

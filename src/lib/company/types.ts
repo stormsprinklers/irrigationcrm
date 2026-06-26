@@ -37,6 +37,7 @@ export const companySettingsSelect = {
   notifyInvoicePaid: true,
   notifyVisitScheduled: true,
   notifyVisitEnRoute: true,
+  notifyVisitEnRouteIncludeTechnicianPhoto: true,
   notifyVisitTimeUpdated: true,
   notifyVisitCancelled: true,
   notifyVisitCompleted: true,
@@ -101,6 +102,7 @@ export type CompanySettingsDTO = {
   notifyInvoicePaid: boolean;
   notifyVisitScheduled: boolean;
   notifyVisitEnRoute: boolean;
+  notifyVisitEnRouteIncludeTechnicianPhoto: boolean;
   notifyVisitTimeUpdated: boolean;
   notifyVisitCancelled: boolean;
   notifyVisitCompleted: boolean;

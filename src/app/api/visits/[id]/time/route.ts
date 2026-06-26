@@ -167,7 +167,10 @@ export async function POST(request: NextRequest, { params }: Params) {
           visitAddress: destination,
           timezone: visit.company.timezone,
         }),
-        options: { visitId: id },
+        options: {
+          visitId: id,
+          technicianUserId: updated.assignedUser?.id ?? user.id,
+        },
       }).catch((err) => console.error("VISIT_EN_ROUTE notification error:", err));
     }
 

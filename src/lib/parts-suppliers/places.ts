@@ -88,7 +88,7 @@ export async function searchPlaces(textQuery: string): Promise<PlaceSearchResult
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask": PLACE_FIELD_MASK,
     },
-    body: JSON.stringify({ textQuery, maxResultCount: 5 }),
+    body: JSON.stringify({ textQuery, maxResultCount: 10 }),
     cache: "no-store",
   });
 
