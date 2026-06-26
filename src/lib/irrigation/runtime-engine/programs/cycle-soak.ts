@@ -13,6 +13,9 @@ const SLOPE_MAX_CONTINUOUS: Record<SlopeLevel, number> = {
   steep: 10,
 };
 
+const AUTO_CYCLE_SOAK_THRESHOLD_MINUTES = 60;
+const AUTO_CYCLE_SOAK_DEFAULT_SOAK_MINUTES = 30;
+
 function soakMinutesBetweenCycles(soilType: SoilType, slopeLevel: SlopeLevel): number {
   if (soilType === "clay" && slopeLevel === "steep") return 45;
   if (soilType === "clay") return 30;
@@ -28,7 +31,34 @@ export function calculateCycleSoak(
   slopeLevel: SlopeLevel,
   enabled: boolean
 ): CycleSoakPlan {
-  if (!enabled || totalRuntimeMinutes <= 0) {
+  if (totalRuntimeMinutes <= 0) {
+    return {
+      enabled: false,
+      cycleCount: 1,
+      minutesPerCycle: 0,
+      soakMinutes: 0,
+      wallClockMinutes: 0,
+      description: "Single continuous run",
+    };
+  }
+
+  // Always split long per-event runtimes into two cycles, regardless of settings or soil.
+  if (totalRuntimeMinutes > AUTO_CYCLE_SOAK_THRESHOLD_MINUTES) {
+    const cycleCount = 2;
+    const minutesPerCycle = Math.ceil(totalRuntimeMinutes / cycleCount);
+    const soakMinutes =
+      soakMinutesBetweenCycles(soilType, slopeLevel) || AUTO_CYCLE_SOAK_DEFAULT_SOAK_MINUTES;
+    return {
+      enabled: true,
+      cycleCount,
+      minutesPerCycle,
+      soakMinutes,
+      wallClockMinutes: minutesPerCycle * cycleCount + soakMinutes * (cycleCount - 1),
+      description: `Auto cycle-soak: 2 runs × ${minutesPerCycle} min (${soakMinutes} min soak; runtime exceeds 60 min)`,
+    };
+  }
+
+  if (!enabled) {
     return {
       enabled: false,
       cycleCount: 1,

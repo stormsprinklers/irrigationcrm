@@ -20,6 +20,18 @@ export const WATERING_WINDOW = {
   prohibitedEndMinutes: 18 * 60,
 };
 
+const ALL_DAYS: DayOfWeekCode[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+];
+
+const PROGRAM_IDS: ProgramId[] = ["A", "B", "C"];
+
 export function formatTimeOfDay(totalMinutes: number): string {
   const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
   const hours24 = Math.floor(normalized / 60);
@@ -27,6 +39,17 @@ export function formatTimeOfDay(totalMinutes: number): string {
   const period = hours24 >= 12 ? "PM" : "AM";
   const hours12 = hours24 % 12 || 12;
   return `${hours12}:${mins.toString().padStart(2, "0")} ${period}`;
+}
+
+export function parseTimeOfDay(label: string): number {
+  const match = label.match(/^(\d{1,2}):(\d{2}) (AM|PM)$/);
+  if (!match) throw new Error(`Invalid time label: ${label}`);
+  let hours = Number.parseInt(match[1], 10);
+  const mins = Number.parseInt(match[2], 10);
+  const period = match[3];
+  if (period === "AM" && hours === 12) hours = 0;
+  if (period === "PM" && hours !== 12) hours += 12;
+  return hours * 60 + mins;
 }
 
 function daysLabel(days: DayOfWeekCode[]): string {
@@ -42,89 +65,189 @@ function daysLabel(days: DayOfWeekCode[]): string {
   return days.map((d) => labels[d]).join(", ");
 }
 
-function programForVegetation(vegetationType: VegetationType | null): ProgramId {
-  if (!vegetationType || vegetationType === "grass") return "A";
-  return "B";
+function resolveZoneDaysOfWeek(
+  zone: ZoneRuntimeInput,
+  result: ZoneRuntimeResult,
+  droughtMode: boolean
+): DayOfWeekCode[] {
+  if (result.establishmentOverride) return ALL_DAYS;
+  if (droughtMode) return [...DROUGHT_DAYS];
+
+  const vegetationType = (zone.vegetationType ?? "grass") as VegetationType;
+  return DEFAULT_DAYS_BY_VEGETATION[vegetationType].slice(0, result.daysPerWeek);
 }
 
-function assignPrograms(
+function programCycleCount(result: ZoneRuntimeResult): number {
+  return result.cycleSoak.enabled ? result.cycleSoak.cycleCount : 1;
+}
+
+function scheduleGroupKey(
+  days: DayOfWeekCode[],
+  result: ZoneRuntimeResult
+): string {
+  return `${days.join(",")}|${result.establishmentOverride ? "est" : "norm"}|c${programCycleCount(result)}`;
+}
+
+type ProgramDraft = {
+  key: string;
+  daysOfWeek: DayOfWeekCode[];
+  isEstablishment: boolean;
+  cycleCount: number;
+  items: { zone: ZoneRuntimeInput; result: ZoneRuntimeResult }[];
+  startTimes: string[];
+  zones: ProgramZoneEntry[];
+  totalWallClockMinutes: number;
+  totalGallonsPerWeek: number;
+};
+
+function clusterZonesIntoPrograms(
   zoneResults: ZoneRuntimeResult[],
-  zones: ZoneRuntimeInput[]
-): Map<ProgramId, { zone: ZoneRuntimeInput; result: ZoneRuntimeResult }[]> {
-  const map = new Map<ProgramId, { zone: ZoneRuntimeInput; result: ZoneRuntimeResult }[]>();
-  map.set("A", []);
-  map.set("B", []);
-  map.set("C", []);
+  zones: ZoneRuntimeInput[],
+  droughtMode: boolean
+): ProgramDraft[] {
+  const groups = new Map<string, ProgramDraft>();
 
   for (const result of zoneResults) {
     const zone = zones.find((z) => z.id === result.zoneId);
     if (!zone) continue;
-    const programId = result.establishmentOverride
-      ? "C"
-      : programForVegetation(zone.vegetationType as VegetationType | null);
-    map.get(programId)!.push({ zone, result });
+
+    const daysOfWeek = resolveZoneDaysOfWeek(zone, result, droughtMode);
+    const key = scheduleGroupKey(daysOfWeek, result);
+    const cycleCount = programCycleCount(result);
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        daysOfWeek,
+        isEstablishment: result.establishmentOverride,
+        cycleCount,
+        items: [],
+        startTimes: [],
+        zones: [],
+        totalWallClockMinutes: 0,
+        totalGallonsPerWeek: 0,
+      });
+    }
+
+    groups.get(key)!.items.push({ zone, result });
   }
 
-  return map;
-}
-
-function resolveDaysOfWeek(
-  zoneResults: { result: ZoneRuntimeResult; zone: ZoneRuntimeInput }[],
-  droughtMode: boolean
-): DayOfWeekCode[] {
-  if (droughtMode) return DROUGHT_DAYS;
-
-  const establishment = zoneResults.some((z) => z.result.establishmentOverride);
-  if (establishment) {
-    return ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-  }
-
-  const vegetationTypes = new Set(
-    zoneResults.map((z) => (z.zone.vegetationType ?? "grass") as VegetationType)
-  );
-
-  if (vegetationTypes.size === 1) {
-    const vt = [...vegetationTypes][0];
-    return DEFAULT_DAYS_BY_VEGETATION[vt].slice(0, zoneResults[0]?.result.daysPerWeek ?? 3);
-  }
-
-  return DEFAULT_DAYS_BY_VEGETATION.grass.slice(0, zoneResults[0]?.result.daysPerWeek ?? 3);
-}
-
-function buildStartTimes(wallClockPerRun: number, maxStartTimes = 3): string[] {
-  const windowMinutes =
-    WATERING_WINDOW.prohibitedStartMinutes - WATERING_WINDOW.earliestStartMinutes;
-
-  if (wallClockPerRun <= windowMinutes) {
-    return [formatTimeOfDay(WATERING_WINDOW.earliestStartMinutes)];
-  }
-
-  const needed = Math.min(
-    maxStartTimes,
-    Math.ceil(wallClockPerRun / windowMinutes)
-  );
-
-  if (needed <= 1) {
-    return [formatTimeOfDay(WATERING_WINDOW.earliestStartMinutes)];
-  }
-
-  const gap = Math.floor(windowMinutes / needed);
-  return Array.from({ length: needed }, (_, i) =>
-    formatTimeOfDay(WATERING_WINDOW.earliestStartMinutes + i * gap)
-  );
-}
-
-function staggerZones(
-  entries: ProgramZoneEntry[],
-  startMinutes: number
-): ProgramZoneEntry[] {
-  let cursor = startMinutes;
-  return entries.map((entry) => {
-    const startTime = formatTimeOfDay(cursor);
-    const finishTime = formatTimeOfDay(cursor + entry.cycleSoak.wallClockMinutes);
-    cursor += entry.cycleSoak.wallClockMinutes;
-    return { ...entry, startTime, finishTime };
+  return [...groups.values()].sort((a, b) => {
+    if (a.isEstablishment !== b.isEstablishment) {
+      return a.isEstablishment ? 1 : -1;
+    }
+    const minStationA = Math.min(...a.items.map((item) => item.result.stationNumber));
+    const minStationB = Math.min(...b.items.map((item) => item.result.stationNumber));
+    return minStationA - minStationB;
   });
+}
+
+function daysOverlap(a: DayOfWeekCode[], b: DayOfWeekCode[]): boolean {
+  const setA = new Set(a);
+  return b.some((day) => setA.has(day));
+}
+
+export type ProgramTimeline = {
+  startTimes: string[];
+  zones: ProgramZoneEntry[];
+  endMinutes: number;
+};
+
+export function buildProgramTimeline(
+  entries: ProgramZoneEntry[],
+  baseStartMinutes: number,
+  cycleCount: number
+): ProgramTimeline {
+  const sorted = [...entries].sort((a, b) => a.stationNumber - b.stationNumber);
+  const zoneTiming = new Map<
+    string,
+    { firstStart?: number; lastFinish?: number }
+  >();
+  for (const entry of sorted) {
+    zoneTiming.set(entry.zoneId, {});
+  }
+
+  const startTimesMinutes: number[] = [];
+  let cursor = baseStartMinutes;
+
+  for (let cycle = 0; cycle < cycleCount; cycle++) {
+    startTimesMinutes.push(cursor);
+
+    for (const entry of sorted) {
+      const activeCycle = cycle < entry.cycleSoak.cycleCount;
+      const minutes = activeCycle ? entry.cycleSoak.minutesPerCycle : 0;
+      if (minutes <= 0) continue;
+
+      const timing = zoneTiming.get(entry.zoneId)!;
+      if (timing.firstStart == null) timing.firstStart = cursor;
+      timing.lastFinish = cursor + minutes;
+      cursor += minutes;
+    }
+
+    if (cycle < cycleCount - 1) {
+      const soakMinutes = sorted.reduce((max, entry) => {
+        if (cycle + 1 >= entry.cycleSoak.cycleCount) return max;
+        return Math.max(max, entry.cycleSoak.soakMinutes);
+      }, 0);
+      cursor += soakMinutes;
+    }
+  }
+
+  const zones = sorted.map((entry) => {
+    const timing = zoneTiming.get(entry.zoneId)!;
+    return {
+      ...entry,
+      startTime:
+        timing.firstStart != null ? formatTimeOfDay(timing.firstStart) : undefined,
+      finishTime:
+        timing.lastFinish != null ? formatTimeOfDay(timing.lastFinish) : undefined,
+    };
+  });
+
+  return {
+    startTimes: startTimesMinutes.map(formatTimeOfDay),
+    zones,
+    endMinutes: cursor,
+  };
+}
+
+function assignNonOverlappingSchedules(drafts: ProgramDraft[]): void {
+  const scheduled: { daysOfWeek: DayOfWeekCode[]; endMinutes: number }[] = [];
+
+  for (const draft of drafts) {
+    draft.items.sort((a, b) => a.result.stationNumber - b.result.stationNumber);
+
+    let baseStart = WATERING_WINDOW.earliestStartMinutes;
+    for (const previous of scheduled) {
+      if (daysOverlap(previous.daysOfWeek, draft.daysOfWeek)) {
+        baseStart = Math.max(baseStart, previous.endMinutes);
+      }
+    }
+
+    const entries: ProgramZoneEntry[] = draft.items.map(({ result }) => ({ ...result }));
+    const timeline = buildProgramTimeline(entries, baseStart, draft.cycleCount);
+
+    draft.startTimes = timeline.startTimes;
+    draft.zones = timeline.zones;
+    draft.totalWallClockMinutes = timeline.endMinutes - baseStart;
+    draft.totalGallonsPerWeek = draft.zones.reduce((sum, zone) => sum + zone.gallonsPerWeek, 0);
+
+    scheduled.push({
+      daysOfWeek: draft.daysOfWeek,
+      endMinutes: timeline.endMinutes,
+    });
+  }
+}
+
+function programLabel(
+  programId: ProgramId,
+  daysOfWeek: DayOfWeekCode[],
+  isEstablishment: boolean
+): string {
+  if (isEstablishment) {
+    return `Program ${programId} — Establishment (temporary)`;
+  }
+  return `Program ${programId} — ${daysLabel(daysOfWeek)}`;
 }
 
 export function buildControllerGuide(
@@ -151,7 +274,13 @@ export function buildControllerGuide(
     landscapeET
   );
 
-  const programMap = assignPrograms(zoneResults, params.zones);
+  const drafts = clusterZonesIntoPrograms(
+    zoneResults,
+    params.zones,
+    params.settings.droughtRestrictionsActive
+  );
+  assignNonOverlappingSchedules(drafts);
+
   const programs: ControllerProgram[] = [];
   const notes: string[] = [];
 
@@ -159,46 +288,31 @@ export function buildControllerGuide(
     notes.push("Drought restrictions active: watering limited to 2 days per week (Tue & Fri).");
   }
 
-  notes.push("No watering between 9:00 AM and 6:00 PM. Prefer early morning start times.");
-
   if (!params.settings.cycleSoakEnabled) {
-    notes.push("Cycle-soak is off. Enable in property settings for clay or sloped zones.");
+    notes.push(
+      "Optional cycle-soak for shorter runtimes is off. Runtimes over 60 min are still auto-split into two cycles."
+    );
   }
 
-  const programLabels: Record<ProgramId, string> = {
-    A: "Program A — Turf",
-    B: "Program B — Shrubs / drip / specialty",
-    C: "Program C — Establishment (temporary)",
-  };
-
-  for (const programId of ["A", "B", "C"] as ProgramId[]) {
-    const group = programMap.get(programId) ?? [];
-    if (!group.length) continue;
-
-    group.sort((a, b) => a.result.stationNumber - b.result.stationNumber);
-
-    const daysOfWeek = resolveDaysOfWeek(group, params.settings.droughtRestrictionsActive);
-    const programZones: ProgramZoneEntry[] = group.map(({ result }) => ({ ...result }));
-
-    const totalWallClock = programZones.reduce(
-      (sum, z) => sum + z.cycleSoak.wallClockMinutes,
-      0
-    );
-
-    const startTimes = buildStartTimes(totalWallClock);
-    const staggered = staggerZones(programZones, WATERING_WINDOW.earliestStartMinutes);
-
+  drafts.slice(0, PROGRAM_IDS.length).forEach((draft, index) => {
+    const programId = PROGRAM_IDS[index];
     programs.push({
       id: programId,
-      label: programLabels[programId],
-      daysOfWeek,
-      daysLabel: daysLabel(daysOfWeek),
-      startTimes,
-      zones: staggered,
-      totalWallClockMinutes: totalWallClock,
-      totalGallonsPerWeek: programZones.reduce((s, z) => s + z.gallonsPerWeek, 0),
-      isEstablishment: programId === "C",
+      label: programLabel(programId, draft.daysOfWeek, draft.isEstablishment),
+      daysOfWeek: draft.daysOfWeek,
+      daysLabel: daysLabel(draft.daysOfWeek),
+      startTimes: draft.startTimes,
+      zones: draft.zones,
+      totalWallClockMinutes: draft.totalWallClockMinutes,
+      totalGallonsPerWeek: draft.totalGallonsPerWeek,
+      isEstablishment: draft.isEstablishment,
     });
+  });
+
+  if (drafts.length > PROGRAM_IDS.length) {
+    notes.push(
+      `More than ${PROGRAM_IDS.length} distinct schedules were detected; only the first ${PROGRAM_IDS.length} are shown. Adjust zone watering days or cycle counts to consolidate.`
+    );
   }
 
   return {

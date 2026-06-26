@@ -125,7 +125,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
               setSettings((s) => ({ ...s, cycleSoakEnabled: e.target.checked }))
             }
           />
-          Cycle-soak splitting
+          Cycle-soak for clay/sloped zones (always on when a run exceeds 60 min)
         </label>
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Grass season:</span>
@@ -182,6 +182,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
                           ? ` (${zone.cycleSoak.description})`
                           : ""}
                         {zone.startTime ? ` · ${zone.startTime}` : ""}
+                        {zone.finishTime ? `–${zone.finishTime}` : ""}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         ~{zone.gallonsPerWeek} gal/wk · KL {zone.breakdown.KL.toFixed(2)} · PR{" "}

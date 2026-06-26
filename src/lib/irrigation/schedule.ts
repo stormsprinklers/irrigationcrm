@@ -186,6 +186,31 @@ export function calculateCycleSoak(
   soilType: SoilType,
   slopeLevel: SlopeLevel
 ): CycleSoakPlan {
+  if (totalRuntimeMinutes <= 0) {
+    return {
+      enabled: false,
+      cycleCount: 1,
+      minutesPerCycle: 0,
+      soakMinutes: 0,
+      wallClockMinutes: 0,
+      description: "Single continuous run",
+    };
+  }
+
+  if (totalRuntimeMinutes > 60) {
+    const cycleCount = 2;
+    const minutesPerCycle = Math.ceil(totalRuntimeMinutes / cycleCount);
+    const soakMinutes = soakMinutesBetweenCycles(soilType, slopeLevel) || 30;
+    return {
+      enabled: true,
+      cycleCount,
+      minutesPerCycle,
+      soakMinutes,
+      wallClockMinutes: minutesPerCycle * cycleCount + soakMinutes * (cycleCount - 1),
+      description: `Auto cycle-soak: 2 runs × ${minutesPerCycle} min (${soakMinutes} min soak; runtime exceeds 60 min)`,
+    };
+  }
+
   const maxContinuous = Math.min(
     MAX_CONTINUOUS_RUN[soilType],
     SLOPE_MAX_CONTINUOUS[slopeLevel]

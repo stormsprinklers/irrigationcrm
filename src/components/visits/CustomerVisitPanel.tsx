@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { ChevronRight, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { ChevronDown, ChevronRight, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ type Props = {
 };
 
 export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl }: Props) {
-  const [tab, setTab] = useState<"contact" | "history">("contact");
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -88,185 +88,180 @@ export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl }: P
 
   return (
     <div className="overflow-hidden rounded-lg border bg-white">
-      <div className="flex border-b border-border">
-        <button
-          type="button"
-          className={cn(
-            "flex-1 px-4 py-2.5 text-sm font-medium transition-colors",
-            tab === "contact"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => setTab("contact")}
-        >
-          Contact
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "flex-1 px-4 py-2.5 text-sm font-medium transition-colors",
-            tab === "history"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => setTab("history")}
-        >
-          Customer history
-          {history !== null ? (
-            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-              ({history.pastVisitCount} past visit{history.pastVisitCount === 1 ? "" : "s"})
-            </span>
-          ) : null}
-        </button>
+      <div className="border-b border-border px-4 py-2.5">
+        <h2 className="text-sm font-medium">Contact</h2>
       </div>
 
-      {tab === "contact" ? (
-        <div className="space-y-3 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href={`/customers/${customer.id}`}
-              className="mr-1 font-medium text-primary hover:underline"
-            >
-              <CustomerNameWithBadge
-                name={customer.name}
-                doNotService={customer.doNotService}
-                nameClassName="font-medium"
-              />
-            </Link>
-            {customer.phone ? (
-              <>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={buildInboxCustomerUrl("voice", linkParams)}>
-                    <Phone className="h-4 w-4" />
-                    Call
-                  </Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={buildInboxCustomerUrl("sms", linkParams)}>
-                    <MessageSquare className="h-4 w-4" />
-                    Text
-                  </Link>
-                </Button>
-              </>
-            ) : null}
-            {customer.email ? (
+      <div className="space-y-3 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/customers/${customer.id}`}
+            className="mr-1 font-medium text-primary hover:underline"
+          >
+            <CustomerNameWithBadge
+              name={customer.name}
+              doNotService={customer.doNotService}
+              nameClassName="font-medium"
+            />
+          </Link>
+          {customer.phone ? (
+            <>
               <Button variant="outline" size="sm" asChild>
-                <Link href={buildInboxCustomerUrl("email", linkParams)}>
-                  <Mail className="h-4 w-4" />
-                  Email
+                <Link href={buildInboxCustomerUrl("voice", linkParams)}>
+                  <Phone className="h-4 w-4" />
+                  Call
                 </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={buildInboxCustomerUrl("sms", linkParams)}>
+                  <MessageSquare className="h-4 w-4" />
+                  Text
+                </Link>
+              </Button>
+            </>
+          ) : null}
+          {customer.email ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={buildInboxCustomerUrl("email", linkParams)}>
+                <Mail className="h-4 w-4" />
+                Email
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+
+        {jobAddress ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+            <span>{jobAddress}</span>
+            {mapsUrl ? (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                asChild
+                title="Navigate with Google Maps"
+              >
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                  <MapPin className="h-3.5 w-3.5" />
+                  <span className="sr-only">Open in Google Maps</span>
+                </a>
               </Button>
             ) : null}
           </div>
-          {jobAddress ? (
-            <div className="flex items-start gap-2 text-sm text-muted-foreground">
-              <p className="min-w-0 flex-1">{jobAddress}</p>
-              {mapsUrl ? (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  asChild
-                  title="Navigate with Google Maps"
-                >
-                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
-                    <MapPin className="h-4 w-4" />
-                    <span className="sr-only">Open in Google Maps</span>
-                  </a>
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="max-h-80 overflow-y-auto p-3">
-          {loadingHistory ? (
-            <p className="text-sm text-muted-foreground">Loading history...</p>
-          ) : !history ? (
-            <p className="text-sm text-muted-foreground">Could not load customer history.</p>
-          ) : (
-            <div className="space-y-4">
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Past visits
-                </h3>
-                {history.visits.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No other visits for this customer.</p>
-                ) : (
-                  <ul className="divide-y divide-border rounded-md border">
-                    {history.visits.map((visit) => (
-                      <li key={visit.id}>
-                        <Link
-                          href={`/visits/${visit.id}`}
-                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">{visit.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(visit.startAt), "MMM d, yyyy")} ·{" "}
-                              {visit.assignedUserName ?? "Unassigned"} ·{" "}
-                              {visit.status.replace(/_/g, " ")}
-                            </p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
+        ) : null}
 
-              {(history.estimatesLinkedToVisits.length > 0 ||
-                history.estimatesWithoutVisit.length > 0) && (
+        <button
+          type="button"
+          className="flex w-full items-center gap-1.5 text-left text-sm text-muted-foreground hover:text-foreground"
+          onClick={() => setHistoryExpanded((expanded) => !expanded)}
+          aria-expanded={historyExpanded}
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 transition-transform",
+              historyExpanded && "rotate-180"
+            )}
+          />
+          <span>
+            Customer history
+            {history !== null ? (
+              <span className="ml-1.5 text-xs">
+                ({history.pastVisitCount} past visit{history.pastVisitCount === 1 ? "" : "s"})
+              </span>
+            ) : null}
+          </span>
+        </button>
+
+        {historyExpanded ? (
+          <div className="max-h-80 overflow-y-auto border-t border-border pt-3">
+            {loadingHistory ? (
+              <p className="text-sm text-muted-foreground">Loading history...</p>
+            ) : !history ? (
+              <p className="text-sm text-muted-foreground">Could not load customer history.</p>
+            ) : (
+              <div className="space-y-4">
                 <section>
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Estimates
+                    Past visits
                   </h3>
-                  <ul className="divide-y divide-border rounded-md border">
-                    {history.estimatesLinkedToVisits.map((estimate) => (
-                      <li key={estimate.id}>
-                        <Link
-                          href={`/customers/estimates/${estimate.id}`}
-                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {formatMoney(estimate.total)} · {estimate.status}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Linked to visit: {estimate.visitTitle ?? estimate.visitId}
-                            </p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        </Link>
-                      </li>
-                    ))}
-                    {history.estimatesWithoutVisit.map((estimate) => (
-                      <li key={estimate.id}>
-                        <Link
-                          href={`/customers/estimates/${estimate.id}`}
-                          className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {formatMoney(estimate.total)} · {estimate.status}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(estimate.createdAt), "MMM d, yyyy")} · Not linked to
-                              a visit
-                            </p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
+                  {history.visits.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No other visits for this customer.</p>
+                  ) : (
+                    <ul className="divide-y divide-border rounded-md border">
+                      {history.visits.map((visit) => (
+                        <li key={visit.id}>
+                          <Link
+                            href={`/visits/${visit.id}`}
+                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{visit.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(visit.startAt), "MMM d, yyyy")} ·{" "}
+                                {visit.assignedUserName ?? "Unassigned"} ·{" "}
+                                {visit.status.replace(/_/g, " ")}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+
+                {(history.estimatesLinkedToVisits.length > 0 ||
+                  history.estimatesWithoutVisit.length > 0) && (
+                  <section>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Estimates
+                    </h3>
+                    <ul className="divide-y divide-border rounded-md border">
+                      {history.estimatesLinkedToVisits.map((estimate) => (
+                        <li key={estimate.id}>
+                          <Link
+                            href={`/customers/estimates/${estimate.id}`}
+                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {formatMoney(estimate.total)} · {estimate.status}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Linked to visit: {estimate.visitTitle ?? estimate.visitId}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          </Link>
+                        </li>
+                      ))}
+                      {history.estimatesWithoutVisit.map((estimate) => (
+                        <li key={estimate.id}>
+                          <Link
+                            href={`/customers/estimates/${estimate.id}`}
+                            className="flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-muted/50"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {formatMoney(estimate.total)} · {estimate.status}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(estimate.createdAt), "MMM d, yyyy")} · Not linked to
+                                a visit
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
