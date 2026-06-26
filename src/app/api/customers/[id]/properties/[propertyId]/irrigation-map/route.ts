@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { IrrigationMapStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { calculateZoneSchedule } from "@/lib/irrigation/runtime";
-import type {
-  IrrigationType,
-  ShadeLevel,
-  SlopeLevel,
-  SoilType,
-  VegetationType,
-} from "@/lib/irrigation/types";
+import {
+  buildControllerGuide,
+  calculateZoneRuntime,
+  defaultWeatherFallback,
+  fetchWeeklyWeather,
+  propertySettingsFromRecord,
+  zoneInputFromMapZone,
+} from "@/lib/irrigation/runtime-engine";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string; propertyId: string }> };
@@ -52,32 +52,76 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     if (body.publish) {
-      const mapZones = await prisma.propertyIrrigationMapZone.findMany({
-        where: { propertyId },
-        orderBy: { sortOrder: "asc" },
+      const fullProperty = await prisma.customerProperty.findFirst({
+        where: { id: propertyId },
+        include: { irrigationMapZones: { orderBy: { sortOrder: "asc" } } },
       });
+
+      const mapZones = fullProperty?.irrigationMapZones ?? [];
+
+      let weather = defaultWeatherFallback();
+      if (fullProperty?.latitude != null && fullProperty?.longitude != null) {
+        try {
+          weather = await fetchWeeklyWeather(fullProperty.latitude, fullProperty.longitude);
+          await prisma.customerProperty.update({
+            where: { id: propertyId },
+            data: {
+              etoWeeklyInches: weather.weeklyEToInches,
+              rainfallWeeklyInches: weather.totalRainfallInches,
+              etoCachedAt: new Date(),
+            },
+          });
+        } catch (err) {
+          console.error("Weather fetch on publish failed:", err);
+        }
+      }
+
+      const settings = propertySettingsFromRecord(fullProperty ?? {});
+      const zoneInputs = mapZones.map((z) => zoneInputFromMapZone(z));
+      const weatherInput = {
+        weeklyEToInches: settings.etoOverrideInches ?? weather.weeklyEToInches,
+        totalRainfallInches: weather.totalRainfallInches,
+        source: weather.source as "open_meteo",
+      };
+
+      const guide = buildControllerGuide({
+        propertyId,
+        settings,
+        zones: zoneInputs,
+        weather: weatherInput,
+      });
+
+      for (const [index, zone] of mapZones.entries()) {
+        const input = zoneInputFromMapZone(zone, index + 1);
+        const result = calculateZoneRuntime(input, settings, weatherInput);
+        if (result) {
+          await prisma.propertyIrrigationMapZone.update({
+            where: { id: zone.id },
+            data: {
+              baseRuntimeMinutes: result.runtimePerEventMinutes,
+              computedWeeklyRuntimeMinutes: result.weeklyRuntimeMinutes,
+              computedGallonsPerWeek: result.gallonsPerWeek,
+            },
+          });
+        }
+      }
 
       await prisma.propertyIrrigationZone.deleteMany({ where: { propertyId } });
       await prisma.propertyIrrigationZone.createMany({
         data: mapZones.map((zone, index) => {
-          const schedule =
-            zone.vegetationType && zone.irrigationType
-              ? calculateZoneSchedule({
-                  vegetationType: zone.vegetationType as VegetationType,
-                  irrigationType: zone.irrigationType as IrrigationType,
-                  shadeLevel: (zone.shadeLevel as ShadeLevel) ?? "full_sun",
-                  soilType: (zone.soilType as SoilType) ?? "loam",
-                  slopeLevel: (zone.slopeLevel as SlopeLevel) ?? "flat",
-                })
-              : null;
+          const input = zoneInputFromMapZone(zone, index + 1);
+          const result = calculateZoneRuntime(input, settings, weatherInput);
+          const programZone = guide.programs
+            .flatMap((p) => p.zones)
+            .find((z) => z.zoneId === zone.id);
 
           return {
             propertyId,
             stationNumber: index + 1,
             name: zone.name,
-            runMinutes: schedule?.adjustedRuntimeMinutes ?? zone.baseRuntimeMinutes,
-            wateringGuide: schedule
-              ? `${schedule.daysLabel} · ${schedule.startTime}–${schedule.finishTime}`
+            runMinutes: result?.runtimePerEventMinutes ?? zone.baseRuntimeMinutes,
+            wateringGuide: programZone
+              ? `${result?.daysPerWeek ?? 3} days/week · ${programZone.startTime ?? "5:00 AM"} · ${result?.gallonsPerWeek ?? 0} gal/wk`
               : null,
             sortOrder: index,
           };
@@ -86,7 +130,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
       await prisma.customerProperty.update({
         where: { id: propertyId },
-        data: { irrigationMapStatus: IrrigationMapStatus.PUBLISHED },
+        data: {
+          irrigationMapStatus: IrrigationMapStatus.PUBLISHED,
+          programGuideJson: guide as object,
+        },
       });
     }
 
@@ -142,6 +189,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           irrigationType: z.irrigationType ? String(z.irrigationType) : null,
           nozzleCount: z.nozzleCount != null ? Number(z.nozzleCount) : null,
           estimatedGpm: z.estimatedGpm != null ? Number(z.estimatedGpm) : null,
+          irrigatedSqFt: z.irrigatedSqFt != null ? Number(z.irrigatedSqFt) : null,
+          irrigationEfficiencyScore:
+            z.irrigationEfficiencyScore != null
+              ? Number(z.irrigationEfficiencyScore)
+              : null,
+          establishmentStage: z.establishmentStage
+            ? (String(z.establishmentStage) as "NORMAL" | "NEW_SOD" | "NEW_SEED")
+            : "NORMAL",
+          nozzleGpm: z.nozzleGpm != null ? Number(z.nozzleGpm) : null,
           baseRuntimeMinutes:
             z.baseRuntimeMinutes != null ? Number(z.baseRuntimeMinutes) : null,
           sortOrder: index,

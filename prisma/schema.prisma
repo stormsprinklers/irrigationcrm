@@ -826,6 +826,14 @@ model CustomerProperty {
   irrigationMapStatus  IrrigationMapStatus?
   waterSource          PropertyWaterSource?
   designProjectId      String?
+  grassSeason              GrassSeason           @default(COOL)
+  droughtRestrictionsActive Boolean              @default(true)
+  cycleSoakEnabled         Boolean              @default(false)
+  etoOverrideInches        Float?
+  etoWeeklyInches          Float?
+  etoCachedAt              DateTime?
+  rainfallWeeklyInches     Float?
+  programGuideJson         Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -2407,6 +2415,17 @@ enum PropertyWaterSource {
   BOTH
 }
 
+enum GrassSeason {
+  COOL
+  WARM
+}
+
+enum ZoneEstablishmentStage {
+  NORMAL
+  NEW_SOD
+  NEW_SEED
+}
+
 enum IrrigationMapMarkerType {
   POC
   FILTER
@@ -2586,6 +2605,12 @@ model PropertyIrrigationMapZone {
   nozzleCount         Int?
   estimatedGpm        Float?
   baseRuntimeMinutes  Int?
+  irrigatedSqFt           Int?
+  irrigationEfficiencyScore Int?
+  establishmentStage      ZoneEstablishmentStage @default(NORMAL)
+  nozzleGpm               Float?
+  computedWeeklyRuntimeMinutes Int?
+  computedGallonsPerWeek       Float?
   designVersionId     String?
   sortOrder           Int      @default(0)
   createdAt           DateTime @default(now())

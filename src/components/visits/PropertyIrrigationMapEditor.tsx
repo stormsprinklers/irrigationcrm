@@ -31,14 +31,8 @@ import {
   defaultZoneAttributes,
   IrrigationZoneAttributesPanel,
 } from "@/components/irrigation/IrrigationZoneAttributesPanel";
-import { calculateZoneSchedule } from "@/lib/irrigation/runtime";
-import type {
-  IrrigationType,
-  ShadeLevel,
-  SlopeLevel,
-  SoilType,
-  VegetationType,
-} from "@/lib/irrigation/types";
+import { resolveZoneGpm } from "@/lib/irrigation/runtime-engine";
+import type { IrrigationType } from "@/lib/irrigation/types";
 
 type MapZoneState = {
   name: string;
@@ -51,6 +45,10 @@ type MapZoneState = {
   nozzleCount?: number | null;
   estimatedGpm?: number | null;
   baseRuntimeMinutes?: number | null;
+  irrigatedSqFt?: number | null;
+  irrigationEfficiencyScore?: number | null;
+  establishmentStage?: string | null;
+  nozzleGpm?: number | null;
 };
 
 type Props = {
@@ -115,6 +113,10 @@ export function PropertyIrrigationMapEditor({
             nozzleCount?: number | null;
             estimatedGpm?: number | null;
             baseRuntimeMinutes?: number | null;
+            irrigatedSqFt?: number | null;
+            irrigationEfficiencyScore?: number | null;
+            establishmentStage?: string | null;
+            nozzleGpm?: number | null;
           }, index: number) => ({
             name: zone.name,
             polygon: polygonFromGeoJson(zone.polygonGeoJson),
@@ -126,6 +128,10 @@ export function PropertyIrrigationMapEditor({
             nozzleCount: zone.nozzleCount,
             estimatedGpm: zone.estimatedGpm,
             baseRuntimeMinutes: zone.baseRuntimeMinutes,
+            irrigatedSqFt: zone.irrigatedSqFt,
+            irrigationEfficiencyScore: zone.irrigationEfficiencyScore,
+            establishmentStage: zone.establishmentStage ?? "NORMAL",
+            nozzleGpm: zone.nozzleGpm,
             color: ZONE_MAP_COLORS[index % ZONE_MAP_COLORS.length],
           })
         )
@@ -215,16 +221,13 @@ export function PropertyIrrigationMapEditor({
               irrigationZoneCount: zones.length,
             },
             mapZones: zones.map((zone) => {
-              const schedule =
-                zone.vegetationType && zone.irrigationType
-                  ? calculateZoneSchedule({
-                      vegetationType: zone.vegetationType as VegetationType,
-                      irrigationType: zone.irrigationType as IrrigationType,
-                      shadeLevel: (zone.shadeLevel as ShadeLevel) ?? "full_sun",
-                      soilType: (zone.soilType as SoilType) ?? "loam",
-                      slopeLevel: (zone.slopeLevel as SlopeLevel) ?? "flat",
-                    })
-                  : null;
+              const irrigationType = (zone.irrigationType ?? "spray") as IrrigationType;
+              const totalGpm = resolveZoneGpm(
+                irrigationType,
+                zone.nozzleCount,
+                zone.estimatedGpm,
+                zone.nozzleGpm
+              );
               return {
                 name: zone.name,
                 polygonGeoJson: polygonToGeoJson(zone.polygon),
@@ -234,12 +237,12 @@ export function PropertyIrrigationMapEditor({
                 soilType: zone.soilType,
                 irrigationType: zone.irrigationType,
                 nozzleCount: zone.nozzleCount,
-                estimatedGpm:
-                  zone.nozzleCount != null
-                    ? Math.round(zone.nozzleCount * 0.5 * 100) / 100
-                    : zone.estimatedGpm,
-                baseRuntimeMinutes:
-                  schedule?.adjustedRuntimeMinutes ?? zone.baseRuntimeMinutes,
+                estimatedGpm: totalGpm,
+                irrigatedSqFt: zone.irrigatedSqFt,
+                irrigationEfficiencyScore: zone.irrigationEfficiencyScore,
+                establishmentStage: zone.establishmentStage ?? "NORMAL",
+                nozzleGpm: zone.nozzleGpm,
+                baseRuntimeMinutes: zone.baseRuntimeMinutes,
               };
             }),
             valves,

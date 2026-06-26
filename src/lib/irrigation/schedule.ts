@@ -40,7 +40,7 @@ export const DEFAULT_FIRST_START_MINUTES = 5 * 60; // 5:00 AM
 export const UTAH_WATERING_WINDOW = {
   bestStartEarliest: 5 * 60, // 5:00 AM
   bestFinishBy: 9 * 60 + 30, // ~9:30 AM (near sunrise in summer)
-  avoidStart: 10 * 60, // 10:00 AM
+  avoidStart: 9 * 60, // 9:00 AM
   avoidEnd: 18 * 60, // 6:00 PM
 };
 

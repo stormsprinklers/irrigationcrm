@@ -16,7 +16,13 @@ import {
   WIZARD_STEPS,
   ZONE_MAP_COLORS,
 } from "@/lib/irrigation/constants";
-import { calculateZoneSchedule } from "@/lib/irrigation/runtime";
+import {
+  buildControllerGuide,
+  defaultWeatherFallback,
+  propertySettingsFromRecord,
+  resolveZoneGpm,
+  zoneInputFromMapZone,
+} from "@/lib/irrigation/runtime-engine";
 import { polygonFromGeoJson, polygonToGeoJson } from "@/lib/irrigation/image-polygon";
 import type { ImagePolygon } from "@/lib/irrigation/image-polygon";
 import type {
@@ -214,13 +220,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     setSaving(true);
     try {
       const mapZones = zones.map((z) => {
-        const schedule = calculateZoneSchedule({
-          vegetationType: z.vegetationType,
-          irrigationType: z.irrigationType,
-          shadeLevel: z.shadeLevel,
-          soilType: z.soilType,
-          slopeLevel: z.slopeLevel,
-        });
+        const totalGpm = resolveZoneGpm(z.irrigationType, z.nozzleCount, null, null);
         return {
           name: z.name,
           polygonGeoJson: polygonToGeoJson(z.polygon),
@@ -230,8 +230,8 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           soilType: z.soilType,
           irrigationType: z.irrigationType,
           nozzleCount: z.nozzleCount,
-          estimatedGpm: Math.round(z.nozzleCount * 0.5 * 100) / 100,
-          baseRuntimeMinutes: schedule.adjustedRuntimeMinutes,
+          estimatedGpm: totalGpm,
+          establishmentStage: "NORMAL",
         };
       });
 
@@ -581,22 +581,53 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
               />
             )}
             <ul className="space-y-2 text-sm">
-              {zones.map((z) => {
-                const schedule = calculateZoneSchedule({
-                  vegetationType: z.vegetationType,
-                  irrigationType: z.irrigationType,
-                  shadeLevel: z.shadeLevel,
-                  soilType: z.soilType,
-                  slopeLevel: z.slopeLevel,
+              {(() => {
+                const weather = defaultWeatherFallback();
+                const settings = propertySettingsFromRecord({
+                  grassSeason: "COOL",
+                  droughtRestrictionsActive: true,
+                  cycleSoakEnabled: false,
                 });
-                return (
-                  <li key={z.name} className="rounded border p-2">
-                    <strong>{z.name}</strong> — {schedule.adjustedRuntimeMinutes} min,{" "}
-                    {schedule.daysLabel}
-                  </li>
+                const guide = buildControllerGuide({
+                  propertyId,
+                  settings,
+                  zones: zones.map((z, i) =>
+                    zoneInputFromMapZone(
+                      {
+                        id: `wizard-${i}`,
+                        name: z.name,
+                        sortOrder: i,
+                        vegetationType: z.vegetationType,
+                        shadeLevel: z.shadeLevel,
+                        slopeLevel: z.slopeLevel,
+                        soilType: z.soilType,
+                        irrigationType: z.irrigationType,
+                        nozzleCount: z.nozzleCount,
+                      },
+                      i + 1
+                    )
+                  ),
+                  weather: {
+                    weeklyEToInches: weather.weeklyEToInches,
+                    totalRainfallInches: 0.3,
+                    source: "open_meteo",
+                  },
+                });
+                return guide.programs.flatMap((p) =>
+                  p.zones.map((zone) => (
+                    <li key={zone.zoneId} className="rounded border p-2">
+                      <strong>{zone.name}</strong> — {zone.runtimePerEventMinutes} min/event ·{" "}
+                      {zone.daysPerWeek} days/wk · ~{zone.gallonsPerWeek} gal/wk
+                      {zone.cycleSoak.enabled ? ` · ${zone.cycleSoak.description}` : ""}
+                    </li>
+                  ))
                 );
-              })}
+              })()}
             </ul>
+            <p className="text-xs text-muted-foreground">
+              Preview uses default Utah ET₀ ({defaultWeatherFallback().weeklyEToInches}&quot;/wk).
+              Publish to save live weather-based programming guide.
+            </p>
           </div>
         )}
 
