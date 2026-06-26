@@ -161,42 +161,28 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
 
         {guide.programs.map((program) => (
           <div key={program.id} className="rounded-md border">
-            <div className="border-b bg-muted/30 px-3 py-2">
+            <div className="space-y-1 px-3 py-3">
               <p className="text-sm font-medium">{program.label}</p>
-              <p className="text-xs text-muted-foreground">
-                {program.daysLabel} · Start: {program.startTimes.join(", ")} ·{" "}
+              <p className="text-sm text-muted-foreground">
+                Start Times: {program.startTimes.join(", ")} · Estimated{" "}
                 {Math.round(program.totalGallonsPerWeek)} gal/wk
               </p>
+              <ul className="space-y-1 pt-1">
+                {program.zones.map((zone) => (
+                  <li key={zone.zoneId} className="text-sm">
+                    Station {zone.stationNumber}:{" "}
+                    {zone.cycleSoak.enabled && zone.cycleSoak.cycleCount > 1
+                      ? `Runtime - ${zone.cycleSoak.minutesPerCycle} mins per cycle`
+                      : `Runtime - ${zone.runtimePerEventMinutes} mins`}
+                    {zone.establishmentNote ? (
+                      <span className="mt-1 block text-xs text-amber-700">
+                        {zone.establishmentNote}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="divide-y">
-              {program.zones.map((zone) => (
-                <li key={zone.zoneId} className="px-3 py-2 text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="font-medium">
-                        Station {zone.stationNumber}: {zone.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {zone.runtimePerEventMinutes} min/run
-                        {zone.cycleSoak.enabled
-                          ? ` (${zone.cycleSoak.description})`
-                          : ""}
-                        {zone.startTime ? ` · ${zone.startTime}` : ""}
-                        {zone.finishTime ? `–${zone.finishTime}` : ""}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        ~{zone.gallonsPerWeek} gal/wk · KL {zone.breakdown.KL.toFixed(2)} · PR{" "}
-                        {zone.breakdown.precipitationRateInHr} in/hr · DU{" "}
-                        {zone.breakdown.distributionUniformity}
-                      </p>
-                      {zone.establishmentNote ? (
-                        <p className="mt-1 text-xs text-amber-700">{zone.establishmentNote}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
           </div>
         ))}
       </div>

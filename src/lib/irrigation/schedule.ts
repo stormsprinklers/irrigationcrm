@@ -55,13 +55,13 @@ const BASE_DAYS_PER_WEEK: Record<VegetationType, number> = {
 /** Shade reduces ET — water less often and apply less per event */
 const SHADE_DAYS_FACTOR: Record<ShadeLevel, number> = {
   full_sun: 1.0,
-  some_shade: 0.85,
+  some_shade: 0.8,
   lots_of_shade: 0.67,
 };
 
 const SHADE_DEPTH_FACTOR: Record<ShadeLevel, number> = {
   full_sun: 1.0,
-  some_shade: 0.85,
+  some_shade: 0.8,
   lots_of_shade: 0.65,
 };
 
@@ -198,8 +198,8 @@ export function calculateCycleSoak(
   }
 
   if (totalRuntimeMinutes > 60) {
-    const cycleCount = 2;
-    const minutesPerCycle = Math.ceil(totalRuntimeMinutes / cycleCount);
+    const cycleCount = Math.ceil(totalRuntimeMinutes / 60);
+    const minutesPerCycle = Math.floor(totalRuntimeMinutes / cycleCount);
     const soakMinutes = soakMinutesBetweenCycles(soilType, slopeLevel) || 30;
     return {
       enabled: true,
@@ -207,7 +207,7 @@ export function calculateCycleSoak(
       minutesPerCycle,
       soakMinutes,
       wallClockMinutes: minutesPerCycle * cycleCount + soakMinutes * (cycleCount - 1),
-      description: `Auto cycle-soak: 2 runs × ${minutesPerCycle} min (${soakMinutes} min soak; runtime exceeds 60 min)`,
+      description: `Auto cycle-soak: ${cycleCount} runs × ${minutesPerCycle} min (${soakMinutes} min soak)`,
     };
   }
 

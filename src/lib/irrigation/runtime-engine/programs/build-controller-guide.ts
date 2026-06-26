@@ -52,6 +52,11 @@ export function parseTimeOfDay(label: string): number {
   return hours * 60 + mins;
 }
 
+/** Round up to the next 10-minute controller start-time slot. */
+export function roundUpToTenMinutes(totalMinutes: number): number {
+  return Math.ceil(totalMinutes / 10) * 10;
+}
+
 function daysLabel(days: DayOfWeekCode[]): string {
   const labels: Record<DayOfWeekCode, string> = {
     SUN: "Sun",
@@ -168,9 +173,10 @@ export function buildProgramTimeline(
   }
 
   const startTimesMinutes: number[] = [];
-  let cursor = baseStartMinutes;
+  let cursor = roundUpToTenMinutes(baseStartMinutes);
 
   for (let cycle = 0; cycle < cycleCount; cycle++) {
+    cursor = roundUpToTenMinutes(cursor);
     startTimesMinutes.push(cursor);
 
     for (const entry of sorted) {
@@ -217,10 +223,10 @@ function assignNonOverlappingSchedules(drafts: ProgramDraft[]): void {
   for (const draft of drafts) {
     draft.items.sort((a, b) => a.result.stationNumber - b.result.stationNumber);
 
-    let baseStart = WATERING_WINDOW.earliestStartMinutes;
+    let baseStart = roundUpToTenMinutes(WATERING_WINDOW.earliestStartMinutes);
     for (const previous of scheduled) {
       if (daysOverlap(previous.daysOfWeek, draft.daysOfWeek)) {
-        baseStart = Math.max(baseStart, previous.endMinutes);
+        baseStart = Math.max(baseStart, roundUpToTenMinutes(previous.endMinutes));
       }
     }
 
@@ -283,16 +289,6 @@ export function buildControllerGuide(
 
   const programs: ControllerProgram[] = [];
   const notes: string[] = [];
-
-  if (params.settings.droughtRestrictionsActive) {
-    notes.push("Drought restrictions active: watering limited to 2 days per week (Tue & Fri).");
-  }
-
-  if (!params.settings.cycleSoakEnabled) {
-    notes.push(
-      "Optional cycle-soak for shorter runtimes is off. Runtimes over 60 min are still auto-split into two cycles."
-    );
-  }
 
   drafts.slice(0, PROGRAM_IDS.length).forEach((draft, index) => {
     const programId = PROGRAM_IDS[index];

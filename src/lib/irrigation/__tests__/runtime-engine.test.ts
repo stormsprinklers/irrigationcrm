@@ -8,6 +8,7 @@ import { gallonsPerWeek } from "../runtime-engine/hydraulics/gallons";
 import {
   buildControllerGuide,
   buildProgramTimeline,
+  roundUpToTenMinutes,
   WATERING_WINDOW,
   formatTimeOfDay,
   parseTimeOfDay,
@@ -73,12 +74,23 @@ test("start times avoid 9am-6pm prohibited window", () => {
   assert.match(formatted, /5:00 AM/);
 });
 
-test("auto cycle-soak splits runtimes over 60 min into two runs", () => {
-  const plan = calculateCycleSoak(95, "rotor", "loam", "flat", false);
-  assert.equal(plan.enabled, true);
-  assert.equal(plan.cycleCount, 2);
-  assert.equal(plan.minutesPerCycle, 48);
-  assert.equal(plan.soakMinutes, 30);
+test("start times round up to 10-minute increments", () => {
+  assert.equal(roundUpToTenMinutes(5 * 60 + 48), 5 * 60 + 50);
+  assert.equal(roundUpToTenMinutes(5 * 60 + 50), 5 * 60 + 50);
+  assert.equal(roundUpToTenMinutes(6 * 60 + 36), 6 * 60 + 40);
+});
+
+test("auto cycle-soak splits runtimes over 60 min until each cycle is at most 60 min", () => {
+  const plan95 = calculateCycleSoak(95, "rotor", "loam", "flat", false);
+  assert.equal(plan95.enabled, true);
+  assert.equal(plan95.cycleCount, 2);
+  assert.equal(plan95.minutesPerCycle, 47);
+  assert.equal(plan95.soakMinutes, 30);
+
+  const plan145 = calculateCycleSoak(145, "rotor", "loam", "flat", false);
+  assert.equal(plan145.enabled, true);
+  assert.equal(plan145.cycleCount, 3);
+  assert.equal(plan145.minutesPerCycle, 48);
 });
 
 test("runtimes at or below 60 min stay single run when cycle-soak disabled", () => {
@@ -372,5 +384,5 @@ test("cycle-soak programs stagger zones and push later programs back", () => {
   assert.ok(oneCycleProgram);
 
   const twoCycleEnd = parseTimeOfDay(twoCycleProgram.zones.at(-1)!.finishTime!);
-  assert.equal(parseTimeOfDay(oneCycleProgram.startTimes[0]), twoCycleEnd);
+  assert.equal(parseTimeOfDay(oneCycleProgram.startTimes[0]), roundUpToTenMinutes(twoCycleEnd));
 });

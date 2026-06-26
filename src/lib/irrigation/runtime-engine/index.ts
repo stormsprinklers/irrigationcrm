@@ -67,8 +67,10 @@ export {
 
 export {
   buildControllerGuide,
+  buildProgramTimeline,
   formatTimeOfDay,
   parseTimeOfDay,
+  roundUpToTenMinutes,
   WATERING_WINDOW,
 } from "./programs/build-controller-guide";
 

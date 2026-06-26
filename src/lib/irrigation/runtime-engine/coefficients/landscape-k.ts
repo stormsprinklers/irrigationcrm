@@ -13,7 +13,7 @@ export const SPECIES_FACTOR_DEFAULTS = {
 
 const SHADE_KMC: Record<ShadeLevel, number> = {
   full_sun: 1.0,
-  some_shade: 0.85,
+  some_shade: 0.8,
   lots_of_shade: 0.65,
 };
 
@@ -84,7 +84,7 @@ export function daysPerWeekForVegetation(
   };
 
   const shadeFactor =
-    shadeLevel === "lots_of_shade" ? 0.67 : shadeLevel === "some_shade" ? 0.85 : 1.0;
+    shadeLevel === "lots_of_shade" ? 0.67 : shadeLevel === "some_shade" ? 0.8 : 1.0;
 
   return Math.max(1, Math.min(7, Math.round(base[vegetationType] * shadeFactor)));
 }
