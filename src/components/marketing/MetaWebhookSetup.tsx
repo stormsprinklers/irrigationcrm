@@ -325,7 +325,8 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
               <code className="text-[11px]">business_management</code>,{" "}
               <code className="text-[11px]">pages_read_engagement</code>,{" "}
               <code className="text-[11px]">pages_read_user_content</code>,{" "}
-              <code className="text-[11px]">read_insights</code>, and{" "}
+              <code className="text-[11px]">read_insights</code>,{" "}
+              <code className="text-[11px]">instagram_manage_insights</code>, and{" "}
               <code className="text-[11px]">instagram_basic</code>. When Meta asks, select your{" "}
               <strong>business</strong> and <strong>Page</strong>. Tokens expire in about an hour —
               save App ID and App Secret too so we can exchange for a longer-lived token.

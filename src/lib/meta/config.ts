@@ -67,6 +67,7 @@ export const META_PUBLISH_PERMISSIONS = [
   "pages_read_user_content",
   "instagram_content_publish",
   "instagram_basic",
+  "instagram_manage_insights",
   "pages_show_list",
   "business_management",
   "read_insights",

@@ -263,7 +263,7 @@ export function SocialPageClient() {
         <TabsContent value="recent" className="space-y-6">
           <MarketingSectionCard
             title="Recent posts & stories"
-            description="Published content and engagement across Facebook and Instagram."
+            description="Published content and engagement across Facebook and Instagram. Per-post reach requires read_insights (Facebook) and instagram_manage_insights (Instagram) on your Meta token."
             action={
               <Button
                 size="sm"

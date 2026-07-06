@@ -79,6 +79,73 @@ function totalInsightValue(insights: InsightsResponse): number | null {
   return values.reduce((sum, row) => sum + (row.value ?? 0), 0);
 }
 
+function firstInsightValue(insights: InsightsResponse, metricNames: string[]): number | null {
+  for (const name of metricNames) {
+    const row = insights.data?.find((entry) => entry.name === name);
+    if (!row?.values?.length) continue;
+
+    if (row.values.length === 1) {
+      const value = row.values[0]?.value;
+      if (typeof value === "number") return value;
+      continue;
+    }
+
+    const total = row.values.reduce((sum, entry) => sum + (entry.value ?? 0), 0);
+    if (total > 0) return total;
+  }
+
+  return null;
+}
+
+async function fetchObjectReach(
+  objectId: string,
+  token: string,
+  metricCandidates: string[]
+): Promise<number | null> {
+  for (const metric of metricCandidates) {
+    const result = await graphGetSafe<InsightsResponse>(`/${objectId}/insights`, {
+      metric,
+      period: "lifetime",
+      access_token: token,
+    });
+
+    if (!result.ok) continue;
+
+    const direct = firstInsightValue(result.data, [metric]);
+    if (direct != null) return direct;
+
+    const fallback = totalInsightValue(result.data);
+    if (fallback != null) return fallback;
+  }
+
+  return null;
+}
+
+const FACEBOOK_POST_REACH_METRICS = [
+  "post_total_media_view_unique",
+  "post_impressions_unique",
+  "post_impressions",
+  "post_media_view",
+] as const;
+
+const INSTAGRAM_MEDIA_REACH_METRICS = ["reach", "impressions"] as const;
+
+async function enrichPostsWithReach(posts: FetchedSocialPost[], token: string) {
+  const batchSize = 6;
+
+  for (let index = 0; index < posts.length; index += batchSize) {
+    const batch = posts.slice(index, index + batchSize);
+    await Promise.all(
+      batch.map(async (post) => {
+        post.reach =
+          post.platform === "facebook"
+            ? await fetchObjectReach(post.externalId, token, [...FACEBOOK_POST_REACH_METRICS])
+            : await fetchObjectReach(post.externalId, token, [...INSTAGRAM_MEDIA_REACH_METRICS]);
+      })
+    );
+  }
+}
+
 /** Facebook Page reach for the last 7 days via Meta Page Insights API. */
 async function fetchPageReach7d(pageId: string, token: string): Promise<number | null> {
   const attempts: Array<Record<string, string>> = [
@@ -160,7 +227,7 @@ export async function fetchMetaSocialData(params: {
     likes: post.likes?.summary?.total_count ?? 0,
     comments: post.comments?.summary?.total_count ?? 0,
     shares: post.shares?.count ?? 0,
-    reach: null,
+    reach: null as number | null,
   }));
 
   let instagramFollowers: number | null = null;
@@ -189,13 +256,14 @@ export async function fetchMetaSocialData(params: {
       likes: media.like_count ?? 0,
       comments: media.comments_count ?? 0,
       shares: 0,
-      reach: null,
+      reach: null as number | null,
     }));
   }
 
-  const reach7d = await fetchPageReach7d(pageId, token);
-
   const allPosts = [...facebookPosts, ...instagramPosts];
+  await enrichPostsWithReach(allPosts, token);
+
+  const reach7d = await fetchPageReach7d(pageId, token);
   const totalEngagement = allPosts.reduce(
     (sum, post) => sum + post.likes + post.comments + post.shares,
     0
