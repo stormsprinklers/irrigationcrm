@@ -374,6 +374,23 @@ export default function SettingsIntegrationsPage() {
             </div>
           ) : null}
 
+          <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-sm">Slack — Google review alerts</span>
+              <Badge variant="secondary">Configured in settings</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Post designed image cards to a Slack channel when new Google reviews arrive. Requires{" "}
+              <code className="text-xs">SLACK_BOT_TOKEN</code> in Vercel and a connected Google
+              Business Profile.
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/settings/integrations/slack">Configure Slack review alerts</Link>
+              </Button>
+            </div>
+          </div>
+
           {googleAdsStatus ? (
             <div className="rounded-lg border border-border bg-white p-6 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">

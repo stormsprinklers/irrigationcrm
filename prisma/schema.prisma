@@ -490,6 +490,9 @@ model Company {
   metaAdAccountId              String?
   metaAdAccountName            String?
   metaAdsConnectedAt           DateTime?
+  slackGbpReviewsEnabled       Boolean  @default(false)
+  slackGbpReviewsChannelId     String?
+  slackGbpReviewsBootstrapped  Boolean  @default(false)
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
@@ -559,6 +562,7 @@ model Company {
   socialPostSubmissions  SocialPostSubmission[]
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
+  gbpReviewSlackDeliveries GbpReviewSlackDelivery[]
   localSeoKeywords     LocalSeoKeyword[]
   localSeoTargetCities LocalSeoTargetCity[]
   localSeoSerpSearches LocalSeoSerpSearch[]
@@ -2691,6 +2695,20 @@ model MarketingEvent {
 
   @@unique([companyId, source, externalId])
   @@index([companyId, eventType, occurredAt])
+}
+
+model GbpReviewSlackDelivery {
+  id         String   @id @default(cuid())
+  companyId  String
+  reviewId   String
+  reviewName String?
+  starRating Int?
+  deliveredAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, reviewId])
+  @@index([companyId, deliveredAt])
 }
 
 model PropertyIrrigationMapZone {

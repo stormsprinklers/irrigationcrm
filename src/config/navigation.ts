@@ -133,6 +133,7 @@ export const settingsSidebar: NavSection[] = [
       { label: "Parts Run", href: "/settings/parts-suppliers" },
       { label: "Data migration", href: "/settings/migrations/housecall-pro" },
       { label: "Integrations", href: "/settings/integrations" },
+      { label: "Slack", href: "/settings/integrations/slack" },
       { label: "Meta webhooks", href: "/settings/integrations/meta" },
       { label: "Google Business Profile", href: "/settings/integrations/google-business" },
       { label: "Google Ads", href: "/settings/integrations/google-ads" },
