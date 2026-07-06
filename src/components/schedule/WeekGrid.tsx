@@ -175,7 +175,7 @@ type TimeGridProps = {
 };
 
 function handleGridClick(
-  event: React.MouseEvent<HTMLDivElement>,
+  event: React.MouseEvent<HTMLElement>,
   day: Date,
   assignedUserId: string | null,
   assignedUserName: string | null,
