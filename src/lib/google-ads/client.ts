@@ -1,10 +1,14 @@
 import {
   createOAuthState,
-  exchangeOAuthCode,
-  getGoogleOAuthConfig,
-  isGoogleBusinessConfigured,
+  exchangeGoogleOAuthCode,
   verifyOAuthState,
-} from "@/lib/google-business/client";
+} from "@/lib/google-oauth/oauth";
+import {
+  getGeneralGoogleOAuthConfig,
+  isGeneralGoogleOAuthConfigured,
+} from "@/lib/google-oauth/config";
+import type { AdsDateRange } from "@/lib/marketing/ads-date-range";
+import { googleAdsDateClause } from "@/lib/marketing/ads-date-range";
 import type {
   GoogleAdsCampaignRow,
   GoogleAdsConnectionStatus,
@@ -26,7 +30,7 @@ export class GoogleAdsApiError extends Error {
 }
 
 export function isGoogleAdsConfigured() {
-  return isGoogleBusinessConfigured();
+  return isGeneralGoogleOAuthConfigured();
 }
 
 export function hasGoogleAdsDeveloperToken() {
@@ -34,7 +38,7 @@ export function hasGoogleAdsDeveloperToken() {
 }
 
 export function buildGoogleAdsAuthUrl(companyId: string, redirectUri: string) {
-  const { clientId } = getGoogleOAuthConfig();
+  const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleAdsApiError("Google OAuth is not configured", 503);
 
   const params = new URLSearchParams({
@@ -50,7 +54,16 @@ export function buildGoogleAdsAuthUrl(companyId: string, redirectUri: string) {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export { exchangeOAuthCode, verifyOAuthState };
+export { verifyOAuthState };
+
+export async function exchangeOAuthCode(code: string, redirectUri: string) {
+  return exchangeGoogleOAuthCode(
+    code,
+    redirectUri,
+    getGeneralGoogleOAuthConfig(),
+    GoogleAdsApiError
+  );
+}
 
 function normalizeCustomerId(id: string) {
   return id.replace(/-/g, "").replace(/^customers\//, "");
@@ -73,7 +86,7 @@ export async function getGoogleAdsAccessToken(companyId: string) {
     throw new GoogleAdsApiError("Google Ads is not connected", 400);
   }
 
-  const { clientId, clientSecret } = getGoogleOAuthConfig();
+  const { clientId, clientSecret } = getGeneralGoogleOAuthConfig();
   if (!clientId || !clientSecret) {
     throw new GoogleAdsApiError("Google OAuth is not configured", 503);
   }
@@ -186,7 +199,7 @@ export async function getGoogleAdsConnectionStatus(
 
   if (!company) return null;
 
-  const env = getGoogleOAuthConfig();
+  const env = getGeneralGoogleOAuthConfig();
 
   return {
     connected: Boolean(company.googleAdsRefreshToken),
@@ -225,7 +238,7 @@ export async function saveGoogleAdsCustomer(
 
 export async function getGoogleAdsSummary(
   companyId: string,
-  days = 30
+  range: AdsDateRange
 ): Promise<GoogleAdsSummary> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -242,7 +255,7 @@ export async function getGoogleAdsSummary(
 
   const accessToken = await getGoogleAdsAccessToken(companyId);
   const customerId = normalizeCustomerId(company.googleAdsCustomerId);
-  const range = days === 7 ? "LAST_7_DAYS" : days === 90 ? "LAST_90_DAYS" : "LAST_30_DAYS";
+  const dateClause = googleAdsDateClause(range);
 
   const data = await googleAdsFetch<{
     results?: Array<{
@@ -280,7 +293,7 @@ export async function getGoogleAdsSummary(
             metrics.conversions,
             metrics.conversions_value
           FROM campaign
-          WHERE segments.date DURING ${range}
+          WHERE ${dateClause}
             AND campaign.status != 'REMOVED'
           ORDER BY metrics.cost_micros DESC
           LIMIT 100
@@ -315,7 +328,10 @@ export async function getGoogleAdsSummary(
   return {
     customerId,
     customerName: company.googleAdsCustomerName ?? customerId,
-    days,
+    days: range.presetDays ?? 0,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    rangeLabel: range.label,
     spend,
     impressions,
     clicks,

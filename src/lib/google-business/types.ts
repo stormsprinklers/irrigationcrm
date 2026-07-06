@@ -77,5 +77,6 @@ export type GbpConnectionStatus = {
   oauthEnv: {
     hasClientId: boolean;
     hasClientSecret: boolean;
+    usesDedicatedCredentials?: boolean;
   };
 };

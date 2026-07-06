@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { GoogleAdsApiError, getGoogleAdsSummary } from "@/lib/google-ads/client";
+import { parseAdsDateRange } from "@/lib/marketing/ads-date-range";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const days = Number(request.nextUrl.searchParams.get("days") ?? 30);
-    const summary = await getGoogleAdsSummary(user.companyId, days);
+    const dateRange = parseAdsDateRange(request.nextUrl.searchParams);
+    const summary = await getGoogleAdsSummary(user.companyId, dateRange);
     return NextResponse.json(summary);
   } catch (error) {
     if (error instanceof GoogleAdsApiError) {

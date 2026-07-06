@@ -1,3 +1,5 @@
+import type { AdsDateRange } from "@/lib/marketing/ads-date-range";
+import { metaInsightsField } from "@/lib/marketing/ads-date-range";
 import { prisma } from "@/lib/prisma";
 
 const GRAPH_VERSION = "v21.0";
@@ -38,6 +40,9 @@ export type MetaAdsSummary = {
   adAccountId: string;
   adAccountName: string;
   days: number;
+  startDate: string;
+  endDate: string;
+  rangeLabel: string;
   spend: number;
   impressions: number;
   clicks: number;
@@ -188,7 +193,10 @@ function countLeadActions(actions: Array<{ action_type?: string; value?: string 
   }, 0);
 }
 
-export async function getMetaAdsSummary(companyId: string, days = 30): Promise<MetaAdsSummary> {
+export async function getMetaAdsSummary(
+  companyId: string,
+  range: AdsDateRange
+): Promise<MetaAdsSummary> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { metaAdAccountId: true, metaAdAccountName: true },
@@ -200,7 +208,7 @@ export async function getMetaAdsSummary(companyId: string, days = 30): Promise<M
 
   const { token } = await getMetaAdsAccessToken(companyId);
   const actId = company.metaAdAccountId.replace(/^act_/, "");
-  const datePreset = days === 7 ? "last_7d" : days === 90 ? "last_90d" : "last_30d";
+  const insightsField = metaInsightsField(range);
 
   const data = await graphGet<{
     data?: Array<{
@@ -220,7 +228,7 @@ export async function getMetaAdsSummary(companyId: string, days = 30): Promise<M
       };
     }>;
   }>(`/act_${actId}/campaigns`, token, {
-    fields: `id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(${datePreset}){spend,impressions,clicks,actions}`,
+    fields: `id,name,status,objective,daily_budget,lifetime_budget,${insightsField}{spend,impressions,clicks,actions}`,
     limit: "100",
   });
 
@@ -245,7 +253,10 @@ export async function getMetaAdsSummary(companyId: string, days = 30): Promise<M
   return {
     adAccountId: actId,
     adAccountName: company.metaAdAccountName ?? actId,
-    days,
+    days: range.presetDays ?? 0,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    rangeLabel: range.label,
     spend: campaigns.reduce((sum, row) => sum + row.spend, 0),
     impressions: campaigns.reduce((sum, row) => sum + row.impressions, 0),
     clicks: campaigns.reduce((sum, row) => sum + row.clicks, 0),

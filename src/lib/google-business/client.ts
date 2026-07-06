@@ -1,7 +1,16 @@
-import { createHmac, timingSafeEqual } from "crypto";
 import { Prisma } from "@prisma/client";
 import type { GbpAccount, GbpCatalogCache, GbpLocation, GbpPerformanceSummary } from "@/lib/google-business/types";
 import { GBP_METRIC_LABELS, GBP_PERFORMANCE_METRICS, GOOGLE_BUSINESS_SCOPE } from "@/lib/google-business/types";
+import {
+  getGoogleBusinessOAuthConfig,
+  isGoogleBusinessOAuthConfigured,
+  usesDedicatedGoogleBusinessOAuthCredentials,
+} from "@/lib/google-oauth/config";
+import {
+  createOAuthState,
+  exchangeGoogleOAuthCode,
+  verifyOAuthState,
+} from "@/lib/google-oauth/oauth";
 import { prisma } from "@/lib/prisma";
 
 const ACCOUNT_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
@@ -30,71 +39,14 @@ export class GoogleBusinessApiError extends Error {
   }
 }
 
-function envGoogleOAuthConfig() {
-  return {
-    clientId:
-      process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ??
-      process.env.GOOGLE_CLOUD_CLIENT_ID?.trim() ??
-      "",
-    clientSecret:
-      process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ??
-      process.env.GOOGLE_CLOUD_CLIENT_SECRET?.trim() ??
-      "",
-  };
-}
+export { createOAuthState, verifyOAuthState };
 
 export function getGoogleOAuthConfig() {
-  return envGoogleOAuthConfig();
+  return getGoogleBusinessOAuthConfig();
 }
 
 export function isGoogleBusinessConfigured() {
-  const { clientId, clientSecret } = getGoogleOAuthConfig();
-  return Boolean(clientId && clientSecret);
-}
-
-function oauthStateSecret() {
-  const secret =
-    process.env.GOOGLE_OAUTH_STATE_SECRET ??
-    process.env.NEXTAUTH_SECRET ??
-    process.env.AUTH_SECRET;
-  if (!secret) {
-    throw new Error(
-      "GOOGLE_OAUTH_STATE_SECRET or NEXTAUTH_SECRET must be set for Google Business OAuth"
-    );
-  }
-  return secret;
-}
-
-export function createOAuthState(companyId: string) {
-  const ts = Date.now();
-  const sig = createHmac("sha256", oauthStateSecret())
-    .update(`${companyId}:${ts}`)
-    .digest("hex");
-  return Buffer.from(JSON.stringify({ companyId, ts, sig })).toString("base64url");
-}
-
-export function verifyOAuthState(state: string, maxAgeMs = 15 * 60 * 1000) {
-  try {
-    const parsed = JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as {
-      companyId: string;
-      ts: number;
-      sig: string;
-    };
-    if (!parsed.companyId || !parsed.ts || !parsed.sig) return null;
-    if (Date.now() - parsed.ts > maxAgeMs) return null;
-
-    const expected = createHmac("sha256", oauthStateSecret())
-      .update(`${parsed.companyId}:${parsed.ts}`)
-      .digest("hex");
-
-    const a = Buffer.from(parsed.sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-
-    return parsed.companyId;
-  } catch {
-    return null;
-  }
+  return isGoogleBusinessOAuthConfigured();
 }
 
 export function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: string) {
@@ -115,38 +67,12 @@ export function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: strin
 }
 
 export async function exchangeOAuthCode(code: string, redirectUri: string) {
-  const { clientId, clientSecret } = getGoogleOAuthConfig();
-  if (!clientId || !clientSecret) {
-    throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
-  }
-
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
-
-  const data = (await res.json()) as {
-    access_token?: string;
-    refresh_token?: string;
-    error?: string;
-    error_description?: string;
-  };
-
-  if (!res.ok || !data.access_token) {
-    throw new GoogleBusinessApiError(
-      data.error_description ?? data.error ?? "OAuth token exchange failed",
-      res.status
-    );
-  }
-
-  return data;
+  return exchangeGoogleOAuthCode(
+    code,
+    redirectUri,
+    getGoogleBusinessOAuthConfig(),
+    GoogleBusinessApiError
+  );
 }
 
 export async function getCompanyAccessToken(companyId: string) {
@@ -159,7 +85,7 @@ export async function getCompanyAccessToken(companyId: string) {
     throw new GoogleBusinessApiError("Google Business Profile is not connected", 400);
   }
 
-  const { clientId, clientSecret } = getGoogleOAuthConfig();
+  const { clientId, clientSecret } = getGoogleBusinessOAuthConfig();
   if (!clientId || !clientSecret) {
     throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
   }
@@ -592,7 +518,7 @@ export async function getGbpConnectionStatus(companyId: string) {
 
   if (!company) return null;
 
-  const env = envGoogleOAuthConfig();
+  const env = getGoogleBusinessOAuthConfig();
 
   return {
     connected: Boolean(company.googleBusinessRefreshToken),
@@ -600,10 +526,11 @@ export async function getGbpConnectionStatus(companyId: string) {
     locationId: company.googleBusinessLocationId,
     locationTitle: company.googleBusinessLocationTitle,
     connectedAt: company.googleBusinessConnectedAt?.toISOString() ?? null,
-    configured: isGoogleBusinessConfigured(),
+    configured: isGoogleBusinessOAuthConfigured(),
     oauthEnv: {
       hasClientId: Boolean(env.clientId),
       hasClientSecret: Boolean(env.clientSecret),
+      usesDedicatedCredentials: usesDedicatedGoogleBusinessOAuthCredentials(),
     },
   };
 }

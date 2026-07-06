@@ -12,6 +12,7 @@ type Props = {
   value: string;
   selectedName?: string;
   onValueChange: (customerId: string, customerName: string) => void;
+  onCustomerSelect?: (customer: CustomerDTO) => void;
   minQueryLength?: number;
   placeholder?: string;
 };
@@ -20,6 +21,7 @@ export function CustomerSearchPicker({
   value,
   selectedName,
   onValueChange,
+  onCustomerSelect,
   minQueryLength = 2,
   placeholder = "Search customers by name, phone, email…",
 }: Props) {
@@ -60,7 +62,9 @@ export function CustomerSearchPicker({
   }, [query, searchCustomers]);
 
   function selectCustomer(customer: CustomerDTO) {
+    if (customer.doNotService) return;
     onValueChange(customer.id, customer.name);
+    onCustomerSelect?.(customer);
     setDisplayName(customer.name);
     setQuery("");
     setResults([]);
@@ -110,12 +114,17 @@ export function CustomerSearchPicker({
                 <button
                   type="button"
                   onClick={() => selectCustomer(customer)}
+                  disabled={customer.doNotService}
                   className={cn(
                     "flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-muted/50",
-                    value === customer.id && "bg-highlight-panel"
+                    value === customer.id && "bg-highlight-panel",
+                    customer.doNotService && "cursor-not-allowed opacity-50"
                   )}
                 >
-                  <span className="font-medium">{customer.name}</span>
+                  <span className="font-medium">
+                    {customer.name}
+                    {customer.doNotService ? " (do not service)" : ""}
+                  </span>
                   {(customer.phone || customer.email) && (
                     <span className="text-xs text-muted-foreground">
                       {[customer.phone, customer.email].filter(Boolean).join(" · ")}

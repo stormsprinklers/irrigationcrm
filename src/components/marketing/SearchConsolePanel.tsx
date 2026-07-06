@@ -108,7 +108,15 @@ export function SearchConsolePanel() {
     const error = searchParams.get("error");
     if (connected) toast.success("Google Search Console connected");
     if (error) {
-      toast.error(decodeURIComponent(error), { duration: 10000 });
+      const decoded = decodeURIComponent(error);
+      if (decoded.includes("unauthorized_client")) {
+        toast.error(
+          "Google OAuth client mismatch. Set GOOGLE_OAUTH_CLIENT_ID/SECRET to your Search Console OAuth client (not the GBP client), redeploy, disconnect Search Console, then connect again.",
+          { duration: 14000 }
+        );
+      } else {
+        toast.error(decoded, { duration: 10000 });
+      }
     }
   }, [searchParams]);
 
@@ -188,8 +196,8 @@ export function SearchConsolePanel() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Server OAuth credentials are required before you can connect Search Console. These are
-            the same variables used for Google Business Profile.
+            Server OAuth credentials are required before you can connect Search Console. Use your
+            general Google OAuth client (not the GBP-only client).
           </p>
           <ul className="list-disc space-y-1 pl-5">
             <li>
@@ -201,6 +209,11 @@ export function SearchConsolePanel() {
               {status.oauthEnv.hasClientSecret ? "detected" : "missing"}
             </li>
           </ul>
+          <p className="text-xs text-muted-foreground">
+            If you use a separate OAuth client for Google Business Profile, set{" "}
+            <code>GOOGLE_BUSINESS_OAUTH_CLIENT_ID</code> and{" "}
+            <code>GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET</code> for GBP only.
+          </p>
           <p>
             Add this authorized redirect URI on your OAuth client:{" "}
             <code className="text-xs">{redirectUri}</code>

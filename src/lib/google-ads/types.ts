@@ -38,6 +38,9 @@ export type GoogleAdsSummary = {
   customerId: string;
   customerName: string;
   days: number;
+  startDate: string;
+  endDate: string;
+  rangeLabel: string;
   spend: number;
   impressions: number;
   clicks: number;

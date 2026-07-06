@@ -13,6 +13,7 @@ import {
 } from "@/components/marketing/MarketingMetricGrid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AdsCampaignRow, AdsDashboard } from "@/lib/marketing/ads-dashboard";
 
@@ -146,35 +147,65 @@ function SetupBanner({ platform, setupUrl, message }: { platform: string; setupU
   );
 }
 
+function defaultCustomFrom() {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - 29);
+  return date.toISOString().slice(0, 10);
+}
+
+function defaultCustomTo() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function AdsPageClient() {
   const [dashboard, setDashboard] = useState<AdsDashboard | null>(null);
-  const [days, setDays] = useState(30);
+  const [rangeQuery, setRangeQuery] = useState("days=30");
+  const [customFrom, setCustomFrom] = useState(defaultCustomFrom);
+  const [customTo, setCustomTo] = useState(defaultCustomTo);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (rangeDays: number) => {
-    const res = await fetch(`/api/marketing/ads/dashboard?days=${rangeDays}`);
+  const load = useCallback(async (query: string) => {
+    const res = await fetch(`/api/marketing/ads/dashboard?${query}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to load ads dashboard");
     setDashboard(data as AdsDashboard);
   }, []);
 
   useEffect(() => {
-    load(days)
+    load(rangeQuery)
       .catch(() => toast.error("Failed to load ads dashboard"))
       .finally(() => setLoading(false));
-  }, [days, load]);
+  }, [rangeQuery, load]);
 
   async function refresh() {
     setRefreshing(true);
     try {
-      await load(days);
+      await load(rangeQuery);
     } catch {
       toast.error("Failed to refresh ads data");
     } finally {
       setRefreshing(false);
     }
   }
+
+  function applyCustomRange() {
+    if (!customFrom || !customTo) {
+      toast.error("Choose start and end dates");
+      return;
+    }
+    if (customFrom > customTo) {
+      toast.error("Start date must be on or before end date");
+      return;
+    }
+    setLoading(true);
+    setRangeQuery(`from=${customFrom}&to=${customTo}`);
+  }
+
+  const rangeLabel = dashboard?.dateRange.label ?? "Last 30 days";
+  const isPresetActive = (days: number) => rangeQuery === `days=${days}`;
+  const isAllTimeActive = rangeQuery === "preset=all";
+  const isCustomActive = rangeQuery.startsWith("from=");
 
   const totals = dashboard?.totals;
   const anyReady = dashboard?.google.ready || dashboard?.meta.ready;
@@ -208,17 +239,67 @@ export function AdsPageClient() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {[7, 30, 90].map((range) => (
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {([7, 30, 90] as const).map((range) => (
+            <Button
+              key={range}
+              size="sm"
+              variant={isPresetActive(range) ? "default" : "outline"}
+              onClick={() => {
+                setLoading(true);
+                setRangeQuery(`days=${range}`);
+              }}
+            >
+              {range}d
+            </Button>
+          ))}
           <Button
-            key={range}
             size="sm"
-            variant={days === range ? "default" : "outline"}
-            onClick={() => setDays(range)}
+            variant={isAllTimeActive ? "default" : "outline"}
+            onClick={() => {
+              setLoading(true);
+              setRangeQuery("preset=all");
+            }}
           >
-            {range}d
+            All time
           </Button>
-        ))}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">From</label>
+            <Input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="h-9 w-[11rem]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">To</label>
+            <Input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="h-9 w-[11rem]"
+            />
+          </div>
+          <Button
+            size="sm"
+            variant={isCustomActive ? "default" : "outline"}
+            onClick={() => applyCustomRange()}
+          >
+            Apply range
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Showing {rangeLabel}
+          {dashboard?.dateRange && !dashboard.dateRange.isAllTime
+            ? ` (${dashboard.dateRange.startDate} – ${dashboard.dateRange.endDate})`
+            : null}
+        </p>
       </div>
 
       {!anyReady && !loading ? (
@@ -293,7 +374,7 @@ export function AdsPageClient() {
             title="Google Search &amp; Display campaigns"
             description={
               dashboard?.google.accountName
-                ? `${dashboard.google.accountName} · last ${days} days`
+                ? `${dashboard.google.accountName} · ${rangeLabel}`
                 : "Search, display, and remarketing campaigns from Google Ads."
             }
             action={
@@ -346,7 +427,7 @@ export function AdsPageClient() {
             title="Meta ads (Facebook &amp; Instagram)"
             description={
               dashboard?.meta.accountName
-                ? `${dashboard.meta.accountName} · last ${days} days`
+                ? `${dashboard.meta.accountName} · ${rangeLabel}`
                 : "Paid social campaigns across Facebook and Instagram placements."
             }
             action={

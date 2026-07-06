@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { GoogleAdsApiError, getGoogleAdsConnectionStatus, getGoogleAdsSummary } from "@/lib/google-ads/client";
+import { parseAdsDateRange } from "@/lib/marketing/ads-date-range";
 import { buildAdsDashboard } from "@/lib/marketing/ads-dashboard";
 import { MetaAdsApiError, getMetaAdsConnectionStatus, getMetaAdsSummary } from "@/lib/meta/ads";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const days = Number(request.nextUrl.searchParams.get("days") ?? 30);
+    const dateRange = parseAdsDateRange(request.nextUrl.searchParams);
 
     const [googleStatus, metaStatus] = await Promise.all([
       getGoogleAdsConnectionStatus(user.companyId),
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     let googleError: string | null = null;
     if (googleStatus?.customerId) {
       try {
-        googleSummary = await getGoogleAdsSummary(user.companyId, days);
+        googleSummary = await getGoogleAdsSummary(user.companyId, dateRange);
       } catch (error) {
         googleError = error instanceof Error ? error.message : "Failed to load Google Ads";
       }
@@ -28,14 +29,14 @@ export async function GET(request: NextRequest) {
     let metaError: string | null = null;
     if (metaStatus.connected) {
       try {
-        metaSummary = await getMetaAdsSummary(user.companyId, days);
+        metaSummary = await getMetaAdsSummary(user.companyId, dateRange);
       } catch (error) {
         metaError = error instanceof Error ? error.message : "Failed to load Meta Ads";
       }
     }
 
     const dashboard = buildAdsDashboard({
-      days,
+      dateRange,
       googleSummary,
       googleConnected: Boolean(googleStatus?.connected),
       googleReady: Boolean(googleStatus?.customerId),

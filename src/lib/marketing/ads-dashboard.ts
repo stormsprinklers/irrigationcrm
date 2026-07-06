@@ -1,3 +1,4 @@
+import type { AdsDateRange } from "@/lib/marketing/ads-date-range";
 import type { GoogleAdsSummary } from "@/lib/google-ads/types";
 import type { MetaAdsSummary } from "@/lib/meta/ads";
 
@@ -37,6 +38,12 @@ export type AdsPlatformBlock = {
 
 export type AdsDashboard = {
   days: number;
+  dateRange: {
+    startDate: string;
+    endDate: string;
+    label: string;
+    isAllTime: boolean;
+  };
   google: AdsPlatformBlock;
   meta: AdsPlatformBlock;
   totals: {
@@ -148,7 +155,7 @@ function buildMetaBlock(
 }
 
 export function buildAdsDashboard(input: {
-  days: number;
+  dateRange: AdsDateRange;
   googleSummary: GoogleAdsSummary | null;
   googleConnected: boolean;
   googleReady: boolean;
@@ -177,7 +184,13 @@ export function buildAdsDashboard(input: {
   const conversions = google.conversions + meta.conversions;
 
   return {
-    days: input.days,
+    days: input.dateRange.presetDays ?? 0,
+    dateRange: {
+      startDate: input.dateRange.startDate,
+      endDate: input.dateRange.endDate,
+      label: input.dateRange.label,
+      isAllTime: input.dateRange.isAllTime,
+    },
     google,
     meta,
     totals: {

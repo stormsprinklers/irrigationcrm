@@ -196,19 +196,33 @@ export function GoogleBusinessConnectionPanel() {
             <p className="font-medium">Server environment</p>
             <ul className="mt-2 space-y-1 text-muted-foreground">
               <li>
-                <code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code>:{" "}
-                {status.oauthEnv.hasClientId ? "detected" : "missing"}
+                <code className="text-xs">GOOGLE_BUSINESS_OAUTH_CLIENT_ID</code>:{" "}
+                {status.oauthEnv.usesDedicatedCredentials
+                  ? status.oauthEnv.hasClientId
+                    ? "detected"
+                    : "missing"
+                  : "using GOOGLE_OAUTH_CLIENT_ID"}
               </li>
               <li>
-                <code className="text-xs">GOOGLE_OAUTH_CLIENT_SECRET</code>:{" "}
-                {status.oauthEnv.hasClientSecret ? "detected" : "missing"}
+                <code className="text-xs">GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET</code>:{" "}
+                {status.oauthEnv.usesDedicatedCredentials
+                  ? status.oauthEnv.hasClientSecret
+                    ? "detected"
+                    : "missing"
+                  : "using GOOGLE_OAUTH_CLIENT_SECRET"}
               </li>
             </ul>
             {status && (!status.oauthEnv.hasClientId || !status.oauthEnv.hasClientSecret) ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                Add the missing variables in Vercel (or your host), redeploy, then refresh this
-                page. Aliases <code>GOOGLE_CLOUD_CLIENT_ID</code> /{" "}
-                <code>GOOGLE_CLOUD_CLIENT_SECRET</code> are also supported.
+                Add dedicated GBP variables in Vercel, or set{" "}
+                <code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code> as a
+                fallback. Redeploy, then refresh this page.
+              </p>
+            ) : !status.oauthEnv.usesDedicatedCredentials ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Using shared <code>GOOGLE_OAUTH_*</code> credentials. For a separate GBP OAuth
+                client, set <code>GOOGLE_BUSINESS_OAUTH_CLIENT_ID</code> and{" "}
+                <code>GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET</code>.
               </p>
             ) : null}
           </div>

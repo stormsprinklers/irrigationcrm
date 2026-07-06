@@ -4,11 +4,13 @@
  */
 import {
   createOAuthState,
-  exchangeOAuthCode,
-  getGoogleOAuthConfig,
-  isGoogleBusinessConfigured,
+  exchangeGoogleOAuthCode,
   verifyOAuthState,
-} from "@/lib/google-business/client";
+} from "@/lib/google-oauth/oauth";
+import {
+  getGeneralGoogleOAuthConfig,
+  isGeneralGoogleOAuthConfigured,
+} from "@/lib/google-oauth/config";
 import type {
   Ga4ConnectionStatus,
   Ga4ConversionRow,
@@ -34,11 +36,11 @@ export class GoogleAnalyticsApiError extends Error {
 }
 
 export function isGoogleAnalyticsConfigured() {
-  return isGoogleBusinessConfigured();
+  return isGeneralGoogleOAuthConfigured();
 }
 
 export function buildGoogleAnalyticsAuthUrl(companyId: string, redirectUri: string) {
-  const { clientId } = getGoogleOAuthConfig();
+  const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleAnalyticsApiError("Google OAuth is not configured", 503);
 
   const params = new URLSearchParams({
@@ -54,7 +56,16 @@ export function buildGoogleAnalyticsAuthUrl(companyId: string, redirectUri: stri
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export { exchangeOAuthCode, verifyOAuthState };
+export { verifyOAuthState };
+
+export async function exchangeOAuthCode(code: string, redirectUri: string) {
+  return exchangeGoogleOAuthCode(
+    code,
+    redirectUri,
+    getGeneralGoogleOAuthConfig(),
+    GoogleAnalyticsApiError
+  );
+}
 
 function formatGscStyleDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -88,7 +99,7 @@ export async function getGoogleAnalyticsAccessToken(companyId: string) {
     throw new GoogleAnalyticsApiError("Google Analytics is not connected", 400);
   }
 
-  const { clientId, clientSecret } = getGoogleOAuthConfig();
+  const { clientId, clientSecret } = getGeneralGoogleOAuthConfig();
   if (!clientId || !clientSecret) {
     throw new GoogleAnalyticsApiError("Google OAuth is not configured", 503);
   }
@@ -354,7 +365,7 @@ export async function getGa4ConnectionStatus(companyId: string): Promise<Ga4Conn
 
   if (!company) return null;
 
-  const env = getGoogleOAuthConfig();
+  const env = getGeneralGoogleOAuthConfig();
 
   return {
     connected: Boolean(company.googleAnalyticsRefreshToken),

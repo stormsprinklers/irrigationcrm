@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET on the server (Vercel environment variables).",
+            "Set GOOGLE_BUSINESS_OAUTH_CLIENT_ID and GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET (or shared GOOGLE_OAUTH_*) on the server.",
         },
         { status: 503 }
       );

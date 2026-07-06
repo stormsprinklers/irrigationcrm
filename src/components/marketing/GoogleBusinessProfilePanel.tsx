@@ -21,7 +21,7 @@ function GbpSetupPrompt({ status }: { status: GbpConnectionStatus }) {
 
   if (!status.configured) {
     message =
-      "Google OAuth credentials are not configured on the server. An admin must set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Vercel.";
+      "Google OAuth credentials are not configured on the server. An admin must set GOOGLE_BUSINESS_OAUTH_CLIENT_ID and GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET (or shared GOOGLE_OAUTH_*) in Vercel.";
     actionLabel = "View setup in Settings";
   } else if (status.connected && !status.locationId) {
     message = "Choose a business location in Settings to load marketing data from Google.";

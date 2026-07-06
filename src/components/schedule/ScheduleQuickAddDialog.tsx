@@ -6,6 +6,8 @@ import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
+import { EmployeeSearchPicker } from "@/components/schedule/EmployeeSearchPicker";
 import type { CustomerDTO } from "@/lib/customers/types";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 
@@ -29,12 +31,13 @@ export function ScheduleQuickAddDialog({
   onClose,
   onCreated,
 }: Props) {
-  const [customers, setCustomers] = useState<CustomerDTO[]>([]);
-  const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("Service visit");
   const [customerId, setCustomerId] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDTO | null>(null);
   const [assignedUserId, setAssignedUserId] = useState("");
+  const [assignedUserName, setAssignedUserName] = useState("");
   const [serviceAreaId, setServiceAreaId] = useState("");
   const [division, setDivision] = useState<"SERVICE" | "INSTALL">("SERVICE");
 
@@ -43,21 +46,19 @@ export function ScheduleQuickAddDialog({
 
     setTitle("Service visit");
     setCustomerId("");
-    setAssignedUserId(slot?.assignedUserId && slot.assignedUserId !== "__unassigned__" ? slot.assignedUserId : "");
+    setCustomerName("");
+    setSelectedCustomer(null);
     setServiceAreaId(serviceAreas[0]?.id ?? "");
     setDivision("SERVICE");
 
-    setLoadingCustomers(true);
-    fetch("/api/customers")
-      .then((r) => r.json())
-      .then((data) => setCustomers(data.customers ?? []))
-      .catch(() => toast.error("Failed to load customers"))
-      .finally(() => setLoadingCustomers(false));
-  }, [open, slot, serviceAreas]);
+    const preassignedId =
+      slot?.assignedUserId && slot.assignedUserId !== "__unassigned__" ? slot.assignedUserId : "";
+    const preassignedEmployee = employees.find((employee) => employee.id === preassignedId);
+    setAssignedUserId(preassignedId);
+    setAssignedUserName(preassignedEmployee?.name ?? "");
+  }, [open, slot, serviceAreas, employees]);
 
   if (!open || !slot) return null;
-
-  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -146,44 +147,33 @@ export function ScheduleQuickAddDialog({
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Customer</label>
-            {loadingCustomers ? (
-              <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading customers…
-              </p>
-            ) : (
-              <select
-                className={`${selectClassName} mt-1`}
+            <div className="mt-1">
+              <CustomerSearchPicker
                 value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                required
-              >
-                <option value="">Select customer</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id} disabled={customer.doNotService}>
-                    {customer.name}
-                    {customer.doNotService ? " (do not service)" : ""}
-                  </option>
-                ))}
-              </select>
-            )}
+                selectedName={customerName}
+                onValueChange={(id, name) => {
+                  setCustomerId(id);
+                  setCustomerName(name);
+                  if (!id) setSelectedCustomer(null);
+                }}
+                onCustomerSelect={setSelectedCustomer}
+              />
+            </div>
           </div>
 
           <div>
             <label className="text-xs font-medium text-muted-foreground">Technician</label>
-            <select
-              className={`${selectClassName} mt-1`}
-              value={assignedUserId}
-              onChange={(e) => setAssignedUserId(e.target.value)}
-              required
-            >
-              <option value="">Select technician</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.name}
-                </option>
-              ))}
-            </select>
+            <div className="mt-1">
+              <EmployeeSearchPicker
+                value={assignedUserId}
+                selectedName={assignedUserName}
+                employees={employees}
+                onValueChange={(id, name) => {
+                  setAssignedUserId(id);
+                  setAssignedUserName(name);
+                }}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

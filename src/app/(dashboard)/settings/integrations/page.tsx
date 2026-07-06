@@ -359,7 +359,7 @@ export default function SettingsIntegrationsPage() {
               </div>
               <p className="text-sm text-muted-foreground">
                 {!gbpStatus.configured
-                  ? "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Vercel."
+                  ? "Set GOOGLE_BUSINESS_OAUTH_CLIENT_ID and GOOGLE_BUSINESS_OAUTH_CLIENT_SECRET (or shared GOOGLE_OAUTH_*) in Vercel."
                   : !gbpStatus.connected
                     ? "Connect the Google account that manages your Business Profile listing."
                     : !gbpStatus.locationId
