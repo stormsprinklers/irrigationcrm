@@ -46,7 +46,7 @@ export function TopNav() {
           {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
 
-        <Link href="/" className="flex shrink-0 items-center">
+        <Link href="/home" className="flex shrink-0 items-center">
           <Image
             src={stormBrand.logoPath}
             alt="Storm Sprinklers"

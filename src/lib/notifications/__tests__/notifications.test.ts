@@ -6,6 +6,10 @@ import { isEstimateOpenForFollowUp } from "../estimate-followup";
 import { splitCustomerName } from "../name-utils";
 import { renderTemplate } from "../templates";
 import { buildNotificationContext, buildEnRouteContext, EN_ROUTE_ETA_FALLBACK } from "../context";
+import {
+  injectTrackedUrlsInText,
+  templateContextWithTrackedPlaceholders,
+} from "../tracked-links";
 
 test("isEstimateOpenForFollowUp is true only for SENT", () => {
   assert.equal(isEstimateOpenForFollowUp(EstimateStatus.SENT), true);
@@ -70,4 +74,29 @@ test("buildEnRouteContext uses fallback when ETA unavailable", () => {
     timezone: "America/Denver",
   });
   assert.equal(ctx.technician_eta, EN_ROUTE_ETA_FALLBACK);
+});
+
+test("review links in SMS templates use tracked redirect URLs", () => {
+  const context = buildNotificationContext({
+    company: {
+      name: "Storm Sprinklers",
+      googleReviewUrl: "https://g.page/r/storm/review",
+    },
+    customer: { name: "Jane Doe" },
+  });
+
+  const renderContext = templateContextWithTrackedPlaceholders(context, {
+    review: "https://g.page/r/storm/review",
+  });
+
+  const rendered = renderTemplate(
+    "Thanks {customer_first_name}! Review us: {review_link}",
+    renderContext
+  );
+  const body = injectTrackedUrlsInText(rendered, {
+    "{review_link}": "https://crm.example.com/api/track/l/abc123",
+  });
+
+  assert.match(body, /https:\/\/crm\.example\.com\/api\/track\/l\/abc123/);
+  assert.doesNotMatch(body, /g\.page\/r\/storm\/review/);
 });

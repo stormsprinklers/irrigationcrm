@@ -7,8 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { assertCustomerCanReceiveNotifications } from "./guard";
 import { technicianPhotoMediaUrl } from "./technician-photo";
 import {
-  createTrackedLink,
+  buildTrackedUrlMap,
   injectTrackedUrlsInText,
+  templateContextWithTrackedPlaceholders,
   type TrackedLinkKind,
 } from "./tracked-links";
 import { renderTemplate, type NotificationEvent, type TemplateContext } from "./templates";
@@ -160,6 +161,8 @@ export async function sendOperationalNotification(params: {
     customerName: params.recipient.name ?? params.context.customerName ?? "Customer",
   };
 
+  const renderContext = templateContextWithTrackedPlaceholders(baseContext, linkPlaceholders);
+
   const branding = {
     companyName: company.name,
     sendgridFrom: company.sendgridFrom,
@@ -187,25 +190,9 @@ export async function sendOperationalNotification(params: {
     });
     result.deliveryIds.push(delivery.id);
 
-    const urlMap: Record<string, string> = {};
-    for (const [kind, dest] of Object.entries(linkPlaceholders)) {
-      if (!dest || typeof dest !== "string") continue;
-      const tracked = await createTrackedLink({
-        deliveryId: delivery.id,
-        kind: kind as TrackedLinkKind,
-        destinationUrl: dest,
-      });
-      const snakeKey = `{${kind}_link}`;
-      urlMap[snakeKey] = tracked;
-      if (kind === "portal") urlMap["{portal_link}"] = tracked;
-      if (kind === "invoice") urlMap["{invoice_link}"] = tracked;
-      if (kind === "review") urlMap["{review_link}"] = tracked;
-      if (kind === "survey") urlMap["{survey_link}"] = tracked;
-      if (kind === "technician") urlMap["{about_technician_link}"] = tracked;
-      if (kind === "estimate") urlMap["{estimate_link}"] = tracked;
-    }
+    const urlMap = await buildTrackedUrlMap(delivery.id, linkPlaceholders);
 
-    let body = renderTemplate(rule.template.body, baseContext);
+    let body = renderTemplate(rule.template.body, renderContext);
     body = injectTrackedUrlsInText(body, urlMap);
 
     if (rule.template.channel === Channel.EMAIL && !options.smsOnly) {
@@ -218,7 +205,7 @@ export async function sendOperationalNotification(params: {
       try {
         const subject = renderTemplate(
           rule.template.subject ?? `${company.name} notification`,
-          baseContext
+          renderContext
         );
         await sendCompanyEmail(branding, {
           to: [to],
@@ -282,18 +269,12 @@ export async function sendOperationalNotification(params: {
       });
       result.deliveryIds.push(delivery.id);
 
-      const urlMap: Record<string, string> = {};
-      for (const [kind, dest] of Object.entries(linkPlaceholders)) {
-        if (!dest) continue;
-        const tracked = await createTrackedLink({
-          deliveryId: delivery.id,
-          kind: kind as TrackedLinkKind,
-          destinationUrl: dest,
-        });
-        if (kind === "invoice") urlMap["{invoice_link}"] = tracked;
-      }
+      const urlMap = await buildTrackedUrlMap(delivery.id, linkPlaceholders);
 
-      const body = injectTrackedUrlsInText(renderTemplate(rule.template.body, baseContext), urlMap);
+      const body = injectTrackedUrlsInText(
+        renderTemplate(rule.template.body, renderContext),
+        urlMap
+      );
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone) continue;
       try {

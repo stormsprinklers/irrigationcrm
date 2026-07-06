@@ -15,6 +15,7 @@ import {
   type NotificationEvent,
 } from "@/lib/notifications/templates";
 import type { CompanySettingsDTO } from "@/lib/company/types";
+import { ReviewLinkTrackingPanel } from "@/components/settings/ReviewLinkTrackingPanel";
 import { toast } from "sonner";
 
 type Template = {
@@ -300,8 +301,16 @@ export default function SettingsNotificationsPage() {
                     }
                     placeholder={linkField.placeholder}
                   />
+                  {event === "REVIEW_REQUEST" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Customers receive a tracked CRM link that redirects to this URL, so you can
+                      see who clicked.
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
+
+              {event === "REVIEW_REQUEST" ? <ReviewLinkTrackingPanel /> : null}
 
               {timingFields.map((field) => (
                 <div key={String(field.key)} className="space-y-1">

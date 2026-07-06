@@ -39,26 +39,58 @@ export async function uploadPngToSlackChannel(params: {
   title: string;
   initialComment?: string;
 }) {
-  const uploadMeta = await slackApi<SlackApiResponse & { upload_url: string; file_id: string }>(
-    "files.getUploadURLExternal",
-    {
-      filename: params.filename,
-      length: params.buffer.length,
-    }
-  );
-
-  const uploadRes = await fetch(uploadMeta.upload_url, {
-    method: "POST",
-    headers: { "Content-Type": "image/png" },
-    body: new Uint8Array(params.buffer),
+  await uploadPngsToSlackChannel({
+    channelId: params.channelId,
+    files: [
+      {
+        buffer: params.buffer,
+        filename: params.filename,
+        title: params.title,
+      },
+    ],
+    initialComment: params.initialComment,
   });
+}
 
-  if (!uploadRes.ok) {
-    throw new Error(`Slack file upload failed (${uploadRes.status})`);
+export async function uploadPngsToSlackChannel(params: {
+  channelId: string;
+  files: Array<{
+    buffer: Buffer;
+    filename: string;
+    title: string;
+  }>;
+  initialComment?: string;
+}) {
+  if (params.files.length === 0) {
+    throw new Error("At least one file is required");
+  }
+
+  const uploaded: Array<{ id: string; title: string }> = [];
+
+  for (const file of params.files) {
+    const uploadMeta = await slackApi<SlackApiResponse & { upload_url: string; file_id: string }>(
+      "files.getUploadURLExternal",
+      {
+        filename: file.filename,
+        length: file.buffer.length,
+      }
+    );
+
+    const uploadRes = await fetch(uploadMeta.upload_url, {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: new Uint8Array(file.buffer),
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`Slack file upload failed (${uploadRes.status})`);
+    }
+
+    uploaded.push({ id: uploadMeta.file_id, title: file.title });
   }
 
   await slackApi("files.completeUploadExternal", {
-    files: [{ id: uploadMeta.file_id, title: params.title }],
+    files: uploaded,
     channel_id: params.channelId,
     initial_comment: params.initialComment,
   });

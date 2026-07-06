@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Storm Sprinklers CRM",
-  description: "Irrigation company CRM",
+  title: "Irrigation CRM",
+  description: "Internal irrigation company operations and marketing platform for Storm Sprinklers.",
   icons: {
     icon: stormBrand.iconPath,
   },

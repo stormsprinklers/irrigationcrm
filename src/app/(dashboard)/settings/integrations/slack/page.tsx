@@ -10,7 +10,7 @@ export default function SlackIntegrationsPage() {
       <PageHeader
         breadcrumb={["Settings", "Integrations", "Slack"]}
         title="Slack"
-        subtitle="Send designed Google review cards to a company Slack channel when new reviews arrive."
+        subtitle="Send designed Google review cards to Slack on demand — batched as image posts."
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link href="/settings/integrations">Back to integrations</Link>

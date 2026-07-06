@@ -2,6 +2,12 @@
 
 Use this script when submitting your OAuth verification request. Record a **single unlisted YouTube video** that demonstrates **all scopes** used by your one OAuth Web client in Google Cloud.
 
+**Public homepage (Google branding verification):** `https://crm.stormsprinklers.com/`
+
+- App name on the page: **Irrigation CRM** (must match OAuth consent screen)
+- No login required to view `/` or `/privacy`
+- Verify domain ownership of `crm.stormsprinklers.com` in [Google Search Console](https://search.google.com/search-console) (URL-prefix property) or add the `GOOGLE_SITE_VERIFICATION` meta tag from Search Console to Vercel env and redeploy
+
 **Preview page for recording:** open your CRM at:
 
 ```
@@ -17,7 +23,7 @@ That page shows sample dashboards for GBP and Search Console without requiring l
 1. Log into the CRM as an admin.
 2. Have Google Cloud Console open (OAuth consent screen + Credentials) to show the **same OAuth client** used for both redirect URIs.
 3. Optional: connect GBP and/or Search Console live if already verified — otherwise use the preview page for those sections.
-4. App name on consent screen should match what you tell Google (e.g. **Storm Sprinklers CRM**).
+4. App name on consent screen should match the public homepage: **Irrigation CRM**.
 5. Video length target: **4–6 minutes**.
 
 ---

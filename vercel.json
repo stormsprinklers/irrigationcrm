@@ -9,10 +9,6 @@
     {
       "path": "/api/cron/marketing/social-publish",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/marketing/gbp-review-slack",
-      "schedule": "0 */8 * * *"
     }
   ]
 }

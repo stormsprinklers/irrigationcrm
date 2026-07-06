@@ -4,10 +4,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import {
-  bootstrapGbpReviewSlack,
-  processGbpReviewSlackNotifications,
-} from "@/lib/google-business/review-slack-notifier";
+import { sendUnsentGbpReviewsToSlack } from "@/lib/google-business/review-slack-notifier";
 import { isSlackConfigured, slackConfigHints } from "@/lib/slack/config";
 import { testSlackAuth } from "@/lib/slack/client";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +17,6 @@ export async function GET() {
       select: {
         slackGbpReviewsEnabled: true,
         slackGbpReviewsChannelId: true,
-        slackGbpReviewsBootstrapped: true,
         googleBusinessRefreshToken: true,
         googleBusinessLocationTitle: true,
       },
@@ -44,8 +40,8 @@ export async function GET() {
       locationTitle: company.googleBusinessLocationTitle,
       enabled: company.slackGbpReviewsEnabled,
       channelId: company.slackGbpReviewsChannelId,
-      bootstrapped: company.slackGbpReviewsBootstrapped,
       deliveredCount,
+      hasDeliveryHistory: deliveredCount > 0,
       slackError: auth.ok ? null : auth.error,
     });
   } catch {
@@ -68,7 +64,6 @@ export async function PATCH(request: NextRequest) {
     const existing = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: {
-        slackGbpReviewsEnabled: true,
         slackGbpReviewsChannelId: true,
         googleBusinessRefreshToken: true,
       },
@@ -101,31 +96,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const turningOn = enabled && !existing.slackGbpReviewsEnabled;
-    const channelChanged =
-      channelId !== undefined && channelId !== existing.slackGbpReviewsChannelId;
-
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data: {
         slackGbpReviewsEnabled: enabled,
         ...(channelId !== undefined ? { slackGbpReviewsChannelId: channelId } : {}),
-        ...(turningOn || channelChanged ? { slackGbpReviewsBootstrapped: false } : {}),
       },
       select: {
         slackGbpReviewsEnabled: true,
         slackGbpReviewsChannelId: true,
-        slackGbpReviewsBootstrapped: true,
       },
     });
 
-    let bootstrapped = 0;
-    if ((turningOn || channelChanged) && enabled) {
-      const result = await bootstrapGbpReviewSlack(user.companyId);
-      bootstrapped = result.bootstrapped;
-    }
-
-    return NextResponse.json({ ...company, bootstrapped });
+    return NextResponse.json(company);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save Slack settings";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -139,10 +122,10 @@ export async function POST() {
       return forbiddenResponse();
     }
 
-    const result = await processGbpReviewSlackNotifications(user.companyId);
+    const result = await sendUnsentGbpReviewsToSlack(user.companyId);
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to check for new reviews";
+    const message = error instanceof Error ? error.message : "Failed to send reviews to Slack";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

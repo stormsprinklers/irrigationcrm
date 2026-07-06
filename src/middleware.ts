@@ -3,6 +3,8 @@ import { getToken } from "next-auth/jwt";
 import { getAuthSecret } from "@/lib/auth-secret";
 
 const publicPaths = [
+  "/",
+  "/privacy",
   "/login",
   "/pay",
   "/book",

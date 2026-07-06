@@ -13,6 +13,7 @@ import {
   type ReportRangeInput,
   resolveReportRange,
 } from "@/lib/reporting/date-range";
+import { getGbpReviewSummary } from "@/lib/google-business/v4-api";
 import { prisma } from "@/lib/prisma";
 
 export type KpiDateRange = ReportPresetRange | "custom";
@@ -83,6 +84,39 @@ function isSalesperson(user: {
   if (user.tags.some((t) => t.toLowerCase() === "sales")) return true;
   if (user.title?.toLowerCase().includes("sales")) return true;
   return false;
+}
+
+async function resolveCompanyFiveStarReviewCount(
+  companyId: string,
+  feedbackFiveStarCount: number
+): Promise<number> {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      googleBusinessRefreshToken: true,
+      googleBusinessAccountId: true,
+      googleBusinessLocationId: true,
+    },
+  });
+
+  if (
+    !company?.googleBusinessRefreshToken ||
+    !company.googleBusinessAccountId ||
+    !company.googleBusinessLocationId
+  ) {
+    return feedbackFiveStarCount;
+  }
+
+  try {
+    const summary = await getGbpReviewSummary(
+      companyId,
+      company.googleBusinessAccountId,
+      company.googleBusinessLocationId
+    );
+    return summary.byStar.find((row) => row.stars === 5)?.count ?? feedbackFiveStarCount;
+  } catch {
+    return feedbackFiveStarCount;
+  }
 }
 
 export async function getKpiDashboardReport(
@@ -225,7 +259,11 @@ export async function getKpiDashboardReport(
       ? serviceVisits.reduce((s, v) => s + v.revenue, 0) / serviceVisits.length
       : 0;
 
-  const fiveStarReviews = feedback.filter((f) => f.rating === 5).length;
+  const feedbackFiveStarCount = feedback.filter((f) => f.rating === 5).length;
+  const fiveStarReviews = await resolveCompanyFiveStarReviewCount(
+    companyId,
+    feedbackFiveStarCount
+  );
 
   const serviceEstimates = estimates.filter((e) => e.visit?.division === Division.SERVICE);
   const serviceConversionRate = estimateConversionRate(serviceEstimates);

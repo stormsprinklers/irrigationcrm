@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +18,8 @@ type SlackGbpReviewsStatus = {
   locationTitle: string | null;
   enabled: boolean;
   channelId: string | null;
-  bootstrapped: boolean;
   deliveredCount: number;
+  hasDeliveryHistory: boolean;
   slackError: string | null;
 };
 
@@ -28,7 +28,7 @@ export function SlackGbpReviewsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [sending, setSending] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [channelId, setChannelId] = useState("");
 
@@ -63,11 +63,7 @@ export function SlackGbpReviewsPanel() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
-      toast.success(
-        data.bootstrapped > 0
-          ? `Saved. Marked ${data.bootstrapped} existing reviews as seen — only new reviews will post to Slack.`
-          : "Slack review alerts saved"
-      );
+      toast.success("Slack review settings saved");
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
@@ -90,22 +86,49 @@ export function SlackGbpReviewsPanel() {
     }
   }
 
-  async function checkNow() {
-    setChecking(true);
+  async function sendReviews() {
+    setSending(true);
     try {
       const res = await fetch("/api/settings/slack/gbp-reviews", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Check failed");
-      toast.success(
-        data.posted > 0
-          ? `Posted ${data.posted} new review${data.posted === 1 ? "" : "s"} to Slack`
-          : "No new reviews to post"
-      );
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+
+      if (data.skipped === "slack_not_configured") {
+        toast.error("Slack is not configured on the server");
+        return;
+      }
+      if (data.skipped === "channel_not_configured") {
+        toast.error("Save a Slack channel ID first");
+        return;
+      }
+      if (data.skipped === "gbp_not_connected") {
+        toast.error("Connect Google Business Profile first");
+        return;
+      }
+
+      if (data.posted > 0) {
+        const parts = [
+          `Sent ${data.posted} review${data.posted === 1 ? "" : "s"} in ${data.messages} Slack message${data.messages === 1 ? "" : "s"}`,
+        ];
+        if (data.remaining > 0) {
+          parts.push(`${data.remaining} more unsent — click Send again`);
+        }
+        toast.success(parts.join(". "));
+      } else if (data.firstSend) {
+        toast.message("No Google reviews from the last 24 hours to send");
+      } else {
+        toast.message("No new unsent reviews to post");
+      }
+
+      if (data.errors?.length) {
+        toast.error(data.errors[0]);
+      }
+
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Check failed");
+      toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
-      setChecking(false);
+      setSending(false);
     }
   }
 
@@ -118,8 +141,9 @@ export function SlackGbpReviewsPanel() {
       <CardHeader>
         <CardTitle className="text-base">Google review alerts</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Post a designed image card to Slack whenever a new Google review arrives. Checks run
-          automatically every 8 hours.
+          Send designed review cards to Slack on demand. Each Slack message can include up to six
+          review images; larger batches are split across multiple messages. Reviews already sent are
+          tracked so they are not posted again.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -150,7 +174,7 @@ export function SlackGbpReviewsPanel() {
 
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={enabled} onCheckedChange={(value) => setEnabled(value === true)} />
-          Enable Slack alerts for new Google reviews
+          Enable Google review Slack sharing
         </label>
 
         <div className="space-y-2">
@@ -168,29 +192,38 @@ export function SlackGbpReviewsPanel() {
           </p>
         </div>
 
-        {status?.bootstrapped ? (
-          <p className="text-xs text-muted-foreground">
-            Tracking {status.deliveredCount} reviews already seen. Only new reviews will be posted.
-          </p>
-        ) : null}
+        <p className="text-xs text-muted-foreground">
+          {status?.hasDeliveryHistory
+            ? `${status.deliveredCount} reviews already sent to Slack. Send will post any newer reviews not yet shared.`
+            : "First send includes Google reviews from the last 24 hours only. After that, any unsent reviews are eligible."}
+        </p>
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={() => void save()} disabled={saving}>
             {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             Save
           </Button>
-          <Button type="button" variant="outline" disabled={testing || !channelId} onClick={() => void sendTest()}>
-            {testing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-            Send sample card
+          <Button
+            type="button"
+            variant="default"
+            disabled={sending || !channelId || !status?.gbpConnected}
+            onClick={() => void sendReviews()}
+          >
+            {sending ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-1 h-4 w-4" />
+            )}
+            Send reviews to Slack
           </Button>
           <Button
             type="button"
             variant="outline"
-            disabled={checking || !enabled}
-            onClick={() => void checkNow()}
+            disabled={testing || !channelId}
+            onClick={() => void sendTest()}
           >
-            {checking ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
-            Check now
+            {testing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Send sample card
           </Button>
         </div>
 

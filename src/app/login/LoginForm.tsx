@@ -11,7 +11,7 @@ import { stormBrand } from "@/lib/branding";
 
 export default function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/home";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -61,8 +61,8 @@ export default function LoginForm() {
             priority
             className="mx-auto mb-2 h-24 w-auto object-contain"
           />
-          <CardTitle className="font-display text-2xl text-storm-navy">Storm Sprinklers CRM</CardTitle>
-          <p className="text-sm text-muted-foreground">Sign in to continue</p>
+          <CardTitle className="font-display text-2xl text-storm-navy">Irrigation CRM</CardTitle>
+          <p className="text-sm text-muted-foreground">Storm Sprinklers staff sign in</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

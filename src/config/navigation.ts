@@ -12,7 +12,7 @@ export type NavSection = {
 };
 
 export const primaryNav: NavItem[] = [
-  { label: "Home", href: "/" },
+  { label: "Home", href: "/home" },
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
@@ -183,13 +183,13 @@ export const priceBookSettingsSidebar: NavSection[] = [
 ];
 
 export function isNavActive(pathname: string, href: string, exact?: boolean) {
-  if (href === "/") return pathname === "/";
+  if (href === "/home") return pathname === "/home";
   if (exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function getPrimaryNavActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/home") return pathname === "/home";
   if (href === "/customers") return pathname.startsWith("/customers");
   if (href === "/inbox") return pathname.startsWith("/inbox");
   if (href === "/price-book") return pathname.startsWith("/price-book");

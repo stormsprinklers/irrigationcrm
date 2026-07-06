@@ -380,7 +380,7 @@ export default function SettingsIntegrationsPage() {
               <Badge variant="secondary">Configured in settings</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Post designed image cards to a Slack channel when new Google reviews arrive. Requires{" "}
+              Send designed review image cards to a Slack channel on demand. Requires{" "}
               <code className="text-xs">SLACK_BOT_TOKEN</code> in Vercel and a connected Google
               Business Profile.
             </p>
