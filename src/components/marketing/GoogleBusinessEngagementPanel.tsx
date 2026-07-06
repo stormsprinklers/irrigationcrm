@@ -67,8 +67,8 @@ export function GoogleBusinessEngagementPanel() {
       <CardHeader>
         <CardTitle className="text-base">Reviews, posts & photos</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Respond to reviews, publish updates, and upload job photos to your Google Business
-          Profile. AI drafts text for you to edit before posting.
+          Reply to reviews that still need a response, publish updates, and upload job photos to
+          your Google Business Profile. AI drafts text for you to edit before posting.
         </p>
         <div className="flex flex-wrap gap-2 pt-2">
           <TabButton active={tab === "reviews"} onClick={() => setTab("reviews")} icon={MessageSquare}>
@@ -116,6 +116,7 @@ function TabButton({
 
 function ReviewsTab() {
   const [reviews, setReviews] = useState<GbpReviewDto[]>([]);
+  const [allReviewsResponded, setAllReviewsResponded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [generatingId, setGeneratingId] = useState<string | null>(null);
@@ -128,12 +129,14 @@ function ReviewsTab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load reviews");
       const list = (data.reviews ?? []) as GbpReviewDto[];
-      setReviews(list);
+      const unreplied = list.filter((review) => !review.reply?.trim());
+      setReviews(unreplied);
+      setAllReviewsResponded(list.length > 0 && unreplied.length === 0);
       setReplyDrafts((current) => {
         const next = { ...current };
-        for (const review of list) {
+        for (const review of unreplied) {
           if (next[review.name] === undefined) {
-            next[review.name] = review.reply ?? "";
+            next[review.name] = "";
           }
         }
         return next;
@@ -141,6 +144,7 @@ function ReviewsTab() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load reviews");
       setReviews([]);
+      setAllReviewsResponded(false);
     } finally {
       setLoading(false);
     }
@@ -209,7 +213,9 @@ function ReviewsTab() {
   if (reviews.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No reviews returned from Google for this location yet.
+        {allReviewsResponded
+          ? "You're all caught up — every review has a response."
+          : "No reviews returned from Google for this location yet."}
       </p>
     );
   }
@@ -230,7 +236,6 @@ function ReviewsTab() {
                 ) : null}
               </div>
             </div>
-            {review.reply ? <Badge variant="secondary">Replied</Badge> : null}
           </div>
           {review.comment ? (
             <p className="text-sm text-foreground/90 whitespace-pre-wrap">{review.comment}</p>

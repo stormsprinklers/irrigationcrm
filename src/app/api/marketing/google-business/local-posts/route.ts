@@ -8,7 +8,7 @@ import {
 import { canManageCustomers } from "@/lib/customers/permissions";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { createGbpLocalPost, listGbpLocalPosts } from "@/lib/google-business/v4-api";
-import { uploadGbpPhotoFromPickableId } from "@/lib/google-business/gbp-media-upload";
+import { resolveGbpLocalPostPhotoSourceUrl } from "@/lib/google-business/gbp-media-upload";
 
 export async function GET() {
   try {
@@ -47,15 +47,11 @@ export async function POST(request: NextRequest) {
     let photoSourceUrl: string | null = null;
     const photoId = body.photoId ?? body.attachmentId;
     if (photoId) {
-      const uploaded = await uploadGbpPhotoFromPickableId({
+      photoSourceUrl = await resolveGbpLocalPostPhotoSourceUrl({
         companyId: user.companyId,
-        accountId: company.googleBusinessAccountId!,
-        locationId: company.googleBusinessLocationId!,
         photoId: String(photoId),
         previewUrl: String(body.previewUrl ?? "").trim() || null,
-        category: "AT_WORK",
       });
-      photoSourceUrl = uploaded.googleUrl;
     }
 
     const post = await createGbpLocalPost(

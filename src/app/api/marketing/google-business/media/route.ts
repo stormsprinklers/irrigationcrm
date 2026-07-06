@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       body.category === "PRODUCT" ||
       body.category === "TEAMS"
         ? body.category
-        : "AT_WORK";
+        : "ADDITIONAL";
 
     const media = await uploadGbpPhotoFromPickableId({
       companyId: user.companyId,

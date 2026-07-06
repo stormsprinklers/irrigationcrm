@@ -17,6 +17,11 @@ import { buildGbpLocationParent } from "@/lib/google-business/location-path";
 const MYBUSINESS_V4 = "https://mybusiness.googleapis.com/v4";
 const MYBUSINESS_UPLOAD = "https://mybusiness.googleapis.com/upload/v1";
 
+function gbpMediaUploadUrl(resourceName: string) {
+  const normalized = resourceName.startsWith("media/") ? resourceName : `media/${resourceName}`;
+  return `${MYBUSINESS_UPLOAD}/${normalized}?uploadType=media`;
+}
+
 function mapReview(raw: Record<string, unknown>): GbpReviewDto {
   const reviewer = raw.reviewer as Record<string, unknown> | undefined;
   const reply = raw.reviewReply as Record<string, unknown> | undefined;
@@ -266,7 +271,7 @@ export async function uploadGbpPhotoBytes(
   locationId: string,
   bytes: Buffer,
   mimeType: string,
-  category: "ADDITIONAL" | "AT_WORK" | "EXTERIOR" | "INTERIOR" | "PRODUCT" | "TEAMS" = "AT_WORK"
+  category: "ADDITIONAL" | "AT_WORK" | "EXTERIOR" | "INTERIOR" | "PRODUCT" | "TEAMS" = "ADDITIONAL"
 ): Promise<GbpMediaItemDto> {
   const accessToken = await getCompanyAccessToken(companyId);
   const parent = buildGbpLocationParent(accountId, locationId);
@@ -279,6 +284,12 @@ export async function uploadGbpPhotoBytes(
       "Google Business Profile photos must be an image file",
       400
     );
+  }
+  if (bytes.length === 0) {
+    throw new GoogleBusinessApiError("Photo file was empty", 400);
+  }
+  if (bytes.length > 10 * 1024 * 1024) {
+    throw new GoogleBusinessApiError("Google photos must be 10 MB or smaller", 400);
   }
 
   const start = await googleApiFetch<{ resourceName?: string }>(
@@ -298,7 +309,7 @@ export async function uploadGbpPhotoBytes(
 
   const uploadRes = await googleApiFetchRaw(
     accessToken,
-    `${MYBUSINESS_UPLOAD}/media/${encodeURIComponent(resourceName)}?uploadType=media`,
+    gbpMediaUploadUrl(resourceName),
     {
       method: "POST",
       headers: { "Content-Type": uploadMime },
