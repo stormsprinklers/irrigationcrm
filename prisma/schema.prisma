@@ -59,6 +59,23 @@ enum Division {
   SERVICE
 }
 
+enum ReferralSubmissionStatus {
+  SUBMITTED
+  BOOKED
+  ESTIMATE_APPROVED
+  PAID
+  REWARDED
+  DISQUALIFIED
+  EXPIRED
+}
+
+enum ReferralRewardStatus {
+  PENDING_ONBOARDING
+  PENDING_PAYOUT
+  TRANSFERRED
+  FAILED
+}
+
 enum EmployeeStatus {
   ACTIVE
   ARCHIVED
@@ -431,6 +448,7 @@ model Company {
   portalShowChecklists     Boolean  @default(true)
   portalShowRachio         Boolean  @default(true)
   portalShowOffers         Boolean  @default(true)
+  portalShowReferrals      Boolean  @default(true)
   portalRachioAllowRun     Boolean  @default(false)
   notifyEstimateSent       Boolean  @default(true)
   notifyInvoicePaid        Boolean  @default(true)
@@ -453,6 +471,7 @@ model Company {
   intakeRequiredFields     String[] @default([])
   businessHours            Json?
   referralCode             String?
+  stripeConnectAccountId   String?
   subscriptionTier         String?  @default("Professional")
   customReportPresets      Json?
   rachioApiKey             String?
@@ -568,6 +587,9 @@ model Company {
   localSeoSerpSearches LocalSeoSerpSearch[]
   localSeoRankingCaches LocalSeoRankingCache[]
   seoTasks               SeoTask[]
+  referralProgramSettings ReferralProgramSettings?
+  referralMembers        ReferralMember[]
+  referralSubmissions    ReferralSubmission[]
 }
 
 model LocalSeoSerpSearch {
@@ -744,6 +766,7 @@ model Customer {
   state       String?
   zip         String?
   leadSource       String?
+  referredByCustomerId String?
   stripeCustomerId String?
   status           CustomerStatus @default(ACTIVE)
   doNotService     Boolean        @default(false)
@@ -752,6 +775,11 @@ model Customer {
   updatedAt        DateTime @updatedAt
 
   company              Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  referredBy           Customer?                  @relation("CustomerReferrals", fields: [referredByCustomerId], references: [id], onDelete: SetNull)
+  referredCustomers    Customer[]                 @relation("CustomerReferrals")
+  referralMember       ReferralMember?
+  referralSubmissionsAsReferrer ReferralSubmission[] @relation("ReferrerCustomer")
+  referralSubmissionsAsReferred ReferralSubmission[] @relation("ReferredCustomer")
   blockedEntry         BlockedContact?
   callLogs             CallLog[]
   conversations        Conversation[]
@@ -772,6 +800,8 @@ model Customer {
   portalLoginTokens      CustomerPortalLoginToken[]
   notificationDeliveries NotificationDelivery[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
+
+  @@index([referredByCustomerId])
 }
 
 model CustomerPhone {
@@ -837,6 +867,7 @@ model Lead {
   company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   assignedUser      User?     @relation("AssignedLeads", fields: [assignedUserId], references: [id], onDelete: SetNull)
   convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+  referralSubmission ReferralSubmission?
   callLogs          CallLog[]
 
   @@unique([companyId, externalId])
@@ -2709,6 +2740,92 @@ model GbpReviewSlackDelivery {
 
   @@unique([companyId, reviewId])
   @@index([companyId, deliveredAt])
+}
+
+model ReferralProgramSettings {
+  id                  String   @id @default(cuid())
+  companyId           String   @unique
+  enabled             Boolean  @default(false)
+  installRewardCents  Int      @default(25000)
+  serviceRewardCents  Int      @default(5000)
+  autoEnrollCustomers Boolean  @default(false)
+  headline            String?
+  terms               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model ReferralMember {
+  id                        String    @id @default(cuid())
+  companyId                 String
+  customerId                String    @unique
+  token                     String    @unique
+  enrolledAt                DateTime  @default(now())
+  stripeConnectAccountId    String?
+  stripeConnectOnboardedAt  DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+model ReferralSubmission {
+  id                  String                   @id @default(cuid())
+  companyId           String
+  referrerCustomerId  String
+  referredName        String
+  referredPhone       String?
+  referredEmail       String?
+  referredAddress     String?
+  referredCity        String?
+  referredState       String?
+  referredZip         String?
+  leadId              String?                  @unique
+  referredCustomerId  String?
+  visitId             String?
+  estimateId          String?
+  invoiceId           String?
+  status              ReferralSubmissionStatus @default(SUBMITTED)
+  division            Division?
+  revenueCents        Int?
+  rewardCents         Int?
+  bookedAt            DateTime?
+  estimateApprovedAt  DateTime?
+  paidAt              DateTime?
+  rewardedAt          DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  referrerCustomer Customer         @relation("ReferrerCustomer", fields: [referrerCustomerId], references: [id], onDelete: Cascade)
+  referredCustomer Customer?        @relation("ReferredCustomer", fields: [referredCustomerId], references: [id], onDelete: SetNull)
+  lead             Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  reward           ReferralReward?
+
+  @@index([companyId, status, createdAt])
+  @@index([referrerCustomerId])
+  @@index([referredCustomerId])
+}
+
+model ReferralReward {
+  id                   String               @id @default(cuid())
+  submissionId         String               @unique
+  amountCents          Int
+  status               ReferralRewardStatus @default(PENDING_ONBOARDING)
+  stripeTransferId     String?
+  failureReason        String?
+  paidAt               DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  submission ReferralSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 model PropertyIrrigationMapZone {

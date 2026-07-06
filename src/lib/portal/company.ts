@@ -26,6 +26,7 @@ export const portalCompanySelect = {
   portalShowChecklists: true,
   portalShowRachio: true,
   portalShowOffers: true,
+  portalShowReferrals: true,
   portalRachioAllowRun: true,
 } as const;
 
@@ -55,6 +56,7 @@ export type PortalCompany = {
   portalShowChecklists: boolean;
   portalShowRachio: boolean;
   portalShowOffers: boolean;
+  portalShowReferrals: boolean;
   portalRachioAllowRun: boolean;
 };
 

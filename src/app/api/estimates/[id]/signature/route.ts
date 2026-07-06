@@ -48,6 +48,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     void onEstimateClosed(id).catch(() => {});
 
+    const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
+    void onReferralEstimateApproved({
+      companyId: estimate.companyId,
+      estimateId: id,
+      customerId: estimate.customerId,
+    }).catch(() => {});
+
     const updated = await getEstimateForCompany(user.companyId, id);
     return NextResponse.json(updated);
   } catch {

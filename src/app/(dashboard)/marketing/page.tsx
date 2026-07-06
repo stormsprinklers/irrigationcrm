@@ -7,6 +7,7 @@ import {
   Mail,
   Megaphone,
   Search,
+  Users,
 } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -48,6 +49,13 @@ const modules = [
     href: "/marketing/google-business",
     icon: Globe,
     cta: "View performance",
+  },
+  {
+    title: "Referrals",
+    description: "Customer referral program with share links, funnel tracking, and Stripe Connect payouts.",
+    href: "/marketing/referrals",
+    icon: Users,
+    cta: "Manage referrals",
   },
 ];
 

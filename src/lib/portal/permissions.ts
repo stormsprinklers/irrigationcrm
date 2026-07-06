@@ -2,7 +2,7 @@ import type { PortalCompany } from "./company";
 
 export function portalFeatureEnabled(
   company: PortalCompany,
-  feature: "jobs" | "invoices" | "estimates" | "maintenance" | "checklists" | "rachio" | "offers"
+  feature: "jobs" | "invoices" | "estimates" | "maintenance" | "checklists" | "rachio" | "offers" | "referrals"
 ) {
   switch (feature) {
     case "jobs":
@@ -19,6 +19,8 @@ export function portalFeatureEnabled(
       return company.portalShowRachio;
     case "offers":
       return company.portalShowOffers;
+    case "referrals":
+      return company.portalShowReferrals;
     default:
       return false;
   }

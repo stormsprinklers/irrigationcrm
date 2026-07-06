@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const { autoEnrollCustomerIfEnabled } = await import("@/lib/referrals/members");
+    void autoEnrollCustomerIfEnabled(user.companyId, customer.id).catch(() => {});
+
     return NextResponse.json(serializeCustomer(customer), { status: 201 });
   } catch {
     return unauthorizedResponse();

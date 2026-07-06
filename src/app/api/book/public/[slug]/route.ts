@@ -211,6 +211,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     isInitialSchedule: true,
   }).catch(() => {});
 
+  const { onReferralVisitBooked } = await import("@/lib/referrals/conversion");
+  void onReferralVisitBooked({
+    companyId: company.id,
+    customerId: customer.id,
+    visitId: visit.id,
+  }).catch(() => {});
+
   return NextResponse.json(
     {
       visitId: visit.id,

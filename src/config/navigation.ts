@@ -116,6 +116,7 @@ export const marketingSidebar: NavSection[] = [
       { label: "SEO", href: "/marketing/seo" },
       { label: "Ads", href: "/marketing/ads" },
       { label: "Google Business Profile", href: "/marketing/google-business" },
+      { label: "Referrals", href: "/marketing/referrals" },
     ],
   },
 ];

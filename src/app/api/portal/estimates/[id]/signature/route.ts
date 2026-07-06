@@ -83,6 +83,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   void onEstimateClosed(estimate.id).catch(() => {});
 
+  const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
+  void onReferralEstimateApproved({
+    companyId: estimate.companyId,
+    estimateId: estimate.id,
+    customerId: estimate.customerId,
+  }).catch(() => {});
+
   const depositAmount = computeDepositAmount(updated);
   let depositCheckoutUrl: string | null = null;
 

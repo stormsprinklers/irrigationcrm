@@ -129,6 +129,13 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         isInitialSchedule: true,
       }).catch(() => {});
+
+      const { onReferralVisitBooked } = await import("@/lib/referrals/conversion");
+      void onReferralVisitBooked({
+        companyId: user.companyId,
+        customerId: visit.customerId,
+        visitId: visit.id,
+      }).catch(() => {});
     }
 
     return NextResponse.json(serializeJob(visit), { status: 201 });

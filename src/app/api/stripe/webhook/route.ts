@@ -58,5 +58,13 @@ export async function POST(request: NextRequest) {
     await handleSubscriptionUpdated(event.data.object);
   }
 
+  if (event.type === "account.updated") {
+    const { handleConnectAccountUpdated } = await import("@/lib/referrals/stripe-connect");
+    const account = event.data.object as { id?: string };
+    if (account.id) {
+      await handleConnectAccountUpdated(account.id);
+    }
+  }
+
   return NextResponse.json({ received: true });
 }

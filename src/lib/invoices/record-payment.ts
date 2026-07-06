@@ -142,6 +142,19 @@ export async function recordInvoicePayment(
     });
   }
 
+  if (nextStatus === "PAID") {
+    const { onReferralInvoicePaid } = await import("@/lib/referrals/conversion");
+    await onReferralInvoicePaid({
+      companyId: invoice.companyId,
+      invoiceId: invoice.id,
+      customerId: invoice.customerId,
+      invoiceNumber: invoice.invoiceNumber,
+      visitId: invoice.visitId,
+    }).catch((err) => {
+      console.error("Referral invoice paid hook failed:", err);
+    });
+  }
+
   return {
     recorded: true,
     alreadyRecorded: false,

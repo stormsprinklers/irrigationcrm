@@ -69,8 +69,8 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
               G
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 28, fontWeight: 700 }}>New Google Review</div>
-              <div style={{ fontSize: 18, color: "#cbd5e1", marginTop: 4 }}>{dateLabel}</div>
+              <div style={{ fontSize: 28, fontWeight: 700, display: "flex" }}>New Google Review</div>
+              <div style={{ fontSize: 18, color: "#cbd5e1", marginTop: 4, display: "flex" }}>{dateLabel}</div>
             </div>
           </div>
           <div
@@ -81,6 +81,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
               background: "rgba(255,255,255,0.12)",
               padding: "10px 18px",
               borderRadius: 999,
+              display: "flex",
             }}
           >
             {input.companyName}
@@ -95,8 +96,8 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
             marginTop: 40,
           }}
         >
-          <div style={{ fontSize: 44, color: "#fbbf24", letterSpacing: 2 }}>{stars}</div>
-          <div style={{ fontSize: 30, fontWeight: 700 }}>{input.starCount} out of 5</div>
+          <div style={{ fontSize: 44, color: "#fbbf24", letterSpacing: 2, display: "flex" }}>{stars}</div>
+          <div style={{ fontSize: 30, fontWeight: 700, display: "flex" }}>{`${input.starCount} out of 5`}</div>
         </div>
 
         <div
@@ -112,13 +113,16 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
             flex: 1,
           }}
         >
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#f8fafc" }}>{input.reviewerName}</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "#f8fafc", display: "flex" }}>
+            {input.reviewerName}
+          </div>
           <div
             style={{
               fontSize: 24,
               lineHeight: 1.45,
               color: "#e2e8f0",
               whiteSpace: "pre-wrap",
+              display: "flex",
             }}
           >
             {comment}

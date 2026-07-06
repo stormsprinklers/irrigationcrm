@@ -63,6 +63,7 @@ export async function GET() {
         checklists: portalFeatureEnabled(ctx.company, "checklists"),
         rachio: portalFeatureEnabled(ctx.company, "rachio"),
         offers: portalFeatureEnabled(ctx.company, "offers"),
+        referrals: portalFeatureEnabled(ctx.company, "referrals"),
         allowSchedule: ctx.company.portalAllowSchedule,
         rachioAllowRun: ctx.company.portalRachioAllowRun,
       },

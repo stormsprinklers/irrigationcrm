@@ -53,8 +53,8 @@ export async function convertLeadToCustomer(companyId: string, leadId: string) {
     return prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
   }
 
-  return prisma.$transaction(async (tx) => {
-    const customer = await tx.customer.create({
+  const customer = await prisma.$transaction(async (tx) => {
+    const created = await tx.customer.create({
       data: {
         companyId,
         name: lead.name,
@@ -65,8 +65,13 @@ export async function convertLeadToCustomer(companyId: string, leadId: string) {
     });
     await tx.lead.update({
       where: { id: leadId },
-      data: { convertedCustomerId: customer.id, status: LeadStatus.WON },
+      data: { convertedCustomerId: created.id, status: LeadStatus.WON },
     });
-    return customer;
+    return created;
   });
+
+  const { onReferralLeadConverted } = await import("@/lib/referrals/conversion");
+  await onReferralLeadConverted({ companyId, leadId, customerId: customer.id }).catch(() => {});
+
+  return customer;
 }

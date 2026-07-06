@@ -32,6 +32,7 @@ import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPa
 import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap";
 import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
 import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection";
+import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
@@ -801,6 +802,9 @@ export function CustomerProfile({ customerId }: Props) {
               disabled={!canManage}
               onUpdated={(tags) => setCustomer({ ...customer, tags })}
             />
+          )}
+          {customer && (
+            <CustomerReferralsSection customerId={customer.id} disabled={!canManage} />
           )}
           {customer && (
             <CustomerPaymentMethodsSection

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, FileText, Home, LogOut, Percent, Wrench } from "lucide-react";
+import { Calendar, FileText, Home, LogOut, Percent, Users, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolvePortalLogoUrl } from "@/lib/portal/branding";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ type Features = {
   checklists: boolean;
   rachio: boolean;
   offers: boolean;
+  referrals: boolean;
   allowSchedule: boolean;
 };
 
@@ -37,6 +38,7 @@ export function PortalShell({ slug, companyName, emailLogoUrl, features, childre
     { href: `${base}/invoices`, label: "Invoices", icon: FileText, show: features.invoices },
     { href: `${base}/maintenance`, label: "Maintenance", icon: Wrench, show: features.maintenance },
     { href: `${base}/offers`, label: "Offers", icon: Percent, show: features.offers },
+    { href: `${base}/referrals`, label: "Referrals", icon: Users, show: features.referrals },
   ].filter((n) => n.show);
 
   async function logout() {

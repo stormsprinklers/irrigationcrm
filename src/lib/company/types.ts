@@ -32,6 +32,7 @@ export const companySettingsSelect = {
   portalShowChecklists: true,
   portalShowRachio: true,
   portalShowOffers: true,
+  portalShowReferrals: true,
   portalRachioAllowRun: true,
   notifyEstimateSent: true,
   notifyInvoicePaid: true,
@@ -97,6 +98,7 @@ export type CompanySettingsDTO = {
   portalShowChecklists: boolean;
   portalShowRachio: boolean;
   portalShowOffers: boolean;
+  portalShowReferrals: boolean;
   portalRachioAllowRun: boolean;
   notifyEstimateSent: boolean;
   notifyInvoicePaid: boolean;

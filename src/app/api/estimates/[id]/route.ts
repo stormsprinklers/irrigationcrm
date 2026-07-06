@@ -51,6 +51,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (newStatus === EstimateStatus.SENT) {
         void onEstimateSent(id, user.companyId).catch(() => {});
       }
+      if (newStatus === EstimateStatus.APPROVED) {
+        const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
+        void onReferralEstimateApproved({
+          companyId: user.companyId,
+          estimateId: id,
+          customerId: existing.customerId,
+        }).catch(() => {});
+      }
     }
 
     if (body.installDurationDays !== undefined) {

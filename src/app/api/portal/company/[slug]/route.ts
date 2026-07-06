@@ -24,6 +24,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       portalShowChecklists: company.portalShowChecklists,
       portalShowRachio: company.portalShowRachio,
       portalShowOffers: company.portalShowOffers,
+      portalShowReferrals: company.portalShowReferrals,
       portalAllowSchedule: company.portalAllowSchedule,
     },
   });

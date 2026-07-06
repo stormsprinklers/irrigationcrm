@@ -58,6 +58,7 @@ export async function requirePortalCustomer(): Promise<PortalCustomerContext | n
         portalShowChecklists: true,
         portalShowRachio: true,
         portalShowOffers: true,
+        portalShowReferrals: true,
         portalRachioAllowRun: true,
       },
     }),
