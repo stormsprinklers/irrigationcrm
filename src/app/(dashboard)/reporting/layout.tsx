@@ -1,5 +1,5 @@
 import { reportingSidebar } from "@/config/navigation";
-import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
+import { ModuleLayout } from "@/components/layout/ModuleLayout";
 
 export default function ReportingLayout({
   children,
@@ -7,9 +7,8 @@ export default function ReportingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <ModuleSidebar title="Reporting" sections={reportingSidebar} />
-      <div className="flex-1 overflow-y-auto">{children}</div>
-    </div>
+    <ModuleLayout title="Reporting" sections={reportingSidebar}>
+      {children}
+    </ModuleLayout>
   );
 }

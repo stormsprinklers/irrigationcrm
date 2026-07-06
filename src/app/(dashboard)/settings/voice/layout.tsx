@@ -1,5 +1,5 @@
 import { voiceSettingsSidebar } from "@/config/navigation";
-import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
+import { ModuleLayout } from "@/components/layout/ModuleLayout";
 
 export default function VoiceSettingsLayout({
   children,
@@ -7,9 +7,8 @@ export default function VoiceSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-full">
-      <ModuleSidebar title="Voice" sections={voiceSettingsSidebar} />
-      <div className="flex-1">{children}</div>
-    </div>
+    <ModuleLayout title="Voice" sections={voiceSettingsSidebar} className="min-h-full">
+      {children}
+    </ModuleLayout>
   );
 }

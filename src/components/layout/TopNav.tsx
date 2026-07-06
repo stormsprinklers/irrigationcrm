@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
-import { Phone, Settings } from "lucide-react";
+import { Menu, Phone, Settings, X } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
@@ -28,11 +28,24 @@ export function TopNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [dialerOpen, setDialerOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const userName = session?.user?.name ?? "User";
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
-      <div className="flex h-[4.5rem] items-center gap-4 px-4">
+      <div className="flex h-14 items-center gap-2 px-3 sm:h-[4.5rem] sm:gap-4 sm:px-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          type="button"
+          className="shrink-0 xl:hidden"
+          aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((open) => !open)}
+        >
+          {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
+
         <Link href="/" className="flex shrink-0 items-center">
           <Image
             src={stormBrand.logoPath}
@@ -40,7 +53,7 @@ export function TopNav() {
             width={320}
             height={320}
             priority
-            className="h-[4.5rem] w-auto rounded-sm bg-card object-contain"
+            className="h-10 w-auto rounded-sm bg-card object-contain sm:h-[4.5rem]"
           />
         </Link>
 
@@ -66,7 +79,7 @@ export function TopNav() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
           <NewMenu />
 
           <NotificationBell />
@@ -86,7 +99,7 @@ export function TopNav() {
             </Link>
           </Button>
 
-          <Avatar className="ml-1 h-8 w-8">
+          <Avatar className="ml-0.5 h-8 w-8 sm:ml-1">
             <AvatarFallback className="bg-primary/10 text-xs text-primary">
               {getInitials(userName)}
             </AvatarFallback>
@@ -94,25 +107,47 @@ export function TopNav() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto border-t border-border px-4 py-2 xl:hidden">
-        {primaryNav.map((item) => {
-          const active = getPrimaryNavActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium",
-                active
-                  ? "bg-primary text-white"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              )}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </div>
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 top-14 z-40 bg-black/40 sm:top-[4.5rem] xl:hidden"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
+
+      <nav
+        className={cn(
+          "fixed left-0 z-50 flex w-72 flex-col border-r border-border bg-card shadow-lg transition-transform duration-200 xl:hidden",
+          "top-14 bottom-0 sm:top-[4.5rem]",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
+        )}
+        aria-label="Primary"
+        aria-hidden={!mobileNavOpen}
+      >
+        <div className="overflow-y-auto py-2">
+          {primaryNav.map((item) => {
+            const active = getPrimaryNavActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                onClick={() => setMobileNavOpen(false)}
+                className={cn(
+                  "relative flex items-center px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60",
+                  active ? "text-foreground" : "text-muted-foreground"
+                )}
+              >
+                {active ? (
+                  <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-primary" />
+                ) : null}
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
 
       <VoiceDialerDialog open={dialerOpen} onClose={() => setDialerOpen(false)} />
     </header>

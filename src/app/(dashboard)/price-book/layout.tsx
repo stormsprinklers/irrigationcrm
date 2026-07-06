@@ -1,5 +1,5 @@
 import { priceBookSidebar } from "@/config/navigation";
-import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
+import { ModuleLayout } from "@/components/layout/ModuleLayout";
 
 export default function PriceBookLayout({
   children,
@@ -7,9 +7,8 @@ export default function PriceBookLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
-      <ModuleSidebar title="Price book" sections={priceBookSidebar} />
-      <div className="flex-1 overflow-y-auto">{children}</div>
-    </div>
+    <ModuleLayout title="Price book" sections={priceBookSidebar}>
+      {children}
+    </ModuleLayout>
   );
 }
