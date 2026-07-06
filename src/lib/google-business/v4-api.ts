@@ -241,7 +241,7 @@ export async function uploadGbpPhotoBytes(
     {
       method: "POST",
       headers: { "Content-Type": mimeType || "application/octet-stream" },
-      body: bytes,
+      body: new Uint8Array(bytes),
     }
   );
   await uploadRes.json().catch(() => null);
