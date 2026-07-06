@@ -183,12 +183,16 @@ export async function getCompanyAccessToken(companyId: string) {
   return data.access_token;
 }
 
-async function googleFetch<T>(accessToken: string, url: string): Promise<T> {
+async function googleFetch<T>(accessToken: string, url: string, init?: RequestInit): Promise<T> {
   let attempt = 0;
 
   while (true) {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(init?.headers ?? {}),
+      },
     });
 
     const data = (await res.json()) as T & {
@@ -211,6 +215,58 @@ async function googleFetch<T>(accessToken: string, url: string): Promise<T> {
 
     throw new GoogleBusinessApiError(message, res.status);
   }
+}
+
+export async function googleApiFetch<T>(accessToken: string, url: string, init?: RequestInit) {
+  return googleFetch<T>(accessToken, url, init);
+}
+
+export async function googleApiFetchRaw(
+  accessToken: string,
+  url: string,
+  init?: RequestInit
+): Promise<Response> {
+  const res = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    let message = `Google API error (${res.status})`;
+    try {
+      const data = (await res.json()) as { error?: { message?: string } };
+      message = data.error?.message ?? message;
+    } catch {
+      /* ignore */
+    }
+    throw new GoogleBusinessApiError(message, res.status);
+  }
+  return res;
+}
+
+export async function requireGbpCompany(companyId: string) {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: {
+      id: true,
+      name: true,
+      googleBusinessAccountId: true,
+      googleBusinessLocationId: true,
+      googleBusinessLocationTitle: true,
+      googleBusinessRefreshToken: true,
+    },
+  });
+
+  if (!company?.googleBusinessRefreshToken) {
+    throw new GoogleBusinessApiError("Google Business Profile is not connected", 400);
+  }
+  if (!company.googleBusinessAccountId || !company.googleBusinessLocationId) {
+    throw new GoogleBusinessApiError("Select a Google Business Profile location first", 400);
+  }
+
+  return company;
 }
 
 function readCatalog(raw: unknown): GbpCatalogCache {

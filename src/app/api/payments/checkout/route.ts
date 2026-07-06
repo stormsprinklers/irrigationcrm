@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
-import { prisma } from "@/lib/prisma";
+import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
-import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
-import { nextInvoiceNumber } from "@/lib/visits/queries";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,112 +15,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "STRIPE_SECRET_KEY is not configured" }, { status: 503 });
     }
 
+    const synced = await syncVisitInvoice({ companyId: user.companyId, visitId });
+    if (!synced.ok) {
+      return NextResponse.json({ error: synced.error }, { status: synced.status });
+    }
+
     const visit = await prisma.visit.findFirst({
       where: { id: visitId, companyId: user.companyId },
-      include: {
-        customer: true,
-        lineItems: { orderBy: { sortOrder: "asc" } },
-        discounts: true,
-      },
+      include: { customer: true },
     });
-
-    if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-    if (!visit.customerId || !visit.customer) {
-      return badRequestResponse("Visit must have a customer to collect payment");
+    if (!visit?.customer) {
+      return NextResponse.json({ error: "Visit not found" }, { status: 404 });
     }
 
-    const subtotal = sumLineItems(visit.lineItems);
-    const discountTotal = sumDiscounts(subtotal, visit.discounts);
-    const { total } = computeTotals(subtotal, discountTotal);
-
-    if (total <= 0) {
-      return badRequestResponse("Visit total must be greater than zero");
-    }
-
-    let invoice = await prisma.invoice.findFirst({
-      where: {
-        visitId: visit.id,
-        companyId: user.companyId,
-        status: { in: ["DRAFT", "SENT", "PARTIAL"] },
-      },
-      include: { payments: true },
-    });
-
-    const computeBalanceDue = (inv: typeof invoice) => {
-      if (!inv) return total;
-      const paid = inv.payments.reduce((sum, payment) => {
-        if (payment.refundedAt) return sum;
-        return sum + toNumber(payment.amount);
-      }, 0);
-      return Math.max(0, total - paid);
-    };
-
-    if (!invoice) {
-      const created = await prisma.invoice.create({
-        data: {
-          companyId: user.companyId,
-          customerId: visit.customerId,
-          visitId: visit.id,
-          invoiceNumber: await nextInvoiceNumber(user.companyId),
-          status: "SENT",
-          subtotal,
-          discountTotal,
-          total,
-          lineItems: {
-            create: visit.lineItems.map((item, index) => ({
-              name: item.name,
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              total: item.total,
-              sortOrder: index,
-            })),
-          },
-        },
-      });
-      invoice = await prisma.invoice.findFirstOrThrow({
-        where: { id: created.id },
-        include: { payments: true },
-      });
-    } else {
-      invoice = await prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { subtotal, discountTotal, total, status: "SENT" },
-        include: { payments: true },
-      });
-    }
-
-    const balanceDue = computeBalanceDue(invoice);
-    if (balanceDue <= 0) {
-      return badRequestResponse("This visit invoice is already paid");
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const mobileReturn = body.mobileReturn === true || body.platform === "ios";
     const successUrl = mobileReturn
       ? `stormcrm://payment-return?visitId=${visit.id}&session_id={CHECKOUT_SESSION_ID}`
-      : `${appUrl}/visits/${visit.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+      : `${process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin}/visits/${visit.id}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = mobileReturn
       ? `stormcrm://payment-return?visitId=${visit.id}&payment=cancelled`
-      : `${appUrl}/visits/${visit.id}?payment=cancelled`;
+      : `${process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin}/visits/${visit.id}?payment=cancelled`;
 
     const session = await createInvoiceCheckoutSession({
       invoice: {
-        id: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
+        id: synced.invoiceId,
+        invoiceNumber: synced.invoice.invoiceNumber,
         companyId: user.companyId,
         visitId: visit.id,
       },
       customerEmail: visit.customer.email,
       productName: visit.title,
-      amount: balanceDue,
+      amount: synced.balanceDue,
       successUrl,
       cancelUrl,
     });
 
     return NextResponse.json({
       url: session.url,
-      payLink: getInvoicePayUrl(invoice.publicToken),
+      payLink: synced.payLink,
+      balanceDue: synced.balanceDue,
+      invoice: synced.invoice,
     });
   } catch {
     return unauthorizedResponse();

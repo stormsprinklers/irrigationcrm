@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { canEditCustomerTags, canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -21,13 +21,24 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
-
     const { id } = await params;
     const existing = await prisma.customer.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    const bodyKeys = Object.keys(body).filter((key) => body[key] !== undefined);
+
+    if (user.role === "TECH" || user.role === "INSTALLER") {
+      if (!canEditCustomerTags(user.role)) return forbiddenResponse();
+      const allowedKeys = new Set(["tags"]);
+      if (bodyKeys.length === 0 || bodyKeys.some((key) => !allowedKeys.has(key))) {
+        return forbiddenResponse();
+      }
+    } else {
+      const fieldDenied = forbiddenForFieldRole(user.role);
+      if (fieldDenied) return fieldDenied;
+    }
+
     if (body.doNotService !== undefined && !canFlagDoNotService(user.role)) {
       return forbiddenResponse();
     }

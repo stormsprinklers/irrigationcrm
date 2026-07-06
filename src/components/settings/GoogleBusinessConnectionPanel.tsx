@@ -1,0 +1,388 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { format } from "date-fns";
+import { Globe, Loader2, RefreshCw, Unplug } from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { GbpAccount, GbpConnectionStatus, GbpLocation } from "@/lib/google-business/types";
+
+export function GoogleBusinessConnectionPanel() {
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<GbpConnectionStatus | null>(null);
+  const [accounts, setAccounts] = useState<GbpAccount[]>([]);
+  const [locations, setLocations] = useState<GbpLocation[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [locationsError, setLocationsError] = useState<string | null>(null);
+  const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
+
+  const redirectUri =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/marketing/google-business/callback`
+      : "/api/marketing/google-business/callback";
+
+  const loadStatus = useCallback(async () => {
+    const res = await fetch("/api/marketing/google-business/status");
+    if (res.ok) setStatus(await res.json());
+  }, []);
+
+  const loadAccounts = useCallback(async (refresh = false) => {
+    setLoadingAccounts(true);
+    setAccountsError(null);
+    try {
+      const res = await fetch(
+        `/api/marketing/google-business/accounts${refresh ? "?refresh=1" : ""}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load accounts");
+      const nextAccounts = data.accounts ?? [];
+      setAccounts(nextAccounts);
+      if (data.warning) {
+        setCatalogWarning(data.warning);
+        toast.message(data.warning);
+      } else if (!data.stale) {
+        setCatalogWarning(null);
+      }
+      if (nextAccounts.length === 1) {
+        setSelectedAccountId((current) => current || nextAccounts[0].name);
+      }
+      return nextAccounts as GbpAccount[];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load accounts";
+      setAccountsError(message);
+      toast.error(message);
+      return [];
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, []);
+
+  const loadLocations = useCallback(async (accountId: string, refresh = false) => {
+    setLoadingLocations(true);
+    setLocationsError(null);
+    try {
+      const res = await fetch(
+        `/api/marketing/google-business/locations?accountId=${encodeURIComponent(accountId)}${refresh ? "&refresh=1" : ""}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load locations");
+      setLocations(data.locations ?? []);
+      if (data.warning) {
+        setCatalogWarning(data.warning);
+        toast.message(data.warning);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load locations";
+      setLocationsError(message);
+      toast.error(message);
+      setLocations([]);
+    } finally {
+      setLoadingLocations(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (connected) toast.success("Google Business Profile connected");
+    if (error) {
+      const decoded = decodeURIComponent(error);
+      if (decoded === "org_internal" || decoded.includes("org_internal")) {
+        toast.error(
+          "Google blocked sign-in: OAuth app is Internal-only. Set consent screen to External and add your email as a test user.",
+          { duration: 12000 }
+        );
+      } else {
+        toast.error(decoded);
+      }
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    loadStatus()
+      .catch(() => toast.error("Failed to load Google Business Profile status"))
+      .finally(() => setLoading(false));
+  }, [loadStatus]);
+
+  useEffect(() => {
+    if (!status?.connected) return;
+    if (status.accountId) setSelectedAccountId(status.accountId);
+    void loadAccounts(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.connected]);
+
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    void loadLocations(selectedAccountId, false);
+  }, [selectedAccountId, loadLocations]);
+
+  async function saveLocation(location: GbpLocation) {
+    setSavingLocation(true);
+    try {
+      const res = await fetch("/api/marketing/google-business/location", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: selectedAccountId,
+          locationId: location.name,
+          locationTitle: location.title,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to save location");
+      }
+      toast.success("Location saved");
+      await loadStatus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save location");
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
+  async function disconnect() {
+    const res = await fetch("/api/marketing/google-business", { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Failed to disconnect");
+      return;
+    }
+    setLocations([]);
+    setAccounts([]);
+    await loadStatus();
+    toast.success("Disconnected Google Business Profile");
+  }
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading Google Business Profile...</p>;
+  }
+
+  if (!status) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          Could not load Google Business Profile status.{" "}
+          <button type="button" className="text-primary underline" onClick={() => loadStatus()}>
+            Try again
+          </button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!status.configured) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-5 w-5" />
+            Google Business Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p className="text-muted-foreground">
+            Server OAuth credentials are required before you can connect a Google account. These are
+            set as environment variables on your deployment (not in this screen).
+          </p>
+          <div className="rounded-md border p-3 text-sm">
+            <p className="font-medium">Server environment</p>
+            <ul className="mt-2 space-y-1 text-muted-foreground">
+              <li>
+                <code className="text-xs">GOOGLE_OAUTH_CLIENT_ID</code>:{" "}
+                {status.oauthEnv.hasClientId ? "detected" : "missing"}
+              </li>
+              <li>
+                <code className="text-xs">GOOGLE_OAUTH_CLIENT_SECRET</code>:{" "}
+                {status.oauthEnv.hasClientSecret ? "detected" : "missing"}
+              </li>
+            </ul>
+            {status && (!status.oauthEnv.hasClientId || !status.oauthEnv.hasClientSecret) ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add the missing variables in Vercel (or your host), redeploy, then refresh this
+                page. Aliases <code>GOOGLE_CLOUD_CLIENT_ID</code> /{" "}
+                <code>GOOGLE_CLOUD_CLIENT_SECRET</code> are also supported.
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <p className="font-medium">Google Cloud redirect URI</p>
+            <p className="mt-1 text-muted-foreground">
+              On your OAuth client in Google Cloud Console, add this authorized redirect URI:
+            </p>
+            <p className="mt-2 rounded-md border bg-muted/30 p-3 font-mono text-xs text-foreground break-all">
+              {redirectUri}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!status.connected) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-5 w-5" />
+            Google Business Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Connect the Google account that manages your Business Profile. Marketing metrics, review
+            responses, and posts use this connection.
+          </p>
+          <Button asChild>
+            <a href="/api/marketing/google-business">Connect Google Business Profile</a>
+          </Button>
+          <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Google Cloud OAuth consent screen</p>
+            <p>
+              If Google shows <strong>“restricted to users within its organization”</strong>{" "}
+              (error 403 org_internal), your OAuth app is set to <strong>Internal</strong>. In
+              Google Cloud Console → APIs &amp; Services → OAuth consent screen, change{" "}
+              <strong>User type</strong> to <strong>External</strong>.
+            </p>
+            <p>
+              While the app is in <strong>Testing</strong>, add each Google account that manages
+              your Business Profile under <strong>Test users</strong> (e.g. the Gmail you sign in
+              with). Use the same account that owns the listing in Google Business Profile.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            If Google returns a redirect error, confirm this URI is on your OAuth client:{" "}
+            <code className="break-all">{redirectUri}</code>
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-5 w-5" />
+            Google Business Profile
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {status.locationTitle ?? "Select a location for marketing and review tools"}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">Connected</Badge>
+          {status.connectedAt ? (
+            <span className="text-xs text-muted-foreground">
+              Since {format(new Date(status.connectedAt), "MMM d, yyyy")}
+            </span>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={disconnect}>
+            <Unplug className="mr-1 h-4 w-4" />
+            Disconnect
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {catalogWarning ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            {catalogWarning}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="min-w-[12rem] flex-1">
+            <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Account
+            </label>
+            <select
+              className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              disabled={loadingAccounts || accounts.length === 0}
+            >
+              <option value="">
+                {loadingAccounts
+                  ? "Loading accounts..."
+                  : accounts.length === 0
+                    ? "No accounts loaded"
+                    : "Select account"}
+              </option>
+              {accounts.map((account) => (
+                <option key={account.name} value={account.name}>
+                  {account.accountName}
+                </option>
+              ))}
+            </select>
+            {accountsError ? (
+              <p className="mt-1 text-xs text-destructive">{accountsError}</p>
+            ) : null}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loadingAccounts || loadingLocations}
+            onClick={() => {
+              void loadAccounts(true).then((nextAccounts) => {
+                const accountId = selectedAccountId || nextAccounts[0]?.name;
+                if (accountId) void loadLocations(accountId, true);
+              });
+            }}
+          >
+            <RefreshCw
+              className={`mr-1 h-4 w-4 ${loadingAccounts || loadingLocations ? "animate-spin" : ""}`}
+            />
+            Refresh from Google
+          </Button>
+        </div>
+
+        {selectedAccountId ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Locations</p>
+            {loadingLocations ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading locations...
+              </div>
+            ) : locations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {locationsError
+                  ? locationsError
+                  : "No locations found for this account. Try Refresh from Google in a minute if you recently hit a rate limit."}
+              </p>
+            ) : (
+              locations.map((location) => (
+                <div
+                  key={location.name}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div>
+                    <p className="font-medium">{location.title}</p>
+                    {location.address ? (
+                      <p className="text-sm text-muted-foreground">{location.address}</p>
+                    ) : null}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={status.locationId === location.name ? "default" : "outline"}
+                    disabled={savingLocation}
+                    onClick={() => saveLocation(location)}
+                  >
+                    {status.locationId === location.name ? "Selected" : "Use this location"}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}

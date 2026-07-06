@@ -27,13 +27,19 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+
+    const fieldAllowedKeys = new Set(["workSummary"]);
+    const bodyKeys = Object.keys(body);
+    const workSummaryOnlyUpdate =
+      bodyKeys.length > 0 && bodyKeys.every((key) => fieldAllowedKeys.has(key));
+    const fieldDenied = forbiddenForFieldRole(user.role);
+    if (fieldDenied && !workSummaryOnlyUpdate) return fieldDenied;
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
@@ -95,6 +101,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
         ...(body.installDurationDays !== undefined
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
+          : {}),
+        ...(body.workSummary !== undefined
+          ? { workSummary: body.workSummary ? String(body.workSummary).trim() : null }
           : {}),
       },
     });

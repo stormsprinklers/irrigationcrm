@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Facebook, Instagram, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -88,7 +89,11 @@ export function SocialDmThreadList({
           </div>
           <p className="text-sm font-medium">{config.label} not connected</p>
           <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-            Connect Meta in Marketing → Social to receive {config.label} DMs here.
+            Connect Meta in{" "}
+            <Link href="/settings/integrations/meta" className="text-primary underline">
+              Settings → Meta webhooks
+            </Link>{" "}
+            to receive {config.label} DMs here.
           </p>
         </div>
       </ScrollArea>

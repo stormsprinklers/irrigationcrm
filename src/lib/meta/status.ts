@@ -12,7 +12,7 @@ export type MetaIntegrationStatus = {
   hasPageAccessToken: boolean;
   hasAppId: boolean;
   lastWebhookEventAt: string | null;
-  setupUrl: "/marketing/social";
+  setupUrl: "/settings/integrations/meta";
   vercelEnv: typeof META_VERCEL_ENV_VARS;
   crmSettings: typeof META_CRM_SETTINGS;
   env: ReturnType<typeof getMetaEnvConfig>;
@@ -50,12 +50,12 @@ export async function getMetaIntegrationStatus(
   const hasAppUrl = Boolean(env.callbackUrl);
 
   let status: MetaIntegrationStatus["status"] = "not_configured";
-  let message = "Complete Meta setup in Marketing → Social → Meta webhooks.";
+  let message = "Complete Meta setup in Settings → Meta webhooks.";
 
   if (!hasAppUrl) {
     message = "Set NEXT_PUBLIC_APP_URL in Vercel so Meta can reach your webhook.";
   } else if (!hasVerifyToken) {
-    message = "Generate and save a verify token in Marketing → Social.";
+    message = "Generate and save a verify token in Settings → Meta webhooks.";
   } else if (!verified) {
     status = "awaiting_verification";
     message =
@@ -67,7 +67,7 @@ export async function getMetaIntegrationStatus(
   } else if (!hasPageAccessToken) {
     status = "configured";
     message =
-      "Webhook verified. Add a Meta access token (User token from Graph API Explorer) in Marketing → Social to load followers and recent posts.";
+      "Webhook verified. Add a Meta access token (User token from Graph API Explorer) in Settings → Meta webhooks to load followers and recent posts.";
   } else if (lastEvent) {
     status = "connected";
     message = "Receiving webhook events from Meta.";
@@ -88,7 +88,7 @@ export async function getMetaIntegrationStatus(
     hasPageAccessToken,
     hasAppId,
     lastWebhookEventAt: lastEvent?.createdAt.toISOString() ?? null,
-    setupUrl: "/marketing/social",
+    setupUrl: "/settings/integrations/meta",
     vercelEnv: META_VERCEL_ENV_VARS,
     crmSettings: META_CRM_SETTINGS,
     env,

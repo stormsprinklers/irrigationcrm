@@ -13,7 +13,7 @@ export const OAUTH_DEMO_SCOPES = [
       "Read local business performance metrics (impressions, calls, direction requests, website clicks) for the connected location.",
     apis: ["Business Profile Performance API", "Business Profile Account Management API"],
     redirectPath: "/api/marketing/google-business/callback",
-    crmPath: "/marketing/google-business",
+    crmPath: "/settings/integrations/google-business",
   },
   {
     id: "webmasters.readonly",

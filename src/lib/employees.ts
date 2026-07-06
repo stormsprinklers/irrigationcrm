@@ -27,7 +27,13 @@ export function isFieldRole(role: string) {
 
 /** Roles allowed to use the Storm CRM iOS / mobile app. */
 export function canAccessMobileApp(role: string) {
-  return isFieldRole(role) || role === UserRole.ADMIN;
+  return (
+    isFieldRole(role) ||
+    role === UserRole.ADMIN ||
+    role === UserRole.MANAGER ||
+    role === UserRole.CSR ||
+    role === UserRole.SALES
+  );
 }
 
 export function defaultDivisionForRole(role: string): Division | null {

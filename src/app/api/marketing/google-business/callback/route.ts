@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
-  const redirectBase = `${appUrl}/marketing/google-business`;
+  const redirectBase = `${appUrl}/settings/integrations/google-business`;
 
   try {
     const code = request.nextUrl.searchParams.get("code");

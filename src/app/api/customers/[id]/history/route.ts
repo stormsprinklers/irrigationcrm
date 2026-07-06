@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     });
     if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const [visits, estimates] = await Promise.all([
+    const [visits, estimates, invoices] = await Promise.all([
       prisma.visit.findMany({
         where: {
           companyId: user.companyId,
@@ -48,6 +48,20 @@ export async function GET(request: NextRequest, { params }: Params) {
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
+      prisma.invoice.findMany({
+        where: { companyId: user.companyId, customerId },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          status: true,
+          total: true,
+          createdAt: true,
+          visitId: true,
+          visit: { select: { id: true, title: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
     ]);
 
     const pastVisitCount = visits.length;
@@ -71,6 +85,15 @@ export async function GET(request: NextRequest, { params }: Params) {
       })),
       estimatesLinkedToVisits: estimatesLinkedToVisits.map((row) => ({
         id: row.id,
+        status: row.status,
+        total: row.total,
+        createdAt: row.createdAt.toISOString(),
+        visitId: row.visitId,
+        visitTitle: row.visit?.title ?? null,
+      })),
+      invoices: invoices.map((row) => ({
+        id: row.id,
+        invoiceNumber: row.invoiceNumber,
         status: row.status,
         total: row.total,
         createdAt: row.createdAt.toISOString(),

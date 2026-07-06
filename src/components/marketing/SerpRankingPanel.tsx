@@ -268,7 +268,16 @@ export function SerpRankingPanel({ variant }: Props) {
                   : "."}
               </p>
             ) : null}
-            <SerpRankingMap rankings={rankings.cities} trackedName={rankings.businessName} />
+            <SerpRankingMap
+              rankings={rankings.cities}
+              trackedName={rankings.businessName}
+              lastSearchedAt={
+                rankings.source === "serpapi" &&
+                rankings.cities.some((city) => city.topBusinesses.length > 0)
+                  ? rankings.updatedAt
+                  : null
+              }
+            />
             <p className="text-xs text-muted-foreground">
               Hover a dot to see the top 3 results. If your {config.tooltipEntityLabel} ranks outside
               the top 3, it appears below with its rank.

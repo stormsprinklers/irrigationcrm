@@ -16,7 +16,7 @@ export async function authenticateMobileUser(email: string, password: string) {
     return { error: "Invalid email or password" as const };
   }
   if (!canAccessMobileApp(user.role)) {
-    return { error: "This app is for technicians and admins only" as const };
+    return { error: "This app is for Storm CRM staff only" as const };
   }
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {

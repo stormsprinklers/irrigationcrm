@@ -198,7 +198,7 @@ export async function getMetaSocialDashboard(
 
       if (message.toLowerCase().includes("invalid oauth")) {
         syncError =
-          "Stored Meta token is invalid or expired. Open Meta webhooks, paste a fresh User token from Graph API Explorer, click Test connection, then Refresh.";
+          "Stored Meta token is invalid or expired. Open Settings → Meta webhooks, paste a fresh User token from Graph API Explorer, click Test connection, then Refresh.";
       }
     }
   }

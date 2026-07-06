@@ -1,5 +1,6 @@
-import { AppNotificationType, UserRole } from "@prisma/client";
+import { AppNotificationType, Scope, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { sendMobilePushToUsers } from "@/lib/mobile-push/devices";
 
 const STAFF_ROLES: UserRole[] = [
   UserRole.ADMIN,
@@ -8,19 +9,31 @@ const STAFF_ROLES: UserRole[] = [
   UserRole.SALES,
 ];
 
+const FIELD_ROLES: UserRole[] = [UserRole.TECH, UserRole.INSTALLER];
+
 export async function notifyStaffInApp(params: {
   companyId: string;
   type: AppNotificationType;
   title: string;
   body?: string | null;
   href?: string | null;
+  userIds?: string[];
 }) {
+  const where =
+    params.userIds && params.userIds.length
+      ? {
+          companyId: params.companyId,
+          status: "ACTIVE" as const,
+          id: { in: params.userIds },
+        }
+      : {
+          companyId: params.companyId,
+          status: "ACTIVE" as const,
+          role: { in: STAFF_ROLES },
+        };
+
   const staff = await prisma.user.findMany({
-    where: {
-      companyId: params.companyId,
-      status: "ACTIVE",
-      role: { in: STAFF_ROLES },
-    },
+    where,
     select: { id: true },
   });
 
@@ -58,13 +71,68 @@ export async function notifyInboundSms(params: {
   conversationId: string;
   fromLabel: string;
   preview: string;
+  scope?: Scope;
+  participantPhone?: string | null;
+  fromPhone?: string | null;
 }) {
+  const title = `New text from ${params.fromLabel}`;
+  const body = params.preview.slice(0, 160);
+  const href = `/inbox/sms/customers?conversationId=${params.conversationId}`;
+
+  let notifyUserIds: string[] = [];
+
+  if (params.scope === Scope.INTERNAL) {
+    const lookupPhone = params.fromPhone ?? params.participantPhone;
+    const employee = lookupPhone
+      ? await prisma.user.findFirst({
+          where: {
+            companyId: params.companyId,
+            status: "ACTIVE",
+            phone: lookupPhone,
+          },
+          select: { id: true },
+        })
+      : null;
+    if (employee) {
+      notifyUserIds = [employee.id];
+    } else {
+      const fieldStaff = await prisma.user.findMany({
+        where: {
+          companyId: params.companyId,
+          status: "ACTIVE",
+          role: { in: [...FIELD_ROLES, UserRole.ADMIN] },
+        },
+        select: { id: true },
+      });
+      notifyUserIds = fieldStaff.map((user) => user.id);
+    }
+  } else {
+    const staff = await prisma.user.findMany({
+      where: {
+        companyId: params.companyId,
+        status: "ACTIVE",
+        role: { in: STAFF_ROLES },
+      },
+      select: { id: true },
+    });
+    notifyUserIds = staff.map((user) => user.id);
+  }
+
   await notifyStaffInApp({
     companyId: params.companyId,
     type: AppNotificationType.INBOX_SMS,
-    title: `New text from ${params.fromLabel}`,
-    body: params.preview.slice(0, 160),
-    href: `/inbox/sms/customers?conversationId=${params.conversationId}`,
+    title,
+    body,
+    href,
+    userIds: notifyUserIds,
+  });
+
+  await sendMobilePushToUsers({
+    companyId: params.companyId,
+    userIds: notifyUserIds,
+    title,
+    body,
+    conversationId: params.conversationId,
   });
 }
 

@@ -7,7 +7,6 @@ import { ExternalLink, Facebook, Instagram, Loader2, Plus, RefreshCw, Upload } f
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { MetaWebhookSetup } from "@/components/marketing/MetaWebhookSetup";
 import { SocialWorkflowSection } from "@/components/marketing/SocialWorkflowPanel";
 import {
   MarketingEmptyTable,
@@ -55,7 +54,7 @@ function SocialPostsTable({ posts }: { posts: MetaSocialPost[] }) {
           "Shares",
           "Engagement",
         ]}
-        message="No posts yet. Add a Page Access Token in Meta webhooks and click Refresh, or publish content on your Page."
+        message="No posts yet. Add a Meta access token in Settings → Meta webhooks and click Refresh, or publish content on your Page."
       />
     );
   }
@@ -127,7 +126,6 @@ export function SocialPageClient() {
   const [dashboard, setDashboard] = useState<MetaSocialDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [defaultTab, setDefaultTab] = useState("recent");
 
   const load = useCallback(async (force = false) => {
     const res = await fetch(
@@ -137,9 +135,6 @@ export function SocialPageClient() {
     if (!res.ok) throw new Error("Failed to load social dashboard");
     const data = (await res.json()) as MetaSocialDashboard;
     setDashboard(data);
-    if (data.needsPageToken) {
-      setDefaultTab("setup");
-    }
     return data;
   }, []);
 
@@ -202,8 +197,11 @@ export function SocialPageClient() {
       {dashboard?.needsPageToken ? (
         <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           Add a <strong className="font-medium text-foreground">Meta access token</strong> (User token
-          from Graph API Explorer is fine) in the Meta webhooks tab to load followers, reach, and
-          recent posts.
+          from Graph API Explorer is fine) in{" "}
+          <Link href="/settings/integrations/meta" className="text-primary underline">
+            Settings → Meta webhooks
+          </Link>{" "}
+          to load followers, reach, and recent posts.
         </p>
       ) : null}
 
@@ -255,10 +253,9 @@ export function SocialPageClient() {
         </p>
       ) : null}
 
-      <Tabs defaultValue={defaultTab} className="space-y-6">
+      <Tabs defaultValue="recent" className="space-y-6">
         <TabsList>
           <TabsTrigger value="recent">Recent posts</TabsTrigger>
-          <TabsTrigger value="setup">Meta webhooks</TabsTrigger>
           <TabsTrigger value="review">Review queue</TabsTrigger>
           <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
         </TabsList>
@@ -294,10 +291,6 @@ export function SocialPageClient() {
           </MarketingSectionCard>
         </TabsContent>
 
-        <TabsContent value="setup">
-          <MetaWebhookSetup onSaved={() => void load(true)} />
-        </TabsContent>
-
         <TabsContent value="review" className="space-y-6">
           <SocialWorkflowSection
             title="Review queue"
@@ -321,7 +314,11 @@ export function SocialPageClient() {
       </Tabs>
 
       <p className="mt-6 text-xs text-muted-foreground">
-        After webhooks are verified, Facebook and Instagram DMs will appear in{" "}
+        Configure Meta webhooks in{" "}
+        <Link href="/settings/integrations/meta" className="text-primary underline">
+          Settings → Meta webhooks
+        </Link>
+        . After verification, Facebook and Instagram DMs will appear in{" "}
         <Link href="/inbox/social/facebook" className="text-primary underline">
           Inbox → Social
         </Link>

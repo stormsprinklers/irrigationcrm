@@ -276,8 +276,11 @@ export async function getKpiDashboardReport(
       );
       const conversionRate = estimateConversionRate(workerEstimates);
 
-      const reviewCount = feedback.filter(
-        (f) => f.visit.assignedUserId === worker.id && f.visit.crewId == null
+      const fiveStarReviews = feedback.filter(
+        (f) =>
+          f.rating === 5 &&
+          f.visit.assignedUserId === worker.id &&
+          f.visit.crewId == null
       ).length;
 
       return {
@@ -299,7 +302,7 @@ export async function getKpiDashboardReport(
             label: "Conversion rate",
             value: workerEstimates.length > 0 ? formatPercent(conversionRate) : "—",
           },
-          { label: "Reviews", value: String(reviewCount) },
+          { label: "5-star reviews", value: String(fiveStarReviews) },
         ],
       };
     });
@@ -434,7 +437,9 @@ export async function getKpiDashboardReport(
       }
     }
 
-    const reviewCount = feedback.filter((f) => f.visit.crewId === crew.id).length;
+    const fiveStarReviews = feedback.filter(
+      (f) => f.rating === 5 && f.visit.crewId === crew.id
+    ).length;
 
     return {
       id: crew.id,
@@ -446,7 +451,7 @@ export async function getKpiDashboardReport(
           label: "Avg per man hour",
           value: totalManHours > 0 ? formatCurrency(revenue / totalManHours) : "—",
         },
-        { label: "Reviews", value: String(reviewCount) },
+        { label: "5-star reviews", value: String(fiveStarReviews) },
       ],
     };
   });

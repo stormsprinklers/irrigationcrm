@@ -187,6 +187,9 @@ export async function POST(request: NextRequest) {
       conversationId: conversation.id,
       fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
       preview: body.trim() || (mediaItems.length ? "[Media message]" : "New message"),
+      scope: conversation.scope,
+      participantPhone: conversation.participantPhone,
+      fromPhone: normalizedFrom,
     }).catch((err) => console.error("In-app notification failed for inbound SMS", err));
 
     if (contactInfoDetected) {

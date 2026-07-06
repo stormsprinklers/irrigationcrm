@@ -86,10 +86,35 @@ function statusBadgeVariant(
   return "secondary";
 }
 
+type GbpStatus = {
+  configured: boolean;
+  connected: boolean;
+  locationId: string | null;
+  locationTitle: string | null;
+};
+
+type GoogleAdsStatus = {
+  configured: boolean;
+  connected: boolean;
+  hasDeveloperToken: boolean;
+  customerId: string | null;
+  customerName: string | null;
+};
+
+type MetaAdsStatus = {
+  connected: boolean;
+  hasToken: boolean;
+  adAccountId: string | null;
+  adAccountName: string | null;
+};
+
 export default function SettingsIntegrationsPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [statuses, setStatuses] = useState<IntegrationStatus[]>([]);
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null);
+  const [gbpStatus, setGbpStatus] = useState<GbpStatus | null>(null);
+  const [googleAdsStatus, setGoogleAdsStatus] = useState<GoogleAdsStatus | null>(null);
+  const [metaAdsStatus, setMetaAdsStatus] = useState<MetaAdsStatus | null>(null);
   const [urls, setUrls] = useState<IntegrationUrls | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -101,15 +126,27 @@ export default function SettingsIntegrationsPage() {
   const loadStatus = useCallback(async () => {
     setCheckingStatus(true);
     try {
-      const [statusRes, metaRes] = await Promise.all([
+      const [statusRes, metaRes, gbpRes, googleAdsRes, metaAdsRes] = await Promise.all([
         fetch("/api/settings/integrations/status"),
         fetch("/api/integrations/meta/status"),
+        fetch("/api/marketing/google-business/status"),
+        fetch("/api/marketing/google-ads/status"),
+        fetch("/api/marketing/meta-ads/status"),
       ]);
       if (!statusRes.ok) throw new Error();
       const data = await statusRes.json();
       setStatuses(data.statuses ?? []);
       if (metaRes.ok) {
         setMetaStatus(await metaRes.json());
+      }
+      if (gbpRes.ok) {
+        setGbpStatus(await gbpRes.json());
+      }
+      if (googleAdsRes.ok) {
+        setGoogleAdsStatus(await googleAdsRes.json());
+      }
+      if (metaAdsRes.ok) {
+        setMetaAdsStatus(await metaAdsRes.json());
       }
     } catch {
       toast.error("Failed to check integration status");
@@ -281,9 +318,147 @@ export default function SettingsIntegrationsPage() {
               ) : null}
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button size="sm" variant="outline" asChild>
-                  <Link href={metaStatus.setupUrl}>Open Meta setup</Link>
+                  <Link href={metaStatus.setupUrl}>Configure Meta webhooks</Link>
                 </Button>
               </div>
+            </div>
+          ) : null}
+
+          {gbpStatus ? (
+            <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon
+                    status={
+                      gbpStatus.connected && gbpStatus.locationId
+                        ? "connected"
+                        : gbpStatus.connected || gbpStatus.configured
+                          ? "configured"
+                          : "not_configured"
+                    }
+                  />
+                  <span className="font-medium text-sm">Google Business Profile</span>
+                </div>
+                <Badge
+                  variant={
+                    gbpStatus.connected && gbpStatus.locationId
+                      ? "success"
+                      : gbpStatus.connected
+                        ? "outline"
+                        : "secondary"
+                  }
+                >
+                  {gbpStatus.connected && gbpStatus.locationId
+                    ? "Connected"
+                    : gbpStatus.connected
+                      ? "Location needed"
+                      : gbpStatus.configured
+                        ? "Not connected"
+                        : "Not configured"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {!gbpStatus.configured
+                  ? "Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in Vercel."
+                  : !gbpStatus.connected
+                    ? "Connect the Google account that manages your Business Profile listing."
+                    : !gbpStatus.locationId
+                      ? "Choose which location to use for marketing metrics and review tools."
+                      : `Using ${gbpStatus.locationTitle ?? "selected location"}.`}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/settings/integrations/google-business">Configure Google Business Profile</Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {googleAdsStatus ? (
+            <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon
+                    status={
+                      googleAdsStatus.connected && googleAdsStatus.customerId
+                        ? "connected"
+                        : googleAdsStatus.connected && googleAdsStatus.hasDeveloperToken
+                          ? "configured"
+                          : googleAdsStatus.configured
+                            ? "configured"
+                            : "not_configured"
+                    }
+                  />
+                  <span className="font-medium text-sm">Google Ads</span>
+                </div>
+                <Badge
+                  variant={
+                    googleAdsStatus.connected && googleAdsStatus.customerId
+                      ? "success"
+                      : googleAdsStatus.connected
+                        ? "outline"
+                        : "secondary"
+                  }
+                >
+                  {googleAdsStatus.connected && googleAdsStatus.customerId
+                    ? "Connected"
+                    : googleAdsStatus.connected
+                      ? "Account needed"
+                      : !googleAdsStatus.hasDeveloperToken
+                        ? "Developer token needed"
+                        : "Not connected"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {!googleAdsStatus.configured
+                  ? "Set Google OAuth credentials in Vercel."
+                  : !googleAdsStatus.hasDeveloperToken
+                    ? "Add GOOGLE_ADS_DEVELOPER_TOKEN in Vercel."
+                    : !googleAdsStatus.connected
+                      ? "Connect Google Ads for PPC reporting in Marketing → Ads."
+                      : !googleAdsStatus.customerId
+                        ? "Choose which Google Ads customer account to report on."
+                        : `Using ${googleAdsStatus.customerName ?? googleAdsStatus.customerId}.`}
+              </p>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/settings/integrations/google-ads">Configure Google Ads</Link>
+              </Button>
+            </div>
+          ) : null}
+
+          {metaAdsStatus ? (
+            <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon
+                    status={
+                      metaAdsStatus.connected
+                        ? "connected"
+                        : metaAdsStatus.hasToken
+                          ? "configured"
+                          : "not_configured"
+                    }
+                  />
+                  <span className="font-medium text-sm">Meta Ads</span>
+                </div>
+                <Badge variant={metaAdsStatus.connected ? "success" : "secondary"}>
+                  {metaAdsStatus.connected
+                    ? "Connected"
+                    : metaAdsStatus.hasToken
+                      ? "Ad account needed"
+                      : "Not connected"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {!metaAdsStatus.hasToken
+                  ? "Add a Meta User token with ads_read for paid social reporting."
+                  : !metaAdsStatus.connected
+                    ? "Select the Meta ad account used in Marketing → Ads."
+                    : `Using ${metaAdsStatus.adAccountName ?? metaAdsStatus.adAccountId}.`}
+              </p>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/settings/integrations/meta-ads">Configure Meta Ads</Link>
+              </Button>
             </div>
           ) : null}
 
@@ -391,7 +566,7 @@ LMS_INTEGRATION_KEY=same-as-lms-INTEGRATION_API_KEY
 NEXT_PUBLIC_APP_URL=https://your-crm.example.com
 META_APP_ID=optional-default-app-id
 # Webhook: {NEXT_PUBLIC_APP_URL}/api/meta/webhook
-# App Secret, verify token, Page ID → Marketing → Social in CRM`}</pre>
+# App Secret, verify token, Page ID → Settings → Meta webhooks in CRM`}</pre>
           </div>
         </div>
       )}

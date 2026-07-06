@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const result = await authenticateMobileUser(email, password);
     if ("error" in result) {
       const message = result.error ?? "Invalid email or password";
-      const status = message.includes("technicians and admins") ? 403 : 401;
+      const status = message.includes("technicians and admins") || message.includes("Storm CRM staff") ? 403 : 401;
       return NextResponse.json({ error: message }, { status });
     }
 

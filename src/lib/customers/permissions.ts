@@ -5,5 +5,22 @@ export function canManageCustomers(role: UserRole | string) {
 }
 
 export function canFlagDoNotService(role: UserRole | string) {
-  return role === "ADMIN" || role === "MANAGER";
+  return (
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "CSR" ||
+    role === "SALES" ||
+    role === "TECH"
+  );
+}
+
+export function canEditCustomerTags(role: UserRole | string) {
+  return (
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "CSR" ||
+    role === "SALES" ||
+    role === "TECH" ||
+    role === "INSTALLER"
+  );
 }

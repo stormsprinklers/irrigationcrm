@@ -1,5 +1,6 @@
 "use client";
 
+import { format } from "date-fns";
 import { useEffect, useRef } from "react";
 import type { SerpApiCityRanking } from "@/lib/serpapi/types";
 import {
@@ -13,9 +14,11 @@ import { buildRankingTooltipHtml } from "@/lib/local-seo/tooltip";
 type Props = {
   rankings: SerpApiCityRanking[];
   trackedName: string;
+  /** ISO timestamp of the most recent SerpAPI fetch for this keyword (live data only). */
+  lastSearchedAt?: string | null;
 };
 
-export function SerpRankingMap({ rankings, trackedName }: Props) {
+export function SerpRankingMap({ rankings, trackedName, lastSearchedAt }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
 
@@ -92,7 +95,20 @@ export function SerpRankingMap({ rankings, trackedName }: Props) {
           </span>
         ))}
       </div>
-      <div ref={containerRef} className="h-[520px] w-full overflow-hidden rounded-lg border border-border" />
+      <div className="relative">
+        {lastSearchedAt ? (
+          <div className="pointer-events-none absolute right-2 top-2 z-[1000] rounded-md border border-border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+            <span className="text-muted-foreground">Last searched </span>
+            <span className="font-medium text-foreground">
+              {format(new Date(lastSearchedAt), "MMM d, yyyy h:mm a")}
+            </span>
+          </div>
+        ) : null}
+        <div
+          ref={containerRef}
+          className="h-[520px] w-full overflow-hidden rounded-lg border border-border"
+        />
+      </div>
     </div>
   );
 }

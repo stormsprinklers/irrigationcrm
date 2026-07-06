@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DepositType, EstimateStatus } from "@prisma/client";
-import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenForFieldRole, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed, onEstimateSent, onEstimateStatusChange } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +22,6 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
     const existing = await prisma.estimate.findFirst({ where: { id, companyId: user.companyId } });

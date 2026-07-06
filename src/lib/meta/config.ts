@@ -23,40 +23,40 @@ export const META_VERCEL_ENV_VARS = [
     name: "META_APP_ID",
     required: false,
     description:
-      "Optional default App ID from Meta Developer Console. You can also enter App ID per company in Marketing → Social.",
+      "Optional default App ID from Meta Developer Console. You can also enter App ID per company in Settings → Meta webhooks.",
   },
 ] as const;
 
 export const META_CRM_SETTINGS = [
   {
     field: "Verify token",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description: "You generate this in the CRM; paste the same value in Meta as the webhook Verify Token.",
   },
   {
     field: "App Secret",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description: "From Meta App Dashboard → App settings → Basic. Stored per company (not in Vercel).",
   },
   {
     field: "App ID",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description: "From Meta App Dashboard → App settings → Basic.",
   },
   {
     field: "Facebook Page ID",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description: "Routes incoming webhook events to your company account.",
   },
   {
     field: "Meta access token",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description:
       "User token from Graph API Explorer (include pages_show_list and business_management for Business Suite pages). The CRM resolves the Page token automatically.",
   },
   {
     field: "Instagram account ID",
-    where: "Marketing → Social → Meta webhooks",
+    where: "Settings → Meta webhooks",
     description: "Optional; use if Instagram webhooks use a different object ID.",
   },
 ] as const;
@@ -75,6 +75,12 @@ export const META_PUBLISH_PERMISSIONS = [
 export const META_WEBHOOK_FIELDS = [
   { product: "Page", fields: ["messages", "messaging_postbacks", "message_echoes", "feed"] },
   { product: "Instagram", fields: ["messages", "messaging_postbacks", "message_echoes", "comments"] },
+] as const;
+
+export const META_ADS_PERMISSIONS = [
+  "ads_read",
+  "business_management",
+  "pages_show_list",
 ] as const;
 
 export const META_MESSAGING_PERMISSIONS = [
