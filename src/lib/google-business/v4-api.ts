@@ -11,6 +11,7 @@ import type {
   GbpReviewSummary,
   GbpReviewsListResponse,
 } from "@/lib/google-business/engagement-types";
+import { GBP_STAR_LABELS } from "@/lib/google-business/engagement-types";
 import { buildGbpLocationParent } from "@/lib/google-business/location-path";
 
 const MYBUSINESS_V4 = "https://mybusiness.googleapis.com/v4";
@@ -95,17 +96,47 @@ export async function listGbpReviews(
 
 const REVIEW_SUMMARY_MAX_PAGES = 40;
 
+function starLevelFromRating(rating: GbpReviewDto["starRating"]) {
+  return GBP_STAR_LABELS[rating] ?? null;
+}
+
+function emptyStarBreakdown() {
+  return [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: 0,
+    newLast14Days: 0,
+  }));
+}
+
 export async function getGbpReviewSummary(
   companyId: string,
   accountId: string,
   locationId: string
 ): Promise<GbpReviewSummary> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoff7 = new Date();
+  cutoff7.setDate(cutoff7.getDate() - 7);
+  const cutoff14 = new Date();
+  cutoff14.setDate(cutoff14.getDate() - 14);
 
   let totalReviewCount: number | null = null;
   let averageRating: number | null = null;
   let newReviewsLast7Days = 0;
+  let reviewsSampled = 0;
+  const countByStar = new Map<number, number>([
+    [5, 0],
+    [4, 0],
+    [3, 0],
+    [2, 0],
+    [1, 0],
+  ]);
+  const recentByStar = new Map<number, number>([
+    [5, 0],
+    [4, 0],
+    [3, 0],
+    [2, 0],
+    [1, 0],
+  ]);
+
   let pageToken: string | undefined;
   let pages = 0;
 
@@ -115,16 +146,38 @@ export async function getGbpReviewSummary(
       totalReviewCount = page.totalReviewCount;
       averageRating = page.averageRating;
     }
+
     for (const review of page.reviews) {
-      if (review.createTime && new Date(review.createTime) >= cutoff) {
+      reviewsSampled += 1;
+      const stars = starLevelFromRating(review.starRating);
+      if (stars) {
+        countByStar.set(stars, (countByStar.get(stars) ?? 0) + 1);
+        if (review.createTime && new Date(review.createTime) >= cutoff14) {
+          recentByStar.set(stars, (recentByStar.get(stars) ?? 0) + 1);
+        }
+      }
+      if (review.createTime && new Date(review.createTime) >= cutoff7) {
         newReviewsLast7Days += 1;
       }
     }
+
     pageToken = page.nextPageToken ?? undefined;
     pages += 1;
   } while (pageToken && pages < REVIEW_SUMMARY_MAX_PAGES);
 
-  return { totalReviewCount, averageRating, newReviewsLast7Days };
+  const byStar = [5, 4, 3, 2, 1].map((stars) => ({
+    stars,
+    count: countByStar.get(stars) ?? 0,
+    newLast14Days: recentByStar.get(stars) ?? 0,
+  }));
+
+  return {
+    totalReviewCount,
+    averageRating,
+    newReviewsLast7Days,
+    byStar: byStar.length ? byStar : emptyStarBreakdown(),
+    reviewsSampled,
+  };
 }
 
 export async function updateGbpReviewReply(

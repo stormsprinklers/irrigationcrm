@@ -355,6 +355,7 @@ function PostsTab({
         body: JSON.stringify({
           summary: postText.trim(),
           attachmentId: selectedPhotoId,
+          photoId: selectedPhotoId,
         }),
       });
       const data = await res.json();
@@ -405,7 +406,7 @@ function PostsTab({
           selectedId={selectedPhotoId}
           onSelect={setSelectedPhotoId}
           onReload={onReloadPhotos}
-          label="Optional photo from recent jobs (last 14 days)"
+          label="Optional photo from recent jobs or social (last 14 days)"
         />
         <Button type="button" disabled={posting} onClick={() => void publishPost()}>
           {posting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
@@ -499,7 +500,7 @@ function PhotosTab({
         const res = await fetch("/api/marketing/google-business/media", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ attachmentId, category: "AT_WORK" }),
+          body: JSON.stringify({ photoId: attachmentId, category: "AT_WORK" }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upload failed");
@@ -526,7 +527,7 @@ function PhotosTab({
           multi
           onSelect={(id) => togglePhoto(id)}
           onReload={onReloadPhotos}
-          label="Recent job photos (last 14 days)"
+          label="Recent job & social photos (last 14 days)"
         />
         <Button type="button" disabled={uploading || selectedIds.length === 0} onClick={() => void uploadSelected()}>
           {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
@@ -561,6 +562,12 @@ function PhotosTab({
       </div>
     </div>
   );
+}
+
+function sourceLabel(source: GbpJobPhotoDto["source"]) {
+  if (source === "facebook") return "Facebook";
+  if (source === "instagram") return "Instagram";
+  return "Job visit";
 }
 
 function JobPhotoPicker({
@@ -600,7 +607,8 @@ function JobPhotoPicker({
         </div>
       ) : photos.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No job photos from the last 14 days. Attach photos on visits in the mobile app.
+          No photos from the last 14 days. Add visit photos in the mobile app, or connect Meta in
+          Settings to include Facebook and Instagram posts.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 max-h-64 overflow-y-auto rounded-md border p-2">
@@ -616,7 +624,12 @@ function JobPhotoPicker({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photo.previewUrl} alt={photo.fileName} className="aspect-square w-full object-cover" />
               <div className="p-1.5">
-                <p className="truncate text-xs font-medium">{photo.visitTitle}</p>
+                <div className="flex items-center justify-between gap-1">
+                  <p className="truncate text-xs font-medium">{photo.visitTitle}</p>
+                  <Badge variant="outline" className="shrink-0 px-1 py-0 text-[9px]">
+                    {sourceLabel(photo.source)}
+                  </Badge>
+                </div>
                 <p className="text-[10px] text-muted-foreground">
                   {format(new Date(photo.createdAt), "MMM d")}
                 </p>

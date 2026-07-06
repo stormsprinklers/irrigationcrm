@@ -8,7 +8,7 @@ import {
 import { canManageCustomers } from "@/lib/customers/permissions";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { listGbpMedia } from "@/lib/google-business/v4-api";
-import { uploadGbpPhotoFromAttachment } from "@/lib/google-business/gbp-media-upload";
+import { uploadGbpPhotoFromPickableId } from "@/lib/google-business/gbp-media-upload";
 
 export async function GET() {
   try {
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
 
     const company = await requireGbpCompany(user.companyId);
     const body = await request.json();
-    const attachmentId = String(body.attachmentId ?? "").trim();
-    if (!attachmentId) return badRequestResponse("attachmentId is required");
+    const photoId = String(body.photoId ?? body.attachmentId ?? "").trim();
+    if (!photoId) return badRequestResponse("photoId is required");
 
     const category =
       body.category === "ADDITIONAL" ||
@@ -53,11 +53,11 @@ export async function POST(request: NextRequest) {
         ? body.category
         : "AT_WORK";
 
-    const media = await uploadGbpPhotoFromAttachment({
+    const media = await uploadGbpPhotoFromPickableId({
       companyId: user.companyId,
       accountId: company.googleBusinessAccountId!,
       locationId: company.googleBusinessLocationId!,
-      attachmentId,
+      photoId,
       category,
     });
 

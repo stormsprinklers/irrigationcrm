@@ -8,7 +8,7 @@ import {
 import { canManageCustomers } from "@/lib/customers/permissions";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { createGbpLocalPost, listGbpLocalPosts } from "@/lib/google-business/v4-api";
-import { uploadGbpPhotoFromAttachment } from "@/lib/google-business/gbp-media-upload";
+import { uploadGbpPhotoFromPickableId } from "@/lib/google-business/gbp-media-upload";
 
 export async function GET() {
   try {
@@ -45,12 +45,13 @@ export async function POST(request: NextRequest) {
     if (!summary) return badRequestResponse("Post text is required");
 
     let photoSourceUrl: string | null = null;
-    if (body.attachmentId) {
-      const uploaded = await uploadGbpPhotoFromAttachment({
+    const photoId = body.photoId ?? body.attachmentId;
+    if (photoId) {
+      const uploaded = await uploadGbpPhotoFromPickableId({
         companyId: user.companyId,
         accountId: company.googleBusinessAccountId!,
         locationId: company.googleBusinessLocationId!,
-        attachmentId: String(body.attachmentId),
+        photoId: String(photoId),
         category: "AT_WORK",
       });
       photoSourceUrl = uploaded.googleUrl;

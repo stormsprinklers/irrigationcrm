@@ -20,10 +20,19 @@ export type GbpReviewsListResponse = {
   nextPageToken: string | null;
 };
 
+export type GbpReviewStarBreakdown = {
+  stars: number;
+  count: number;
+  newLast14Days: number;
+};
+
 export type GbpReviewSummary = {
   totalReviewCount: number | null;
   averageRating: number | null;
   newReviewsLast7Days: number;
+  byStar: GbpReviewStarBreakdown[];
+  /** Reviews included when computing star breakdown (all pages fetched up to API limit). */
+  reviewsSampled: number;
 };
 
 export type GbpLocalPostDto = {
@@ -45,15 +54,19 @@ export type GbpMediaItemDto = {
   category: string | null;
 };
 
+export type GbpPickablePhotoSource = "visit" | "facebook" | "instagram";
+
 export type GbpJobPhotoDto = {
   id: string;
+  source: GbpPickablePhotoSource;
   fileName: string;
   mimeType: string;
   previewUrl: string;
-  visitId: string;
+  visitId: string | null;
   visitTitle: string;
   visitStartAt: string | null;
   createdAt: string;
+  permalink: string | null;
 };
 
 export const GBP_STAR_LABELS: Record<string, number> = {

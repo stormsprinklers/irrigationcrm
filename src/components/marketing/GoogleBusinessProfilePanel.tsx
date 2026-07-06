@@ -2,16 +2,84 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Star } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleBusinessEngagementPanel } from "@/components/marketing/GoogleBusinessEngagementPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { GbpReviewSummary } from "@/lib/google-business/engagement-types";
+import type { GbpReviewStarBreakdown, GbpReviewSummary } from "@/lib/google-business/engagement-types";
 import type { GbpConnectionStatus, GbpPerformanceSummary } from "@/lib/google-business/types";
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function AverageStars({ rating }: { rating: number }) {
+  return (
+    <span className="inline-flex gap-0.5 text-amber-500">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star
+          key={star}
+          className={`h-4 w-4 ${
+            rating >= star ? "fill-current" : rating >= star - 0.5 ? "fill-current opacity-50" : "opacity-25"
+          }`}
+        />
+      ))}
+    </span>
+  );
+}
+
+function GbpReviewStarBreakdownChart({
+  byStar,
+  totalReviewCount,
+  averageRating,
+}: {
+  byStar: GbpReviewStarBreakdown[];
+  totalReviewCount: number | null;
+  averageRating: number | null;
+}) {
+  const barTotal = totalReviewCount ?? byStar.reduce((sum, row) => sum + row.count, 0);
+
+  return (
+    <div className="mt-4 flex flex-col gap-4 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0 flex-1 space-y-2">
+        {byStar.map((row) => {
+          const widthPercent = barTotal > 0 ? (row.count / barTotal) * 100 : 0;
+          return (
+            <div
+              key={row.stars}
+              className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-center gap-x-3"
+            >
+              <span className="text-sm font-medium text-muted-foreground tabular-nums">{row.stars}</span>
+              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-amber-400 transition-all"
+                  style={{ width: `${Math.max(widthPercent, row.count > 0 ? 4 : 0)}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium tabular-nums">{formatCount(row.count)}</span>
+              <span className="min-w-[2rem] text-right text-sm font-medium text-green-600 tabular-nums">
+                {row.newLast14Days > 0 ? `+${row.newLast14Days}` : ""}
+              </span>
+            </div>
+          );
+        })}
+        <p className="text-xs text-muted-foreground">Green +N = new reviews at that rating in the last 14 days</p>
+      </div>
+
+      {averageRating != null ? (
+        <div className="shrink-0 text-center sm:min-w-[7rem] sm:text-right">
+          <p className="text-4xl font-semibold tabular-nums leading-none">{averageRating.toFixed(1)}</p>
+          <div className="mt-2 flex justify-center sm:justify-end">
+            <AverageStars rating={averageRating} />
+          </div>
+          {totalReviewCount != null ? (
+            <p className="mt-1 text-sm text-muted-foreground tabular-nums">({formatCount(totalReviewCount)})</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function GbpSetupPrompt({ status }: { status: GbpConnectionStatus }) {
@@ -129,6 +197,13 @@ export function GoogleBusinessProfilePanel() {
                 </>
               )}
             </div>
+            {reviewSummary?.byStar?.length ? (
+              <GbpReviewStarBreakdownChart
+                byStar={reviewSummary.byStar}
+                totalReviewCount={reviewSummary.totalReviewCount}
+                averageRating={reviewSummary.averageRating}
+              />
+            ) : null}
           </div>
           <Button
             size="sm"
