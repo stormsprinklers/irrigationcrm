@@ -17,14 +17,26 @@ function formatCount(value: number) {
 function AverageStars({ rating }: { rating: number }) {
   return (
     <span className="inline-flex gap-0.5 text-amber-500">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`h-4 w-4 ${
-            rating >= star ? "fill-current" : rating >= star - 0.5 ? "fill-current opacity-50" : "opacity-25"
-          }`}
-        />
-      ))}
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fill = Math.max(0, Math.min(1, rating - (star - 1)));
+
+        if (fill >= 1) {
+          return <Star key={star} className="h-4 w-4 fill-current" />;
+        }
+
+        if (fill <= 0) {
+          return <Star key={star} className="h-4 w-4 opacity-25" />;
+        }
+
+        return (
+          <span key={star} className="relative inline-block h-4 w-4 shrink-0">
+            <Star className="h-4 w-4 opacity-25" />
+            <span className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: `${fill * 100}%` }}>
+              <Star className="h-4 w-4 fill-current" />
+            </span>
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -64,7 +76,6 @@ function GbpReviewStarBreakdownChart({
             </div>
           );
         })}
-        <p className="text-xs text-muted-foreground">Green +N = new reviews at that rating in the last 14 days</p>
       </div>
 
       {averageRating != null ? (
