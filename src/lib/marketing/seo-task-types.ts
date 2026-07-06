@@ -62,5 +62,10 @@ export type SeoReachContext = {
     topQueries: Array<{ query: string; clicks: number; impressions: number; position: number }>;
     topPages: Array<{ page: string; clicks: number; impressions: number; position: number }>;
   } | null;
-  existingOpenTasks: string[];
+  existingOpenTasks: Array<{ title: string; category: string | null }>;
+  existingCompletedTasks: Array<{
+    title: string;
+    category: string | null;
+    completedAt: string | null;
+  }>;
 };

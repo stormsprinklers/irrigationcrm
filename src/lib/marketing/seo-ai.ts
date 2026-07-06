@@ -103,7 +103,8 @@ Rules:
 - Good: "Write a guide titled 'How to Winterize Your Sprinkler System in Utah County'", "Email Utah Valley Homebuilders Association offering a free spring startup checklist in exchange for a resource page link".
 - Tie each tip to the company's actual keywords, cities, ranking gaps, Search Console queries, or weak pages when data is available.
 - If organic ranking data shows competitors outranking them, reference those competitors or gaps.
-- Avoid duplicating tasks listed in existingOpenTasks.
+- Do NOT repeat or closely mirror tasks in existingOpenTasks (still on the checklist) or existingCompletedTasks (already checked off). Treat completed tasks as done — suggest NEW opportunities instead.
+- If many tasks are already completed, focus on gaps not covered by that history.
 - Keep descriptions concrete and executable by a small marketing team (not enterprise SEO jargon).`;
 
   const user = `Company: ${context.companyName}

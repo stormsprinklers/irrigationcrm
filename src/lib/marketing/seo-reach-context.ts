@@ -7,7 +7,8 @@ const ANALYTICS_DAYS = 30;
 const GSC_DAYS = 30;
 
 export async function buildSeoReachContext(companyId: string): Promise<SeoReachContext> {
-  const [company, organicKeywords, cities, rankingCaches, openTasks] = await Promise.all([
+  const [company, organicKeywords, cities, rankingCaches, openTasks, completedTasks] =
+    await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: { name: true, website: true, organicSearchWebsiteUrl: true },
@@ -35,7 +36,13 @@ export async function buildSeoReachContext(companyId: string): Promise<SeoReachC
       where: { companyId, completed: false },
       orderBy: { createdAt: "desc" },
       take: 20,
-      select: { title: true },
+      select: { title: true, category: true },
+    }),
+    prisma.seoTask.findMany({
+      where: { companyId, completed: true },
+      orderBy: { completedAt: "desc" },
+      take: 40,
+      select: { title: true, category: true, completedAt: true },
     }),
   ]);
 
@@ -111,6 +118,14 @@ export async function buildSeoReachContext(companyId: string): Promise<SeoReachC
     organicRankings,
     websiteAnalytics,
     searchConsole,
-    existingOpenTasks: openTasks.map((task) => task.title),
+    existingOpenTasks: openTasks.map((task) => ({
+      title: task.title,
+      category: task.category,
+    })),
+    existingCompletedTasks: completedTasks.map((task) => ({
+      title: task.title,
+      category: task.category,
+      completedAt: task.completedAt?.toISOString() ?? null,
+    })),
   };
 }
