@@ -17,6 +17,8 @@ import { jobCardStyle } from "@/lib/schedule/colors";
 import type { ColorByMode, ScheduleJobDTO } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { buildScheduleSlotClick } from "@/lib/schedule/quick-add";
+import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 
 const SCHEDULE_START_HOUR = 4;
 const SCHEDULE_END_HOUR = 22;
@@ -169,9 +171,33 @@ type TimeGridProps = {
   viewMode: "week" | "day";
   columns: TechColumn[];
   showUnassigned: boolean;
+  onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
 
-function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showUnassigned }: TimeGridProps) {
+function handleGridClick(
+  event: React.MouseEvent<HTMLDivElement>,
+  day: Date,
+  assignedUserId: string | null,
+  assignedUserName: string | null,
+  onSlotClick?: (slot: ScheduleSlotClick) => void
+) {
+  if (!onSlotClick) return;
+  const rect = event.currentTarget.getBoundingClientRect();
+  const offsetY = event.clientY - rect.top;
+  onSlotClick(
+    buildScheduleSlotClick(
+      day,
+      offsetY,
+      HOUR_HEIGHT,
+      SCHEDULE_START_HOUR,
+      SCHEDULE_END_HOUR,
+      assignedUserId === "__unassigned__" ? null : assignedUserId,
+      assignedUserName
+    )
+  );
+}
+
+function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showUnassigned, onSlotClick }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [weekDayWidth, setWeekDayWidth] = useState(DAY_MIN_WIDTH);
 
@@ -439,10 +465,18 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
                           className="relative border-r border-border/60 last:border-r-0"
                           style={{ width: TECH_COL_WIDTH, height: gridHeight }}
                         >
+                          <button
+                            type="button"
+                            className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
+                            aria-label={`Add visit for ${col.name} at ${format(day, "MMM d")}`}
+                            onClick={(e) =>
+                              handleGridClick(e, day, col.id, col.name, onSlotClick)
+                            }
+                          />
                           {SCHEDULE_HOURS.map((hour) => (
                             <div
                               key={hour}
-                              className="border-b border-border/60"
+                              className="pointer-events-none border-b border-border/60"
                               style={{ height: HOUR_HEIGHT }}
                             />
                           ))}
@@ -482,10 +516,16 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
                       : { minWidth: DAY_MIN_WIDTH, height: gridHeight }
                   }
                 >
+                  <button
+                    type="button"
+                    className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
+                    aria-label={`Add visit on ${format(day, "MMM d")}`}
+                    onClick={(e) => handleGridClick(e, day, null, null, onSlotClick)}
+                  />
                   {SCHEDULE_HOURS.map((hour) => (
                     <div
                       key={hour}
-                      className="border-b border-border/60"
+                      className="pointer-events-none border-b border-border/60"
                       style={{ height: HOUR_HEIGHT }}
                     />
                   ))}
@@ -645,6 +685,7 @@ type Props = {
   columns: TechColumn[];
   showUnassigned: boolean;
   onDayClick?: (day: Date) => void;
+  onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
 
 export function WeekGrid({
@@ -657,6 +698,7 @@ export function WeekGrid({
   columns,
   showUnassigned,
   onDayClick,
+  onSlotClick,
 }: Props) {
   if (viewMode === "month" && monthStart) {
     return <MonthScheduleGrid jobs={jobs} monthStart={monthStart} onDayClick={onDayClick} />;
@@ -671,6 +713,7 @@ export function WeekGrid({
       viewMode={viewMode === "day" ? "day" : "week"}
       columns={columns}
       showUnassigned={showUnassigned}
+      onSlotClick={onSlotClick}
     />
   );
 }

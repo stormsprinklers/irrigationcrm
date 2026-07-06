@@ -17,6 +17,7 @@ import {
 } from "date-fns";
 import { toast } from "sonner";
 import { ScheduleFilterSidebar } from "./ScheduleFilterSidebar";
+import { ScheduleQuickAddDialog } from "./ScheduleQuickAddDialog";
 import { ScheduleToolbar } from "./ScheduleToolbar";
 import { TeamSchedulePanel } from "./TeamSchedulePanel";
 import { WeekGrid, type ScheduleViewMode, type TechColumn } from "./WeekGrid";
@@ -26,6 +27,7 @@ import {
   type ScheduleFilters,
   type ScheduleJobDTO,
 } from "@/lib/schedule/types";
+import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
@@ -55,6 +57,7 @@ export function ScheduleView() {
     scheduledHoursFormatted: "0h",
   });
   const [loading, setLoading] = useState(true);
+  const [quickAddSlot, setQuickAddSlot] = useState<ScheduleSlotClick | null>(null);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "day") {
@@ -275,9 +278,21 @@ export function ScheduleView() {
               setFocusDay(startOfDay(day));
               setViewMode("day");
             }}
+            onSlotClick={(slot) => setQuickAddSlot(slot)}
           />
         )}
       </div>
+
+      <ScheduleQuickAddDialog
+        open={quickAddSlot !== null}
+        slot={quickAddSlot}
+        serviceAreas={filterOptions.serviceAreas}
+        employees={filterOptions.employees}
+        onClose={() => setQuickAddSlot(null)}
+        onCreated={() => {
+          void loadData();
+        }}
+      />
     </div>
   );
 }
