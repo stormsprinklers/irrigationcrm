@@ -119,7 +119,7 @@ export function SlackGbpReviewsPanel() {
         <CardTitle className="text-base">Google review alerts</CardTitle>
         <p className="text-sm text-muted-foreground">
           Post a designed image card to Slack whenever a new Google review arrives. Checks run
-          automatically every 15 minutes.
+          automatically every 8 hours.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -12,7 +12,7 @@
     },
     {
       "path": "/api/cron/marketing/gbp-review-slack",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 */8 * * *"
     }
   ]
 }

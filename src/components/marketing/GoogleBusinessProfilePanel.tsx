@@ -71,7 +71,7 @@ function GbpReviewStarBreakdownChart({
               </div>
               <span className="text-sm font-medium tabular-nums">{formatCount(row.count)}</span>
               <span className="min-w-[2rem] text-right text-sm font-medium text-green-600 tabular-nums">
-                {row.newLast14Days > 0 ? `+${row.newLast14Days}` : ""}
+                {row.newLast7Days > 0 ? `+${row.newLast7Days}` : ""}
               </span>
             </div>
           );

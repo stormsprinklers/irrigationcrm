@@ -14,8 +14,7 @@ export function formatWebsiteReviewStats(
 
   const reviewCount = Math.max(0, Math.round(totalReviewCount));
   const ratingValue = Math.round(averageRating * 10) / 10;
-  const reviewCountLabel =
-    reviewCount >= 10 ? `${Math.floor(reviewCount / 10) * 10}+` : String(reviewCount);
+  const reviewCountLabel = reviewCount.toLocaleString("en-US");
 
   return { ratingValue, reviewCount, reviewCountLabel };
 }

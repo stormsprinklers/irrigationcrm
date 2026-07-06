@@ -104,7 +104,7 @@ function emptyStarBreakdown() {
   return [5, 4, 3, 2, 1].map((stars) => ({
     stars,
     count: 0,
-    newLast14Days: 0,
+    newLast7Days: 0,
   }));
 }
 
@@ -115,8 +115,6 @@ export async function getGbpReviewSummary(
 ): Promise<GbpReviewSummary> {
   const cutoff7 = new Date();
   cutoff7.setDate(cutoff7.getDate() - 7);
-  const cutoff14 = new Date();
-  cutoff14.setDate(cutoff14.getDate() - 14);
 
   let totalReviewCount: number | null = null;
   let averageRating: number | null = null;
@@ -152,7 +150,7 @@ export async function getGbpReviewSummary(
       const stars = starLevelFromRating(review.starRating);
       if (stars) {
         countByStar.set(stars, (countByStar.get(stars) ?? 0) + 1);
-        if (review.createTime && new Date(review.createTime) >= cutoff14) {
+        if (review.createTime && new Date(review.createTime) >= cutoff7) {
           recentByStar.set(stars, (recentByStar.get(stars) ?? 0) + 1);
         }
       }
@@ -168,7 +166,7 @@ export async function getGbpReviewSummary(
   const byStar = [5, 4, 3, 2, 1].map((stars) => ({
     stars,
     count: countByStar.get(stars) ?? 0,
-    newLast14Days: recentByStar.get(stars) ?? 0,
+    newLast7Days: recentByStar.get(stars) ?? 0,
   }));
 
   return {

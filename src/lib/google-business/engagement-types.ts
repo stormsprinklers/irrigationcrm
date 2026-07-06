@@ -23,7 +23,7 @@ export type GbpReviewsListResponse = {
 export type GbpReviewStarBreakdown = {
   stars: number;
   count: number;
-  newLast14Days: number;
+  newLast7Days: number;
 };
 
 export type GbpReviewSummary = {
