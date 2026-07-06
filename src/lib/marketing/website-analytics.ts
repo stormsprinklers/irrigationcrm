@@ -66,11 +66,18 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
   let homepageDwellSamples = 0;
   let homepageDwellTotalSeconds = 0;
   let phoneClicks = 0;
+  let smsClicks = 0;
   let formSubmits = 0;
   let bookingCompleted = 0;
   let organicConversions = 0;
 
-  const conversionTypes = new Set(["TEL_CLICK", "FORM_SUBMIT", "BOOKING_COMPLETED", "PRICING_COMPLETED"]);
+  const conversionTypes = new Set([
+    "TEL_CLICK",
+    "SMS_CLICK",
+    "FORM_SUBMIT",
+    "BOOKING_COMPLETED",
+    "PRICING_COMPLETED",
+  ]);
 
   for (const event of events) {
     const path = event.pagePath ?? "/";
@@ -94,6 +101,7 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
     }
 
     if (event.eventType === "TEL_CLICK") phoneClicks += 1;
+    if (event.eventType === "SMS_CLICK") smsClicks += 1;
     if (event.eventType === "FORM_SUBMIT") formSubmits += 1;
     if (event.eventType === "BOOKING_COMPLETED") bookingCompleted += 1;
 
@@ -135,10 +143,11 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
     },
     conversions: {
       phoneClicks,
+      smsClicks,
       formSubmits,
       bookingCompleted,
       organicConversions,
-      total: phoneClicks + formSubmits + bookingCompleted,
+      total: phoneClicks + smsClicks + formSubmits + bookingCompleted,
     },
     topPages: sortEntries(pageViews),
     topLandingPages: sortEntries(landingPages),

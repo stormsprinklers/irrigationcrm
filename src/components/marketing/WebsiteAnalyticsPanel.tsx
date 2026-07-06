@@ -25,6 +25,7 @@ type WebsiteAnalyticsReport = {
   };
   conversions: {
     phoneClicks: number;
+    smsClicks: number;
     formSubmits: number;
     bookingCompleted: number;
     organicConversions: number;
@@ -172,13 +173,17 @@ export function WebsiteAnalyticsPanel() {
         <>
           <MarketingMetricGrid
             comingSoon={false}
-            columns={6}
+            columns={7}
             metrics={[
               { label: "Page views", value: formatCount(report.totalPageViews) },
               { label: "Sessions", value: formatCount(report.totalSessions), hint: "New visits" },
               {
                 label: "Phone clicks",
                 value: formatCount(report.conversions.phoneClicks),
+              },
+              {
+                label: "SMS clicks",
+                value: formatCount(report.conversions.smsClicks),
               },
               {
                 label: "Form submits",
