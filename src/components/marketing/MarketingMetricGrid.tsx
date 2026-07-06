@@ -9,7 +9,7 @@ export type MarketingMetric = {
 
 type Props = {
   metrics: MarketingMetric[];
-  columns?: 2 | 3 | 4 | 5 | 6;
+  columns?: 2 | 3 | 4 | 5 | 6 | 7;
   className?: string;
   comingSoon?: boolean;
 };
@@ -26,6 +26,7 @@ export function MarketingMetricGrid({
     4: "sm:grid-cols-2 lg:grid-cols-4",
     5: "sm:grid-cols-2 lg:grid-cols-5",
     6: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
+    7: "sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7",
   }[columns];
 
   return (
