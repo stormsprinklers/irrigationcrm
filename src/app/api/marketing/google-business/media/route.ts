@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const photoId = String(body.photoId ?? body.attachmentId ?? "").trim();
     if (!photoId) return badRequestResponse("photoId is required");
+    const previewUrl = String(body.previewUrl ?? "").trim() || null;
 
     const category =
       body.category === "ADDITIONAL" ||
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
       accountId: company.googleBusinessAccountId!,
       locationId: company.googleBusinessLocationId!,
       photoId,
+      previewUrl,
       category,
     });
 

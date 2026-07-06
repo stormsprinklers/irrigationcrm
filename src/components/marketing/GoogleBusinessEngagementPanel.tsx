@@ -349,6 +349,7 @@ function PostsTab({
     }
     setPosting(true);
     try {
+      const selectedPhoto = jobPhotos.find((item) => item.id === selectedPhotoId);
       const res = await fetch("/api/marketing/google-business/local-posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -356,6 +357,7 @@ function PostsTab({
           summary: postText.trim(),
           attachmentId: selectedPhotoId,
           photoId: selectedPhotoId,
+          previewUrl: selectedPhoto?.previewUrl,
         }),
       });
       const data = await res.json();
@@ -496,11 +498,16 @@ function PhotosTab({
     setUploading(true);
     try {
       let uploaded = 0;
-      for (const attachmentId of selectedIds) {
+      for (const photoId of selectedIds) {
+        const photo = jobPhotos.find((item) => item.id === photoId);
         const res = await fetch("/api/marketing/google-business/media", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ photoId: attachmentId, category: "AT_WORK" }),
+          body: JSON.stringify({
+            photoId,
+            previewUrl: photo?.previewUrl,
+            category: "AT_WORK",
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upload failed");

@@ -272,6 +272,16 @@ export async function uploadGbpPhotoBytes(
 ): Promise<GbpMediaItemDto> {
   const accessToken = await getCompanyAccessToken(companyId);
   const parent = buildGbpLocationParent(accountId, locationId);
+  const normalizedMime = mimeType.split(";")[0].trim().toLowerCase();
+  const uploadMime =
+    normalizedMime === "image/jpg" ? "image/jpeg" : normalizedMime || "image/jpeg";
+
+  if (!uploadMime.startsWith("image/")) {
+    throw new GoogleBusinessApiError(
+      "Google Business Profile photos must be an image file",
+      400
+    );
+  }
 
   const start = await googleApiFetch<{ resourceName?: string }>(
     accessToken,
@@ -293,7 +303,7 @@ export async function uploadGbpPhotoBytes(
     `${MYBUSINESS_UPLOAD}/media/${encodeURIComponent(resourceName)}?uploadType=media`,
     {
       method: "POST",
-      headers: { "Content-Type": mimeType || "application/octet-stream" },
+      headers: { "Content-Type": uploadMime },
       body: new Uint8Array(bytes),
     }
   );

@@ -8,6 +8,7 @@ type UploadParams = {
   accountId: string;
   locationId: string;
   photoId: string;
+  previewUrl?: string | null;
   category?: "ADDITIONAL" | "AT_WORK" | "EXTERIOR" | "INTERIOR" | "PRODUCT" | "TEAMS";
 };
 
@@ -24,7 +25,9 @@ export async function uploadGbpPhotoFromPickableId(params: UploadParams) {
     });
   }
 
-  const { buffer, mimeType } = await fetchSocialPhotoBytes(params.companyId, params.photoId);
+  const { buffer, mimeType } = await fetchSocialPhotoBytes(params.companyId, params.photoId, {
+    previewUrl: params.previewUrl,
+  });
 
   return uploadGbpPhotoBytes(
     params.companyId,

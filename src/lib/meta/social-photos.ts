@@ -47,6 +47,55 @@ function guessMimeType(url: string) {
   return "image/jpeg";
 }
 
+function isMetaCdnUrl(url: string) {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes("fbcdn.net") ||
+    lower.includes("cdninstagram.com") ||
+    lower.includes("instagram.com") ||
+    lower.includes("facebook.com")
+  );
+}
+
+function withAccessToken(url: string, accessToken: string) {
+  if (!accessToken || !isMetaCdnUrl(url)) return url;
+  return url.includes("?")
+    ? `${url}&access_token=${encodeURIComponent(accessToken)}`
+    : `${url}?access_token=${encodeURIComponent(accessToken)}`;
+}
+
+async function downloadImageUrl(
+  imageUrl: string,
+  accessToken?: string
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const res = await fetch(withAccessToken(imageUrl, accessToken ?? ""), {
+    cache: "no-store",
+    redirect: "follow",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; StormSprinklersCRM/1.0)",
+      Accept: "image/*,*/*",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to download image (${res.status})`);
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length === 0) {
+    throw new Error("Downloaded image was empty");
+  }
+
+  const mimeType = res.headers.get("content-type")?.split(";")[0]?.trim() || guessMimeType(imageUrl);
+  if (!mimeType.startsWith("image/")) {
+    throw new Error(
+      `Only image files can be uploaded to Google Business Profile (received ${mimeType})`
+    );
+  }
+
+  return { buffer, mimeType };
+}
+
 function pushPhoto(
   photos: GbpJobPhotoDto[],
   row: {
@@ -229,7 +278,11 @@ export function parsePickablePhotoId(photoId: string) {
   return { source: "visit" as const, externalId: photoId };
 }
 
-export async function fetchSocialPhotoBytes(companyId: string, photoId: string) {
+export async function fetchSocialPhotoBytes(
+  companyId: string,
+  photoId: string,
+  options?: { previewUrl?: string | null }
+) {
   const parsed = parsePickablePhotoId(photoId);
   if (parsed.source === "visit") {
     throw new Error("Not a social photo");
@@ -257,6 +310,15 @@ export async function fetchSocialPhotoBytes(companyId: string, photoId: string) 
   });
 
   const token = resolved.pageToken;
+  const previewUrl = options?.previewUrl?.trim() || null;
+  if (previewUrl) {
+    try {
+      return await downloadImageUrl(previewUrl, token);
+    } catch {
+      /* fall through to Meta Graph resolution */
+    }
+  }
+
   let imageUrl: string | null = null;
 
   if (parsed.source === "facebook") {
@@ -276,29 +338,19 @@ export async function fetchSocialPhotoBytes(companyId: string, photoId: string) 
       media_type?: string;
       media_url?: string;
       thumbnail_url?: string;
-      children?: { data?: Array<{ id?: string; media_url?: string; thumbnail_url?: string }> };
     }>(`/${parsed.externalId}`, {
-      fields: "media_type,media_url,thumbnail_url,children{media_url,thumbnail_url}",
+      fields: "media_type,media_url,thumbnail_url",
       access_token: token,
     });
-    imageUrl = media.media_url ?? media.thumbnail_url ?? null;
-    if (!imageUrl) {
-      const child = media.children?.data?.find((row) => row.id === parsed.externalId);
-      imageUrl = child?.media_url ?? child?.thumbnail_url ?? null;
-    }
+    imageUrl =
+      media.media_type === "VIDEO"
+        ? media.thumbnail_url ?? null
+        : media.media_url ?? media.thumbnail_url ?? null;
   }
 
   if (!imageUrl) {
     throw new Error("Could not resolve image URL from Meta");
   }
 
-  const res = await fetch(imageUrl, { cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`Failed to download image (${res.status})`);
-  }
-
-  const buffer = Buffer.from(await res.arrayBuffer());
-  const mimeType = res.headers.get("content-type")?.split(";")[0]?.trim() || guessMimeType(imageUrl);
-
-  return { buffer, mimeType };
+  return downloadImageUrl(imageUrl, token);
 }

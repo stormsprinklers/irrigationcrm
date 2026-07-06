@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
         accountId: company.googleBusinessAccountId!,
         locationId: company.googleBusinessLocationId!,
         photoId: String(photoId),
+        previewUrl: String(body.previewUrl ?? "").trim() || null,
         category: "AT_WORK",
       });
       photoSourceUrl = uploaded.googleUrl;
