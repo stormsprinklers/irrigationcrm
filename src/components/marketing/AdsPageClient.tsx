@@ -298,7 +298,9 @@ export function AdsPageClient() {
           Showing {rangeLabel}
           {dashboard?.dateRange && !dashboard.dateRange.isAllTime
             ? ` (${dashboard.dateRange.startDate} – ${dashboard.dateRange.endDate})`
-            : null}
+            : dashboard?.dateRange?.isAllTime
+              ? " (Google: full history; Meta: up to 37 months)"
+              : null}
         </p>
       </div>
 

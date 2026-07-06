@@ -76,10 +76,20 @@ export function googleAdsDateClause(range: AdsDateRange) {
   return `segments.date BETWEEN '${range.startDate}' AND '${range.endDate}'`;
 }
 
+/** Meta insights cannot look back more than 37 months. */
+function metaEarliestSinceDate() {
+  const date = utcToday();
+  date.setUTCMonth(date.getUTCMonth() - 37);
+  return formatUtcDate(date);
+}
+
 export function metaInsightsField(range: AdsDateRange) {
-  if (range.isAllTime) return "insights.date_preset(lifetime)";
+  if (range.isAllTime) return "insights.date_preset(maximum)";
   if (range.presetDays === 7) return "insights.date_preset(last_7d)";
   if (range.presetDays === 30) return "insights.date_preset(last_30d)";
   if (range.presetDays === 90) return "insights.date_preset(last_90d)";
-  return `insights.time_range({'since':'${range.startDate}','until':'${range.endDate}'})`;
+
+  const earliest = metaEarliestSinceDate();
+  const since = range.startDate < earliest ? earliest : range.startDate;
+  return `insights.time_range({'since':'${since}','until':'${range.endDate}'})`;
 }
