@@ -8,15 +8,44 @@ export type GbpReviewCardInput = {
   reviewDate: string | null;
 };
 
-function starGlyphs(count: number) {
+function StarRow({ count }: { count: number }) {
   const safe = Math.max(0, Math.min(5, Math.round(count)));
-  return `${"★".repeat(safe)}${"☆".repeat(5 - safe)}`;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      {Array.from({ length: 5 }, (_, index) => {
+        const filled = index < safe;
+        return (
+          <div
+            key={index}
+            style={{
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                background: filled ? "#fbbf24" : "transparent",
+                border: filled ? "2px solid #fbbf24" : "2px solid #94a3b8",
+                display: "flex",
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function truncateComment(text: string | null, max = 320) {
-  const trimmed = text?.trim() || "No written review — star rating only.";
+  const trimmed = text?.trim() || "No written review - star rating only.";
   if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max - 1)}…`;
+  return `${trimmed.slice(0, max - 3)}...`;
 }
 
 function formatReviewDate(iso: string | null) {
@@ -32,7 +61,6 @@ function formatReviewDate(iso: string | null) {
 }
 
 export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise<Buffer> {
-  const stars = starGlyphs(input.starCount);
   const comment = truncateComment(input.comment);
   const dateLabel = formatReviewDate(input.reviewDate);
 
@@ -96,7 +124,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
             marginTop: 40,
           }}
         >
-          <div style={{ fontSize: 44, color: "#fbbf24", letterSpacing: 2, display: "flex" }}>{stars}</div>
+          <StarRow count={input.starCount} />
           <div style={{ fontSize: 30, fontWeight: 700, display: "flex" }}>{`${input.starCount} out of 5`}</div>
         </div>
 

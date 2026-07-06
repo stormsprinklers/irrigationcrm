@@ -34,11 +34,7 @@ type Settings = {
 
 type DashboardResponse = {
   range: { preset: string; label: string };
-  metrics: {
-    allTime: ReferralDashboardMetrics;
-    ytd: ReferralDashboardMetrics;
-    selected: ReferralDashboardMetrics;
-  };
+  metrics: ReferralDashboardMetrics;
   pipeline: ReferralPipelineRow[];
   rewardsQueue: ReferralRewardQueueRow[];
 };
@@ -314,20 +310,7 @@ export function ReferralsPageClient() {
         </div>
 
         {dashboard ? (
-          <>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">All time</p>
-              <MarketingMetricGrid metrics={metricsToCards(dashboard.metrics.allTime)} comingSoon={false} />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Year to date</p>
-              <MarketingMetricGrid metrics={metricsToCards(dashboard.metrics.ytd)} comingSoon={false} />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">{dashboard.range.label}</p>
-              <MarketingMetricGrid metrics={metricsToCards(dashboard.metrics.selected)} comingSoon={false} />
-            </div>
-          </>
+          <MarketingMetricGrid metrics={metricsToCards(dashboard.metrics)} comingSoon={false} />
         ) : null}
 
         <MarketingSectionCard title="Pipeline" description="All referral submissions in the selected range.">

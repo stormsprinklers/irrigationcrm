@@ -7,7 +7,6 @@ import {
   listReferralRewardsQueue,
 } from "@/lib/referrals/dashboard";
 import { parseReportRangeFromSearchParams, resolveReportRange } from "@/lib/reporting/date-range";
-import { startOfYear } from "date-fns";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,14 +16,7 @@ export async function GET(request: NextRequest) {
     const rangeInput = parseReportRangeFromSearchParams(request.nextUrl.searchParams);
     const range = resolveReportRange(rangeInput);
 
-    const now = new Date();
-    const [allTime, ytd, selected, pipeline, rewardsQueue] = await Promise.all([
-      computeReferralMetrics({ companyId: user.companyId }),
-      computeReferralMetrics({
-        companyId: user.companyId,
-        start: startOfYear(now),
-        end: now,
-      }),
+    const [metrics, pipeline, rewardsQueue] = await Promise.all([
       computeReferralMetrics({
         companyId: user.companyId,
         start: range.start,
@@ -45,11 +37,7 @@ export async function GET(request: NextRequest) {
         start: range.start.toISOString(),
         end: range.end.toISOString(),
       },
-      metrics: {
-        allTime,
-        ytd,
-        selected,
-      },
+      metrics,
       pipeline,
       rewardsQueue,
     });

@@ -72,11 +72,11 @@ async function deliverReviewBatchToSlack(params: {
         reviewDate: review.createTime ?? review.updateTime,
       });
 
-      const starLabel = starCount > 0 ? `${starCount}★` : "Review";
+      const starLabel = starCount > 0 ? `${starCount} stars` : "Review";
       return {
         buffer,
         filename: `google-review-${review.reviewId}.png`,
-        title: `${review.reviewerName} — ${starLabel}`,
+        title: `${review.reviewerName} - ${starLabel}`,
       };
     })
   );
