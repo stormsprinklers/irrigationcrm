@@ -1,40 +1,60 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 
-/** Cached Inter font for @vercel/og ImageResponse (Satori). */
-let interFontData: ArrayBuffer | null = null;
+/** Cached font for @vercel/og ImageResponse (Satori). Must be TTF/OTF — WOFF2 is not supported. */
+let ogFontData: { name: string; data: ArrayBuffer } | null = null;
 
-const INTER_FONT_PATHS = [
-  join(process.cwd(), "public", "fonts", "inter-latin-400-normal.woff2"),
-  join(
-    process.cwd(),
-    "node_modules",
-    "@fontsource",
-    "inter",
-    "files",
-    "inter-latin-400-normal.woff2"
-  ),
+type FontCandidate = { name: string; path: string };
+
+const FONT_CANDIDATES: FontCandidate[] = [
+  {
+    name: "Inter",
+    path: join(process.cwd(), "public", "fonts", "inter-latin-400-normal.ttf"),
+  },
+  {
+    name: "Noto Sans",
+    path: join(process.cwd(), "public", "fonts", "noto-sans-latin-regular.ttf"),
+  },
+  {
+    name: "Noto Sans",
+    path: join(
+      process.cwd(),
+      "node_modules",
+      "next",
+      "dist",
+      "compiled",
+      "@vercel",
+      "og",
+      "noto-sans-v27-latin-regular.ttf"
+    ),
+  },
 ];
 
-export async function getOgInterFont(): Promise<ArrayBuffer> {
-  if (interFontData) return interFontData;
+export async function getOgFont(): Promise<{ name: string; data: ArrayBuffer }> {
+  if (ogFontData) return ogFontData;
 
-  for (const fontPath of INTER_FONT_PATHS) {
+  for (const candidate of FONT_CANDIDATES) {
     try {
-      const buffer = await readFile(fontPath);
-      interFontData = buffer.buffer.slice(
-        buffer.byteOffset,
-        buffer.byteOffset + buffer.byteLength
-      );
-      return interFontData;
+      const buffer = await readFile(candidate.path);
+      ogFontData = {
+        name: candidate.name,
+        data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+      };
+      return ogFontData;
     } catch {
       // try next path
     }
   }
 
   throw new Error(
-    "Failed to load Inter font for review cards. Ensure public/fonts/inter-latin-400-normal.woff2 is deployed."
+    "Failed to load a TTF font for review cards. Ensure public/fonts/inter-latin-400-normal.ttf is deployed."
   );
+}
+
+/** @deprecated Use getOgFont() — returns TTF bytes only. */
+export async function getOgInterFont(): Promise<ArrayBuffer> {
+  const font = await getOgFont();
+  return font.data;
 }
 
 /** Strip emoji / symbol glyphs that can trigger failing dynamic font downloads in Satori. */

@@ -12,4 +12,9 @@ If the file is missing, headings fall back to the body sans-serif font.
 
 ## Inter (Slack GBP review cards)
 
-`inter-latin-400-normal.woff2` is bundled for server-side review card images (`@vercel/og` / Satori). Do not remove — Slack review cards fail without it.
+Satori (`@vercel/og`) requires **TTF or OTF** fonts — not WOFF2.
+
+- `inter-latin-400-normal.ttf` — primary font for Slack review card images
+- `noto-sans-latin-regular.ttf` — fallback (same family Next.js uses for OG images)
+
+Do not remove these files; Slack review cards fail without a TTF font.

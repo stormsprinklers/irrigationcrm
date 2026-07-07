@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getOgInterFont, sanitizeOgText } from "@/lib/slack/og-font";
+import { getOgFont, sanitizeOgText } from "@/lib/slack/og-font";
 
 export type GbpReviewCardInput = {
   companyName: string;
@@ -66,7 +66,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
   const dateLabel = formatReviewDate(input.reviewDate);
   const reviewerName = sanitizeOgText(input.reviewerName) || "Google reviewer";
   const companyName = sanitizeOgText(input.companyName) || "Your company";
-  const interFont = await getOgInterFont();
+  const ogFont = await getOgFont();
 
   const response = new ImageResponse(
     (
@@ -78,7 +78,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           height: "100%",
           background: "linear-gradient(145deg, #102341 0%, #1a4a7a 55%, #102341 100%)",
           color: "#ffffff",
-          fontFamily: "Inter",
+          fontFamily: ogFont.name,
           padding: "56px",
         }}
       >
@@ -167,8 +167,8 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
       height: 630,
       fonts: [
         {
-          name: "Inter",
-          data: interFont,
+          name: ogFont.name,
+          data: ogFont.data,
           style: "normal",
           weight: 400,
         },
