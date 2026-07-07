@@ -91,7 +91,7 @@ export function SlackGbpReviewsPanel() {
     try {
       const res = await fetch("/api/settings/slack/gbp-reviews", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      if (!res.ok) throw new Error(data.error ?? data.errors?.[0] ?? "Send failed");
 
       if (data.skipped === "slack_not_configured") {
         toast.error("Slack is not configured on the server");
@@ -117,7 +117,7 @@ export function SlackGbpReviewsPanel() {
       } else if (data.firstSend) {
         toast.message("No Google reviews from the last 24 hours to send");
       } else {
-        toast.message("No new unsent reviews to post");
+        toast.message("No new unsent reviews to post to Slack");
       }
 
       if (data.errors?.length) {

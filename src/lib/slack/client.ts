@@ -27,7 +27,13 @@ async function slackApi<T extends SlackApiResponse>(
 
   const data = (await res.json()) as T;
   if (!data.ok) {
-    throw new Error(data.error ?? `Slack API ${method} failed`);
+    const hint =
+      data.error === "not_in_channel"
+        ? "Invite the Slack bot to the channel"
+        : data.error === "missing_scope"
+          ? "Bot needs files:write and chat:write scopes"
+          : null;
+    throw new Error(hint ? `${data.error}: ${hint}` : (data.error ?? `Slack API ${method} failed`));
   }
   return data;
 }

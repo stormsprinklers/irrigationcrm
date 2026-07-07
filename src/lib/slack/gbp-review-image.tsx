@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { getOgInterFont, sanitizeOgText } from "@/lib/slack/og-font";
 
 export type GbpReviewCardInput = {
   companyName: string;
@@ -43,7 +44,7 @@ function StarRow({ count }: { count: number }) {
 }
 
 function truncateComment(text: string | null, max = 320) {
-  const trimmed = text?.trim() || "No written review - star rating only.";
+  const trimmed = sanitizeOgText(text?.trim() || "No written review - star rating only.");
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, max - 3)}...`;
 }
@@ -63,6 +64,9 @@ function formatReviewDate(iso: string | null) {
 export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise<Buffer> {
   const comment = truncateComment(input.comment);
   const dateLabel = formatReviewDate(input.reviewDate);
+  const reviewerName = sanitizeOgText(input.reviewerName) || "Google reviewer";
+  const companyName = sanitizeOgText(input.companyName) || "Your company";
+  const interFont = await getOgInterFont();
 
   const response = new ImageResponse(
     (
@@ -74,7 +78,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           height: "100%",
           background: "linear-gradient(145deg, #102341 0%, #1a4a7a 55%, #102341 100%)",
           color: "#ffffff",
-          fontFamily: "sans-serif",
+          fontFamily: "Inter",
           padding: "56px",
         }}
       >
@@ -112,7 +116,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
               display: "flex",
             }}
           >
-            {input.companyName}
+            {companyName}
           </div>
         </div>
 
@@ -142,7 +146,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           }}
         >
           <div style={{ fontSize: 26, fontWeight: 700, color: "#f8fafc", display: "flex" }}>
-            {input.reviewerName}
+            {reviewerName}
           </div>
           <div
             style={{
@@ -161,6 +165,14 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
     {
       width: 1200,
       height: 630,
+      fonts: [
+        {
+          name: "Inter",
+          data: interFont,
+          style: "normal",
+          weight: 400,
+        },
+      ],
     }
   );
 

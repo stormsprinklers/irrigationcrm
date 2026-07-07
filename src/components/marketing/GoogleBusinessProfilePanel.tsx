@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, RefreshCw, Star } from "lucide-react";
+import { Loader2, RefreshCw, Send, Star } from "lucide-react";
 import { toast } from "sonner";
 import { GoogleBusinessEngagementPanel } from "@/components/marketing/GoogleBusinessEngagementPanel";
 import { Button } from "@/components/ui/button";
@@ -93,6 +93,48 @@ function GbpReviewStarBreakdownChart({
   );
 }
 
+type SlackGbpReviewsSendResult = {
+  posted: number;
+  messages: number;
+  remaining: number;
+  firstSend: boolean;
+  skipped: "slack_not_configured" | "channel_not_configured" | "gbp_not_connected" | null;
+  errors: string[];
+};
+
+function notifySlackSendResult(data: SlackGbpReviewsSendResult) {
+  if (data.skipped === "slack_not_configured") {
+    toast.error("Slack is not configured on the server");
+    return;
+  }
+  if (data.skipped === "channel_not_configured") {
+    toast.error("Set a Slack channel in Settings → Integrations → Slack");
+    return;
+  }
+  if (data.skipped === "gbp_not_connected") {
+    toast.error("Connect Google Business Profile first");
+    return;
+  }
+
+  if (data.posted > 0) {
+    const parts = [
+      `Sent ${data.posted} review${data.posted === 1 ? "" : "s"} in ${data.messages} Slack message${data.messages === 1 ? "" : "s"}`,
+    ];
+    if (data.remaining > 0) {
+      parts.push(`${data.remaining} more unsent — click Send again`);
+    }
+    toast.success(parts.join(". "));
+  } else if (data.firstSend) {
+    toast.message("No Google reviews from the last 24 hours to send");
+  } else {
+    toast.message("No new unsent reviews to post to Slack");
+  }
+
+  if (data.errors?.length) {
+    toast.error(data.errors[0]);
+  }
+}
+
 function GbpSetupPrompt({ status }: { status: GbpConnectionStatus }) {
   let message =
     "Connect your Google Business Profile in Settings to view performance, reviews, and posts.";
@@ -127,6 +169,8 @@ export function GoogleBusinessProfilePanel() {
   const [loading, setLoading] = useState(true);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
   const [loadingReviewSummary, setLoadingReviewSummary] = useState(false);
+  const [sendingToSlack, setSendingToSlack] = useState(false);
+  const [slackChannelConfigured, setSlackChannelConfigured] = useState(false);
 
   const loadStatus = useCallback(async () => {
     const res = await fetch("/api/marketing/google-business/status");
@@ -163,6 +207,33 @@ export function GoogleBusinessProfilePanel() {
     }
   }, []);
 
+  const loadSlackStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings/slack/gbp-reviews");
+      if (!res.ok) return;
+      const data = await res.json();
+      setSlackChannelConfigured(Boolean(data.channelId));
+    } catch {
+      setSlackChannelConfigured(false);
+    }
+  }, []);
+
+  const sendReviewsToSlack = useCallback(async () => {
+    setSendingToSlack(true);
+    try {
+      const res = await fetch("/api/settings/slack/gbp-reviews", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? data.errors?.[0] ?? "Send failed");
+      }
+      notifySlackSendResult(data as SlackGbpReviewsSendResult);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send reviews to Slack");
+    } finally {
+      setSendingToSlack(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadStatus()
       .catch(() => toast.error("Failed to load Google Business Profile status"))
@@ -173,7 +244,8 @@ export function GoogleBusinessProfilePanel() {
     if (!status?.locationId) return;
     loadPerformance(days);
     loadReviewSummary();
-  }, [status?.locationId, days, loadPerformance, loadReviewSummary]);
+    void loadSlackStatus();
+  }, [status?.locationId, days, loadPerformance, loadReviewSummary, loadSlackStatus]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading Google Business Profile...</p>;
@@ -216,15 +288,43 @@ export function GoogleBusinessProfilePanel() {
               />
             ) : null}
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={loadingReviewSummary}
-            onClick={() => void loadReviewSummary()}
-          >
-            <RefreshCw className={`mr-1 h-4 w-4 ${loadingReviewSummary ? "animate-spin" : ""}`} />
-            Refresh reviews
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                disabled={sendingToSlack || !slackChannelConfigured}
+                onClick={() => void sendReviewsToSlack()}
+                title={
+                  slackChannelConfigured
+                    ? "Post new unsent reviews to Slack"
+                    : "Configure a Slack channel in Settings → Integrations → Slack"
+                }
+              >
+                {sendingToSlack ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-1 h-4 w-4" />
+                )}
+                Send to Slack
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loadingReviewSummary}
+                onClick={() => void loadReviewSummary()}
+              >
+                <RefreshCw className={`mr-1 h-4 w-4 ${loadingReviewSummary ? "animate-spin" : ""}`} />
+                Refresh reviews
+              </Button>
+            </div>
+            {!slackChannelConfigured ? (
+              <p className="text-xs text-muted-foreground text-right">
+                <Link href="/settings/integrations/slack" className="underline">
+                  Configure Slack channel
+                </Link>
+              </p>
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -43,6 +43,11 @@ function withNoIndex(response: NextResponse) {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Google Search / OAuth HTML file verification (served from /public)
+  if (/^\/google[a-z0-9]+\.html$/i.test(pathname)) {
+    return NextResponse.next();
+  }
+
   const isPublic = publicPaths.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );

@@ -45,7 +45,7 @@ function buildBatchComment(companyName: string, reviews: GbpReviewDto[]) {
     const review = reviews[0];
     const starCount = GBP_STAR_LABELS[review.starRating] ?? 0;
     const starLabel = starCount > 0 ? `${starCount}-star` : "new";
-    return `New ${starLabel} Google review from *${review.reviewerName}* — ${companyName}`;
+    return `New ${starLabel} Google review from *${review.reviewerName}* - ${companyName}`;
   }
 
   const fiveStarCount = reviews.filter((review) => review.starRating === "FIVE").length;
@@ -278,6 +278,6 @@ export async function sendSampleGbpReviewToSlack(companyId: string) {
       },
     ],
     initialComment:
-      "Sample Google review notification — your team will see cards like this when you send reviews to Slack.",
+      "Sample Google review notification - your team will see cards like this when you send reviews to Slack.",
   });
 }

@@ -123,6 +123,14 @@ export async function POST() {
     }
 
     const result = await sendUnsentGbpReviewsToSlack(user.companyId);
+
+    if (result.errors.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: result.errors[0], ...result },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to send reviews to Slack";
