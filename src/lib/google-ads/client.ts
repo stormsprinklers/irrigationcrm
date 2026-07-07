@@ -18,7 +18,9 @@ import type {
 import { GOOGLE_ADS_SCOPE } from "@/lib/google-ads/types";
 import { prisma } from "@/lib/prisma";
 
-const GOOGLE_ADS_API = "https://googleads.googleapis.com/v18";
+/** v18 sunset Aug 2025 — use a supported major version (see Google Ads API sunset schedule). */
+const GOOGLE_ADS_API_VERSION = process.env.GOOGLE_ADS_API_VERSION?.trim() || "v24";
+const GOOGLE_ADS_API = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 
 export class GoogleAdsApiError extends Error {
   status: number;
@@ -136,9 +138,23 @@ async function googleAdsFetch<T>(
   }
 
   const res = await fetch(`${GOOGLE_ADS_API}${path}`, { ...init, headers });
-  const data = (await res.json()) as T & {
+  const bodyText = await res.text();
+
+  let data: T & {
     error?: { message?: string; status?: string; code?: number };
   };
+
+  try {
+    data = JSON.parse(bodyText) as typeof data;
+  } catch {
+    const isHtml = bodyText.trimStart().startsWith("<");
+    throw new GoogleAdsApiError(
+      isHtml
+        ? `Google Ads API returned an HTML error page (HTTP ${res.status}). Confirm GOOGLE_ADS_DEVELOPER_TOKEN is set, API access is approved, and GOOGLE_ADS_API_VERSION (${GOOGLE_ADS_API_VERSION}) is supported.`
+        : `Google Ads API returned invalid JSON (HTTP ${res.status})`,
+      res.status || 502
+    );
+  }
 
   if (!res.ok) {
     const message = data.error?.message ?? `Google Ads API error (${res.status})`;

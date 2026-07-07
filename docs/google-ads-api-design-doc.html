@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Storm Sprinklers — Google Ads API Tool Design Documentation</title>
+  <style>
+    @page { size: letter; margin: 0.75in; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 11pt;
+      line-height: 1.45;
+      color: #1a1a1a;
+      max-width: 7.5in;
+      margin: 0 auto;
+      padding: 0.5in;
+    }
+    h1 {
+      font-size: 20pt;
+      color: #102341;
+      margin: 0 0 0.25rem;
+      border-bottom: 3px solid #4C9BC8;
+      padding-bottom: 0.35rem;
+    }
+    h2 {
+      font-size: 13pt;
+      color: #102341;
+      margin: 1.25rem 0 0.5rem;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11pt;
+      color: #102341;
+      margin: 0.75rem 0 0.35rem;
+    }
+    p, li { margin: 0.35rem 0; }
+    ul { margin: 0.25rem 0 0.5rem 1.1rem; padding: 0; }
+    .meta { font-size: 10pt; color: #555; margin-bottom: 1rem; }
+    .section { page-break-inside: avoid; margin-bottom: 0.75rem; }
+    code, .mono { font-family: Consolas, "Courier New", monospace; font-size: 9.5pt; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin: 0.5rem 0;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.35rem 0.5rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #eef6fa; color: #102341; }
+    .mockup {
+      border: 1px solid #C2E4F0;
+      border-radius: 8px;
+      margin: 0.75rem 0;
+      page-break-inside: avoid;
+    }
+    .mockup-caption {
+      font-size: 9.5pt;
+      color: #555;
+      margin: 0.25rem 0 0.75rem;
+      font-style: italic;
+    }
+    .diagram {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      font-size: 10pt;
+    }
+    .footer {
+      margin-top: 1.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid #ddd;
+      font-size: 9pt;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Google Ads API Tool — Design Documentation</h1>
+<p class="meta">
+  <strong>Company:</strong> Storm Sprinklers &nbsp;|&nbsp;
+  <strong>Application:</strong> Irrigation CRM &nbsp;|&nbsp;
+  <strong>URL:</strong> https://crm.stormsprinklers.com &nbsp;|&nbsp;
+  <strong>Website advertised:</strong> https://www.stormsprinklers.com &nbsp;|&nbsp;
+  <strong>Date:</strong> June 2026
+</p>
+
+<div class="section">
+  <h2>Company Name</h2>
+  <p><strong>Storm Sprinklers</strong> (product name: <strong>Irrigation CRM</strong>)</p>
+</div>
+
+<div class="section">
+  <h2>Business Model</h2>
+  <p>
+    Storm Sprinklers is an irrigation services company based in Utah County, Utah. We operate our
+    own customer-facing website at <strong>www.stormsprinklers.com</strong> to generate leads for
+    sprinkler repair, installation, seasonal blowouts, and related services.
+  </p>
+  <p>
+    We run paid advertising only for our own business through our own Google Ads manager account
+    (MCC) and linked customer account. We advertise Google Search, Display, Performance Max, and
+    Local Services Ads (LSA) campaigns that drive traffic to stormsprinklers.com and phone calls
+    for our field team.
+  </p>
+  <p>
+    <strong>We do not manage Google Ads for any other companies or clients.</strong> Irrigation CRM
+    is an internal operations platform used exclusively by Storm Sprinklers staff — not a SaaS
+    product resold to third parties.
+  </p>
+</div>
+
+<div class="section">
+  <h2>Tool Access / Use</h2>
+  <p>
+    Irrigation CRM is hosted at <strong>https://crm.stormsprinklers.com</strong>. The application
+    requires staff login (company credentials via secure session authentication). There is no public
+    sign-up and no external user access.
+  </p>
+  <ul>
+    <li><strong>Who uses it:</strong> Storm Sprinklers owners, office staff, and marketing managers.</li>
+    <li><strong>Primary use:</strong> View Google PPC and Local Services Ads performance alongside Meta ads in a unified Marketing → Ads dashboard.</li>
+    <li><strong>Connection flow:</strong> An authenticated admin connects their Google account once in Settings → Integrations → Google Ads via OAuth 2.0 (<code>adwords</code> scope).</li>
+    <li><strong>Data sharing:</strong> Google Ads data is displayed only inside the CRM to logged-in staff. We do not sell, reshare, or expose Google Ads data to unrelated third parties.</li>
+    <li><strong>Planned management features:</strong> Pause or enable campaigns and adjust daily budgets from the CRM when seasonal demand changes (e.g., winter blowout season vs. spring startup).</li>
+  </ul>
+  <p>
+    A public marketing homepage at <code>/</code> describes the application for Google OAuth
+    verification; all reporting features require staff authentication.
+  </p>
+</div>
+
+<div class="section">
+  <h2>Tool Design</h2>
+
+  <h3>Architecture overview</h3>
+  <div class="diagram">
+    <strong>Flow:</strong>
+    Staff browser → Irrigation CRM (Next.js on Vercel) → PostgreSQL (OAuth refresh token, selected customer ID)
+    → Google Ads API v18 (server-side, with developer token + OAuth access token)
+    → Dashboard UI (Marketing → Ads)
+  </div>
+
+  <h3>Reporting (live today)</h3>
+  <p>
+    When a staff member opens <strong>Marketing → Ads</strong> or changes the date range, the CRM
+    server calls the Google Ads API using Google Ads Query Language (GAQL) via
+    <code>GoogleAdsService.Search</code>. Results are returned to the browser and rendered in the
+    dashboard. Metrics include spend, impressions, clicks, CPC, conversions, conversion value, and
+    ROAS aggregated by campaign.
+  </p>
+  <p>
+    Campaign rows include channel type (Search, Display, Performance Max, Local Services) so PPC
+    and LSA campaigns appear in the appropriate tabs. The staff member can filter by preset ranges
+    (7 / 30 / 90 days, month-to-date, year-to-date, all time, or custom dates).
+  </p>
+
+  <h3>Account linking (live today)</h3>
+  <p>
+    After OAuth connect, the admin selects which Google Ads customer account to report on from
+    accessible accounts returned by <code>CustomerService.ListAccessibleCustomers</code>. Selection
+    is stored per company in the CRM database.
+  </p>
+
+  <h3>Campaign management (planned — same tool)</h3>
+  <p>
+    Planned features use the same OAuth connection and developer token. Staff will be able to
+    pause or enable campaigns and update campaign budgets from the Ads dashboard when business
+    conditions change. Local Services Ads will show lead counts, cost per lead, and booked jobs in
+    the dedicated LSA tab using <code>LOCAL_SERVICES</code> channel campaign data.
+  </p>
+
+  <h3>Security</h3>
+  <ul>
+    <li>OAuth refresh tokens stored server-side only (PostgreSQL); never sent to the browser.</li>
+    <li>Google Ads developer token stored as a server environment variable (<code>GOOGLE_ADS_DEVELOPER_TOKEN</code>).</li>
+    <li>All Google Ads API calls originate from CRM backend route handlers after session authentication.</li>
+    <li>Disconnect removes stored OAuth tokens immediately.</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>API Services Called</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>API service / method</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Live</strong></td>
+        <td><code>CustomerService.ListAccessibleCustomers</code></td>
+        <td>List Google Ads accounts the connected user can access; populate account picker in Settings.</td>
+      </tr>
+      <tr>
+        <td><strong>Live</strong></td>
+        <td><code>GoogleAdsService.Search</code> (GAQL on <code>customer</code>)</td>
+        <td>Read customer descriptive name and manager flag for each accessible account.</td>
+      </tr>
+      <tr>
+        <td><strong>Live</strong></td>
+        <td><code>GoogleAdsService.Search</code> (GAQL on <code>campaign</code>, <code>campaign_budget</code>, <code>metrics</code>)</td>
+        <td>Pull campaign performance reports: name, status, channel type, budget, cost, impressions, clicks, conversions, conversion value for the selected date range. Includes <code>LOCAL_SERVICES</code> channel for LSA campaigns.</td>
+      </tr>
+      <tr>
+        <td>Planned</td>
+        <td><code>CampaignService.MutateCampaigns</code></td>
+        <td>Pause or enable campaigns from the CRM when seasonality or capacity requires it.</td>
+      </tr>
+      <tr>
+        <td>Planned</td>
+        <td><code>CampaignBudgetService.MutateCampaignBudgets</code></td>
+        <td>Adjust daily campaign budgets for PPC and LSA from the Budgets tab.</td>
+      </tr>
+      <tr>
+        <td>Planned</td>
+        <td><code>GoogleAdsService.Search</code> (GAQL on local services lead resources)</td>
+        <td>Display LSA lead volume, CPL, and booking metrics in the Google LSA tab.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>OAuth scope:</strong> <code>https://www.googleapis.com/auth/adwords</code></p>
+  <p><strong>API version:</strong> Google Ads API v18 (REST endpoint <code>googleads.googleapis.com/v18</code>)</p>
+</div>
+
+<div class="section">
+  <h2>Tool Mockups</h2>
+  <p>
+    Irrigation CRM is externally reachable at https://crm.stormsprinklers.com but requires staff
+    login. The mockups below represent the Google Ads integration screens as implemented and
+    planned in the product.
+  </p>
+
+  <h3>Figure 1 — Settings → Google Ads (OAuth connect &amp; account selection)</h3>
+  <div class="mockup">
+    <svg viewBox="0 0 720 320" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+      <rect width="720" height="320" fill="#F8FAFC"/>
+      <rect x="0" y="0" width="720" height="48" fill="#102341"/>
+      <text x="16" y="30" fill="#fff" font-size="14" font-weight="600">Irrigation CRM — Settings → Integrations → Google Ads</text>
+      <rect x="24" y="64" width="672" height="232" rx="8" fill="#fff" stroke="#C2E4F0"/>
+      <text x="40" y="92" fill="#102341" font-size="13" font-weight="600">Google Ads</text>
+      <rect x="40" y="104" width="72" height="20" rx="10" fill="#e2e8f0"/>
+      <text x="52" y="118" fill="#334155" font-size="10">Connected</text>
+      <text x="40" y="142" fill="#64748b" font-size="11">Connect the Google account that manages Storm Sprinklers campaigns.</text>
+      <rect x="40" y="156" width="140" height="32" rx="6" fill="#4C9BC8"/>
+      <text x="58" y="177" fill="#fff" font-size="11">Connect Google Ads</text>
+      <line x1="40" y1="208" x2="680" y2="208" stroke="#e2e8f0"/>
+      <text x="40" y="232" fill="#102341" font-size="11" font-weight="600">Accessible accounts</text>
+      <rect x="40" y="244" width="640" height="40" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+      <text x="52" y="262" fill="#102341" font-size="11">Storm Sprinklers — Main</text>
+      <text x="52" y="276" fill="#64748b" font-size="10">ID 1234567890</text>
+      <rect x="580" y="254" width="88" height="24" rx="4" fill="#102341"/>
+      <text x="598" y="270" fill="#fff" font-size="10">Use account</text>
+    </svg>
+  </div>
+  <p class="mockup-caption">Figure 1: Admin connects Google Ads via OAuth, then selects the Storm Sprinklers customer account.</p>
+
+  <h3>Figure 2 — Marketing → Ads (Google PPC reporting dashboard)</h3>
+  <div class="mockup">
+    <svg viewBox="0 0 720 400" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+      <rect width="720" height="400" fill="#F8FAFC"/>
+      <rect x="0" y="0" width="720" height="48" fill="#102341"/>
+      <text x="16" y="30" fill="#fff" font-size="14" font-weight="600">Irrigation CRM — Marketing → Ads</text>
+      <text x="24" y="72" fill="#64748b" font-size="10">Marketing / Ads</text>
+      <text x="24" y="92" fill="#102341" font-size="16" font-weight="700">Ads</text>
+      <rect x="24" y="104" width="90" height="26" rx="4" fill="#102341"/>
+      <text x="38" y="121" fill="#fff" font-size="10">Google PPC</text>
+      <rect x="118" y="104" width="80" height="26" rx="4" fill="#fff" stroke="#e2e8f0"/>
+      <text x="130" y="121" fill="#64748b" font-size="10">Google LSA</text>
+      <rect x="204" y="104" width="56" height="26" rx="4" fill="#fff" stroke="#e2e8f0"/>
+      <text x="214" y="121" fill="#64748b" font-size="10">Meta</text>
+      <g transform="translate(24,140)">
+        <rect width="100" height="56" rx="6" fill="#fff" stroke="#C2E4F0"/>
+        <text x="10" y="18" fill="#64748b" font-size="9">Total spend</text>
+        <text x="10" y="40" fill="#102341" font-size="14" font-weight="700">$2,848</text>
+        <rect x="112" width="100" height="56" rx="6" fill="#fff" stroke="#C2E4F0"/>
+        <text x="122" y="18" fill="#64748b" font-size="9">Impressions</text>
+        <text x="122" y="40" fill="#102341" font-size="14" font-weight="700">48,200</text>
+        <rect x="224" width="100" height="56" rx="6" fill="#fff" stroke="#C2E4F0"/>
+        <text x="234" y="18" fill="#64748b" font-size="9">Clicks</text>
+        <text x="234" y="40" fill="#102341" font-size="14" font-weight="700">1,864</text>
+        <rect x="336" width="100" height="56" rx="6" fill="#fff" stroke="#C2E4F0"/>
+        <text x="346" y="18" fill="#64748b" font-size="9">Conversions</text>
+        <text x="346" y="40" fill="#102341" font-size="14" font-weight="700">94</text>
+        <rect x="448" width="100" height="56" rx="6" fill="#fff" stroke="#C2E4F0"/>
+        <text x="458" y="18" fill="#64748b" font-size="9">ROAS</text>
+        <text x="458" y="40" fill="#102341" font-size="14" font-weight="700">15.0x</text>
+      </g>
+      <rect x="24" y="212" width="672" height="168" rx="8" fill="#fff" stroke="#C2E4F0"/>
+      <text x="40" y="236" fill="#102341" font-size="12" font-weight="600">Google Search &amp; Display campaigns</text>
+      <text x="40" y="252" fill="#64748b" font-size="10">Storm Sprinklers — Main · Last 30 days</text>
+      <rect x="40" y="264" width="640" height="22" fill="#eef6fa"/>
+      <text x="48" y="279" fill="#64748b" font-size="9" font-weight="600">Campaign</text>
+      <text x="220" y="279" fill="#64748b" font-size="9" font-weight="600">Status</text>
+      <text x="290" y="279" fill="#64748b" font-size="9" font-weight="600">Spend</text>
+      <text x="350" y="279" fill="#64748b" font-size="9" font-weight="600">Clicks</text>
+      <text x="410" y="279" fill="#64748b" font-size="9" font-weight="600">Conv.</text>
+      <text x="48" y="302" fill="#102341" font-size="10">Sprinkler repair — Search</text>
+      <text x="220" y="302" fill="#102341" font-size="10">Enabled</text>
+      <text x="290" y="302" fill="#102341" font-size="10">$1,242</text>
+      <text x="350" y="302" fill="#102341" font-size="10">892</text>
+      <text x="410" y="302" fill="#102341" font-size="10">41</text>
+      <text x="48" y="324" fill="#102341" font-size="10">Local Services — Irrigation</text>
+      <text x="220" y="324" fill="#102341" font-size="10">Enabled</text>
+      <text x="290" y="324" fill="#102341" font-size="10">$986</text>
+      <text x="350" y="324" fill="#102341" font-size="10">312</text>
+      <text x="410" y="324" fill="#102341" font-size="10">38</text>
+      <text x="48" y="346" fill="#102341" font-size="10">Brand remarketing — Display</text>
+      <text x="220" y="346" fill="#102341" font-size="10">Enabled</text>
+      <text x="290" y="346" fill="#102341" font-size="10">$413</text>
+      <text x="350" y="346" fill="#102341" font-size="10">428</text>
+      <text x="410" y="346" fill="#102341" font-size="10">11</text>
+    </svg>
+  </div>
+  <p class="mockup-caption">Figure 2: Unified ads dashboard showing Google PPC metrics and campaign-level performance pulled from the Google Ads API.</p>
+
+  <h3>Figure 3 — Marketing → Ads (Google LSA tab — planned UI)</h3>
+  <div class="mockup">
+    <svg viewBox="0 0 720 280" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+      <rect width="720" height="280" fill="#F8FAFC"/>
+      <rect x="0" y="0" width="720" height="48" fill="#102341"/>
+      <text x="16" y="30" fill="#fff" font-size="14" font-weight="600">Irrigation CRM — Marketing → Ads → Google LSA</text>
+      <rect x="24" y="64" width="90" height="26" rx="4" fill="#fff" stroke="#e2e8f0"/>
+      <text x="38" y="81" fill="#64748b" font-size="10">Google PPC</text>
+      <rect x="118" y="64" width="80" height="26" rx="4" fill="#102341"/>
+      <text x="130" y="81" fill="#fff" font-size="10">Google LSA</text>
+      <rect x="24" y="104" width="672" height="152" rx="8" fill="#fff" stroke="#C2E4F0"/>
+      <text x="40" y="128" fill="#102341" font-size="12" font-weight="600">Google Local Services Ads</text>
+      <text x="40" y="144" fill="#64748b" font-size="10">Pay-per-lead local service ads for qualified job requests</text>
+      <rect x="40" y="160" width="640" height="22" fill="#eef6fa"/>
+      <text x="48" y="175" fill="#64748b" font-size="9" font-weight="600">Service type</text>
+      <text x="180" y="175" fill="#64748b" font-size="9" font-weight="600">Status</text>
+      <text x="260" y="175" fill="#64748b" font-size="9" font-weight="600">Budget</text>
+      <text x="330" y="175" fill="#64748b" font-size="9" font-weight="600">Leads</text>
+      <text x="390" y="175" fill="#64748b" font-size="9" font-weight="600">CPL</text>
+      <text x="450" y="175" fill="#64748b" font-size="9" font-weight="600">Booked jobs</text>
+      <text x="48" y="198" fill="#102341" font-size="10">Sprinkler repair</text>
+      <text x="180" y="198" fill="#102341" font-size="10">Active</text>
+      <text x="260" y="198" fill="#102341" font-size="10">$50/day</text>
+      <text x="330" y="198" fill="#102341" font-size="10">38</text>
+      <text x="390" y="198" fill="#102341" font-size="10">$25.96</text>
+      <text x="450" y="198" fill="#102341" font-size="10">31</text>
+      <text x="48" y="220" fill="#102341" font-size="10">Sprinkler installation</text>
+      <text x="180" y="220" fill="#102341" font-size="10">Active</text>
+      <text x="260" y="220" fill="#102341" font-size="10">$40/day</text>
+      <text x="330" y="220" fill="#102341" font-size="10">22</text>
+      <text x="390" y="220" fill="#102341" font-size="10">$31.18</text>
+      <text x="450" y="220" fill="#102341" font-size="10">18</text>
+    </svg>
+  </div>
+  <p class="mockup-caption">Figure 3: Planned Local Services Ads tab using the same Google Ads API connection (LOCAL_SERVICES channel campaigns and lead metrics).</p>
+</div>
+
+<div class="section">
+  <h2>Data Handling Summary</h2>
+  <ul>
+    <li>Single-tenant internal tool for Storm Sprinklers only.</li>
+    <li>Google Ads data used solely for internal marketing decisions and operational reporting.</li>
+    <li>No resale, no multi-client ad management, no sharing with unrelated third parties.</li>
+    <li>Users can disconnect Google Ads at any time; stored OAuth tokens are deleted on disconnect.</li>
+    <li>Privacy policy: https://crm.stormsprinklers.com/privacy</li>
+  </ul>
+</div>
+
+<p class="footer">
+  Storm Sprinklers · Irrigation CRM · Google Ads API Design Documentation · June 2026
+</p>
+
+</body>
+</html>

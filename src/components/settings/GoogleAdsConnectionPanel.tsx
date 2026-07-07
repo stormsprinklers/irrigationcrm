@@ -10,6 +10,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GoogleAdsConnectionStatus, GoogleAdsCustomer } from "@/lib/google-ads/types";
 
+async function readJsonResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    const snippet = (await res.text()).slice(0, 120).replace(/\s+/g, " ");
+    throw new Error(
+      snippet.startsWith("<!DOCTYPE") || snippet.startsWith("<html")
+        ? "Server returned HTML instead of JSON. Try signing in again or redeploy after env changes."
+        : `Unexpected response (${res.status}): ${snippet}`
+    );
+  }
+  return res.json() as Promise<T>;
+}
+
 export function GoogleAdsConnectionPanel() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<GoogleAdsConnectionStatus | null>(null);
@@ -25,14 +38,15 @@ export function GoogleAdsConnectionPanel() {
 
   const loadStatus = useCallback(async () => {
     const res = await fetch("/api/marketing/google-ads/status");
-    if (res.ok) setStatus(await res.json());
+    if (!res.ok) return;
+    setStatus(await readJsonResponse<GoogleAdsConnectionStatus>(res));
   }, []);
 
   const loadCustomers = useCallback(async () => {
     setLoadingCustomers(true);
     try {
       const res = await fetch("/api/marketing/google-ads/customers");
-      const data = await res.json();
+      const data = await readJsonResponse<{ customers?: GoogleAdsCustomer[]; error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to load Google Ads accounts");
       setCustomers(data.customers ?? []);
     } catch (err) {
@@ -72,7 +86,7 @@ export function GoogleAdsConnectionPanel() {
           customerName: customer.name,
         }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to save account");
       toast.success("Google Ads account saved");
       await loadStatus();

@@ -1,5 +1,6 @@
 import type { GbpPerformanceSummary } from "@/lib/google-business/types";
 import type { GscDashboardData } from "@/lib/google-search-console/types";
+import type { GoogleAdsSummary } from "@/lib/google-ads/types";
 
 const DEMO_START = "2026-02-24";
 const DEMO_END = "2026-03-25";
@@ -25,10 +26,25 @@ export const OAUTH_DEMO_SCOPES = [
     redirectPath: "/api/marketing/search-console/callback",
     crmPath: "/marketing/seo",
   },
+  {
+    id: "adwords",
+    scope: "https://www.googleapis.com/auth/adwords",
+    product: "Google Ads (PPC + Local Services Ads)",
+    purpose:
+      "Read and manage Google Ads campaign performance for PPC (Search, Display, Performance Max) and Local Services Ads pay-per-lead campaigns for the connected customer account.",
+    apis: [
+      "Google Ads API (googleAds:search, customers:listAccessibleCustomers)",
+      "Campaign metrics: cost, impressions, clicks, conversions",
+      "LOCAL_SERVICES channel for LSA lead reporting",
+    ],
+    redirectPath: "/api/marketing/google-ads/callback",
+    crmPath: "/settings/integrations/google-ads",
+  },
 ] as const;
 
 export const DEMO_GSC_SITE = "sc-domain:stormsprinklers.com";
 export const DEMO_GBP_LOCATION = "Storm Sprinklers — Utah County";
+export const DEMO_GOOGLE_ADS_ACCOUNT = "Storm Sprinklers — Main";
 
 /** Sample organic conversion count for Search Console preview (native website tracking). */
 export const DEMO_WEBSITE_ORGANIC_CONVERSIONS = 94;
@@ -129,30 +145,97 @@ export function buildDemoGbpPerformance(): GbpPerformanceSummary {
   };
 }
 
+export function buildDemoGoogleAdsSummary(): GoogleAdsSummary {
+  return {
+    customerId: "1234567890",
+    customerName: DEMO_GOOGLE_ADS_ACCOUNT,
+    days: 30,
+    startDate: DEMO_START,
+    endDate: DEMO_END,
+    rangeLabel: "Last 30 days",
+    spend: 2847.52,
+    impressions: 48200,
+    clicks: 1864,
+    conversions: 94,
+    conversionsValue: 42850,
+    activeCampaigns: 4,
+    campaigns: [
+      {
+        id: "1001",
+        name: "Sprinkler repair — Search",
+        status: "ENABLED",
+        channelType: "SEARCH",
+        budgetMicros: 75_000_000,
+        spend: 1242.18,
+        impressions: 22100,
+        clicks: 892,
+        conversions: 41,
+        conversionsValue: 19200,
+      },
+      {
+        id: "1002",
+        name: "Local Services — Irrigation",
+        status: "ENABLED",
+        channelType: "LOCAL_SERVICES",
+        budgetMicros: 50_000_000,
+        spend: 986.4,
+        impressions: 8400,
+        clicks: 312,
+        conversions: 38,
+        conversionsValue: 15600,
+      },
+      {
+        id: "1003",
+        name: "Brand remarketing — Display",
+        status: "ENABLED",
+        channelType: "DISPLAY",
+        budgetMicros: 25_000_000,
+        spend: 412.94,
+        impressions: 14200,
+        clicks: 428,
+        conversions: 11,
+        conversionsValue: 5200,
+      },
+      {
+        id: "1004",
+        name: "Spring startup — Performance Max",
+        status: "PAUSED",
+        channelType: "PERFORMANCE_MAX",
+        budgetMicros: 40_000_000,
+        spend: 206,
+        impressions: 3500,
+        clicks: 232,
+        conversions: 4,
+        conversionsValue: 2850,
+      },
+    ],
+  };
+}
+
 export const OAUTH_FLOW_STEPS = [
   {
     step: 1,
     title: "User initiates connect",
     detail:
-      "An authenticated CRM admin clicks Connect on Marketing → SEO or Google Business Profile. The app redirects to Google OAuth with only the scope required for that integration.",
+      "An authenticated CRM admin clicks Connect on Settings → Integrations (Google Ads, Google Business Profile) or Marketing → SEO. The app redirects to Google OAuth with only the scope required for that integration.",
   },
   {
     step: 2,
     title: "Google consent screen",
     detail:
-      "The user signs in with their Google account and grants read-only access to their own Search Console or Business Profile data.",
+      "The user signs in with their Google account and grants access to their own Search Console, Business Profile, or Google Ads data.",
   },
   {
     step: 3,
     title: "Secure token storage",
     detail:
-      "The CRM stores a refresh token server-side (encrypted at rest in PostgreSQL). Tokens are never exposed to the browser or other users.",
+      "The CRM stores a refresh token server-side (encrypted at rest in PostgreSQL). Google Ads API calls also use a server-only developer token. Tokens are never exposed to the browser or other users.",
   },
   {
     step: 4,
-    title: "Read-only API calls",
+    title: "API calls for dashboards",
     detail:
-      "When the dashboard loads, the CRM server uses the refresh token to call Google APIs and display metrics. No data is sold, shared with third parties, or written back to Google.",
+      "When a dashboard loads, the CRM server uses the refresh token to call Google APIs and display metrics. PPC and Local Services Ads share the same Google Ads connection. No data is sold or shared with unrelated third parties.",
   },
   {
     step: 5,
