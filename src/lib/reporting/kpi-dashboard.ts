@@ -13,7 +13,6 @@ import {
   type ReportRangeInput,
   resolveReportRange,
 } from "@/lib/reporting/date-range";
-import { getGbpReviewSummary } from "@/lib/google-business/v4-api";
 import { prisma } from "@/lib/prisma";
 
 export type KpiDateRange = ReportPresetRange | "custom";
@@ -40,7 +39,6 @@ export type KpiDashboardReport = {
   rangeLabel: string;
   company: KpiMetric[];
   technicians: KpiPersonCard[];
-  installers: KpiPersonCard[];
   csrs: KpiPersonCard[];
   crews: KpiCrewCard[];
   salespeople: KpiPersonCard[];
@@ -86,39 +84,6 @@ function isSalesperson(user: {
   return false;
 }
 
-async function resolveCompanyFiveStarReviewCount(
-  companyId: string,
-  feedbackFiveStarCount: number
-): Promise<number> {
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: {
-      googleBusinessRefreshToken: true,
-      googleBusinessAccountId: true,
-      googleBusinessLocationId: true,
-    },
-  });
-
-  if (
-    !company?.googleBusinessRefreshToken ||
-    !company.googleBusinessAccountId ||
-    !company.googleBusinessLocationId
-  ) {
-    return feedbackFiveStarCount;
-  }
-
-  try {
-    const summary = await getGbpReviewSummary(
-      companyId,
-      company.googleBusinessAccountId,
-      company.googleBusinessLocationId
-    );
-    return summary.byStar.find((row) => row.stars === 5)?.count ?? feedbackFiveStarCount;
-  } catch {
-    return feedbackFiveStarCount;
-  }
-}
-
 export async function getKpiDashboardReport(
   companyId: string,
   rangeInput: ReportRangeInput = { preset: "ytd" }
@@ -134,6 +99,7 @@ export async function getKpiDashboardReport(
     callLogs,
     enrollments,
     leads,
+    activePlanCount,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { companyId, status: "ACTIVE" },
@@ -155,6 +121,7 @@ export async function getKpiDashboardReport(
         id: true,
         name: true,
         color: true,
+        division: true,
         members: { select: { userId: true } },
       },
     }),
@@ -238,6 +205,12 @@ export async function getKpiDashboardReport(
         createdAt: true,
       },
     }),
+    prisma.maintenancePlanEnrollment.count({
+      where: {
+        companyId,
+        status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.RENEWED] },
+      },
+    }),
   ]);
 
   const visitRevenues = visits.map((v) => ({
@@ -250,44 +223,58 @@ export async function getKpiDashboardReport(
   const installVisits = visitRevenues.filter((v) => v.visit.division === Division.INSTALL);
   const serviceVisits = visitRevenues.filter((v) => v.visit.division === Division.SERVICE);
 
-  const avgInstallTicket =
-    installVisits.length > 0
-      ? installVisits.reduce((s, v) => s + v.revenue, 0) / installVisits.length
-      : 0;
-  const avgServiceTicket =
-    serviceVisits.length > 0
-      ? serviceVisits.reduce((s, v) => s + v.revenue, 0) / serviceVisits.length
-      : 0;
+  const installRevenue = installVisits.reduce((s, v) => s + v.revenue, 0);
+  const serviceRevenue = serviceVisits.reduce((s, v) => s + v.revenue, 0);
 
-  const feedbackFiveStarCount = feedback.filter((f) => f.rating === 5).length;
-  const fiveStarReviews = await resolveCompanyFiveStarReviewCount(
-    companyId,
-    feedbackFiveStarCount
-  );
+  const avgInstallTicket = installVisits.length > 0 ? installRevenue / installVisits.length : 0;
+  const avgServiceTicket = serviceVisits.length > 0 ? serviceRevenue / serviceVisits.length : 0;
+
+  let companyBookedCalls = 0;
+  let companyDispositionedCalls = 0;
+  for (const call of callLogs) {
+    if (
+      call.direction === CallDirection.INBOUND &&
+      call.disposition !== CallDisposition.NONE
+    ) {
+      companyDispositionedCalls += 1;
+      if (call.disposition === CallDisposition.BOOKED) companyBookedCalls += 1;
+    }
+  }
+  const companyBookingRate =
+    companyDispositionedCalls > 0
+      ? (companyBookedCalls / companyDispositionedCalls) * 100
+      : 0;
 
   const serviceEstimates = estimates.filter((e) => e.visit?.division === Division.SERVICE);
   const serviceConversionRate = estimateConversionRate(serviceEstimates);
 
   const company: KpiMetric[] = [
+    { label: "Service revenue", value: formatCurrency(serviceRevenue) },
+    { label: "Install revenue", value: formatCurrency(installRevenue) },
     { label: "Total revenue", value: formatCurrency(totalRevenue) },
     {
-      label: "Avg ticket — Installs",
+      label: "Service avg ticket",
+      value: serviceVisits.length > 0 ? formatCurrency(avgServiceTicket) : "—",
+    },
+    {
+      label: "Install avg ticket",
       value: installVisits.length > 0 ? formatCurrency(avgInstallTicket) : "—",
     },
     {
-      label: "Avg ticket — Service",
-      value: serviceVisits.length > 0 ? formatCurrency(avgServiceTicket) : "—",
+      label: "Booking rate",
+      value: companyDispositionedCalls > 0 ? formatPercent(companyBookingRate) : "—",
     },
-    { label: "5-star reviews", value: String(fiveStarReviews) },
     {
       label: "Service conversion rate",
       value: serviceEstimates.length > 0 ? formatPercent(serviceConversionRate) : "—",
     },
+    { label: "Active maintenance plans", value: String(activePlanCount) },
   ];
 
   function buildSoloFieldWorkerCards(
     role: "TECH" | "INSTALLER",
-    estimateDivision: Division
+    estimateDivision: Division,
+    options: { includeCallbackRate?: boolean } = {}
   ): KpiPersonCard[] {
     const workers = users.filter(
       (u) => u.role === role && u.crewMemberships.length === 0
@@ -299,6 +286,8 @@ export async function getKpiDashboardReport(
       );
       const revenue = workerVisits.reduce((s, v) => s + v.revenue, 0);
       const visitCount = workerVisits.length;
+      const callbackCount = workerVisits.filter((v) => v.visit.isCallback).length;
+      const callbackRate = visitCount > 0 ? (callbackCount / visitCount) * 100 : 0;
 
       let totalHours = 0;
       for (const { visit } of workerVisits) {
@@ -341,6 +330,14 @@ export async function getKpiDashboardReport(
             value: workerEstimates.length > 0 ? formatPercent(conversionRate) : "—",
           },
           { label: "5-star reviews", value: String(fiveStarReviews) },
+          ...(options.includeCallbackRate
+            ? [
+                {
+                  label: "Callback rate",
+                  value: visitCount > 0 ? formatPercent(callbackRate) : "—",
+                },
+              ]
+            : []),
         ],
       };
     });
@@ -354,8 +351,9 @@ export async function getKpiDashboardReport(
     return cards;
   }
 
-  const technicians = buildSoloFieldWorkerCards("TECH", Division.SERVICE);
-  const installers = buildSoloFieldWorkerCards("INSTALLER", Division.INSTALL);
+  const technicians = buildSoloFieldWorkerCards("TECH", Division.SERVICE, {
+    includeCallbackRate: true,
+  });
 
   const csrUsers = users.filter((u) => u.role === "CSR");
 
@@ -465,6 +463,9 @@ export async function getKpiDashboardReport(
   const crewCards: KpiCrewCard[] = crews.map((crew) => {
     const crewVisits = visitRevenues.filter((v) => v.visit.crewId === crew.id);
     const revenue = crewVisits.reduce((s, v) => s + v.revenue, 0);
+    const visitCount = crewVisits.length;
+    const callbackCount = crewVisits.filter((v) => v.visit.isCallback).length;
+    const callbackRate = visitCount > 0 ? (callbackCount / visitCount) * 100 : 0;
     const memberIds = new Set(crew.members.map((m) => m.userId));
 
     let totalManHours = 0;
@@ -490,6 +491,14 @@ export async function getKpiDashboardReport(
           value: totalManHours > 0 ? formatCurrency(revenue / totalManHours) : "—",
         },
         { label: "5-star reviews", value: String(fiveStarReviews) },
+        ...(crew.division === Division.INSTALL
+          ? [
+              {
+                label: "Callback rate",
+                value: visitCount > 0 ? formatPercent(callbackRate) : "—",
+              },
+            ]
+          : []),
       ],
     };
   });
@@ -566,7 +575,6 @@ export async function getKpiDashboardReport(
     rangeLabel,
     company,
     technicians,
-    installers,
     csrs,
     crews: crewCards,
     salespeople,

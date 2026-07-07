@@ -1,17 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
-import { getGbpReviewSummary } from "@/lib/google-business/v4-api";
+import { getCachedGbpReviewSummary } from "@/lib/google-business/v4-api";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const company = await requireGbpCompany(user.companyId);
 
-    const summary = await getGbpReviewSummary(
+    const refresh = request.nextUrl.searchParams.get("refresh") === "1";
+    const summary = await getCachedGbpReviewSummary(
       user.companyId,
       company.googleBusinessAccountId!,
-      company.googleBusinessLocationId!
+      company.googleBusinessLocationId!,
+      { refresh }
     );
 
     return NextResponse.json(summary);

@@ -9,33 +9,37 @@ export type GbpReviewCardInput = {
   reviewDate: string | null;
 };
 
+const CARD_WIDTH = 1200;
+const CARD_MIN_HEIGHT = 630;
+const HORIZONTAL_PADDING = 56;
+const COMMENT_FONT_SIZE = 24;
+const COMMENT_LINE_HEIGHT = 1.45;
+const COMMENT_LINE_PX = COMMENT_FONT_SIZE * COMMENT_LINE_HEIGHT;
+/** Space above the review body (header, stars, reviewer name, gaps, padding). */
+const FIXED_CHROME_HEIGHT = 340;
+const INNER_BOX_PADDING_X = 36;
+const COMMENT_WIDTH =
+  CARD_WIDTH - HORIZONTAL_PADDING * 2 - INNER_BOX_PADDING_X * 2;
+
 function StarRow({ count }: { count: number }) {
   const safe = Math.max(0, Math.min(5, Math.round(count)));
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
       {Array.from({ length: 5 }, (_, index) => {
         const filled = index < safe;
         return (
           <div
             key={index}
             style={{
-              width: 40,
-              height: 40,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              fontSize: 38,
+              lineHeight: 1,
+              color: filled ? "#fbbf24" : "#64748b",
             }}
           >
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 17,
-                background: filled ? "#fbbf24" : "transparent",
-                border: filled ? "2px solid #fbbf24" : "2px solid #94a3b8",
-                display: "flex",
-              }}
-            />
+            {filled ? "★" : "☆"}
           </div>
         );
       })}
@@ -43,10 +47,25 @@ function StarRow({ count }: { count: number }) {
   );
 }
 
-function truncateComment(text: string | null, max = 320) {
-  const trimmed = sanitizeOgText(text?.trim() || "No written review - star rating only.");
-  if (trimmed.length <= max) return trimmed;
-  return `${trimmed.slice(0, max - 3)}...`;
+function formatComment(text: string | null) {
+  return sanitizeOgText(text?.trim() || "No written review - star rating only.");
+}
+
+function formatStarLabel(count: number) {
+  const safe = Math.max(0, Math.min(5, Math.round(count)));
+  if (safe === 1) return "1 star";
+  return `${safe} stars`;
+}
+
+function estimateCardHeight(comment: string) {
+  const avgCharWidth = COMMENT_FONT_SIZE * 0.48;
+  const charsPerLine = Math.max(24, Math.floor(COMMENT_WIDTH / avgCharWidth));
+  const lineCount = Math.max(1, Math.ceil(comment.length / charsPerLine));
+  const commentAreaHeight = CARD_MIN_HEIGHT - FIXED_CHROME_HEIGHT;
+  const linesAtMinHeight = Math.floor(commentAreaHeight / COMMENT_LINE_PX);
+  if (lineCount <= linesAtMinHeight) return CARD_MIN_HEIGHT;
+  const extraLines = lineCount - linesAtMinHeight;
+  return CARD_MIN_HEIGHT + Math.ceil(extraLines * COMMENT_LINE_PX);
 }
 
 function formatReviewDate(iso: string | null) {
@@ -62,10 +81,12 @@ function formatReviewDate(iso: string | null) {
 }
 
 export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise<Buffer> {
-  const comment = truncateComment(input.comment);
+  const comment = formatComment(input.comment);
   const dateLabel = formatReviewDate(input.reviewDate);
   const reviewerName = sanitizeOgText(input.reviewerName) || "Google reviewer";
   const companyName = sanitizeOgText(input.companyName) || "Your company";
+  const starLabel = formatStarLabel(input.starCount);
+  const cardHeight = estimateCardHeight(comment);
   const ogFont = await getOgFont();
 
   const response = new ImageResponse(
@@ -79,7 +100,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           background: "linear-gradient(145deg, #102341 0%, #1a4a7a 55%, #102341 100%)",
           color: "#ffffff",
           fontFamily: ogFont.name,
-          padding: "56px",
+          padding: `${HORIZONTAL_PADDING}px`,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -129,7 +150,7 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           }}
         >
           <StarRow count={input.starCount} />
-          <div style={{ fontSize: 30, fontWeight: 700, display: "flex" }}>{`${input.starCount} out of 5`}</div>
+          <div style={{ fontSize: 30, fontWeight: 700, display: "flex" }}>{starLabel}</div>
         </div>
 
         <div
@@ -150,8 +171,8 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
           </div>
           <div
             style={{
-              fontSize: 24,
-              lineHeight: 1.45,
+              fontSize: COMMENT_FONT_SIZE,
+              lineHeight: COMMENT_LINE_HEIGHT,
               color: "#e2e8f0",
               whiteSpace: "pre-wrap",
               display: "flex",
@@ -163,8 +184,8 @@ export async function renderGbpReviewCardPng(input: GbpReviewCardInput): Promise
       </div>
     ),
     {
-      width: 1200,
-      height: 630,
+      width: CARD_WIDTH,
+      height: cardHeight,
       fonts: [
         {
           name: ogFont.name,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Wrench, Headphones, UsersRound, TrendingUp, HardHat } from "lucide-react";
+import { Wrench, Headphones, UsersRound, TrendingUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -185,13 +185,13 @@ export function KpiDashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 {data.company.map((metric, index) => (
                   <div
                     key={metric.label}
                     className={cn(
-                      index > 0 &&
-                        "border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
+                      index > 0 && "border-t border-border pt-4 lg:border-t-0 lg:pt-0",
+                      index % 4 !== 0 && "lg:border-l lg:border-border lg:pl-4"
                     )}
                   >
                     <p className="text-xs text-muted-foreground">{metric.label}</p>
@@ -211,19 +211,6 @@ export function KpiDashboard() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {data.technicians.map((tech) => (
                 <PersonKpiCard key={tech.id} person={tech} />
-              ))}
-            </div>
-          </Section>
-
-          <Section
-            title="Installers"
-            icon={HardHat}
-            emptyMessage="No solo installers found."
-            hasItems={data.installers.length > 0}
-          >
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {data.installers.map((installer) => (
-                <PersonKpiCard key={installer.id} person={installer} />
               ))}
             </div>
           </Section>

@@ -1,3 +1,5 @@
+import type { GbpReviewSummary } from "@/lib/google-business/engagement-types";
+
 export const GOOGLE_BUSINESS_SCOPE = "https://www.googleapis.com/auth/business.manage";
 
 export const GBP_PERFORMANCE_METRICS = [
@@ -65,6 +67,8 @@ export type GbpCatalogCache = {
   accountsFetchedAt?: string;
   locationsByAccount?: Record<string, GbpLocation[]>;
   locationsFetchedAt?: Record<string, string>;
+  reviewSummaryByLocation?: Record<string, GbpReviewSummary>;
+  reviewSummaryFetchedAt?: Record<string, string>;
 };
 
 export type GbpConnectionStatus = {

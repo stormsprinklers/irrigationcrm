@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import {
   getCompanyAccessToken,
   googleApiFetch,
@@ -13,6 +14,8 @@ import type {
 } from "@/lib/google-business/engagement-types";
 import { GBP_STAR_LABELS } from "@/lib/google-business/engagement-types";
 import { buildGbpLocationParent } from "@/lib/google-business/location-path";
+import type { GbpCatalogCache } from "@/lib/google-business/types";
+import { prisma } from "@/lib/prisma";
 
 const MYBUSINESS_V4 = "https://mybusiness.googleapis.com/v4";
 const MYBUSINESS_UPLOAD = "https://mybusiness.googleapis.com/upload/v1";
@@ -73,13 +76,12 @@ function mapMediaItem(raw: Record<string, unknown>): GbpMediaItemDto {
   };
 }
 
-export async function listGbpReviews(
-  companyId: string,
+async function fetchGbpReviewsPage(
+  accessToken: string,
   accountId: string,
   locationId: string,
   pageToken?: string
 ): Promise<GbpReviewsListResponse> {
-  const accessToken = await getCompanyAccessToken(companyId);
   const parent = buildGbpLocationParent(accountId, locationId);
   const params = new URLSearchParams({ pageSize: "50", orderBy: "updateTime desc" });
   if (pageToken) params.set("pageToken", pageToken);
@@ -97,6 +99,16 @@ export async function listGbpReviews(
     totalReviewCount: data.totalReviewCount ?? null,
     nextPageToken: data.nextPageToken ?? null,
   };
+}
+
+export async function listGbpReviews(
+  companyId: string,
+  accountId: string,
+  locationId: string,
+  pageToken?: string
+): Promise<GbpReviewsListResponse> {
+  const accessToken = await getCompanyAccessToken(companyId);
+  return fetchGbpReviewsPage(accessToken, accountId, locationId, pageToken);
 }
 
 const REVIEW_SUMMARY_MAX_PAGES = 40;
@@ -143,8 +155,10 @@ export async function getGbpReviewSummary(
   let pageToken: string | undefined;
   let pages = 0;
 
+  const accessToken = await getCompanyAccessToken(companyId);
+
   do {
-    const page = await listGbpReviews(companyId, accountId, locationId, pageToken);
+    const page = await fetchGbpReviewsPage(accessToken, accountId, locationId, pageToken);
     if (totalReviewCount === null) {
       totalReviewCount = page.totalReviewCount;
       averageRating = page.averageRating;
@@ -181,6 +195,66 @@ export async function getGbpReviewSummary(
     byStar: byStar.length ? byStar : emptyStarBreakdown(),
     reviewsSampled,
   };
+}
+
+const REVIEW_SUMMARY_TTL_MS = 15 * 60 * 1000;
+
+function readCatalog(raw: unknown): GbpCatalogCache {
+  if (!raw || typeof raw !== "object") return {};
+  return raw as GbpCatalogCache;
+}
+
+/**
+ * Returns the GBP review summary for a location, backed by a short-lived DB cache
+ * stored on Company.googleBusinessCatalogJson. Fresh cache is returned immediately;
+ * otherwise the live summary is fetched and persisted. On a transient live-fetch
+ * failure the last known good cached value is returned so callers never regress to a
+ * stale/lower fallback once a real Google value has been recorded.
+ */
+export async function getCachedGbpReviewSummary(
+  companyId: string,
+  accountId: string,
+  locationId: string,
+  options: { refresh?: boolean; maxAgeMs?: number } = {}
+): Promise<GbpReviewSummary> {
+  const maxAgeMs = options.maxAgeMs ?? REVIEW_SUMMARY_TTL_MS;
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { googleBusinessCatalogJson: true },
+  });
+  const catalog = readCatalog(company?.googleBusinessCatalogJson);
+  const cached = catalog.reviewSummaryByLocation?.[locationId];
+  const fetchedAtIso = catalog.reviewSummaryFetchedAt?.[locationId];
+  const fresh =
+    !!fetchedAtIso && Date.now() - new Date(fetchedAtIso).getTime() < maxAgeMs;
+
+  if (!options.refresh && cached && fresh) {
+    return cached;
+  }
+
+  try {
+    const summary = await getGbpReviewSummary(companyId, accountId, locationId);
+    const next: GbpCatalogCache = {
+      ...catalog,
+      reviewSummaryByLocation: {
+        ...(catalog.reviewSummaryByLocation ?? {}),
+        [locationId]: summary,
+      },
+      reviewSummaryFetchedAt: {
+        ...(catalog.reviewSummaryFetchedAt ?? {}),
+        [locationId]: new Date().toISOString(),
+      },
+    };
+    await prisma.company.update({
+      where: { id: companyId },
+      data: { googleBusinessCatalogJson: next as Prisma.InputJsonValue },
+    });
+    return summary;
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
+  }
 }
 
 export async function updateGbpReviewReply(
