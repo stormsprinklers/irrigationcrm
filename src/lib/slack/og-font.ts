@@ -1,17 +1,40 @@
-/** Cached Inter font for @vercel/og ImageResponse (avoids dynamic font fetch failures). */
+import { readFile } from "fs/promises";
+import { join } from "path";
+
+/** Cached Inter font for @vercel/og ImageResponse (Satori). */
 let interFontData: ArrayBuffer | null = null;
 
-const INTER_FONT_URL =
-  "https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZ9hjp-Ek-_EeA.woff2";
+const INTER_FONT_PATHS = [
+  join(process.cwd(), "public", "fonts", "inter-latin-400-normal.woff2"),
+  join(
+    process.cwd(),
+    "node_modules",
+    "@fontsource",
+    "inter",
+    "files",
+    "inter-latin-400-normal.woff2"
+  ),
+];
 
-export async function getOgInterFont() {
+export async function getOgInterFont(): Promise<ArrayBuffer> {
   if (interFontData) return interFontData;
-  const res = await fetch(INTER_FONT_URL);
-  if (!res.ok) {
-    throw new Error(`Failed to load Inter font for review cards (${res.status})`);
+
+  for (const fontPath of INTER_FONT_PATHS) {
+    try {
+      const buffer = await readFile(fontPath);
+      interFontData = buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      );
+      return interFontData;
+    } catch {
+      // try next path
+    }
   }
-  interFontData = await res.arrayBuffer();
-  return interFontData;
+
+  throw new Error(
+    "Failed to load Inter font for review cards. Ensure public/fonts/inter-latin-400-normal.woff2 is deployed."
+  );
 }
 
 /** Strip emoji / symbol glyphs that can trigger failing dynamic font downloads in Satori. */

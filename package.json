@@ -14,6 +14,7 @@
     "build:utah-locations": "node scripts/build-utah-locations.mjs"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@prisma/client": "5.22.0",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-checkbox": "^1.3.2",
