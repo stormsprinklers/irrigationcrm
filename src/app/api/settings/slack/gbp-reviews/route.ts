@@ -6,7 +6,7 @@ import {
 } from "@/lib/api-auth";
 import { sendUnsentGbpReviewsToSlack } from "@/lib/google-business/review-slack-notifier";
 import { isSlackConfigured, slackConfigHints } from "@/lib/slack/config";
-import { testSlackAuth } from "@/lib/slack/client";
+import { normalizeSlackChannelId, testSlackAuth, validateSlackChannelId } from "@/lib/slack/client";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -59,7 +59,9 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const enabled = body.enabled === true;
     const channelId =
-      typeof body.channelId === "string" ? body.channelId.trim() || null : undefined;
+      typeof body.channelId === "string"
+        ? normalizeSlackChannelId(body.channelId) || null
+        : undefined;
 
     const existing = await prisma.company.findUnique({
       where: { id: user.companyId },
@@ -96,11 +98,26 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    let normalizedChannelId: string | null | undefined;
+    if (channelId !== undefined) {
+      if (!channelId) {
+        normalizedChannelId = null;
+      } else {
+        const validated = validateSlackChannelId(channelId);
+        if (!validated.ok) {
+          return NextResponse.json({ error: validated.error }, { status: 400 });
+        }
+        normalizedChannelId = validated.channelId;
+      }
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data: {
         slackGbpReviewsEnabled: enabled,
-        ...(channelId !== undefined ? { slackGbpReviewsChannelId: channelId } : {}),
+        ...(normalizedChannelId !== undefined
+          ? { slackGbpReviewsChannelId: normalizedChannelId }
+          : {}),
       },
       select: {
         slackGbpReviewsEnabled: true,

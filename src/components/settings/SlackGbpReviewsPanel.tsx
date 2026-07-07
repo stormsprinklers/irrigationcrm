@@ -188,7 +188,9 @@ export function SlackGbpReviewsPanel() {
             placeholder="C0123456789"
           />
           <p className="text-xs text-muted-foreground">
-            In Slack: open the channel → channel details → copy the Channel ID at the bottom.
+            In Slack: open the channel → channel details → copy the Channel ID at the bottom (starts
+            with <code className="text-xs">C</code>, <code className="text-xs">G</code>, or{" "}
+            <code className="text-xs">D</code> — not a user ID starting with U).
           </p>
         </div>
 
