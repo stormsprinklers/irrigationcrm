@@ -24,7 +24,46 @@ export type IvrNodeConfig = {
   options?: Array<{ digit: string; nextNodeId?: string; label?: string }>;
   timeoutNodeId?: string;
   invalidNodeId?: string;
+  /** PLAY step: audio clip to play, with typed text as a text-to-speech fallback. */
+  clipId?: string;
+  text?: string;
+  /** VOICEMAIL step: greeting played before recording. */
+  greetingClipId?: string;
+  greetingText?: string;
+  maxLengthSec?: number;
 };
+
+/** The next step to run when a pass-through step (e.g. PLAY) finishes. */
+function findNextSequentialNode(
+  current: CallFlowNode,
+  nodes: CallFlowNode[]
+): CallFlowNode | null {
+  const later = nodes
+    .filter((n) => n.sortOrder > current.sortOrder)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return later[0] ?? null;
+}
+
+/** Play an audio clip when configured, otherwise speak the fallback text. */
+async function appendAudio(
+  target: {
+    play: (url: string) => void;
+    say: (text: string) => void;
+  },
+  clipId: string | undefined,
+  text: string | undefined,
+  fallbackText: string,
+  companyId: string
+) {
+  if (clipId) {
+    const playUrl = await resolveVoiceClipPlayUrl(clipId, companyId);
+    if (playUrl) {
+      target.play(playUrl);
+      return;
+    }
+  }
+  target.say(text?.trim() || fallbackText);
+}
 
 export type FlowContext = {
   flowId: string;
@@ -235,9 +274,15 @@ export async function renderIvrNode(
       break;
 
     case CallFlowNodeType.VOICEMAIL:
-      response.say("Please leave a message after the tone.");
+      await appendAudio(
+        response,
+        config.greetingClipId,
+        config.greetingText,
+        "Please leave a message after the tone.",
+        ctx.companyId
+      );
       response.record({
-        maxLength: 120,
+        maxLength: config.maxLengthSec ?? 120,
         recordingStatusCallback: `${appBaseUrl()}/api/twilio/voice/recording`,
         transcribe: ctx.transcribeCalls,
         transcribeCallback: ctx.transcribeCalls
@@ -245,6 +290,26 @@ export async function renderIvrNode(
           : undefined,
       });
       break;
+
+    case CallFlowNodeType.PLAY: {
+      await appendAudio(
+        response,
+        config.clipId,
+        config.text,
+        "Thank you for calling.",
+        ctx.companyId
+      );
+      const next = findNextSequentialNode(node, nodes);
+      if (next) {
+        response.redirect(
+          { method: "POST" },
+          `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${ctx.flowId}&goto=${next.id}`
+        );
+      } else {
+        response.hangup();
+      }
+      break;
+    }
 
     case CallFlowNodeType.HANGUP:
       response.say("Goodbye.");

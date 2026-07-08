@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
 
   const flowId = request.nextUrl.searchParams.get("flowId");
   const nodeId = request.nextUrl.searchParams.get("nodeId");
+  const goto = request.nextUrl.searchParams.get("goto");
   const digits = params.Digits;
 
-  if (!flowId || !nodeId) {
+  if (!flowId || (!nodeId && !goto)) {
     const twiml = await buildInboundTwiml(params);
     return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
   }
@@ -31,6 +32,29 @@ export async function POST(request: NextRequest) {
     const response = new VoiceResponse();
     response.say("Call flow not found. Goodbye.");
     return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+  }
+
+  // Pass-through steps (e.g. PLAY) redirect here with ?goto=<nextNodeId> to continue the flow.
+  if (goto) {
+    const company = await prisma.company.findUnique({
+      where: { id: flow.companyId },
+      select: { recordCalls: true, transcribeCalls: true },
+    });
+    const target = flow.nodes.find((n) => n.id === goto);
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    if (!target) {
+      const response = new VoiceResponse();
+      response.hangup();
+      return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+    }
+    const twiml = await renderIvrNode(target, flow.nodes, {
+      flowId: flow.id,
+      companyId: flow.companyId,
+      from: params.From,
+      recordCalls: company?.recordCalls ?? true,
+      transcribeCalls: company?.transcribeCalls ?? true,
+    });
+    return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
   }
 
   const current = flow.nodes.find((n) => n.id === nodeId);

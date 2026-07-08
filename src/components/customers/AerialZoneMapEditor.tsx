@@ -100,18 +100,28 @@ export function AerialZoneMapEditor({
     if (!img) return;
 
     if (img.naturalWidth && img.naturalHeight) {
-      setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight });
+      setNaturalSize((prev) =>
+        prev.width === img.naturalWidth && prev.height === img.naturalHeight
+          ? prev
+          : { width: img.naturalWidth, height: img.naturalHeight }
+      );
     }
 
     if (useCrop && croppedLayout) {
-      setOverlaySize({ width: croppedLayout.innerWidth, height: croppedLayout.innerHeight });
+      const width = croppedLayout.innerWidth;
+      const height = croppedLayout.innerHeight;
+      setOverlaySize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height }
+      );
       return;
     }
 
     const width = img.clientWidth;
     const height = img.clientHeight;
     if (width > 0 && height > 0) {
-      setOverlaySize({ width, height });
+      setOverlaySize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height }
+      );
     }
   }, [useCrop, croppedLayout]);
 

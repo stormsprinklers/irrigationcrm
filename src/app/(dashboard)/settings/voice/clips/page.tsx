@@ -84,7 +84,9 @@ export default function VoiceClipsPage() {
         className="mb-8 space-y-4 rounded-lg border border-border bg-white p-6"
       >
         <h3 className="font-semibold">Upload clip</h3>
-        <p className="text-sm text-muted-foreground">MP3 or WAV, max 10MB. Used in IVR greetings.</p>
+        <p className="text-sm text-muted-foreground">
+          MP3 or WAV, max 10MB. Assign to greetings, phone menus, or voicemail in any call flow.
+        </p>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}

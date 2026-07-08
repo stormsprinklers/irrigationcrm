@@ -362,6 +362,7 @@ enum CallFlowNodeType {
   FORWARD
   VOICEMAIL
   HANGUP
+  PLAY
 }
 
 enum PhoneNumberType {
