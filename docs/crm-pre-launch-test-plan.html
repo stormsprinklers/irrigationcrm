@@ -1,0 +1,2959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Storm Sprinklers CRM — Pre-Launch Test Plan</title>
+  <style>
+    @page { size: Letter; margin: 0.55in; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.35;
+      color: #1a1a1a;
+      margin: 0;
+      padding: 0;
+    }
+    .cover {
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 90vh;
+      padding: 2in 1in 1in;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      color: #fff;
+    }
+    .cover h1 { font-size: 28pt; margin: 0 0 8px; font-weight: 700; }
+    .cover .subtitle { font-size: 14pt; opacity: 0.9; margin-bottom: 32px; }
+    .cover .meta { font-size: 10pt; opacity: 0.75; line-height: 1.8; }
+    .cover .meta strong { opacity: 1; }
+    h2 {
+      font-size: 14pt;
+      color: #0f172a;
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 4px;
+      margin: 24px 0 8px;
+      page-break-after: avoid;
+    }
+    h3 { font-size: 11pt; margin: 16px 0 6px; page-break-after: avoid; }
+    p.intro { font-size: 9pt; color: #444; margin: 0 0 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 8pt;
+      page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 4px 5px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    td {
+      border: 1px solid #e2e8f0;
+      padding: 4px 5px;
+      vertical-align: top;
+    }
+    td.id { width: 52px; font-weight: 600; color: #2563eb; white-space: nowrap; }
+    td.area { width: 72px; color: #64748b; font-size: 7.5pt; }
+    td.case { width: 14%; font-weight: 600; }
+    td.steps { width: 28%; }
+    td.expected { width: 28%; }
+    td.status { width: 28px; text-align: center; font-size: 12pt; }
+    td.notes { width: 10%; min-height: 20px; }
+    .toc { page-break-after: always; padding: 0.5in 0; }
+    .toc h2 { border: none; font-size: 18pt; }
+    .toc ol { columns: 2; font-size: 10pt; line-height: 1.7; }
+    .toc a { color: #2563eb; text-decoration: none; }
+    .howto { page-break-after: always; }
+    .howto ul { margin: 4px 0; padding-left: 20px; }
+    .howto li { margin-bottom: 4px; }
+    .accounts table { font-size: 9pt; }
+    .accounts th { background: #e0e7ff; }
+    .badge { display: inline-block; background: #dbeafe; color: #1d4ed8; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; }
+    .summary-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 12px 0;
+      font-size: 9pt;
+    }
+    .module { page-break-before: auto; }
+  </style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Storm Sprinklers CRM</h1>
+  <div class="subtitle">Comprehensive Pre-Launch Test Plan</div>
+  <div class="meta">
+    <strong>Version:</strong> 1.0<br/>
+    <strong>Date:</strong> July 2026<br/>
+    <strong>Purpose:</strong> Verify every CRM feature before active team use<br/>
+    <strong>Environment:</strong> Staging / Production (check each box for the environment tested)<br/>
+    <br/>
+  </div>
+</div>
+
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#auth">Authentication, Roles &amp; Global Navigation</a></li>
+    <li><a href="#home">Home Dashboard</a></li>
+    <li><a href="#customers">Customers Module</a></li>
+    <li><a href="#schedule">Schedule &amp; Team Management</a></li>
+    <li><a href="#visits">Visit Detail &amp; Field Workflow</a></li>
+    <li><a href="#inbox">Inbox — Voice, SMS, Email, Social</a></li>
+    <li><a href="#voice-settings">Voice Settings</a></li>
+    <li><a href="#pricebook">Price Book</a></li>
+    <li><a href="#estimates">Estimates</a></li>
+    <li><a href="#checklists">Checklists</a></li>
+    <li><a href="#maintenance">Maintenance Plans</a></li>
+    <li><a href="#timesheets">Timesheets &amp; Compensation</a></li>
+    <li><a href="#marketing">Marketing</a></li>
+    <li><a href="#reporting">Reporting</a></li>
+    <li><a href="#portal">Customer Portal</a></li>
+    <li><a href="#booking">Public Online Booking</a></li>
+    <li><a href="#payments">Payments</a></li>
+    <li><a href="#settings">Settings</a></li>
+    <li><a href="#migration">Data Migration (Housecall Pro)</a></li>
+    <li><a href="#integrations">Cross-Integration E2E Scenarios</a></li>
+    <li><a href="#golive">Pre-Go-Live Checklist</a></li>
+  </ol>
+</div>
+
+<div class="howto">
+  <h2>How to Use This Document</h2>
+  <div class="summary-box">
+    This plan contains <strong>262</strong> manual test cases across <strong>21 modules</strong> covering every feature of the Storm Sprinklers CRM.
+  </div>
+  <h3>Instructions</h3>
+  <ul>
+    <li>Work through sections <strong>in order</strong> for first pass, or jump to specific modules for targeted retesting.</li>
+    <li>Each row has a unique <strong>ID</strong> (e.g. AUTH-01) for referencing bugs and retests.</li>
+    <li>Mark <strong>Pass</strong> column with ☑ when the expected result is confirmed.</li>
+    <li>Use the <strong>Notes</strong> column for bug IDs, screenshots, or environment details.</li>
+    <li>Section <strong>20 (E2E)</strong> should be run last after individual modules pass.</li>
+    <li>Section <strong>21 (Pre-Go-Live)</strong> is the final gate before handing to your team.</li>
+  </ul>
+  <h3>Recommended test order</h3>
+  <ol>
+    <li>Settings &amp; configuration (Section 18) — set up the system first</li>
+    <li>Price Book &amp; Checklists (Sections 8, 10) — catalog and field workflows</li>
+    <li>Customers &amp; Schedule (Sections 3, 4) — core data entry</li>
+    <li>Visits &amp; field workflow (Section 5) — the daily technician experience</li>
+    <li>Inbox &amp; Voice (Sections 6, 7) — communication channels</li>
+    <li>Estimates &amp; Payments (Sections 9, 17) — sales and money</li>
+    <li>Maintenance Plans (Section 11) — recurring revenue</li>
+    <li>Portal &amp; Booking (Sections 15, 16) — customer self-service</li>
+    <li>Marketing &amp; Reporting (Sections 13, 14) — growth and analytics</li>
+    <li>E2E scenarios &amp; Go-Live (Sections 20, 21) — final validation</li>
+  </ol>
+
+  <h3>Test accounts needed</h3>
+  <div class="accounts">
+    <table>
+      <thead>
+        <tr><th>Role</th><th>Purpose</th><th>Created?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge">ADMIN</span></td><td>Full access, settings, integrations, delete, refunds</td><td>☐</td></tr>
+        <tr><td><span class="badge">MANAGER</span></td><td>Schedule, employees, customers, most settings</td><td>☐</td></tr>
+        <tr><td><span class="badge">CSR</span></td><td>Inbox, scheduling, customer management, voice desk</td><td>☐</td></tr>
+        <tr><td><span class="badge">TECH</span></td><td>Field service — assigned visits, time tracking, checklists</td><td>☐</td></tr>
+        <tr><td><span class="badge">INSTALLER</span></td><td>Install crew member — crew visits only</td><td>☐</td></tr>
+        <tr><td><span class="badge">SALES</span></td><td>Leads, estimates, pipeline</td><td>☐</td></tr>
+        <tr><td><span class="badge">CUSTOMER</span></td><td>Portal login, booking, estimate approval, invoice pay</td><td>☐</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>External services to verify before testing</h3>
+  <ul>
+    <li><strong>Twilio</strong> — SMS, voice, MMS, email (phone number, webhooks registered)</li>
+    <li><strong>Stripe</strong> — Invoice pay, visit checkout, deposits, card-on-file, Connect payouts</li>
+    <li><strong>Google</strong> — Business Profile OAuth, Ads OAuth, Search Console OAuth</li>
+    <li><strong>Meta</strong> — Page token, webhooks for DMs and social insights</li>
+    <li><strong>Slack</strong> — Bot token, GBP review channel configured</li>
+    <li><strong>Google Maps</strong> — Address autocomplete, map embeds, driving ETA</li>
+    <li><strong>Rachio</strong> — API key, controller linked to test property</li>
+    <li><strong>SerpAPI</strong> — Keyword ranking maps (optional; mock data without key)</li>
+    <li><strong>OpenAI</strong> — AI descriptions, email generation, SEO recommendations (optional)</li>
+    <li><strong>Blob storage</strong> — Attachments, photos, voice clips, email logos</li>
+  </ul>
+</div>
+
+
+<section class="module" id="auth">
+  <h2>1. Authentication, Roles & Global Navigation</h2>
+  <p class="intro">Verify login, role-based access, top navigation, and global shortcuts before testing feature modules. Test with at least one account per role: Admin, Manager, CSR, Tech, Installer, Sales.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">auth-01</td>
+      <td class="area">Auth</td>
+      <td class="case">Staff login with valid credentials</td>
+      <td class="steps">Go to /login. Enter active employee email and password. Submit.</td>
+      <td class="expected">Redirect to /home. Session shows correct name and role. Top nav visible.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-02</td>
+      <td class="area">Auth</td>
+      <td class="case">Staff login rejects invalid credentials</td>
+      <td class="steps">Enter wrong password for a valid user. Submit.</td>
+      <td class="expected">Error shown. No session created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-03</td>
+      <td class="area">Auth</td>
+      <td class="case">Archived employee cannot log in</td>
+      <td class="steps">Archive an employee in Settings → Employees. Attempt login as that user.</td>
+      <td class="expected">Login fails. User cannot access CRM.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-04</td>
+      <td class="area">Navigation</td>
+      <td class="case">Primary navigation links work</td>
+      <td class="steps">Click each top nav item: Home, Customers, Inbox, Schedule, Timesheets, Price Book, Maintenance Plans, Marketing, Reporting, Settings.</td>
+      <td class="expected">Each module loads without error. Active state highlights correctly.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-05</td>
+      <td class="area">Navigation</td>
+      <td class="case">Mobile navigation menu</td>
+      <td class="steps">Resize to mobile width. Open hamburger menu. Navigate to 3 modules.</td>
+      <td class="expected">Menu opens/closes. Links work. Overlay dismisses on selection.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-06</td>
+      <td class="area">New menu</td>
+      <td class="case">New menu — create customer</td>
+      <td class="steps">Click + New → New customer. Fill name, phone, email. Save.</td>
+      <td class="expected">Customer created. Redirect or confirmation. Customer appears in list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-07</td>
+      <td class="area">New menu</td>
+      <td class="case">New menu — create visit</td>
+      <td class="steps">Click + New → New visit. Fill title, division, date/time, technician, service area. Save.</td>
+      <td class="expected">Visit created on schedule. Opens visit detail or shows on board.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-08</td>
+      <td class="area">New menu</td>
+      <td class="case">New menu — create estimate</td>
+      <td class="steps">Click + New → New estimate. Select customer. Save.</td>
+      <td class="expected">Estimate created in DRAFT. Opens estimate builder.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-09</td>
+      <td class="area">New menu</td>
+      <td class="case">New visit blocks Do Not Service customer</td>
+      <td class="steps">Flag a customer Do Not Service. Try to create visit for them via New menu.</td>
+      <td class="expected">Booking blocked with clear error. No visit created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-10</td>
+      <td class="area">Notifications</td>
+      <td class="case">Notification bell</td>
+      <td class="steps">Trigger a test notification (e.g. website lead). Open notification bell.</td>
+      <td class="expected">Unread badge increments. Item appears. Click marks read and navigates if linked.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-11</td>
+      <td class="area">Voice</td>
+      <td class="case">Phone dialer opens from top nav</td>
+      <td class="steps">Click phone icon in top nav.</td>
+      <td class="expected">Voice dialer dialog opens. Softphone status shown (ready/connecting/error).</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">auth-12</td>
+      <td class="area">Roles</td>
+      <td class="case">Field role cannot access office-only settings writes</td>
+      <td class="steps">Log in as TECH. Open Settings → Company. Attempt to save changes (or verify API 403).</td>
+      <td class="expected">View may work; save blocked for unauthorized roles.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="home">
+  <h2>2. Home Dashboard</h2>
+  <p class="intro">The home page is the daily starting point for office and field staff.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">home-01</td>
+      <td class="area">Home</td>
+      <td class="case">Home summary cards load</td>
+      <td class="steps">Open /home as Admin.</td>
+      <td class="expected">Greeting shows first name. Estimates, Jobs, Invoices, Maintenance cards show counts and link correctly.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">home-02</td>
+      <td class="area">Time clock</td>
+      <td class="case">Clock in</td>
+      <td class="steps">Click Clock In on home page.</td>
+      <td class="expected">Status shows clocked in with live timer. POST /api/time-clock succeeds.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">home-03</td>
+      <td class="area">Time clock</td>
+      <td class="case">Clock out</td>
+      <td class="steps">While clocked in, click Clock Out.</td>
+      <td class="expected">Timer stops. Today's hours displayed. Entry appears on /timesheets.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">home-04</td>
+      <td class="area">Time clock</td>
+      <td class="case">Double clock-in prevented</td>
+      <td class="steps">Clock in twice without clocking out.</td>
+      <td class="expected">Second attempt shows error or is disabled.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">home-05</td>
+      <td class="area">Home</td>
+      <td class="case">KPI strip date range</td>
+      <td class="steps">Change KPI strip range: YTD, MTD, Last 30 days.</td>
+      <td class="expected">Metrics update. Link to /reporting works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="customers">
+  <h2>3. Customers Module</h2>
+  <p class="intro">Covers customer list, profile, properties, irrigation, Rachio, leads, jobs, estimates, and invoices sub-pages.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">customers-01</td>
+      <td class="area">List</td>
+      <td class="case">Customer list search and filters</td>
+      <td class="steps">Go to /customers. Search by name. Filter by city, ZIP, lead source. Toggle Active/Archived.</td>
+      <td class="expected">Results filter correctly. Count updates. Clear filters resets view.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-02</td>
+      <td class="area">List</td>
+      <td class="case">Create customer from list</td>
+      <td class="steps">Click Create customer. Enter name, phone, email. Submit.</td>
+      <td class="expected">Customer created. Redirect to profile. Appears in active list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-03</td>
+      <td class="area">List</td>
+      <td class="case">Bulk archive customers</td>
+      <td class="steps">Select 2+ customers. Bulk action → Archive. Confirm.</td>
+      <td class="expected">Customers move to Archived tab. Restore works from Archived tab.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-04</td>
+      <td class="area">List</td>
+      <td class="case">Bulk merge customers</td>
+      <td class="steps">Select 2 customers as Admin/Manager. Merge into target.</td>
+      <td class="expected">Records merged. Secondary customer data consolidated.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-05</td>
+      <td class="area">List</td>
+      <td class="case">Bulk Do Not Service flag</td>
+      <td class="steps">Select customer. Mark Do Not Service.</td>
+      <td class="expected">Badge appears on customer. Scheduling blocked elsewhere.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-06</td>
+      <td class="area">Profile</td>
+      <td class="case">Customer profile — edit contact</td>
+      <td class="steps">Open customer. Edit name, address (autocomplete), phone, email, lead source. Save.</td>
+      <td class="expected">Changes persist. Map embed updates if address changed.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-07</td>
+      <td class="area">Profile</td>
+      <td class="case">Alternate phone numbers</td>
+      <td class="steps">In edit mode, add alternate phone with note. Save. Delete one.</td>
+      <td class="expected">Phones listed with call/SMS actions. CRUD works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-08</td>
+      <td class="area">Profile</td>
+      <td class="case">Customer tags</td>
+      <td class="steps">Add tag. Remove tag. Save as Admin/Manager.</td>
+      <td class="expected">Tags display on profile. Persist after reload.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-09</td>
+      <td class="area">Profile</td>
+      <td class="case">Send portal link</td>
+      <td class="steps">Click Send portal link for customer with email (portal enabled).</td>
+      <td class="expected">Email sent or success toast. Customer can use magic link.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-10</td>
+      <td class="area">Profile</td>
+      <td class="case">Customer notes and attachments</td>
+      <td class="steps">Add text note. Upload JPEG and PDF attachment. Delete attachment.</td>
+      <td class="expected">Note shows author/timestamp. Files upload, preview, and delete.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-11</td>
+      <td class="area">Payments</td>
+      <td class="case">Payment methods on file</td>
+      <td class="steps">As CSR/Manager, add card via Stripe Elements. Copy secure link. Email secure link.</td>
+      <td class="expected">Card saved in Stripe. Links work for customer self-service.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-12</td>
+      <td class="area">Properties</td>
+      <td class="case">Add property</td>
+      <td class="steps">Properties tab → Add property with name and address (autocomplete).</td>
+      <td class="expected">Property appears. Lat/lng captured. Map shows location.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-13</td>
+      <td class="area">Properties</td>
+      <td class="case">Delete property</td>
+      <td class="steps">Delete a property with no critical dependencies.</td>
+      <td class="expected">Property removed from list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-14</td>
+      <td class="area">Irrigation</td>
+      <td class="case">Irrigation wizard — full publish</td>
+      <td class="steps">Run 6-step wizard: aerial capture, system overview, zone map, conditions, irrigation, review. Publish.</td>
+      <td class="expected">Draft saves at each step. Publish sets status Published. Portal shows guide.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-15</td>
+      <td class="area">Irrigation</td>
+      <td class="case">Irrigation wizard — import from design</td>
+      <td class="steps">On a property linked to design project, import from design in wizard.</td>
+      <td class="expected">Zone data seeds correctly into wizard.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-16</td>
+      <td class="area">Irrigation</td>
+      <td class="case">Legacy irrigation editor</td>
+      <td class="steps">Set diagram URL and per-station run minutes. Save irrigation guide.</td>
+      <td class="expected">Data persists. Displays alongside wizard map if both exist.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-17</td>
+      <td class="area">Rachio</td>
+      <td class="case">Rachio link and zone run</td>
+      <td class="steps">Link Rachio device to property. View zones. Run zone for 5 minutes. Stop all.</td>
+      <td class="expected">Device shows online. Zone run starts. Stop all works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-18</td>
+      <td class="area">Visits</td>
+      <td class="case">Create visit from customer</td>
+      <td class="steps">Visits tab → Add visit. Fill required fields. Save.</td>
+      <td class="expected">Visit created. Redirect to visit detail. Appears on schedule.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-19</td>
+      <td class="area">Estimates</td>
+      <td class="case">Create estimate from customer</td>
+      <td class="steps">Estimates tab → Create estimate.</td>
+      <td class="expected">DRAFT estimate created. Opens builder.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-20</td>
+      <td class="area">Maintenance</td>
+      <td class="case">Enroll in maintenance plan</td>
+      <td class="steps">Maintenance tab → Enroll in plan. Select template, property, billing frequency.</td>
+      <td class="expected">DRAFT enrollment created. Appears in enrollment list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-21</td>
+      <td class="area">Referrals</td>
+      <td class="case">Referral enrollment</td>
+      <td class="steps">Enroll customer in referral program. Copy share link.</td>
+      <td class="expected">Member created. Share URL works for public referral form.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-22</td>
+      <td class="area">Jobs</td>
+      <td class="case">Jobs list</td>
+      <td class="steps">Go to /customers/jobs. Search. Click a job.</td>
+      <td class="expected">Jobs listed with status, date, total. Links to visit detail.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-23</td>
+      <td class="area">Leads</td>
+      <td class="case">Leads list and convert</td>
+      <td class="steps">Go to /customers/leads. Create lead. Convert to customer.</td>
+      <td class="expected">Lead appears. Convert creates customer. Status WON. View customer link works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-24</td>
+      <td class="area">Invoices</td>
+      <td class="case">Invoices list actions</td>
+      <td class="steps">Go to /customers/invoices. Send, Remind, Copy pay link, Refund (Admin).</td>
+      <td class="expected">Each action succeeds or shows appropriate error. Pay link opens /pay/{token}.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">customers-25</td>
+      <td class="area">Leads inbox</td>
+      <td class="case">Website leads inbox</td>
+      <td class="steps">Submit website form. Open /inbox/leads.</td>
+      <td class="expected">Submission appears within 15s. Detail shows form content. Delete works for email leads.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="schedule">
+  <h2>4. Schedule & Team Management</h2>
+  <p class="intro">Covers schedule board, quick-add, needs-scheduling queue, and team schedules/time-off.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">schedule-01</td>
+      <td class="area">Board</td>
+      <td class="case">Schedule week view</td>
+      <td class="steps">Open /schedule. View week. Navigate prev/next/today.</td>
+      <td class="expected">Jobs display in correct time slots. Colors apply per color mode.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-02</td>
+      <td class="area">Board</td>
+      <td class="case">Schedule day and month views</td>
+      <td class="steps">Switch to Day view, then Month view. Click a day in month view.</td>
+      <td class="expected">Day shows per-employee columns. Month shows counts. Click switches to day.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-03</td>
+      <td class="area">Filters</td>
+      <td class="case">Filter by service area and employee</td>
+      <td class="steps">Toggle areas and hide/show employees in sidebar.</td>
+      <td class="expected">Grid filters correctly. Unassigned column toggles.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-04</td>
+      <td class="area">Quick-add</td>
+      <td class="case">Quick-add visit from slot</td>
+      <td class="steps">Click empty time slot. Fill customer, technician, division. Save.</td>
+      <td class="expected">Visit appears on board at correct time. Default 3-hour window applied.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-05</td>
+      <td class="area">Metrics</td>
+      <td class="case">Schedule revenue summary</td>
+      <td class="steps">View week with completed/scheduled jobs.</td>
+      <td class="expected">Daily/weekly revenue and hours metrics display.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-06</td>
+      <td class="area">Needs scheduling</td>
+      <td class="case">Needs scheduling queue</td>
+      <td class="steps">Approve design estimate with deposit. Open /schedule/needs-scheduling.</td>
+      <td class="expected">Estimate appears in queue with customer, total, duration. Links work.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-07</td>
+      <td class="area">Team</td>
+      <td class="case">Team schedule — set work days</td>
+      <td class="steps">Team schedules → select employee. Set Mon–Fri 8am–5pm working. Save.</td>
+      <td class="expected">Schedule persists. Non-working days block assignment server-side.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-08</td>
+      <td class="area">Time off</td>
+      <td class="case">Request time off (Tech)</td>
+      <td class="steps">Log in as Tech. Submit PTO request for future dates.</td>
+      <td class="expected">Request shows as PENDING. Appears in manager pending queue.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-09</td>
+      <td class="area">Time off</td>
+      <td class="case">Approve time off (Manager)</td>
+      <td class="steps">As Manager, approve pending time off request.</td>
+      <td class="expected">Status APPROVED. Employee unavailable on those dates for scheduling.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-10</td>
+      <td class="area">Time off</td>
+      <td class="case">Assignment blocked on approved time off</td>
+      <td class="steps">Try scheduling visit for employee on approved time-off date.</td>
+      <td class="expected">Server returns error. Assignment blocked.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">schedule-11</td>
+      <td class="area">Validation</td>
+      <td class="case">Double-booking prevention</td>
+      <td class="steps">Assign overlapping visits to same technician.</td>
+      <td class="expected">Second assignment blocked with conflict error.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="visits">
+  <h2>5. Visit Detail & Field Workflow</h2>
+  <p class="intro">Complete visit lifecycle from scheduled through payment.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">visits-01</td>
+      <td class="area">Schedule</td>
+      <td class="case">Edit visit schedule</td>
+      <td class="steps">As Manager, change date, time, assigned technician. Save.</td>
+      <td class="expected">Schedule updates. Customer notification sent if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-02</td>
+      <td class="area">Roles</td>
+      <td class="case">Tech cannot edit schedule</td>
+      <td class="steps">Log in as Tech on assigned visit. Verify schedule fields read-only.</td>
+      <td class="expected">No edit controls for date/technician.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-03</td>
+      <td class="area">Time tracking</td>
+      <td class="case">On my way with ETA</td>
+      <td class="steps">Start On my way. Allow geolocation. Verify ETA banner.</td>
+      <td class="expected">Status EN_ROUTE. ETA shown. Customer SMS sent if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-04</td>
+      <td class="area">Time tracking</td>
+      <td class="case">Start, pause, resume work</td>
+      <td class="steps">Start my time → Pause → Resume.</td>
+      <td class="expected">Status transitions IN_PROGRESS/PAUSED. Timer runs correctly.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-05</td>
+      <td class="area">Checklists</td>
+      <td class="case">Finish visit — required checklists</td>
+      <td class="steps">Leave required checklist incomplete. Try Finish visit.</td>
+      <td class="expected">Blocked with message listing incomplete checklists.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-06</td>
+      <td class="area">Checklists</td>
+      <td class="case">Complete all checklist item types</td>
+      <td class="steps">Fill Pass/Flag/Fail, Number, Note, Photo, Multi-select, Select one, Checkbox items. Mark complete.</td>
+      <td class="expected">Each type saves. Checklist marked COMPLETED.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-07</td>
+      <td class="area">Callback</td>
+      <td class="case">Callback flag</td>
+      <td class="steps">Toggle Callback job checkbox. Verify callback-specific checklists excluded.</td>
+      <td class="expected">Flag persists. Matching rules respect excludeCallbacks.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-08</td>
+      <td class="area">Line items</td>
+      <td class="case">Add line items from price book</td>
+      <td class="steps">Add service and material from ItemPicker. Adjust quantity.</td>
+      <td class="expected">Line items appear. Totals recalculate. Subtotal/discount/total correct.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-09</td>
+      <td class="area">Discounts</td>
+      <td class="case">Add visit discount</td>
+      <td class="steps">Add FIXED and PERCENT discounts.</td>
+      <td class="expected">Totals update correctly. PERCENT applies to subtotal.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-10</td>
+      <td class="area">Notes</td>
+      <td class="case">Visit notes and attachments</td>
+      <td class="steps">Add note. Upload photo and PDF.</td>
+      <td class="expected">Note shows author/time. Attachments viewable and deletable.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-11</td>
+      <td class="area">Parts run</td>
+      <td class="case">Parts run</td>
+      <td class="steps">Open Parts run. View nearest suppliers. Navigate (pauses timer if in progress).</td>
+      <td class="expected">Suppliers listed. Google Maps opens. Timer pauses if applicable.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-12</td>
+      <td class="area">Payments</td>
+      <td class="case">Collect payment via Stripe</td>
+      <td class="steps">Click Collect payment on visit with balance > 0.</td>
+      <td class="expected">Stripe Checkout opens. On success, visit shows Paid. Invoice synced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-13</td>
+      <td class="area">Profit</td>
+      <td class="case">Profit section (Admin only)</td>
+      <td class="steps">View visit as Admin. Verify profit section visible.</td>
+      <td class="expected">Margin data loads. Hidden for Tech role.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-14</td>
+      <td class="area">Delete</td>
+      <td class="case">Delete visit</td>
+      <td class="steps">As Admin, delete visit with confirmation.</td>
+      <td class="expected">Visit removed. No longer on schedule.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-15</td>
+      <td class="area">Install</td>
+      <td class="case">Install plan section</td>
+      <td class="steps">On install visit with design, set install days. Save.</td>
+      <td class="expected">Install days persist. Design zone viewer loads.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-16</td>
+      <td class="area">Maintenance</td>
+      <td class="case">Link maintenance plan visit</td>
+      <td class="steps">On visit with enrolled customer, assign plan visit from dropdown.</td>
+      <td class="expected">Plan visit linked. Plan discounts applied to line items.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">visits-17</td>
+      <td class="area">Irrigation</td>
+      <td class="case">Irrigation map editor on visit</td>
+      <td class="steps">Edit map: place markers, draw zones, set zone attributes. Save draft.</td>
+      <td class="expected">Map saves. Status shows Draft. Published map visible in portal.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="inbox">
+  <h2>6. Inbox — Voice, SMS, Email, Social, Leads</h2>
+  <p class="intro">Test all communication channels and CSR workflows.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">inbox-01</td>
+      <td class="area">CSR Desk</td>
+      <td class="case">CSR Desk — live queue</td>
+      <td class="steps">Place inbound test call. View CSR Desk queue.</td>
+      <td class="expected">Caller appears in queue with lookup info (name, city, last visit).</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-02</td>
+      <td class="area">Voice</td>
+      <td class="case">Accept queued call</td>
+      <td class="steps">On Voice → Customers, click Accept on queue entry.</td>
+      <td class="expected">Call connects to softphone. Active call bar appears.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-03</td>
+      <td class="area">Voice</td>
+      <td class="case">Outbound dial — manual number</td>
+      <td class="steps">Open dialer. Enter phone. Place call.</td>
+      <td class="expected">Call connects. History logs outbound entry.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-04</td>
+      <td class="area">Voice</td>
+      <td class="case">Outbound dial — customer search</td>
+      <td class="steps">Dialer → Find customer. Search and select. Call.</td>
+      <td class="expected">Customer phone populated. Call placed.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-05</td>
+      <td class="area">CSR Desk</td>
+      <td class="case">Book appointment during call</td>
+      <td class="steps">During active call with known customer, Book appointment. Fill fields. Save.</td>
+      <td class="expected">Visit created. Banner confirms. Disposition links on wrap-up.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-06</td>
+      <td class="area">Voice</td>
+      <td class="case">Call wrap-up disposition</td>
+      <td class="steps">End call. Select disposition (Booked / Not booked / Non-opportunity). Add note. Save.</td>
+      <td class="expected">Disposition saved. Appears in call history.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-07</td>
+      <td class="area">Voice</td>
+      <td class="case">Warm transfer</td>
+      <td class="steps">During call, Transfer → Warm → select available agent. Complete transfer.</td>
+      <td class="expected">Consult connects. Complete transfer assigns new handler.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-08</td>
+      <td class="area">Voice</td>
+      <td class="case">Cold transfer</td>
+      <td class="steps">Transfer → Cold → select agent.</td>
+      <td class="expected">Customer redirected. CSR disconnected.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-09</td>
+      <td class="area">Voice</td>
+      <td class="case">Hold and mute</td>
+      <td class="steps">During call, toggle Mute and Hold.</td>
+      <td class="expected">Mute silences mic. Hold plays hold music to customer.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-10</td>
+      <td class="area">Voice</td>
+      <td class="case">Call recording playback</td>
+      <td class="steps">Complete a recorded call. Open call detail. Play recording.</td>
+      <td class="expected">Recording plays. Transcript shown if enabled.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-11</td>
+      <td class="area">SMS</td>
+      <td class="case">SMS — send to customer</td>
+      <td class="steps">SMS → Customers. Select thread or compose. Send text message.</td>
+      <td class="expected">Message delivered. Appears in thread. Customer receives SMS.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-12</td>
+      <td class="area">SMS</td>
+      <td class="case">SMS — send MMS attachment</td>
+      <td class="steps">Attach image to SMS. Send.</td>
+      <td class="expected">MMS delivered. Media displays in thread.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-13</td>
+      <td class="area">SMS</td>
+      <td class="case">SMS — block contact</td>
+      <td class="steps">Block a customer contact. Attempt to send SMS.</td>
+      <td class="expected">Send blocked with 403. Blocklist enforced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-14</td>
+      <td class="area">SMS</td>
+      <td class="case">SMS — contact info detection</td>
+      <td class="steps">Receive inbound SMS with name/email. Apply contact info dialog.</td>
+      <td class="expected">Fields parsed. Customer created/updated. Conversation linked.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-15</td>
+      <td class="area">SMS</td>
+      <td class="case">SMS — team internal</td>
+      <td class="steps">SMS → Team. Message another employee.</td>
+      <td class="expected">Internal thread created. Message delivered.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-16</td>
+      <td class="area">Email</td>
+      <td class="case">Email compose and send</td>
+      <td class="steps">Go to /inbox/compose. Add recipient, subject, body, attachment. Send.</td>
+      <td class="expected">Email sent. Appears in sent folder (API).</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-17</td>
+      <td class="area">Social</td>
+      <td class="case">Facebook DM reply</td>
+      <td class="steps">Open Facebook DMs thread. Reply with text.</td>
+      <td class="expected">Message sent via Meta API. Appears in thread.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-18</td>
+      <td class="area">Social</td>
+      <td class="case">Instagram DM reply</td>
+      <td class="steps">Open Instagram DMs thread. Reply.</td>
+      <td class="expected">Message sent. Within 24-hour window enforced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">inbox-19</td>
+      <td class="area">Voice</td>
+      <td class="case">Team voice directory</td>
+      <td class="steps">Voice → Team. Click-to-call team member.</td>
+      <td class="expected">Internal call placed via softphone.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="voice-settings">
+  <h2>7. Voice Settings</h2>
+  <p class="intro">Configure phone system before go-live.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">voice-settings-01</td>
+      <td class="area">Numbers</td>
+      <td class="case">Add phone number manually</td>
+      <td class="steps">Settings → Voice → Numbers. Add E.164 number with friendly name.</td>
+      <td class="expected">Number appears in list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-02</td>
+      <td class="area">Numbers</td>
+      <td class="case">Import numbers from Twilio</td>
+      <td class="steps">Click Import from Twilio.</td>
+      <td class="expected">Twilio numbers sync to list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-03</td>
+      <td class="area">Numbers</td>
+      <td class="case">Buy Twilio number</td>
+      <td class="steps">Search by area code. Purchase number.</td>
+      <td class="expected">Number purchased and added to account.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-04</td>
+      <td class="area">Numbers</td>
+      <td class="case">Set primary number</td>
+      <td class="steps">Mark a number as primary.</td>
+      <td class="expected">Primary badge shown. Used as default caller ID.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-05</td>
+      <td class="area">Flows</td>
+      <td class="case">Create call flow with IVR</td>
+      <td class="steps">Settings → Voice → Flows. Create flow with IVR node (digits → branches).</td>
+      <td class="expected">Flow saves. Inbound calls route per digit selection.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-06</td>
+      <td class="area">Groups</td>
+      <td class="case">Create agent group</td>
+      <td class="steps">Settings → Voice → Groups. Create group with ring strategy and members.</td>
+      <td class="expected">Group saves. DIAL_GROUP node rings members per strategy.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-07</td>
+      <td class="area">Clips</td>
+      <td class="case">Upload audio clip</td>
+      <td class="steps">Settings → Voice → Clips. Upload MP3/WAV.</td>
+      <td class="expected">Clip available for IVR prompts.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-08</td>
+      <td class="area">Hours</td>
+      <td class="case">Business hours</td>
+      <td class="steps">Settings → Voice → Hours. Set Mon–Fri open, Sat–Sun closed. Save.</td>
+      <td class="expected">After-hours routing uses afterHoursNodeId on inbound calls.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-09</td>
+      <td class="area">Overview</td>
+      <td class="case">Record and transcribe toggles</td>
+      <td class="steps">Settings → Voice. Toggle Record calls and Transcribe calls.</td>
+      <td class="expected">New calls record/transcribe per settings.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">voice-settings-10</td>
+      <td class="area">Inbox settings</td>
+      <td class="case">Register Twilio webhooks</td>
+      <td class="steps">Settings → Inbox → Register Twilio webhooks.</td>
+      <td class="expected">Webhooks registered. SMS and voice inbound work.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="pricebook">
+  <h2>8. Price Book</h2>
+  <p class="intro">Catalog management for services, materials, pricing forms, templates, and discounts.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">pricebook-01</td>
+      <td class="area">Services</td>
+      <td class="case">Create service category and item</td>
+      <td class="steps">Price Book → Create category. Add service with name, price, description.</td>
+      <td class="expected">Category and item appear. Searchable from ItemPicker.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-02</td>
+      <td class="area">Services</td>
+      <td class="case">Flat-rate calculated service</td>
+      <td class="steps">Enable flat rate in settings. Create service with labor rate + hours + bundled materials.</td>
+      <td class="expected">Price auto-calculates. Breakdown shown. Manual override option works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-03</td>
+      <td class="area">Materials</td>
+      <td class="case">Material with markup tiers</td>
+      <td class="steps">Enable material markups. Create material with cost. Enable markup on item.</td>
+      <td class="expected">Sell price = cost × (1 + tier %). Tier matched by cost range.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-04</td>
+      <td class="area">Import</td>
+      <td class="case">CSV import services</td>
+      <td class="steps">Export CSV. Modify. Re-import with update existing toggle.</td>
+      <td class="expected">Items created/updated. Toast shows counts.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-05</td>
+      <td class="area">Labor rates</td>
+      <td class="case">Labor rates CRUD</td>
+      <td class="steps">Settings → Price Book → Labor rates. Create rate. Set as default.</td>
+      <td class="expected">Rate saves. Calculated services recalculate on default change.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-06</td>
+      <td class="area">Markups</td>
+      <td class="case">Material markup tiers</td>
+      <td class="steps">Edit tier rows. Save.</td>
+      <td class="expected">Materials with markupEnabled recalculate.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-07</td>
+      <td class="area">Bulk adjust</td>
+      <td class="case">Bulk price adjust</td>
+      <td class="steps">Bulk adjust +10% on all services. Preview then Apply.</td>
+      <td class="expected">Prices update. Calculated services recalculate.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-08</td>
+      <td class="area">AI</td>
+      <td class="case">AI description generation</td>
+      <td class="steps">On service item, click Generate description (requires OpenAI key).</td>
+      <td class="expected">Description populated by AI.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-09</td>
+      <td class="area">Pricing forms</td>
+      <td class="case">Create pricing form</td>
+      <td class="steps">Pricing forms → Create form by name.</td>
+      <td class="expected">Form created with default fields.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-10</td>
+      <td class="area">Templates</td>
+      <td class="case">Create estimate template</td>
+      <td class="steps">Estimate Templates → Create with name and line item.</td>
+      <td class="expected">Template appears in list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">pricebook-11</td>
+      <td class="area">Discounts</td>
+      <td class="case">Create catalog discount</td>
+      <td class="steps">Discounts → Create PERCENT and FIXED discounts. Toggle active.</td>
+      <td class="expected">Discounts listed with status.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="estimates">
+  <h2>9. Estimates</h2>
+  <p class="intro">Estimate builder, send, approve, convert, and portal flow.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">estimates-01</td>
+      <td class="area">Builder</td>
+      <td class="case">Build estimate with line items</td>
+      <td class="steps">Open estimate. Add items from price book. Add discount. Verify totals.</td>
+      <td class="expected">Subtotal, discount, total correct. No tax line.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-02</td>
+      <td class="area">Builder</td>
+      <td class="case">Add estimate note and attachment</td>
+      <td class="steps">Add text note. Upload image attachment.</td>
+      <td class="expected">Note and attachment appear.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-03</td>
+      <td class="area">Send</td>
+      <td class="case">Send estimate to customer</td>
+      <td class="steps">Click Send. Verify customer has email or phone.</td>
+      <td class="expected">Status SENT. Notification sent. Expiry date set.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-04</td>
+      <td class="area">Signature</td>
+      <td class="case">Staff signature approval</td>
+      <td class="steps">Draw signature on canvas. Save.</td>
+      <td class="expected">Status APPROVED. signedAt recorded.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-05</td>
+      <td class="area">Convert</td>
+      <td class="case">Copy estimate to visit</td>
+      <td class="steps">With linked visit, Copy to visit. Select this visit or new visit.</td>
+      <td class="expected">Line items and discounts copied. Status CONVERTED.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-06</td>
+      <td class="area">Portal</td>
+      <td class="case">Portal estimate approval</td>
+      <td class="steps">Open /portal/{slug}/estimates/{token} as customer. Sign and approve.</td>
+      <td class="expected">Status APPROVED. Deposit checkout if required.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-07</td>
+      <td class="area">Portal</td>
+      <td class="case">Portal premium tier selection</td>
+      <td class="steps">On design estimate with premium option, select Premium tier. Approve.</td>
+      <td class="expected">Total updates to premiumOptionTotal.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-08</td>
+      <td class="area">Payments</td>
+      <td class="case">Deposit payment flow</td>
+      <td class="steps">Approve estimate requiring deposit. Complete Stripe checkout.</td>
+      <td class="expected">Deposit paid. Install visit auto-created if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-09</td>
+      <td class="area">Expiry</td>
+      <td class="case">Estimate expiry</td>
+      <td class="steps">Send estimate. Wait past expiry or backdate expiresAt. Reload.</td>
+      <td class="expected">Status auto-flips to EXPIRED.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-10</td>
+      <td class="area">Delete</td>
+      <td class="case">Delete estimate</td>
+      <td class="steps">As Admin/Manager, delete DRAFT estimate.</td>
+      <td class="expected">Estimate removed.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">estimates-11</td>
+      <td class="area">Design</td>
+      <td class="case">Design estimate — needs scheduling</td>
+      <td class="steps">Approve design estimate with deposit. Check needs-scheduling queue.</td>
+      <td class="expected">Estimate appears. Install visit created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="checklists">
+  <h2>10. Checklists</h2>
+  <p class="intro">Template configuration and visit execution.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">checklists-01</td>
+      <td class="area">Templates</td>
+      <td class="case">Create checklist template</td>
+      <td class="steps">Settings → Checklists → New. Name, divisions, items of each type. Save.</td>
+      <td class="expected">Template appears in list with rule summary.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-02</td>
+      <td class="area">Matching</td>
+      <td class="case">Apply to all jobs rule</td>
+      <td class="steps">Create template with Apply to all jobs. Schedule new visit.</td>
+      <td class="expected">Checklist auto-assigned on visit create.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-03</td>
+      <td class="area">Matching</td>
+      <td class="case">Division-specific rule</td>
+      <td class="steps">Create SERVICE-only template. Schedule SERVICE and INSTALL visits.</td>
+      <td class="expected">Checklist only on SERVICE visit.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-04</td>
+      <td class="area">Matching</td>
+      <td class="case">Price book trigger rule</td>
+      <td class="steps">Link template to specific service item. Add that item to visit.</td>
+      <td class="expected">Checklist auto-syncs when line item added.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-05</td>
+      <td class="area">Matching</td>
+      <td class="case">Exclude callbacks</td>
+      <td class="steps">Create template excluding callbacks. Flag visit as callback.</td>
+      <td class="expected">Template not applied to callback visit.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-06</td>
+      <td class="area">Completion</td>
+      <td class="case">Mandatory for completion</td>
+      <td class="steps">Mark template mandatory. Try completing visit without finishing checklist.</td>
+      <td class="expected">Visit completion blocked.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-07</td>
+      <td class="area">Portal</td>
+      <td class="case">Customer portal visibility</td>
+      <td class="steps">Complete checklist with portal visibility enabled.</td>
+      <td class="expected">Completed checklist visible in portal for that visit.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">checklists-08</td>
+      <td class="area">Templates</td>
+      <td class="case">Duplicate template</td>
+      <td class="steps">Duplicate existing template.</td>
+      <td class="expected">Copy created as inactive with (copy) suffix.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="maintenance">
+  <h2>11. Maintenance Plans</h2>
+  <p class="intro">Plan templates, enrollment, billing, and scheduling.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">maintenance-01</td>
+      <td class="area">Templates</td>
+      <td class="case">Create plan template (full wizard)</td>
+      <td class="steps">Maintenance Plans → New template. Complete all wizard steps. Save.</td>
+      <td class="expected">Template active with visits, pricing, discounts, add-ons.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-02</td>
+      <td class="area">Enrollment</td>
+      <td class="case">Enroll customer in plan</td>
+      <td class="steps">Enroll via customer profile or visit. Select property, template, billing frequency.</td>
+      <td class="expected">DRAFT enrollment created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-03</td>
+      <td class="area">Activation</td>
+      <td class="case">Accept and activate enrollment</td>
+      <td class="steps">Open enrollment. Click Accept & activate.</td>
+      <td class="expected">Status ACTIVE. Plan visits generated. Stripe subscription if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-04</td>
+      <td class="area">Scheduling</td>
+      <td class="case">Schedule unscheduled plan visit</td>
+      <td class="steps">Dashboard → Unscheduled visits. Schedule with technician.</td>
+      <td class="expected">Visit created at due month. Linked to plan visit.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-05</td>
+      <td class="area">Cancel</td>
+      <td class="case">Cancel enrollment</td>
+      <td class="steps">Cancel active enrollment with reason.</td>
+      <td class="expected">Status CANCELLED. Stripe sub cancelled. Unscheduled visits skipped.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-06</td>
+      <td class="area">Billing</td>
+      <td class="case">Billing charge via API</td>
+      <td class="steps">POST /api/maintenance-plans/billing/{id}/charge for due period.</td>
+      <td class="expected">Stripe charge succeeds or stub-paid if no key.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-07</td>
+      <td class="area">Dashboard</td>
+      <td class="case">Dashboard metrics</td>
+      <td class="steps">View maintenance dashboard cards.</td>
+      <td class="expected">Enrollments, revenue, due billing, unscheduled counts load.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">maintenance-08</td>
+      <td class="area">Rachio</td>
+      <td class="case">Rachio smart irrigation panel</td>
+      <td class="steps">View Smart irrigation card. Link Rachio in settings if needed.</td>
+      <td class="expected">Connection status shown. Links to settings.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="timesheets">
+  <h2>12. Timesheets & Compensation</h2>
+  <p class="intro">Shift tracking and pay preview.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">timesheets-01</td>
+      <td class="area">Timesheets</td>
+      <td class="case">Timesheets list — own entries</td>
+      <td class="steps">Log in as Tech. Open /timesheets. View own clock entries.</td>
+      <td class="expected">Entries show date, in/out, duration.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">timesheets-02</td>
+      <td class="area">Timesheets</td>
+      <td class="case">Timesheets — manager view all</td>
+      <td class="steps">Log in as Manager. Filter by employee and date range.</td>
+      <td class="expected">All employee entries visible.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">timesheets-03</td>
+      <td class="area">Compensation</td>
+      <td class="case">Pay period preview</td>
+      <td class="steps">As Manager, view pay preview section.</td>
+      <td class="expected">Per-employee: hours, OT, commission, projected payout.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">timesheets-04</td>
+      <td class="area">Settings</td>
+      <td class="case">Compensation settings</td>
+      <td class="steps">Settings → Compensation. Set pay type defaults, OT threshold, commission basis. Save.</td>
+      <td class="expected">Settings persist. Affects pay preview calculations.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="marketing">
+  <h2>13. Marketing</h2>
+  <p class="intro">Campaigns, social, SEO, ads, GBP, and referrals.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">marketing-01</td>
+      <td class="area">Campaigns</td>
+      <td class="case">Email blast campaign</td>
+      <td class="steps">Marketing → Campaigns → New. Setup → Audience (city filter) → Email content → Send now.</td>
+      <td class="expected">Campaign sends. Recipients table shows delivered/opened.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-02</td>
+      <td class="area">Campaigns</td>
+      <td class="case">SMS blast campaign</td>
+      <td class="steps">Create SMS blast with message body. Send.</td>
+      <td class="expected">SMS delivered. STOP opt-out appended.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-03</td>
+      <td class="area">Campaigns</td>
+      <td class="case">Drip campaign activation</td>
+      <td class="steps">Create DRIP with 3 steps. Activate.</td>
+      <td class="expected">Enrollment count shown. Steps process on schedule.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-04</td>
+      <td class="area">Campaigns</td>
+      <td class="case">AI email generation</td>
+      <td class="steps">In email editor, enter prompt. Generate email.</td>
+      <td class="expected">HTML content generated. Editable in GrapesJS.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-05</td>
+      <td class="area">Social</td>
+      <td class="case">Social post — submit for review</td>
+      <td class="steps">Social → Review queue. Compose post with caption and image. Submit for review.</td>
+      <td class="expected">Status PENDING_REVIEW. Appears in reviewer queue.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-06</td>
+      <td class="area">Social</td>
+      <td class="case">Social post — approve and publish</td>
+      <td class="steps">As Admin/Manager, approve submission. Publish now.</td>
+      <td class="expected">Status PUBLISHED. Post appears on Meta.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-07</td>
+      <td class="area">Social</td>
+      <td class="case">Social post — schedule</td>
+      <td class="steps">As Admin, schedule approved post for future datetime.</td>
+      <td class="expected">Status SCHEDULED. Auto-publishes at scheduled time.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-08</td>
+      <td class="area">Social</td>
+      <td class="case">Social dashboard sync</td>
+      <td class="steps">Click Refresh on social dashboard.</td>
+      <td class="expected">Follower counts and recent posts update from Meta.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-09</td>
+      <td class="area">SEO</td>
+      <td class="case">SEO — organic ranking map</td>
+      <td class="steps">Marketing → SEO. Select keyword. Refresh rankings.</td>
+      <td class="expected">Map shows positions by city. SerpAPI quota respected.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-10</td>
+      <td class="area">SEO</td>
+      <td class="case">SEO — AI recommendations</td>
+      <td class="steps">Click Get recommendations.</td>
+      <td class="expected">3 tasks generated. Toggle complete. Delete task.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-11</td>
+      <td class="area">SEO</td>
+      <td class="case">Website analytics dashboard</td>
+      <td class="steps">Select 7/28/30/90 day range. Refresh.</td>
+      <td class="expected">Page views, sessions, form submits, bookings metrics load.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-12</td>
+      <td class="area">SEO</td>
+      <td class="case">Search Console connect</td>
+      <td class="steps">Connect Google Search Console OAuth. Select property.</td>
+      <td class="expected">Metrics: clicks, impressions, CTR, top queries load.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-13</td>
+      <td class="area">Ads</td>
+      <td class="case">Google Ads dashboard</td>
+      <td class="steps">Marketing → Ads. Select date range. Refresh.</td>
+      <td class="expected">PPC campaigns show spend, impressions, clicks, conversions.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-14</td>
+      <td class="area">Ads</td>
+      <td class="case">Meta Ads dashboard</td>
+      <td class="steps">View Meta ads tab with connected account.</td>
+      <td class="expected">Campaign metrics load.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-15</td>
+      <td class="area">GBP</td>
+      <td class="case">GBP reviews summary</td>
+      <td class="steps">Marketing → Google Business. View review summary. Refresh.</td>
+      <td class="expected">Star breakdown, average rating, new last 7 days shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-16</td>
+      <td class="area">GBP</td>
+      <td class="case">GBP reply to review</td>
+      <td class="steps">Reviews tab → Generate AI reply → Edit → Post reply.</td>
+      <td class="expected">Reply posted to Google. Review removed from unreplied list.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-17</td>
+      <td class="area">GBP</td>
+      <td class="case">GBP create post</td>
+      <td class="steps">Posts tab → Generate post → Attach job photo → Publish.</td>
+      <td class="expected">Post published to Google Business Profile.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-18</td>
+      <td class="area">GBP</td>
+      <td class="case">GBP upload photos</td>
+      <td class="steps">Photos tab → Select job photos → Upload to profile.</td>
+      <td class="expected">Photos appear on GBP.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-19</td>
+      <td class="area">Slack</td>
+      <td class="case">Send GBP reviews to Slack</td>
+      <td class="steps">Click Send to Slack (Slack + channel configured).</td>
+      <td class="expected">Review cards posted to Slack channel.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-20</td>
+      <td class="area">Referrals</td>
+      <td class="case">Referral program settings</td>
+      <td class="steps">Marketing → Referrals. Enable program. Set install/service rewards. Save.</td>
+      <td class="expected">Settings persist. Metrics grid loads.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-21</td>
+      <td class="area">Referrals</td>
+      <td class="case">Referral pipeline and payout</td>
+      <td class="steps">Submit referral via public form. Convert to customer. Verify reward queue.</td>
+      <td class="expected">Pipeline shows submission. Reward queued. Retry works on FAILED.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">marketing-22</td>
+      <td class="area">Referrals</td>
+      <td class="case">Stripe Connect for referrals</td>
+      <td class="steps">Click Verify Stripe Connect.</td>
+      <td class="expected">Connect onboarding completes. Payouts enabled.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="reporting">
+  <h2>14. Reporting</h2>
+  <p class="intro">All dashboards and reports with correct data.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">reporting-01</td>
+      <td class="area">KPI</td>
+      <td class="case">KPI Dashboard — company overview</td>
+      <td class="steps">Open /reporting. Select YTD range. Verify 8 company metrics.</td>
+      <td class="expected">Service/install revenue, total, avg tickets, booking rate, conversion, active plans shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-02</td>
+      <td class="area">KPI</td>
+      <td class="case">KPI Dashboard — technician cards</td>
+      <td class="steps">Verify solo tech cards: revenue, rev/hour, avg ticket, conversion, 5-star, callback rate.</td>
+      <td class="expected">Metrics match known test data for date range.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-03</td>
+      <td class="area">KPI</td>
+      <td class="case">KPI Dashboard — CSR cards</td>
+      <td class="steps">Verify CSR booking rate, avg duration, booked revenue, plans sold.</td>
+      <td class="expected">Metrics calculated from call logs.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-04</td>
+      <td class="area">KPI</td>
+      <td class="case">KPI Dashboard — crew cards</td>
+      <td class="steps">Verify install crew cards include callback rate.</td>
+      <td class="expected">Install crews show callback rate. Service crews do not.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-05</td>
+      <td class="area">KPI</td>
+      <td class="case">KPI Dashboard — salespeople</td>
+      <td class="steps">Assign Sales role. Verify conversion, avg ticket, revenue sold.</td>
+      <td class="expected">Sales cards appear with correct metrics.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-06</td>
+      <td class="area">Insights</td>
+      <td class="case">Business insights</td>
+      <td class="steps">Open /reporting/insights.</td>
+      <td class="expected">8 KPI cards: revenue MTD/YTD, pipeline, completion rate, etc.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-07</td>
+      <td class="area">Tech</td>
+      <td class="case">Tech performance report</td>
+      <td class="steps">Open /reporting/tech-performance.</td>
+      <td class="expected">Per-tech table: visits, revenue, avg job size, hours.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-08</td>
+      <td class="area">Financial</td>
+      <td class="case">Financial report</td>
+      <td class="steps">Open /reporting/financial.</td>
+      <td class="expected">Monthly invoiced vs collected for 12 months.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-09</td>
+      <td class="area">CSR</td>
+      <td class="case">CSR report</td>
+      <td class="steps">Open /reporting/csr.</td>
+      <td class="expected">Call volume, book rate, disposition breakdown, per-agent table.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-10</td>
+      <td class="area">Estimates</td>
+      <td class="case">Estimates report</td>
+      <td class="steps">Open /reporting/estimates.</td>
+      <td class="expected">Conversion rate and status breakdown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-11</td>
+      <td class="area">Leads</td>
+      <td class="case">Leads report</td>
+      <td class="steps">Open /reporting/leads.</td>
+      <td class="expected">Total leads, by status, by source.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-12</td>
+      <td class="area">Marketing</td>
+      <td class="case">Marketing report</td>
+      <td class="steps">Open /reporting/marketing?days=30.</td>
+      <td class="expected">Website event counts by type and top pages.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-13</td>
+      <td class="area">Voice</td>
+      <td class="case">Voice report</td>
+      <td class="steps">Open /reporting/voice.</td>
+      <td class="expected">Total calls, missed, avg duration (30 days).</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-14</td>
+      <td class="area">Plans</td>
+      <td class="case">Service plans report</td>
+      <td class="steps">Open /reporting/service-plans.</td>
+      <td class="expected">Enrollments, revenue, churn, due billing.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-15</td>
+      <td class="area">Invoices</td>
+      <td class="case">Invoices AR aging</td>
+      <td class="steps">Open /reporting/invoices.</td>
+      <td class="expected">Aging buckets 0-30, 31-60, 61-90, 90+ with counts and balances.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-16</td>
+      <td class="area">Payments</td>
+      <td class="case">Payments report</td>
+      <td class="steps">Open /reporting/payments.</td>
+      <td class="expected">Refund count and breakdown by payment method.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">reporting-17</td>
+      <td class="area">KPI</td>
+      <td class="case">Date range control on KPI</td>
+      <td class="steps">Switch presets and custom range on KPI dashboard.</td>
+      <td class="expected">All sections refresh with new range data.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="portal">
+  <h2>15. Customer Portal</h2>
+  <p class="intro">Public self-service portal for customers.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">portal-01</td>
+      <td class="area">Auth</td>
+      <td class="case">Portal magic link login</td>
+      <td class="steps">Send portal link. Click link in email.</td>
+      <td class="expected">Customer logged in. Dashboard shows welcome and property.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-02</td>
+      <td class="area">Visits</td>
+      <td class="case">Portal — view visits</td>
+      <td class="steps">Navigate to Visits. View upcoming and past.</td>
+      <td class="expected">Visits listed with status, date, technician.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-03</td>
+      <td class="area">Scheduling</td>
+      <td class="case">Portal — schedule visit</td>
+      <td class="steps">Click Schedule a visit. Select property, reason, slot. Submit.</td>
+      <td class="expected">Visit created. Confirmation shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-04</td>
+      <td class="area">Reschedule</td>
+      <td class="case">Portal — reschedule visit</td>
+      <td class="steps">On scheduled visit, pick new slot. Reschedule.</td>
+      <td class="expected">Visit updated. Lead-time policy enforced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-05</td>
+      <td class="area">Cancel</td>
+      <td class="case">Portal — cancel visit</td>
+      <td class="steps">Cancel scheduled visit. Confirm.</td>
+      <td class="expected">Status CANCELLED. Lead-time policy enforced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-06</td>
+      <td class="area">Invoices</td>
+      <td class="case">Portal — view and pay invoice</td>
+      <td class="steps">Open Invoices. Click Pay on open invoice.</td>
+      <td class="expected">Stripe Checkout opens. Payment succeeds. Balance updates.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-07</td>
+      <td class="area">Estimates</td>
+      <td class="case">Portal — approve estimate</td>
+      <td class="steps">Open estimate link. Sign and approve.</td>
+      <td class="expected">Status APPROVED. Deposit flow if required.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-08</td>
+      <td class="area">Maintenance</td>
+      <td class="case">Portal — maintenance enrollments</td>
+      <td class="steps">View maintenance tab.</td>
+      <td class="expected">Active enrollments, upcoming visits, billing history shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-09</td>
+      <td class="area">Rachio</td>
+      <td class="case">Portal — Rachio zone run</td>
+      <td class="steps">On property with Rachio, run zone for 5 minutes (if allowed).</td>
+      <td class="expected">Zone run starts. Confirmation shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-10</td>
+      <td class="area">Irrigation</td>
+      <td class="case">Portal — irrigation guide</td>
+      <td class="steps">View published irrigation map and zone runtimes.</td>
+      <td class="expected">Map and programming guide display correctly.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-11</td>
+      <td class="area">Offers</td>
+      <td class="case">Portal — offers</td>
+      <td class="steps">View active offers. Click CTA button.</td>
+      <td class="expected">Offers display. External link opens.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-12</td>
+      <td class="area">Referrals</td>
+      <td class="case">Portal — submit referral</td>
+      <td class="steps">Referrals tab → Submit referral with friend details.</td>
+      <td class="expected">Submission recorded. History shows status.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-13</td>
+      <td class="area">Feedback</td>
+      <td class="case">Portal — feedback survey</td>
+      <td class="steps">Open /portal/{slug}/feedback/{token}. Rate 1-5 stars. Submit comment.</td>
+      <td class="expected">Survey saved. Thank you shown. Already-submitted on repeat.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">portal-14</td>
+      <td class="area">Settings</td>
+      <td class="case">Portal feature gating</td>
+      <td class="steps">Disable portal features in settings. Verify hidden in portal nav.</td>
+      <td class="expected">Disabled sections not accessible.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="booking">
+  <h2>16. Public Online Booking</h2>
+  <p class="intro">Customer-facing booking widget at /book/{slug}.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">booking-01</td>
+      <td class="area">Booking</td>
+      <td class="case">Booking flow — happy path</td>
+      <td class="steps">Go to /book/{slug}. Enter contact, address with valid ZIP, pick slot. Book.</td>
+      <td class="expected">Confirmation shown. Visit created. Customer matched/created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">booking-02</td>
+      <td class="area">Validation</td>
+      <td class="case">Booking — invalid ZIP</td>
+      <td class="steps">Enter ZIP outside service areas.</td>
+      <td class="expected">Error: area not serviced. No slots shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">booking-03</td>
+      <td class="area">Validation</td>
+      <td class="case">Booking — slot race condition</td>
+      <td class="steps">Select slot, delay submit until slot taken.</td>
+      <td class="expected">409 error. User prompted to pick another slot.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">booking-04</td>
+      <td class="area">Validation</td>
+      <td class="case">Booking — Do Not Service block</td>
+      <td class="steps">Book with phone/email of DNS customer.</td>
+      <td class="expected">403 blocked. No visit created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">booking-05</td>
+      <td class="area">Settings</td>
+      <td class="case">Booking disabled</td>
+      <td class="steps">Disable online booking in settings. Visit /book/{slug}.</td>
+      <td class="expected">404 or not available message.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">booking-06</td>
+      <td class="area">Notifications</td>
+      <td class="case">Booking notification</td>
+      <td class="steps">Complete booking. Verify visit-scheduled notification sent.</td>
+      <td class="expected">Customer receives SMS/email per communication settings.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="payments">
+  <h2>17. Payments</h2>
+  <p class="intro">Invoice payment and card-on-file flows.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">payments-01</td>
+      <td class="area">Invoice pay</td>
+      <td class="case">Public invoice payment</td>
+      <td class="steps">Open /pay/{token}. Click Pay. Complete Stripe Checkout.</td>
+      <td class="expected">Payment succeeds. Invoice balance updates. Receipt sent if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-02</td>
+      <td class="area">Invoice pay</td>
+      <td class="case">Already-paid invoice</td>
+      <td class="steps">Open pay link for fully paid invoice.</td>
+      <td class="expected">Thank you / already paid message. No pay button.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-03</td>
+      <td class="area">Invoice pay</td>
+      <td class="case">Refunded invoice</td>
+      <td class="steps">Open pay link for refunded invoice.</td>
+      <td class="expected">Not payable message shown.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-04</td>
+      <td class="area">Visit pay</td>
+      <td class="case">Visit checkout payment</td>
+      <td class="steps">From visit detail, Collect payment. Complete Stripe.</td>
+      <td class="expected">Visit marked Paid. Invoice synced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-05</td>
+      <td class="area">Deposit</td>
+      <td class="case">Estimate deposit payment</td>
+      <td class="steps">Approve estimate with deposit via portal. Pay deposit.</td>
+      <td class="expected">Deposit recorded. Install flow triggered if configured.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-06</td>
+      <td class="area">Card on file</td>
+      <td class="case">Card setup success/cancel</td>
+      <td class="steps">Use secure card-add link. Complete or cancel Stripe setup.</td>
+      <td class="expected">Success page at /pay/card/success. Cancel at /pay/card/cancelled.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">payments-07</td>
+      <td class="area">Refunds</td>
+      <td class="case">Issue refund</td>
+      <td class="steps">As Admin, refund payment on invoice from /customers/invoices.</td>
+      <td class="expected">Refund processed in Stripe. Invoice status updated.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="settings">
+  <h2>18. Settings (Global & Feature Configuration)</h2>
+  <p class="intro">All company configuration before go-live.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">settings-01</td>
+      <td class="area">Company</td>
+      <td class="case">Company profile</td>
+      <td class="steps">Settings → Company. Edit name, address, timezone, support email, phone. Save.</td>
+      <td class="expected">Profile persists. Timezone affects scheduling.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-02</td>
+      <td class="area">Company</td>
+      <td class="case">Email branding</td>
+      <td class="steps">Upload email logo. Set sender display name.</td>
+      <td class="expected">Logo appears in outbound emails and portal header.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-03</td>
+      <td class="area">Company</td>
+      <td class="case">Business hours (company)</td>
+      <td class="steps">Set Mon–Fri open hours. Save.</td>
+      <td class="expected">Hours persist. Used for voice after-hours routing.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-04</td>
+      <td class="area">Appearance</td>
+      <td class="case">Appearance theme</td>
+      <td class="steps">Settings → Appearance. Toggle Light/Dark/System.</td>
+      <td class="expected">Theme applies immediately.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-05</td>
+      <td class="area">Communications</td>
+      <td class="case">Communications templates</td>
+      <td class="steps">Settings → Communications. Edit visit-scheduled SMS template. Insert merge field. Save.</td>
+      <td class="expected">Template saves. Test send delivers with merged data.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-06</td>
+      <td class="area">Communications</td>
+      <td class="case">Review link tracking</td>
+      <td class="steps">Enable review request notification. Send test. Click review link.</td>
+      <td class="expected">Sent/clicked stats increment in tracking panel.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-07</td>
+      <td class="area">Employees</td>
+      <td class="case">Create employee with role</td>
+      <td class="steps">Settings → Employees → Create. Set role TECH, division, service areas, compensation. Save.</td>
+      <td class="expected">Employee active. Can log in. Appears on schedule filters.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-08</td>
+      <td class="area">Employees</td>
+      <td class="case">Archive and restore employee</td>
+      <td class="steps">Archive employee. Verify hidden from active. Restore.</td>
+      <td class="expected">Status toggles. Login blocked while archived.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-09</td>
+      <td class="area">Employees</td>
+      <td class="case">Set employee password (Admin)</td>
+      <td class="steps">As Admin, set password for employee.</td>
+      <td class="expected">Employee can log in with new password.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-10</td>
+      <td class="area">Crews</td>
+      <td class="case">Create and manage crew</td>
+      <td class="steps">Create install crew with division INSTALL. Add members.</td>
+      <td class="expected">Crew appears on schedule. KPI crew card shows callback rate.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-11</td>
+      <td class="area">Service areas</td>
+      <td class="case">Service areas and ZIPs</td>
+      <td class="steps">Create area. Add ZIP codes. Use in scheduling and booking.</td>
+      <td class="expected">ZIPs validate booking and quick-add.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-12</td>
+      <td class="area">Parts</td>
+      <td class="case">Parts suppliers</td>
+      <td class="steps">Search Google Places. Add supplier. Activate.</td>
+      <td class="expected">Supplier appears in Parts run on visits.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-13</td>
+      <td class="area">Booking</td>
+      <td class="case">Booking settings</td>
+      <td class="steps">Enable booking. Set slug and lead time. Save.</td>
+      <td class="expected">Public /book/{slug} accessible.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-14</td>
+      <td class="area">Portal</td>
+      <td class="case">Customer portal settings</td>
+      <td class="steps">Enable portal. Toggle feature flags (visits, estimates, invoices, etc.). Set reschedule/cancel lead times.</td>
+      <td class="expected">Portal reflects toggles. Policies enforced.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-15</td>
+      <td class="area">Portal</td>
+      <td class="case">Portal offers CRUD</td>
+      <td class="steps">Create offer with title, description, URL. Toggle active. Delete.</td>
+      <td class="expected">Active offers appear in portal.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-16</td>
+      <td class="area">Leads</td>
+      <td class="case">Lead settings</td>
+      <td class="steps">Add lead source tags. Set default assignee. Enable notify on website lead.</td>
+      <td class="expected">Sources available on lead forms. Notifications fire.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-17</td>
+      <td class="area">Inbox</td>
+      <td class="case">Inbox settings</td>
+      <td class="steps">Set Twilio phone, from email. Send test email. Register webhooks.</td>
+      <td class="expected">SMS and email outbound work. Webhooks registered.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-18</td>
+      <td class="area">Estimates</td>
+      <td class="case">Estimate settings</td>
+      <td class="steps">Set expiry days, deposit defaults, install duration, supplier email, auto-email parts.</td>
+      <td class="expected">New estimates inherit defaults.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-19</td>
+      <td class="area">Invoices</td>
+      <td class="case">Invoice settings</td>
+      <td class="steps">Set prefix, payment terms, footer.</td>
+      <td class="expected">New invoices use settings.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-20</td>
+      <td class="area">Intake</td>
+      <td class="case">Customer intake required fields</td>
+      <td class="steps">Mark phone and address required. Create customer without them.</td>
+      <td class="expected">Validation blocks incomplete create.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-21</td>
+      <td class="area">Integrations</td>
+      <td class="case">Integrations — API keys</td>
+      <td class="steps">Generate WEBSITE API key. Copy raw key. Revoke.</td>
+      <td class="expected">Key works for spoke integration. Revoked key fails.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-22</td>
+      <td class="area">GBP</td>
+      <td class="case">Google Business Profile connect</td>
+      <td class="steps">Settings → Integrations → GBP. OAuth connect. Select location.</td>
+      <td class="expected">Connected. Marketing GBP pages load data.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-23</td>
+      <td class="area">Google Ads</td>
+      <td class="case">Google Ads connect</td>
+      <td class="steps">OAuth connect. Enter developer token. Select customer account.</td>
+      <td class="expected">Ads dashboard loads campaign data.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-24</td>
+      <td class="area">Meta Ads</td>
+      <td class="case">Meta Ads connect</td>
+      <td class="steps">Enter token. Select ad account.</td>
+      <td class="expected">Meta ads tab loads data.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-25</td>
+      <td class="area">Slack</td>
+      <td class="case">Slack GBP reviews</td>
+      <td class="steps">Configure Slack channel. Send test card.</td>
+      <td class="expected">Test card appears in Slack.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-26</td>
+      <td class="area">SEO</td>
+      <td class="case">SERP rankings settings</td>
+      <td class="steps">Add GBP and organic keywords. Add target cities. Save.</td>
+      <td class="expected">SEO ranking maps use configured keywords/cities.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">settings-27</td>
+      <td class="area">Rachio</td>
+      <td class="case">Rachio API key</td>
+      <td class="steps">Settings → Maintenance. Enter Rachio API key. Test connection.</td>
+      <td class="expected">Connection succeeds. Controllers listed.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="migration">
+  <h2>19. Data Migration (Housecall Pro)</h2>
+  <p class="intro">One-time import from Housecall Pro. Run in staging first.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">migration-01</td>
+      <td class="area">Migration</td>
+      <td class="case">HCP connect and preview</td>
+      <td class="steps">Settings → Data migration. Enter HCP API key. Preview import counts.</td>
+      <td class="expected">Preview shows expected record counts per step.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">migration-02</td>
+      <td class="area">Migration</td>
+      <td class="case">Run migration batches</td>
+      <td class="steps">Start migration. Run batches for tags, zones, employees, materials, services, customers, jobs.</td>
+      <td class="expected">Each step completes. Counts increment. Auto-continue works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">migration-03</td>
+      <td class="area">Migration</td>
+      <td class="case">Skip and focus steps</td>
+      <td class="steps">Skip a step. Focus on specific step. Reset step.</td>
+      <td class="expected">Step state changes correctly.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">migration-04</td>
+      <td class="area">Migration</td>
+      <td class="case">Pause and resume</td>
+      <td class="steps">Pause migration mid-batch. Resume.</td>
+      <td class="expected">State preserved. Continues from pause point.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">migration-05</td>
+      <td class="area">Migration</td>
+      <td class="case">Rollback (destructive)</td>
+      <td class="steps">In staging only: run rollback with confirmation.</td>
+      <td class="expected">All HCP-imported records deleted.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="integrations">
+  <h2>20. Cross-Integration End-to-End Scenarios</h2>
+  <p class="intro">Full workflows spanning multiple modules. Run these last.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">integrations-01</td>
+      <td class="area">E2E</td>
+      <td class="case">Lead → customer → visit → complete → invoice → pay</td>
+      <td class="steps">Create lead. Convert. Schedule visit. Complete with checklist. Generate invoice. Customer pays via portal.</td>
+      <td class="expected">End-to-end data flows correctly. Balances zero.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-02</td>
+      <td class="area">E2E</td>
+      <td class="case">Inbound call → book → dispatch → complete</td>
+      <td class="steps">Receive call. Book appointment. Tech goes On my way. Completes visit.</td>
+      <td class="expected">Call disposition BOOKED. Visit completed. KPIs update.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-03</td>
+      <td class="area">E2E</td>
+      <td class="case">Online booking → notification → schedule board</td>
+      <td class="steps">Customer books online. Verify notification. Find on schedule board.</td>
+      <td class="expected">Visit on board. Customer and property created.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-04</td>
+      <td class="area">E2E</td>
+      <td class="case">Estimate → send → portal approve → deposit → schedule install</td>
+      <td class="steps">Create estimate. Send. Customer approves in portal. Pays deposit. Appears in needs-scheduling.</td>
+      <td class="expected">Full sales-to-install pipeline works.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-05</td>
+      <td class="area">E2E</td>
+      <td class="case">Maintenance plan enroll → activate → schedule visits → bill</td>
+      <td class="steps">Enroll customer. Activate. Schedule plan visits. Verify billing period.</td>
+      <td class="expected">Plan lifecycle complete.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-06</td>
+      <td class="area">E2E</td>
+      <td class="case">Marketing campaign → track opens → reporting</td>
+      <td class="steps">Send email campaign. Open email (click link). Check reporting/marketing events.</td>
+      <td class="expected">Open tracked. Events appear in marketing report.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-07</td>
+      <td class="area">E2E</td>
+      <td class="case">GBP review → Slack card → reply in CRM</td>
+      <td class="steps">Receive new Google review. Send to Slack. Reply from Marketing GBP page.</td>
+      <td class="expected">Slack card posted. Reply on Google.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-08</td>
+      <td class="area">E2E</td>
+      <td class="case">Referral submit → convert → payout</td>
+      <td class="steps">Customer submits referral. Referred becomes customer with paid visit. Verify reward payout.</td>
+      <td class="expected">Reward queued and transferred via Stripe Connect.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-09</td>
+      <td class="area">E2E</td>
+      <td class="case">Do Not Service enforcement everywhere</td>
+      <td class="steps">Flag customer DNS. Attempt: book online, New visit, schedule plan visit, send notifications.</td>
+      <td class="expected">All paths blocked. No notifications sent.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">integrations-10</td>
+      <td class="area">E2E</td>
+      <td class="case">Role-based access sweep</td>
+      <td class="steps">Log in as each role. Verify allowed modules accessible. Verify forbidden actions blocked.</td>
+      <td class="expected">TECH cannot delete customers. INSTALLER cannot manage enrollments. CSR can schedule.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<section class="module" id="golive">
+  <h2>21. Pre-Go-Live Checklist</h2>
+  <p class="intro">Final verification before handing the CRM to your team for daily use.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Area</th>
+        <th>Test case</th>
+        <th>Steps</th>
+        <th>Expected result</th>
+        <th>Pass</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+    <tr>
+      <td class="id">golive-01</td>
+      <td class="area">Env</td>
+      <td class="case">Production environment variables</td>
+      <td class="steps">Verify all required env vars set: DATABASE_URL, NEXTAUTH_SECRET, STRIPE keys, TWILIO, SENDGRID, GOOGLE_OAUTH, SLACK_BOT_TOKEN, BLOB, OPENAI (optional).</td>
+      <td class="expected">No 503 errors on integration pages. Health checks pass.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-02</td>
+      <td class="area">Twilio</td>
+      <td class="case">Twilio webhooks registered</td>
+      <td class="steps">Settings → Inbox → Register webhooks. Verify in Twilio console.</td>
+      <td class="expected">Inbound SMS and voice route to CRM.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-03</td>
+      <td class="area">Stripe</td>
+      <td class="case">Stripe webhooks configured</td>
+      <td class="steps">Verify Stripe webhook endpoint points to /api/stripe/webhook.</td>
+      <td class="expected">Payment confirmations process automatically.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-04</td>
+      <td class="area">Google</td>
+      <td class="case">Google OAuth redirect URIs</td>
+      <td class="steps">Verify all callback URIs registered in Google Cloud Console.</td>
+      <td class="expected">GBP, Ads, Search Console OAuth flows complete without error.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-05</td>
+      <td class="area">Meta</td>
+      <td class="case">Meta webhooks verified</td>
+      <td class="steps">Settings → Meta webhooks. Verify webhook in Meta developer console.</td>
+      <td class="expected">Social DMs and post insights flow in.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-06</td>
+      <td class="area">Areas</td>
+      <td class="case">Service areas cover all ZIPs</td>
+      <td class="steps">Review service area ZIP lists match your actual service territory.</td>
+      <td class="expected">Booking and scheduling accept valid ZIPs only.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-07</td>
+      <td class="area">Price book</td>
+      <td class="case">Price book populated</td>
+      <td class="steps">Import or manually enter all services and materials used in the field.</td>
+      <td class="expected">Techs can add line items from complete catalog.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-08</td>
+      <td class="area">Checklists</td>
+      <td class="case">Checklists configured</td>
+      <td class="steps">Create and activate checklists for SERVICE and INSTALL divisions.</td>
+      <td class="expected">Visits auto-receive correct checklists.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-09</td>
+      <td class="area">Communications</td>
+      <td class="case">Communication templates reviewed</td>
+      <td class="steps">Review all 12 notification templates. Send test for each channel.</td>
+      <td class="expected">Messages professional and merge fields correct.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-10</td>
+      <td class="area">Employees</td>
+      <td class="case">Employee accounts created</td>
+      <td class="steps">Create accounts for all team members with correct roles.</td>
+      <td class="expected">Each person can log in and sees appropriate modules.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-11</td>
+      <td class="area">Portal</td>
+      <td class="case">Customer portal tested</td>
+      <td class="steps">Send portal link to test customer. Walk through all enabled features.</td>
+      <td class="expected">Portal works on mobile and desktop.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-12</td>
+      <td class="area">Booking</td>
+      <td class="case">Online booking tested</td>
+      <td class="steps">Complete test booking from public URL on mobile.</td>
+      <td class="expected">Booking works end-to-end.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr>
+    <tr>
+      <td class="id">golive-13</td>
+      <td class="area">Ops</td>
+      <td class="case">Backup and rollback plan</td>
+      <td class="steps">Document database backup procedure. Test restore in staging.</td>
+      <td class="expected">Can recover from bad data entry or migration mistake.</td>
+      <td class="status">☐</td>
+      <td class="notes"></td>
+    </tr></tbody>
+  </table>
+</section>
+
+<div style="page-break-before:always; padding-top:1in; text-align:center; color:#64748b; font-size:9pt;">
+  <p>End of Storm Sprinklers CRM Pre-Launch Test Plan</p>
+  <p>Generated 2026-07-07</p>
+</div>
+
+</body>
+</html>

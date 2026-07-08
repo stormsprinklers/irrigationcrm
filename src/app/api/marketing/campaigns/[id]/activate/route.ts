@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { activateDripCampaign } from "@/lib/marketing/send";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -21,6 +22,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     const result = await activateDripCampaign(id);
     return NextResponse.json(result);
   } catch (err) {
+    const commsDisabled = outboundCommsErrorResponse(err);
+    if (commsDisabled) return commsDisabled;
     const message = err instanceof Error ? err.message : "Activation failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

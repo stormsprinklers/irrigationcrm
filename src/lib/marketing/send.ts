@@ -9,6 +9,7 @@ import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { assertOutboundCommsEnabled, getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { buildCampaignStats } from "@/lib/marketing/stats";
@@ -175,6 +176,7 @@ async function sendToRecipient(
       ? bodyText
       : `${bodyText}\n\nReply STOP to opt out.`;
     const msg = await sendSms({
+      companyId: campaign.companyId,
       from: fromPhone,
       to: normalizePhone(phone),
       body,
@@ -202,6 +204,7 @@ async function sendToRecipient(
   const html = rewriteTrackedLinks(rawHtml, recipient.id);
 
   const response = await sendCompanyEmail(branding, {
+    companyId: campaign.companyId,
     to: [email],
     subject,
     text: bodyText,
@@ -227,6 +230,10 @@ export async function sendCampaignBatch(campaignId: string): Promise<{
     include: { company: true },
   });
   if (!campaign) throw new Error("Campaign not found");
+  await assertOutboundCommsEnabled(
+    campaign.companyId,
+    campaign.channel === CampaignChannel.SMS ? "sms" : "email"
+  );
   if (campaign.status === CampaignStatus.CANCELLED) {
     return { done: true, stats: buildCampaignStats([]) };
   }
@@ -313,6 +320,10 @@ export async function activateDripCampaign(campaignId: string) {
     include: { steps: { orderBy: { sortOrder: "asc" } } },
   });
   if (!campaign) throw new Error("Campaign not found");
+  await assertOutboundCommsEnabled(
+    campaign.companyId,
+    campaign.channel === CampaignChannel.SMS ? "sms" : "email"
+  );
   if (campaign.type !== CampaignType.DRIP) throw new Error("Not a drip campaign");
   if (campaign.steps.length === 0) throw new Error("Add at least one drip step");
 
@@ -374,9 +385,17 @@ export async function processDripSends() {
   });
 
   const sentCounts = new Map<string, { email: number; sms: number }>();
+  const freezeByCompany = new Map<string, boolean>();
 
   for (const enrollment of enrollments) {
     const campaign = enrollment.campaign;
+
+    let frozen = freezeByCompany.get(campaign.companyId);
+    if (frozen === undefined) {
+      frozen = (await getOutboundCommsState(campaign.companyId)).disabled;
+      freezeByCompany.set(campaign.companyId, frozen);
+    }
+    if (frozen) continue;
     const dripSettings = (campaign.dripSettings ?? {}) as DripSettings;
     const emailsPerDay = dripSettings.emailsPerDay ?? 50;
     const smsPerDay = dripSettings.smsPerDay ?? 50;

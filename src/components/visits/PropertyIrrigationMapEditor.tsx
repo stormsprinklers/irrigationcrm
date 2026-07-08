@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Save } from "lucide-react";
+import { Maximize2, Pencil, Plus, Save, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import {
   AerialZoneMapEditor,
   type MapMarkerEntry,
   type ZoneMapEntry,
 } from "@/components/customers/AerialZoneMapEditor";
+import { AerialCropDialog, type AerialCropRect } from "@/components/customers/AerialCropDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -86,8 +87,12 @@ export function PropertyIrrigationMapEditor({
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [aerialUrl, setAerialUrl] = useState<string | null>(aerialImageUrl ?? null);
+  const [diagramUrl, setDiagramUrl] = useState<string | null>(propertyDiagramUrl ?? null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropBusy, setCropBusy] = useState(false);
 
-  const mapImageUrl = blobProxyUrl(propertyDiagramUrl || aerialImageUrl);
+  const mapImageUrl = blobProxyUrl(diagramUrl || aerialUrl);
 
   const loadMap = useCallback(async () => {
     setLoading(true);
@@ -99,6 +104,8 @@ export function PropertyIrrigationMapEditor({
       const property = data?.property;
       if (!property) return;
 
+      setAerialUrl(property.aerialImageUrl ?? null);
+      setDiagramUrl(property.propertyDiagramUrl ?? null);
       setWaterSource(property.waterSource ?? "");
       setZones(
         (property.irrigationMapZones ?? []).map(
@@ -265,6 +272,30 @@ export function PropertyIrrigationMapEditor({
     }
   }
 
+  async function recaptureAerial(crop?: AerialCropRect) {
+    setCropBusy(true);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/properties/${propertyId}/irrigation-map/aerial`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(crop ? { crop } : {}),
+        }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? "Failed to update aerial image");
+        return;
+      }
+      setCropOpen(false);
+      await loadMap();
+      toast.success(crop ? "Zoomed in — zones realigned to the new image" : "Reset to full property view");
+    } finally {
+      setCropBusy(false);
+    }
+  }
+
   function handleMarkerPlace(type: IrrigationMapMarkerKind, point: ImagePoint) {
     const count = markers.filter((m) => m.type === type).length;
     setMarkers((prev) => [
@@ -326,6 +357,29 @@ export function PropertyIrrigationMapEditor({
         </div>
         {allowInlineEdit ? (
           <div className="flex gap-2">
+            {aerialUrl ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCropOpen(true)}
+                  disabled={cropBusy}
+                >
+                  <ZoomIn className="mr-1.5 h-3.5 w-3.5" />
+                  Zoom in
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void recaptureAerial()}
+                  disabled={cropBusy}
+                  title="Reset to the full property view"
+                >
+                  <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
+                  Reset
+                </Button>
+              </>
+            ) : null}
             {isEditing ? (
               <>
                 <Button size="sm" variant="outline" onClick={() => { setEditing(false); setMarkerPlacement(null); void loadMap(); }}>
@@ -500,6 +554,15 @@ export function PropertyIrrigationMapEditor({
           </>
         )}
       </div>
+
+      {cropOpen && aerialUrl ? (
+        <AerialCropDialog
+          imageUrl={blobProxyUrl(aerialUrl) ?? ""}
+          busy={cropBusy}
+          onApply={(crop) => void recaptureAerial(crop)}
+          onClose={() => setCropOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }

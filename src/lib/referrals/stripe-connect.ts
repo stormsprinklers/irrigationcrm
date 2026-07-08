@@ -280,9 +280,16 @@ async function notifyReferrerReward(submissionId: string) {
   }).format(submission.reward.amountCents / 100);
 
   const { sendSms } = await import("@/lib/inbox/twilio");
-  await sendSms({
-    from: submission.company.twilioPhone,
-    to: submission.referrerCustomer.phone,
-    body: `Thanks for referring ${submission.referredName}! Your ${amount} referral reward is on the way.`,
-  });
+  const { OutboundCommsDisabledError } = await import("@/lib/communications/outbound-guard");
+  try {
+    await sendSms({
+      companyId: submission.company.id,
+      from: submission.company.twilioPhone,
+      to: submission.referrerCustomer.phone,
+      body: `Thanks for referring ${submission.referredName}! Your ${amount} referral reward is on the way.`,
+    });
+  } catch (error) {
+    if (error instanceof OutboundCommsDisabledError) return;
+    throw error;
+  }
 }

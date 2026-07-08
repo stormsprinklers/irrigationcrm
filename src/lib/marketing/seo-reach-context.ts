@@ -1,5 +1,6 @@
 import { getSearchConsoleDashboard } from "@/lib/google-search-console/client";
 import { getWebsiteAnalyticsReport } from "@/lib/marketing/website-analytics";
+import { fetchSitemapPages, sitemapPathsForPrompt } from "@/lib/marketing/sitemap-pages";
 import type { SeoReachContext } from "@/lib/marketing/seo-task-types";
 import { prisma } from "@/lib/prisma";
 
@@ -85,8 +86,10 @@ export async function buildSeoReachContext(companyId: string): Promise<SeoReachC
   }
 
   let searchConsole: SeoReachContext["searchConsole"] = null;
+  let gscSitemapPaths: string[] = [];
   try {
     const gsc = await getSearchConsoleDashboard(companyId, GSC_DAYS);
+    gscSitemapPaths = gsc.sitemaps.map((row) => row.path).filter(Boolean);
     searchConsole = {
       days: GSC_DAYS,
       clicks: gsc.overview.clicks,
@@ -110,9 +113,28 @@ export async function buildSeoReachContext(companyId: string): Promise<SeoReachC
     searchConsole = null;
   }
 
+  const websiteUrl = company?.organicSearchWebsiteUrl ?? company?.website ?? null;
+  let currentSitemap: SeoReachContext["currentSitemap"] = null;
+  try {
+    const snapshot = await fetchSitemapPages({
+      websiteUrl,
+      sitemapPaths: gscSitemapPaths,
+    });
+    if (snapshot) {
+      currentSitemap = {
+        sourceUrl: snapshot.sourceUrl,
+        paths: sitemapPathsForPrompt(snapshot),
+        totalCount: snapshot.totalCount,
+        truncated: snapshot.truncated,
+      };
+    }
+  } catch {
+    currentSitemap = null;
+  }
+
   return {
     companyName: company?.name ?? "Company",
-    websiteUrl: company?.organicSearchWebsiteUrl ?? company?.website ?? null,
+    websiteUrl,
     organicKeywords: organicKeywords.map((row) => row.keyword),
     targetCities: cities.map((city) => city.name),
     organicRankings,
@@ -127,5 +149,6 @@ export async function buildSeoReachContext(companyId: string): Promise<SeoReachC
       category: task.category,
       completedAt: task.completedAt?.toISOString() ?? null,
     })),
+    currentSitemap,
   };
 }

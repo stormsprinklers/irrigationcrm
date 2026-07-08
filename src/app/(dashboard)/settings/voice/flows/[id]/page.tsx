@@ -29,15 +29,27 @@ type CallFlow = {
 
 type AgentGroup = { id: string; name: string };
 type VoiceClip = { id: string; name: string };
+type CompanyUser = { id: string; name: string };
 
 const NODE_TYPES = [
   "DIAL_GROUP",
+  "DIAL_USER",
   "IVR",
   "QUEUE",
   "FORWARD",
   "VOICEMAIL",
   "HANGUP",
 ] as const;
+
+const NODE_TYPE_LABELS: Record<(typeof NODE_TYPES)[number], string> = {
+  DIAL_GROUP: "Dial group",
+  DIAL_USER: "Ring a person's app",
+  IVR: "IVR menu",
+  QUEUE: "Queue",
+  FORWARD: "Forward",
+  VOICEMAIL: "Voicemail",
+  HANGUP: "Hang up",
+};
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
@@ -53,6 +65,8 @@ function defaultConfig(type: string): Record<string, unknown> {
       return { forwardTo: "" };
     case "DIAL_GROUP":
       return { groupId: "" };
+    case "DIAL_USER":
+      return { userId: "", timeoutSec: 30 };
     default:
       return {};
   }
@@ -66,6 +80,7 @@ export default function FlowEditorPage() {
   const [flow, setFlow] = useState<CallFlow | null>(null);
   const [groups, setGroups] = useState<AgentGroup[]>([]);
   const [clips, setClips] = useState<VoiceClip[]>([]);
+  const [users, setUsers] = useState<CompanyUser[]>([]);
   const [saving, setSaving] = useState(false);
 
   function load() {
@@ -73,12 +88,18 @@ export default function FlowEditorPage() {
       fetch(`/api/settings/voice/flows/${flowId}`).then((r) => r.json()),
       fetch("/api/settings/voice/groups").then((r) => r.json()),
       fetch("/api/settings/voice/clips").then((r) => r.json()),
+      fetch("/api/settings/employees?status=ACTIVE").then((r) => r.json()),
     ])
-      .then(([fl, gr, cl]) => {
+      .then(([fl, gr, cl, us]) => {
         if (fl.error) throw new Error(fl.error);
         setFlow(fl);
         setGroups(gr);
         setClips(cl);
+        setUsers(
+          Array.isArray(us)
+            ? us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))
+            : []
+        );
       })
       .catch(() => toast.error("Failed to load flow"));
   }
@@ -230,7 +251,7 @@ export default function FlowEditorPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         {NODE_TYPES.map((t) => (
           <Button key={t} type="button" variant="outline" size="sm" onClick={() => addNode(t)}>
-            + {t.replace("_", " ")}
+            + {NODE_TYPE_LABELS[t]}
           </Button>
         ))}
       </div>
@@ -240,7 +261,7 @@ export default function FlowEditorPage() {
           <div key={node.id ?? index} className="rounded-lg border border-border bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="font-medium">
-                #{index + 1} {node.type}
+                #{index + 1} {NODE_TYPE_LABELS[node.type as (typeof NODE_TYPES)[number]] ?? node.type}
               </span>
               <Button type="button" variant="ghost" size="sm" onClick={() => removeNode(index)}>
                 Remove
@@ -259,7 +280,7 @@ export default function FlowEditorPage() {
             >
               {NODE_TYPES.map((t) => (
                 <option key={t} value={t}>
-                  {t.replace("_", " ")}
+                  {NODE_TYPE_LABELS[t]}
                 </option>
               ))}
             </select>
@@ -279,6 +300,47 @@ export default function FlowEditorPage() {
                   </option>
                 ))}
               </select>
+            )}
+
+            {node.type === "DIAL_USER" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Ring this person</label>
+                  <select
+                    className={selectClass}
+                    value={String(node.config.userId ?? "")}
+                    onChange={(e) =>
+                      updateNodeConfig(index, { ...node.config, userId: e.target.value })
+                    }
+                  >
+                    <option value="">Select a person…</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Rings their web softphone and their iOS app (including a push notification
+                    when the app is closed, if notifications are enabled).
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Ring timeout (seconds)</label>
+                  <Input
+                    type="number"
+                    min={10}
+                    max={120}
+                    value={Number(node.config.timeoutSec ?? 30)}
+                    onChange={(e) =>
+                      updateNodeConfig(index, {
+                        ...node.config,
+                        timeoutSec: Number(e.target.value) || 30,
+                      })
+                    }
+                  />
+                </div>
+              </div>
             )}
 
             {node.type === "FORWARD" && (

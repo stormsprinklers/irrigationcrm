@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { CampaignStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { sendCampaign } from "@/lib/campaigns/send";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -29,6 +30,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    const commsDisabled = outboundCommsErrorResponse(error);
+    if (commsDisabled) return commsDisabled;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Send failed" },
       { status: 500 }

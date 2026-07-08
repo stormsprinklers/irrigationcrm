@@ -38,6 +38,9 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await sendCompanyEmail(branding, {
+      companyId: user.companyId,
+      // Admin diagnostic — allowed even while outbound comms are frozen.
+      bypassCommsFreeze: true,
       to: [to],
       subject: `${branding.companyName} — test email`,
       text: `This is a test email from ${branding.companyName}. If you received this, outbound email is configured correctly.`,

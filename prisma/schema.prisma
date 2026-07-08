@@ -356,6 +356,7 @@ enum TransferType {
 
 enum CallFlowNodeType {
   DIAL_GROUP
+  DIAL_USER
   IVR
   QUEUE
   FORWARD
@@ -512,6 +513,10 @@ model Company {
   slackGbpReviewsEnabled       Boolean  @default(false)
   slackGbpReviewsChannelId     String?
   slackGbpReviewsBootstrapped  Boolean  @default(false)
+  outboundCommsDisabled        Boolean  @default(false)
+  outboundCommsDisabledReason  String?
+  outboundCommsDisabledAt      DateTime?
+  outboundCommsDisabledById    String?
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
@@ -890,6 +895,9 @@ model CustomerProperty {
   longitude  Float?
   mapBounds  Json?
   aerialImageUrl    String?
+  aerialCenterLat   Float?
+  aerialCenterLng   Float?
+  aerialZoom        Int?
   stylizedImageUrl  String?
   irrigationZoneCount     Int?
   shutoffValveLocation    String?

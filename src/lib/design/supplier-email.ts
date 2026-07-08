@@ -33,6 +33,7 @@ export async function sendSupplierPartsList(estimateId: string) {
   };
 
   await sendCompanyEmail(branding, {
+    companyId: estimate.companyId,
     to: [estimate.company.supplierEmail],
     subject: `Parts list — ${estimate.customer.name}`,
     text: body,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { sendCampaign } from "@/lib/marketing/send";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -21,6 +22,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     const stats = await sendCampaign(id);
     return NextResponse.json({ stats });
   } catch (err) {
+    const commsDisabled = outboundCommsErrorResponse(err);
+    if (commsDisabled) return commsDisabled;
     const message = err instanceof Error ? err.message : "Send failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

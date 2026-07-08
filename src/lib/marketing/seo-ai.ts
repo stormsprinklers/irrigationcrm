@@ -102,6 +102,7 @@ Rules:
 - Be SPECIFIC. Bad: "write blog posts", "get backlinks", "improve meta tags".
 - Good: "Write a guide titled 'How to Winterize Your Sprinkler System in Utah County'", "Email Utah Valley Homebuilders Association offering a free spring startup checklist in exchange for a resource page link".
 - Tie each tip to the company's actual keywords, cities, ranking gaps, Search Console queries, or weak pages when data is available.
+- Use currentSitemap.paths (when provided) as the authoritative list of pages that already exist on the site. Do NOT recommend creating new pages or URLs that duplicate or closely overlap paths already in the sitemap. Instead suggest improvements to existing pages, net-new pages for gaps (cities, services, guides not listed), or off-site work (backlinks, GBP, etc.).
 - If organic ranking data shows competitors outranking them, reference those competitors or gaps.
 - Do NOT repeat or closely mirror tasks in existingOpenTasks (still on the checklist) or existingCompletedTasks (already checked off). Treat completed tasks as done — suggest NEW opportunities instead.
 - If many tasks are already completed, focus on gaps not covered by that history.

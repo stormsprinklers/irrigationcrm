@@ -41,6 +41,7 @@ export type PartsRunOption = {
   supplierId: string;
   name: string;
   address: string;
+  city: string | null;
   phone: string | null;
   weekdayHours: string[];
   isOpenNow: boolean;

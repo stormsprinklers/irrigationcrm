@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse, badRequestResponse } from "@/lib/api-auth";
 import { getCompanyByPortalSlug, resolvePortalSlug } from "@/lib/portal/company";
 import { requestPortalLoginLink } from "@/lib/portal/login";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -53,9 +54,12 @@ export async function POST(_request: Request, { params }: Params) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    const commsDisabled = outboundCommsErrorResponse(err);
+    if (commsDisabled) return commsDisabled;
     if (err instanceof Error && err.message.includes("Too many")) {
       return NextResponse.json({ error: err.message }, { status: 429 });
     }
-    return unauthorizedResponse();
+    const message = err instanceof Error ? err.message : "Failed to send portal link";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

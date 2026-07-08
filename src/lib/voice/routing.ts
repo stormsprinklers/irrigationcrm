@@ -12,6 +12,7 @@ import { normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
+import { getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { renderIvrGather, renderIvrNode, type FlowContext } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
@@ -197,7 +198,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
   const dial = response.dial(
     inboundDialAttributes(company, {
       timeout: 30,
-      action: `${appBaseUrl()}/api/twilio/voice/queue?companyId=${company.id}`,
+      action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${company.id}`,
       method: "POST",
       callerId: from,
     })
@@ -237,10 +238,20 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
     return response.toString();
   }
 
+  const freeze = await getOutboundCommsState(companyId);
+  if (freeze.disabled) {
+    response.say(
+      "Outbound calling is currently disabled by your administrator. This call cannot be placed."
+    );
+    return response.toString();
+  }
+
   const normalizedTo = normalizePhone(to);
   const statusUrl = `${appBaseUrl()}/api/twilio/voice/status`;
   const dial = response.dial({
     callerId,
+    action: `${appBaseUrl()}/api/twilio/voice/dial-complete`,
+    method: "POST",
     record: company.recordCalls ? "record-from-answer-dual" : undefined,
     recordingStatusCallback: company.recordCalls
       ? `${appBaseUrl()}/api/twilio/voice/recording`

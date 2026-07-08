@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AerialZoneMapEditor } from "@/components/customers/AerialZoneMapEditor";
+import { AerialCropDialog, type AerialCropRect } from "@/components/customers/AerialCropDialog";
 import {
   IRRIGATION_TYPES,
   SHADE_LEVELS,
@@ -89,14 +90,19 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [activeZoneIndex, setActiveZoneIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [capturingAerial, setCapturingAerial] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropBusy, setCropBusy] = useState(false);
   const [propertyLoaded, setPropertyLoaded] = useState(false);
   const [importingDesign, setImportingDesign] = useState(false);
   const autoCaptureAttempted = useRef(false);
 
-  useEffect(() => {
-    fetch(`/api/customers/${customerId}/properties/${propertyId}/irrigation-map`)
-      .then((r) => r.json())
-      .then((data) => {
+  const loadProperty = useCallback(
+    async (options: { keepStep?: boolean } = {}) => {
+      try {
+        const res = await fetch(
+          `/api/customers/${customerId}/properties/${propertyId}/irrigation-map`
+        );
+        const data = await res.json();
         const p = data.property;
         if (!p) return;
         setAddressQuery(
@@ -112,7 +118,9 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         setShutoffValveLocation(p.shutoffValveLocation ?? "");
         setControllerLocation(p.controllerLocation ?? "");
         setWaterSource(p.waterSource ?? "");
-        setStep(Math.min(p.irrigationWizardStep ?? 1, MAX_STEP));
+        if (!options.keepStep) {
+          setStep(Math.min(p.irrigationWizardStep ?? 1, MAX_STEP));
+        }
 
         if (p.irrigationMapZones?.length) {
           const loaded = p.irrigationMapZones.map(
@@ -131,10 +139,18 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         } else if (p.irrigationZoneCount) {
           setZones(zonesForCount(p.irrigationZoneCount, []));
         }
-      })
-      .catch(() => {})
-      .finally(() => setPropertyLoaded(true));
-  }, [customerId, propertyId]);
+      } catch {
+        // ignore
+      } finally {
+        setPropertyLoaded(true);
+      }
+    },
+    [customerId, propertyId]
+  );
+
+  useEffect(() => {
+    void loadProperty();
+  }, [loadProperty]);
 
   const captureAerial = useCallback(async () => {
     if (!addressQuery.trim()) {
@@ -167,6 +183,35 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     autoCaptureAttempted.current = true;
     void captureAerial();
   }, [propertyLoaded, aerialImageUrl, addressQuery, captureAerial]);
+
+  const cropAerial = useCallback(
+    async (crop: AerialCropRect) => {
+      setCropBusy(true);
+      try {
+        const res = await fetch(
+          `/api/customers/${customerId}/properties/${propertyId}/irrigation-map/aerial`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ crop }),
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error ?? "Failed to zoom into the selected area");
+        }
+        setCropOpen(false);
+        // Server remapped any drawn zones to the new image — reload them.
+        await loadProperty({ keepStep: true });
+        toast.success("Zoomed in — the map is now centered on your selection");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to zoom in");
+      } finally {
+        setCropBusy(false);
+      }
+    },
+    [customerId, propertyId, loadProperty]
+  );
 
   async function importFromDesign() {
     setImportingDesign(true);
@@ -332,21 +377,42 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-sm font-medium">Aerial satellite image</label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void captureAerial()}
-                  disabled={capturingAerial || !addressQuery.trim()}
-                >
-                  {capturingAerial ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  {capturingAerial ? "Capturing..." : aerialImageUrl ? "Refresh" : "Capture"}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {aerialImageUrl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCropOpen(true)}
+                      disabled={capturingAerial || cropBusy}
+                    >
+                      <ZoomIn className="mr-1.5 h-3.5 w-3.5" />
+                      Zoom in
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void captureAerial()}
+                    disabled={capturingAerial || cropBusy || !addressQuery.trim()}
+                  >
+                    {capturingAerial ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {capturingAerial ? "Capturing..." : aerialImageUrl ? "Refresh" : "Capture"}
+                  </Button>
+                </div>
               </div>
+              {aerialImageUrl ? (
+                <p className="text-xs text-muted-foreground">
+                  Use <span className="font-medium">Zoom in</span> to crop to the yard for a
+                  closer, sharper image. <span className="font-medium">Refresh</span> resets to the
+                  full property view.
+                </p>
+              ) : null}
               {capturingAerial && !aerialImageUrl ? (
                 <div className="flex h-48 items-center justify-center rounded-md border border-dashed bg-muted/30 text-sm text-muted-foreground">
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -649,6 +715,15 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           </Button>
         </div>
       </CardContent>
+
+      {cropOpen && aerialDisplayUrl ? (
+        <AerialCropDialog
+          imageUrl={aerialDisplayUrl}
+          busy={cropBusy}
+          onApply={(crop) => void cropAerial(crop)}
+          onClose={() => setCropOpen(false)}
+        />
+      ) : null}
     </Card>
   );
 }

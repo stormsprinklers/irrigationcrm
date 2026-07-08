@@ -16,6 +16,7 @@ import {
 } from "@/lib/notifications/templates";
 import type { CompanySettingsDTO } from "@/lib/company/types";
 import { ReviewLinkTrackingPanel } from "@/components/settings/ReviewLinkTrackingPanel";
+import { OutboundCommsFreezePanel } from "@/components/settings/OutboundCommsFreezePanel";
 import { toast } from "sonner";
 
 type Template = {
@@ -234,6 +235,10 @@ export default function SettingsNotificationsPage() {
           </div>
         }
       />
+
+      <div className="mb-4">
+        <OutboundCommsFreezePanel />
+      </div>
 
       <p className="mb-4 text-sm text-muted-foreground">
         Customers marked Do Not Service are excluded from all automated messages.

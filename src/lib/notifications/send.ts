@@ -4,6 +4,7 @@ import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
+import { getOutboundCommsState, DEFAULT_OUTBOUND_FREEZE_REASON } from "@/lib/communications/outbound-guard";
 import { assertCustomerCanReceiveNotifications } from "./guard";
 import { technicianPhotoMediaUrl } from "./technician-photo";
 import {
@@ -88,6 +89,13 @@ export async function sendOperationalNotification(params: {
 }): Promise<SendResult> {
   const result: SendResult = { emailSent: false, smsSent: false, skipped: [], deliveryIds: [] };
   const options = params.options ?? {};
+
+  const freeze = await getOutboundCommsState(params.companyId);
+  if (freeze.disabled) {
+    const detail = freeze.reason?.trim() || DEFAULT_OUTBOUND_FREEZE_REASON;
+    result.skipped.push(`Outbound communications disabled: ${detail}`);
+    return result;
+  }
 
   const guard = await assertCustomerCanReceiveNotifications({
     companyId: params.companyId,
@@ -208,6 +216,7 @@ export async function sendOperationalNotification(params: {
           renderContext
         );
         await sendCompanyEmail(branding, {
+          companyId: params.companyId,
           to: [to],
           subject: injectTrackedUrlsInText(subject, urlMap),
           text: body,
@@ -235,6 +244,7 @@ export async function sendOperationalNotification(params: {
 
       try {
         await sendSms({
+          companyId: params.companyId,
           from: company.twilioPhone,
           to,
           body,
@@ -279,6 +289,7 @@ export async function sendOperationalNotification(params: {
       if (!to || !company.twilioPhone) continue;
       try {
         await sendSms({
+          companyId: params.companyId,
           from: company.twilioPhone,
           to,
           body,

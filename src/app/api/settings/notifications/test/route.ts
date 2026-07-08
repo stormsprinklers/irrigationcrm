@@ -52,6 +52,12 @@ export async function POST() {
     });
 
     if (!result.emailSent && !result.smsSent) {
+      const freezeReason = result.skipped.find((s) =>
+        s.startsWith("Outbound communications disabled:")
+      );
+      if (freezeReason) {
+        return NextResponse.json({ error: freezeReason }, { status: 403 });
+      }
       return NextResponse.json(
         { error: "No channels available", skipped: result.skipped },
         { status: 503 }

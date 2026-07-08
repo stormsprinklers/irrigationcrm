@@ -78,6 +78,7 @@ export async function requestPortalLoginLink(params: {
         emailLogoUrl: params.emailLogoUrl,
       },
       {
+        companyId: params.companyId,
         to: [email],
         subject: `Sign in to ${params.companyName}`,
         text: `Hi ${customer.name},\n\nClick the link below to sign in to your customer portal. This link expires in 15 minutes.\n\n${loginUrl}\n\n— ${params.companyName}`,

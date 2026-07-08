@@ -68,15 +68,19 @@ export function WebsiteLeadsInbox() {
     if (!items.length) return;
 
     if (emailId) {
+      // Already showing this email — don't re-select (list refreshes recreate
+      // item references, which would otherwise loop back into the detail fetch).
+      if (selected?.channel === "email" && selected.id === emailId) return;
       const match = items.find((item) => item.channel === "email" && item.id === emailId);
       if (match) setSelected(match);
     } else if (conversationId) {
+      if (selected?.channel === "sms" && selected.conversationId === conversationId) return;
       const match = items.find(
         (item) => item.channel === "sms" && item.conversationId === conversationId
       );
       if (match) setSelected(match);
     }
-  }, [searchParams, items]);
+  }, [searchParams, items, selected]);
 
   useEffect(() => {
     if (!selected) {
@@ -92,11 +96,15 @@ export function WebsiteLeadsInbox() {
         .then((data) => {
           setEmailDetail(data);
           setSmsBody(null);
-          setItems((current) =>
-            current.map((item) =>
+          setItems((current) => {
+            const target = current.find((item) => item.id === selected.id);
+            // Keep the same array reference when nothing changes so dependent
+            // effects (URL-based selection) don't re-run and loop.
+            if (!target || target.isRead) return current;
+            return current.map((item) =>
               item.id === selected.id ? { ...item, isRead: true } : item
-            )
-          );
+            );
+          });
         })
         .catch(() => toast.error("Failed to load form submission"))
         .finally(() => setLoadingDetail(false));

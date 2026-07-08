@@ -1,4 +1,5 @@
 import { getDefaultFromEmail, sendEmail, type SendEmailResult } from "@/lib/inbox/email";
+import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
 
 export type EmailBranding = {
   companyName: string;
@@ -62,6 +63,8 @@ function escapeHtml(value: string) {
 export async function sendCompanyEmail(
   branding: EmailBranding,
   params: {
+    /** Company sending the email — required so the outbound-comms freeze can be enforced. */
+    companyId: string;
     to: string[];
     subject: string;
     text?: string;
@@ -73,8 +76,13 @@ export async function sendCompanyEmail(
       contentType: string;
       content: string;
     }>;
+    /** Skip the outbound-comms freeze (admin diagnostics only). */
+    bypassCommsFreeze?: boolean;
   }
 ): Promise<SendEmailResult> {
+  if (!params.bypassCommsFreeze) {
+    await assertOutboundCommsEnabled(params.companyId, "email");
+  }
   const from =
     (params.fromOverride ? formatEmailFromAddress(parseEmailAddress(params.fromOverride).address, resolveSenderDisplayName(branding)) : null) ??
     resolveFromAddress(branding);

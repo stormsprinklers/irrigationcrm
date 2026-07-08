@@ -60,6 +60,7 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
     if (!user.email) continue;
     try {
         await sendCompanyEmail(branding, {
+          companyId,
           to: [user.email],
           subject,
           text: body,

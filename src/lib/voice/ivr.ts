@@ -17,6 +17,10 @@ export type IvrNodeConfig = {
   promptClipId?: string;
   forwardTo?: string;
   groupId?: string;
+  /** Ring a specific user's apps (web softphone + iOS app via VoIP push). */
+  userId?: string;
+  /** Ring timeout in seconds before falling through (DIAL_GROUP / DIAL_USER). */
+  timeoutSec?: number;
   options?: Array<{ digit: string; nextNodeId?: string; label?: string }>;
   timeoutNodeId?: string;
   invalidNodeId?: string;
@@ -166,7 +170,7 @@ export async function renderIvrNode(
       const dial = response.dial(
         inboundDialAttributes(ctx.recordCalls, {
           timeout: group?.ringTimeoutSec ?? 30,
-          action: `${appBaseUrl()}/api/twilio/voice/queue?companyId=${ctx.companyId}`,
+          action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${ctx.companyId}`,
           method: "POST",
           callerId: ctx.from,
         })
@@ -184,6 +188,34 @@ export async function renderIvrNode(
           response.say("No agents are available. Please try again later.");
         }
       }
+      break;
+    }
+
+    case CallFlowNodeType.DIAL_USER: {
+      const targetUser = config.userId
+        ? await prisma.user.findFirst({
+            where: { id: config.userId, companyId: ctx.companyId },
+            select: { id: true },
+          })
+        : null;
+
+      if (!targetUser) {
+        response.say("The person you are trying to reach is not available.");
+        break;
+      }
+
+      const dial = response.dial(
+        inboundDialAttributes(ctx.recordCalls, {
+          timeout: config.timeoutSec ?? 30,
+          action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${ctx.companyId}`,
+          method: "POST",
+          callerId: ctx.from,
+        })
+      );
+
+      // Rings every endpoint registered under this identity: the web softphone
+      // and the user's iOS app (via VoIP push, even when the app is closed).
+      dial.client({}, voiceClientIdentity(ctx.companyId, targetUser.id));
       break;
     }
 

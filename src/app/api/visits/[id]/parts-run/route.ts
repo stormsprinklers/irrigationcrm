@@ -51,10 +51,24 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const visit = await getVisitForCompany(user.companyId, id);
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const origin = await resolvePropertyOrigin(visit);
+    // Prefer the technician's live GPS (passed by the mobile app) so we rank the
+    // suppliers nearest to where they actually are, falling back to the job site.
+    const { searchParams } = request.nextUrl;
+    const latParam = Number(searchParams.get("originLat"));
+    const lngParam = Number(searchParams.get("originLng"));
+    const hasUserOrigin =
+      Number.isFinite(latParam) &&
+      Number.isFinite(lngParam) &&
+      Math.abs(latParam) <= 90 &&
+      Math.abs(lngParam) <= 180 &&
+      !(latParam === 0 && lngParam === 0);
+
+    const origin = hasUserOrigin
+      ? { lat: latParam, lng: lngParam }
+      : await resolvePropertyOrigin(visit);
 
     if (!origin) {
-      return badRequestResponse("Could not determine property location for routing");
+      return badRequestResponse("Could not determine a location for routing");
     }
 
     const [suppliers, company] = await Promise.all([
@@ -71,6 +85,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     if (!suppliers.length) {
       return NextResponse.json({
         options: [],
+        usedUserLocation: hasUserOrigin,
         message: "No parts suppliers configured. Add suppliers in Settings → Parts Run.",
       });
     }
@@ -80,15 +95,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
       originLat: origin.lat,
       originLng: origin.lng,
       timezone: company?.timezone ?? "America/Denver",
-      limit: 2,
+      limit: 6,
+      includeClosed: true,
     });
 
     return NextResponse.json({
       options,
-      closedCount: suppliers.length - options.length,
+      usedUserLocation: hasUserOrigin,
       message:
         options.length === 0
-          ? "No configured suppliers are open right now. Call a supplier to check hours."
+          ? "No parts suppliers with a saved location are available. Add or update suppliers in Settings → Parts Run."
           : null,
     });
   } catch {

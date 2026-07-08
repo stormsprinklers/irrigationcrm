@@ -8,6 +8,7 @@ function formatCurrency(value: number) {
 }
 
 type InvoiceNotifyParams = {
+  companyId: string;
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
@@ -54,6 +55,7 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
   if (params.customerEmail && isEmailConfigured() && resolveFromAddress(branding)) {
     try {
       await sendCompanyEmail(branding, {
+        companyId: params.companyId,
         to: [params.customerEmail],
         subject,
         text: `Hi ${params.customerName},\n\n${intro}\n\nPay online: ${payUrl}\n\n— ${params.companyName}`,
@@ -68,6 +70,7 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
   if (params.customerPhone && params.twilioPhone && process.env.TWILIO_ACCOUNT_SID) {
     try {
       await sendSms({
+        companyId: params.companyId,
         from: params.twilioPhone,
         to: params.customerPhone,
         body: smsBody,
@@ -82,6 +85,7 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
 }
 
 type InvoiceReceiptParams = {
+  companyId: string;
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
@@ -115,6 +119,7 @@ export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
   if (params.customerEmail && isEmailConfigured() && resolveFromAddress(branding)) {
     try {
       await sendCompanyEmail(branding, {
+        companyId: params.companyId,
         to: [params.customerEmail],
         subject,
         text: `Hi ${params.customerName},\n\n${intro}\n\nView your invoice: ${payUrl}\n\n— ${params.companyName}`,
@@ -129,6 +134,7 @@ export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
   if (params.customerPhone && params.twilioPhone && process.env.TWILIO_ACCOUNT_SID) {
     try {
       await sendSms({
+        companyId: params.companyId,
         from: params.twilioPhone,
         to: params.customerPhone,
         body: `Payment received for invoice ${params.invoiceNumber}: ${amountFormatted}. View receipt: ${payUrl}`,

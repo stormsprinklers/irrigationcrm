@@ -4,6 +4,7 @@ type UploadBody = Blob | File | Buffer | ArrayBuffer | ReadableStream | string;
 
 type UploadOptions = {
   contentType?: string;
+  addRandomSuffix?: boolean;
 };
 
 export function getBlobToken() {
@@ -29,7 +30,7 @@ export async function uploadPrivateBlob(
     access: "private",
     token: getBlobToken(),
     contentType: options.contentType,
-    addRandomSuffix: false,
+    addRandomSuffix: options.addRandomSuffix ?? false,
   });
 }
 

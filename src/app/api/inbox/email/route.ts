@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import {
   EMAIL_ATTACHMENT_MAX_TOTAL_BYTES,
   fetchBlobAsBase64,
@@ -196,6 +197,7 @@ export async function POST(request: NextRequest) {
       };
 
       await sendCompanyEmail(branding, {
+        companyId: user.companyId,
         to: toEmails,
         subject,
         text,
@@ -229,6 +231,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(withAttachments);
   } catch (error) {
+    const commsDisabled = outboundCommsErrorResponse(error);
+    if (commsDisabled) return commsDisabled;
     console.error(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to send email" },

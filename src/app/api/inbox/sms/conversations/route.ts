@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
@@ -74,6 +75,7 @@ async function sendSmsMessage(params: {
   }
 
   const twilioMessage = await sendSms({
+    companyId: params.user.companyId,
     from: company.twilioPhone,
     to: normalizedTo,
     body: params.messageBody,
@@ -185,6 +187,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    const commsDisabled = outboundCommsErrorResponse(error);
+    if (commsDisabled) return commsDisabled;
     console.error(error);
     const message = error instanceof Error ? error.message : "Failed to send SMS";
     if (message === "Contact is blocked") return forbiddenResponse(message);

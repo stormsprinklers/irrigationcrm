@@ -4,6 +4,7 @@ import { requireSessionUser, unauthorizedResponse, badRequestResponse } from "@/
 import { initiateOutboundCall } from "@/lib/inbox/twilio";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
+import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     const twimlUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/voice/twiml?to=${encodeURIComponent(normalizedTo)}`;
 
     const call = await initiateOutboundCall({
+      companyId: user.companyId,
       from: callerId,
       to: normalizedTo,
       url: twimlUrl,
@@ -54,6 +56,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ call, callLog });
   } catch (error) {
+    const commsDisabled = outboundCommsErrorResponse(error);
+    if (commsDisabled) return commsDisabled;
     console.error(error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to initiate call" },

@@ -9,30 +9,39 @@ export async function rankSuppliersForPartsRun(params: {
   originLng: number;
   timezone: string;
   limit?: number;
+  /** Include suppliers that are closed right now (ranked after open ones). */
+  includeClosed?: boolean;
 }): Promise<PartsRunOption[]> {
-  const { suppliers, originLat, originLng, timezone, limit = 2 } = params;
+  const {
+    suppliers,
+    originLat,
+    originLng,
+    timezone,
+    limit = 2,
+    includeClosed = false,
+  } = params;
 
   const withCoords = suppliers.filter(
     (s) => s.isActive && s.latitude != null && s.longitude != null
   );
 
-  const openSuppliers = withCoords.filter((s) =>
-    isSupplierOpenNow(s.hoursJson, s.timezone ?? timezone)
-  );
+  const candidates = includeClosed
+    ? withCoords
+    : withCoords.filter((s) => isSupplierOpenNow(s.hoursJson, s.timezone ?? timezone));
 
-  if (!openSuppliers.length) return [];
+  if (!candidates.length) return [];
 
   const driveTimes = await computeDriveTimes({
     originLat,
     originLng,
-    destinations: openSuppliers.map((s) => ({
+    destinations: candidates.map((s) => ({
       id: s.id,
       lat: s.latitude!,
       lng: s.longitude!,
     })),
   });
 
-  const ranked = openSuppliers
+  const ranked = candidates
     .map((supplier) => {
       const drive = driveTimes.get(supplier.id);
       const address =
@@ -47,15 +56,18 @@ export async function rankSuppliersForPartsRun(params: {
         supplierId: supplier.id,
         name: supplier.name,
         address,
+        city: supplier.city,
         phone: supplier.phone,
         weekdayHours: supplier.weekdayHours,
-        isOpenNow: true,
+        isOpenNow: isSupplierOpenNow(supplier.hoursJson, supplier.timezone ?? timezone),
         driveMinutes: drive?.durationMinutes ?? null,
         driveDistanceMiles: drive?.distanceMiles ?? null,
         mapsUrl: googleMapsDirectionsUrl(address),
       } satisfies PartsRunOption;
     })
     .sort((a, b) => {
+      // Open suppliers first, then closest by drive time.
+      if (a.isOpenNow !== b.isOpenNow) return a.isOpenNow ? -1 : 1;
       const aDrive = a.driveMinutes ?? Number.MAX_SAFE_INTEGER;
       const bDrive = b.driveMinutes ?? Number.MAX_SAFE_INTEGER;
       return aDrive - bDrive;

@@ -68,4 +68,11 @@ export type SeoReachContext = {
     category: string | null;
     completedAt: string | null;
   }>;
+  /** Live sitemap pages so AI does not suggest URLs that already exist. */
+  currentSitemap: {
+    sourceUrl: string;
+    paths: string[];
+    totalCount: number;
+    truncated: boolean;
+  } | null;
 };
