@@ -15,7 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { AdsCampaignRow, AdsDashboard } from "@/lib/marketing/ads-dashboard";
+import type {
+  AdsCampaignRow,
+  AdsDashboard,
+  AdsLsaBlock,
+} from "@/lib/marketing/ads-dashboard";
 
 function formatCount(value: number | null | undefined) {
   if (value == null) return "—";
@@ -136,6 +140,141 @@ function CampaignTable({
   );
 }
 
+function LsaCampaignTable({
+  rows,
+  message,
+}: {
+  rows: AdsCampaignRow[];
+  message: string;
+}) {
+  if (rows.length === 0) {
+    return (
+      <MarketingEmptyTable
+        columns={["Campaign", "Status", "Budget", "Spend", "Impressions", "Clicks"]}
+        message={message}
+      />
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Campaign</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium">Budget</th>
+            <th className="px-3 py-2 font-medium">Spend</th>
+            <th className="px-3 py-2 font-medium">Impressions</th>
+            <th className="px-3 py-2 font-medium">Clicks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={`lsa-${row.id}`} className="border-b border-border/60">
+              <td className="px-3 py-2 font-medium">{row.name}</td>
+              <td className="px-3 py-2 capitalize text-muted-foreground">
+                {row.status.toLowerCase()}
+              </td>
+              <td className="px-3 py-2">{formatCurrency(row.budget)}</td>
+              <td className="px-3 py-2">{formatCurrencyPrecise(row.spend)}</td>
+              <td className="px-3 py-2">{formatCount(row.impressions)}</td>
+              <td className="px-3 py-2">{formatCount(row.clicks)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LsaCategoryTable({ lsa }: { lsa: AdsLsaBlock }) {
+  if (lsa.categories.length === 0) {
+    return (
+      <MarketingEmptyTable
+        columns={["Service type", "Leads", "Charged", "Booked"]}
+        message="No Local Services leads in this date range."
+      />
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Service type</th>
+            <th className="px-3 py-2 font-medium">Leads</th>
+            <th className="px-3 py-2 font-medium">Charged</th>
+            <th className="px-3 py-2 font-medium">Booked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lsa.categories.map((row) => (
+            <tr key={row.categoryId} className="border-b border-border/60">
+              <td className="px-3 py-2 font-medium">{row.label}</td>
+              <td className="px-3 py-2">{formatCount(row.leads)}</td>
+              <td className="px-3 py-2">{formatCount(row.chargedLeads)}</td>
+              <td className="px-3 py-2">{formatCount(row.bookedLeads)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LsaLeadsTable({ lsa }: { lsa: AdsLsaBlock }) {
+  if (lsa.recentLeads.length === 0) {
+    return (
+      <MarketingEmptyTable
+        columns={["When", "Type", "Status", "Service", "Contact", "Charged"]}
+        message="Lead details appear here once Local Services Ads generate calls, messages, or bookings."
+      />
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium">When</th>
+            <th className="px-3 py-2 font-medium">Type</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 font-medium">Service</th>
+            <th className="px-3 py-2 font-medium">Contact</th>
+            <th className="px-3 py-2 font-medium">Charged</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lsa.recentLeads.map((lead) => (
+            <tr key={lead.id} className="border-b border-border/60">
+              <td className="px-3 py-2 text-muted-foreground">
+                {lead.creationDateTime ?? "—"}
+              </td>
+              <td className="px-3 py-2 capitalize">
+                {lead.leadType.replace(/_/g, " ").toLowerCase()}
+              </td>
+              <td className="px-3 py-2 capitalize text-muted-foreground">
+                {lead.leadStatus.replace(/_/g, " ").toLowerCase()}
+              </td>
+              <td className="px-3 py-2">{lead.categoryLabel}</td>
+              <td className="px-3 py-2">
+                {lead.consumerName || lead.phoneNumber || "—"}
+                {lead.consumerName && lead.phoneNumber ? (
+                  <span className="block text-xs text-muted-foreground">{lead.phoneNumber}</span>
+                ) : null}
+              </td>
+              <td className="px-3 py-2">{lead.leadCharged ? "Yes" : "No"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function SetupBanner({ platform, setupUrl, message }: { platform: string; setupUrl: string; message: string }) {
   return (
     <p className="mb-4 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -208,14 +347,14 @@ export function AdsPageClient() {
   const isCustomActive = rangeQuery.startsWith("from=");
 
   const totals = dashboard?.totals;
-  const anyReady = dashboard?.google.ready || dashboard?.meta.ready;
+  const anyReady = dashboard?.google.ready || dashboard?.googleLsa.ready || dashboard?.meta.ready;
 
   return (
     <ContentArea>
       <PageHeader
         breadcrumb={["Marketing", "Ads"]}
         title="Paid ads"
-        subtitle="Google PPC and Meta campaigns — spend, performance, and campaign breakdowns."
+        subtitle="Google PPC, Google LSA, and Meta — spend, leads, and campaign breakdowns."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -396,16 +535,94 @@ export function AdsPageClient() {
         </TabsContent>
 
         <TabsContent value="google-lsa">
-          <MarketingSectionCard
-            title="Google Local Services Ads"
-            description="Pay-per-lead local service ads for qualified job requests."
-            action={<Badge variant="secondary">Coming soon</Badge>}
-          >
-            <MarketingEmptyTable
-              columns={["Service type", "Status", "Budget", "Leads", "CPL", "Booked jobs"]}
-              message="Local Services Ads use a separate Google API. Link Google Ads above for PPC reporting; LSA support is planned next."
+          {dashboard && !dashboard.googleLsa.ready ? (
+            <SetupBanner
+              platform="Google Ads"
+              setupUrl={dashboard.googleLsa.setupUrl}
+              message={
+                dashboard.googleLsa.connected
+                  ? "Choose a Google Ads customer account in"
+                  : "Connect Google Ads in"
+              }
             />
-          </MarketingSectionCard>
+          ) : null}
+          {dashboard?.googleLsa.error ? (
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              {dashboard.googleLsa.error}
+            </p>
+          ) : null}
+
+          {dashboard?.googleLsa.ready ? (
+            <MarketingMetricGrid
+              className="mb-6"
+              columns={5}
+              metrics={[
+                { label: "LSA spend", value: formatCurrencyPrecise(dashboard.googleLsa.spend) },
+                { label: "Leads", value: formatCount(dashboard.googleLsa.leads) },
+                {
+                  label: "Charged leads",
+                  value: formatCount(dashboard.googleLsa.chargedLeads),
+                },
+                { label: "Booked", value: formatCount(dashboard.googleLsa.bookedLeads) },
+                {
+                  label: "CPL",
+                  hint: "Cost per charged lead",
+                  value: formatCurrencyPrecise(dashboard.googleLsa.cpl),
+                },
+              ]}
+            />
+          ) : null}
+
+          <div className="space-y-6">
+            <MarketingSectionCard
+              title="Local Services campaigns"
+              description={
+                dashboard?.googleLsa.accountName
+                  ? `${dashboard.googleLsa.accountName} · ${rangeLabel}`
+                  : "LOCAL_SERVICES channel campaigns from the connected Google Ads account."
+              }
+              action={
+                dashboard?.googleLsa.ready ? (
+                  <Badge variant="secondary">Live</Badge>
+                ) : (
+                  <Badge variant="outline">Not linked</Badge>
+                )
+              }
+            >
+              <LsaCampaignTable
+                rows={dashboard?.googleLsa.campaigns ?? []}
+                message="No Local Services campaigns found for this account and date range."
+              />
+            </MarketingSectionCard>
+
+            <MarketingSectionCard
+              title="Leads by service type"
+              description="From Google Ads API local_services_lead for the selected range."
+            >
+              {dashboard?.googleLsa ? (
+                <LsaCategoryTable lsa={dashboard.googleLsa} />
+              ) : (
+                <MarketingEmptyTable
+                  columns={["Service type", "Leads", "Charged", "Booked"]}
+                  message="Connect Google Ads to load Local Services lead metrics."
+                />
+              )}
+            </MarketingSectionCard>
+
+            <MarketingSectionCard
+              title="Recent LSA leads"
+              description="Calls, messages, and bookings attributed to Local Services Ads."
+            >
+              {dashboard?.googleLsa ? (
+                <LsaLeadsTable lsa={dashboard.googleLsa} />
+              ) : (
+                <MarketingEmptyTable
+                  columns={["When", "Type", "Status", "Service", "Contact", "Charged"]}
+                  message="Connect Google Ads to load Local Services leads."
+                />
+              )}
+            </MarketingSectionCard>
+          </div>
         </TabsContent>
 
         <TabsContent value="meta">

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { GoogleAdsApiError, getGoogleAdsConnectionStatus, getGoogleAdsSummary } from "@/lib/google-ads/client";
+import {
+  GoogleAdsApiError,
+  getGoogleAdsConnectionStatus,
+  getGoogleAdsSummary,
+  getGoogleLsaSummary,
+} from "@/lib/google-ads/client";
 import { parseAdsDateRange } from "@/lib/marketing/ads-date-range";
 import { buildAdsDashboard } from "@/lib/marketing/ads-dashboard";
 import { MetaAdsApiError, getMetaAdsConnectionStatus, getMetaAdsSummary } from "@/lib/meta/ads";
@@ -17,11 +22,31 @@ export async function GET(request: NextRequest) {
 
     let googleSummary = null;
     let googleError: string | null = null;
+    let googleLsaSummary = null;
+    let googleLsaError: string | null = null;
+
     if (googleStatus?.customerId) {
-      try {
-        googleSummary = await getGoogleAdsSummary(user.companyId, dateRange);
-      } catch (error) {
-        googleError = error instanceof Error ? error.message : "Failed to load Google Ads";
+      const [ppcResult, lsaResult] = await Promise.allSettled([
+        getGoogleAdsSummary(user.companyId, dateRange),
+        getGoogleLsaSummary(user.companyId, dateRange),
+      ]);
+
+      if (ppcResult.status === "fulfilled") {
+        googleSummary = ppcResult.value;
+      } else {
+        googleError =
+          ppcResult.reason instanceof Error
+            ? ppcResult.reason.message
+            : "Failed to load Google Ads";
+      }
+
+      if (lsaResult.status === "fulfilled") {
+        googleLsaSummary = lsaResult.value;
+      } else {
+        googleLsaError =
+          lsaResult.reason instanceof Error
+            ? lsaResult.reason.message
+            : "Failed to load Google LSA";
       }
     }
 
@@ -41,6 +66,8 @@ export async function GET(request: NextRequest) {
       googleConnected: Boolean(googleStatus?.connected),
       googleReady: Boolean(googleStatus?.customerId),
       googleError,
+      googleLsaSummary,
+      googleLsaError,
       metaSummary,
       metaConnected: Boolean(metaStatus.hasToken),
       metaReady: metaStatus.connected,

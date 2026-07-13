@@ -14,6 +14,10 @@ import type {
   GoogleAdsConnectionStatus,
   GoogleAdsCustomer,
   GoogleAdsSummary,
+  GoogleLsaCampaignRow,
+  GoogleLsaCategoryRow,
+  GoogleLsaLeadRow,
+  GoogleLsaSummary,
 } from "@/lib/google-ads/types";
 import { GOOGLE_ADS_SCOPE } from "@/lib/google-ads/types";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +80,13 @@ function microsToUnits(value: string | number | undefined | null) {
   const num = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(num)) return 0;
   return num / 1_000_000;
+}
+
+function localServicesLeadDateClause(range: AdsDateRange) {
+  return (
+    `local_services_lead.creation_date_time >= '${range.startDate} 00:00:00'` +
+    ` AND local_services_lead.creation_date_time <= '${range.endDate} 23:59:59'`
+  );
 }
 
 export async function getGoogleAdsAccessToken(companyId: string) {
@@ -164,6 +175,46 @@ async function googleAdsFetch<T>(
   return data;
 }
 
+type CustomerDetail = {
+  id: string;
+  name: string;
+  manager: boolean;
+};
+
+async function fetchCustomerDetail(
+  accessToken: string,
+  customerId: string,
+  loginCustomerId: string | null
+): Promise<CustomerDetail> {
+  const detail = await googleAdsFetch<{
+    results?: Array<{
+      customer?: { descriptiveName?: string; manager?: boolean; id?: string };
+    }>;
+  }>(
+    accessToken,
+    `/customers/${customerId}/googleAds:search`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        query:
+          "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1",
+      }),
+    },
+    loginCustomerId
+  );
+
+  const customer = detail.results?.[0]?.customer;
+  return {
+    id: customerId,
+    name: customer?.descriptiveName ?? customerId,
+    manager: Boolean(customer?.manager),
+  };
+}
+
+/**
+ * List accessible Google Ads accounts. When an MCC is present, client accounts
+ * get a suggestedLoginCustomerId so subsequent API calls can set login-customer-id.
+ */
 export async function listGoogleAdsCustomers(companyId: string): Promise<GoogleAdsCustomer[]> {
   const accessToken = await getGoogleAdsAccessToken(companyId);
   const data = await googleAdsFetch<{ resourceNames?: string[] }>(
@@ -171,32 +222,79 @@ export async function listGoogleAdsCustomers(companyId: string): Promise<GoogleA
     "/customers:listAccessibleCustomers"
   );
 
-  const customers: GoogleAdsCustomer[] = [];
-  for (const resourceName of data.resourceNames ?? []) {
-    const customerId = normalizeCustomerId(resourceName);
+  const ids = [...new Set((data.resourceNames ?? []).map(normalizeCustomerId))];
+
+  type Resolved = CustomerDetail & { ok: boolean; viaManagerId: string | null };
+  const resolved: Resolved[] = [];
+
+  for (const customerId of ids) {
     try {
-      const detail = await googleAdsFetch<{ results?: Array<{ customer?: { descriptiveName?: string; manager?: boolean } }> }>(
-        accessToken,
-        `/customers/${customerId}/googleAds:search`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            query: "SELECT customer.id, customer.descriptive_name, customer.manager FROM customer LIMIT 1",
-          }),
-        }
-      );
-      const customer = detail.results?.[0]?.customer;
-      customers.push({
-        id: customerId,
-        name: customer?.descriptiveName ?? customerId,
-        manager: Boolean(customer?.manager),
-      });
+      const detail = await fetchCustomerDetail(accessToken, customerId, null);
+      resolved.push({ ...detail, ok: true, viaManagerId: null });
     } catch {
-      customers.push({ id: customerId, name: customerId, manager: false });
+      resolved.push({
+        id: customerId,
+        name: customerId,
+        manager: false,
+        ok: false,
+        viaManagerId: null,
+      });
     }
   }
 
-  return customers.sort((a, b) => a.name.localeCompare(b.name));
+  const managers = resolved.filter((row) => row.ok && row.manager);
+  const soleManagerId = managers.length === 1 ? managers[0].id : null;
+
+  const customers: GoogleAdsCustomer[] = [];
+
+  for (const row of resolved) {
+    if (row.ok && row.manager) {
+      customers.push({
+        id: row.id,
+        name: row.name,
+        manager: true,
+        suggestedLoginCustomerId: null,
+      });
+      continue;
+    }
+
+    let detail: CustomerDetail = row;
+    let viaManagerId: string | null = row.viaManagerId;
+
+    if (!row.ok || managers.length > 0) {
+      for (const manager of managers) {
+        if (manager.id === row.id) continue;
+        try {
+          const viaManager = await fetchCustomerDetail(accessToken, row.id, manager.id);
+          if (!viaManager.manager) {
+            detail = viaManager;
+            viaManagerId = manager.id;
+            break;
+          }
+        } catch {
+          // Try the next manager account.
+        }
+      }
+    }
+
+    // With a single MCC over the client (common setup), always prefer routing
+    // through the manager so login-customer-id is set correctly.
+    if (!viaManagerId && soleManagerId && soleManagerId !== detail.id && !detail.manager) {
+      viaManagerId = soleManagerId;
+    }
+
+    customers.push({
+      id: detail.id,
+      name: detail.name,
+      manager: Boolean(detail.manager),
+      suggestedLoginCustomerId: detail.manager ? null : viaManagerId,
+    });
+  }
+
+  return customers.sort((a, b) => {
+    if (a.manager !== b.manager) return a.manager ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 export async function getGoogleAdsConnectionStatus(
@@ -239,23 +337,46 @@ export async function saveGoogleAdsCustomer(
   customerName: string,
   loginCustomerId?: string | null
 ) {
+  const normalizedCustomerId = normalizeCustomerId(customerId);
+  let resolvedLoginId = loginCustomerId ? normalizeCustomerId(loginCustomerId) : null;
+
+  // Auto-resolve MCC when the UI didn't send one (e.g. sole manager over client).
+  if (!resolvedLoginId) {
+    try {
+      const accessible = await listGoogleAdsCustomers(companyId);
+      const selected = accessible.find((row) => row.id === normalizedCustomerId);
+      if (selected?.manager) {
+        throw new GoogleAdsApiError(
+          "Select your client Google Ads account, not the manager (MCC) account",
+          400
+        );
+      }
+      if (selected?.suggestedLoginCustomerId) {
+        resolvedLoginId = selected.suggestedLoginCustomerId;
+      } else {
+        const managers = accessible.filter((row) => row.manager);
+        if (managers.length === 1 && managers[0].id !== normalizedCustomerId) {
+          resolvedLoginId = managers[0].id;
+        }
+      }
+    } catch (error) {
+      if (error instanceof GoogleAdsApiError) throw error;
+      // Listing can fail transiently; still save the customer without login id.
+    }
+  }
+
   await prisma.company.update({
     where: { id: companyId },
     data: {
-      googleAdsCustomerId: normalizeCustomerId(customerId),
+      googleAdsCustomerId: normalizedCustomerId,
       googleAdsCustomerName: customerName,
-      googleAdsLoginCustomerId: loginCustomerId
-        ? normalizeCustomerId(loginCustomerId)
-        : null,
+      googleAdsLoginCustomerId: resolvedLoginId,
       googleAdsConnectedAt: new Date(),
     },
   });
 }
 
-export async function getGoogleAdsSummary(
-  companyId: string,
-  range: AdsDateRange
-): Promise<GoogleAdsSummary> {
+async function getSelectedGoogleAdsAccount(companyId: string) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
@@ -269,8 +390,109 @@ export async function getGoogleAdsSummary(
     throw new GoogleAdsApiError("Select a Google Ads account", 400);
   }
 
+  let loginCustomerId = company.googleAdsLoginCustomerId
+    ? normalizeCustomerId(company.googleAdsLoginCustomerId)
+    : null;
+
+  // Heal older connections that selected a client under an MCC but never stored login-customer-id.
+  if (!loginCustomerId) {
+    try {
+      const accessible = await listGoogleAdsCustomers(companyId);
+      const selected = accessible.find(
+        (row) => row.id === normalizeCustomerId(company.googleAdsCustomerId!)
+      );
+      const resolved =
+        selected?.suggestedLoginCustomerId ??
+        accessible.find((row) => row.manager && row.id !== company.googleAdsCustomerId)?.id ??
+        null;
+      if (resolved) {
+        loginCustomerId = normalizeCustomerId(resolved);
+        await prisma.company.update({
+          where: { id: companyId },
+          data: { googleAdsLoginCustomerId: loginCustomerId },
+        });
+      }
+    } catch {
+      // Keep going without a login-customer-id; direct-access accounts still work.
+    }
+  }
+
+  return {
+    customerId: normalizeCustomerId(company.googleAdsCustomerId),
+    customerName: company.googleAdsCustomerName ?? company.googleAdsCustomerId,
+    loginCustomerId,
+  };
+}
+
+function mapCampaignRows(
+  results: Array<{
+    campaign?: {
+      id?: string;
+      name?: string;
+      status?: string;
+      advertisingChannelType?: string;
+    };
+    campaignBudget?: { amountMicros?: string };
+    metrics?: {
+      costMicros?: string;
+      impressions?: string;
+      clicks?: string;
+      conversions?: number;
+      conversionsValue?: number;
+    };
+  }>
+): GoogleAdsCampaignRow[] {
+  return results.map((row) => ({
+    id: String(row.campaign?.id ?? ""),
+    name: row.campaign?.name ?? "Untitled campaign",
+    status: row.campaign?.status ?? "UNKNOWN",
+    channelType: row.campaign?.advertisingChannelType ?? null,
+    budgetMicros: row.campaignBudget?.amountMicros
+      ? Number(row.campaignBudget.amountMicros)
+      : null,
+    spend: microsToUnits(row.metrics?.costMicros),
+    impressions: Number(row.metrics?.impressions ?? 0),
+    clicks: Number(row.metrics?.clicks ?? 0),
+    conversions: Number(row.metrics?.conversions ?? 0),
+    conversionsValue: Number(row.metrics?.conversionsValue ?? 0),
+  }));
+}
+
+function summarizeCampaigns(campaigns: GoogleAdsCampaignRow[], range: AdsDateRange, account: {
+  customerId: string;
+  customerName: string;
+}): GoogleAdsSummary {
+  const spend = campaigns.reduce((sum, row) => sum + row.spend, 0);
+  const impressions = campaigns.reduce((sum, row) => sum + row.impressions, 0);
+  const clicks = campaigns.reduce((sum, row) => sum + row.clicks, 0);
+  const conversions = campaigns.reduce((sum, row) => sum + row.conversions, 0);
+  const conversionsValue = campaigns.reduce((sum, row) => sum + row.conversionsValue, 0);
+  const activeCampaigns = campaigns.filter((row) => row.status === "ENABLED").length;
+
+  return {
+    customerId: account.customerId,
+    customerName: account.customerName,
+    days: range.presetDays ?? 0,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    rangeLabel: range.label,
+    spend,
+    impressions,
+    clicks,
+    conversions,
+    conversionsValue,
+    activeCampaigns,
+    campaigns,
+  };
+}
+
+/** PPC / non-LSA campaigns (Search, Display, PMax, etc.). */
+export async function getGoogleAdsSummary(
+  companyId: string,
+  range: AdsDateRange
+): Promise<GoogleAdsSummary> {
+  const account = await getSelectedGoogleAdsAccount(companyId);
   const accessToken = await getGoogleAdsAccessToken(companyId);
-  const customerId = normalizeCustomerId(company.googleAdsCustomerId);
   const dateClause = googleAdsDateClause(range);
 
   const data = await googleAdsFetch<{
@@ -292,7 +514,7 @@ export async function getGoogleAdsSummary(
     }>;
   }>(
     accessToken,
-    `/customers/${customerId}/googleAds:search`,
+    `/customers/${account.customerId}/googleAds:search`,
     {
       method: "POST",
       body: JSON.stringify({
@@ -311,19 +533,119 @@ export async function getGoogleAdsSummary(
           FROM campaign
           WHERE ${dateClause}
             AND campaign.status != 'REMOVED'
+            AND campaign.advertising_channel_type != 'LOCAL_SERVICES'
           ORDER BY metrics.cost_micros DESC
           LIMIT 100
         `,
       }),
     },
-    company.googleAdsLoginCustomerId
+    account.loginCustomerId
   );
 
-  const campaigns: GoogleAdsCampaignRow[] = (data.results ?? []).map((row) => ({
+  return summarizeCampaigns(mapCampaignRows(data.results ?? []), range, account);
+}
+
+/** Local Services Ads campaigns + lead volume from local_services_lead. */
+export async function getGoogleLsaSummary(
+  companyId: string,
+  range: AdsDateRange
+): Promise<GoogleLsaSummary> {
+  const account = await getSelectedGoogleAdsAccount(companyId);
+  const accessToken = await getGoogleAdsAccessToken(companyId);
+  const dateClause = googleAdsDateClause(range);
+  const leadDateClause = localServicesLeadDateClause(range);
+
+  const [campaignData, leadData] = await Promise.all([
+    googleAdsFetch<{
+      results?: Array<{
+        campaign?: {
+          id?: string;
+          name?: string;
+          status?: string;
+        };
+        campaignBudget?: { amountMicros?: string };
+        metrics?: {
+          costMicros?: string;
+          impressions?: string;
+          clicks?: string;
+          conversions?: number;
+        };
+      }>;
+    }>(
+      accessToken,
+      `/customers/${account.customerId}/googleAds:search`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          query: `
+            SELECT
+              campaign.id,
+              campaign.name,
+              campaign.status,
+              campaign_budget.amount_micros,
+              metrics.cost_micros,
+              metrics.impressions,
+              metrics.clicks,
+              metrics.conversions
+            FROM campaign
+            WHERE ${dateClause}
+              AND campaign.status != 'REMOVED'
+              AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
+            ORDER BY metrics.cost_micros DESC
+            LIMIT 50
+          `,
+        }),
+      },
+      account.loginCustomerId
+    ).catch(() => ({ results: [] as never[] })),
+    googleAdsFetch<{
+      results?: Array<{
+        localServicesLead?: {
+          id?: string;
+          leadType?: string;
+          leadStatus?: string;
+          categoryId?: string;
+          serviceId?: string;
+          creationDateTime?: string;
+          leadCharged?: boolean;
+          contactDetails?: {
+            consumerName?: string;
+            phoneNumber?: string;
+            email?: string;
+          };
+        };
+      }>;
+    }>(
+      accessToken,
+      `/customers/${account.customerId}/googleAds:search`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          query: `
+            SELECT
+              local_services_lead.id,
+              local_services_lead.lead_type,
+              local_services_lead.lead_status,
+              local_services_lead.category_id,
+              local_services_lead.service_id,
+              local_services_lead.creation_date_time,
+              local_services_lead.lead_charged,
+              local_services_lead.contact_details
+            FROM local_services_lead
+            WHERE ${leadDateClause}
+            ORDER BY local_services_lead.creation_date_time DESC
+            LIMIT 500
+          `,
+        }),
+      },
+      account.loginCustomerId
+    ).catch(() => ({ results: [] as never[] })),
+  ]);
+
+  const campaigns: GoogleLsaCampaignRow[] = (campaignData.results ?? []).map((row) => ({
     id: String(row.campaign?.id ?? ""),
-    name: row.campaign?.name ?? "Untitled campaign",
+    name: row.campaign?.name ?? "Local Services campaign",
     status: row.campaign?.status ?? "UNKNOWN",
-    channelType: row.campaign?.advertisingChannelType ?? null,
     budgetMicros: row.campaignBudget?.amountMicros
       ? Number(row.campaignBudget.amountMicros)
       : null,
@@ -331,19 +653,49 @@ export async function getGoogleAdsSummary(
     impressions: Number(row.metrics?.impressions ?? 0),
     clicks: Number(row.metrics?.clicks ?? 0),
     conversions: Number(row.metrics?.conversions ?? 0),
-    conversionsValue: Number(row.metrics?.conversionsValue ?? 0),
   }));
+
+  const recentLeads: GoogleLsaLeadRow[] = (leadData.results ?? []).map((row) => {
+    const lead = row.localServicesLead;
+    return {
+      id: String(lead?.id ?? ""),
+      leadType: lead?.leadType ?? "UNKNOWN",
+      leadStatus: lead?.leadStatus ?? "UNKNOWN",
+      categoryId: lead?.categoryId ?? null,
+      serviceId: lead?.serviceId ?? null,
+      creationDateTime: lead?.creationDateTime ?? null,
+      leadCharged: Boolean(lead?.leadCharged),
+      consumerName: lead?.contactDetails?.consumerName ?? null,
+      phoneNumber: lead?.contactDetails?.phoneNumber ?? null,
+      email: lead?.contactDetails?.email ?? null,
+    };
+  });
+
+  const categoryMap = new Map<string, GoogleLsaCategoryRow>();
+  for (const lead of recentLeads) {
+    const key = lead.categoryId ?? "unknown";
+    const current = categoryMap.get(key) ?? {
+      categoryId: key,
+      leads: 0,
+      chargedLeads: 0,
+      bookedLeads: 0,
+    };
+    current.leads += 1;
+    if (lead.leadCharged) current.chargedLeads += 1;
+    if (lead.leadStatus === "BOOKED") current.bookedLeads += 1;
+    categoryMap.set(key, current);
+  }
 
   const spend = campaigns.reduce((sum, row) => sum + row.spend, 0);
   const impressions = campaigns.reduce((sum, row) => sum + row.impressions, 0);
   const clicks = campaigns.reduce((sum, row) => sum + row.clicks, 0);
-  const conversions = campaigns.reduce((sum, row) => sum + row.conversions, 0);
-  const conversionsValue = campaigns.reduce((sum, row) => sum + row.conversionsValue, 0);
-  const activeCampaigns = campaigns.filter((row) => row.status === "ENABLED").length;
+  const leads = recentLeads.length;
+  const chargedLeads = recentLeads.filter((lead) => lead.leadCharged).length;
+  const bookedLeads = recentLeads.filter((lead) => lead.leadStatus === "BOOKED").length;
 
   return {
-    customerId,
-    customerName: company.googleAdsCustomerName ?? customerId,
+    customerId: account.customerId,
+    customerName: account.customerName,
     days: range.presetDays ?? 0,
     startDate: range.startDate,
     endDate: range.endDate,
@@ -351,9 +703,13 @@ export async function getGoogleAdsSummary(
     spend,
     impressions,
     clicks,
-    conversions,
-    conversionsValue,
-    activeCampaigns,
+    leads,
+    chargedLeads,
+    bookedLeads,
+    cpl: chargedLeads > 0 ? spend / chargedLeads : leads > 0 ? spend / leads : null,
+    activeCampaigns: campaigns.filter((row) => row.status === "ENABLED").length,
     campaigns,
+    categories: [...categoryMap.values()].sort((a, b) => b.leads - a.leads),
+    recentLeads: recentLeads.slice(0, 50),
   };
 }

@@ -1,5 +1,5 @@
 import type { AdsDateRange } from "@/lib/marketing/ads-date-range";
-import type { GoogleAdsSummary } from "@/lib/google-ads/types";
+import type { GoogleAdsSummary, GoogleLsaSummary } from "@/lib/google-ads/types";
 import type { MetaAdsSummary } from "@/lib/meta/ads";
 
 export type AdsCampaignRow = {
@@ -36,6 +36,44 @@ export type AdsPlatformBlock = {
   campaigns: AdsCampaignRow[];
 };
 
+export type AdsLsaCategoryRow = {
+  categoryId: string;
+  label: string;
+  leads: number;
+  chargedLeads: number;
+  bookedLeads: number;
+};
+
+export type AdsLsaLeadRow = {
+  id: string;
+  leadType: string;
+  leadStatus: string;
+  categoryLabel: string;
+  creationDateTime: string | null;
+  leadCharged: boolean;
+  consumerName: string | null;
+  phoneNumber: string | null;
+};
+
+export type AdsLsaBlock = {
+  connected: boolean;
+  ready: boolean;
+  accountName: string | null;
+  setupUrl: string;
+  error: string | null;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  chargedLeads: number;
+  bookedLeads: number;
+  cpl: number | null;
+  activeCampaigns: number;
+  campaigns: AdsCampaignRow[];
+  categories: AdsLsaCategoryRow[];
+  recentLeads: AdsLsaLeadRow[];
+};
+
 export type AdsDashboard = {
   days: number;
   dateRange: {
@@ -45,6 +83,7 @@ export type AdsDashboard = {
     isAllTime: boolean;
   };
   google: AdsPlatformBlock;
+  googleLsa: AdsLsaBlock;
   meta: AdsPlatformBlock;
   totals: {
     spend: number;
@@ -63,6 +102,15 @@ export type AdsDashboard = {
 function ratio(numerator: number, denominator: number) {
   if (!denominator) return null;
   return numerator / denominator;
+}
+
+function formatLsaCategoryLabel(categoryId: string) {
+  if (!categoryId || categoryId === "unknown") return "Uncategorized";
+  return categoryId
+    .replace(/^xcat:service_area_business_/, "")
+    .replace(/^xcat:/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function buildGoogleBlock(
@@ -106,6 +154,60 @@ function buildGoogleBlock(
       cpc: ratio(row.spend, row.clicks),
       conversions: row.conversions,
       roas: ratio(row.conversionsValue, row.spend),
+    })),
+  };
+}
+
+function buildGoogleLsaBlock(
+  summary: GoogleLsaSummary | null,
+  connected: boolean,
+  ready: boolean,
+  error: string | null
+): AdsLsaBlock {
+  return {
+    connected,
+    ready,
+    accountName: summary?.customerName ?? null,
+    setupUrl: "/settings/integrations/google-ads",
+    error,
+    spend: summary?.spend ?? 0,
+    impressions: summary?.impressions ?? 0,
+    clicks: summary?.clicks ?? 0,
+    leads: summary?.leads ?? 0,
+    chargedLeads: summary?.chargedLeads ?? 0,
+    bookedLeads: summary?.bookedLeads ?? 0,
+    cpl: summary?.cpl ?? null,
+    activeCampaigns: summary?.activeCampaigns ?? 0,
+    campaigns: (summary?.campaigns ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      platform: "google" as const,
+      objective: "LOCAL_SERVICES",
+      budget: row.budgetMicros != null ? row.budgetMicros / 1_000_000 : null,
+      spend: row.spend,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      cpc: ratio(row.spend, row.clicks),
+      conversions: row.conversions,
+      roas: null,
+    })),
+    categories: (summary?.categories ?? []).map((row) => ({
+      categoryId: row.categoryId,
+      label: formatLsaCategoryLabel(row.categoryId),
+      leads: row.leads,
+      chargedLeads: row.chargedLeads,
+      bookedLeads: row.bookedLeads,
+    })),
+    recentLeads: (summary?.recentLeads ?? []).map((row) => ({
+      id: row.id,
+      leadType: row.leadType,
+      leadStatus: row.leadStatus,
+      categoryLabel: formatLsaCategoryLabel(row.categoryId ?? "unknown"),
+      creationDateTime: row.creationDateTime,
+      leadCharged: row.leadCharged,
+      consumerName: row.consumerName,
+      phoneNumber: row.phoneNumber,
     })),
   };
 }
@@ -160,6 +262,8 @@ export function buildAdsDashboard(input: {
   googleConnected: boolean;
   googleReady: boolean;
   googleError: string | null;
+  googleLsaSummary: GoogleLsaSummary | null;
+  googleLsaError: string | null;
   metaSummary: MetaAdsSummary | null;
   metaConnected: boolean;
   metaReady: boolean;
@@ -171,6 +275,12 @@ export function buildAdsDashboard(input: {
     input.googleReady,
     input.googleError
   );
+  const googleLsa = buildGoogleLsaBlock(
+    input.googleLsaSummary,
+    input.googleConnected,
+    input.googleReady,
+    input.googleLsaError
+  );
   const meta = buildMetaBlock(
     input.metaSummary,
     input.metaConnected,
@@ -178,10 +288,11 @@ export function buildAdsDashboard(input: {
     input.metaError
   );
 
-  const spend = google.spend + meta.spend;
-  const impressions = google.impressions + meta.impressions;
-  const clicks = google.clicks + meta.clicks;
-  const conversions = google.conversions + meta.conversions;
+  const spend = google.spend + googleLsa.spend + meta.spend;
+  const impressions = google.impressions + googleLsa.impressions + meta.impressions;
+  const clicks = google.clicks + googleLsa.clicks + meta.clicks;
+  const conversions = google.conversions + googleLsa.leads + meta.conversions;
+  const leadLike = google.conversions + googleLsa.chargedLeads + meta.conversions;
 
   return {
     days: input.dateRange.presetDays ?? 0,
@@ -192,6 +303,7 @@ export function buildAdsDashboard(input: {
       isAllTime: input.dateRange.isAllTime,
     },
     google,
+    googleLsa,
     meta,
     totals: {
       spend,
@@ -201,12 +313,10 @@ export function buildAdsDashboard(input: {
       ctr: ratio(clicks, impressions),
       conversions,
       conversionRate: ratio(conversions, clicks),
-      cpl: ratio(spend, conversions),
-      roas: ratio(
-        (input.googleSummary?.conversionsValue ?? 0),
-        spend
-      ),
-      activeCampaigns: google.activeCampaigns + meta.activeCampaigns,
+      cpl: ratio(spend, leadLike),
+      roas: ratio(input.googleSummary?.conversionsValue ?? 0, spend),
+      activeCampaigns:
+        google.activeCampaigns + googleLsa.activeCampaigns + meta.activeCampaigns,
     },
   };
 }

@@ -76,6 +76,11 @@ export function GoogleAdsConnectionPanel() {
   }, [status?.connected, loadCustomers]);
 
   async function saveCustomer(customer: GoogleAdsCustomer) {
+    if (customer.manager) {
+      toast.error("Select your client ads account, not the manager (MCC) account");
+      return;
+    }
+
     setSavingCustomer(true);
     try {
       const res = await fetch("/api/marketing/google-ads/customer", {
@@ -84,11 +89,16 @@ export function GoogleAdsConnectionPanel() {
         body: JSON.stringify({
           customerId: customer.id,
           customerName: customer.name,
+          loginCustomerId: customer.suggestedLoginCustomerId,
         }),
       });
       const data = await readJsonResponse<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to save account");
-      toast.success("Google Ads account saved");
+      toast.success(
+        customer.suggestedLoginCustomerId
+          ? "Google Ads account saved (via manager account)"
+          : "Google Ads account saved"
+      );
       await loadStatus();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save account");
@@ -198,8 +208,13 @@ export function GoogleAdsConnectionPanel() {
             Google Ads
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            {status.customerName ?? "Select a Google Ads account"}
+            {status.customerName ?? "Select your client Google Ads account"}
           </p>
+          {status.loginCustomerId ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Manager (login-customer-id): {status.loginCustomerId}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">Connected</Badge>
@@ -215,6 +230,10 @@ export function GoogleAdsConnectionPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Pick the client ads account (not the manager). If a manager account sits above it, we
+          store that MCC ID automatically for API calls.
+        </p>
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">Accessible accounts</p>
           <Button
@@ -246,16 +265,28 @@ export function GoogleAdsConnectionPanel() {
                 <p className="font-medium">{customer.name}</p>
                 <p className="text-sm text-muted-foreground">
                   ID {customer.id}
-                  {customer.manager ? " · Manager account" : ""}
+                  {customer.manager ? " · Manager account" : " · Client account"}
+                  {!customer.manager && customer.suggestedLoginCustomerId
+                    ? ` · via MCC ${customer.suggestedLoginCustomerId}`
+                    : ""}
                 </p>
               </div>
               <Button
                 size="sm"
                 variant={status.customerId === customer.id ? "default" : "outline"}
-                disabled={savingCustomer}
+                disabled={savingCustomer || customer.manager}
+                title={
+                  customer.manager
+                    ? "Select the client account under this manager"
+                    : undefined
+                }
                 onClick={() => void saveCustomer(customer)}
               >
-                {status.customerId === customer.id ? "Selected" : "Use this account"}
+                {customer.manager
+                  ? "Manager"
+                  : status.customerId === customer.id
+                    ? "Selected"
+                    : "Use this account"}
               </Button>
             </div>
           ))
