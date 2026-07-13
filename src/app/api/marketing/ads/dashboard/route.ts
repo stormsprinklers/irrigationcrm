@@ -9,15 +9,21 @@ import {
 import { parseAdsDateRange } from "@/lib/marketing/ads-date-range";
 import { buildAdsDashboard } from "@/lib/marketing/ads-dashboard";
 import { MetaAdsApiError, getMetaAdsConnectionStatus, getMetaAdsSummary } from "@/lib/meta/ads";
+import { getCrmCallConversionSummary } from "@/lib/voice/call-conversion-report";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const dateRange = parseAdsDateRange(request.nextUrl.searchParams);
 
-    const [googleStatus, metaStatus] = await Promise.all([
+    const [googleStatus, metaStatus, crmConversions] = await Promise.all([
       getGoogleAdsConnectionStatus(user.companyId),
       getMetaAdsConnectionStatus(user.companyId),
+      getCrmCallConversionSummary(
+        user.companyId,
+        dateRange.startDate,
+        dateRange.endDate
+      ).catch(() => null),
     ]);
 
     let googleSummary = null;
@@ -68,6 +74,17 @@ export async function GET(request: NextRequest) {
       googleError,
       googleLsaSummary,
       googleLsaError,
+      googleLsaCrm: crmConversions
+        ? {
+            matchedCalls: crmConversions.lsaMatchedCalls,
+            bookedCalls: crmConversions.lsaBookedCalls,
+            revenue: crmConversions.lsaRevenue,
+            bookingRate:
+              crmConversions.lsaMatchedCalls > 0
+                ? crmConversions.lsaBookedCalls / crmConversions.lsaMatchedCalls
+                : null,
+          }
+        : null,
       metaSummary,
       metaConnected: Boolean(metaStatus.hasToken),
       metaReady: metaStatus.connected,

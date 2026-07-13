@@ -57,7 +57,7 @@ export function CsrDeskPanel({
 }: {
   onVisitBooked?: (visitId: string) => void;
 }) {
-  const { ready, activeCall, disconnect, transfer } = useVoiceDevice();
+  const { ready, activeCall, disconnect, transfer, notifyVisitBooked } = useVoiceDevice();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
@@ -200,6 +200,7 @@ export function CsrDeskPanel({
       const visit = await res.json();
       toast.success("Appointment booked");
       setBookOpen(false);
+      notifyVisitBooked(visit.id);
       onVisitBooked?.(visit.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to book");

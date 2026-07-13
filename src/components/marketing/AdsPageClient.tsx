@@ -558,16 +558,44 @@ export function AdsPageClient() {
               columns={5}
               metrics={[
                 { label: "LSA spend", value: formatCurrencyPrecise(dashboard.googleLsa.spend) },
-                { label: "Leads", value: formatCount(dashboard.googleLsa.leads) },
+                { label: "Google leads", value: formatCount(dashboard.googleLsa.leads) },
                 {
                   label: "Charged leads",
                   value: formatCount(dashboard.googleLsa.chargedLeads),
                 },
-                { label: "Booked", value: formatCount(dashboard.googleLsa.bookedLeads) },
+                { label: "Google booked", value: formatCount(dashboard.googleLsa.bookedLeads) },
                 {
-                  label: "CPL",
-                  hint: "Cost per charged lead",
+                  label: "Google CPL",
+                  hint: "Cost per charged lead (Google)",
                   value: formatCurrencyPrecise(dashboard.googleLsa.cpl),
+                },
+              ]}
+            />
+          ) : null}
+
+          {dashboard?.googleLsa.crm ? (
+            <MarketingMetricGrid
+              className="mb-6"
+              columns={4}
+              metrics={[
+                {
+                  label: "CRM-matched LSA calls",
+                  hint: "Inbound calls matched to an LSA lead phone",
+                  value: formatCount(dashboard.googleLsa.crm.matchedCalls),
+                },
+                {
+                  label: "CRM booked",
+                  hint: "Matched calls that booked an appointment",
+                  value: formatCount(dashboard.googleLsa.crm.bookedCalls),
+                },
+                {
+                  label: "CRM booking rate",
+                  value: formatPercent(dashboard.googleLsa.crm.bookingRate),
+                },
+                {
+                  label: "CRM booked revenue",
+                  hint: "Linked appointment revenue",
+                  value: formatCurrencyPrecise(dashboard.googleLsa.crm.revenue),
                 },
               ]}
             />

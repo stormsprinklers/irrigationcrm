@@ -72,6 +72,13 @@ export type AdsLsaBlock = {
   campaigns: AdsCampaignRow[];
   categories: AdsLsaCategoryRow[];
   recentLeads: AdsLsaLeadRow[];
+  /** First-party CRM conversion tracking (CSR answer → booked visit → revenue). */
+  crm: {
+    matchedCalls: number;
+    bookedCalls: number;
+    revenue: number;
+    bookingRate: number | null;
+  } | null;
 };
 
 export type AdsDashboard = {
@@ -162,7 +169,8 @@ function buildGoogleLsaBlock(
   summary: GoogleLsaSummary | null,
   connected: boolean,
   ready: boolean,
-  error: string | null
+  error: string | null,
+  crm: AdsLsaBlock["crm"]
 ): AdsLsaBlock {
   return {
     connected,
@@ -209,6 +217,7 @@ function buildGoogleLsaBlock(
       consumerName: row.consumerName,
       phoneNumber: row.phoneNumber,
     })),
+    crm,
   };
 }
 
@@ -264,6 +273,7 @@ export function buildAdsDashboard(input: {
   googleError: string | null;
   googleLsaSummary: GoogleLsaSummary | null;
   googleLsaError: string | null;
+  googleLsaCrm: AdsLsaBlock["crm"];
   metaSummary: MetaAdsSummary | null;
   metaConnected: boolean;
   metaReady: boolean;
@@ -279,7 +289,8 @@ export function buildAdsDashboard(input: {
     input.googleLsaSummary,
     input.googleConnected,
     input.googleReady,
-    input.googleLsaError
+    input.googleLsaError,
+    input.googleLsaCrm
   );
   const meta = buildMetaBlock(
     input.metaSummary,

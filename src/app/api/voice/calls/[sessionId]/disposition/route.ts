@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { CallDisposition } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { syncCallConversionFromLog } from "@/lib/voice/call-conversion";
 
 const VALID_DISPOSITIONS: CallDisposition[] = [
   CallDisposition.BOOKED,
@@ -50,6 +51,7 @@ export async function PATCH(
       orderBy: { startedAt: "desc" },
     });
 
+    let callLogId: string;
     if (callLog) {
       await prisma.callLog.update({
         where: { id: callLog.id },
@@ -59,10 +61,13 @@ export async function PATCH(
           visitId: resolvedVisitId,
           leadId: leadId ?? null,
           handledByUserId: user.id,
+          userId: callLog.userId ?? session.assignedUserId ?? user.id,
+          phoneNumberId: callLog.phoneNumberId ?? session.phoneNumberId,
         },
       });
+      callLogId = callLog.id;
     } else {
-      await prisma.callLog.create({
+      const created = await prisma.callLog.create({
         data: {
           companyId: user.companyId,
           scope: "EXTERNAL",
@@ -71,6 +76,7 @@ export async function PATCH(
           toNumber: session.toNumber,
           customerId: session.customerId,
           sessionId: session.id,
+          phoneNumberId: session.phoneNumberId,
           twilioCallSid: session.callSid,
           status: "completed",
           disposition,
@@ -78,10 +84,19 @@ export async function PATCH(
           visitId: resolvedVisitId,
           leadId: leadId ?? null,
           handledByUserId: user.id,
+          userId: session.assignedUserId ?? user.id,
           endedAt: new Date(),
         },
       });
+      callLogId = created.id;
     }
+
+    await syncCallConversionFromLog(callLogId, {
+      disposition,
+      visitId: resolvedVisitId,
+      answeredByUserId: session.assignedUserId ?? user.id,
+      customerId: session.customerId,
+    });
 
     return NextResponse.json({ ok: true, disposition });
   } catch {

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
+import { resolveInboundCallAttribution } from "@/lib/voice/call-attribution";
+import { syncCallConversionFromLog } from "@/lib/voice/call-conversion";
 
 export async function POST(request: NextRequest) {
   const params = await parseTwilioWebhook(request);
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
       toNumber: true,
       customerId: true,
       assignedUserId: true,
+      phoneNumberId: true,
     },
   });
 
@@ -91,8 +94,18 @@ export async function POST(request: NextRequest) {
         endedAt: callStatus === "completed" ? new Date() : existing.endedAt,
         ...(session?.id && !existing.sessionId ? { sessionId: session.id } : {}),
         ...(userId && !existing.userId ? { userId } : {}),
+        ...(session?.phoneNumberId && !existing.phoneNumberId
+          ? { phoneNumberId: session.phoneNumberId }
+          : {}),
       },
     });
+
+    if (direction === CallDirection.INBOUND) {
+      void syncCallConversionFromLog(existing.id, {
+        answeredByUserId: userId,
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ ok: true });
   }
 
@@ -116,7 +129,17 @@ export async function POST(request: NextRequest) {
     customerId = customer?.id ?? null;
   }
 
-  await prisma.callLog.create({
+  let attribution = null;
+  if (direction === CallDirection.INBOUND) {
+    attribution = await resolveInboundCallAttribution({
+      companyId: company.id,
+      callerNumber: fromNumber,
+      dialedNumber: toNumber,
+      phoneNumberId: session?.phoneNumberId,
+    });
+  }
+
+  const created = await prisma.callLog.create({
     data: {
       companyId: company.id,
       scope: Scope.EXTERNAL,
@@ -127,11 +150,22 @@ export async function POST(request: NextRequest) {
       userId,
       twilioCallSid: logLookupSid,
       sessionId: session?.id ?? null,
+      phoneNumberId: attribution?.phoneNumberId ?? session?.phoneNumberId ?? null,
+      trackingSource: attribution?.trackingSource ?? null,
+      attributionMethod: attribution?.method ?? undefined,
+      googleLsaLeadId: attribution?.googleLsaLeadId ?? null,
       status: callStatus,
       durationSec: duration,
       endedAt: callStatus === "completed" ? new Date() : null,
     },
   });
+
+  if (direction === CallDirection.INBOUND) {
+    void syncCallConversionFromLog(created.id, {
+      answeredByUserId: userId,
+      attribution,
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true });
 }

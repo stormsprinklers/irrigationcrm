@@ -42,6 +42,8 @@ type VoiceContextValue = {
   toggleHold: () => Promise<void>;
   transfer: (targetUserId: string, type: "warm" | "cold") => Promise<void>;
   completeWarmTransfer: () => Promise<void>;
+  /** Link a visit booked during the active call into wrap-up + conversion tracking. */
+  notifyVisitBooked: (visitId: string) => void;
 };
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -72,6 +74,23 @@ async function resolveSessionId(callSid: string): Promise<string | null> {
     return data.id ?? null;
   } catch {
     return null;
+  }
+}
+
+async function recordAnswered(callSid: string | undefined, sessionId: string | null) {
+  if (!callSid && !sessionId) return;
+  try {
+    await fetch("/api/voice/sessions/by-call", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callSid: callSid || undefined,
+        sessionId: sessionId || undefined,
+        answered: true,
+      }),
+    });
+  } catch {
+    // ignore — conversion can still heal on disposition
   }
 }
 
@@ -107,6 +126,10 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       const callSid = call.parameters.CallSid;
       const sessionId = callSid ? await resolveSessionId(callSid) : null;
 
+      if (direction === "inbound") {
+        void recordAnswered(callSid, sessionId);
+      }
+
       const state: ActiveCallState = {
         call,
         direction,
@@ -140,6 +163,10 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     },
     []
   );
+
+  const notifyVisitBooked = useCallback((visitId: string) => {
+    setWrapUpVisitId(visitId);
+  }, []);
 
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !session?.user?.id) {
@@ -347,6 +374,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       toggleHold,
       transfer,
       completeWarmTransfer,
+      notifyVisitBooked,
     }),
     [
       ready,
@@ -361,6 +389,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       toggleHold,
       transfer,
       completeWarmTransfer,
+      notifyVisitBooked,
     ]
   );
 

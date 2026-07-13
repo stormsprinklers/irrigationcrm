@@ -123,6 +123,17 @@ export async function POST(request: NextRequest) {
 
     await syncVisitChecklists(visit.id, user.companyId);
 
+    if (callSessionId) {
+      const { linkVisitToCallSession } = await import("@/lib/voice/call-conversion");
+      void linkVisitToCallSession({
+        companyId: user.companyId,
+        callSessionId: String(callSessionId),
+        visitId: visit.id,
+        answeredByUserId: user.id,
+        markBooked: true,
+      }).catch(() => {});
+    }
+
     if (visit.customerId) {
       void onVisitTimeChanged({
         visitId: visit.id,
