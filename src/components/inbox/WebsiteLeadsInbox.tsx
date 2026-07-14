@@ -394,7 +394,9 @@ export function WebsiteLeadsInbox() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {item.source ? (
-                          <span className="text-xs text-primary">{item.source}</span>
+                          <span className="text-xs text-primary">
+                            {websiteLeadFormLabel(item.source)}
+                          </span>
                         ) : null}
                         {item.leadStatus && item.leadStatus !== "NEW" ? (
                           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -437,7 +439,9 @@ export function WebsiteLeadsInbox() {
                   ) : null}
                 </div>
                 {selected.source ? (
-                  <p className="text-sm text-muted-foreground">Source: {selected.source}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Source: {websiteLeadFormLabel(selected.source)}
+                  </p>
                 ) : null}
                 {emailDetail ? (
                   <p className="text-sm text-muted-foreground">From: {emailDetail.fromEmail}</p>
