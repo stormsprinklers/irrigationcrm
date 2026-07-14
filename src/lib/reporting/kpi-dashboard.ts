@@ -59,6 +59,19 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Format average first-contact time (can span hours). */
+function formatSpeedToLead(seconds: number) {
+  if (seconds <= 0) return "0:00";
+  const totalSec = Math.round(seconds);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function estimateConversionRate(
   estimates: Array<{ status: EstimateStatus }>
 ) {
@@ -203,6 +216,7 @@ export async function getKpiDashboardReport(
         convertedCustomerId: true,
         updatedAt: true,
         createdAt: true,
+        contactedAt: true,
       },
     }),
     prisma.maintenancePlanEnrollment.count({
@@ -427,6 +441,22 @@ export async function getKpiDashboardReport(
         ? stats.bookedRevenue.reduce((s, v) => s + v, 0) / stats.bookedRevenue.length
         : 0;
 
+    const speedSamples = leads.filter(
+      (lead) =>
+        lead.assignedUserId === csr.id &&
+        lead.contactedAt != null &&
+        lead.status !== LeadStatus.SPAM &&
+        lead.contactedAt >= start &&
+        lead.contactedAt <= end
+    );
+    const speedSeconds = speedSamples
+      .map((lead) => (lead.contactedAt!.getTime() - lead.createdAt.getTime()) / 1000)
+      .filter((sec) => Number.isFinite(sec) && sec >= 0);
+    const avgSpeedToLead =
+      speedSeconds.length > 0
+        ? speedSeconds.reduce((sum, sec) => sum + sec, 0) / speedSeconds.length
+        : null;
+
     return {
       id: csr.id,
       name: csr.name,
@@ -436,6 +466,10 @@ export async function getKpiDashboardReport(
         {
           label: "Booking rate",
           value: stats.dispositioned > 0 ? formatPercent(bookRate) : "—",
+        },
+        {
+          label: "Avg speed to lead",
+          value: avgSpeedToLead != null ? formatSpeedToLead(avgSpeedToLead) : "—",
         },
         {
           label: "Avg call duration",
