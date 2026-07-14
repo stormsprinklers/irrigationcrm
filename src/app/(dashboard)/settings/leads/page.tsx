@@ -63,7 +63,8 @@ export default function SettingsLeadsPage() {
             onChange={(e) => setCompany({ ...company, notifyLeadCreated: e.target.checked })}
           />
           <label htmlFor="notifyLeadCreated" className="text-sm">
-            Email ADMIN and CSR when a new lead is created via website integration
+            Email the company support/contact address when a new website lead arrives
+            (not individual salesperson or staff inboxes)
           </label>
         </div>
       </div>

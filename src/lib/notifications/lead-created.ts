@@ -1,15 +1,19 @@
 import type { Lead } from "@prisma/client";
-import { UserRole } from "@prisma/client";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Email the company support/contact address when a website lead arrives.
+ * Do not fan out to every ADMIN/CSR/SALES personal inbox.
+ */
 export async function notifyLeadCreated(companyId: string, lead: Lead) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: {
       name: true,
       notifyLeadCreated: true,
+      supportEmail: true,
       sendgridFrom: true,
       emailSenderName: true,
       emailLogoUrl: true,
@@ -18,17 +22,15 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
 
   if (!company?.notifyLeadCreated) return;
 
-  const staff = await prisma.user.findMany({
-    where: {
-      companyId,
-      status: "ACTIVE",
-      role: { in: [UserRole.ADMIN, UserRole.CSR, UserRole.SALES] },
-      email: { not: "" },
-    },
-    select: { email: true, name: true },
-  });
-
-  if (!staff.length || !isEmailConfigured()) return;
+  const to = company.supportEmail?.trim();
+  if (!to || !isEmailConfigured()) {
+    if (company.notifyLeadCreated && !to) {
+      console.warn(
+        "notifyLeadCreated: set company supportEmail to receive new-lead emails (staff personal inboxes are not used)"
+      );
+    }
+    return;
+  }
 
   const crmUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const leadUrl = crmUrl ? `${crmUrl}/customers/leads` : "/customers/leads";
@@ -49,25 +51,19 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
     .filter(Boolean)
     .join("\n");
 
-  const branding = {
-    companyName: company.name,
-    sendgridFrom: company.sendgridFrom,
-    emailSenderName: company.emailSenderName,
-    emailLogoUrl: company.emailLogoUrl,
-  };
-
-  for (const user of staff) {
-    if (!user.email) continue;
-    try {
-        await sendCompanyEmail(branding, {
-          companyId,
-          to: [user.email],
-          subject,
-          text: body,
-          html: body.replace(/\n/g, "<br>"),
-        });
-    } catch {
-      // continue notifying other staff
+  await sendCompanyEmail(
+    {
+      companyName: company.name,
+      sendgridFrom: company.sendgridFrom,
+      emailSenderName: company.emailSenderName,
+      emailLogoUrl: company.emailLogoUrl,
+    },
+    {
+      companyId,
+      to: [to],
+      subject,
+      text: body,
+      html: body.replace(/\n/g, "<br>"),
     }
-  }
+  );
 }
