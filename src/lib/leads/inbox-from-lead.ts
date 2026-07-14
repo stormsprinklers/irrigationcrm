@@ -3,6 +3,7 @@ import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
+import { websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
 import { notifyWebsiteFormInbox } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 
@@ -52,8 +53,9 @@ export async function createInboxEntriesFromWebsiteLead(
   });
 
   const body = formatLeadInboxBody(input);
-  const subject = `Website form: ${input.source ?? "contact"} — ${input.name}`;
+  const subject = websiteLeadNotificationTitle(input.source, input.name);
   const threadId = `website-lead:${leadId}`;
+  const sourceSlug = input.source ?? "contact";
 
   if (input.email?.trim()) {
     const emailMessage = await prisma.emailMessage.create({
@@ -83,7 +85,7 @@ export async function createInboxEntriesFromWebsiteLead(
       title: input.name,
     });
 
-    const inboundBody = `[Website form — ${input.source ?? "contact"} | lead:${leadId}]\n\n${body}`;
+    const inboundBody = `[Website form — ${sourceSlug} | lead:${leadId}]\n\n${body}`;
     const contactInfoDetected = messageSharesContactInfo(inboundBody);
 
     const createdMessage = await prisma.message.create({

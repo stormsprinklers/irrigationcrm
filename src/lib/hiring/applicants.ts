@@ -212,7 +212,7 @@ export async function createApplicantFromCareers(
     await notifyStaffInApp({
       companyId,
       type: AppNotificationType.HIRING_APPLICANT,
-      title: `New applicant: ${applicant.name}`,
+      title: `New Job Applicant: ${applicant.name}`,
       body: `${applicant.jobTitle || applicant.jobSlug}${aiScore != null ? ` · score ${aiScore}/12` : ""}`,
       href: `/hiring/applicants/${applicant.id}`,
       userIds: await hiringNotifyUserIds(companyId, applicant.jobSlug),

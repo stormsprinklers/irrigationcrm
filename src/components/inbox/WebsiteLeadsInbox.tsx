@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { sanitizeEmailHtml } from "@/lib/inbox/attachments";
+import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
 
 type WebsiteLeadInboxItem = {

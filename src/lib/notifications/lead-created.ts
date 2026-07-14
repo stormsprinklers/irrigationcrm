@@ -1,4 +1,5 @@
 import type { Lead } from "@prisma/client";
+import { websiteLeadFormLabel, websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { prisma } from "@/lib/prisma";
@@ -34,10 +35,11 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
 
   const crmUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const leadUrl = crmUrl ? `${crmUrl}/customers/leads` : "/customers/leads";
+  const formLabel = websiteLeadFormLabel(lead.source);
 
-  const subject = `New lead: ${lead.name}`;
+  const subject = websiteLeadNotificationTitle(lead.source, lead.name);
   const body = [
-    `A new lead was submitted from ${lead.source ?? "website"}.`,
+    `A new ${formLabel.toLowerCase()} submission was received.`,
     "",
     `Name: ${lead.name}`,
     lead.phone ? `Phone: ${lead.phone}` : null,

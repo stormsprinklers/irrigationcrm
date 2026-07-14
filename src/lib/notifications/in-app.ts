@@ -1,4 +1,8 @@
 import { AppNotificationType, Scope, UserRole } from "@prisma/client";
+import {
+  websiteLeadFormLabel,
+  websiteLeadNotificationTitle,
+} from "@/lib/leads/form-labels";
 import { prisma } from "@/lib/prisma";
 import { sendMobilePushToUsers } from "@/lib/mobile-push/devices";
 
@@ -143,13 +147,15 @@ export async function notifyWebsiteFormInbox(params: {
   name: string;
   source?: string | null;
 }) {
-  const label = params.source ?? "website form";
+  const title = websiteLeadNotificationTitle(params.source, params.name);
+  const body = websiteLeadFormLabel(params.source);
+
   if (params.emailId) {
     await notifyStaffInApp({
       companyId: params.companyId,
       type: AppNotificationType.INBOX_LEAD,
-      title: `Website form: ${params.name}`,
-      body: label,
+      title,
+      body,
       href: `/inbox/leads?emailId=${params.emailId}`,
     });
     return;
@@ -159,8 +165,8 @@ export async function notifyWebsiteFormInbox(params: {
     await notifyStaffInApp({
       companyId: params.companyId,
       type: AppNotificationType.INBOX_LEAD,
-      title: `Website form: ${params.name}`,
-      body: label,
+      title,
+      body,
       href: `/inbox/leads?conversationId=${params.conversationId}`,
     });
   }
