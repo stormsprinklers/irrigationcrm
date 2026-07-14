@@ -1,17 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink, Mail, MessageSquare, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { sanitizeEmailHtml } from "@/lib/inbox/attachments";
 import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
+
+type LeadFilterTab = "to_contact" | "contacted" | "spam";
 
 type WebsiteLeadInboxItem = {
   id: string;
@@ -122,10 +125,24 @@ function statusLabel(status: string | null) {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
+function leadMatchesTab(item: WebsiteLeadInboxItem, tab: LeadFilterTab) {
+  const status = item.leadStatus;
+  if (tab === "spam") return status === "SPAM";
+  if (tab === "contacted") return status === "CONTACTED";
+  return status !== "SPAM" && status !== "CONTACTED";
+}
+
+function tabForLeadStatus(status: string | null): LeadFilterTab {
+  if (status === "SPAM") return "spam";
+  if (status === "CONTACTED") return "contacted";
+  return "to_contact";
+}
+
 export function WebsiteLeadsInbox() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<WebsiteLeadInboxItem[]>([]);
+  const [filterTab, setFilterTab] = useState<LeadFilterTab>("to_contact");
   const [selected, setSelected] = useState<WebsiteLeadInboxItem | null>(null);
   const [emailDetail, setEmailDetail] = useState<EmailDetail | null>(null);
   const [smsBody, setSmsBody] = useState<string | null>(null);
@@ -133,6 +150,23 @@ export function WebsiteLeadsInbox() {
   const [statusBusy, setStatusBusy] = useState(false);
   /** Tracks which deep-link query we've already applied so list refreshes don't fight clicks. */
   const appliedDeepLinkRef = useRef<string | null>(null);
+
+  const filteredItems = useMemo(
+    () => items.filter((item) => leadMatchesTab(item, filterTab)),
+    [items, filterTab]
+  );
+
+  const tabCounts = useMemo(() => {
+    let toContact = 0;
+    let contacted = 0;
+    let spam = 0;
+    for (const item of items) {
+      if (item.leadStatus === "SPAM") spam += 1;
+      else if (item.leadStatus === "CONTACTED") contacted += 1;
+      else toContact += 1;
+    }
+    return { toContact, contacted, spam };
+  }, [items]);
 
   const loadItems = useCallback(async () => {
     const res = await fetch("/api/inbox/leads");
@@ -177,6 +211,7 @@ export function WebsiteLeadsInbox() {
     if (emailId) {
       const match = items.find((item) => item.channel === "email" && item.id === emailId);
       if (match) {
+        setFilterTab(tabForLeadStatus(match.leadStatus));
         setSelected(match);
         appliedDeepLinkRef.current = deepLinkKey;
       }
@@ -187,10 +222,18 @@ export function WebsiteLeadsInbox() {
       (item) => item.channel === "sms" && item.conversationId === conversationId
     );
     if (match) {
+      setFilterTab(tabForLeadStatus(match.leadStatus));
       setSelected(match);
       appliedDeepLinkRef.current = deepLinkKey;
     }
   }, [searchParams, items]);
+
+  useEffect(() => {
+    if (!selected) return;
+    if (!leadMatchesTab(selected, filterTab)) {
+      setSelected(null);
+    }
+  }, [filterTab, selected]);
 
   useEffect(() => {
     if (!selected) {
@@ -298,6 +341,7 @@ export function WebsiteLeadsInbox() {
         data.status ?? status,
         data.contactedAt ?? (status === "CONTACTED" ? new Date().toISOString() : selected.contactedAt)
       );
+      setFilterTab(tabForLeadStatus(data.status ?? status));
       if (status === "CONTACTED") toast.success("Marked as contacted");
       else if (status === "SPAM") toast.success("Marked as spam");
       else toast.success("Lead reopened");
@@ -321,6 +365,7 @@ export function WebsiteLeadsInbox() {
             data.status ?? "CONTACTED",
             data.contactedAt ?? new Date().toISOString()
           );
+          setFilterTab("contacted");
         }
       } catch {
         // Navigation still proceeds so the CSR can reach the lead.
@@ -364,13 +409,41 @@ export function WebsiteLeadsInbox() {
           <p className="mt-1 text-xs text-muted-foreground">
             Contact and other form submissions from stormsprinklers.com
           </p>
+          <Tabs
+            value={filterTab}
+            onValueChange={(value) => setFilterTab(value as LeadFilterTab)}
+            className="mt-3"
+          >
+            <TabsList className="grid h-auto w-full grid-cols-3 gap-0.5 p-1">
+              <TabsTrigger value="to_contact" className="px-1.5 text-[11px]">
+                To contact
+                <span className="ml-1 opacity-70">{tabCounts.toContact}</span>
+              </TabsTrigger>
+              <TabsTrigger value="contacted" className="px-1.5 text-[11px]">
+                Contacted
+                <span className="ml-1 opacity-70">{tabCounts.contacted}</span>
+              </TabsTrigger>
+              <TabsTrigger value="spam" className="px-1.5 text-[11px]">
+                Spam
+                <span className="ml-1 opacity-70">{tabCounts.spam}</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
         <ScrollArea className="min-h-0 flex-1">
           {!items.length ? (
             <p className="p-4 text-sm text-muted-foreground">No form submissions yet.</p>
+          ) : !filteredItems.length ? (
+            <p className="p-4 text-sm text-muted-foreground">
+              {filterTab === "to_contact"
+                ? "No leads waiting to be contacted."
+                : filterTab === "contacted"
+                  ? "No contacted leads yet."
+                  : "No spam leads."}
+            </p>
           ) : (
             <ul>
-              {items.map((item) => {
+              {filteredItems.map((item) => {
                 const start = item.leadCreatedAt ?? item.createdAt;
                 return (
                   <li key={`${item.channel}-${item.id}`}>
