@@ -2,10 +2,24 @@ import { randomBytes } from "crypto";
 import { AppNotificationType, type ApplicantStage, type JobApplicant, Prisma } from "@prisma/client";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { stageFromAiScore, stageNeedsBookingInvite } from "@/lib/hiring/permissions";
-import { scoreApplicantAnswers } from "@/lib/hiring/score";
+import {
+  scoreApplicantAnswers,
+  scoreBreakdownFromMetadata,
+} from "@/lib/hiring/score";
 import { notifyStaffInApp } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 import type { WebsiteCareersApplicationInput } from "@/lib/integrations/schemas";
+
+function mergeMetadata(
+  existing: unknown,
+  patch: Record<string, unknown>
+): Prisma.InputJsonValue {
+  const base =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {};
+  return { ...base, ...patch } as Prisma.InputJsonValue;
+}
 
 export function serializeApplicant(
   applicant: JobApplicant & {
@@ -36,6 +50,7 @@ export function serializeApplicant(
     inconvenientServiceExample: applicant.inconvenientServiceExample,
     personalGoals: applicant.personalGoals,
     aiScore: applicant.aiScore,
+    aiScoreBreakdown: scoreBreakdownFromMetadata(applicant.metadata),
     stage: applicant.stage,
     stageSource: applicant.stageSource,
     bookingInviteSentAt: applicant.bookingInviteSentAt?.toISOString() ?? null,
@@ -157,7 +172,7 @@ export async function createApplicantFromCareers(
     return { applicant: existing, created: false };
   }
 
-  const aiScore = options?.skipScoring
+  const scored = options?.skipScoring
     ? null
     : await scoreApplicantAnswers({
         hardWorkMeaning: input.hardWorkMeaning,
@@ -165,7 +180,12 @@ export async function createApplicantFromCareers(
         inconvenientServiceExample: input.inconvenientServiceExample,
         personalGoals: input.personalGoals,
       });
+  const aiScore = scored?.total ?? null;
   const stage = options?.skipScoring ? ("MAYBE" as const) : stageFromAiScore(aiScore);
+
+  const metadata = mergeMetadata(input.metadata ?? null, {
+    ...(scored ? { aiScoreBreakdown: scored } : {}),
+  });
 
   const applicant = await prisma.jobApplicant.create({
     data: {
@@ -184,7 +204,7 @@ export async function createApplicantFromCareers(
       aiScore,
       stage,
       stageSource: options?.skipScoring ? "MANUAL" : "AI",
-      metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+      metadata,
     },
   });
 
@@ -252,4 +272,48 @@ export async function updateApplicantStage(
   }
 
   return updated;
+}
+
+/**
+ * Re-run AI scoring and persist per-section grades (used for older applicants).
+ * Does not change stage unless `updateStageFromScore` is true.
+ */
+export async function rescoreApplicant(
+  companyId: string,
+  applicantId: string,
+  options?: { updateStageFromScore?: boolean }
+) {
+  const existing = await prisma.jobApplicant.findFirst({
+    where: { id: applicantId, companyId },
+  });
+  if (!existing) return null;
+
+  const scored = await scoreApplicantAnswers({
+    hardWorkMeaning: existing.hardWorkMeaning,
+    integrityMeaning: existing.integrityMeaning,
+    inconvenientServiceExample: existing.inconvenientServiceExample,
+    personalGoals: existing.personalGoals,
+  });
+  if (!scored) return existing;
+
+  const data: Prisma.JobApplicantUpdateInput = {
+    aiScore: scored.total,
+    metadata: mergeMetadata(existing.metadata, { aiScoreBreakdown: scored }),
+  };
+  if (options?.updateStageFromScore && existing.stageSource === "AI") {
+    data.stage = stageFromAiScore(scored.total);
+  }
+
+  return prisma.jobApplicant.update({
+    where: { id: applicantId },
+    data,
+    include: {
+      bookings: {
+        where: { status: "SCHEDULED" },
+        orderBy: { startAt: "asc" },
+        take: 1,
+        include: { manager: { select: { id: true, name: true } } },
+      },
+    },
+  });
 }

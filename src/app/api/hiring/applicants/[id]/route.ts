@@ -7,7 +7,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { serializeApplicant, updateApplicantStage } from "@/lib/hiring/applicants";
+import { serializeApplicant, rescoreApplicant, updateApplicantStage } from "@/lib/hiring/applicants";
 import { canAccessHiring } from "@/lib/hiring/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -43,6 +43,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!canAccessHiring(user.role)) return forbiddenResponse();
     const { id } = await params;
     const body = await request.json();
+
+    if (body.rescore === true) {
+      const updated = await rescoreApplicant(user.companyId, id);
+      if (!updated) return notFoundResponse();
+      return NextResponse.json(serializeApplicant(updated));
+    }
 
     if (
       body.stage === undefined ||
