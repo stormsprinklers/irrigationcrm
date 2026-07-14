@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 
-const STATUSES = ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST"];
+const STATUSES = ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST", "SPAM"];
 
 export default function CustomerLeadsPage() {
   const [leads, setLeads] = useState<

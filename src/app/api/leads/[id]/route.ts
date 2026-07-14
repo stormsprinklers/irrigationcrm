@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LeadStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { leadStatusUpdateData } from "@/lib/leads/contact-status";
 import { convertLeadToCustomer, serializeLead } from "@/lib/leads/queries";
 import { leadInclude } from "@/lib/leads/queries";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const existing = await prisma.lead.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    const nextStatus =
+      body.status !== undefined && Object.values(LeadStatus).includes(body.status as LeadStatus)
+        ? (body.status as LeadStatus)
+        : undefined;
+
     const lead = await prisma.lead.update({
       where: { id },
       data: {
@@ -25,7 +31,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ...(body.source !== undefined ? { source: body.source } : {}),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId } : {}),
-        ...(body.status !== undefined ? { status: body.status as LeadStatus } : {}),
+        ...(nextStatus !== undefined
+          ? leadStatusUpdateData(
+              { status: existing.status, contactedAt: existing.contactedAt },
+              nextStatus
+            )
+          : {}),
       },
       include: leadInclude,
     });

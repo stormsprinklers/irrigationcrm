@@ -83,7 +83,7 @@ export async function createInboxEntriesFromWebsiteLead(
       title: input.name,
     });
 
-    const inboundBody = `[Website form — ${input.source ?? "contact"}]\n\n${body}`;
+    const inboundBody = `[Website form — ${input.source ?? "contact"} | lead:${leadId}]\n\n${body}`;
     const contactInfoDetected = messageSharesContactInfo(inboundBody);
 
     const createdMessage = await prisma.message.create({

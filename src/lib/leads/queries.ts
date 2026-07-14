@@ -19,6 +19,7 @@ export function serializeLead(lead: LeadPayload) {
     notes: lead.notes,
     assignedUser: lead.assignedUser,
     convertedCustomer: lead.convertedCustomer,
+    contactedAt: lead.contactedAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
   };

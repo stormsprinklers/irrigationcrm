@@ -12,6 +12,7 @@ const publicPaths = [
   "/portal",
   "/api/auth",
   "/api/book/public",
+  "/api/book/hiring",
   "/api/refer",
   "/api/portal/auth",
   "/api/portal/company",

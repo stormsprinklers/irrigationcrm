@@ -315,6 +315,24 @@ enum LeadStatus {
   QUALIFIED
   WON
   LOST
+  SPAM
+}
+
+enum ApplicantStage {
+  REJECTED
+  MAYBE
+  GOOD_FIT
+}
+
+enum ApplicantStageSource {
+  AI
+  MANUAL
+}
+
+enum HiringScreenBookingStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
 }
 
 enum PriceBookDiscountAppliesTo {
@@ -605,6 +623,10 @@ model Company {
   referralProgramSettings ReferralProgramSettings?
   referralMembers        ReferralMember[]
   referralSubmissions    ReferralSubmission[]
+  jobApplicants          JobApplicant[]
+  hiringRoleAssignments  HiringRoleAssignment[]
+  hiringManagerAvailabilities HiringManagerAvailability[]
+  hiringScreenBookings   HiringScreenBooking[]
 }
 
 model LocalSeoSerpSearch {
@@ -768,6 +790,9 @@ model User {
   reviewedSocialPosts    SocialPostSubmission[] @relation("SocialSubmissionReviewer")
   socialPostReviewComments SocialPostReviewComment[]
   appNotifications         AppNotification[]
+  hiringRoleAssignments    HiringRoleAssignment[] @relation("HiringRoleManager")
+  hiringManagerAvailability HiringManagerAvailability?
+  hiringScreenBookings     HiringScreenBooking[]  @relation("HiringScreenManager")
 }
 
 model Customer {
@@ -878,6 +903,8 @@ model Lead {
   externalId          String?
   metadata            Json?
   convertedCustomerId String?    @unique
+  /// First time marked contacted (manual or via call / SMS / email action). Used for speed-to-lead.
+  contactedAt         DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
@@ -890,6 +917,97 @@ model Lead {
   @@unique([companyId, externalId])
   @@index([companyId, status])
   @@index([assignedUserId])
+  @@index([companyId, contactedAt])
+}
+
+model JobApplicant {
+  id                          String               @id @default(cuid())
+  companyId                   String
+  externalId                  String
+  name                        String
+  email                       String
+  phone                       String?
+  jobSlug                     String
+  jobTitle                    String?
+  interest                    String?              @db.Text
+  hardWorkMeaning             String               @db.Text
+  integrityMeaning            String               @db.Text
+  inconvenientServiceExample  String               @db.Text
+  personalGoals               String               @db.Text
+  aiScore                     Int?
+  stage                       ApplicantStage       @default(MAYBE)
+  stageSource                 ApplicantStageSource @default(AI)
+  bookingToken                String?              @unique
+  bookingInviteSentAt         DateTime?
+  metadata                    Json?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+
+  company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  bookings HiringScreenBooking[]
+
+  @@unique([companyId, externalId])
+  @@index([companyId, jobSlug])
+  @@index([companyId, stage])
+  @@index([companyId, aiScore])
+  @@index([companyId, createdAt])
+  @@map("job_applicants")
+}
+
+model HiringRoleAssignment {
+  id                  String   @id @default(cuid())
+  companyId           String
+  jobSlug             String
+  jobTitle            String?
+  hiringManagerUserId String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  hiringManager  User    @relation("HiringRoleManager", fields: [hiringManagerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, jobSlug])
+  @@index([companyId])
+  @@index([hiringManagerUserId])
+  @@map("hiring_role_assignments")
+}
+
+model HiringManagerAvailability {
+  id           String   @id @default(cuid())
+  companyId    String
+  userId       String   @unique
+  weeklyHours  Json?
+  blockedSlots Json?
+  leadTimeHours Int     @default(2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("hiring_manager_availabilities")
+}
+
+model HiringScreenBooking {
+  id          String                    @id @default(cuid())
+  companyId   String
+  applicantId String
+  managerUserId String
+  startAt     DateTime
+  endAt       DateTime
+  status      HiringScreenBookingStatus @default(SCHEDULED)
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+
+  company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  applicant JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  manager   User         @relation("HiringScreenManager", fields: [managerUserId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, startAt])
+  @@index([managerUserId, startAt])
+  @@index([applicantId])
+  @@map("hiring_screen_bookings")
 }
 
 model CustomerProperty {
@@ -1114,6 +1232,8 @@ enum AppNotificationType {
   INBOX_SMS
   INBOX_LEAD
   LEAD_CREATED
+  HIRING_APPLICANT
+  HIRING_SCREEN_BOOKED
 }
 
 model NotificationTemplate {

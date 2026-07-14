@@ -20,8 +20,18 @@ export const primaryNav: NavItem[] = [
   { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Marketing", href: "/marketing" },
+  { label: "Hiring", href: "/hiring" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
+];
+
+export const hiringSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Applicants", href: "/hiring" },
+      { label: "Setup", href: "/hiring/setup" },
+    ],
+  },
 ];
 
 export const customerSidebar: NavSection[] = [
@@ -195,6 +205,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/inbox") return pathname.startsWith("/inbox");
   if (href === "/price-book") return pathname.startsWith("/price-book");
   if (href === "/marketing") return pathname.startsWith("/marketing");
+  if (href === "/hiring") return pathname.startsWith("/hiring");
   if (href === "/campaigns") return pathname.startsWith("/campaigns") || pathname.startsWith("/marketing");
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");

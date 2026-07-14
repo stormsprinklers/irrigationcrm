@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useState } from "react";
 import { Menu, Phone, Settings, X } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
+import { canAccessHiring } from "@/lib/hiring/permissions";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
@@ -30,6 +31,9 @@ export function TopNav() {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const userName = session?.user?.name ?? "User";
+  const navItems = primaryNav.filter(
+    (item) => item.href !== "/hiring" || canAccessHiring(session?.user?.role)
+  );
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
@@ -58,7 +62,7 @@ export function TopNav() {
         </Link>
 
         <nav className="hidden items-center gap-1 xl:flex" aria-label="Primary">
-          {primaryNav.map((item) => {
+          {navItems.map((item) => {
             const active = getPrimaryNavActive(pathname, item.href);
             return (
               <Link
@@ -126,7 +130,7 @@ export function TopNav() {
         aria-hidden={!mobileNavOpen}
       >
         <div className="overflow-y-auto py-2">
-          {primaryNav.map((item) => {
+          {navItems.map((item) => {
             const active = getPrimaryNavActive(pathname, item.href);
             return (
               <Link

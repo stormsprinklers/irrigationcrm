@@ -13,6 +13,23 @@ export const websiteLeadSchema = z.object({
   city: z.string().optional().nullable(),
 });
 
+export const websiteCareersApplicationSchema = z.object({
+  externalId: z.string().min(1),
+  name: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().optional().nullable(),
+  jobSlug: z.string().min(1),
+  jobTitle: z.string().optional().nullable(),
+  interest: z.string().optional().nullable(),
+  hardWorkMeaning: z.string().min(1),
+  integrityMeaning: z.string().min(1),
+  inconvenientServiceExample: z.string().min(1),
+  personalGoals: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type WebsiteCareersApplicationInput = z.infer<typeof websiteCareersApplicationSchema>;
+
 export const websiteEventSchema = z.object({
   externalId: z.string().min(1),
   eventType: z.string().min(1),

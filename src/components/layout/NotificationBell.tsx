@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCheck, Mail, MessageSquare, UserPlus } from "lucide-react";
+import { Bell, Briefcase, CheckCheck, Mail, MessageSquare, Phone, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,13 @@ import { cn } from "@/lib/utils";
 
 type AppNotification = {
   id: string;
-  type: "INBOX_EMAIL" | "INBOX_SMS" | "INBOX_LEAD" | "LEAD_CREATED";
+  type:
+    | "INBOX_EMAIL"
+    | "INBOX_SMS"
+    | "INBOX_LEAD"
+    | "LEAD_CREATED"
+    | "HIRING_APPLICANT"
+    | "HIRING_SCREEN_BOOKED";
   title: string;
   body?: string | null;
   href?: string | null;
@@ -32,6 +38,10 @@ function notificationIcon(type: AppNotification["type"]) {
     case "INBOX_LEAD":
     case "LEAD_CREATED":
       return UserPlus;
+    case "HIRING_APPLICANT":
+      return Briefcase;
+    case "HIRING_SCREEN_BOOKED":
+      return Phone;
     default:
       return Mail;
   }
