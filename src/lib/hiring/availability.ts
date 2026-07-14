@@ -1,19 +1,17 @@
-import { addDays, addMinutes, isBefore, startOfDay } from "date-fns";
+import { addMinutes, isBefore } from "date-fns";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay } from "@/lib/company/types";
+import {
+  addZonedDays,
+  getZonedDayKey,
+  getZonedParts,
+  resolveCompanyTimezone,
+  startOfZonedDay,
+  zonedWallTimeToUtc,
+} from "@/lib/datetime/zoned";
 import { prisma } from "@/lib/prisma";
 
 export const HIRING_SCREEN_MINUTES = 10;
 export const HIRING_LOOKAHEAD_DAYS = 14;
-
-const DAY_KEYS = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-] as const;
 
 export type HiringSlot = {
   startAt: string;
@@ -25,17 +23,6 @@ function mergeWeeklyHours(weeklyHours: unknown): Record<string, BusinessHoursDay
     return { ...DEFAULT_BUSINESS_HOURS };
   }
   return { ...DEFAULT_BUSINESS_HOURS, ...(weeklyHours as Record<string, BusinessHoursDay>) };
-}
-
-function parseTimeOnDate(baseDate: Date, time: string): Date {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date(baseDate);
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-function dayKey(date: Date): string {
-  return DAY_KEYS[date.getDay()];
 }
 
 type BlockedSlot = { startAt: string; endAt: string };
@@ -51,17 +38,33 @@ function parseBlockedSlots(raw: unknown): BlockedSlot[] {
   );
 }
 
+function parseHm(time: string): { hour: number; minute: number } {
+  const [h, m] = time.split(":").map(Number);
+  return { hour: h || 0, minute: m || 0 };
+}
+
 export async function getHiringManagerSlots(params: {
   companyId: string;
   managerUserId: string;
+  /** IANA timezone for wall-clock hours (defaults to company.timezone / Denver). */
+  timeZone?: string | null;
   from?: Date;
   days?: number;
   slotMinutes?: number;
 }): Promise<HiringSlot[]> {
-  const availability = await prisma.hiringManagerAvailability.findUnique({
-    where: { userId: params.managerUserId },
-  });
+  const [availability, company] = await Promise.all([
+    prisma.hiringManagerAvailability.findUnique({
+      where: { userId: params.managerUserId },
+    }),
+    params.timeZone
+      ? Promise.resolve(null)
+      : prisma.company.findUnique({
+          where: { id: params.companyId },
+          select: { timezone: true },
+        }),
+  ]);
 
+  const timeZone = resolveCompanyTimezone(params.timeZone ?? company?.timezone);
   const hours = mergeWeeklyHours(availability?.weeklyHours);
   const blocked = parseBlockedSlots(availability?.blockedSlots);
   const leadTimeHours = availability?.leadTimeHours ?? 2;
@@ -70,8 +73,8 @@ export async function getHiringManagerSlots(params: {
   const slotMinutes = params.slotMinutes ?? HIRING_SCREEN_MINUTES;
   const leadTimeCutoff = addMinutes(from, leadTimeHours * 60);
 
-  const rangeStart = startOfDay(from);
-  const rangeEnd = addDays(rangeStart, days + 1);
+  const rangeStart = startOfZonedDay(from, timeZone);
+  const rangeEnd = addZonedDays(rangeStart, days + 1, timeZone);
 
   const existing = await prisma.hiringScreenBooking.findMany({
     where: {
@@ -92,13 +95,31 @@ export async function getHiringManagerSlots(params: {
   const slots: HiringSlot[] = [];
 
   for (let dayOffset = 0; dayOffset < days; dayOffset++) {
-    const day = addDays(rangeStart, dayOffset);
-    const key = dayKey(day);
+    const day = addZonedDays(rangeStart, dayOffset, timeZone);
+    const key = getZonedDayKey(day, timeZone);
     const window = hours[key];
     if (!window?.open) continue;
 
-    let cursor = parseTimeOnDate(day, window.start);
-    const dayEnd = parseTimeOnDate(day, window.end);
+    const parts = getZonedParts(day, timeZone);
+    const startHm = parseHm(window.start);
+    const endHm = parseHm(window.end);
+
+    let cursor = zonedWallTimeToUtc(
+      timeZone,
+      parts.year,
+      parts.month,
+      parts.day,
+      startHm.hour,
+      startHm.minute
+    );
+    const dayEnd = zonedWallTimeToUtc(
+      timeZone,
+      parts.year,
+      parts.month,
+      parts.day,
+      endHm.hour,
+      endHm.minute
+    );
 
     while (addMinutes(cursor, slotMinutes) <= dayEnd) {
       const slotEnd = addMinutes(cursor, slotMinutes);

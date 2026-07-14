@@ -30,14 +30,21 @@ export async function GET(request: NextRequest) {
       where: { userId: manager.id },
     });
 
+    const company = await prisma.company.findUnique({
+      where: { id: user.companyId },
+      select: { timezone: true },
+    });
+
     const previewSlots = await getHiringManagerSlots({
       companyId: user.companyId,
       managerUserId: manager.id,
+      timeZone: company?.timezone,
     });
 
     return NextResponse.json({
       userId: manager.id,
       managerName: manager.name,
+      timezone: company?.timezone ?? "America/Denver",
       weeklyHours: availability?.weeklyHours ?? DEFAULT_BUSINESS_HOURS,
       blockedSlots: availability?.blockedSlots ?? [],
       leadTimeHours: availability?.leadTimeHours ?? 2,

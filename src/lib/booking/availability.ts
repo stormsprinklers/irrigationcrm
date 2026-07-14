@@ -1,19 +1,17 @@
-import { addDays, addMinutes, format, isBefore, isEqual, startOfDay } from "date-fns";
+import { addMinutes, isBefore, isEqual } from "date-fns";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay } from "@/lib/company/types";
+import {
+  addZonedDays,
+  getZonedDayKey,
+  getZonedParts,
+  resolveCompanyTimezone,
+  startOfZonedDay,
+  zonedWallTimeToUtc,
+} from "@/lib/datetime/zoned";
 import { prisma } from "@/lib/prisma";
 
 export const BOOKING_SLOT_MINUTES = 120;
 export const BOOKING_LOOKAHEAD_DAYS = 14;
-
-const DAY_KEYS = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-] as const;
 
 export type BookingSlot = {
   startAt: string;
@@ -24,6 +22,8 @@ export type AvailabilityParams = {
   companyId: string;
   businessHours: unknown;
   bookingLeadTimeHours: number;
+  /** IANA timezone for business-hours wall clock. Defaults to America/Denver. */
+  timeZone?: string | null;
   from?: Date;
   days?: number;
   slotMinutes?: number;
@@ -36,35 +36,25 @@ function mergeBusinessHours(businessHours: unknown): Record<string, BusinessHour
   return { ...DEFAULT_BUSINESS_HOURS, ...(businessHours as Record<string, BusinessHoursDay>) };
 }
 
-function parseTimeOnDate(baseDate: Date, time: string): Date {
+function parseHm(time: string): { hour: number; minute: number } {
   const [h, m] = time.split(":").map(Number);
-  const d = new Date(baseDate);
-  d.setHours(h, m, 0, 0);
-  return d;
+  return { hour: h || 0, minute: m || 0 };
 }
 
-function dayKey(date: Date): string {
-  return DAY_KEYS[date.getDay()];
-}
-
-function slotsOverlap(
-  aStart: Date,
-  aEnd: Date,
-  bStart: Date,
-  bEnd: Date
-): boolean {
+function slotsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && bStart < aEnd;
 }
 
 export async function getAvailableSlots(params: AvailabilityParams): Promise<BookingSlot[]> {
+  const timeZone = resolveCompanyTimezone(params.timeZone);
   const hours = mergeBusinessHours(params.businessHours);
   const from = params.from ?? new Date();
   const days = params.days ?? BOOKING_LOOKAHEAD_DAYS;
   const slotMinutes = params.slotMinutes ?? BOOKING_SLOT_MINUTES;
   const leadTimeCutoff = addMinutes(from, params.bookingLeadTimeHours * 60);
 
-  const rangeStart = startOfDay(from);
-  const rangeEnd = addDays(rangeStart, days + 1);
+  const rangeStart = startOfZonedDay(from, timeZone);
+  const rangeEnd = addZonedDays(rangeStart, days + 1, timeZone);
 
   const existingVisits = await prisma.visit.findMany({
     where: {
@@ -79,13 +69,31 @@ export async function getAvailableSlots(params: AvailabilityParams): Promise<Boo
   const slots: BookingSlot[] = [];
 
   for (let offset = 0; offset < days; offset++) {
-    const day = addDays(rangeStart, offset);
-    const key = dayKey(day);
+    const day = addZonedDays(rangeStart, offset, timeZone);
+    const key = getZonedDayKey(day, timeZone);
     const dayHours = hours[key];
     if (!dayHours?.open || !dayHours.start || !dayHours.end) continue;
 
-    let cursor = parseTimeOnDate(day, dayHours.start);
-    const dayEnd = parseTimeOnDate(day, dayHours.end);
+    const parts = getZonedParts(day, timeZone);
+    const startHm = parseHm(dayHours.start);
+    const endHm = parseHm(dayHours.end);
+
+    let cursor = zonedWallTimeToUtc(
+      timeZone,
+      parts.year,
+      parts.month,
+      parts.day,
+      startHm.hour,
+      startHm.minute
+    );
+    const dayEnd = zonedWallTimeToUtc(
+      timeZone,
+      parts.year,
+      parts.month,
+      parts.day,
+      endHm.hour,
+      endHm.minute
+    );
 
     while (addMinutes(cursor, slotMinutes) <= dayEnd) {
       const slotEnd = addMinutes(cursor, slotMinutes);
@@ -113,8 +121,25 @@ export async function getAvailableSlots(params: AvailabilityParams): Promise<Boo
   return slots;
 }
 
-export function formatSlotLabel(startAt: string, endAt: string): string {
+export function formatSlotLabel(startAt: string, endAt: string, timeZone?: string | null): string {
+  const tz = resolveCompanyTimezone(timeZone);
   const start = new Date(startAt);
   const end = new Date(endAt);
-  return `${format(start, "EEE, MMM d")} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
+  const day = start.toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: tz,
+  });
+  const startTime = start.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+  });
+  const endTime = end.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+  });
+  return `${day} · ${startTime} – ${endTime}`;
 }

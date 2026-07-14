@@ -14,13 +14,14 @@ type BookingInfo = {
   slotMinutes: number;
 };
 
-function formatSlot(iso: string) {
-  return new Date(iso).toLocaleString(undefined, {
+function formatSlot(iso: string, timeZone?: string | null) {
+  return new Date(iso).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: timeZone?.trim() || "America/Denver",
   });
 }
 
@@ -96,7 +97,7 @@ export function HiringBookingClient({ token }: { token: string }) {
         <h1 className="text-2xl font-semibold text-slate-900">You&apos;re booked</h1>
         <p className="text-slate-600">
           Your phone screen with {info.company.name} is scheduled for{" "}
-          <strong>{formatSlot(confirmed.startAt)}</strong>.
+          <strong>{formatSlot(confirmed.startAt, info.company.timezone)}</strong>.
         </p>
         <p className="text-sm text-slate-500">We&apos;ll call you at the number on your application.</p>
       </div>
@@ -131,7 +132,7 @@ export function HiringBookingClient({ token }: { token: string }) {
                 disabled={booking}
                 onClick={() => void bookSlot(slot.startAt)}
               >
-                <span>{formatSlot(slot.startAt)}</span>
+                <span>{formatSlot(slot.startAt, info.company.timezone)}</span>
                 <span className="text-xs text-muted-foreground">Book</span>
               </Button>
             </li>

@@ -62,6 +62,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     : await getHiringManagerSlots({
         companyId: applicant.companyId,
         managerUserId: manager.id,
+        timeZone: applicant.company.timezone,
       });
 
   return NextResponse.json({
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const slots = await getHiringManagerSlots({
     companyId: applicant.companyId,
     managerUserId: manager.id,
+    timeZone: applicant.company.timezone,
   });
   const match = slots.find((slot) => slot.startAt === startAt.toISOString());
   if (!match) {
@@ -140,12 +142,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
-  const whenLabel = startAt.toLocaleString(undefined, {
+  const whenLabel = startAt.toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: applicant.company.timezone ?? "America/Denver",
   });
 
   try {

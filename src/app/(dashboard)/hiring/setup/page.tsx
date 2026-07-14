@@ -33,6 +33,7 @@ export default function HiringSetupPage() {
     useState<Record<string, BusinessHoursDay>>(DEFAULT_BUSINESS_HOURS);
   const [leadTimeHours, setLeadTimeHours] = useState(2);
   const [previewSlots, setPreviewSlots] = useState<Array<{ startAt: string }>>([]);
+  const [timezone, setTimezone] = useState("America/Denver");
   const [loading, setLoading] = useState(true);
   const [savingRole, setSavingRole] = useState(false);
   const [savingAvail, setSavingAvail] = useState(false);
@@ -62,6 +63,7 @@ export default function HiringSetupPage() {
     setWeeklyHours({ ...DEFAULT_BUSINESS_HOURS, ...(data.weeklyHours ?? {}) });
     setLeadTimeHours(data.leadTimeHours ?? 2);
     setPreviewSlots(data.previewSlots ?? []);
+    if (data.timezone) setTimezone(data.timezone);
   }, []);
 
   useEffect(() => {
@@ -234,7 +236,8 @@ export default function HiringSetupPage() {
       <section className="space-y-4 rounded-lg border border-border bg-white p-5">
         <h2 className="font-semibold">Phone-screen availability</h2>
         <p className="text-sm text-muted-foreground">
-          Set weekly windows for 10-minute screening calls. Booked times are removed automatically.
+          Set weekly windows for 10-minute screening calls in company time ({timezone}). Booked times
+          are removed automatically.
         </p>
 
         <div>
@@ -323,12 +326,13 @@ export default function HiringSetupPage() {
             <ul className="space-y-1 text-sm text-muted-foreground">
               {previewSlots.slice(0, 8).map((slot) => (
                 <li key={slot.startAt}>
-                  {new Date(slot.startAt).toLocaleString(undefined, {
+                  {new Date(slot.startAt).toLocaleString("en-US", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
                     hour: "numeric",
                     minute: "2-digit",
+                    timeZone: timezone,
                   })}
                 </li>
               ))}

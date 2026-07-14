@@ -45,6 +45,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     companyId: company.id,
     businessHours: company.businessHours ?? DEFAULT_BUSINESS_HOURS,
     bookingLeadTimeHours: company.bookingLeadTimeHours,
+    timeZone: company.timezone,
   });
 
   return NextResponse.json({
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     companyId: company.id,
     businessHours: company.businessHours ?? DEFAULT_BUSINESS_HOURS,
     bookingLeadTimeHours: company.bookingLeadTimeHours,
+    timeZone: company.timezone,
   });
 
   const slotValid = slots.some(
