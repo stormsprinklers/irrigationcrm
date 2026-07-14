@@ -3,13 +3,22 @@ import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
-import { websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
+import { websiteLeadFormLabel, websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
+import {
+  enrichPricingQuoteLead,
+  isPricingQuoteLead,
+  type PricingQuoteEnrichment,
+} from "@/lib/leads/pricing-quote-enrichment";
 import { notifyWebsiteFormInbox } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 
-function formatLeadInboxBody(input: WebsiteLeadInput) {
+function formatLeadInboxBody(
+  input: WebsiteLeadInput,
+  enrichment: PricingQuoteEnrichment | null
+) {
+  const formLabel = websiteLeadFormLabel(input.source);
   const lines = [
-    `New website form submission`,
+    `New ${formLabel.toLowerCase()} submission`,
     ``,
     `Name: ${input.name}`,
   ];
@@ -18,9 +27,17 @@ function formatLeadInboxBody(input: WebsiteLeadInput) {
   if (input.source) lines.push(`Source: ${input.source}`);
   if (input.address) lines.push(`Address: ${input.address}`);
   if (input.city) lines.push(`City: ${input.city}`);
-  if (input.notes) {
+
+  if (enrichment) {
+    lines.push(``, enrichment.inboxBlock);
+  } else if (input.notes) {
     lines.push(``, `Message:`, input.notes);
   }
+
+  if (enrichment && input.notes && input.notes !== enrichment.quoteTitle) {
+    lines.push(``, `Notes:`, input.notes);
+  }
+
   if (input.metadata && typeof input.metadata === "object") {
     const meta = input.metadata as Record<string, unknown>;
     const nested =
@@ -45,14 +62,22 @@ function formatLeadInboxBody(input: WebsiteLeadInput) {
 export async function createInboxEntriesFromWebsiteLead(
   companyId: string,
   leadId: string,
-  input: WebsiteLeadInput
+  input: WebsiteLeadInput,
+  precomputedEnrichment?: PricingQuoteEnrichment | null
 ) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
     select: { sendgridFrom: true },
   });
 
-  const body = formatLeadInboxBody(input);
+  const enrichment =
+    precomputedEnrichment !== undefined
+      ? precomputedEnrichment
+      : isPricingQuoteLead(input.source)
+        ? await enrichPricingQuoteLead(input)
+        : null;
+
+  const body = formatLeadInboxBody(input, enrichment);
   const subject = websiteLeadNotificationTitle(input.source, input.name);
   const threadId = `website-lead:${leadId}`;
   const sourceSlug = input.source ?? "contact";
@@ -76,6 +101,7 @@ export async function createInboxEntriesFromWebsiteLead(
       emailId: emailMessage.id,
       name: input.name,
       source: input.source,
+      body: enrichment?.notificationBody,
     }).catch((err) => console.error("In-app notification failed for website form", err));
   } else if (input.phone?.trim()) {
     const conversation = await findOrCreateSmsConversation({
@@ -112,6 +138,7 @@ export async function createInboxEntriesFromWebsiteLead(
       conversationId: conversation.id,
       name: input.name,
       source: input.source,
+      body: enrichment?.notificationBody,
     }).catch((err) => console.error("In-app notification failed for website form", err));
   } else {
     const emailMessage = await prisma.emailMessage.create({
@@ -132,6 +159,7 @@ export async function createInboxEntriesFromWebsiteLead(
       emailId: emailMessage.id,
       name: input.name,
       source: input.source,
+      body: enrichment?.notificationBody,
     }).catch((err) => console.error("In-app notification failed for website form", err));
   }
 }

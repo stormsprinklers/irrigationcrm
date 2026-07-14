@@ -146,9 +146,10 @@ export async function notifyWebsiteFormInbox(params: {
   conversationId?: string | null;
   name: string;
   source?: string | null;
+  body?: string | null;
 }) {
   const title = websiteLeadNotificationTitle(params.source, params.name);
-  const body = websiteLeadFormLabel(params.source);
+  const body = params.body?.trim() || websiteLeadFormLabel(params.source);
 
   if (params.emailId) {
     await notifyStaffInApp({

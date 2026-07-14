@@ -1,5 +1,9 @@
 import type { Lead } from "@prisma/client";
 import { websiteLeadFormLabel, websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
+import {
+  formatQuoteEstimate,
+  isPricingQuoteLead,
+} from "@/lib/leads/pricing-quote-enrichment";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { prisma } from "@/lib/prisma";
@@ -36,22 +40,43 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
   const crmUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const leadUrl = crmUrl ? `${crmUrl}/customers/leads` : "/customers/leads";
   const formLabel = websiteLeadFormLabel(lead.source);
+  const meta =
+    lead.metadata && typeof lead.metadata === "object" && !Array.isArray(lead.metadata)
+      ? (lead.metadata as Record<string, unknown>)
+      : {};
 
   const subject = websiteLeadNotificationTitle(lead.source, lead.name);
-  const body = [
+  const bodyLines: Array<string | null> = [
     `A new ${formLabel.toLowerCase()} submission was received.`,
     "",
     `Name: ${lead.name}`,
     lead.phone ? `Phone: ${lead.phone}` : null,
     lead.email ? `Email: ${lead.email}` : null,
     lead.source ? `Source: ${lead.source}` : null,
-    "",
-    `View leads: ${leadUrl}`,
-    "",
-    `— ${company.name}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ];
+
+  if (isPricingQuoteLead(lead.source)) {
+    const estimate =
+      (typeof meta.formattedEstimate === "string" && meta.formattedEstimate) ||
+      formatQuoteEstimate(meta.quote ?? meta.pricing_quote_snapshot) ||
+      null;
+    const summary =
+      (typeof meta.aiIssueSummary === "string" && meta.aiIssueSummary) || null;
+    if (estimate) bodyLines.push(`Estimate shown: ${estimate}`);
+    if (typeof meta.quoteTitle === "string" && meta.quoteTitle) {
+      bodyLines.push(`Quoted option: ${meta.quoteTitle}`);
+    }
+    if (summary) {
+      bodyLines.push("", "What they're dealing with:", summary);
+    } else if (lead.notes) {
+      bodyLines.push("", lead.notes);
+    }
+  } else if (lead.notes) {
+    bodyLines.push("", `Notes: ${lead.notes}`);
+  }
+
+  bodyLines.push("", `View leads: ${leadUrl}`, "", `— ${company.name}`);
+  const body = bodyLines.filter((line): line is string => line != null).join("\n");
 
   await sendCompanyEmail(
     {

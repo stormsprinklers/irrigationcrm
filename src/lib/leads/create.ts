@@ -2,6 +2,10 @@ import { LeadStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
+import {
+  enrichPricingQuoteLead,
+  isPricingQuoteLead,
+} from "@/lib/leads/pricing-quote-enrichment";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 
 export async function createLeadFromIntegration(
@@ -23,10 +27,37 @@ export async function createLeadFromIntegration(
     select: { defaultLeadAssigneeId: true },
   });
 
+  const enrichment = isPricingQuoteLead(input.source)
+    ? await enrichPricingQuoteLead(input)
+    : null;
+
   const notesParts: string[] = [];
-  if (input.notes) notesParts.push(input.notes);
+  if (enrichment) {
+    if (enrichment.estimateLabel) {
+      notesParts.push(
+        `Estimate shown: ${enrichment.estimateLabel}${
+          enrichment.quoteTitle ? ` (${enrichment.quoteTitle})` : ""
+        }`
+      );
+    } else if (enrichment.quoteTitle) {
+      notesParts.push(`Quoted option: ${enrichment.quoteTitle}`);
+    }
+    notesParts.push(`Issues: ${enrichment.issueSummary}`);
+    if (input.notes && input.notes !== enrichment.quoteTitle) {
+      notesParts.push(input.notes);
+    }
+  } else {
+    if (input.notes) notesParts.push(input.notes);
+  }
   if (input.address) notesParts.push(`Address: ${input.address}`);
   if (input.city) notesParts.push(`City: ${input.city}`);
+
+  const metadata = {
+    ...((input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+      ? input.metadata
+      : {}) as Record<string, unknown>),
+    ...(enrichment?.metadataPatch ?? {}),
+  };
 
   const lead = await prisma.lead.create({
     data: {
@@ -36,17 +67,21 @@ export async function createLeadFromIntegration(
       email: input.email || null,
       source: input.source ?? "website",
       status: (input.status as LeadStatus) ?? LeadStatus.NEW,
-      notes: notesParts.length ? notesParts.join("\n") : null,
+      notes: notesParts.length ? notesParts.join("\n\n") : null,
       externalId: input.externalId,
-      metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+      metadata: Object.keys(metadata).length
+        ? (metadata as Prisma.InputJsonValue)
+        : undefined,
       assignedUserId: company?.defaultLeadAssigneeId ?? null,
     },
   });
 
   notifyLeadCreated(companyId, lead).catch(() => {});
-  createInboxEntriesFromWebsiteLead(companyId, lead.id, input).catch((err) => {
-    console.error("Failed to create inbox entry for website lead", err);
-  });
+  createInboxEntriesFromWebsiteLead(companyId, lead.id, input, enrichment).catch(
+    (err) => {
+      console.error("Failed to create inbox entry for website lead", err);
+    }
+  );
 
   return { lead, created: true };
 }
