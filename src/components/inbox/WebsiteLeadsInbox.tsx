@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -42,12 +42,15 @@ function formatWhen(iso: string) {
 }
 
 export function WebsiteLeadsInbox() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<WebsiteLeadInboxItem[]>([]);
   const [selected, setSelected] = useState<WebsiteLeadInboxItem | null>(null);
   const [emailDetail, setEmailDetail] = useState<EmailDetail | null>(null);
   const [smsBody, setSmsBody] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  /** Tracks which deep-link query we've already applied so list refreshes don't fight clicks. */
+  const appliedDeepLinkRef = useRef<string | null>(null);
 
   const loadItems = useCallback(async () => {
     const res = await fetch("/api/inbox/leads");
@@ -62,25 +65,42 @@ export function WebsiteLeadsInbox() {
     return () => clearInterval(interval);
   }, [loadItems]);
 
+  // Deep-link from notifications: apply once per emailId/conversationId, then stop
+  // re-forcing selection so clicking other leads works.
   useEffect(() => {
     const emailId = searchParams.get("emailId");
     const conversationId = searchParams.get("conversationId");
     if (!items.length) return;
 
-    if (emailId) {
-      // Already showing this email — don't re-select (list refreshes recreate
-      // item references, which would otherwise loop back into the detail fetch).
-      if (selected?.channel === "email" && selected.id === emailId) return;
-      const match = items.find((item) => item.channel === "email" && item.id === emailId);
-      if (match) setSelected(match);
-    } else if (conversationId) {
-      if (selected?.channel === "sms" && selected.conversationId === conversationId) return;
-      const match = items.find(
-        (item) => item.channel === "sms" && item.conversationId === conversationId
-      );
-      if (match) setSelected(match);
+    const deepLinkKey = emailId
+      ? `email:${emailId}`
+      : conversationId
+        ? `sms:${conversationId}`
+        : null;
+
+    if (!deepLinkKey) {
+      appliedDeepLinkRef.current = null;
+      return;
     }
-  }, [searchParams, items, selected]);
+    if (appliedDeepLinkRef.current === deepLinkKey) return;
+
+    if (emailId) {
+      const match = items.find((item) => item.channel === "email" && item.id === emailId);
+      if (match) {
+        setSelected(match);
+        appliedDeepLinkRef.current = deepLinkKey;
+      }
+      return;
+    }
+
+    const match = items.find(
+      (item) => item.channel === "sms" && item.conversationId === conversationId
+    );
+    if (match) {
+      setSelected(match);
+      appliedDeepLinkRef.current = deepLinkKey;
+    }
+  }, [searchParams, items]);
 
   useEffect(() => {
     if (!selected) {
@@ -89,26 +109,32 @@ export function WebsiteLeadsInbox() {
       return;
     }
 
+    let cancelled = false;
     setLoadingDetail(true);
     if (selected.channel === "email") {
       fetch(`/api/inbox/email/${selected.id}`)
         .then((r) => r.json())
         .then((data) => {
+          if (cancelled) return;
           setEmailDetail(data);
           setSmsBody(null);
           setItems((current) => {
             const target = current.find((item) => item.id === selected.id);
-            // Keep the same array reference when nothing changes so dependent
-            // effects (URL-based selection) don't re-run and loop.
             if (!target || target.isRead) return current;
             return current.map((item) =>
               item.id === selected.id ? { ...item, isRead: true } : item
             );
           });
         })
-        .catch(() => toast.error("Failed to load form submission"))
-        .finally(() => setLoadingDetail(false));
-      return;
+        .catch(() => {
+          if (!cancelled) toast.error("Failed to load form submission");
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingDetail(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (!selected.conversationId) {
@@ -116,17 +142,38 @@ export function WebsiteLeadsInbox() {
       return;
     }
 
-    fetch(`/api/inbox/sms/conversations/${selected.conversationId}/messages`)
+    const conversationId = selected.conversationId;
+    const selectedId = selected.id;
+    const preview = selected.preview;
+    fetch(`/api/inbox/sms/conversations/${conversationId}/messages`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled) return;
         const messages = data.messages ?? [];
-        const message = messages.find((row: { id: string }) => row.id === selected.id);
-        setSmsBody(message?.body ?? selected.preview);
+        const message = messages.find((row: { id: string }) => row.id === selectedId);
+        setSmsBody(message?.body ?? preview);
         setEmailDetail(null);
       })
-      .catch(() => toast.error("Failed to load form submission"))
-      .finally(() => setLoadingDetail(false));
+      .catch(() => {
+        if (!cancelled) toast.error("Failed to load form submission");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDetail(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [selected]);
+
+  function selectItem(item: WebsiteLeadInboxItem) {
+    setSelected(item);
+    // Drop notification deep-link params so they can't snap selection back.
+    if (searchParams.get("emailId") || searchParams.get("conversationId")) {
+      appliedDeepLinkRef.current = null;
+      router.replace("/inbox/leads", { scroll: false });
+    }
+  }
 
   async function removeSelected() {
     if (!selected || selected.channel !== "email") return;
@@ -137,6 +184,10 @@ export function WebsiteLeadsInbox() {
     }
     toast.success("Removed");
     setSelected(null);
+    if (searchParams.get("emailId") || searchParams.get("conversationId")) {
+      appliedDeepLinkRef.current = null;
+      router.replace("/inbox/leads", { scroll: false });
+    }
     await loadItems();
   }
 
@@ -159,7 +210,7 @@ export function WebsiteLeadsInbox() {
                 <li key={`${item.channel}-${item.id}`}>
                   <button
                     type="button"
-                    onClick={() => setSelected(item)}
+                    onClick={() => selectItem(item)}
                     className={cn(
                       "flex w-full flex-col gap-1 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
                       selected?.id === item.id &&
