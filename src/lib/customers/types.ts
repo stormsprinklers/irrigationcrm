@@ -9,6 +9,11 @@ export type CustomerDTO = {
   phone: string | null;
   email: string | null;
   leadSource: string | null;
+  attributionChannel: string | null;
+  attributionCampaign: string | null;
+  attributionSource: string | null;
+  firstTouchAt: string | null;
+  firstTouchMethod: string | null;
   status: "ACTIVE" | "ARCHIVED";
   doNotService: boolean;
   tags: string[];

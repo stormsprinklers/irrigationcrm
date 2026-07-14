@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { MarketingAttributionKpiStrip } from "@/components/marketing/MarketingAttributionKpiStrip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -72,6 +73,8 @@ export default function MarketingOverviewPage() {
           </Button>
         }
       />
+
+      <MarketingAttributionKpiStrip />
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {modules.map((item) => {

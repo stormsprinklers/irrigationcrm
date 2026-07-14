@@ -1,4 +1,10 @@
-import { CallAttributionMethod, CallDisposition, CallDirection } from "@prisma/client";
+import {
+  AttributionFirstTouchMethod,
+  CallAttributionMethod,
+  CallDisposition,
+  CallDirection,
+} from "@prisma/client";
+import { normalizeAttribution, recordTouchEvent, resolvePersonByPhone } from "@/lib/attribution";
 import { visitRevenue } from "@/lib/compensation/commission";
 import { prisma } from "@/lib/prisma";
 import {
@@ -139,17 +145,37 @@ export async function syncCallConversionFromLog(
     },
   });
 
-  // Stamp customer lead source when empty and we have a clear attribution label.
-  if (customerId && trackingSource) {
-    await prisma.customer.updateMany({
-      where: {
-        id: customerId,
-        companyId: log.companyId,
-        OR: [{ leadSource: null }, { leadSource: "" }],
-      },
-      data: { leadSource: trackingSource },
-    });
+  const isLsa = method === CallAttributionMethod.LSA_CALLER_MATCH || Boolean(googleLsaLeadId);
+  const normalized = normalizeAttribution({
+    trackingSource,
+    attributionMethod: method,
+    leadSource: trackingSource,
+  });
+
+  let resolvedCustomerId = customerId;
+  let resolvedLeadId: string | null = null;
+  if (!resolvedCustomerId) {
+    const matched = await resolvePersonByPhone(log.companyId, log.fromNumber);
+    resolvedCustomerId = matched.customerId;
+    resolvedLeadId = matched.leadId;
   }
+
+  await recordTouchEvent({
+    companyId: log.companyId,
+    customerId: resolvedCustomerId,
+    leadId: resolvedLeadId,
+    callLogId: log.id,
+    eventType: "INBOUND_CALL",
+    method: isLsa ? AttributionFirstTouchMethod.LSA : AttributionFirstTouchMethod.CALL,
+    normalized,
+    phone: log.fromNumber,
+    occurredAt: log.startedAt,
+    metadata: {
+      attributionMethod: method,
+      googleLsaLeadId,
+      dialedNumber: log.toNumber,
+    },
+  }).catch(() => {});
 
   return conversion;
 }

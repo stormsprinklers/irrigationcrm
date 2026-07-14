@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/marketing/social-publish",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/marketing/spend-sync",
+      "schedule": "15 8 * * *"
     }
   ]
 }

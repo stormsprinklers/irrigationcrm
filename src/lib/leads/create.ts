@@ -1,4 +1,5 @@
-import { LeadStatus, Prisma } from "@prisma/client";
+import { AttributionFirstTouchMethod, LeadStatus, Prisma } from "@prisma/client";
+import { parseAttributionFromMetadata, recordTouchEvent } from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
@@ -74,6 +75,33 @@ export async function createLeadFromIntegration(
         : undefined,
       assignedUserId: company?.defaultLeadAssigneeId ?? null,
     },
+  });
+
+  const sessionId =
+    typeof metadata.session_id === "string"
+      ? metadata.session_id
+      : typeof metadata.sessionId === "string"
+        ? metadata.sessionId
+        : null;
+
+  recordTouchEvent({
+    companyId,
+    leadId: lead.id,
+    eventType: "FORM_SUBMIT",
+    method: AttributionFirstTouchMethod.FORM,
+    attribution: {
+      ...parseAttributionFromMetadata(metadata),
+      formSource: input.source ?? "website",
+      leadSource: input.source ?? "website",
+    },
+    sessionId,
+    phone: input.phone,
+    metadata: {
+      formSource: input.source ?? "website",
+      externalId: input.externalId,
+    },
+  }).catch((err) => {
+    console.error("Failed to record lead attribution touch", err);
   });
 
   notifyLeadCreated(companyId, lead).catch(() => {});

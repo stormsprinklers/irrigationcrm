@@ -404,6 +404,23 @@ enum CallAttributionMethod {
   UNKNOWN
 }
 
+enum AttributionFirstTouchMethod {
+  FORM
+  CALL
+  SMS
+  TEL_CLICK
+  SMS_CLICK
+  BOOKING
+  LSA
+  MANUAL
+}
+
+enum MarketingSpendChannel {
+  google_ads
+  google_lsa
+  meta_ads
+}
+
 enum CampaignStatus {
   DRAFT
   SCHEDULED
@@ -627,6 +644,8 @@ model Company {
   hiringRoleAssignments  HiringRoleAssignment[]
   hiringManagerAvailabilities HiringManagerAvailability[]
   hiringScreenBookings   HiringScreenBooking[]
+  marketingTouchEvents   MarketingTouchEvent[]
+  marketingSpendDaily    MarketingSpendDaily[]
 }
 
 model LocalSeoSerpSearch {
@@ -807,6 +826,18 @@ model Customer {
   state       String?
   zip         String?
   leadSource       String?
+  /// Normalized first-touch marketing channel (never overwritten once set).
+  attributionChannel   String?
+  attributionSource    String?
+  attributionMedium    String?
+  attributionCampaign  String?
+  attributionTerm      String?
+  attributionContent   String?
+  gclid                String?
+  fbclid               String?
+  msclkid              String?
+  firstTouchAt         DateTime?
+  firstTouchMethod     AttributionFirstTouchMethod?
   referredByCustomerId String?
   stripeCustomerId String?
   status           CustomerStatus @default(ACTIVE)
@@ -842,8 +873,11 @@ model Customer {
   portalLoginTokens      CustomerPortalLoginToken[]
   notificationDeliveries NotificationDelivery[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
+  marketingTouchEvents   MarketingTouchEvent[]
 
   @@index([referredByCustomerId])
+  @@index([companyId, attributionChannel])
+  @@index([companyId, createdAt])
 }
 
 model CustomerPhone {
@@ -905,6 +939,17 @@ model Lead {
   convertedCustomerId String?    @unique
   /// First time marked contacted (manual or via call / SMS / email action). Used for speed-to-lead.
   contactedAt         DateTime?
+  attributionChannel  String?
+  attributionSource   String?
+  attributionMedium   String?
+  attributionCampaign String?
+  attributionTerm     String?
+  attributionContent  String?
+  gclid               String?
+  fbclid              String?
+  msclkid             String?
+  firstTouchAt        DateTime?
+  firstTouchMethod    AttributionFirstTouchMethod?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
@@ -913,11 +958,13 @@ model Lead {
   convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
   referralSubmission ReferralSubmission?
   callLogs          CallLog[]
+  marketingTouchEvents MarketingTouchEvent[]
 
   @@unique([companyId, externalId])
   @@index([companyId, status])
   @@index([assignedUserId])
   @@index([companyId, contactedAt])
+  @@index([companyId, attributionChannel])
 }
 
 model JobApplicant {
@@ -2921,6 +2968,64 @@ model MarketingEvent {
 
   @@unique([companyId, source, externalId])
   @@index([companyId, eventType, occurredAt])
+}
+
+/// Immutable first-party attribution audit log for every marketing touch.
+model MarketingTouchEvent {
+  id                String   @id @default(cuid())
+  companyId         String
+  customerId        String?
+  leadId            String?
+  callLogId         String?
+  conversationId    String?
+  sessionId         String?
+  eventType         String
+  channel           String
+  source            String?
+  medium            String?
+  campaign          String?
+  term              String?
+  content           String?
+  gclid             String?
+  fbclid            String?
+  msclkid           String?
+  trackingSource    String?
+  phone             String?
+  pagePath          String?
+  occurredAt        DateTime
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, occurredAt])
+  @@index([companyId, channel])
+  @@index([companyId, sessionId])
+  @@index([customerId, occurredAt])
+  @@index([leadId, occurredAt])
+  @@index([companyId, phone])
+  @@map("marketing_touch_events")
+}
+
+/// Daily paid-media spend snapshot for CAC / ROAS (populated by cron).
+model MarketingSpendDaily {
+  id          String                @id @default(cuid())
+  companyId   String
+  date        DateTime              @db.Date
+  channel     MarketingSpendChannel
+  spend       Decimal               @db.Decimal(12, 2)
+  impressions Int?
+  clicks      Int?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date, channel])
+  @@index([companyId, date])
+  @@map("marketing_spend_daily")
 }
 
 model GbpReviewSlackDelivery {

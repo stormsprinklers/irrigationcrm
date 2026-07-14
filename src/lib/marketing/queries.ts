@@ -1,5 +1,10 @@
+import { AttributionFirstTouchMethod, type Prisma } from "@prisma/client";
+import {
+  parseAttributionFromMetadata,
+  recordTouchEvent,
+  resolvePersonByPhone,
+} from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
 import type { WebsiteEventInput } from "@/lib/integrations/schemas";
 
 export async function recordMarketingEvent(companyId: string, input: WebsiteEventInput) {
@@ -29,6 +34,41 @@ export async function recordMarketingEvent(companyId: string, input: WebsiteEven
       occurredAt,
     },
   });
+
+  const clickTypes = new Set(["TEL_CLICK", "SMS_CLICK"]);
+  if (clickTypes.has(input.eventType)) {
+    const meta =
+      input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+        ? (input.metadata as Record<string, unknown>)
+        : {};
+    const phone =
+      typeof meta.phone === "string"
+        ? meta.phone
+        : typeof meta.cta_destination === "string" && meta.cta_destination.startsWith("tel:")
+          ? meta.cta_destination.slice(4)
+          : null;
+    const person = phone ? await resolvePersonByPhone(companyId, phone) : { customerId: null, leadId: null };
+    const method =
+      input.eventType === "TEL_CLICK"
+        ? AttributionFirstTouchMethod.TEL_CLICK
+        : AttributionFirstTouchMethod.SMS_CLICK;
+
+    await recordTouchEvent({
+      companyId,
+      customerId: person.customerId,
+      leadId: person.leadId,
+      sessionId: input.sessionId,
+      eventType: input.eventType,
+      method,
+      attribution: parseAttributionFromMetadata(meta),
+      phone,
+      pagePath: input.pagePath,
+      occurredAt,
+      metadata: meta,
+      // Clicks alone rarely identify a person; stamp when we can resolve one.
+      stampFirstTouch: Boolean(person.customerId || person.leadId),
+    }).catch(() => {});
+  }
 
   return { event, created: true };
 }

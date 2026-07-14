@@ -262,6 +262,38 @@ export async function getKpiDashboardReport(
   const serviceEstimates = estimates.filter((e) => e.visit?.division === Division.SERVICE);
   const serviceConversionRate = estimateConversionRate(serviceEstimates);
 
+  const {
+    getAveragePayingCustomerLtv,
+    sumMarketingSpend,
+  } = await import("@/lib/marketing/attribution-kpis");
+
+  const [{ avgLtv, payingCustomerCount }, periodSpend, allTimeSpend, newCustomersInRange] =
+    await Promise.all([
+      getAveragePayingCustomerLtv(companyId),
+      sumMarketingSpend(companyId, {
+        start,
+        end,
+      }),
+      sumMarketingSpend(companyId),
+      prisma.customer.count({
+        where: { companyId, createdAt: { gte: start, lte: end } },
+      }),
+    ]);
+
+  const periodCac =
+    newCustomersInRange > 0 && periodSpend > 0 ? periodSpend / newCustomersInRange : null;
+  const allTimeCac =
+    payingCustomerCount > 0 && allTimeSpend > 0 ? allTimeSpend / payingCustomerCount : null;
+  const ltvCacPeriod =
+    periodCac && avgLtv > 0 ? avgLtv / periodCac : null;
+  const ltvCacAllTime =
+    allTimeCac && avgLtv > 0 ? avgLtv / allTimeCac : null;
+
+  function formatRatio(value: number | null) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    return `${value.toFixed(2)}x`;
+  }
+
   const company: KpiMetric[] = [
     { label: "Service revenue", value: formatCurrency(serviceRevenue) },
     { label: "Install revenue", value: formatCurrency(installRevenue) },
@@ -283,6 +315,14 @@ export async function getKpiDashboardReport(
       value: serviceEstimates.length > 0 ? formatPercent(serviceConversionRate) : "—",
     },
     { label: "Active maintenance plans", value: String(activePlanCount) },
+    {
+      label: "Avg LTV:CAC (period)",
+      value: formatRatio(ltvCacPeriod),
+    },
+    {
+      label: "Avg LTV:CAC (all-time)",
+      value: formatRatio(ltvCacAllTime),
+    },
   ];
 
   function buildSoloFieldWorkerCards(

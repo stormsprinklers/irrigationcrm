@@ -1,4 +1,5 @@
-import { LeadStatus, Prisma } from "@prisma/client";
+import { AttributionFirstTouchMethod, LeadStatus, Prisma } from "@prisma/client";
+import { copyLeadFirstTouchToCustomer, recordTouchEvent } from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
 
 export const leadInclude = {
@@ -83,6 +84,30 @@ export async function convertLeadToCustomer(companyId: string, leadId: string) {
     });
     return created;
   });
+
+  await copyLeadFirstTouchToCustomer(leadId, customer.id).catch(() => {});
+  recordTouchEvent({
+    companyId,
+    leadId,
+    customerId: customer.id,
+    eventType: "LEAD_CONVERT",
+    method: AttributionFirstTouchMethod.FORM,
+    attribution: {
+      leadSource: lead.source,
+      formSource: lead.source,
+      source: lead.attributionSource,
+      medium: lead.attributionMedium,
+      campaign: lead.attributionCampaign,
+      term: lead.attributionTerm,
+      content: lead.attributionContent,
+      gclid: lead.gclid,
+      fbclid: lead.fbclid,
+      msclkid: lead.msclkid,
+    },
+    phone: lead.phone,
+    stampFirstTouch: false,
+    metadata: { fromLeadId: leadId },
+  }).catch(() => {});
 
   const { onReferralLeadConverted } = await import("@/lib/referrals/conversion");
   await onReferralLeadConverted({ companyId, leadId, customerId: customer.id }).catch(() => {});

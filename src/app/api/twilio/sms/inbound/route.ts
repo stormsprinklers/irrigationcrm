@@ -182,6 +182,88 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // First-touch attribution from dialed tracking number / LSA caller match
+    void (async () => {
+      try {
+        const { AttributionFirstTouchMethod } = await import("@prisma/client");
+        const { normalizePhone } = await import("@/lib/inbox/contacts");
+        const {
+          normalizeAttribution,
+          recordTouchEvent,
+          resolvePersonByPhone,
+        } = await import("@/lib/attribution");
+        const { matchGoogleLsaLeadByCallerPhone } = await import(
+          "@/lib/voice/call-attribution"
+        );
+
+        const dialed = normalizePhone(to);
+        const phoneRecord = await prisma.phoneNumber.findFirst({
+          where: {
+            companyId: company.id,
+            OR: [
+              { e164: dialed },
+              { e164: to },
+              { e164: `+1${dialed.replace(/\D/g, "").slice(-10)}` },
+            ],
+          },
+          select: { id: true, trackingSource: true },
+        });
+
+        let trackingSource = phoneRecord?.trackingSource?.trim() || null;
+        let googleLsaLeadId: string | null = null;
+        let attributionMethod = "tracking_number";
+
+        if (!trackingSource) {
+          googleLsaLeadId = await matchGoogleLsaLeadByCallerPhone(
+            company.id,
+            normalizedFrom,
+            new Date()
+          );
+          if (googleLsaLeadId) {
+            trackingSource = "Google LSA";
+            attributionMethod = "lsa_caller_match";
+          }
+        }
+
+        let customerId =
+          customer?.id ?? conversation.customerId ?? null;
+        let leadId: string | null = null;
+        if (!customerId) {
+          const matched = await resolvePersonByPhone(company.id, normalizedFrom);
+          customerId = matched.customerId;
+          leadId = matched.leadId;
+        }
+
+        const normalized = normalizeAttribution({
+          trackingSource: trackingSource ?? "unknown",
+          attributionMethod,
+          leadSource: trackingSource,
+        });
+
+        await recordTouchEvent({
+          companyId: company.id,
+          customerId,
+          leadId,
+          conversationId: conversation.id,
+          eventType: "INBOUND_SMS",
+          method:
+            attributionMethod === "lsa_caller_match"
+              ? AttributionFirstTouchMethod.LSA
+              : AttributionFirstTouchMethod.SMS,
+          normalized,
+          phone: normalizedFrom,
+          metadata: {
+            trackingSource,
+            googleLsaLeadId,
+            dialedNumber: to,
+            phoneNumberId: phoneRecord?.id ?? null,
+          },
+        });
+      } catch (err) {
+        console.error("SMS attribution failed", err);
+      }
+    })();
+
     notifyInboundSms({
       companyId: company.id,
       conversationId: conversation.id,

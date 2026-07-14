@@ -21,59 +21,67 @@ export function CustomerSummaryCard({ customerId }: Props) {
       .finally(() => setLoading(false));
   }, [customerId]);
 
-  const items = [
-    {
-      label: "Last visit",
-      value: summary?.lastVisitAt
-        ? format(new Date(summary.lastVisitAt), "MMM d, yyyy")
-        : "—",
-    },
-    {
-      label: "Customer since",
-      value: summary?.createdAt
-        ? format(new Date(summary.createdAt), "MMM d, yyyy")
-        : "—",
-    },
-    {
-      label: "Lifetime value",
-      value: summary ? formatCurrency(summary.lifetimeValue) : "—",
-    },
-    {
-      label: "Lifetime gross profit",
-      value: summary ? formatCurrency(summary.lifetimeGrossProfit) : "—",
-    },
-    {
-      label: "Outstanding balance",
-      value: summary ? formatCurrency(summary.outstandingBalance) : "—",
-      highlight: (summary?.outstandingBalance ?? 0) > 0,
-    },
-  ];
-
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Customer summary</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading summary...</p>
         ) : (
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {items.map((item) => (
-              <div key={item.label}>
+          <>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Lifetime value
+              </p>
+              <p className="mt-1 text-3xl font-semibold tracking-tight">
+                {summary ? formatCurrency(summary.lifetimeValue) : "—"}
+              </p>
+            </div>
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {item.label}
+                  Last visit
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {summary?.lastVisitAt
+                    ? format(new Date(summary.lastVisitAt), "MMM d, yyyy")
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Customer since
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {summary?.createdAt
+                    ? format(new Date(summary.createdAt), "MMM d, yyyy")
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Lifetime gross profit
+                </dt>
+                <dd className="mt-1 text-lg font-semibold">
+                  {summary ? formatCurrency(summary.lifetimeGrossProfit) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Outstanding balance
                 </dt>
                 <dd
                   className={`mt-1 text-lg font-semibold ${
-                    item.highlight ? "text-destructive" : ""
+                    (summary?.outstandingBalance ?? 0) > 0 ? "text-destructive" : ""
                   }`}
                 >
-                  {item.value}
+                  {summary ? formatCurrency(summary.outstandingBalance) : "—"}
                 </dd>
               </div>
-            ))}
-          </dl>
+            </dl>
+          </>
         )}
       </CardContent>
     </Card>

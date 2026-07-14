@@ -36,6 +36,7 @@ import { CustomerReferralsSection } from "@/components/customers/CustomerReferra
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
+import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
@@ -529,6 +530,26 @@ export function CustomerProfile({ customerId }: Props) {
             </Badge>
           )}
           {customer.companyName && <p className="text-muted-foreground">{customer.companyName}</p>}
+          {(customer.attributionChannel || customer.leadSource) && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              First touch:{" "}
+              <span className="font-medium text-foreground">
+                {customer.attributionChannel
+                  ? attributionChannelLabel(customer.attributionChannel)
+                  : customer.leadSource}
+              </span>
+              {customer.attributionCampaign
+                ? ` · ${customer.attributionCampaign}`
+                : customer.attributionSource
+                  ? ` · ${customer.attributionSource}`
+                  : null}
+              {customer.leadSource &&
+              customer.attributionChannel &&
+              customer.leadSource !== attributionChannelLabel(customer.attributionChannel)
+                ? ` (${customer.leadSource})`
+                : null}
+            </p>
+          )}
         </div>
         {canManage && (
           <div className="flex flex-wrap gap-2">
@@ -627,6 +648,19 @@ export function CustomerProfile({ customerId }: Props) {
                     />
                   </div>
                   <ProfileDetail label="Lead source" value={customer.leadSource} />
+                  <ProfileDetail
+                    label="First-touch channel"
+                    value={
+                      customer.attributionChannel
+                        ? [
+                            attributionChannelLabel(customer.attributionChannel),
+                            customer.attributionCampaign || customer.attributionSource,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : null
+                    }
+                  />
                   {customer.doNotService ? (
                     <div className="sm:col-span-2">
                       <Badge variant="destructive">Do not service</Badge>

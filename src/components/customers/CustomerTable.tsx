@@ -13,6 +13,7 @@ import {
 import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { CustomerDTO } from "@/lib/customers/types";
+import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -143,7 +144,11 @@ export function CustomerTable({
       {
         accessorKey: "leadSource",
         header: "Lead source",
-        cell: ({ row }) => row.original.leadSource ?? "—",
+        cell: ({ row }) =>
+          row.original.leadSource ??
+          (row.original.attributionChannel
+            ? attributionChannelLabel(row.original.attributionChannel)
+            : "—"),
       },
     ],
     []
