@@ -6,6 +6,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { serializeApplicant } from "@/lib/hiring/applicants";
+import { migrateCareersIntoHiring } from "@/lib/hiring/migrate-careers";
 import { canAccessHiring } from "@/lib/hiring/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -13,6 +14,11 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canAccessHiring(user.role)) return forbiddenResponse();
+
+    // Pull historical careers submissions into Hiring (idempotent).
+    await migrateCareersIntoHiring(user.companyId).catch((err) =>
+      console.error("Careers → hiring migrate failed", err)
+    );
 
     const jobSlug = request.nextUrl.searchParams.get("jobSlug");
     const stageParam = request.nextUrl.searchParams.get("stage");

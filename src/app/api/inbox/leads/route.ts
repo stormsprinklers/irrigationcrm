@@ -36,6 +36,8 @@ type LeadRow = {
   name: string;
   phone: string | null;
   email: string | null;
+  source: string | null;
+  externalId: string | null;
   status: string;
   contactedAt: Date | null;
   createdAt: Date;
@@ -47,11 +49,20 @@ const leadSelect = {
   name: true,
   phone: true,
   email: true,
+  source: true,
+  externalId: true,
   status: true,
   contactedAt: true,
   createdAt: true,
   convertedCustomerId: true,
 } as const;
+
+function isCareersLeadRow(lead: LeadRow | null | undefined) {
+  if (!lead) return false;
+  if (lead.source?.toLowerCase() === "careers") return true;
+  if (lead.externalId?.startsWith("careers:")) return true;
+  return false;
+}
 
 function withLead(
   base: {
@@ -215,6 +226,15 @@ export async function GET() {
     });
 
     const items = [...emailItems, ...smsItems]
+      .filter((item) => {
+        // Careers applications belong in Hiring, not Inbox → Leads
+        if (item.source?.toLowerCase() === "careers") return false;
+        const lead =
+          (item.leadId ? leadsById.get(item.leadId) : null) ??
+          null;
+        if (isCareersLeadRow(lead)) return false;
+        return true;
+      })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 100);
 

@@ -26,7 +26,20 @@ export function serializeLead(lead: LeadPayload) {
 }
 
 export async function listLeads(companyId: string, filters?: { search?: string; status?: LeadStatus }) {
-  const where: Prisma.LeadWhereInput = { companyId };
+  const where: Prisma.LeadWhereInput = {
+    companyId,
+    // Careers applications live in Hiring, not Customers → Leads
+    AND: [
+      {
+        NOT: {
+          OR: [
+            { source: { equals: "careers", mode: "insensitive" } },
+            { externalId: { startsWith: "careers:" } },
+          ],
+        },
+      },
+    ],
+  };
   if (filters?.status) where.status = filters.status;
   if (filters?.search) {
     where.OR = [

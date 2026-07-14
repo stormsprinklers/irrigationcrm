@@ -143,7 +143,12 @@ function escapeHtml(value: string) {
 
 export async function createApplicantFromCareers(
   companyId: string,
-  input: WebsiteCareersApplicationInput
+  input: WebsiteCareersApplicationInput,
+  options?: {
+    skipScoring?: boolean;
+    skipBookingInvite?: boolean;
+    skipNotify?: boolean;
+  }
 ) {
   const existing = await prisma.jobApplicant.findFirst({
     where: { companyId, externalId: input.externalId },
@@ -152,13 +157,15 @@ export async function createApplicantFromCareers(
     return { applicant: existing, created: false };
   }
 
-  const aiScore = await scoreApplicantAnswers({
-    hardWorkMeaning: input.hardWorkMeaning,
-    integrityMeaning: input.integrityMeaning,
-    inconvenientServiceExample: input.inconvenientServiceExample,
-    personalGoals: input.personalGoals,
-  });
-  const stage = stageFromAiScore(aiScore);
+  const aiScore = options?.skipScoring
+    ? null
+    : await scoreApplicantAnswers({
+        hardWorkMeaning: input.hardWorkMeaning,
+        integrityMeaning: input.integrityMeaning,
+        inconvenientServiceExample: input.inconvenientServiceExample,
+        personalGoals: input.personalGoals,
+      });
+  const stage = options?.skipScoring ? ("MAYBE" as const) : stageFromAiScore(aiScore);
 
   const applicant = await prisma.jobApplicant.create({
     data: {
@@ -176,21 +183,23 @@ export async function createApplicantFromCareers(
       personalGoals: input.personalGoals,
       aiScore,
       stage,
-      stageSource: "AI",
+      stageSource: options?.skipScoring ? "MANUAL" : "AI",
       metadata: (input.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
     },
   });
 
-  await notifyStaffInApp({
-    companyId,
-    type: AppNotificationType.HIRING_APPLICANT,
-    title: `New applicant: ${applicant.name}`,
-    body: `${applicant.jobTitle || applicant.jobSlug}${aiScore != null ? ` · score ${aiScore}/12` : ""}`,
-    href: `/hiring/applicants/${applicant.id}`,
-    userIds: await hiringNotifyUserIds(companyId, applicant.jobSlug),
-  }).catch(() => {});
+  if (!options?.skipNotify) {
+    await notifyStaffInApp({
+      companyId,
+      type: AppNotificationType.HIRING_APPLICANT,
+      title: `New applicant: ${applicant.name}`,
+      body: `${applicant.jobTitle || applicant.jobSlug}${aiScore != null ? ` · score ${aiScore}/12` : ""}`,
+      href: `/hiring/applicants/${applicant.id}`,
+      userIds: await hiringNotifyUserIds(companyId, applicant.jobSlug),
+    }).catch(() => {});
+  }
 
-  if (stageNeedsBookingInvite(stage)) {
+  if (!options?.skipBookingInvite && stageNeedsBookingInvite(stage)) {
     void sendHiringBookingInvite(applicant.id);
   }
 

@@ -6,6 +6,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { canAccessHiring } from "@/lib/hiring/permissions";
+import { fetchWebsiteCareerJobs } from "@/lib/hiring/website-catalog";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -13,7 +14,7 @@ export async function GET() {
     const user = await requireSessionUser();
     if (!canAccessHiring(user.role)) return forbiddenResponse();
 
-    const [assignments, managers, jobSlugs] = await Promise.all([
+    const [assignments, managers, applicantJobs, websiteJobs] = await Promise.all([
       prisma.hiringRoleAssignment.findMany({
         where: { companyId: user.companyId },
         include: {
@@ -36,7 +37,35 @@ export async function GET() {
         select: { jobSlug: true, jobTitle: true },
         orderBy: { jobSlug: "asc" },
       }),
+      fetchWebsiteCareerJobs(user.companyId),
     ]);
+
+    const bySlug = new Map<
+      string,
+      { jobSlug: string; jobTitle: string | null; source: "website" | "applicant"; applicationsOpen?: boolean }
+    >();
+
+    for (const job of websiteJobs) {
+      bySlug.set(job.slug, {
+        jobSlug: job.slug,
+        jobTitle: job.jobTitle,
+        source: "website",
+        applicationsOpen: job.applicationsOpen,
+      });
+    }
+    for (const job of applicantJobs) {
+      if (!bySlug.has(job.jobSlug)) {
+        bySlug.set(job.jobSlug, {
+          jobSlug: job.jobSlug,
+          jobTitle: job.jobTitle,
+          source: "applicant",
+        });
+      }
+    }
+
+    const knownJobs = [...bySlug.values()].sort((a, b) =>
+      (a.jobTitle || a.jobSlug).localeCompare(b.jobTitle || b.jobSlug)
+    );
 
     return NextResponse.json({
       assignments: assignments.map((row) => ({
@@ -47,7 +76,14 @@ export async function GET() {
         hiringManager: row.hiringManager,
       })),
       managers,
-      knownJobs: jobSlugs,
+      knownJobs,
+      websiteJobs: websiteJobs.map((job) => ({
+        jobSlug: job.slug,
+        jobTitle: job.jobTitle,
+        department: job.department,
+        location: job.location,
+        applicationsOpen: job.applicationsOpen,
+      })),
     });
   } catch {
     return unauthorizedResponse();

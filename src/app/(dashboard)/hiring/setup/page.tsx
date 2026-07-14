@@ -19,7 +19,12 @@ type Assignment = {
   hiringManagerUserId: string;
   hiringManager: Manager;
 };
-type KnownJob = { jobSlug: string; jobTitle: string | null };
+type KnownJob = {
+  jobSlug: string;
+  jobTitle: string | null;
+  source?: "website" | "applicant";
+  applicationsOpen?: boolean;
+};
 
 export default function HiringSetupPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -37,6 +42,7 @@ export default function HiringSetupPage() {
   const [loading, setLoading] = useState(true);
   const [savingRole, setSavingRole] = useState(false);
   const [savingAvail, setSavingAvail] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const loadRoles = useCallback(async () => {
     const res = await fetch("/api/hiring/roles");
@@ -47,9 +53,21 @@ export default function HiringSetupPage() {
     const data = await res.json();
     setAssignments(data.assignments ?? []);
     setManagers(data.managers ?? []);
-    setKnownJobs(data.knownJobs ?? []);
+    const jobs: KnownJob[] = data.knownJobs ?? [];
+    setKnownJobs(jobs);
     setManagerId((current) => current || data.managers?.[0]?.id || "");
     setAvailManagerId((current) => current || data.managers?.[0]?.id || "");
+    setJobSlug((current) => {
+      if (current) return current;
+      const firstOpen =
+        jobs.find((j) => j.applicationsOpen !== false && j.source === "website") ??
+        jobs[0];
+      if (firstOpen) {
+        setJobTitle(firstOpen.jobTitle || "");
+        return firstOpen.jobSlug;
+      }
+      return "";
+    });
   }, []);
 
   const loadAvailability = useCallback(async (userId: string) => {
@@ -75,9 +93,15 @@ export default function HiringSetupPage() {
     if (availManagerId) void loadAvailability(availManagerId);
   }, [availManagerId, loadAvailability]);
 
+  function selectJob(slug: string) {
+    setJobSlug(slug);
+    const match = knownJobs.find((j) => j.jobSlug === slug);
+    setJobTitle(match?.jobTitle || "");
+  }
+
   async function saveAssignment() {
     if (!jobSlug.trim() || !managerId) {
-      toast.error("Job slug and manager are required");
+      toast.error("Select a website job and hiring manager");
       return;
     }
     setSavingRole(true);
@@ -96,11 +120,29 @@ export default function HiringSetupPage() {
         return;
       }
       toast.success("Role assignment saved");
-      setJobSlug("");
-      setJobTitle("");
       await loadRoles();
     } finally {
       setSavingRole(false);
+    }
+  }
+
+  async function syncCareersFromWebsite() {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/hiring/migrate-careers", { method: "POST" });
+      if (!res.ok) {
+        toast.error("Failed to sync careers applications");
+        return;
+      }
+      const data = await res.json();
+      const s = data.summary ?? {};
+      toast.success(
+        `Synced: ${s.importedFromWebsite ?? 0} from website, ${s.importedFromLeads ?? 0} from leads` +
+          (s.websiteJobs != null ? ` · ${s.websiteJobs} roles on site` : "")
+      );
+      await loadRoles();
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -153,40 +195,62 @@ export default function HiringSetupPage() {
       <PageHeader
         breadcrumb={["Hiring", "Setup"]}
         title="Hiring setup"
-        subtitle="Route positions to managers and set phone-screen availability."
+        subtitle="Route website careers roles to managers and set phone-screen availability."
       />
 
       <section className="mb-8 space-y-4 rounded-lg border border-border bg-white p-5">
-        <h2 className="font-semibold">Position → hiring manager</h2>
-        <p className="text-sm text-muted-foreground">
-          Different roles can go to different managers. Applicants book against that manager&apos;s
-          availability.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Position → hiring manager</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Roles are loaded from the careers page on the website. Assign each open role to a
+              hiring manager; applicants book against that manager&apos;s availability.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void syncCareersFromWebsite()}
+            disabled={syncing}
+          >
+            {syncing ? "Syncing…" : "Sync careers → Hiring"}
+          </Button>
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Job slug</label>
-            <Input
-              list="known-jobs"
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs text-muted-foreground">Job from website</label>
+            <select
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={jobSlug}
-              onChange={(e) => setJobSlug(e.target.value)}
-              placeholder="e.g. irrigation-technician"
-            />
-            <datalist id="known-jobs">
-              {knownJobs.map((job) => (
-                <option key={job.jobSlug} value={job.jobSlug}>
-                  {job.jobTitle || job.jobSlug}
-                </option>
-              ))}
-            </datalist>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Job title (optional)</label>
-            <Input
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-              placeholder="Irrigation Technician"
-            />
+              onChange={(e) => selectJob(e.target.value)}
+            >
+              {!knownJobs.length ? (
+                <option value="">No jobs found — check website catalog sync</option>
+              ) : (
+                knownJobs.map((job) => {
+                  const closed = job.applicationsOpen === false;
+                  const label = [
+                    job.jobTitle || job.jobSlug,
+                    closed ? "(applications closed)" : null,
+                    job.source === "applicant" && job.applicationsOpen === undefined
+                      ? "(from applicant)"
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <option key={job.jobSlug} value={job.jobSlug}>
+                      {label}
+                    </option>
+                  );
+                })
+              )}
+            </select>
+            {jobSlug ? (
+              <p className="mt-1 text-xs text-muted-foreground">Slug: {jobSlug}</p>
+            ) : null}
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs text-muted-foreground">Hiring manager</label>
@@ -203,7 +267,12 @@ export default function HiringSetupPage() {
             </select>
           </div>
         </div>
-        <Button type="button" size="sm" onClick={() => void saveAssignment()} disabled={savingRole}>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void saveAssignment()}
+          disabled={savingRole || !jobSlug}
+        >
           {savingRole ? "Saving…" : "Save assignment"}
         </Button>
 
