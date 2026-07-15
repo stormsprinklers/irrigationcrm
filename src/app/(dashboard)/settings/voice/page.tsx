@@ -103,7 +103,7 @@ export default function SettingsVoicePage() {
               checked={data.transcribeCalls}
               onCheckedChange={(c) => setData({ ...data, transcribeCalls: Boolean(c) })}
             />
-            Transcribe calls (Twilio callback)
+            Transcribe calls (Whisper after recording)
           </label>
         </div>
         <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>

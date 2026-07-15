@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateTwilioSignature } from "@/lib/inbox/twilio";
+import { transcribeCallLogsForTwilioSids } from "@/lib/voice/transcribe-recording";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -20,6 +22,12 @@ export async function POST(request: NextRequest) {
   const callSid = params.CallSid;
   const parentCallSid = params.ParentCallSid;
   const recordingUrl = params.RecordingUrl;
+  const recordingStatus = (params.RecordingStatus ?? "").toLowerCase();
+
+  // Ignore in-progress callbacks; only act when the recording is ready.
+  if (recordingStatus && recordingStatus !== "completed") {
+    return NextResponse.json({ ok: true, skipped: recordingStatus });
+  }
 
   if (callSid && recordingUrl) {
     const sidCandidates = [callSid, parentCallSid].filter(Boolean) as string[];
@@ -40,6 +48,19 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    // Dial recordings cannot use Twilio <Record transcribe>. Run Whisper after ACK
+    // so the webhook stays under Twilio's timeout.
+    after(async () => {
+      try {
+        await transcribeCallLogsForTwilioSids({
+          callSids: sidCandidates,
+          recordingUrl,
+        });
+      } catch (err) {
+        console.error("Post-recording transcription failed", err);
+      }
+    });
   }
 
   return NextResponse.json({ ok: true });

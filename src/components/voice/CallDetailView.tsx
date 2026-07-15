@@ -67,7 +67,11 @@ export function CallDetailView({ detail }: { detail: CallHistoryDetail }) {
 
       <div>
         <p className="mb-2 text-sm font-medium">Transcript</p>
-        <CallTranscriptPanel transcript={detail.transcript} />
+        <CallTranscriptPanel
+          callId={detail.id}
+          transcript={detail.transcript}
+          hasRecording={detail.hasRecording}
+        />
       </div>
     </div>
   );
