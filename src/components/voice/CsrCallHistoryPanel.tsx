@@ -7,7 +7,13 @@ import { CallDetailView } from "@/components/voice/CallDetailView";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { CallHistoryDetail, CallHistoryListItem } from "@/lib/voice/call-history";
-import { formatCallDuration, formatCallTime, remotePartyLabel } from "@/lib/voice/call-history";
+import {
+  CALL_HISTORY_LIST_MAX_HEIGHT_CLASS,
+  CALL_HISTORY_UI_LIMIT,
+  formatCallDuration,
+  formatCallTime,
+  remotePartyLabel,
+} from "@/lib/voice/call-history";
 
 type Props = {
   className?: string;
@@ -48,7 +54,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
   return (
     <section
       className={cn(
-        "flex min-h-[36rem] flex-col overflow-visible rounded-lg border border-border bg-card lg:flex-row",
+        "flex min-h-[36rem] flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex-row",
         className
       )}
     >
@@ -57,10 +63,18 @@ export function CsrCallHistoryPanel({ className }: Props) {
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold">Call history</h3>
           {calls.length > 0 ? (
-            <span className="text-xs text-muted-foreground">({calls.length})</span>
+            <span className="text-xs text-muted-foreground">
+              ({calls.length}
+              {calls.length >= CALL_HISTORY_UI_LIMIT ? "+" : ""})
+            </span>
           ) : null}
         </div>
-        <div className="flex-1">
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+            CALL_HISTORY_LIST_MAX_HEIGHT_CLASS
+          )}
+        >
           {!calls.length ? (
             <p className="p-4 text-sm text-muted-foreground">No calls yet.</p>
           ) : (
@@ -113,11 +127,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
         </div>
       </div>
 
-      <div className="flex min-h-[18rem] min-w-0 flex-1 flex-col lg:min-h-[36rem] lg:w-[66%]">
+      <div className="flex min-h-[18rem] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-[36rem] lg:w-[66%]">
         <div className="shrink-0 border-b border-border px-4 py-3">
           <h3 className="font-semibold">Call details</h3>
         </div>
-        <div className="flex-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {!selectedId ? (
             <p className="p-4 text-sm text-muted-foreground">
               Select a call to play recording or read transcript.

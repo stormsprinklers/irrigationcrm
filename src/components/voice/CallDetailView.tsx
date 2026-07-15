@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { User } from "lucide-react";
+import { Phone, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
 import { CallTranscriptPanel } from "@/components/voice/CallTranscriptPanel";
+import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import {
   formatCallDateTime,
   formatCallDuration,
   remotePartyLabel,
+  remotePartyNumber,
 } from "@/lib/voice/call-history";
 
 type VisitOption = { id: string; title: string; startAt: string };
@@ -29,10 +31,28 @@ export function CallDetailView({
   const [visits, setVisits] = useState<VisitOption[]>([]);
   const [selectedVisitId, setSelectedVisitId] = useState("");
   const [linking, setLinking] = useState(false);
+  const { ready, connect, activeCall } = useVoiceDevice();
 
   useEffect(() => {
     setDetail(initialDetail);
   }, [initialDetail]);
+
+  const callBackNumber = useMemo(() => {
+    const fromCustomer = detail.customer?.phone?.trim();
+    if (fromCustomer) return fromCustomer;
+    return remotePartyNumber(detail.direction, detail.fromNumber, detail.toNumber);
+  }, [detail.customer?.phone, detail.direction, detail.fromNumber, detail.toNumber]);
+
+  const displayName = useMemo(
+    () =>
+      remotePartyLabel(
+        detail.direction,
+        detail.fromNumber,
+        detail.toNumber,
+        detail.customer?.name
+      ),
+    [detail.direction, detail.fromNumber, detail.toNumber, detail.customer?.name]
+  );
 
   const staffDisplay = useMemo(() => {
     const named = (detail.participants ?? []).filter(
@@ -113,6 +133,27 @@ export function CallDetailView({
     }
   }
 
+  async function callCustomer() {
+    if (!callBackNumber?.trim()) {
+      toast.error("No phone number available");
+      return;
+    }
+    if (!ready) {
+      toast.error("Softphone not ready — check Twilio Voice settings");
+      return;
+    }
+    if (activeCall) {
+      toast.error("Already on a call");
+      return;
+    }
+    try {
+      await connect(callBackNumber, detail.customer?.id);
+      toast.success("Calling…");
+    } catch {
+      toast.error("Failed to place call");
+    }
+  }
+
   async function linkToJob() {
     if (!selectedVisitId) {
       toast.error("Select a job first");
@@ -143,15 +184,23 @@ export function CallDetailView({
     <div className="space-y-5">
       <div className="flex items-start gap-3">
         <CallHistoryIcon direction={detail.direction} answered={detail.answered} />
-        <div>
-          <p className="font-semibold">
-            {remotePartyLabel(
-              detail.direction,
-              detail.fromNumber,
-              detail.toNumber,
-              detail.customer?.name
-            )}
-          </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="font-semibold">{displayName}</p>
+            {callBackNumber ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-primary"
+                aria-label={`Call ${displayName}`}
+                title={`Call ${callBackNumber}`}
+                onClick={() => void callCustomer()}
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
           {detail.customer?.id ? (
             <Link href={`/customers/${detail.customer.id}`} className="text-sm text-primary hover:underline">
               View customer

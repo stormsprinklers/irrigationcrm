@@ -15,6 +15,12 @@ export type CallHistoryListItem = {
   employee: { id: string; name: string } | null;
 };
 
+/** Max calls returned to CSR desk history UI. All CallLog rows remain stored indefinitely. */
+export const CALL_HISTORY_UI_LIMIT = 250;
+
+/** Scroll after ~20 rows (~3.65rem each). */
+export const CALL_HISTORY_LIST_MAX_HEIGHT_CLASS = "max-h-[calc(20*3.65rem)]";
+
 export type CallHistoryDetail = CallHistoryListItem & {
   recordingPlaybackUrl: string | null;
   transcript: string | null;

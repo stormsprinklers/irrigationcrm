@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   type CallHistoryDetail,
   type CallHistoryListItem,
+  CALL_HISTORY_UI_LIMIT,
   isCallAnswered,
 } from "@/lib/voice/call-history";
 import { callRecordingPlaybackPath } from "@/lib/voice/recording";
@@ -130,7 +131,10 @@ function toDetail(row: CallLogRow): CallHistoryDetail {
   };
 }
 
-export async function listCallHistory(companyId: string, take = 100): Promise<CallHistoryListItem[]> {
+export async function listCallHistory(
+  companyId: string,
+  take = CALL_HISTORY_UI_LIMIT
+): Promise<CallHistoryListItem[]> {
   const rows = await prisma.callLog.findMany({
     where: { companyId, scope: "EXTERNAL" },
     include: callLogInclude,
