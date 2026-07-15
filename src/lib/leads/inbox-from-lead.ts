@@ -3,6 +3,7 @@ import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
+import { websiteFormDetailLines } from "@/lib/leads/form-details";
 import { websiteLeadFormLabel, websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
 import {
   enrichPricingQuoteLead,
@@ -28,14 +29,15 @@ function formatLeadInboxBody(
   if (input.address) lines.push(`Address: ${input.address}`);
   if (input.city) lines.push(`City: ${input.city}`);
 
-  if (enrichment) {
-    lines.push(``, enrichment.inboxBlock);
+  const detailLines = websiteFormDetailLines(input.metadata);
+  if (detailLines.length) {
+    lines.push(``, ...detailLines);
   } else if (input.notes) {
     lines.push(``, `Message:`, input.notes);
   }
 
-  if (enrichment && input.notes && input.notes !== enrichment.quoteTitle) {
-    lines.push(``, `Notes:`, input.notes);
+  if (enrichment) {
+    lines.push(``, enrichment.inboxBlock);
   }
 
   if (input.metadata && typeof input.metadata === "object") {

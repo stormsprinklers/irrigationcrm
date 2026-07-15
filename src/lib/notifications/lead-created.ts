@@ -1,4 +1,5 @@
 import type { Lead } from "@prisma/client";
+import { websiteFormDetailLines } from "@/lib/leads/form-details";
 import { websiteLeadFormLabel, websiteLeadNotificationTitle } from "@/lib/leads/form-labels";
 import {
   formatQuoteEstimate,
@@ -75,8 +76,13 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
     } else if (lead.notes) {
       bodyLines.push("", lead.notes);
     }
-  } else if (lead.notes) {
-    bodyLines.push("", `Notes: ${lead.notes}`);
+  } else {
+    const detailLines = websiteFormDetailLines(meta);
+    if (detailLines.length) {
+      bodyLines.push("", ...detailLines);
+    } else if (lead.notes) {
+      bodyLines.push("", lead.notes);
+    }
   }
 
   bodyLines.push("", `View leads: ${leadUrl}`, "", `— ${company.name}`);
