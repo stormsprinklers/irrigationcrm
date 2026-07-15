@@ -48,11 +48,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
   return (
     <section
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex-row",
+        "flex min-h-[36rem] flex-col overflow-visible rounded-lg border border-border bg-card lg:flex-row",
         className
       )}
     >
-      <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-b border-border lg:h-auto lg:w-[34%] lg:border-b-0 lg:border-r">
+      <div className="flex min-h-[18rem] min-w-0 flex-col border-b border-border lg:min-h-[36rem] lg:w-[34%] lg:border-b-0 lg:border-r">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <History className="h-4 w-4 text-muted-foreground" />
           <h3 className="font-semibold">Call history</h3>
@@ -60,7 +60,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
             <span className="text-xs text-muted-foreground">({calls.length})</span>
           ) : null}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex-1">
           {!calls.length ? (
             <p className="p-4 text-sm text-muted-foreground">No calls yet.</p>
           ) : (
@@ -113,11 +113,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
         </div>
       </div>
 
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:w-[66%]">
+      <div className="flex min-h-[18rem] min-w-0 flex-1 flex-col lg:min-h-[36rem] lg:w-[66%]">
         <div className="shrink-0 border-b border-border px-4 py-3">
           <h3 className="font-semibold">Call details</h3>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="flex-1">
           {!selectedId ? (
             <p className="p-4 text-sm text-muted-foreground">
               Select a call to play recording or read transcript.

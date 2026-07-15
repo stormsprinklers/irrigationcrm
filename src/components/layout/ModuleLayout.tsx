@@ -60,7 +60,9 @@ export function ModuleLayout({
         <div
           className={cn(
             "min-h-0 min-w-0 flex-1",
-            scrollable ? "overflow-y-auto" : "flex flex-col overflow-hidden"
+            scrollable
+              ? "overflow-y-auto"
+              : "flex flex-col overflow-y-auto"
           )}
         >
           {children}

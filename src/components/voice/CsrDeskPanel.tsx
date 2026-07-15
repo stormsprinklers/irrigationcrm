@@ -210,7 +210,7 @@ export function CsrDeskPanel({
   }
 
   return (
-    <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+    <div className="flex flex-col gap-3 pb-4">
       <div className="space-y-3">
       {needsScheduling.length > 0 ? (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -429,7 +429,7 @@ export function CsrDeskPanel({
       />
       </div>
 
-      <CsrCallHistoryPanel className="min-h-0" />
+      <CsrCallHistoryPanel className="min-h-[36rem]" />
     </div>
   );
 }

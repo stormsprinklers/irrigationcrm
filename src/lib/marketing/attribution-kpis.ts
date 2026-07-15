@@ -205,6 +205,7 @@ export async function getAttributionKpis(
     averageRoas: ratio(paidAttributedRevenue, paidSpend),
     roasByChannel,
     adSpendPercentOfRevenue: ratio(totalAdSpend, invoiceRevenueInRange),
+    spendFromLiveApis,
   };
 }
 
