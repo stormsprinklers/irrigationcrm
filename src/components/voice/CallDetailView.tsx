@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { User } from "lucide-react";
 import { toast } from "sonner";
@@ -33,6 +33,25 @@ export function CallDetailView({
   useEffect(() => {
     setDetail(initialDetail);
   }, [initialDetail]);
+
+  const staffDisplay = useMemo(() => {
+    const named = (detail.participants ?? []).filter(
+      (p) => p.name && p.name !== "Unknown"
+    );
+    if (named.length) return named;
+    if (detail.employee?.name) {
+      return [
+        {
+          id: detail.employee.id,
+          name: detail.employee.name,
+          role: "ANSWERED",
+          phoneE164: null as string | null,
+          joinedAt: "",
+        },
+      ];
+    }
+    return [];
+  }, [detail.participants, detail.employee]);
 
   useEffect(() => {
     if (!detail.customer?.id) {
@@ -152,26 +171,28 @@ export function CallDetailView({
         </div>
         <div>
           <dt className="text-muted-foreground">
-            {detail.participants?.length > 1 ? "Employees" : "Employee"}
+            {staffDisplay.length > 1 ? "Employees" : "Employee"}
           </dt>
           <dd className="font-medium">
-            {detail.participants?.length ? (
+            {staffDisplay.length ? (
               <ul className="space-y-1">
-                {detail.participants.map((p) => (
-                  <li key={`${p.id}-${p.role}-${p.joinedAt}`} className="flex items-center gap-1.5">
+                {staffDisplay.map((p) => (
+                  <li key={`${p.id}-${p.role}-${p.joinedAt || p.name}`} className="flex items-center gap-1.5">
                     <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span>
                       {p.name}
-                      <span className="text-xs font-normal text-muted-foreground">
-                        {" "}
-                        ·{" "}
-                        {p.role === "ANSWERED"
-                          ? "answered"
-                          : p.role === "EXTERNAL_TRANSFER"
-                            ? "phone transfer"
-                            : "transferred"}
-                        {p.phoneE164 ? ` · ${p.phoneE164}` : ""}
-                      </span>
+                      {p.joinedAt ? (
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {" "}
+                          ·{" "}
+                          {p.role === "ANSWERED"
+                            ? "answered"
+                            : p.role === "EXTERNAL_TRANSFER"
+                              ? "phone transfer"
+                              : "transferred"}
+                          {p.phoneE164 ? ` · ${p.phoneE164}` : ""}
+                        </span>
+                      ) : null}
                     </span>
                   </li>
                 ))}
@@ -179,7 +200,7 @@ export function CallDetailView({
             ) : (
               <span className="flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5 text-muted-foreground" />
-                {detail.employee?.name ?? "—"}
+                —
               </span>
             )}
           </dd>

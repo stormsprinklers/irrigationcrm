@@ -137,7 +137,7 @@ export async function syncCallConversionFromLog(
     },
     update: {
       callSessionId: log.sessionId,
-      answeredByUserId,
+      ...(answeredByUserId != null ? { answeredByUserId } : {}),
       disposition,
       booked,
       visitId,
@@ -231,6 +231,8 @@ export async function recordCallAnswered(input: {
     orderBy: { startedAt: "desc" },
   });
 
+  let callLogId: string;
+
   if (callLog) {
     await prisma.callLog.update({
       where: { id: callLog.id },
@@ -239,29 +241,33 @@ export async function recordCallAnswered(input: {
         phoneNumberId: callLog.phoneNumberId ?? session.phoneNumberId,
       },
     });
-    return syncCallConversionFromLog(callLog.id, {
-      answeredByUserId: input.userId,
+    callLogId = callLog.id;
+  } else {
+    // Status webhook may not have created the log yet — create a stub.
+    const created = await prisma.callLog.create({
+      data: {
+        companyId: input.companyId,
+        scope: "EXTERNAL",
+        direction: session.direction,
+        fromNumber: session.fromNumber,
+        toNumber: session.toNumber,
+        customerId: session.customerId,
+        userId: input.userId,
+        sessionId: session.id,
+        phoneNumberId: session.phoneNumberId,
+        twilioCallSid: session.callSid,
+        status: "in-progress",
+      },
     });
+    callLogId = created.id;
   }
 
-  // Status webhook may not have created the log yet — create a stub.
-  const created = await prisma.callLog.create({
-    data: {
-      companyId: input.companyId,
-      scope: "EXTERNAL",
-      direction: session.direction,
-      fromNumber: session.fromNumber,
-      toNumber: session.toNumber,
-      customerId: session.customerId,
-      userId: input.userId,
-      sessionId: session.id,
-      phoneNumberId: session.phoneNumberId,
-      twilioCallSid: session.callSid,
-      status: "in-progress",
-    },
+  await prisma.callParticipant.updateMany({
+    where: { callSessionId: session.id, callLogId: null },
+    data: { callLogId },
   });
 
-  return syncCallConversionFromLog(created.id, {
+  return syncCallConversionFromLog(callLogId, {
     answeredByUserId: input.userId,
   });
 }

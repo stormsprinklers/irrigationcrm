@@ -175,6 +175,53 @@ async function googleAdsFetch<T>(
   return data;
 }
 
+type GoogleAdsSearchPage<TRow> = {
+  results?: TRow[];
+  nextPageToken?: string;
+  next_page_token?: string;
+};
+
+/**
+ * Fetch every page of a Google Ads Search query (REST does not auto-page).
+ * Follows `nextPageToken` until exhausted. Kept query identical across pages.
+ */
+export async function googleAdsSearchAll<TRow>(
+  accessToken: string,
+  customerId: string,
+  query: string,
+  loginCustomerId?: string | null,
+  options?: { maxPages?: number }
+): Promise<TRow[]> {
+  const maxPages = options?.maxPages ?? 50;
+  const rows: TRow[] = [];
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const body: { query: string; pageToken?: string } = { query };
+    if (pageToken) body.pageToken = pageToken;
+
+    const data = await googleAdsFetch<GoogleAdsSearchPage<TRow>>(
+      accessToken,
+      `/customers/${normalizeCustomerId(customerId)}/googleAds:search`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+      loginCustomerId
+    );
+
+    if (data.results?.length) {
+      rows.push(...data.results);
+    }
+
+    const next = data.nextPageToken || data.next_page_token;
+    if (!next) break;
+    pageToken = next;
+  }
+
+  return rows;
+}
+
 type CustomerDetail = {
   id: string;
   name: string;
@@ -555,94 +602,98 @@ export async function getGoogleLsaSummary(
   const dateClause = googleAdsDateClause(range);
   const leadDateClause = localServicesLeadDateClause(range);
 
-  const [campaignData, leadData] = await Promise.all([
-    googleAdsFetch<{
-      results?: Array<{
-        campaign?: {
-          id?: string;
-          name?: string;
-          status?: string;
-        };
-        campaignBudget?: { amountMicros?: string };
-        metrics?: {
-          costMicros?: string;
-          impressions?: string;
-          clicks?: string;
-          conversions?: number;
-        };
-      }>;
-    }>(
+  type LsaCampaignResult = {
+    campaign?: {
+      id?: string;
+      name?: string;
+      status?: string;
+    };
+    campaignBudget?: { amountMicros?: string };
+    metrics?: {
+      costMicros?: string;
+      impressions?: string;
+      clicks?: string;
+      conversions?: number;
+    };
+  };
+
+  type LsaLeadResult = {
+    localServicesLead?: {
+      id?: string;
+      leadType?: string;
+      leadStatus?: string;
+      categoryId?: string;
+      serviceId?: string;
+      creationDateTime?: string;
+      leadCharged?: boolean;
+      contactDetails?: {
+        consumerName?: string;
+        phoneNumber?: string;
+        email?: string;
+      };
+    };
+  };
+
+  const campaignQuery = `
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      campaign_budget.amount_micros,
+      metrics.cost_micros,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.conversions
+    FROM campaign
+    WHERE ${dateClause}
+      AND campaign.status != 'REMOVED'
+      AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
+    ORDER BY metrics.cost_micros DESC
+  `;
+
+  // No GAQL LIMIT — paginate Search so lead volume matches Google LSA UI.
+  const leadQuery = `
+    SELECT
+      local_services_lead.id,
+      local_services_lead.lead_type,
+      local_services_lead.lead_status,
+      local_services_lead.category_id,
+      local_services_lead.service_id,
+      local_services_lead.creation_date_time,
+      local_services_lead.lead_charged,
+      local_services_lead.contact_details
+    FROM local_services_lead
+    WHERE ${leadDateClause}
+    ORDER BY local_services_lead.creation_date_time DESC
+  `;
+
+  const [campaignRows, leadRows] = await Promise.all([
+    googleAdsSearchAll<LsaCampaignResult>(
       accessToken,
-      `/customers/${account.customerId}/googleAds:search`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          query: `
-            SELECT
-              campaign.id,
-              campaign.name,
-              campaign.status,
-              campaign_budget.amount_micros,
-              metrics.cost_micros,
-              metrics.impressions,
-              metrics.clicks,
-              metrics.conversions
-            FROM campaign
-            WHERE ${dateClause}
-              AND campaign.status != 'REMOVED'
-              AND campaign.advertising_channel_type = 'LOCAL_SERVICES'
-            ORDER BY metrics.cost_micros DESC
-            LIMIT 50
-          `,
-        }),
-      },
+      account.customerId,
+      campaignQuery,
       account.loginCustomerId
-    ).catch(() => ({ results: [] as never[] })),
-    googleAdsFetch<{
-      results?: Array<{
-        localServicesLead?: {
-          id?: string;
-          leadType?: string;
-          leadStatus?: string;
-          categoryId?: string;
-          serviceId?: string;
-          creationDateTime?: string;
-          leadCharged?: boolean;
-          contactDetails?: {
-            consumerName?: string;
-            phoneNumber?: string;
-            email?: string;
-          };
-        };
-      }>;
-    }>(
+    ).catch((err) => {
+      console.error("Google LSA campaign query failed", err);
+      return [] as LsaCampaignResult[];
+    }),
+    googleAdsSearchAll<LsaLeadResult>(
       accessToken,
-      `/customers/${account.customerId}/googleAds:search`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          query: `
-            SELECT
-              local_services_lead.id,
-              local_services_lead.lead_type,
-              local_services_lead.lead_status,
-              local_services_lead.category_id,
-              local_services_lead.service_id,
-              local_services_lead.creation_date_time,
-              local_services_lead.lead_charged,
-              local_services_lead.contact_details
-            FROM local_services_lead
-            WHERE ${leadDateClause}
-            ORDER BY local_services_lead.creation_date_time DESC
-            LIMIT 500
-          `,
-        }),
-      },
+      account.customerId,
+      leadQuery,
       account.loginCustomerId
-    ).catch(() => ({ results: [] as never[] })),
+    ).catch((err) => {
+      console.error("Google LSA lead query failed", err);
+      throw err instanceof GoogleAdsApiError
+        ? err
+        : new GoogleAdsApiError(
+            err instanceof Error ? err.message : "Google LSA lead query failed",
+            502
+          );
+    }),
   ]);
 
-  const campaigns: GoogleLsaCampaignRow[] = (campaignData.results ?? []).map((row) => ({
+  const campaigns: GoogleLsaCampaignRow[] = campaignRows.map((row) => ({
     id: String(row.campaign?.id ?? ""),
     name: row.campaign?.name ?? "Local Services campaign",
     status: row.campaign?.status ?? "UNKNOWN",
@@ -655,7 +706,7 @@ export async function getGoogleLsaSummary(
     conversions: Number(row.metrics?.conversions ?? 0),
   }));
 
-  const recentLeads: GoogleLsaLeadRow[] = (leadData.results ?? []).map((row) => {
+  const recentLeads: GoogleLsaLeadRow[] = leadRows.map((row) => {
     const lead = row.localServicesLead;
     return {
       id: String(lead?.id ?? ""),
@@ -689,9 +740,21 @@ export async function getGoogleLsaSummary(
   const spend = campaigns.reduce((sum, row) => sum + row.spend, 0);
   const impressions = campaigns.reduce((sum, row) => sum + row.impressions, 0);
   const clicks = campaigns.reduce((sum, row) => sum + row.clicks, 0);
-  const leads = recentLeads.length;
-  const chargedLeads = recentLeads.filter((lead) => lead.leadCharged).length;
+  const campaignConversions = campaigns.reduce(
+    (sum, row) => sum + row.conversions,
+    0
+  );
+  const leadsFromRows = recentLeads.length;
+  const chargedFromRows = recentLeads.filter((lead) => lead.leadCharged).length;
   const bookedLeads = recentLeads.filter((lead) => lead.leadStatus === "BOOKED").length;
+
+  // Prefer the fuller of row-level lead counts vs campaign `metrics.conversions`
+  // (Google's LSA CPL denominator) so a truncated lead page can't inflate CPL.
+  const leads = Math.max(leadsFromRows, Math.round(campaignConversions));
+  const chargedLeads = Math.max(
+    chargedFromRows,
+    Math.round(campaignConversions)
+  );
 
   return {
     customerId: account.customerId,

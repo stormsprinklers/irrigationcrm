@@ -47,26 +47,40 @@ const callLogInclude = {
 
 type CallLogRow = Prisma.CallLogGetPayload<{ include: typeof callLogInclude }>;
 
+const STAFF_ROLES = ["ANSWERED", "AGENT_TRANSFER", "EXTERNAL_TRANSFER"] as const;
+
+function mergedParticipantRows(row: CallLogRow) {
+  return [...row.participants, ...(row.session?.participants ?? [])];
+}
+
 /** Who picked up / handled the live call — not who later saved wrap-up. */
 function resolveEmployee(row: CallLogRow) {
-  return (
-    row.conversion?.answeredBy ??
-    row.user ??
-    row.session?.assignedUser ??
-    row.handledBy ??
-    null
-  );
+  if (row.conversion?.answeredBy) return row.conversion.answeredBy;
+  if (row.user) return row.user;
+
+  for (const role of STAFF_ROLES) {
+    const participant = mergedParticipantRows(row).find(
+      (p) => p.role === role && (p.user || (p.displayName && p.displayName !== "Unknown"))
+    );
+    if (participant?.user) return participant.user;
+    if (participant?.displayName && participant.displayName !== "Unknown") {
+      return { id: participant.id, name: participant.displayName };
+    }
+  }
+
+  if (row.session?.assignedUser) return row.session.assignedUser;
+  if (row.handledBy) return row.handledBy;
+  return null;
 }
 
 function mapParticipants(row: CallLogRow): CallHistoryDetail["participants"] {
-  const raw = row.participants.length
-    ? row.participants
-    : (row.session?.participants ?? []);
+  const raw = mergedParticipantRows(row);
   const seen = new Set<string>();
   const out: CallHistoryDetail["participants"] = [];
   for (const p of raw) {
     const name = p.user?.name ?? p.displayName ?? "Unknown";
-    const key = `${p.user?.id ?? name}:${p.role}`;
+    if (name === "Unknown" && !p.user && !p.phoneE164) continue;
+    const key = `${p.user?.id ?? name}:${p.role}:${p.phoneE164 ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
@@ -101,15 +115,17 @@ function mapCallLog(row: CallLogRow): CallHistoryListItem {
 }
 
 function toDetail(row: CallLogRow): CallHistoryDetail {
+  const participants = mapParticipants(row);
   const base = mapCallLog(row);
   const employee = resolveEmployee(row);
   return {
     ...base,
+    employee: employee ? { id: employee.id, name: employee.name } : base.employee,
     recordingPlaybackUrl: row.recordingUrl ? callRecordingPlaybackPath(row.id) : null,
     transcript: row.transcript,
     aiSummary: row.aiSummary,
     visitId: row.visitId,
-    participants: mapParticipants(row),
+    participants,
     handledBy: employee,
   };
 }

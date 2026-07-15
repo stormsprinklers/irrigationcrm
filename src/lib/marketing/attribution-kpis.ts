@@ -189,6 +189,24 @@ export async function getAttributionKpis(
     0
   );
 
+  // LSA-only advertisers: CRM Lead rows can lag Google's charged-lead volume
+  // (and used to be further undercounted by Search pagination). Prefer the
+  // larger Google LSA charged/lead count for CPL so it tracks Google's CPL.
+  let leadsForCpl = leadsInRange;
+  let paidLeadsForCpl = paidLeadsInRange;
+  const lsaSpend = spendByChannel.get(MarketingSpendChannel.google_lsa) ?? 0;
+  if (lsaSpend > 0) {
+    try {
+      const { getGoogleLsaSummary } = await import("@/lib/google-ads/client");
+      const lsa = await getGoogleLsaSummary(companyId, range);
+      const googleLeadCount = Math.max(lsa.chargedLeads, lsa.leads);
+      if (googleLeadCount > leadsForCpl) leadsForCpl = googleLeadCount;
+      if (googleLeadCount > paidLeadsForCpl) paidLeadsForCpl = googleLeadCount;
+    } catch (err) {
+      console.error("Attribution KPIs: LSA lead volume lookup failed", err);
+    }
+  }
+
   return {
     dateRange: {
       startDate: range.startDate,
@@ -197,9 +215,9 @@ export async function getAttributionKpis(
       isAllTime: range.isAllTime,
     },
     totalAdSpend: Math.round(totalAdSpend * 100) / 100,
-    leadsInRange,
-    costPerLead: ratio(totalAdSpend, leadsInRange),
-    paidCostPerLead: ratio(paidSpend, paidLeadsInRange),
+    leadsInRange: leadsForCpl,
+    costPerLead: ratio(totalAdSpend, leadsForCpl),
+    paidCostPerLead: ratio(paidSpend, paidLeadsForCpl),
     invoiceRevenueInRange: Math.round(invoiceRevenueInRange * 100) / 100,
     paidAttributedRevenue: Math.round(paidAttributedRevenue * 100) / 100,
     averageRoas: ratio(paidAttributedRevenue, paidSpend),

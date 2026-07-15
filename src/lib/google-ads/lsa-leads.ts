@@ -2,6 +2,7 @@ import type { AdsDateRange } from "@/lib/marketing/ads-date-range";
 import {
   getGoogleAdsAccessToken,
   GoogleAdsApiError,
+  googleAdsSearchAll,
 } from "@/lib/google-ads/client";
 import { prisma } from "@/lib/prisma";
 
@@ -21,6 +22,7 @@ function normalizeCustomerId(id: string) {
 /**
  * Fetch recent LSA leads (with contact phones) for caller-phone attribution.
  * Uses the same OAuth + developer token connection as the Ads dashboard.
+ * Paginates Google Ads Search so attribution is not capped to a single page.
  */
 export async function getGoogleLsaLeadCandidates(
   companyId: string,
@@ -39,67 +41,40 @@ export async function getGoogleLsaLeadCandidates(
 
   const accessToken = await getGoogleAdsAccessToken(companyId);
   const customerId = normalizeCustomerId(company.googleAdsCustomerId);
-  const developerToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim();
-  if (!developerToken) {
-    throw new GoogleAdsApiError("Set GOOGLE_ADS_DEVELOPER_TOKEN", 503);
-  }
 
-  const apiVersion = process.env.GOOGLE_ADS_API_VERSION?.trim() || "v24";
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${accessToken}`,
-    "developer-token": developerToken,
-    "Content-Type": "application/json",
+  type LeadRow = {
+    localServicesLead?: {
+      id?: string;
+      leadType?: string;
+      leadStatus?: string;
+      creationDateTime?: string;
+      leadCharged?: boolean;
+      contactDetails?: { phoneNumber?: string };
+    };
   };
-  if (company.googleAdsLoginCustomerId) {
-    headers["login-customer-id"] = normalizeCustomerId(company.googleAdsLoginCustomerId);
-  }
 
-  const res = await fetch(
-    `https://googleads.googleapis.com/${apiVersion}/customers/${customerId}/googleAds:search`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        query: `
-          SELECT
-            local_services_lead.id,
-            local_services_lead.lead_type,
-            local_services_lead.lead_status,
-            local_services_lead.creation_date_time,
-            local_services_lead.lead_charged,
-            local_services_lead.contact_details
-          FROM local_services_lead
-          WHERE local_services_lead.creation_date_time >= '${range.startDate} 00:00:00'
-            AND local_services_lead.creation_date_time <= '${range.endDate} 23:59:59'
-          ORDER BY local_services_lead.creation_date_time DESC
-          LIMIT 500
-        `,
-      }),
-    }
+  const query = `
+    SELECT
+      local_services_lead.id,
+      local_services_lead.lead_type,
+      local_services_lead.lead_status,
+      local_services_lead.creation_date_time,
+      local_services_lead.lead_charged,
+      local_services_lead.contact_details
+    FROM local_services_lead
+    WHERE local_services_lead.creation_date_time >= '${range.startDate} 00:00:00'
+      AND local_services_lead.creation_date_time <= '${range.endDate} 23:59:59'
+    ORDER BY local_services_lead.creation_date_time DESC
+  `;
+
+  const rows = await googleAdsSearchAll<LeadRow>(
+    accessToken,
+    customerId,
+    query,
+    company.googleAdsLoginCustomerId
   );
 
-  const body = (await res.json()) as {
-    results?: Array<{
-      localServicesLead?: {
-        id?: string;
-        leadType?: string;
-        leadStatus?: string;
-        creationDateTime?: string;
-        leadCharged?: boolean;
-        contactDetails?: { phoneNumber?: string };
-      };
-    }>;
-    error?: { message?: string };
-  };
-
-  if (!res.ok) {
-    throw new GoogleAdsApiError(
-      body.error?.message ?? `Google Ads LSA lead query failed (${res.status})`,
-      res.status
-    );
-  }
-
-  return (body.results ?? []).map((row) => ({
+  return rows.map((row) => ({
     id: String(row.localServicesLead?.id ?? ""),
     phoneNumber: row.localServicesLead?.contactDetails?.phoneNumber ?? null,
     leadType: row.localServicesLead?.leadType ?? null,

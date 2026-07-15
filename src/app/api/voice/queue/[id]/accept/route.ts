@@ -3,6 +3,7 @@ import { CallSessionStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getTwilioClient } from "@/lib/inbox/twilio";
 import { prisma } from "@/lib/prisma";
+import { recordCallAnswered } from "@/lib/voice/call-conversion";
 import { appBaseUrl } from "@/lib/voice/identity";
 
 export async function POST(
@@ -40,6 +41,12 @@ export async function POST(
         queueEnteredAt: null,
       },
     });
+
+    await recordCallAnswered({
+      companyId: user.companyId,
+      sessionId: session.id,
+      userId: user.id,
+    }).catch((err) => console.error("Queue accept: recordCallAnswered failed", err));
 
     return NextResponse.json({ ok: true });
   } catch (error) {
