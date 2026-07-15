@@ -1,4 +1,5 @@
 import { AttributionFirstTouchMethod, LeadStatus, Prisma } from "@prisma/client";
+import { after } from "next/server";
 import { parseAttributionFromMetadata, recordTouchEvent } from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
@@ -84,32 +85,38 @@ export async function createLeadFromIntegration(
         ? metadata.sessionId
         : null;
 
-  recordTouchEvent({
-    companyId,
-    leadId: lead.id,
-    eventType: "FORM_SUBMIT",
-    method: AttributionFirstTouchMethod.FORM,
-    attribution: {
-      ...parseAttributionFromMetadata(metadata),
-      formSource: input.source ?? "website",
-      leadSource: input.source ?? "website",
-    },
-    sessionId,
-    phone: input.phone,
-    metadata: {
-      formSource: input.source ?? "website",
-      externalId: input.externalId,
-    },
-  }).catch((err) => {
-    console.error("Failed to record lead attribution touch", err);
-  });
+  // Inbox + in-app notifications must finish before we ACK the website push.
+  // Fire-and-forget was getting cut off on serverless after the response returned.
+  await createInboxEntriesFromWebsiteLead(companyId, lead.id, input, enrichment);
 
-  notifyLeadCreated(companyId, lead).catch(() => {});
-  createInboxEntriesFromWebsiteLead(companyId, lead.id, input, enrichment).catch(
-    (err) => {
-      console.error("Failed to create inbox entry for website lead", err);
-    }
-  );
+  // Email + attribution can run after the HTTP response; `after` keeps the
+  // serverless invocation alive so they aren't dropped mid-flight.
+  after(async () => {
+    await Promise.all([
+      recordTouchEvent({
+        companyId,
+        leadId: lead.id,
+        eventType: "FORM_SUBMIT",
+        method: AttributionFirstTouchMethod.FORM,
+        attribution: {
+          ...parseAttributionFromMetadata(metadata),
+          formSource: input.source ?? "website",
+          leadSource: input.source ?? "website",
+        },
+        sessionId,
+        phone: input.phone,
+        metadata: {
+          formSource: input.source ?? "website",
+          externalId: input.externalId,
+        },
+      }).catch((err) => {
+        console.error("Failed to record lead attribution touch", err);
+      }),
+      notifyLeadCreated(companyId, lead).catch((err) => {
+        console.error("Failed to send lead-created email", err);
+      }),
+    ]);
+  });
 
   return { lead, created: true };
 }

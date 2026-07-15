@@ -33,6 +33,10 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
       console.warn(
         "notifyLeadCreated: set company supportEmail to receive new-lead emails (staff personal inboxes are not used)"
       );
+    } else if (company.notifyLeadCreated && !isEmailConfigured()) {
+      console.warn(
+        "notifyLeadCreated: email provider is not configured; skipping new-lead email"
+      );
     }
     return;
   }

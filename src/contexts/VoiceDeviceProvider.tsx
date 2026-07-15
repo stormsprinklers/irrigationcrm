@@ -109,7 +109,8 @@ async function patchPresence(status: "AVAILABLE" | "ON_CALL" | "OFFLINE" | "AWAY
 export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const deviceRef = useRef<Device | null>(null);
-  const refreshingTokenRef = useRef(false);
+  const refreshingTokenRef = useRef<Promise<boolean> | null>(null);
+  const recoveringTransportRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
@@ -186,30 +187,85 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshDeviceToken = useCallback(
-    async (opts?: { reRegister?: boolean; silent?: boolean }) => {
+    async (opts?: { reRegister?: boolean; forceRegister?: boolean; silent?: boolean }) => {
       const device = deviceRef.current;
-      if (!device || refreshingTokenRef.current) return false;
-      refreshingTokenRef.current = true;
-      try {
-        const token = await fetchVoiceToken();
-        device.updateToken(token);
-        if (opts?.reRegister && device.state !== "registered") {
-          await device.register();
-        }
-        setError(null);
-        return true;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Voice token refresh failed";
-        setError(message);
-        if (!opts?.silent) {
-          toast.error(message);
-        }
-        return false;
-      } finally {
-        refreshingTokenRef.current = false;
+      if (!device) return false;
+      // Coalesce concurrent refresh attempts (visibility + error handlers race).
+      if (refreshingTokenRef.current) {
+        return refreshingTokenRef.current;
       }
+
+      const run = (async () => {
+        try {
+          const token = await fetchVoiceToken();
+          const current = deviceRef.current;
+          if (!current) return false;
+          current.updateToken(token);
+          if (opts?.forceRegister || (opts?.reRegister && current.state !== "registered")) {
+            await current.register();
+          }
+          setError(null);
+          return true;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Voice token refresh failed";
+          setError(message);
+          if (!opts?.silent) {
+            toast.error(message);
+          }
+          return false;
+        } finally {
+          refreshingTokenRef.current = null;
+        }
+      })();
+
+      refreshingTokenRef.current = run;
+      return run;
     },
     [fetchVoiceToken]
+  );
+
+  const recoverVoiceTransport = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (recoveringTransportRef.current) return false;
+      recoveringTransportRef.current = true;
+      try {
+        const device = deviceRef.current;
+        if (!device) return false;
+
+        // Don't bounce registration mid-call — only refresh the JWT.
+        if (device.isBusy) {
+          return refreshDeviceToken({ silent: opts?.silent ?? true });
+        }
+
+        const tokenOk = await refreshDeviceToken({
+          silent: opts?.silent ?? true,
+        });
+        if (!tokenOk) return false;
+
+        const current = deviceRef.current;
+        if (!current || current.isBusy) return tokenOk;
+
+        // State can still say "registered" with a dead signaling socket after a
+        // backgrounded tab. Bounce registration to rebuild the transport.
+        try {
+          if (current.state === "registered") {
+            await current.unregister();
+          }
+        } catch {
+          // ignore — register() below is what matters
+        }
+        try {
+          await current.register();
+          setError(null);
+          return true;
+        } catch {
+          return false;
+        }
+      } finally {
+        recoveringTransportRef.current = false;
+      }
+    },
+    [refreshDeviceToken]
   );
 
   useEffect(() => {
@@ -242,17 +298,15 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
         device.on("unregistered", () => {
           setReady(false);
-          if (cancelled || document.visibilityState === "hidden") return;
-          void (async () => {
-            const ok = await refreshDeviceToken({ reRegister: true, silent: true });
-            if (!ok && !cancelled) {
-              try {
-                await device.register();
-              } catch {
-                // refreshDeviceToken already recorded the error
-              }
-            }
-          })();
+          // Skip if we intentionally bounced registration during transport recovery.
+          if (
+            cancelled ||
+            document.visibilityState === "hidden" ||
+            recoveringTransportRef.current
+          ) {
+            return;
+          }
+          void recoverVoiceTransport({ silent: true });
         });
 
         device.on("error", (err) => {
@@ -264,14 +318,16 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
             code === 20104 ||
             code === 31204 ||
             code === 31205;
+          // 31009: signaling WS dropped (common after background tabs). Recover quietly.
+          const isTransportError =
+            code === 31009 ||
+            /no transport available/i.test(message) ||
+            /transport error/i.test(message);
 
-          if (isTokenError) {
+          if (isTokenError || isTransportError) {
             void (async () => {
-              const ok = await refreshDeviceToken({ reRegister: true, silent: true });
-              if (ok) {
-                setError(null);
-                return;
-              }
+              const ok = await recoverVoiceTransport({ silent: true });
+              if (ok || cancelled) return;
               setError(message);
               toast.error(message);
             })();
@@ -308,15 +364,11 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
     const onVisibilityChange = () => {
       if (document.visibilityState !== "visible" || cancelled) return;
-      const device = deviceRef.current;
-      if (!device) return;
-      // Browsers freeze background timers; proactively refresh + re-register on return.
-      void (async () => {
-        await refreshDeviceToken({
-          reRegister: device.state !== "registered",
-          silent: true,
-        });
-      })();
+      if (!deviceRef.current) return;
+      // Background tabs freeze timers and kill the Voice signaling socket.
+      // Always refresh the JWT and force re-register — state can still say
+      // "registered" even when the transport is already dead.
+      void recoverVoiceTransport({ silent: true });
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -331,7 +383,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionStatus, session?.user?.id, fetchVoiceToken, refreshDeviceToken]);
+  }, [sessionStatus, session?.user?.id, fetchVoiceToken, refreshDeviceToken, recoverVoiceTransport]);
 
   const connect = useCallback(
     async (to: string, customerId?: string) => {
