@@ -649,6 +649,7 @@ model Company {
   hiringScreenBookings   HiringScreenBooking[]
   marketingTouchEvents   MarketingTouchEvent[]
   marketingSpendDaily    MarketingSpendDaily[]
+  vehicles               Vehicle[]
 }
 
 model LocalSeoSerpSearch {
@@ -816,6 +817,12 @@ model User {
   hiringRoleAssignments    HiringRoleAssignment[] @relation("HiringRoleManager")
   hiringManagerAvailability HiringManagerAvailability?
   hiringScreenBookings     HiringScreenBooking[]  @relation("HiringScreenManager")
+  assignedVehicles         Vehicle[]              @relation("VehicleAssignee")
+  vehicleAttachments       VehicleAttachment[]
+  vehicleMileageLogs       VehicleMileageLog[]
+  vehicleServiceRecords    VehicleServiceRecord[] @relation("VehicleServicePerformer")
+  reportedVehicleIssues    VehicleIssue[]         @relation("VehicleIssueReporter")
+  resolvedVehicleIssues    VehicleIssue[]         @relation("VehicleIssueResolver")
 }
 
 model Customer {
@@ -1290,6 +1297,7 @@ enum AppNotificationType {
   LEAD_CREATED
   HIRING_APPLICANT
   HIRING_SCREEN_BOOKED
+  VEHICLE_REMINDER
 }
 
 model NotificationTemplate {
@@ -3257,4 +3265,136 @@ model PropertyIrrigationMapMarker {
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, sortOrder])
+}
+
+enum VehicleStatus {
+  ACTIVE
+  SOLD
+  OUT_OF_SERVICE
+}
+
+enum VehicleAttachmentKind {
+  PHOTO
+  RECEIPT
+  WORK_SUMMARY
+  CARFAX
+  OTHER
+}
+
+enum VehicleIssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model Vehicle {
+  id                      String        @id @default(cuid())
+  companyId               String
+  make                    String
+  model                   String
+  year                    Int
+  vin                     String?
+  licensePlate            String?
+  photoUrl                String?
+  assignedUserId          String?
+  status                  VehicleStatus @default(ACTIVE)
+  currentMileage          Int           @default(0)
+  lastOilChangeAt         DateTime?
+  lastOilChangeMileage    Int?
+  oilIntervalMiles        Int           @default(5000)
+  oilIntervalMonths       Int           @default(6)
+  nextOilChangeDueAt      DateTime?
+  nextOilChangeDueMileage Int?
+  lastOilReminderSentAt   DateTime?
+  aiSummary               String?
+  notes                   String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedUser   User?                   @relation("VehicleAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  attachments    VehicleAttachment[]
+  mileageLogs    VehicleMileageLog[]
+  serviceRecords VehicleServiceRecord[]
+  issues         VehicleIssue[]
+
+  @@unique([companyId, vin])
+  @@index([companyId])
+  @@index([assignedUserId])
+  @@index([vin])
+  @@index([nextOilChangeDueAt])
+  @@index([companyId, status])
+}
+
+model VehicleAttachment {
+  id           String                 @id @default(cuid())
+  vehicleId    String
+  uploadedById String
+  blobUrl      String
+  fileName     String
+  mimeType     String
+  kind         VehicleAttachmentKind  @default(OTHER)
+  createdAt    DateTime               @default(now())
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, createdAt])
+  @@index([vehicleId, kind])
+}
+
+model VehicleMileageLog {
+  id           String   @id @default(cuid())
+  vehicleId    String
+  mileage      Int
+  recordedAt   DateTime @default(now())
+  recordedById String
+  note         String?
+  createdAt    DateTime @default(now())
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation(fields: [recordedById], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, recordedAt])
+}
+
+model VehicleServiceRecord {
+  id               String    @id @default(cuid())
+  vehicleId        String
+  performedAt      DateTime  @default(now())
+  mileageAtService Int?
+  title            String
+  description      String?
+  cost             Decimal?  @db.Decimal(10, 2)
+  performedById    String?
+  vendor           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  vehicle     Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  performedBy User?   @relation("VehicleServicePerformer", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, performedAt])
+}
+
+model VehicleIssue {
+  id             String             @id @default(cuid())
+  vehicleId      String
+  title          String
+  description    String?
+  status         VehicleIssueStatus @default(OPEN)
+  reportedById   String
+  reportedAt     DateTime           @default(now())
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolutionNote String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  vehicle    Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  reportedBy User    @relation("VehicleIssueReporter", fields: [reportedById], references: [id], onDelete: Cascade)
+  resolvedBy User?   @relation("VehicleIssueResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId, status])
+  @@index([vehicleId, reportedAt])
 }

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Menu, Phone, Settings, X } from "lucide-react";
 import { getPrimaryNavActive, primaryNav } from "@/config/navigation";
 import { canAccessHiring } from "@/lib/hiring/permissions";
+import { canViewVehicles } from "@/lib/vehicles/permissions";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
@@ -31,9 +32,11 @@ export function TopNav() {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const userName = session?.user?.name ?? "User";
-  const navItems = primaryNav.filter(
-    (item) => item.href !== "/hiring" || canAccessHiring(session?.user?.role)
-  );
+  const navItems = primaryNav.filter((item) => {
+    if (item.href === "/hiring") return canAccessHiring(session?.user?.role);
+    if (item.href === "/vehicles") return canViewVehicles(session?.user?.role);
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">

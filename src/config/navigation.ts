@@ -17,12 +17,22 @@ export const primaryNav: NavItem[] = [
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
   { label: "Timesheets", href: "/timesheets" },
+  { label: "Vehicles", href: "/vehicles" },
   { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Marketing", href: "/marketing" },
   { label: "Hiring", href: "/hiring" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
+];
+
+export const vehiclesSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Fleet", href: "/vehicles", exact: true },
+      { label: "Add vehicle", href: "/vehicles/new" },
+    ],
+  },
 ];
 
 export const hiringSidebar: NavSection[] = [
@@ -206,6 +216,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/price-book") return pathname.startsWith("/price-book");
   if (href === "/marketing") return pathname.startsWith("/marketing");
   if (href === "/hiring") return pathname.startsWith("/hiring");
+  if (href === "/vehicles") return pathname.startsWith("/vehicles");
   if (href === "/campaigns") return pathname.startsWith("/campaigns") || pathname.startsWith("/marketing");
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
