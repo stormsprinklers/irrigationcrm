@@ -208,6 +208,24 @@ export async function recordCallAnswered(input: {
     },
   });
 
+  const { recordCallParticipant } = await import("@/lib/voice/conference");
+  const alreadyAnswered = await prisma.callParticipant.findFirst({
+    where: {
+      callSessionId: session.id,
+      userId: input.userId,
+      role: "ANSWERED",
+    },
+    select: { id: true },
+  });
+  if (!alreadyAnswered) {
+    await recordCallParticipant({
+      companyId: input.companyId,
+      callSessionId: session.id,
+      userId: input.userId,
+      role: "ANSWERED",
+    }).catch(() => {});
+  }
+
   const callLog = await prisma.callLog.findFirst({
     where: { sessionId: session.id, companyId: input.companyId },
     orderBy: { startedAt: "desc" },
@@ -282,3 +300,74 @@ export async function linkVisitToCallSession(input: {
     answeredByUserId: input.answeredByUserId,
   });
 }
+
+/**
+ * If a job is booked for the same customer (or phone) within ±15 minutes of a call,
+ * mark that call BOOKED and link the visit — even without an explicit callSessionId.
+ */
+export async function linkVisitToNearbyCalls(input: {
+  companyId: string;
+  visitId: string;
+  customerId?: string | null;
+  phone?: string | null;
+  aroundDate?: Date;
+  windowMinutes?: number;
+  answeredByUserId?: string | null;
+}) {
+  const windowMs = (input.windowMinutes ?? 15) * 60 * 1000;
+  const around = input.aroundDate ?? new Date();
+  const from = new Date(around.getTime() - windowMs);
+  const to = new Date(around.getTime() + windowMs);
+
+  const orFilters: Array<Record<string, unknown>> = [];
+  if (input.customerId) {
+    orFilters.push({ customerId: input.customerId });
+  }
+  if (input.phone?.trim()) {
+    const { phoneLookupVariants } = await import("@/lib/inbox/phone");
+    const variants = phoneLookupVariants(input.phone);
+    orFilters.push({ fromNumber: { in: variants } });
+    orFilters.push({ toNumber: { in: variants } });
+  }
+  if (!orFilters.length) return [];
+
+  const logs = await prisma.callLog.findMany({
+    where: {
+      companyId: input.companyId,
+      scope: "EXTERNAL",
+      startedAt: { gte: from, lte: to },
+      OR: orFilters,
+      disposition: { not: CallDisposition.BOOKED },
+    },
+    select: { id: true, sessionId: true },
+    take: 10,
+    orderBy: { startedAt: "desc" },
+  });
+
+  const linked: string[] = [];
+  for (const log of logs) {
+    await prisma.callLog.update({
+      where: { id: log.id },
+      data: {
+        visitId: input.visitId,
+        disposition: CallDisposition.BOOKED,
+        ...(input.customerId ? { customerId: input.customerId } : {}),
+      },
+    });
+    await syncCallConversionFromLog(log.id, {
+      visitId: input.visitId,
+      disposition: CallDisposition.BOOKED,
+      answeredByUserId: input.answeredByUserId,
+      customerId: input.customerId,
+    });
+    if (log.sessionId) {
+      await prisma.visit.updateMany({
+        where: { id: input.visitId, callSessionId: null },
+        data: { callSessionId: log.sessionId },
+      });
+    }
+    linked.push(log.id);
+  }
+  return linked;
+}
+

@@ -12,6 +12,7 @@ type VoiceOverview = {
   twilioPhone: string | null;
   recordCalls: boolean;
   transcribeCalls: boolean;
+  skipIvrForKnownCustomers: boolean;
   twilioConfigured: boolean;
   counts: { numbers: number; flows: number; groups: number };
   webhooks: Record<string, string>;
@@ -24,7 +25,12 @@ export default function SettingsVoicePage() {
   useEffect(() => {
     fetch("/api/settings/voice")
       .then((r) => r.json())
-      .then(setData)
+      .then((payload) =>
+        setData({
+          ...payload,
+          skipIvrForKnownCustomers: payload.skipIvrForKnownCustomers !== false,
+        })
+      )
       .catch(() => toast.error("Failed to load voice settings"));
   }, []);
 
@@ -37,6 +43,7 @@ export default function SettingsVoicePage() {
       body: JSON.stringify({
         recordCalls: data.recordCalls,
         transcribeCalls: data.transcribeCalls,
+        skipIvrForKnownCustomers: data.skipIvrForKnownCustomers,
       }),
     });
     setSaving(false);
@@ -106,6 +113,32 @@ export default function SettingsVoicePage() {
             Transcribe calls (Whisper after recording)
           </label>
         </div>
+        <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
+          {saving ? "Saving..." : "Save"}
+        </Button>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-border bg-white p-6">
+        <h3 className="mb-2 text-lg font-semibold">Spam reduction IVR</h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Call flows that start with a phone menu (e.g. “press 1 to continue”) block robocalls.
+          Known customers can skip that menu and ring your CSRs directly.
+        </p>
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            className="mt-0.5"
+            checked={data.skipIvrForKnownCustomers !== false}
+            onCheckedChange={(c) =>
+              setData({ ...data, skipIvrForKnownCustomers: Boolean(c) })
+            }
+          />
+          <span>
+            Skip entry IVR for existing customers
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              On by default. New or unknown callers still hear the menu.
+            </span>
+          </span>
+        </label>
         <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
           {saving ? "Saving..." : "Save"}
         </Button>

@@ -36,6 +36,18 @@ type CustomerDetail = {
   city?: string | null;
   mostRecentVisitAt?: string | null;
   doNotService?: boolean;
+  lifetimeValue?: number | null;
+  outstandingBalance?: number | null;
+  propertyAddress?: string | null;
+  recentVisits?: Array<{
+    id: string;
+    title: string;
+    startAt: string;
+    status: string;
+    total: number;
+    balanceDue: number;
+    technicianName: string | null;
+  }>;
 };
 
 type FilterOptions = {
@@ -132,6 +144,10 @@ export function CsrDeskPanel({
                 city: lookup.city,
                 mostRecentVisitAt: lookup.mostRecentVisitAt,
                 doNotService: lookup.doNotService,
+                lifetimeValue: lookup.lifetimeValue,
+                outstandingBalance: lookup.outstandingBalance,
+                propertyAddress: lookup.propertyAddress,
+                recentVisits: lookup.recentVisits ?? [],
               });
               return;
             }
@@ -143,6 +159,10 @@ export function CsrDeskPanel({
               city: lookup.city ?? data.city,
               mostRecentVisitAt: lookup.mostRecentVisitAt,
               doNotService: data.doNotService,
+              lifetimeValue: lookup.lifetimeValue,
+              outstandingBalance: lookup.outstandingBalance,
+              propertyAddress: lookup.propertyAddress,
+              recentVisits: lookup.recentVisits ?? [],
             });
           });
       })
@@ -295,7 +315,64 @@ export function CsrDeskPanel({
               }
             />
             <p className="text-muted-foreground">{callerPhone}</p>
-            {customer?.email && <p>{customer.email}</p>}
+            {customer?.email ? <p>{customer.email}</p> : null}
+            {customer?.propertyAddress ? (
+              <p className="text-xs text-muted-foreground">{customer.propertyAddress}</p>
+            ) : null}
+            {customer?.lifetimeValue != null ? (
+              <p className="text-xs">
+                <span className="text-muted-foreground">LTV:</span>{" "}
+                <span className="font-medium">
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(customer.lifetimeValue)}
+                </span>
+                {customer.outstandingBalance != null && customer.outstandingBalance > 0 ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · Due{" "}
+                    {new Intl.NumberFormat("en-US", {
+                      style: "currency",
+                      currency: "USD",
+                    }).format(customer.outstandingBalance)}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+            {customer?.recentVisits && customer.recentVisits.length > 0 ? (
+              <div className="space-y-1 border-t border-border pt-2">
+                <p className="text-xs font-medium text-muted-foreground">Recent appointments</p>
+                <ul className="space-y-1.5">
+                  {customer.recentVisits.slice(0, 4).map((v) => (
+                    <li key={v.id} className="text-xs leading-snug">
+                      <Link href={`/visits/${v.id}`} className="font-medium text-primary hover:underline">
+                        {new Date(v.startAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </Link>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {v.technicianName ?? "Unassigned"}
+                        {v.balanceDue > 0
+                          ? ` · ${new Intl.NumberFormat("en-US", {
+                              style: "currency",
+                              currency: "USD",
+                            }).format(v.balanceDue)} due`
+                          : v.total > 0
+                            ? ` · ${new Intl.NumberFormat("en-US", {
+                                style: "currency",
+                                currency: "USD",
+                              }).format(v.total)}`
+                            : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {customer?.id && (
               <Button variant="link" className="h-auto p-0" asChild>
                 <Link href={`/customers/${customer.id}`}>View customer profile</Link>

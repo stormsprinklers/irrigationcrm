@@ -468,6 +468,8 @@ model Company {
   emailLogoUrl             String?
   recordCalls              Boolean  @default(true)
   transcribeCalls          Boolean  @default(true)
+  /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.
+  skipIvrForKnownCustomers Boolean  @default(true)
   estimateExpiryDays       Int      @default(14)
   estimateDepositRequired  Boolean  @default(false)
   estimateDepositType      DepositType?
@@ -605,6 +607,7 @@ model Company {
   agentGroups            AgentGroup[]
   agentPresences         AgentPresence[]
   callSessions           CallSession[]
+  callParticipants       CallParticipant[]
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
@@ -798,6 +801,7 @@ model User {
   assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
   handledCallLogs        CallLog[]            @relation("HandledCallLogs")
   answeredCallConversions CallConversion[]    @relation("AnsweredCallConversions")
+  callParticipants         CallParticipant[]
   workScheduleDays       EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
   reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
@@ -1171,6 +1175,7 @@ model CallLog {
   phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
   conversion CallConversion?
   visitNotes VisitNote[]
+  participants CallParticipant[]
 
   @@index([companyId, scope, startedAt])
   @@index([sessionId])
@@ -1595,6 +1600,8 @@ model CallSession {
   id                   String            @id @default(cuid())
   companyId            String
   callSid              String            @unique
+  /// Softphone (agent) CallSid once a CSR answers — used for hold/transfer.
+  agentCallSid         String?
   conferenceSid        String?
   direction            CallDirection
   status               CallSessionStatus @default(RINGING)
@@ -1619,9 +1626,35 @@ model CallSession {
   callLogs       CallLog[]
   visits         Visit[]
   callConversions CallConversion[]
+  participants   CallParticipant[]
 
   @@index([companyId, status])
   @@index([assignedUserId])
+  @@index([agentCallSid])
+}
+
+/// Employees who joined a call (answered, softphone transfer, or personal-phone transfer).
+model CallParticipant {
+  id            String    @id @default(cuid())
+  companyId     String
+  callSessionId String
+  callLogId     String?
+  userId        String?
+  displayName   String?
+  phoneE164     String?
+  /// ANSWERED | AGENT_TRANSFER | EXTERNAL_TRANSFER
+  role          String
+  joinedAt      DateTime  @default(now())
+  leftAt        DateTime?
+
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callSession CallSession @relation(fields: [callSessionId], references: [id], onDelete: Cascade)
+  callLog     CallLog?    @relation(fields: [callLogId], references: [id], onDelete: SetNull)
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([callSessionId, joinedAt])
+  @@index([callLogId])
+  @@index([companyId, userId])
 }
 
 model Conversation {

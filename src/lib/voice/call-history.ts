@@ -20,6 +20,14 @@ export type CallHistoryDetail = CallHistoryListItem & {
   transcript: string | null;
   aiSummary: string | null;
   visitId: string | null;
+  /** All employees who joined (answer + transfers). */
+  participants: Array<{
+    id: string;
+    name: string;
+    role: string;
+    phoneE164: string | null;
+    joinedAt: string;
+  }>;
   /** @deprecated Use employee — kept for older clients */
   handledBy: { id: string; name: string } | null;
 };

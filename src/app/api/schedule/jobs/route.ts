@@ -132,6 +132,22 @@ export async function POST(request: NextRequest) {
         answeredByUserId: user.id,
         markBooked: true,
       }).catch(() => {});
+    } else if (visit.customerId) {
+      // Any appointment booked ~around a call with same customer → count as booked.
+      const { linkVisitToNearbyCalls } = await import("@/lib/voice/call-conversion");
+      const customer = await prisma.customer.findFirst({
+        where: { id: visit.customerId, companyId: user.companyId },
+        select: { phone: true },
+      });
+      void linkVisitToNearbyCalls({
+        companyId: user.companyId,
+        visitId: visit.id,
+        customerId: visit.customerId,
+        phone: customer?.phone,
+        aroundDate: new Date(),
+        windowMinutes: 15,
+        answeredByUserId: user.id,
+      }).catch(() => {});
     }
 
     if (visit.customerId) {

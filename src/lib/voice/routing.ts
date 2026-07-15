@@ -14,10 +14,60 @@ import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import { getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
-import { renderIvrGather, renderIvrNode, type FlowContext } from "./ivr";
+import { renderIvrGather, renderIvrNode, type FlowContext, type IvrNodeConfig } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
 
 type TwilioParams = Record<string, string>;
+
+/** After a spam-gate IVR, prefer the "press 1" (or first) destination dial node. */
+function resolvePostIvrDestination<
+  T extends { id: string; type: CallFlowNodeType; sortOrder: number; config: unknown },
+>(entryNode: T, nodes: T[]): T | null {
+  const config = (entryNode.config ?? {}) as IvrNodeConfig;
+  const option =
+    config.options?.find((o) => o.digit === "1" && o.nextNodeId) ??
+    config.options?.find((o) => o.nextNodeId);
+  if (option?.nextNodeId) {
+    const byId = nodes.find((n) => n.id === option.nextNodeId);
+    if (byId) return byId;
+  }
+  const later = nodes
+    .filter(
+      (n) =>
+        n.sortOrder > entryNode.sortOrder &&
+        (n.type === CallFlowNodeType.DIAL_GROUP || n.type === CallFlowNodeType.DIAL_USER)
+    )
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  if (later[0]) return later[0];
+  return (
+    nodes.find(
+      (n) => n.type === CallFlowNodeType.DIAL_GROUP || n.type === CallFlowNodeType.DIAL_USER
+    ) ?? null
+  );
+}
+
+async function dialAvailableAgents(
+  response: InstanceType<typeof twilio.twiml.VoiceResponse>,
+  company: { id: string; recordCalls: boolean },
+  from: string
+) {
+  const dial = response.dial(
+    inboundDialAttributes(company, {
+      timeout: 30,
+      action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${company.id}`,
+      method: "POST",
+      callerId: from,
+    })
+  );
+  const identities = await getAvailableAgentIdentities(company.id);
+  if (identities.length) {
+    for (const identity of identities) {
+      dial.client({}, identity);
+    }
+  } else {
+    response.say("No agents are available.");
+  }
+}
 
 function isWithinBusinessHours(businessHours: unknown): boolean {
   if (!businessHours || typeof businessHours !== "object") return true;
@@ -187,6 +237,24 @@ export async function buildInboundTwiml(params: TwilioParams) {
       transcribeCalls: company.transcribeCalls,
     };
 
+    // Known customers skip spam-reduction IVR and ring CSRs directly (configurable).
+    const skipIvr =
+      company.skipIvrForKnownCustomers !== false &&
+      Boolean(customer?.id) &&
+      entryNode.type === CallFlowNodeType.IVR;
+
+    if (skipIvr) {
+      const destination = resolvePostIvrDestination(
+        entryNode,
+        phoneRecord.callFlow.nodes
+      );
+      if (destination) {
+        return renderIvrNode(destination, phoneRecord.callFlow.nodes, ctx);
+      }
+      await dialAvailableAgents(response, company, from);
+      return response.toString();
+    }
+
     if (entryNode.type === CallFlowNodeType.IVR) {
       await renderIvrGather(response, entryNode, ctx);
       return response.toString();
@@ -195,22 +263,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
     return renderIvrNode(entryNode, phoneRecord.callFlow.nodes, ctx);
   }
 
-  const dial = response.dial(
-    inboundDialAttributes(company, {
-      timeout: 30,
-      action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${company.id}`,
-      method: "POST",
-      callerId: from,
-    })
-  );
-  const identities = await getAvailableAgentIdentities(company.id);
-  if (identities.length) {
-    for (const identity of identities) {
-      dial.client({}, identity);
-    }
-  } else {
-    response.say("No agents are available.");
-  }
+  await dialAvailableAgents(response, company, from);
   return response.toString();
 }
 

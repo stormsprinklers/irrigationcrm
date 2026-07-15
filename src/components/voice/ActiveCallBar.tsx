@@ -7,10 +7,12 @@ import {
   Pause,
   PhoneOff,
   Play,
+  Plus,
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
+import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointmentModal";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 
@@ -27,7 +29,9 @@ export function ActiveCallBar() {
     toggleMute,
     toggleHold,
     transfer,
-    completeWarmTransfer,
+    openBookAppointment,
+    bookAppointmentOpen,
+    setBookAppointmentOpen,
   } = useVoiceDevice();
   const [seconds, setSeconds] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -61,7 +65,11 @@ export function ActiveCallBar() {
       >
         <div className="mb-3 min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {activeCall.direction === "inbound" ? "On call" : "Outbound call"}
+            {activeCall.transferring
+              ? "Warm transfer"
+              : activeCall.direction === "inbound"
+                ? "On call"
+                : "Outbound call"}
           </p>
           <p className="truncate font-semibold text-foreground">{label}</p>
           <CallerIdDetails
@@ -89,8 +97,9 @@ export function ActiveCallBar() {
           <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)} aria-label="Transfer">
             <UserPlus className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="outline" onClick={() => void completeWarmTransfer()}>
-            Complete
+          <Button size="sm" variant="outline" onClick={openBookAppointment} aria-label="New appointment">
+            <Plus className="mr-1 h-4 w-4" />
+            New
           </Button>
           <Button size="sm" variant="destructive" className="ml-auto" onClick={disconnect}>
             <PhoneOff className="mr-1 h-4 w-4" />
@@ -102,6 +111,10 @@ export function ActiveCallBar() {
         open={transferOpen}
         onOpenChange={setTransferOpen}
         onTransfer={transfer}
+      />
+      <BookCallAppointmentModal
+        open={bookAppointmentOpen}
+        onOpenChange={setBookAppointmentOpen}
       />
     </>
   );

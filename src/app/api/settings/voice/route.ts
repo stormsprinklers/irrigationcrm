@@ -14,6 +14,7 @@ export async function GET() {
         twilioPhone: true,
         recordCalls: true,
         transcribeCalls: true,
+        skipIvrForKnownCustomers: true,
         businessHours: true,
       },
     });
@@ -61,13 +62,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { recordCalls, transcribeCalls, businessHours } = body;
+    const { recordCalls, transcribeCalls, skipIvrForKnownCustomers, businessHours } = body;
 
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data: {
         ...(recordCalls !== undefined ? { recordCalls } : {}),
         ...(transcribeCalls !== undefined ? { transcribeCalls } : {}),
+        ...(skipIvrForKnownCustomers !== undefined
+          ? { skipIvrForKnownCustomers: Boolean(skipIvrForKnownCustomers) }
+          : {}),
         ...(businessHours !== undefined ? { businessHours } : {}),
       },
     });

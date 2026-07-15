@@ -27,6 +27,8 @@ export type ActiveCallState = {
   sessionId: string | null;
   muted: boolean;
   onHold: boolean;
+  /** Warm/consult transfer in progress — hangup leaves conference running. */
+  transferring: boolean;
 };
 
 type VoiceContextValue = {
@@ -40,8 +42,15 @@ type VoiceContextValue = {
   disconnect: () => void;
   toggleMute: () => void;
   toggleHold: () => Promise<void>;
-  transfer: (targetUserId: string, type: "warm" | "cold") => Promise<void>;
-  completeWarmTransfer: () => Promise<void>;
+  transfer: (
+    targetUserId: string,
+    type: "warm" | "cold",
+    options?: { mode?: "agent" | "employee_phone" }
+  ) => Promise<void>;
+  /** Open book-appointment UI for the active call's customer. */
+  openBookAppointment: () => void;
+  bookAppointmentOpen: boolean;
+  setBookAppointmentOpen: (open: boolean) => void;
   /** Link a visit booked during the active call into wrap-up + conversion tracking. */
   notifyVisitBooked: (visitId: string) => void;
 };
@@ -66,9 +75,14 @@ async function lookupCaller(phone: string): Promise<CallerInfo> {
   }
 }
 
-async function resolveSessionId(callSid: string): Promise<string | null> {
+async function resolveSessionId(
+  callSid: string,
+  parentCallSid?: string | null
+): Promise<string | null> {
   try {
-    const res = await fetch(`/api/voice/sessions/by-call?callSid=${encodeURIComponent(callSid)}`);
+    const qs = new URLSearchParams({ callSid });
+    if (parentCallSid) qs.set("parentCallSid", parentCallSid);
+    const res = await fetch(`/api/voice/sessions/by-call?${qs.toString()}`);
     if (!res.ok) return null;
     const data = await res.json();
     return data.id ?? null;
@@ -77,7 +91,11 @@ async function resolveSessionId(callSid: string): Promise<string | null> {
   }
 }
 
-async function recordAnswered(callSid: string | undefined, sessionId: string | null) {
+async function recordAnswered(
+  callSid: string | undefined,
+  sessionId: string | null,
+  parentCallSid?: string | null
+) {
   if (!callSid && !sessionId) return;
   try {
     await fetch("/api/voice/sessions/by-call", {
@@ -85,7 +103,9 @@ async function recordAnswered(callSid: string | undefined, sessionId: string | n
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         callSid: callSid || undefined,
+        parentCallSid: parentCallSid || undefined,
         sessionId: sessionId || undefined,
+        agentCallSid: callSid || undefined,
         answered: true,
       }),
     });
@@ -121,15 +141,31 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const [wrapUpSessionId, setWrapUpSessionId] = useState<string | null>(null);
   const [wrapUpVisitId, setWrapUpVisitId] = useState<string | null>(null);
   const [wrapUpOpen, setWrapUpOpen] = useState(false);
+  const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
 
   const bindCall = useCallback(
     async (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
       const callerInfo = await lookupCaller(remoteNumber);
       const callSid = call.parameters.CallSid;
-      const sessionId = callSid ? await resolveSessionId(callSid) : null;
+      const parentCallSid =
+        (call.parameters as Record<string, string>).ParentCallSid ??
+        (call.parameters as Record<string, string>).parentCallSid ??
+        null;
+      let sessionId = callSid ? await resolveSessionId(callSid, parentCallSid) : null;
 
-      // Record which employee is on the call (inbound pickup or outbound dial).
-      void recordAnswered(callSid, sessionId);
+      void recordAnswered(callSid, sessionId, parentCallSid);
+
+      if (!sessionId && callSid) {
+        window.setTimeout(() => {
+          void resolveSessionId(callSid, parentCallSid).then((id) => {
+            if (!id) return;
+            setActiveCall((prev) =>
+              prev && prev.call === call ? { ...prev, sessionId: id } : prev
+            );
+            void recordAnswered(callSid, id, parentCallSid);
+          });
+        }, 1500);
+      }
 
       const state: ActiveCallState = {
         call,
@@ -139,6 +175,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         sessionId,
         muted: false,
         onHold: false,
+        transferring: false,
       };
 
       setActiveCall(state);
@@ -146,11 +183,18 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       void patchPresence("ON_CALL");
 
       call.on("disconnect", () => {
-        if (sessionId) {
-          setWrapUpSessionId(sessionId);
-          setWrapUpOpen(true);
-        }
-        setActiveCall(null);
+        setActiveCall((prev) => {
+          if (prev?.sessionId) {
+            if (prev.transferring) {
+              void fetch(`/api/voice/calls/${prev.sessionId}/transfer/leave`, {
+                method: "POST",
+              }).catch(() => {});
+            }
+            setWrapUpSessionId(prev.sessionId);
+            setWrapUpOpen(true);
+          }
+          return null;
+        });
         void patchPresence("AVAILABLE");
       });
 
@@ -427,6 +471,12 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   }, [incomingCall]);
 
   const disconnect = useCallback(() => {
+    if (activeCall?.transferring && activeCall.sessionId) {
+      void fetch(`/api/voice/calls/${activeCall.sessionId}/transfer/leave`, {
+        method: "POST",
+      }).catch(() => {});
+      toast.success("You left the call — the transfer continues");
+    }
     activeCall?.call.disconnect();
     setActiveCall(null);
     void patchPresence("AVAILABLE");
@@ -441,7 +491,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
   const toggleHold = useCallback(async () => {
     if (!activeCall?.sessionId) {
-      toast.error("Hold unavailable for this call");
+      toast.error("Hold unavailable for this call — reconnecting session…");
       return;
     }
     const next = !activeCall.onHold;
@@ -451,22 +501,28 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ hold: next }),
     });
     if (!res.ok) {
-      toast.error("Failed to update hold");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to update hold");
       return;
     }
     setActiveCall({ ...activeCall, onHold: next });
   }, [activeCall]);
 
   const transfer = useCallback(
-    async (targetUserId: string, type: "warm" | "cold") => {
+    async (
+      targetUserId: string,
+      type: "warm" | "cold",
+      options?: { mode?: "agent" | "employee_phone" }
+    ) => {
       if (!activeCall?.sessionId) {
         toast.error("Transfer unavailable for this call");
         return;
       }
+      const mode = options?.mode ?? "agent";
       const res = await fetch(`/api/voice/calls/${activeCall.sessionId}/transfer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId, type }),
+        body: JSON.stringify({ targetUserId, type, mode }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -478,25 +534,20 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         setActiveCall(null);
         toast.success("Call transferred");
       } else {
-        toast.success("Consultation started — complete transfer when ready");
+        setActiveCall({ ...activeCall, transferring: true });
+        toast.success(
+          mode === "employee_phone"
+            ? "Ringing employee — hang up when ready to leave the call"
+            : "Consultation started — hang up when ready to leave the call"
+        );
       }
     },
     [activeCall]
   );
 
-  const completeWarmTransfer = useCallback(async () => {
-    if (!activeCall?.sessionId) return;
-    const res = await fetch(`/api/voice/calls/${activeCall.sessionId}/transfer/complete`, {
-      method: "POST",
-    });
-    if (!res.ok) {
-      toast.error("Failed to complete transfer");
-      return;
-    }
-    activeCall.call.disconnect();
-    setActiveCall(null);
-    toast.success("Transfer completed");
-  }, [activeCall]);
+  const openBookAppointment = useCallback(() => {
+    setBookAppointmentOpen(true);
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -511,7 +562,9 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       toggleMute,
       toggleHold,
       transfer,
-      completeWarmTransfer,
+      openBookAppointment,
+      bookAppointmentOpen,
+      setBookAppointmentOpen,
       notifyVisitBooked,
     }),
     [
@@ -526,7 +579,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       toggleMute,
       toggleHold,
       transfer,
-      completeWarmTransfer,
+      openBookAppointment,
+      bookAppointmentOpen,
       notifyVisitBooked,
     ]
   );

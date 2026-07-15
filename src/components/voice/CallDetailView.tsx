@@ -151,10 +151,37 @@ export function CallDetailView({
           <dd className="font-medium">{formatCallDuration(detail.durationSec)}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Employee</dt>
-          <dd className="flex items-center gap-1.5 font-medium">
-            <User className="h-3.5 w-3.5 text-muted-foreground" />
-            {detail.employee?.name ?? "—"}
+          <dt className="text-muted-foreground">
+            {detail.participants?.length > 1 ? "Employees" : "Employee"}
+          </dt>
+          <dd className="font-medium">
+            {detail.participants?.length ? (
+              <ul className="space-y-1">
+                {detail.participants.map((p) => (
+                  <li key={`${p.id}-${p.role}-${p.joinedAt}`} className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span>
+                      {p.name}
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {" "}
+                        ·{" "}
+                        {p.role === "ANSWERED"
+                          ? "answered"
+                          : p.role === "EXTERNAL_TRANSFER"
+                            ? "phone transfer"
+                            : "transferred"}
+                        {p.phoneE164 ? ` · ${p.phoneE164}` : ""}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-muted-foreground" />
+                {detail.employee?.name ?? "—"}
+              </span>
+            )}
           </dd>
         </div>
         <div>

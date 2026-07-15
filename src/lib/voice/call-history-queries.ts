@@ -14,6 +14,28 @@ const callLogInclude = {
   session: {
     select: {
       assignedUser: { select: { id: true, name: true } },
+      participants: {
+        orderBy: { joinedAt: "asc" as const },
+        select: {
+          id: true,
+          role: true,
+          displayName: true,
+          phoneE164: true,
+          joinedAt: true,
+          user: { select: { id: true, name: true } },
+        },
+      },
+    },
+  },
+  participants: {
+    orderBy: { joinedAt: "asc" as const },
+    select: {
+      id: true,
+      role: true,
+      displayName: true,
+      phoneE164: true,
+      joinedAt: true,
+      user: { select: { id: true, name: true } },
     },
   },
   conversion: {
@@ -36,6 +58,28 @@ function resolveEmployee(row: CallLogRow) {
   );
 }
 
+function mapParticipants(row: CallLogRow): CallHistoryDetail["participants"] {
+  const raw = row.participants.length
+    ? row.participants
+    : (row.session?.participants ?? []);
+  const seen = new Set<string>();
+  const out: CallHistoryDetail["participants"] = [];
+  for (const p of raw) {
+    const name = p.user?.name ?? p.displayName ?? "Unknown";
+    const key = `${p.user?.id ?? name}:${p.role}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      id: p.user?.id ?? p.id,
+      name,
+      role: p.role,
+      phoneE164: p.phoneE164,
+      joinedAt: p.joinedAt.toISOString(),
+    });
+  }
+  return out;
+}
+
 function mapCallLog(row: CallLogRow): CallHistoryListItem {
   const employee = resolveEmployee(row);
   return {
@@ -53,6 +97,20 @@ function mapCallLog(row: CallLogRow): CallHistoryListItem {
     hasSummary: Boolean(row.aiSummary?.trim()),
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,
+  };
+}
+
+function toDetail(row: CallLogRow): CallHistoryDetail {
+  const base = mapCallLog(row);
+  const employee = resolveEmployee(row);
+  return {
+    ...base,
+    recordingPlaybackUrl: row.recordingUrl ? callRecordingPlaybackPath(row.id) : null,
+    transcript: row.transcript,
+    aiSummary: row.aiSummary,
+    visitId: row.visitId,
+    participants: mapParticipants(row),
+    handledBy: employee,
   };
 }
 
@@ -77,18 +135,7 @@ export async function listCustomerCallHistory(
     orderBy: { startedAt: "desc" },
     take,
   });
-  return rows.map((row) => {
-    const base = mapCallLog(row);
-    const employee = resolveEmployee(row);
-    return {
-      ...base,
-      recordingPlaybackUrl: row.recordingUrl ? callRecordingPlaybackPath(row.id) : null,
-      transcript: row.transcript,
-      aiSummary: row.aiSummary,
-      visitId: row.visitId,
-      handledBy: employee,
-    };
-  });
+  return rows.map(toDetail);
 }
 
 export async function getCallHistoryDetail(
@@ -100,15 +147,5 @@ export async function getCallHistoryDetail(
     include: callLogInclude,
   });
   if (!row) return null;
-
-  const base = mapCallLog(row);
-  const employee = resolveEmployee(row);
-  return {
-    ...base,
-    recordingPlaybackUrl: row.recordingUrl ? callRecordingPlaybackPath(row.id) : null,
-    transcript: row.transcript,
-    aiSummary: row.aiSummary,
-    visitId: row.visitId,
-    handledBy: employee,
-  };
+  return toDetail(row);
 }
