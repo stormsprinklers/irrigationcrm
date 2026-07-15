@@ -34,7 +34,7 @@ export function MarketingMetricGrid({
       {metrics.map((metric) => (
         <div key={metric.label} className="rounded-lg border border-border bg-white p-4">
           <div className="mb-1 flex items-start justify-between gap-2">
-            <p className="text-2xl font-semibold text-muted-foreground/60">
+            <p className="text-2xl font-semibold text-foreground">
               {metric.value ?? "—"}
             </p>
             {comingSoon && !metric.value ? (

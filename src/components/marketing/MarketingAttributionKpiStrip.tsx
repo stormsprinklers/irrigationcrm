@@ -66,7 +66,7 @@ export function MarketingAttributionKpiStrip() {
                     !kpis.dateRange.isAllTime
                       ? ` (${kpis.dateRange.startDate} – ${kpis.dateRange.endDate})`
                       : ""
-                  }`
+                  }${kpis.spendFromLiveApis ? " · live ad accounts" : ""}`
                 : "Unable to load KPIs"}
           </p>
         </div>

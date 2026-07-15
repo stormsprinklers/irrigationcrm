@@ -26,7 +26,39 @@ export type AttributionKpis = {
     roas: number | null;
   }>;
   adSpendPercentOfRevenue: number | null;
+  /** True when spend came from live ad APIs because daily snapshots were empty. */
+  spendFromLiveApis?: boolean;
 };
+
+async function fetchLivePaidSpendByChannel(
+  companyId: string,
+  range: AdsDateRange
+): Promise<Map<string, number>> {
+  const spend = new Map<string, number>();
+  const [{ getGoogleAdsSummary, getGoogleLsaSummary }, { getMetaAdsSummary }] =
+    await Promise.all([
+      import("@/lib/google-ads/client"),
+      import("@/lib/meta/ads"),
+    ]);
+
+  const results = await Promise.allSettled([
+    getGoogleAdsSummary(companyId, range),
+    getGoogleLsaSummary(companyId, range),
+    getMetaAdsSummary(companyId, range),
+  ]);
+
+  if (results[0].status === "fulfilled") {
+    spend.set(MarketingSpendChannel.google_ads, results[0].value.spend ?? 0);
+  }
+  if (results[1].status === "fulfilled") {
+    spend.set(MarketingSpendChannel.google_lsa, results[1].value.spend ?? 0);
+  }
+  if (results[2].status === "fulfilled") {
+    spend.set(MarketingSpendChannel.meta_ads, results[2].value.spend ?? 0);
+  }
+
+  return spend;
+}
 
 function utcStart(isoDate: string) {
   return new Date(`${isoDate}T00:00:00.000Z`);
@@ -104,6 +136,20 @@ export async function getAttributionKpis(
     const spend = toNumber(row.spend);
     totalAdSpend += spend;
     spendByChannel.set(row.channel, (spendByChannel.get(row.channel) ?? 0) + spend);
+  }
+
+  // MarketingSpendDaily is filled by cron; until that has history, fall back to
+  // the same live Google/Meta summaries the Ads page uses so overview KPIs match.
+  let spendFromLiveApis = false;
+  if (totalAdSpend <= 0) {
+    const live = await fetchLivePaidSpendByChannel(companyId, range);
+    for (const [channel, spend] of live) {
+      if (spend > 0) {
+        spendByChannel.set(channel, spend);
+        totalAdSpend += spend;
+        spendFromLiveApis = true;
+      }
+    }
   }
 
   let invoiceRevenueInRange = 0;
