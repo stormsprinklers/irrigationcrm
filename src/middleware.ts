@@ -6,6 +6,8 @@ const publicPaths = [
   "/",
   "/privacy",
   "/login",
+  "/forgot-password",
+  "/reset-password",
   "/pay",
   "/book",
   "/refer",
@@ -29,6 +31,7 @@ const publicPaths = [
   "/api/integrations",
   "/api/track",
   "/api/mobile/auth/login",
+  "/api/mobile/auth/mfa",
   "/api/mobile/auth/refresh",
 ];
 

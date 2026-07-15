@@ -1,8 +1,8 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { AuthMfaPurpose } from "@prisma/client";
 import { getAuthSecret } from "@/lib/auth-secret";
+import { verifyStaffMfaChallenge } from "@/lib/staff-auth";
 
 declare module "next-auth" {
   interface Session {
@@ -35,33 +35,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        challengeId: { label: "Challenge", type: "text" },
+        code: { label: "Code", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const challengeId = credentials?.challengeId
+          ? String(credentials.challengeId)
+          : "";
+        const code = credentials?.code ? String(credentials.code) : "";
+        if (!challengeId || !code) return null;
         if (!process.env.DATABASE_URL) return null;
 
-        const email = String(credentials.email).toLowerCase().trim();
-        const password = String(credentials.password);
-
         try {
-          const user = await prisma.user.findUnique({
-            where: { email },
-          });
-
-          if (!user?.passwordHash) return null;
-          if (user.status !== "ACTIVE") return null;
-
-          const valid = await bcrypt.compare(password, user.passwordHash);
-          if (!valid) return null;
+          const result = await verifyStaffMfaChallenge(
+            challengeId,
+            code,
+            AuthMfaPurpose.LOGIN,
+          );
+          if (!result.ok) return null;
 
           return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            companyId: user.companyId,
-            role: user.role,
+            id: result.user.id,
+            email: result.user.email,
+            name: result.user.name,
+            companyId: result.user.companyId,
+            role: result.user.role,
           };
         } catch {
           return null;

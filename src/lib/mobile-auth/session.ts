@@ -11,7 +11,20 @@ import {
 
 export async function authenticateMobileUser(email: string, password: string) {
   const normalizedEmail = email.toLowerCase().trim();
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      companyId: true,
+      role: true,
+      status: true,
+      passwordHash: true,
+      phone: true,
+      lmsUserId: true,
+    },
+  });
   if (!user?.passwordHash || user.status !== "ACTIVE") {
     return { error: "Invalid email or password" as const };
   }

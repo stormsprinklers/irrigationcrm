@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
     const { firstName, lastName, name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary, websiteTeamSlug } = body;
 
     if (!email) return badRequestResponse("Email is required");
+    if (!phone || !String(phone).trim()) {
+      return badRequestResponse(
+        "Mobile phone is required for SMS two-factor authentication",
+      );
+    }
 
     const nameFields = parseEmployeeNameFields({ firstName, lastName, name });
     if ("error" in nameFields) return badRequestResponse(nameFields.error);
