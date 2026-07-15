@@ -45,7 +45,27 @@ export const visitDetailInclude = {
   timeEvents: { orderBy: { occurredAt: "asc" as const }, include: { user: { select: { id: true, name: true } } } },
   notes: {
     orderBy: { createdAt: "desc" as const },
-    include: { author: { select: { id: true, name: true, photoUrl: true, color: true } } },
+    include: {
+      author: { select: { id: true, name: true, photoUrl: true, color: true } },
+      callLog: {
+        select: {
+          id: true,
+          startedAt: true,
+          durationSec: true,
+          transcript: true,
+          aiSummary: true,
+          recordingUrl: true,
+          user: { select: { id: true, name: true } },
+          handledBy: { select: { id: true, name: true } },
+          conversion: {
+            select: { answeredBy: { select: { id: true, name: true } } },
+          },
+          session: {
+            select: { assignedUser: { select: { id: true, name: true } } },
+          },
+        },
+      },
+    },
   },
   attachments: {
     orderBy: { createdAt: "desc" as const },

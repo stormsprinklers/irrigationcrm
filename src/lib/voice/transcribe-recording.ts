@@ -95,6 +95,12 @@ export async function transcribeCallLogRecording(callLogId: string): Promise<{
     return { ok: false, skipped: "No recording URL" };
   }
   if (call.transcript?.trim()) {
+    const { summarizeCallLog } = await import("@/lib/voice/summarize-call");
+    try {
+      await summarizeCallLog(call.id);
+    } catch (err) {
+      console.error("Call summary failed for existing transcript", call.id, err);
+    }
     return { ok: true, transcript: call.transcript, skipped: "Already transcribed" };
   }
 
@@ -105,6 +111,13 @@ export async function transcribeCallLogRecording(callLogId: string): Promise<{
     where: { id: call.id },
     data: { transcript },
   });
+
+  const { summarizeCallLog } = await import("@/lib/voice/summarize-call");
+  try {
+    await summarizeCallLog(call.id);
+  } catch (err) {
+    console.error("Call summary failed after transcription", call.id, err);
+  }
 
   return { ok: true, transcript };
 }

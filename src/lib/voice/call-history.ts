@@ -10,6 +10,7 @@ export type CallHistoryListItem = {
   answered: boolean;
   hasRecording: boolean;
   hasTranscript: boolean;
+  hasSummary: boolean;
   customer: { id: string; name: string; phone: string | null } | null;
   employee: { id: string; name: string } | null;
 };
@@ -17,6 +18,9 @@ export type CallHistoryListItem = {
 export type CallHistoryDetail = CallHistoryListItem & {
   recordingPlaybackUrl: string | null;
   transcript: string | null;
+  aiSummary: string | null;
+  visitId: string | null;
+  /** @deprecated Use employee — kept for older clients */
   handledBy: { id: string; name: string } | null;
 };
 

@@ -5,11 +5,11 @@ import {
   forbiddenForFieldRole,
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { transcribeCallLogRecording } from "@/lib/voice/transcribe-recording";
+import { summarizeCallLog } from "@/lib/voice/summarize-call";
 
-/** POST — backfill / retry Whisper transcript for a call that has a recording. */
+/** POST — generate or refresh AI call summary from transcript. */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -18,6 +18,8 @@ export async function POST(
     if (fieldBlock) return fieldBlock;
 
     const { id } = await params;
+    const body = (await request.json().catch(() => ({}))) as { force?: boolean };
+
     const call = await prisma.callLog.findFirst({
       where: { id, companyId: user.companyId },
       select: { id: true },
@@ -26,32 +28,23 @@ export async function POST(
       return NextResponse.json({ error: "Call not found" }, { status: 404 });
     }
 
-    const result = await transcribeCallLogRecording(call.id);
-    if (!result.ok && result.skipped && result.skipped !== "Already transcribed") {
-      const status =
-        result.skipped.includes("OPENAI") || result.skipped.includes("Twilio")
-          ? 503
-          : 400;
+    const result = await summarizeCallLog(call.id, { force: Boolean(body.force) });
+    if (!result.ok && result.skipped && result.skipped !== "Already summarized") {
+      const status = result.skipped.includes("OPENAI") ? 503 : 400;
       return NextResponse.json({ error: result.skipped }, { status });
     }
 
-    const refreshed = await prisma.callLog.findUnique({
-      where: { id: call.id },
-      select: { transcript: true, aiSummary: true },
-    });
-
     return NextResponse.json({
       ok: true,
-      transcript: refreshed?.transcript ?? result.transcript ?? null,
-      summary: refreshed?.aiSummary ?? null,
+      summary: result.summary ?? null,
       skipped: result.skipped ?? null,
     });
   } catch (err) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return unauthorizedResponse();
     }
-    const message = err instanceof Error ? err.message : "Transcription failed";
-    const status = message.includes("OPENAI") || message.includes("Twilio") ? 503 : 500;
+    const message = err instanceof Error ? err.message : "Summary failed";
+    const status = message.includes("OPENAI") ? 503 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

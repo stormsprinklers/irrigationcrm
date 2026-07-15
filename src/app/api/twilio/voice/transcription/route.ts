@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateTwilioSignature } from "@/lib/inbox/twilio";
+import { summarizeCallLogsForTranscriptUpdate } from "@/lib/voice/summarize-call";
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -23,22 +24,33 @@ export async function POST(request: NextRequest) {
 
   if (callSid && transcriptionText) {
     const sidCandidates = [callSid, parentCallSid].filter(Boolean) as string[];
-    const updated = await prisma.callLog.updateMany({
+    const logs = await prisma.callLog.findMany({
       where: { twilioCallSid: { in: sidCandidates } },
-      data: { transcript: transcriptionText },
+      select: { id: true },
     });
 
-    if (updated.count === 0) {
+    let ids = logs.map((l) => l.id);
+
+    if (!ids.length) {
       const session = await prisma.callSession.findFirst({
         where: { callSid: { in: sidCandidates } },
         select: { id: true },
       });
       if (session) {
-        await prisma.callLog.updateMany({
+        const sessionLogs = await prisma.callLog.findMany({
           where: { sessionId: session.id },
-          data: { transcript: transcriptionText },
+          select: { id: true },
         });
+        ids = sessionLogs.map((l) => l.id);
       }
+    }
+
+    if (ids.length) {
+      await prisma.callLog.updateMany({
+        where: { id: { in: ids } },
+        data: { transcript: transcriptionText },
+      });
+      void summarizeCallLogsForTranscriptUpdate(ids);
     }
   }
 

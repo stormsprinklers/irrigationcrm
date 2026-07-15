@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listCustomers, serializeCustomer } from "@/lib/customers/queries";
+import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
       data: {
         companyId: user.companyId,
         name: String(body.name).trim(),
-        phone: body.phone ?? null,
+        phone: body.phone ? normalizePhone(String(body.phone)) : null,
         email: body.email ?? null,
         companyName: body.companyName ?? null,
         address: body.address ?? null,

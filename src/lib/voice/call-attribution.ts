@@ -1,5 +1,5 @@
 import { CallAttributionMethod, PhoneNumberType } from "@prisma/client";
-import { normalizePhone } from "@/lib/inbox/contacts";
+import { normalizePhone, phonesMatch } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
 export type CallAttributionResult = {
@@ -8,16 +8,6 @@ export type CallAttributionResult = {
   trackingSource: string | null;
   googleLsaLeadId: string | null;
 };
-
-function phonesMatch(a: string | null | undefined, b: string | null | undefined) {
-  if (!a || !b) return false;
-  const left = normalizePhone(a).replace(/\D/g, "");
-  const right = normalizePhone(b).replace(/\D/g, "");
-  if (!left || !right) return false;
-  if (left === right) return true;
-  // Compare last 10 digits (US-centric) so +1 variants still match.
-  return left.slice(-10) === right.slice(-10);
-}
 
 /**
  * Attribute an inbound call:

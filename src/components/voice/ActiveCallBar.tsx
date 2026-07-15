@@ -5,7 +5,6 @@ import {
   Mic,
   MicOff,
   Pause,
-  Phone,
   PhoneOff,
   Play,
   UserPlus,
@@ -55,43 +54,48 @@ export function ActiveCallBar() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-white px-4 py-3 shadow-lg">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{label}</p>
-            <CallerIdDetails callerInfo={activeCall.callerInfo} className="truncate text-xs" />
-            <p className="text-sm text-muted-foreground">
-              {formatDuration(seconds)}
-              {activeCall.onHold ? " · On hold" : ""}
-              {activeCall.muted ? " · Muted" : ""}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={toggleMute}>
-              {activeCall.muted ? (
-                <MicOff className="h-4 w-4" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => void toggleHold()}>
-              {activeCall.onHold ? (
-                <Play className="h-4 w-4" />
-              ) : (
-                <Pause className="h-4 w-4" />
-              )}
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)}>
-              <UserPlus className="h-4 w-4" />
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => void completeWarmTransfer()}>
-              Complete transfer
-            </Button>
-            <Button size="sm" variant="destructive" onClick={disconnect}>
-              <PhoneOff className="h-4 w-4" />
-              Hang up
-            </Button>
-          </div>
+      <div
+        className="fixed right-3 top-[calc(3.5rem+0.75rem)] z-[60] w-[min(100vw-1.5rem,22rem)] rounded-lg border border-border bg-card p-3 shadow-lg sm:right-4 sm:top-[calc(4.5rem+0.75rem)]"
+        role="status"
+        aria-label="Active call"
+      >
+        <div className="mb-3 min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {activeCall.direction === "inbound" ? "On call" : "Outbound call"}
+          </p>
+          <p className="truncate font-semibold text-foreground">{label}</p>
+          <CallerIdDetails
+            callerInfo={activeCall.callerInfo}
+            className="truncate text-xs text-muted-foreground"
+          />
+          <p className="text-xs text-muted-foreground">
+            {formatDuration(seconds)}
+            {activeCall.onHold ? " · On hold" : ""}
+            {activeCall.muted ? " · Muted" : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button size="sm" variant="outline" onClick={toggleMute} aria-label={activeCall.muted ? "Unmute" : "Mute"}>
+            {activeCall.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void toggleHold()}
+            aria-label={activeCall.onHold ? "Resume" : "Hold"}
+          >
+            {activeCall.onHold ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)} aria-label="Transfer">
+            <UserPlus className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => void completeWarmTransfer()}>
+            Complete
+          </Button>
+          <Button size="sm" variant="destructive" className="ml-auto" onClick={disconnect}>
+            <PhoneOff className="mr-1 h-4 w-4" />
+            Hang up
+          </Button>
         </div>
       </div>
       <TransferDialog

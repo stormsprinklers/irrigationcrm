@@ -76,11 +76,19 @@ export async function syncCallConversionFromLog(
 
   const disposition = options.disposition ?? log.disposition;
   const visitId = options.visitId ?? log.visitId;
+
+  const existingConversion = await prisma.callConversion.findUnique({
+    where: { callLogId: log.id },
+    select: { answeredByUserId: true },
+  });
+
+  // Prefer an explicit answerer; never overwrite a known answerer with wrap-up user.
   const answeredByUserId =
     options.answeredByUserId ??
+    existingConversion?.answeredByUserId ??
     log.userId ??
-    log.handledByUserId ??
     log.session?.assignedUserId ??
+    log.handledByUserId ??
     null;
   const customerId = options.customerId ?? log.customerId;
   const booked = disposition === CallDisposition.BOOKED && Boolean(visitId);
@@ -194,7 +202,8 @@ export async function recordCallAnswered(input: {
   await prisma.callSession.update({
     where: { id: session.id },
     data: {
-      assignedUserId: session.assignedUserId ?? input.userId,
+      // Always record who actually answered (overwrite any pre-ring assignment).
+      assignedUserId: input.userId,
       status: "IN_PROGRESS",
     },
   });
@@ -208,7 +217,7 @@ export async function recordCallAnswered(input: {
     await prisma.callLog.update({
       where: { id: callLog.id },
       data: {
-        userId: callLog.userId ?? input.userId,
+        userId: input.userId,
         phoneNumberId: callLog.phoneNumberId ?? session.phoneNumberId,
       },
     });

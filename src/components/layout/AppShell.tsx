@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
         <TopNav />
         <OutboundCommsBanner />
-        <main className="relative min-h-0 flex-1 overflow-auto pb-16 xl:pb-0">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-auto">{children}</main>
         <ActiveCallBar />
         <IncomingCallModal />
       </div>

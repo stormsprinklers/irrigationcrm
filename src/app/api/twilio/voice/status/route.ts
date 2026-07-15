@@ -3,6 +3,7 @@ import { CallDirection, CallSessionStatus, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { resolveInboundCallAttribution } from "@/lib/voice/call-attribution";
 import { syncCallConversionFromLog } from "@/lib/voice/call-conversion";
@@ -115,17 +116,13 @@ export async function POST(request: NextRequest) {
     if (blocked) return NextResponse.json({ ok: true });
 
     if (!customerId) {
-      const customer = await prisma.customer.findFirst({
-        where: { companyId: company.id, phone: normalizedFrom },
-      });
+      const customer = await findCustomerByPhone(company.id, normalizedFrom);
       customerId = customer?.id ?? null;
     }
 
     fromNumber = normalizedFrom;
   } else if (!customerId) {
-    const customer = await prisma.customer.findFirst({
-      where: { companyId: company.id, phone: toNumber },
-    });
+    const customer = await findCustomerByPhone(company.id, toNumber);
     customerId = customer?.id ?? null;
   }
 

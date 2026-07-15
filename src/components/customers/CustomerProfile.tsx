@@ -28,6 +28,7 @@ import {
 } from "@/components/customers/CustomerContactActions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerNotesAttachmentsTab } from "@/components/customers/CustomerNotesAttachmentsTab";
+import { CustomerCallsTab } from "@/components/customers/CustomerCallsTab";
 import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPaymentMethodsSection";
 import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap";
 import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
@@ -122,6 +123,7 @@ export function CustomerProfile({ customerId }: Props) {
     "profile",
     "properties",
     "visits",
+    "calls",
     "estimates",
     "invoices",
     "maintenance",
@@ -585,6 +587,7 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
+          <TabsTrigger value="calls">Calls</TabsTrigger>
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
@@ -978,6 +981,10 @@ export function CustomerProfile({ customerId }: Props) {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="calls" className="space-y-4">
+          <CustomerCallsTab customerId={customerId} />
         </TabsContent>
 
         <TabsContent value="estimates" className="space-y-4">

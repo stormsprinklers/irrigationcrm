@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canEditCustomerTags, canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
+import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -47,7 +48,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       data: {
         ...(body.name !== undefined ? { name: String(body.name) } : {}),
-        ...(body.phone !== undefined ? { phone: body.phone ?? null } : {}),
+        ...(body.phone !== undefined
+          ? { phone: body.phone ? normalizePhone(String(body.phone)) : null }
+          : {}),
         ...(body.email !== undefined ? { email: body.email ?? null } : {}),
         ...(body.companyName !== undefined ? { companyName: body.companyName ?? null } : {}),
         ...(body.address !== undefined ? { address: body.address ?? null } : {}),

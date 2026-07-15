@@ -21,7 +21,7 @@ import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenanc
 import { VisitIrrigationSection } from "@/components/visits/VisitIrrigationSection";
 import { VisitInstallPlanSection } from "@/components/visits/VisitInstallPlanSection";
 import { VisitScheduleSection } from "@/components/visits/VisitScheduleSection";
-import { VisitNotesSection } from "@/components/visits/VisitNotesSection";
+import { VisitNotesSection, type VisitNoteItem } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,12 +112,7 @@ type TimeEvent = {
   user: { id: string; name: string };
 };
 
-type Note = {
-  id: string;
-  body: string;
-  createdAt: string;
-  author: { id: string; name: string; photoUrl: string | null; color: string | null };
-};
+type Note = VisitNoteItem;
 
 type Attachment = {
   id: string;
@@ -427,7 +422,12 @@ export function VisitDetail({ visitId }: Props) {
             onUpdated={load}
           />
           <VisitChecklistsSection visitId={visit.id} onUpdated={load} />
-          <VisitNotesSection visitId={visit.id} notes={notes} onUpdated={load} />
+          <VisitNotesSection
+            visitId={visit.id}
+            customerId={visit.customer?.id}
+            notes={notes}
+            onUpdated={load}
+          />
           <VisitAttachmentsSection
             visitId={visit.id}
             attachments={attachments}

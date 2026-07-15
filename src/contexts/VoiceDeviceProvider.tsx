@@ -128,9 +128,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       const callSid = call.parameters.CallSid;
       const sessionId = callSid ? await resolveSessionId(callSid) : null;
 
-      if (direction === "inbound") {
-        void recordAnswered(callSid, sessionId);
-      }
+      // Record which employee is on the call (inbound pickup or outbound dial).
+      void recordAnswered(callSid, sessionId);
 
       const state: ActiveCallState = {
         call,

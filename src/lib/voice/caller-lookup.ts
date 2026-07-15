@@ -1,5 +1,6 @@
 import { VisitStatus } from "@prisma/client";
-import { normalizePhone } from "@/lib/inbox/contacts";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
 export type CallerLookupResult = {
@@ -16,23 +17,39 @@ export async function lookupCustomerByPhone(
   phone: string
 ): Promise<CallerLookupResult> {
   const normalized = normalizePhone(phone);
+  const match = await findCustomerByPhone(companyId, phone);
 
-  let customer = await prisma.customer.findFirst({
-    where: { companyId, phone: normalized },
-    select: { id: true, name: true, phone: true, city: true, doNotService: true },
-  });
-
-  if (!customer) {
-    const alt = await prisma.customerPhone.findFirst({
-      where: { companyId, phone: normalized },
-      include: {
-        customer: {
-          select: { id: true, name: true, phone: true, city: true, doNotService: true },
-        },
-      },
-    });
-    customer = alt?.customer ?? null;
+  if (!match) {
+    return {
+      customerId: null,
+      name: null,
+      phone: normalized,
+      city: null,
+      mostRecentVisitAt: null,
+      doNotService: false,
+    };
   }
+
+  const [customer, recentVisit, primaryProperty] = await Promise.all([
+    prisma.customer.findFirst({
+      where: { id: match.id },
+      select: { id: true, name: true, city: true, doNotService: true },
+    }),
+    prisma.visit.findFirst({
+      where: {
+        customerId: match.id,
+        startAt: { lte: new Date() },
+        status: { not: VisitStatus.CANCELLED },
+      },
+      orderBy: { startAt: "desc" },
+      select: { startAt: true, city: true },
+    }),
+    prisma.customerProperty.findFirst({
+      where: { customerId: match.id },
+      orderBy: { createdAt: "desc" },
+      select: { city: true },
+    }),
+  ]);
 
   if (!customer) {
     return {
@@ -44,23 +61,6 @@ export async function lookupCustomerByPhone(
       doNotService: false,
     };
   }
-
-  const [recentVisit, primaryProperty] = await Promise.all([
-    prisma.visit.findFirst({
-      where: {
-        customerId: customer.id,
-        startAt: { lte: new Date() },
-        status: { not: VisitStatus.CANCELLED },
-      },
-      orderBy: { startAt: "desc" },
-      select: { startAt: true, city: true },
-    }),
-    prisma.customerProperty.findFirst({
-      where: { customerId: customer.id },
-      orderBy: { createdAt: "desc" },
-      select: { city: true },
-    }),
-  ]);
 
   const city =
     customer.city?.trim() ||

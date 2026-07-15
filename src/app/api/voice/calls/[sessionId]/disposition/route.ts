@@ -94,7 +94,7 @@ export async function PATCH(
     await syncCallConversionFromLog(callLogId, {
       disposition,
       visitId: resolvedVisitId,
-      answeredByUserId: session.assignedUserId ?? user.id,
+      // Do not force answeredBy — preserve who actually picked up when already known.
       customerId: session.customerId,
     });
 

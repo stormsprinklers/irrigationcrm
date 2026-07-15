@@ -1144,6 +1144,8 @@ model CallLog {
   durationSec   Int?
   recordingUrl  String?
   transcript    String?
+  /// One-paragraph AI summary generated from the transcript.
+  aiSummary     String?
   disposition   CallDisposition @default(NONE)
   dispositionNote String?
   visitId       String?
@@ -1168,12 +1170,14 @@ model CallLog {
   handledBy User?       @relation("HandledCallLogs", fields: [handledByUserId], references: [id], onDelete: SetNull)
   phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
   conversion CallConversion?
+  visitNotes VisitNote[]
 
   @@index([companyId, scope, startedAt])
   @@index([sessionId])
   @@index([disposition])
   @@index([companyId, attributionMethod, startedAt])
   @@index([companyId, fromNumber, startedAt])
+  @@index([companyId, customerId, startedAt])
   @@index([googleLsaLeadId])
 }
 
@@ -1995,12 +1999,16 @@ model VisitNote {
   visitId   String
   authorId  String
   body      String
+  /// Optional linked call (recording / transcript / AI summary appear on the note).
+  callLogId String?
   createdAt DateTime @default(now())
 
-  visit  Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  visit   Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  author  User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  callLog CallLog? @relation(fields: [callLogId], references: [id], onDelete: SetNull)
 
   @@index([visitId, createdAt])
+  @@index([callLogId])
 }
 
 model VisitAttachment {
