@@ -70,6 +70,7 @@ export function InboxChannelView({
       <InboxChannelLayout
         channel={ch}
         scope={sc}
+        selectedId={selectedId}
         list={
           <SocialDmThreadList
             key={refreshKey}
@@ -101,11 +102,17 @@ export function InboxChannelView({
         <InboxChannelLayout
           channel={ch}
           scope={sc}
+          selectedId={selectedId}
           list={
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-border px-4 py-2">
+              <div className="hidden items-center justify-between border-b border-border px-4 py-2 md:flex">
                 <span className="text-sm font-medium">Conversations</span>
                 <Button variant="ghost" size="icon" onClick={() => setSelectedId(null)}>
+                  <PenSquare className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center justify-end border-b border-border px-2 py-1 md:hidden">
+                <Button variant="ghost" size="icon" onClick={() => setSelectedId(null)} aria-label="New message">
                   <PenSquare className="h-4 w-4" />
                 </Button>
               </div>
@@ -140,6 +147,8 @@ export function InboxChannelView({
       <InboxChannelLayout
         channel={ch}
         scope={sc}
+        selectedId={selectedId}
+        listLabel="Call history"
         list={
           <CallHistoryList
             scope={teamScope}

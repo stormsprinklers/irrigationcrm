@@ -109,6 +109,7 @@ async function patchPresence(status: "AVAILABLE" | "ON_CALL" | "OFFLINE" | "AWAY
 export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const deviceRef = useRef<Device | null>(null);
+  const refreshingTokenRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
@@ -168,6 +169,49 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     setWrapUpVisitId(visitId);
   }, []);
 
+  const fetchVoiceToken = useCallback(async () => {
+    const res = await fetch("/api/inbox/voice/token", { method: "POST" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 503) {
+        throw new Error(data.error ?? "Twilio Voice is not configured");
+      }
+      throw new Error(data.error ?? "Failed to get voice token");
+    }
+    const data = await res.json();
+    if (!data.token || typeof data.token !== "string") {
+      throw new Error("Voice token response was empty");
+    }
+    return data.token as string;
+  }, []);
+
+  const refreshDeviceToken = useCallback(
+    async (opts?: { reRegister?: boolean; silent?: boolean }) => {
+      const device = deviceRef.current;
+      if (!device || refreshingTokenRef.current) return false;
+      refreshingTokenRef.current = true;
+      try {
+        const token = await fetchVoiceToken();
+        device.updateToken(token);
+        if (opts?.reRegister && device.state !== "registered") {
+          await device.register();
+        }
+        setError(null);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Voice token refresh failed";
+        setError(message);
+        if (!opts?.silent) {
+          toast.error(message);
+        }
+        return false;
+      } finally {
+        refreshingTokenRef.current = false;
+      }
+    },
+    [fetchVoiceToken]
+  );
+
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !session?.user?.id) {
       setReady(false);
@@ -179,20 +223,14 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
     async function setup() {
       try {
-        const res = await fetch("/api/inbox/voice/token", { method: "POST" });
-        if (!res.ok) {
-          const data = await res.json();
-          if (res.status === 503) {
-            setError(data.error ?? "Twilio Voice is not configured");
-            return;
-          }
-          throw new Error(data.error ?? "Failed to get voice token");
-        }
-        const { token } = await res.json();
+        const token = await fetchVoiceToken();
         if (cancelled) return;
 
+        // Refresh well before expiry so background-tab timer throttling
+        // cannot let the JWT expire before tokenWillExpire fires.
         const device = new Device(token, {
           closeProtection: true,
+          tokenRefreshMs: 5 * 60 * 1000,
         });
         deviceRef.current = device;
 
@@ -202,9 +240,46 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
           void patchPresence("AVAILABLE");
         });
 
+        device.on("unregistered", () => {
+          setReady(false);
+          if (cancelled || document.visibilityState === "hidden") return;
+          void (async () => {
+            const ok = await refreshDeviceToken({ reRegister: true, silent: true });
+            if (!ok && !cancelled) {
+              try {
+                await device.register();
+              } catch {
+                // refreshDeviceToken already recorded the error
+              }
+            }
+          })();
+        });
+
         device.on("error", (err) => {
-          setError(err.message);
-          toast.error(err.message);
+          const message = err.message ?? "Voice device error";
+          const code = typeof err.code === "number" ? err.code : undefined;
+          const isTokenError =
+            /access.?token/i.test(message) ||
+            code === 20101 ||
+            code === 20104 ||
+            code === 31204 ||
+            code === 31205;
+
+          if (isTokenError) {
+            void (async () => {
+              const ok = await refreshDeviceToken({ reRegister: true, silent: true });
+              if (ok) {
+                setError(null);
+                return;
+              }
+              setError(message);
+              toast.error(message);
+            })();
+            return;
+          }
+
+          setError(message);
+          toast.error(message);
         });
 
         device.on("incoming", async (call) => {
@@ -213,12 +288,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
           setIncomingCall({ call, callerInfo });
         });
 
-        device.on("tokenWillExpire", async () => {
-          const refresh = await fetch("/api/inbox/voice/token", { method: "POST" });
-          if (refresh.ok) {
-            const { token: newToken } = await refresh.json();
-            device.updateToken(newToken);
-          }
+        device.on("tokenWillExpire", () => {
+          void refreshDeviceToken({ silent: true });
         });
 
         await device.register();
@@ -235,8 +306,24 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
     void setup();
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible" || cancelled) return;
+      const device = deviceRef.current;
+      if (!device) return;
+      // Browsers freeze background timers; proactively refresh + re-register on return.
+      void (async () => {
+        await refreshDeviceToken({
+          reRegister: device.state !== "registered",
+          silent: true,
+        });
+      })();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       if (heartbeat) clearInterval(heartbeat);
       void patchPresence("OFFLINE");
       deviceRef.current?.destroy();
@@ -244,7 +331,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionStatus, session?.user?.id]);
+  }, [sessionStatus, session?.user?.id, fetchVoiceToken, refreshDeviceToken]);
 
   const connect = useCallback(
     async (to: string, customerId?: string) => {
