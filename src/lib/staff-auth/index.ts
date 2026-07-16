@@ -5,8 +5,10 @@ import type { AuthMfaPurpose, User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuthSecret } from "@/lib/auth-secret";
 import { sendSms } from "@/lib/inbox/twilio";
+import { normalizePhone } from "@/lib/inbox/phone";
 import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { getCompanyCallerId } from "@/lib/voice/company-phone";
 
 const MFA_TTL_MS = 10 * 60 * 1000;
 const MFA_MAX_ATTEMPTS = 5;
@@ -30,34 +32,55 @@ function maskPhone(phone: string) {
   return `•••-•••-${digits.slice(-4)}`;
 }
 
-/** Normalize to E.164-ish for US numbers; pass through if already +… */
+/** Normalize employee phone to E.164 (US +1), same as inbox SMS. */
 export function normalizeStaffPhone(phone: string | null | undefined): string | null {
   if (!phone?.trim()) return null;
-  const raw = phone.trim();
-  if (raw.startsWith("+") && raw.replace(/\D/g, "").length >= 10) {
-    return `+${raw.replace(/\D/g, "")}`;
-  }
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  if (digits.length >= 10) return `+${digits}`;
-  return null;
+  const normalized = normalizePhone(phone.trim());
+  const digits = normalized.replace(/\D/g, "");
+  if (digits.length < 10) return null;
+  return normalized.startsWith("+") ? normalized : `+${digits}`;
 }
 
 async function resolveSmsFromNumber(companyId: string): Promise<string | null> {
+  // Prefer the same numbers the inbox/voice stack already uses successfully.
+  // (Do not prefer TWILIO_PHONE_NUMBER first — a stale env value breaks MFA
+  // while inbox SMS still works via company.twilioPhone.)
+  const companyNumber = await getCompanyCallerId(companyId);
+  if (companyNumber) return companyNumber;
   const env = process.env.TWILIO_PHONE_NUMBER?.trim();
-  if (env) return env;
-  const primary = await prisma.phoneNumber.findFirst({
-    where: { companyId, isPrimary: true },
-    select: { e164: true },
-  });
-  if (primary?.e164) return primary.e164;
-  const any = await prisma.phoneNumber.findFirst({
-    where: { companyId },
-    select: { e164: true },
-    orderBy: { createdAt: "asc" },
-  });
-  return any?.e164 ?? null;
+  return env ? normalizePhone(env) : null;
+}
+
+function twilioSendErrorMessage(err: unknown): string {
+  if (!err || typeof err !== "object") {
+    return "Failed to send verification text. Try again or contact an admin.";
+  }
+  const twilioErr = err as { code?: number | string; message?: string };
+  const code = twilioErr.code != null ? String(twilioErr.code) : "";
+  const detail = twilioErr.message?.trim();
+
+  if (code === "20003" || code === "20001") {
+    return "Twilio credentials are invalid. Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.";
+  }
+  if (code === "21211" || code === "21401") {
+    return "Your employee phone number is invalid. Ask an admin to update it in your profile.";
+  }
+  if (code === "21608" || code === "21610") {
+    return "This phone cannot receive SMS from Twilio yet (trial or blocked). Verify the number in Twilio Console or use a production Twilio account.";
+  }
+  if (code === "21606" || code === "21612") {
+    return "The company Twilio number cannot send SMS. Check Phone numbers / Messaging in Twilio.";
+  }
+  if (
+    detail?.toLowerCase().includes("credential") ||
+    detail?.toLowerCase().includes("authenticate")
+  ) {
+    return "Twilio credentials are not configured correctly.";
+  }
+  if (detail) {
+    return `Failed to send verification text (${code || "error"}): ${detail}`;
+  }
+  return "Failed to send verification text. Try again or contact an admin.";
 }
 
 export async function findActiveStaffByEmail(email: string): Promise<StaffAuthUser | null> {
@@ -113,7 +136,8 @@ export async function startStaffMfaChallenge(
   if (!from && process.env.STAFF_AUTH_EXPOSE_OTP !== "true") {
     return {
       ok: false,
-      error: "SMS two-factor authentication is not configured (Twilio from-number missing).",
+      error:
+        "SMS two-factor authentication is not configured. Set a company Twilio phone (Settings → Phone numbers) or TWILIO_PHONE_NUMBER.",
       code: "SMS_CONFIG",
     };
   }
@@ -139,11 +163,11 @@ export async function startStaffMfaChallenge(
         bypassCommsFreeze: true,
       });
     } catch (err) {
-      console.error("[staff-auth] SMS send failed", err);
+      console.error("[staff-auth] SMS send failed", { from, to: phone, err });
       if (process.env.STAFF_AUTH_EXPOSE_OTP !== "true") {
         return {
           ok: false,
-          error: "Failed to send verification text. Try again or contact an admin.",
+          error: twilioSendErrorMessage(err),
           code: "SMS_CONFIG",
         };
       }
