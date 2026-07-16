@@ -3,16 +3,36 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stormBrand } from "@/lib/branding";
+import { sanitizeAuthReturnTo } from "@/lib/staff-auth/return-to";
+
+function withResetFlag(dest: string) {
+  try {
+    if (dest.startsWith("/")) {
+      const url = new URL(dest, "https://example.invalid");
+      url.searchParams.set("reset", "1");
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    const url = new URL(dest);
+    url.searchParams.set("reset", "1");
+    return url.toString();
+  } catch {
+    return dest;
+  }
+}
 
 export default function ResetPasswordForm() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get("token") ?? "";
+  const returnTo = useMemo(
+    () => sanitizeAuthReturnTo(params.get("returnTo")),
+    [params]
+  );
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -37,7 +57,12 @@ export default function ResetPasswordForm() {
         setError(data.error ?? "Could not reset password");
         return;
       }
-      router.replace("/login?reset=1");
+      const dest = withResetFlag(returnTo ?? "/login");
+      if (dest.startsWith("http")) {
+        window.location.assign(dest);
+      } else {
+        router.replace(dest);
+      }
     } catch {
       setError("Could not reset password");
     } finally {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestPasswordReset, resetStaffPassword } from "@/lib/staff-auth";
+import { sanitizeAuthReturnTo } from "@/lib/staff-auth/return-to";
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +9,10 @@ export async function POST(request: NextRequest) {
     if (!email.trim()) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
-    await requestPasswordReset(email);
+    const returnTo = sanitizeAuthReturnTo(
+      body.returnTo != null ? String(body.returnTo) : null
+    );
+    await requestPasswordReset(email, returnTo);
     return NextResponse.json({
       ok: true,
       message: "If an account exists for that email, a reset link has been sent.",

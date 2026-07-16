@@ -15,6 +15,7 @@ type Step = "credentials" | "mfa";
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/home";
+  const justReset = searchParams.get("reset") === "1";
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -141,6 +142,11 @@ export default function LoginForm() {
         <CardContent>
           {step === "credentials" ? (
             <form onSubmit={handleCredentials} className="space-y-4">
+              {justReset ? (
+                <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+                  Password updated. Sign in with your new password.
+                </p>
+              ) : null}
               <div>
                 <label className="mb-1 block text-sm font-medium" htmlFor="email">
                   Email
@@ -173,7 +179,13 @@ export default function LoginForm() {
               </Button>
               <p className="text-center text-sm">
                 <Link
-                  href="/forgot-password"
+                  href={
+                    callbackUrl && callbackUrl !== "/home"
+                      ? `/forgot-password?returnTo=${encodeURIComponent(
+                          `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+                        )}`
+                      : "/forgot-password"
+                  }
                   className="text-storm-medium-blue hover:underline"
                 >
                   Forgot password?

@@ -16,14 +16,18 @@ export const primaryNav: NavItem[] = [
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
-  { label: "Timesheets", href: "/timesheets" },
-  { label: "Vehicles", href: "/vehicles" },
-  { label: "Price Book", href: "/price-book" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Marketing", href: "/marketing" },
-  { label: "Hiring", href: "/hiring" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
+];
+
+/** Secondary tools nested under the top-nav "Other" dropdown. */
+export const otherNav: NavItem[] = [
+  { label: "Price Book", href: "/price-book" },
+  { label: "Hiring", href: "/hiring" },
+  { label: "Vehicles", href: "/vehicles" },
+  { label: "Timesheets", href: "/timesheets" },
 ];
 
 export const vehiclesSidebar: NavSection[] = [
@@ -222,6 +226,10 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
   if (href === "/settings") return pathname.startsWith("/settings");
   return pathname.startsWith(href);
+}
+
+export function isOtherNavActive(pathname: string, items: NavItem[] = otherNav) {
+  return items.some((item) => getPrimaryNavActive(pathname, item.href));
 }
 
 export function getInboxSectionActive(pathname: string, href: string) {

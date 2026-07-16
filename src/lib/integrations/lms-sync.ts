@@ -1,13 +1,17 @@
 import type { User } from "@prisma/client";
 import { EmployeeStatus, UserRole } from "@prisma/client";
+import { fetchBlobBytes } from "@/lib/blob/download";
 import { prisma } from "@/lib/prisma";
 
 const LMS_BASE = process.env.LMS_INTEGRATION_URL?.replace(/\/$/, "") ?? "";
 const LMS_KEY = process.env.LMS_INTEGRATION_KEY ?? "";
+const MAX_PHOTO_BYTES = 1_500_000;
 
 export type LmsSyncResult =
   | { ok: true; lmsUserId?: string }
   | { ok: false; error: string; status?: number };
+
+type SyncEmployee = Pick<User, "id" | "name" | "email" | "role" | "status" | "photoUrl">;
 
 function mapRoleToLms(role: UserRole): string {
   if (role === UserRole.ADMIN) return "ADMIN";
@@ -26,9 +30,31 @@ export function isLmsSyncConfigured() {
   return Boolean(LMS_BASE && LMS_KEY);
 }
 
-export async function pushEmployeeToLms(
-  employee: Pick<User, "id" | "name" | "email" | "role" | "status">
-): Promise<LmsSyncResult> {
+async function photoPayload(photoUrl: string | null) {
+  if (!photoUrl) {
+    return { clearPhoto: true as const };
+  }
+  try {
+    const { buffer, mimeType } = await fetchBlobBytes(photoUrl);
+    if (!buffer.length || buffer.length > MAX_PHOTO_BYTES) {
+      console.warn("LMS photo sync skipped: photo too large or empty", buffer.length);
+      return {};
+    }
+    if (!mimeType.startsWith("image/")) {
+      console.warn("LMS photo sync skipped: non-image", mimeType);
+      return {};
+    }
+    return {
+      photoBase64: buffer.toString("base64"),
+      photoMimeType: mimeType,
+    };
+  } catch (error) {
+    console.warn("LMS photo sync skipped: could not read CRM photo", error);
+    return {};
+  }
+}
+
+export async function pushEmployeeToLms(employee: SyncEmployee): Promise<LmsSyncResult> {
   if (!LMS_BASE || !LMS_KEY) {
     return { ok: false, error: "LMS integration not configured on CRM" };
   }
@@ -39,6 +65,7 @@ export async function pushEmployeeToLms(
     name: employee.name,
     role: mapRoleToLms(employee.role),
     archived: employee.status === "ARCHIVED",
+    ...(await photoPayload(employee.photoUrl)),
   };
 
   try {
@@ -105,7 +132,14 @@ export async function syncAllEmployeesToLms(companyId: string, options?: { inclu
 
   const employees = await prisma.user.findMany({
     where: { companyId, status: { in: statusFilter } },
-    select: { id: true, name: true, email: true, role: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      status: true,
+      photoUrl: true,
+    },
     orderBy: { email: "asc" },
   });
 

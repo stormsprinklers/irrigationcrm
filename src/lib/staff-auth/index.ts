@@ -8,6 +8,7 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { buildResetPasswordPath } from "@/lib/staff-auth/return-to";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 
 const MFA_TTL_MS = 10 * 60 * 1000;
@@ -293,7 +294,7 @@ export async function verifyLmsAuthTicket(ticket: string) {
   };
 }
 
-export async function requestPasswordReset(email: string) {
+export async function requestPasswordReset(email: string, returnTo?: string | null) {
   const user = await findActiveStaffByEmail(email);
   // Always return success wording to avoid account enumeration.
   if (!user) return { ok: true as const };
@@ -308,7 +309,7 @@ export async function requestPasswordReset(email: string) {
   });
 
   const base = getAppBaseUrl();
-  const resetUrl = `${base}/reset-password?token=${raw}`;
+  const resetUrl = `${base}${buildResetPasswordPath(raw, returnTo)}`;
   const from = getDefaultFromEmail();
   if (!from) {
     console.error("[staff-auth] password reset: TWILIO_FROM_EMAIL not set");

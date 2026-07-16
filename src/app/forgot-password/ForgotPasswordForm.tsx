@@ -2,17 +2,29 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stormBrand } from "@/lib/branding";
+import { sanitizeAuthReturnTo } from "@/lib/staff-auth/return-to";
 
 export default function ForgotPasswordForm() {
+  const searchParams = useSearchParams();
+  const returnTo = useMemo(
+    () => sanitizeAuthReturnTo(searchParams.get("returnTo")),
+    [searchParams]
+  );
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const backHref = returnTo ?? "/login";
+  const backLabel = returnTo?.includes("/login")
+    ? "Back to sign in"
+    : "Back";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,7 +35,10 @@ export default function ForgotPasswordForm() {
       const res = await fetch("/api/auth/staff/password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          ...(returnTo ? { returnTo } : {}),
+        }),
       });
       const data = (await res.json()) as { error?: string; message?: string };
       if (!res.ok) {
@@ -79,9 +94,15 @@ export default function ForgotPasswordForm() {
               {loading ? "Sending…" : "Send reset link"}
             </Button>
             <p className="text-center text-sm">
-              <Link href="/login" className="text-storm-medium-blue hover:underline">
-                Back to sign in
-              </Link>
+              {backHref.startsWith("http") ? (
+                <a href={backHref} className="text-storm-medium-blue hover:underline">
+                  {backLabel}
+                </a>
+              ) : (
+                <Link href={backHref} className="text-storm-medium-blue hover:underline">
+                  {backLabel}
+                </Link>
+              )}
             </p>
           </form>
         </CardContent>
