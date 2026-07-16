@@ -110,7 +110,7 @@ function AttachmentPreview({
   mimeType,
   className,
 }: {
-  url: string | null;
+  url: string | null | undefined;
   fileName: string;
   mimeType: string;
   className?: string;
