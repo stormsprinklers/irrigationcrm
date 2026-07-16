@@ -12,7 +12,14 @@ export const metadata = {
   title: "Irrigation CRM",
   description: "Internal irrigation company operations and marketing platform for Storm Sprinklers.",
   icons: {
-    icon: stormBrand.iconPath,
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/icon.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/icon.png",
   },
   robots: {
     index: false,

@@ -551,14 +551,7 @@ export default function VehicleDetailPage() {
       </div>
 
       {canManage ? (
-        <Section
-          title="Profile"
-          actions={
-            <Button type="submit" form="vehicle-profile-form" size="sm" disabled={saving}>
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          }
-        >
+        <Section title="Profile">
           <form
             id="vehicle-profile-form"
             className="space-y-4"
@@ -626,11 +619,11 @@ export default function VehicleDetailPage() {
               rows={3}
               placeholder="Vehicle notes…"
             />
-            <div className="flex justify-end">
-              <Button type="submit" size="sm" disabled={saving}>
-                {saving ? "Saving…" : "Save notes"}
-              </Button>
-            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </div>
           </form>
         </Section>
