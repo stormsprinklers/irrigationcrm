@@ -14,9 +14,12 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
+type CertBadge = { title: string; badgeUrl: string | null };
+
 export function EmployeeList() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [serviceAreas, setServiceAreas] = useState<ServiceAreaOption[]>([]);
+  const [certBadgesByUser, setCertBadgesByUser] = useState<Record<string, CertBadge[]>>({});
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
   const [editing, setEditing] = useState<EmployeeRecord | null>(null);
@@ -38,6 +41,25 @@ export function EmployeeList() {
   useEffect(() => {
     load().finally(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    if (tab !== "ACTIVE") {
+      setCertBadgesByUser({});
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/settings/employees/cert-badges")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data: Record<string, CertBadge[]>) => {
+        if (!cancelled) setCertBadgesByUser(data ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setCertBadgesByUser({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, employees]);
 
   async function syncEmployeeToLms(id: string) {
     const res = await fetch(`/api/settings/employees/${id}`, {
@@ -144,6 +166,7 @@ export function EmployeeList() {
                   ? { firstName: employee.firstName, lastName: employee.lastName }
                   : splitFullName(employee.name);
                 const displayName = formatEmployeeName(nameParts.firstName, nameParts.lastName);
+                const badges = certBadgesByUser[employee.id] ?? [];
                 return (
                 <div key={employee.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -156,7 +179,25 @@ export function EmployeeList() {
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">{displayName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{displayName}</p>
+                        {badges.length > 0 ? (
+                          <div className="flex items-center gap-0.5">
+                            {badges.slice(0, 5).map((badge) =>
+                              badge.badgeUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={`${employee.id}-${badge.title}`}
+                                  src={badge.badgeUrl}
+                                  alt=""
+                                  title={badge.title}
+                                  className="h-5 w-5 rounded-full object-cover"
+                                />
+                              ) : null
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                       <p className="text-sm text-muted-foreground">{employee.email}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <Badge variant="secondary">{ROLE_LABELS[employee.role]}</Badge>

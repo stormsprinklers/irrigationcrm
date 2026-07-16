@@ -68,6 +68,22 @@ function PersonKpiCard({ person }: { person: KpiPersonCard }) {
           <PersonAvatar name={person.name} photoUrl={person.photoUrl} color={person.color} />
           <div className="min-w-0">
             <p className="truncate font-semibold">{person.name}</p>
+            {person.certBadges && person.certBadges.length > 0 ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {person.certBadges.slice(0, 6).map((badge) =>
+                  badge.badgeUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${person.id}-${badge.title}`}
+                      src={badge.badgeUrl}
+                      alt=""
+                      title={badge.title}
+                      className="h-5 w-5 rounded-full object-cover"
+                    />
+                  ) : null
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
         <KpiCardGrid metrics={person.metrics} />

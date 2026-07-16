@@ -525,6 +525,33 @@ export default function SettingsIntegrationsPage() {
             </div>
           ) : null}
 
+          <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-sm">Search rankings</span>
+              <Badge variant="secondary">SEO</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Keywords and locations for Google Business Profile local pack and organic ranking maps.
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/settings/integrations/serp-rankings">Configure search rankings</Link>
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-sm">Data migration</span>
+              <Badge variant="secondary">Housecall Pro</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Import customers, jobs, estimates, invoices, and more from Housecall Pro in controlled
+              batches.
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/settings/integrations/migrations/housecall-pro">Open migration tools</Link>
+            </Button>
+          </div>
+
           {urls && (
             <div className="rounded-lg border border-border bg-white p-6 space-y-2">
               <h2 className="font-medium">Spoke URLs</h2>

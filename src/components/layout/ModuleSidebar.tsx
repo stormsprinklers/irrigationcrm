@@ -51,7 +51,12 @@ export function ModuleSidebar({ title, sections, open = false, onClose }: Module
             ) : null}
             <ul>
               {section.items.map((item) => {
-                const active = isNavActive(pathname, item.href, item.exact);
+                const active = isNavActive(
+                  pathname,
+                  item.href,
+                  item.exact,
+                  item.activePrefixes
+                );
                 return (
                   <li key={item.href}>
                     <Link

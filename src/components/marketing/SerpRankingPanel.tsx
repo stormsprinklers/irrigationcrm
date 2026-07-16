@@ -185,7 +185,7 @@ export function SerpRankingPanel({ variant }: Props) {
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button size="sm" variant="ghost" asChild>
-            <Link href="/settings/serp-rankings">
+            <Link href="/settings/integrations/serp-rankings">
               <Settings2 className="mr-1 h-4 w-4" />
               Settings
             </Link>

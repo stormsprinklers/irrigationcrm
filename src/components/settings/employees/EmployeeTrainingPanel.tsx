@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 
 type TrainingSummary = {
   courses?: Array<{ title: string; completionPercent: number }>;
-  certifications?: Array<{ title: string; expiresAt: string | null }>;
+  certifications?: Array<{
+    title: string;
+    description?: string | null;
+    badgeUrl?: string | null;
+    pdfUrl?: string | null;
+    expiresAt: string | null;
+  }>;
   error?: string;
 };
 
@@ -21,6 +27,8 @@ export function EmployeeTrainingPanel({ employeeId, email }: { employeeId: strin
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading training...</p>;
   if (data.error) return <p className="text-sm text-muted-foreground">{data.error}</p>;
+
+  const certifications = data.certifications ?? [];
 
   return (
     <div className="space-y-3 rounded border p-3">
@@ -49,6 +57,49 @@ export function EmployeeTrainingPanel({ employeeId, email }: { employeeId: strin
           ))}
         </ul>
       )}
+
+      {certifications.length > 0 ? (
+        <div className="space-y-2 border-t pt-3">
+          <h5 className="text-xs font-medium text-muted-foreground">Certifications</h5>
+          <ul className="space-y-2">
+            {certifications.map((cert) => (
+              <li key={cert.title} className="flex items-start gap-2 text-xs">
+                {cert.badgeUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={cert.badgeUrl}
+                    alt=""
+                    title={cert.title}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]">
+                    ★
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium">{cert.title}</p>
+                  {cert.expiresAt ? (
+                    <p className="text-muted-foreground">
+                      Expires {new Date(cert.expiresAt).toLocaleDateString()}
+                    </p>
+                  ) : null}
+                  {cert.pdfUrl ? (
+                    <a
+                      href={cert.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Download PDF
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   resolveReportRange,
 } from "@/lib/reporting/date-range";
 import { prisma } from "@/lib/prisma";
+import { fetchLmsTrainingSummary } from "@/lib/integrations/lms-sync";
 
 export type KpiDateRange = ReportPresetRange | "custom";
 
@@ -25,6 +26,7 @@ export type KpiPersonCard = {
   photoUrl: string | null;
   color: string | null;
   metrics: KpiMetric[];
+  certBadges?: Array<{ title: string; badgeUrl: string | null }>;
 };
 
 export type KpiCrewCard = {
@@ -644,13 +646,47 @@ export async function getKpiDashboardReport(
       parseFloat(a.metrics[2].value.replace(/[^0-9.-]/g, ""))
   );
 
+  async function withCertBadges(cards: KpiPersonCard[]): Promise<KpiPersonCard[]> {
+    return Promise.all(
+      cards.map(async (card) => {
+        try {
+          const summary = await fetchLmsTrainingSummary(card.id);
+          if (!summary || typeof summary !== "object" || "error" in summary) {
+            return { ...card, certBadges: [] };
+          }
+          const certs = Array.isArray(summary.certifications) ? summary.certifications : [];
+          return {
+            ...card,
+            certBadges: certs
+              .filter(
+                (c: { badgeUrl?: string | null }) =>
+                  typeof c?.badgeUrl === "string" && c.badgeUrl.length > 0
+              )
+              .map((c: { title?: string; badgeUrl?: string | null }) => ({
+                title: c.title ?? "Certificate",
+                badgeUrl: c.badgeUrl ?? null,
+              })),
+          };
+        } catch {
+          return { ...card, certBadges: [] };
+        }
+      })
+    );
+  }
+
+  const [techniciansWithBadges, csrsWithBadges, salesWithBadges] = await Promise.all([
+    withCertBadges(technicians),
+    withCertBadges(csrs),
+    withCertBadges(salespeople),
+  ]);
+
   return {
     range,
     rangeLabel,
     company,
-    technicians,
-    csrs,
+    technicians: techniciansWithBadges,
+    csrs: csrsWithBadges,
     crews: crewCards,
-    salespeople,
+    salespeople: salesWithBadges,
   };
 }
