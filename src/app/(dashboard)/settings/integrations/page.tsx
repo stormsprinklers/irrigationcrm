@@ -118,6 +118,7 @@ export default function SettingsIntegrationsPage() {
   const [urls, setUrls] = useState<IntegrationUrls | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [syncingLms, setSyncingLms] = useState(false);
   const [newType, setNewType] = useState<(typeof INTEGRATION_TYPES)[number]>("WEBSITE");
   const [newLabel, setNewLabel] = useState("");
   const [creating, setCreating] = useState(false);
@@ -257,6 +258,51 @@ export default function SettingsIntegrationsPage() {
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{item.message}</p>
+                    {item.type === "LMS" ? (
+                      <div className="pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={syncingLms || item.status === "not_configured"}
+                          onClick={async () => {
+                            setSyncingLms(true);
+                            try {
+                              const res = await fetch("/api/settings/integrations/lms/sync", {
+                                method: "POST",
+                              });
+                              const data = await res.json().catch(() => ({}));
+                              if (!res.ok) {
+                                toast.error(data.error || "LMS sync failed");
+                                return;
+                              }
+                              if (data.failed > 0) {
+                                const firstError = data.results?.find(
+                                  (r: { ok: boolean; error?: string }) => !r.ok
+                                )?.error;
+                                toast.error(
+                                  `Synced ${data.synced}/${data.total}. ${data.failed} failed${
+                                    firstError ? `: ${firstError}` : ""
+                                  }`
+                                );
+                              } else {
+                                toast.success(`Synced ${data.synced} employee(s) to LMS`);
+                              }
+                              await loadStatus();
+                            } catch {
+                              toast.error("LMS sync failed");
+                            } finally {
+                              setSyncingLms(false);
+                            }
+                          }}
+                        >
+                          <RefreshCw
+                            className={`mr-1.5 h-3.5 w-3.5 ${syncingLms ? "animate-spin" : ""}`}
+                          />
+                          {syncingLms ? "Syncing…" : "Sync employees to LMS"}
+                        </Button>
+                      </div>
+                    ) : null}
                     {item.spokeUrl ? (
                       <p className="text-xs font-mono text-muted-foreground break-all">
                         URL: {item.spokeUrl}

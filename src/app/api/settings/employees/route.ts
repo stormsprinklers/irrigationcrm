@@ -116,11 +116,13 @@ export async function POST(request: NextRequest) {
       select: employeeSelectFields(),
     });
 
-    pushEmployeeToLms(employee).catch(() => {});
+    const lmsSync = await pushEmployeeToLms(employee);
 
     return NextResponse.json(
       {
         ...employee,
+        lmsSyncStatus: lmsSync.ok ? "synced" : "error",
+        lmsSyncError: lmsSync.ok ? undefined : lmsSync.error,
         tempPassword: plainPassword === "password123" ? "password123" : undefined,
       },
       { status: 201 }

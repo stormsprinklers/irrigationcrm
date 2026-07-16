@@ -150,6 +150,9 @@ export function employeeSelectFields() {
     hourlyRate: true,
     commissionPercent: true,
     annualSalary: true,
+    lmsUserId: true,
+    lmsSyncStatus: true,
+    lmsLastSyncedAt: true,
     createdAt: true,
     serviceAreas: {
       include: { serviceArea: { select: { id: true, name: true, color: true } } },

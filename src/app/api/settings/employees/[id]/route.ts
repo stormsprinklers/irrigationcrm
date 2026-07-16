@@ -120,9 +120,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       select: employeeSelectFields(),
     });
 
-    if (employee) pushEmployeeToLms(employee).catch(() => {});
+    const lmsSync = employee ? await pushEmployeeToLms(employee) : null;
 
-    return NextResponse.json(employee);
+    return NextResponse.json({
+      ...employee,
+      lmsSyncStatus: lmsSync ? (lmsSync.ok ? "synced" : "error") : employee?.lmsSyncStatus,
+      lmsSyncError: lmsSync && !lmsSync.ok ? lmsSync.error : undefined,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

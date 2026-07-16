@@ -27,9 +27,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       select: employeeSelectFields(),
     });
 
-    pushEmployeeToLms(employee).catch(() => {});
+    const lmsSync = await pushEmployeeToLms(employee);
 
-    return NextResponse.json(employee);
+    return NextResponse.json({
+      ...employee,
+      lmsSyncStatus: lmsSync.ok ? "synced" : "error",
+      lmsSyncError: lmsSync.ok ? undefined : lmsSync.error,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

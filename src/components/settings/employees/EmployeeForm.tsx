@@ -38,6 +38,9 @@ export type EmployeeRecord = {
   hourlyRate: number | null;
   commissionPercent: number | null;
   annualSalary: number | null;
+  lmsUserId?: string | null;
+  lmsSyncStatus?: string | null;
+  lmsLastSyncedAt?: string | null;
   serviceAreas: { serviceArea: ServiceAreaOption }[];
 };
 
@@ -294,6 +297,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         toast.success("Employee updated and login password set");
       } else {
         toast.success(employee ? "Employee updated" : "Employee created");
+      }
+      if (data.lmsSyncError) {
+        toast.error(`LMS sync failed: ${data.lmsSyncError}`);
+      } else if (data.lmsSyncStatus === "synced") {
+        toast.message("Synced to LMS");
       }
       onSaved();
     } finally {

@@ -39,6 +39,25 @@ export function EmployeeList() {
     load().finally(() => setLoading(false));
   }, [load]);
 
+  async function syncEmployeeToLms(id: string) {
+    const res = await fetch(`/api/settings/employees/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to sync");
+      return;
+    }
+    if (data.lmsSyncError) {
+      toast.error(`LMS sync failed: ${data.lmsSyncError}`);
+    } else {
+      toast.success("Synced to LMS");
+    }
+    await load();
+  }
+
   async function archiveEmployee(id: string, action: "archive" | "restore") {
     const res = await fetch(`/api/settings/employees/${id}/archive`, {
       method: "POST",
@@ -143,10 +162,26 @@ export function EmployeeList() {
                         <Badge variant="secondary">{ROLE_LABELS[employee.role]}</Badge>
                         {employee.title ? <Badge variant="outline">{employee.title}</Badge> : null}
                         {employee.division ? <Badge variant="outline">{employee.division}</Badge> : null}
+                        {employee.lmsSyncStatus === "synced" ? (
+                          <Badge variant="outline" className="text-green-700">
+                            LMS synced
+                          </Badge>
+                        ) : employee.lmsSyncStatus === "error" ? (
+                          <Badge variant="destructive">LMS sync error</Badge>
+                        ) : (
+                          <Badge variant="outline">LMS not synced</Badge>
+                        )}
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void syncEmployeeToLms(employee.id)}
+                    >
+                      Sync LMS
+                    </Button>
                     {process.env.NEXT_PUBLIC_LMS_URL ? (
                       <Button variant="outline" size="sm" asChild>
                         <a
