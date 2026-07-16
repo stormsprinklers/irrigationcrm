@@ -69,7 +69,7 @@ export async function listVehicles(filters: VehicleListFilters) {
 }
 
 export async function getVehicleDetail(companyId: string, id: string) {
-  return prisma.vehicle.findFirst({
+  const vehicle = await prisma.vehicle.findFirst({
     where: { id, companyId },
     include: {
       assignedUser: { select: { id: true, name: true, photoUrl: true } },
@@ -95,6 +95,15 @@ export async function getVehicleDetail(companyId: string, id: string) {
       },
     },
   });
+  if (!vehicle) return null;
+
+  return {
+    ...vehicle,
+    serviceRecords: vehicle.serviceRecords.map((rec) => ({
+      ...rec,
+      cost: rec.cost != null ? Number(rec.cost) : null,
+    })),
+  };
 }
 
 export async function getCompanyEmployees(companyId: string) {

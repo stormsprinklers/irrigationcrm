@@ -3347,8 +3347,8 @@ model Vehicle {
   nextOilChangeDueAt      DateTime?
   nextOilChangeDueMileage Int?
   lastOilReminderSentAt   DateTime?
-  aiSummary               String?
-  notes                   String?
+  aiSummary               String?       @db.Text
+  notes                   String?       @db.Text
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 

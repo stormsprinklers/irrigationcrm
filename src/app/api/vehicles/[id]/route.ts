@@ -103,7 +103,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data.status = body.status;
     }
     if (body.notes !== undefined) {
-      data.notes = body.notes ? String(body.notes).trim() : null;
+      const raw = body.notes == null ? "" : String(body.notes);
+      data.notes = raw.trim() ? raw.trim() : null;
     }
     if (body.oilIntervalMiles !== undefined) {
       data.oilIntervalMiles = Math.max(1, Number(body.oilIntervalMiles) || 5000);
@@ -163,9 +164,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
-    return NextResponse.json(vehicle);
-  } catch {
-    return unauthorizedResponse();
+    return NextResponse.json({
+      ...vehicle,
+      notes: vehicle.notes,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("[vehicles PATCH]", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to update vehicle";
+    // Surface schema/DB errors instead of masking as 401.
+    if (/notes|column|Unknown arg/i.test(message)) {
+      return NextResponse.json(
+        { error: "Could not save notes. The database may need a schema update." },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

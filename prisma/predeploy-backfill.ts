@@ -73,6 +73,14 @@ async function backfillCallCustomers() {
   console.log(`Backfilled CallLog.customerId (primary=${primary}, alt=${alt})`);
 }
 
+async function ensureVehicleNotesColumn() {
+  const exists = await columnExists("Vehicle", "notes");
+  if (!exists) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Vehicle" ADD COLUMN "notes" TEXT`);
+    console.log(`Added "Vehicle"."notes" column`);
+  }
+}
+
 async function main() {
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
@@ -80,6 +88,11 @@ async function main() {
     await backfillCallCustomers();
   } catch (err) {
     console.warn("Call customer backfill skipped:", err);
+  }
+  try {
+    await ensureVehicleNotesColumn();
+  } catch (err) {
+    console.warn("Vehicle notes column ensure skipped:", err);
   }
 }
 

@@ -179,8 +179,8 @@ export default function VehicleDetailPage() {
     );
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     try {
       const [detailRes, listRes] = await Promise.all([
         fetch(`/api/vehicles/${id}`),
@@ -200,7 +200,7 @@ export default function VehicleDetailPage() {
         setEmployees(list.employees ?? []);
       }
     } finally {
-      setLoading(false);
+      if (!opts?.quiet) setLoading(false);
     }
   }, [id, router, syncForm]);
 
@@ -234,7 +234,10 @@ export default function VehicleDetailPage() {
     : false;
 
   async function saveVehicle() {
-    if (!canManage) return;
+    if (!canManage) {
+      toast.error("Only admins and managers can edit vehicle profile notes.");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(`/api/vehicles/${id}`, {
@@ -247,7 +250,7 @@ export default function VehicleDetailPage() {
           vin: editVin || null,
           licensePlate: editPlate || null,
           status: editStatus,
-          notes: editNotes || null,
+          notes: editNotes,
           assignedUserId: assignedUserId || null,
           oilIntervalMiles: Number(oilIntervalMiles) || 5000,
           oilIntervalMonths: Number(oilIntervalMonths) || 6,
@@ -260,8 +263,13 @@ export default function VehicleDetailPage() {
         toast.error(data.error || "Failed to save");
         return;
       }
+      // Keep notes in local state immediately so a slow reload can't look like a failed save.
+      if (typeof data.notes === "string" || data.notes === null) {
+        setEditNotes(data.notes ?? "");
+        setVehicle((prev) => (prev ? { ...prev, notes: data.notes ?? null } : prev));
+      }
       toast.success("Vehicle updated");
-      await load();
+      await load({ quiet: true });
     } finally {
       setSaving(false);
     }
@@ -546,11 +554,19 @@ export default function VehicleDetailPage() {
         <Section
           title="Profile"
           actions={
-            <Button type="button" size="sm" disabled={saving} onClick={() => void saveVehicle()}>
+            <Button type="submit" form="vehicle-profile-form" size="sm" disabled={saving}>
               {saving ? "Saving…" : "Save changes"}
             </Button>
           }
         >
+          <form
+            id="vehicle-profile-form"
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveVehicle();
+            }}
+          >
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Year</label>
@@ -585,7 +601,7 @@ export default function VehicleDetailPage() {
               </select>
             </div>
           </div>
-          <div className="mt-4 space-y-2">
+          <div className="space-y-2">
             <label className="text-sm font-medium">Assigned to (empty = Shop)</label>
             <EmployeeSearchPicker
               value={assignedUserId}
@@ -598,15 +614,25 @@ export default function VehicleDetailPage() {
               }}
             />
           </div>
-          <div className="mt-4 space-y-2">
-            <label className="text-sm font-medium">Notes</label>
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="vehicle-notes">
+              Notes
+            </label>
             <textarea
+              id="vehicle-notes"
               className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               value={editNotes}
               onChange={(e) => setEditNotes(e.target.value)}
               rows={3}
+              placeholder="Vehicle notes…"
             />
+            <div className="flex justify-end">
+              <Button type="submit" size="sm" disabled={saving}>
+                {saving ? "Saving…" : "Save notes"}
+              </Button>
+            </div>
           </div>
+          </form>
         </Section>
       ) : (
         <Section title="Profile">
