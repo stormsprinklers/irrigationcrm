@@ -27,7 +27,7 @@ export async function pushEmployeeToLms(employee: Pick<User, "id" | "name" | "em
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LMS_KEY}`,
+        "x-integration-key": LMS_KEY,
       },
       body: JSON.stringify(payload),
     });
@@ -78,7 +78,7 @@ export async function fetchLmsTrainingSummary(crmUserId: string) {
 
   try {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${LMS_KEY}` },
+      headers: { "x-integration-key": LMS_KEY },
       next: { revalidate: 60 },
     });
     if (!res.ok) {

@@ -23,7 +23,14 @@ type Attachment = {
   blobUrl: string;
   fileName: string;
   mimeType: string;
-  kind: "PHOTO" | "RECEIPT" | "WORK_SUMMARY" | "CARFAX" | "OTHER";
+  kind:
+    | "PHOTO"
+    | "RECEIPT"
+    | "WORK_SUMMARY"
+    | "CARFAX"
+    | "REGISTRATION"
+    | "INSURANCE"
+    | "OTHER";
   createdAt: string;
   uploadedBy: { id: string; name: string };
 };
@@ -90,8 +97,91 @@ const ATTACHMENT_KINDS = [
   { value: "RECEIPT", label: "Receipts" },
   { value: "WORK_SUMMARY", label: "Work summaries" },
   { value: "CARFAX", label: "Carfax" },
+  { value: "REGISTRATION", label: "Registration" },
+  { value: "INSURANCE", label: "Insurance" },
   { value: "OTHER", label: "Other" },
 ] as const;
+
+const COMPLIANCE_KINDS = new Set(["REGISTRATION", "INSURANCE"]);
+
+function AttachmentPreview({
+  url,
+  fileName,
+  mimeType,
+  className,
+}: {
+  url: string | null;
+  fileName: string;
+  mimeType: string;
+  className?: string;
+}) {
+  if (!url) {
+    return (
+      <div
+        className={cn(
+          "flex items-center justify-center gap-2 bg-muted text-sm text-muted-foreground",
+          className
+        )}
+      >
+        <FileText className="h-5 w-5" />
+        No preview
+      </div>
+    );
+  }
+
+  const isImage = mimeType.startsWith("image/");
+  const isPdf =
+    mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
+
+  if (isImage) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className={cn("relative block bg-muted", className)}
+      >
+        <Image src={url} alt={fileName} fill className="object-contain" unoptimized />
+      </a>
+    );
+  }
+
+  if (isPdf) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className={cn("relative block overflow-hidden bg-muted", className)}
+      >
+        <iframe
+          src={`${url}#toolbar=0&navpanes=0&scrollbar=0`}
+          title={fileName}
+          className="pointer-events-none h-full w-full border-0"
+        />
+        <span className="absolute inset-x-0 bottom-0 bg-background/80 px-2 py-1 text-center text-xs text-muted-foreground">
+          Open PDF
+        </span>
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 bg-muted px-3 text-center text-sm text-muted-foreground",
+        className
+      )}
+    >
+      <FileText className="h-5 w-5" />
+      <span className="max-w-full truncate font-medium text-foreground">{fileName}</span>
+      Open file
+    </a>
+  );
+}
 
 function formatDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -126,6 +216,8 @@ export default function VehicleDetailPage() {
   const id = String(params.id);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const registrationInputRef = useRef<HTMLInputElement>(null);
+  const insuranceInputRef = useRef<HTMLInputElement>(null);
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -134,7 +226,6 @@ export default function VehicleDetailPage() {
   const [saving, setSaving] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [attachmentKindFilter, setAttachmentKindFilter] = useState("ALL");
-  const [uploadKind, setUploadKind] = useState("RECEIPT");
 
   const [editMake, setEditMake] = useState("");
   const [editModel, setEditModel] = useState("");
@@ -210,7 +301,9 @@ export default function VehicleDetailPage() {
 
   const filteredAttachments = useMemo(() => {
     if (!vehicle) return [];
-    if (attachmentKindFilter === "ALL") return vehicle.attachments;
+    if (attachmentKindFilter === "ALL") {
+      return vehicle.attachments.filter((a) => !COMPLIANCE_KINDS.has(a.kind));
+    }
     return vehicle.attachments.filter((a) => a.kind === attachmentKindFilter);
   }, [vehicle, attachmentKindFilter]);
 
@@ -372,10 +465,10 @@ export default function VehicleDetailPage() {
     await load();
   }
 
-  async function uploadAttachment(file: File) {
+  async function uploadAttachment(file: File, kind: string) {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("kind", uploadKind);
+    formData.append("kind", kind);
     const res = await fetch(`/api/vehicles/${id}/attachments`, {
       method: "POST",
       body: formData,
@@ -385,8 +478,18 @@ export default function VehicleDetailPage() {
       toast.error(data.error || "Upload failed");
       return;
     }
-    toast.success("Document uploaded");
+    toast.success(
+      kind === "REGISTRATION"
+        ? "Registration uploaded"
+        : kind === "INSURANCE"
+          ? "Insurance card uploaded"
+          : "Document uploaded"
+    );
     await load();
+  }
+
+  function latestAttachment(kind: "REGISTRATION" | "INSURANCE") {
+    return vehicle?.attachments.find((a) => a.kind === kind) ?? null;
   }
 
   async function deleteAttachment(attachmentId: string) {
@@ -899,6 +1002,103 @@ export default function VehicleDetailPage() {
         </ul>
       </Section>
 
+      <Section title="Registration & insurance">
+        <p className="text-sm text-muted-foreground">
+          Keep the current registration and insurance card photos here so they are easy to find.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(
+            [
+              {
+                kind: "REGISTRATION" as const,
+                title: "Registration",
+                hint: "Photo or PDF of vehicle registration",
+                inputRef: registrationInputRef,
+              },
+              {
+                kind: "INSURANCE" as const,
+                title: "Insurance card",
+                hint: "Photo or PDF of insurance card",
+                inputRef: insuranceInputRef,
+              },
+            ] as const
+          ).map((slot) => {
+            const att = latestAttachment(slot.kind);
+            const url = att ? blobProxyUrl(att.blobUrl) : null;
+            return (
+              <div
+                key={slot.kind}
+                className="flex flex-col overflow-hidden rounded-md border border-border bg-muted/20"
+              >
+                <div className="border-b border-border px-3 py-2">
+                  <div className="text-sm font-semibold">{slot.title}</div>
+                  <div className="text-xs text-muted-foreground">{slot.hint}</div>
+                </div>
+                {att && url ? (
+                  <AttachmentPreview
+                    url={url}
+                    fileName={att.fileName}
+                    mimeType={att.mimeType}
+                    className="aspect-[4/3]"
+                  />
+                ) : (
+                  <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-muted/40 px-4 text-center text-sm text-muted-foreground">
+                    <Upload className="h-7 w-7 opacity-60" />
+                    Nothing uploaded yet
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+                  <div className="min-w-0 text-xs text-muted-foreground">
+                    {att ? (
+                      <>
+                        <div className="truncate font-medium text-foreground">{att.fileName}</div>
+                        Uploaded {formatDate(att.createdAt)}
+                        {att.uploadedBy?.name ? ` · ${att.uploadedBy.name}` : ""}
+                      </>
+                    ) : (
+                      "Upload a clear photo or PDF"
+                    )}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <input
+                      ref={slot.inputRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void uploadAttachment(file, slot.kind);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => slot.inputRef.current?.click()}
+                    >
+                      <Upload className="mr-1.5 h-3.5 w-3.5" />
+                      {att ? "Replace" : "Upload"}
+                    </Button>
+                    {att ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => void deleteAttachment(att.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+
       <Section title="Documents">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {ATTACHMENT_KINDS.map((k) => (
@@ -913,21 +1113,7 @@ export default function VehicleDetailPage() {
             </Button>
           ))}
         </div>
-        <div className="mb-4 flex flex-wrap items-end gap-2">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Upload as</label>
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={uploadKind}
-              onChange={(e) => setUploadKind(e.target.value)}
-            >
-              <option value="RECEIPT">Receipt</option>
-              <option value="WORK_SUMMARY">Work summary</option>
-              <option value="CARFAX">Carfax</option>
-              <option value="PHOTO">Photo</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <input
             ref={attachmentInputRef}
             type="file"
@@ -935,14 +1121,40 @@ export default function VehicleDetailPage() {
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void uploadAttachment(file);
+              if (!file) return;
+              if (attachmentKindFilter === "ALL") {
+                toast.error("Select a document type tab first");
+                e.target.value = "";
+                return;
+              }
+              void uploadAttachment(file, attachmentKindFilter);
               e.target.value = "";
             }}
           />
-          <Button type="button" variant="outline" onClick={() => attachmentInputRef.current?.click()}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (attachmentKindFilter === "ALL") {
+                toast.error("Select a document type tab first");
+                return;
+              }
+              attachmentInputRef.current?.click();
+            }}
+          >
             <Upload className="mr-1.5 h-4 w-4" />
-            Upload file
+            {attachmentKindFilter === "ALL"
+              ? "Upload file"
+              : `Upload ${
+                  ATTACHMENT_KINDS.find((k) => k.value === attachmentKindFilter)?.label ??
+                  "file"
+                }`}
           </Button>
+          {attachmentKindFilter === "ALL" ? (
+            <span className="text-sm text-muted-foreground">
+              Pick a type above, then upload.
+            </span>
+          ) : null}
         </div>
         {filteredAttachments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No documents in this filter.</p>
@@ -950,24 +1162,14 @@ export default function VehicleDetailPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filteredAttachments.map((att) => {
               const url = blobProxyUrl(att.blobUrl);
-              const isImage = att.mimeType.startsWith("image/");
               return (
                 <div key={att.id} className="overflow-hidden rounded-md border border-border">
-                  {isImage && url ? (
-                    <a href={url} target="_blank" rel="noreferrer" className="relative block aspect-video bg-muted">
-                      <Image src={url} alt={att.fileName} fill className="object-cover" unoptimized />
-                    </a>
-                  ) : (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex aspect-video items-center justify-center gap-2 bg-muted text-sm text-muted-foreground"
-                    >
-                      <FileText className="h-5 w-5" />
-                      PDF / file
-                    </a>
-                  )}
+                  <AttachmentPreview
+                    url={url}
+                    fileName={att.fileName}
+                    mimeType={att.mimeType}
+                    className="aspect-video"
+                  />
                   <div className="flex items-start justify-between gap-2 p-2 text-xs">
                     <div className="min-w-0">
                       <div className="truncate font-medium">{att.fileName}</div>

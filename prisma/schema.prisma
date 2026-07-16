@@ -3319,6 +3319,8 @@ enum VehicleAttachmentKind {
   RECEIPT
   WORK_SUMMARY
   CARFAX
+  REGISTRATION
+  INSURANCE
   OTHER
 }
 

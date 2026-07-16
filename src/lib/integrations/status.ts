@@ -80,6 +80,23 @@ function inboundCredentialStatus(
   };
 }
 
+async function readErrorSnippet(res: Response): Promise<string> {
+  try {
+    const text = (await res.text()).trim();
+    if (!text) return "";
+    try {
+      const json = JSON.parse(text) as { error?: string; message?: string };
+      const msg = json.error || json.message;
+      if (msg) return String(msg).slice(0, 200);
+    } catch {
+      // not JSON
+    }
+    return text.replace(/\s+/g, " ").slice(0, 200);
+  } catch {
+    return "";
+  }
+}
+
 async function testLmsOutboundConnection(): Promise<Pick<IntegrationStatus, "status" | "message">> {
   const base = process.env.LMS_INTEGRATION_URL?.replace(/\/$/, "") ?? "";
   const key = process.env.LMS_INTEGRATION_KEY ?? "";
@@ -93,39 +110,58 @@ async function testLmsOutboundConnection(): Promise<Pick<IntegrationStatus, "sta
   }
 
   try {
-    const res = await fetch(
-      `${base}/api/integrations/crm/users/__connection_test__/progress`,
-      {
-        headers: { Authorization: `Bearer ${key}` },
-        signal: AbortSignal.timeout(10_000),
-        cache: "no-store",
+    // Prefer dedicated health route; fall back to legacy progress probe for older LMS deploys.
+    // Use x-integration-key (not Authorization Bearer) so Auth.js does not treat the key as a JWT.
+    const headers = { "x-integration-key": key };
+    let res = await fetch(`${base}/api/integrations/crm/health`, {
+      headers,
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+
+    if (res.status === 404) {
+      res = await fetch(
+        `${base}/api/integrations/crm/users/__connection_test__/progress`,
+        {
+          headers,
+          signal: AbortSignal.timeout(10_000),
+          cache: "no-store",
+        }
+      );
+      if (res.status === 404) {
+        return {
+          status: "connected",
+          message: "LMS is reachable and accepted the API key.",
+        };
       }
-    );
+    }
 
     if (res.status === 401) {
       return {
         status: "error",
-        message: "LMS rejected the API key. Ensure INTEGRATION_API_KEY on LMS matches LMS_INTEGRATION_KEY on CRM.",
+        message:
+          "LMS rejected the API key. Ensure INTEGRATION_API_KEY on LMS matches LMS_INTEGRATION_KEY on CRM.",
       };
     }
     if (res.status === 503) {
+      const detail = await readErrorSnippet(res);
       return {
         status: "error",
-        message: "LMS integration is not configured. Set INTEGRATION_API_KEY on the LMS deployment.",
-      };
-    }
-    if (res.status === 404) {
-      return {
-        status: "connected",
-        message: "LMS is reachable and accepted the API key.",
+        message:
+          detail ||
+          "LMS integration is not configured or its database is unreachable. Set INTEGRATION_API_KEY and DATABASE_URL on LMS.",
       };
     }
     if (res.ok) {
-      return { status: "connected", message: "LMS is reachable and responded successfully." };
+      return { status: "connected", message: "LMS is reachable and accepted the API key." };
     }
+
+    const detail = await readErrorSnippet(res);
     return {
       status: "error",
-      message: `LMS returned unexpected status ${res.status}. Check LMS_INTEGRATION_URL.`,
+      message: detail
+        ? `LMS returned ${res.status}: ${detail}`
+        : `LMS returned unexpected status ${res.status}. Check LMS_INTEGRATION_URL.`,
     };
   } catch {
     return {
