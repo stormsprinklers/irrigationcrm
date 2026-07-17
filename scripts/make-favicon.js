@@ -65,6 +65,7 @@ async function main() {
     { name: "icon.png", size: 32 },
     { name: "favicon.png", size: 32 },
     { name: "icon-192.png", size: 192 },
+    { name: "icon-512.png", size: 512 },
     { name: "apple-icon.png", size: 180 },
   ];
 

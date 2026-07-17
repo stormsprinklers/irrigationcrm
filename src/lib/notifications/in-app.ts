@@ -4,7 +4,7 @@ import {
   websiteLeadNotificationTitle,
 } from "@/lib/leads/form-labels";
 import { prisma } from "@/lib/prisma";
-import { sendMobilePushToUsers } from "@/lib/mobile-push/devices";
+import { sendStaffPush } from "@/lib/push/send";
 
 const STAFF_ROLES: UserRole[] = [
   UserRole.ADMIN,
@@ -22,6 +22,7 @@ export async function notifyStaffInApp(params: {
   body?: string | null;
   href?: string | null;
   userIds?: string[];
+  conversationId?: string;
 }) {
   const where =
     params.userIds && params.userIds.length
@@ -52,6 +53,15 @@ export async function notifyStaffInApp(params: {
       body: params.body ?? null,
       href: params.href ?? null,
     })),
+  });
+
+  await sendStaffPush({
+    companyId: params.companyId,
+    userIds: staff.map((user) => user.id),
+    title: params.title,
+    body: params.body,
+    href: params.href,
+    conversationId: params.conversationId,
   });
 }
 
@@ -129,13 +139,6 @@ export async function notifyInboundSms(params: {
     body,
     href,
     userIds: notifyUserIds,
-  });
-
-  await sendMobilePushToUsers({
-    companyId: params.companyId,
-    userIds: notifyUserIds,
-    title,
-    body,
     conversationId: params.conversationId,
   });
 }

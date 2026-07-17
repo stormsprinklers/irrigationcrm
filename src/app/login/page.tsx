@@ -1,10 +1,12 @@
 import { Suspense } from "react";
+import { getAppCompanyName } from "@/lib/radar-title";
 import LoginForm from "./LoginForm";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const companyName = await getAppCompanyName();
   return (
     <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
-      <LoginForm />
+      <LoginForm companyName={companyName} />
     </Suspense>
   );
 }

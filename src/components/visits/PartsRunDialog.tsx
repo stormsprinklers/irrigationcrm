@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, MapPin, Phone, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { requestCurrentPosition } from "@/lib/maps/geolocation";
 import { todayHoursLabel } from "@/lib/parts-suppliers/hours";
 import type { PartsRunOption } from "@/lib/parts-suppliers/types";
 
@@ -19,6 +20,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
   const [options, setOptions] = useState<PartsRunOption[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [startingId, setStartingId] = useState<string | null>(null);
+  const [usedLiveLocation, setUsedLiveLocation] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -26,8 +28,22 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
     async function loadOptions() {
       setLoading(true);
       setMessage(null);
+      setUsedLiveLocation(false);
       try {
-        const res = await fetch(`/api/visits/${visitId}/parts-run`);
+        const position = await requestCurrentPosition();
+        const params = new URLSearchParams();
+        if (position.ok) {
+          params.set("originLat", String(position.lat));
+          params.set("originLng", String(position.lng));
+          setUsedLiveLocation(true);
+        } else if (position.reason === "denied") {
+          toast.message("Location access denied — ranking suppliers from the job site instead.");
+        }
+
+        const query = params.toString();
+        const res = await fetch(
+          `/api/visits/${visitId}/parts-run${query ? `?${query}` : ""}`
+        );
         const data = await res.json();
         if (!res.ok) {
           toast.error(data.error ?? "Could not load parts suppliers");
@@ -97,14 +113,17 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
 
         <div className="space-y-3 p-4">
           <p className="text-sm text-muted-foreground">
-            Pick the closest open supplier to this job site. If the visit is in progress, your job
-            timer will pause and Google Maps will open for directions.
+            {usedLiveLocation
+              ? "Pick the closest open supplier to your current location. If the visit is in progress, your job timer will pause and Google Maps will open for directions."
+              : "Pick the closest open supplier to this job site. If the visit is in progress, your job timer will pause and Google Maps will open for directions."}
           </p>
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Finding open suppliers near this job site...
+              {usedLiveLocation
+                ? "Finding open suppliers near you..."
+                : "Requesting location and finding open suppliers..."}
             </div>
           ) : options.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">

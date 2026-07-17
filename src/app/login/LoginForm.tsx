@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stormBrand } from "@/lib/branding";
+import { radarDocumentTitle } from "@/lib/radar-title";
 
 type Step = "credentials" | "mfa";
 
-export default function LoginForm() {
+export default function LoginForm({ companyName }: { companyName?: string | null }) {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/home";
   const justReset = searchParams.get("reset") === "1";
@@ -133,7 +134,7 @@ export default function LoginForm() {
             className="mx-auto mb-2 h-24 w-auto object-contain"
           />
           <CardTitle className="font-display text-2xl text-storm-navy">
-            Irrigation CRM
+            {radarDocumentTitle(companyName)}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
             Storm Sprinklers staff sign in
