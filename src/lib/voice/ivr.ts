@@ -442,6 +442,14 @@ async function renderAiReceptionistNode(
     !ctx.callSid ||
     !ctx.from
   ) {
+    console.warn("[ai-receptionist] soft-fail to voicemail", {
+      companyId: ctx.companyId,
+      callSid: ctx.callSid,
+      enabled: company?.aiReceptionistEnabled ?? false,
+      configured: isAiReceptionistConfigured(),
+      hasFrom: Boolean(ctx.from),
+      sideband: getSidebandPublicWssUrl() || null,
+    });
     response.say(
       "Our automated receptionist is temporarily unavailable. Please leave a message after the tone."
     );
@@ -460,6 +468,9 @@ async function renderAiReceptionistNode(
     callSessionId: ctx.callSessionId,
   });
 
+  // Brief cue so a fast stream failure is distinguishable from a bare voicemail entry.
+  response.say("One moment while I connect you.");
+
   const connect = response.connect({
     action: `${appBaseUrl()}/api/twilio/voice/ai-receptionist/stream-status?companyId=${encodeURIComponent(ctx.companyId)}&flowId=${encodeURIComponent(ctx.flowId)}&nodeId=${encodeURIComponent(node.id)}`,
     method: "POST",
@@ -475,9 +486,7 @@ async function renderAiReceptionistNode(
   if (ctx.callSessionId) {
     stream.parameter({ name: "callSessionId", value: ctx.callSessionId });
   }
-
-  // If the stream ends without a REST redirect (transfer/voicemail), fall through.
-  response.redirect({ method: "POST" }, fallbackUrl);
+  // Do not add verbs after <Connect> when action is set — Twilio continues via action.
 }
 
 export async function renderIvrNodeById(

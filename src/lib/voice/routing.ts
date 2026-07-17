@@ -30,13 +30,16 @@ type FlowNodeRow = {
   config: unknown;
 };
 
-function firstOpenAiReceptionist<T extends FlowNodeRow>(nodes: T[]): T | null {
+function firstAiReceptionistOnBranch<T extends FlowNodeRow>(
+  nodes: T[],
+  branch: "open" | "closed"
+): T | null {
   return (
     nodes
       .filter(
         (n) =>
           n.type === CallFlowNodeType.AI_RECEPTIONIST &&
-          flowNodeBranch(n.config) === "open"
+          flowNodeBranch(n.config) === branch
       )
       .sort((a, b) => a.sortOrder - b.sortOrder)[0] ?? null
   );
@@ -284,9 +287,25 @@ export async function buildInboundTwiml(params: TwilioParams) {
   const callFlow = phoneRecord?.callFlow;
   const withinHours = isWithinBusinessHours(company.businessHours, company.timezone);
 
-  if (!withinHours && callFlow?.afterHoursNodeId) {
-    const afterNode = callFlow.nodes.find((n) => n.id === callFlow.afterHoursNodeId);
+  if (!withinHours && callFlow) {
+    // Prefer closed-lane AI when enabled (same as open-hours preference).
+    const aiClosedEntry = company.aiReceptionistEnabled
+      ? firstAiReceptionistOnBranch(callFlow.nodes, "closed")
+      : null;
+    const afterNode =
+      aiClosedEntry ??
+      (callFlow.afterHoursNodeId
+        ? callFlow.nodes.find((n) => n.id === callFlow.afterHoursNodeId)
+        : null);
     if (afterNode) {
+      console.info("[voice/inbound] routing after-hours", {
+        callSid,
+        flowId: callFlow.id,
+        entryType: afterNode.type,
+        entryId: afterNode.id,
+        aiPreferred: Boolean(aiClosedEntry),
+        withinHours: false,
+      });
       return renderIvrNode(afterNode, callFlow.nodes, {
         ...baseCtx(),
         flowId: callFlow.id,
@@ -298,7 +317,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
   // even if a dial/IVR step is still marked as entry (common mis-order in the editor).
   const aiOpenEntry =
     company.aiReceptionistEnabled && callFlow
-      ? firstOpenAiReceptionist(callFlow.nodes)
+      ? firstAiReceptionistOnBranch(callFlow.nodes, "open")
       : null;
 
   const entryNode =
