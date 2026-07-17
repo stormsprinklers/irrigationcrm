@@ -396,7 +396,10 @@ export default function FlowEditorPage() {
     );
   }
 
-  const assignedNumbers = numbers.filter((n) => n.callFlow?.id === flow.id);
+  // Capture non-null flow for nested render helpers (TS does not narrow state across closures).
+  const editorFlow = flow;
+
+  const assignedNumbers = numbers.filter((n) => n.callFlow?.id === editorFlow.id);
 
   const AddStepControl = ({
     branch,
@@ -520,7 +523,7 @@ export default function FlowEditorPage() {
                   <div className="border-t border-border p-4">
                     <StepEditor
                       node={node}
-                      flow={flow}
+                      flow={editorFlow}
                       groups={groups}
                       users={users}
                       clips={clips}

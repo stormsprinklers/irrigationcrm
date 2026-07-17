@@ -93,6 +93,12 @@ type GbpStatus = {
   locationTitle: string | null;
 };
 
+type DriveStatus = {
+  configured: boolean;
+  connected: boolean;
+  pickerConfigured: boolean;
+};
+
 type GoogleAdsStatus = {
   configured: boolean;
   connected: boolean;
@@ -113,6 +119,7 @@ export default function SettingsIntegrationsPage() {
   const [statuses, setStatuses] = useState<IntegrationStatus[]>([]);
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null);
   const [gbpStatus, setGbpStatus] = useState<GbpStatus | null>(null);
+  const [driveStatus, setDriveStatus] = useState<DriveStatus | null>(null);
   const [googleAdsStatus, setGoogleAdsStatus] = useState<GoogleAdsStatus | null>(null);
   const [metaAdsStatus, setMetaAdsStatus] = useState<MetaAdsStatus | null>(null);
   const [urls, setUrls] = useState<IntegrationUrls | null>(null);
@@ -127,10 +134,11 @@ export default function SettingsIntegrationsPage() {
   const loadStatus = useCallback(async () => {
     setCheckingStatus(true);
     try {
-      const [statusRes, metaRes, gbpRes, googleAdsRes, metaAdsRes] = await Promise.all([
+      const [statusRes, metaRes, gbpRes, driveRes, googleAdsRes, metaAdsRes] = await Promise.all([
         fetch("/api/settings/integrations/status"),
         fetch("/api/integrations/meta/status"),
         fetch("/api/marketing/google-business/status"),
+        fetch("/api/marketing/google-drive/status"),
         fetch("/api/marketing/google-ads/status"),
         fetch("/api/marketing/meta-ads/status"),
       ]);
@@ -142,6 +150,9 @@ export default function SettingsIntegrationsPage() {
       }
       if (gbpRes.ok) {
         setGbpStatus(await gbpRes.json());
+      }
+      if (driveRes.ok) {
+        setDriveStatus(await driveRes.json());
       }
       if (googleAdsRes.ok) {
         setGoogleAdsStatus(await googleAdsRes.json());
@@ -415,6 +426,46 @@ export default function SettingsIntegrationsPage() {
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button size="sm" variant="outline" asChild>
                   <Link href="/settings/integrations/google-business">Configure Google Business Profile</Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {driveStatus ? (
+            <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusIcon
+                    status={
+                      driveStatus.connected
+                        ? "connected"
+                        : driveStatus.configured
+                          ? "configured"
+                          : "not_configured"
+                    }
+                  />
+                  <span className="font-medium text-sm">Google Drive</span>
+                </div>
+                <Badge variant={driveStatus.connected ? "success" : "secondary"}>
+                  {driveStatus.connected
+                    ? "Connected"
+                    : driveStatus.configured
+                      ? "Not connected"
+                      : "Not configured"}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {!driveStatus.configured
+                  ? "Uses the same GOOGLE_OAUTH_* credentials as Search Console / Ads. Add drive.file on the consent screen."
+                  : !driveStatus.connected
+                    ? "Connect Drive to pick images for Google Business and social posts."
+                    : driveStatus.pickerConfigured
+                      ? "Drive images are available in marketing post composers via Google Picker."
+                      : "Connected — set GOOGLE_PICKER_API_KEY (or enable Picker on GOOGLE_MAPS_API_KEY) to browse files."}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="outline" asChild>
+                  <Link href="/settings/integrations/google-drive">Configure Google Drive</Link>
                 </Button>
               </div>
             </div>

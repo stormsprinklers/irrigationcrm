@@ -579,6 +579,7 @@ function PhotosTab({
 function sourceLabel(source: GbpJobPhotoDto["source"]) {
   if (source === "facebook") return "Facebook";
   if (source === "instagram") return "Instagram";
+  if (source === "drive") return "Drive";
   return "Job visit";
 }
 
@@ -590,6 +591,7 @@ function JobPhotoPicker({
   multi = false,
   onSelect,
   onReload,
+  onDriveImported,
   label,
 }: {
   photos: GbpJobPhotoDto[];
@@ -599,18 +601,56 @@ function JobPhotoPicker({
   multi?: boolean;
   onSelect: (id: string) => void;
   onReload: () => Promise<void>;
+  onDriveImported?: (photos: GbpJobPhotoDto[]) => void;
   label: string;
 }) {
+  const [browsingDrive, setBrowsingDrive] = useState(false);
   const isSelected = (id: string) =>
     multi ? (selectedIds ?? []).includes(id) : selectedId === id;
+
+  async function browseDrive() {
+    setBrowsingDrive(true);
+    try {
+      const { openGoogleDriveImagePicker, importDrivePickerDocs } = await import(
+        "@/lib/google-drive/picker-client"
+      );
+      const docs = await openGoogleDriveImagePicker({ multiSelect: true });
+      if (docs.length === 0) return;
+      const { photos: imported } = await importDrivePickerDocs(docs);
+      onDriveImported?.(imported);
+      await onReload();
+      toast.success(
+        imported.length === 1
+          ? "Added Drive image to gallery"
+          : `Added ${imported.length} Drive images to gallery`
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to open Google Drive");
+    } finally {
+      setBrowsingDrive(false);
+    }
+  }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <label className="text-xs font-medium text-muted-foreground">{label}</label>
-        <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void onReload()}>
-          Refresh
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={browsingDrive}
+            onClick={() => void browseDrive()}
+          >
+            {browsingDrive ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+            Drive
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => void onReload()}>
+            Refresh
+          </Button>
+        </div>
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -619,8 +659,8 @@ function JobPhotoPicker({
         </div>
       ) : photos.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No photos from the last 14 days. Add visit photos in the mobile app, or connect Meta in
-          Settings to include Facebook and Instagram posts.
+          No photos yet. Add visit photos in the mobile app, connect Meta for Facebook/Instagram, or
+          browse Google Drive.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 max-h-64 overflow-y-auto rounded-md border p-2">

@@ -554,6 +554,8 @@ model Company {
   googleAdsCustomerName           String?
   googleAdsLoginCustomerId        String?
   googleAdsConnectedAt            DateTime?
+  googleDriveRefreshToken         String?
+  googleDriveConnectedAt          DateTime?
   // @deprecated GA4 CRM OAuth — use native website analytics. See lib/google-analytics/DEPRECATED.md
   googleAnalyticsRefreshToken     String?
   googleAnalyticsPropertyId       String?
