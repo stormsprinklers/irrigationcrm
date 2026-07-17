@@ -675,6 +675,14 @@ export function WebsiteLeadsInbox() {
       detail={detail}
       listLabel="Leads"
       selectedId={selected ? `${selected.channel}:${selected.id}` : null}
+      listFirst
+      onMobileBack={() => {
+        setSelected(null);
+        if (searchParams.get("emailId") || searchParams.get("conversationId")) {
+          appliedDeepLinkRef.current = null;
+          router.replace("/inbox/leads", { scroll: false });
+        }
+      }}
     />
   );
 }
