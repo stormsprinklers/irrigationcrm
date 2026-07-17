@@ -366,13 +366,71 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
 export async function buildQueueTwiml(companyId: string) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
-  response.enqueue({ waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait` }, `company_${companyId}`);
+  response.enqueue(
+    {
+      waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait?companyId=${encodeURIComponent(companyId)}`,
+    },
+    `company_${companyId}`
+  );
   return response.toString();
 }
 
-export async function buildQueueWaitTwiml() {
+/** Wait music for callers in queue — uses the company-configured queue wait clip. */
+export async function buildQueueWaitTwiml(companyId: string | null) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
-  response.play({ loop: 0 }, "http://com.twilio.sounds.music.s3.amazonaws.com/MarkovChamberlain_-_Ready.mp3");
+
+  if (companyId) {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { queueWaitClipId: true },
+    });
+    if (company?.queueWaitClipId) {
+      const { resolveVoiceClipPlayUrl } = await import("@/lib/voice/ivr");
+      const playUrl = await resolveVoiceClipPlayUrl(company.queueWaitClipId, companyId);
+      if (playUrl) {
+        response.play({ loop: 0 }, playUrl);
+        return response.toString();
+      }
+    }
+  }
+
+  response.say("Please hold. An agent will be with you shortly.");
+  response.pause({ length: 8 });
+  if (companyId) {
+    response.redirect(
+      `${appBaseUrl()}/api/twilio/voice/queue/wait?companyId=${encodeURIComponent(companyId)}`
+    );
+  }
+  return response.toString();
+}
+
+/** Hold music TwiML for mid-call hold — uses the company-configured hold clip. */
+export async function buildHoldMusicTwiml(companyId: string | null) {
+  const VoiceResponse = twilio.twiml.VoiceResponse;
+  const response = new VoiceResponse();
+
+  if (companyId) {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { holdMusicClipId: true },
+    });
+    if (company?.holdMusicClipId) {
+      const { resolveVoiceClipPlayUrl } = await import("@/lib/voice/ivr");
+      const playUrl = await resolveVoiceClipPlayUrl(company.holdMusicClipId, companyId);
+      if (playUrl) {
+        response.play({ loop: 0 }, playUrl);
+        return response.toString();
+      }
+    }
+  }
+
+  response.say("Please remain on the line.");
+  response.pause({ length: 8 });
+  if (companyId) {
+    response.redirect(
+      `${appBaseUrl()}/api/twilio/voice/hold/music?companyId=${encodeURIComponent(companyId)}`
+    );
+  }
   return response.toString();
 }

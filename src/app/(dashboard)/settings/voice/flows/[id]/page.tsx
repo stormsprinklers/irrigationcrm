@@ -72,7 +72,11 @@ const STEP_META: Record<
   DIAL_GROUP: { label: "Ring a team", icon: Users, blurb: "Ring a group of agents" },
   FORWARD: { label: "Forward to a number", icon: PhoneForwarded, blurb: "Send the call to a phone number" },
   VOICEMAIL: { label: "Send to voicemail", icon: Voicemail, blurb: "Play a greeting and record a message" },
-  QUEUE: { label: "Put caller in queue", icon: Clock, blurb: "Hold the caller with music" },
+  QUEUE: {
+    label: "Put caller in queue",
+    icon: Clock,
+    blurb: "Hold the caller with your queue wait music from Voice settings",
+  },
   HANGUP: { label: "End call", icon: PhoneOff, blurb: "Hang up" },
 };
 
@@ -709,6 +713,18 @@ function StepEditor({
   }
 
   // QUEUE / HANGUP have no extra config.
+  if (node.type === "QUEUE") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {STEP_META.QUEUE.blurb}. Configure the required queue wait clip under{" "}
+        <a href="/settings/voice" className="text-primary underline">
+          Settings → Voice
+        </a>
+        .
+      </p>
+    );
+  }
+
   return (
     <p className="text-sm text-muted-foreground">
       {STEP_META[node.type].blurb}. No extra settings needed.

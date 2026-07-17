@@ -260,7 +260,9 @@ export async function renderIvrNode(
 
     case CallFlowNodeType.QUEUE:
       response.enqueue(
-        { waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait` },
+        {
+          waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait?companyId=${encodeURIComponent(ctx.companyId)}`,
+        },
         `company_${ctx.companyId}`
       );
       break;

@@ -171,7 +171,7 @@ export const settingsSidebar: NavSection[] = [
         href: "/settings/notifications",
         activePrefixes: ["/settings/notifications", "/settings/inbox"],
       },
-      { label: "Parts Run", href: "/settings/parts-suppliers" },
+      { label: "Suppliers", href: "/settings/parts-suppliers" },
       {
         label: "Integrations",
         href: "/settings/integrations",

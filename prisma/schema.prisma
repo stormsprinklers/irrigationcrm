@@ -470,6 +470,10 @@ model Company {
   transcribeCalls          Boolean  @default(true)
   /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.
   skipIvrForKnownCustomers Boolean  @default(true)
+  /// Audio clip played while callers wait in the company queue (required for production queue).
+  queueWaitClipId          String?
+  /// Audio clip played when a CSR puts a live call on hold.
+  holdMusicClipId          String?
   estimateExpiryDays       Int      @default(14)
   estimateDepositRequired  Boolean  @default(false)
   estimateDepositType      DepositType?
@@ -612,6 +616,8 @@ model Company {
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
   voiceClips             VoiceClip[]
+  queueWaitClip          VoiceClip?  @relation("CompanyQueueWaitClip", fields: [queueWaitClipId], references: [id], onDelete: SetNull)
+  holdMusicClip          VoiceClip?  @relation("CompanyHoldMusicClip", fields: [holdMusicClipId], references: [id], onDelete: SetNull)
   appNotifications       AppNotification[]
   notificationTemplates  NotificationTemplate[]
   notificationRules      NotificationRule[]
@@ -1308,7 +1314,9 @@ model VoiceClip {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company               Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  queueWaitForCompanies Company[] @relation("CompanyQueueWaitClip")
+  holdMusicForCompanies Company[] @relation("CompanyHoldMusicClip")
 
   @@index([companyId])
 }

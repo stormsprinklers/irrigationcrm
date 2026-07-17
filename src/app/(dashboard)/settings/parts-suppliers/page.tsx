@@ -6,7 +6,7 @@ export default function PartsSuppliersSettingsPage() {
   return (
     <ContentArea className="max-w-6xl">
       <PageHeader
-        title="Parts Run"
+        title="Suppliers"
         subtitle="Configure irrigation parts suppliers. Technicians can pause the job timer and navigate to the nearest open store."
       />
       <PartsSuppliersManager />

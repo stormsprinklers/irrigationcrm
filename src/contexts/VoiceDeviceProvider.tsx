@@ -45,7 +45,11 @@ type VoiceContextValue = {
   transfer: (
     targetUserId: string,
     type: "warm" | "cold",
-    options?: { mode?: "agent" | "employee_phone" }
+    options?: {
+      mode?: "agent" | "employee_phone" | "external_number";
+      phone?: string;
+      displayName?: string;
+    }
   ) => Promise<void>;
   /** Open book-appointment UI for the active call's customer. */
   openBookAppointment: () => void;
@@ -512,7 +516,11 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     async (
       targetUserId: string,
       type: "warm" | "cold",
-      options?: { mode?: "agent" | "employee_phone" }
+      options?: {
+        mode?: "agent" | "employee_phone" | "external_number";
+        phone?: string;
+        displayName?: string;
+      }
     ) => {
       if (!activeCall?.sessionId) {
         toast.error("Transfer unavailable for this call");
@@ -522,7 +530,13 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`/api/voice/calls/${activeCall.sessionId}/transfer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId, type, mode }),
+        body: JSON.stringify({
+          targetUserId: targetUserId || undefined,
+          type,
+          mode,
+          phone: options?.phone,
+          displayName: options?.displayName,
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -534,10 +548,11 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         setActiveCall(null);
         toast.success("Call transferred");
       } else {
-        setActiveCall({ ...activeCall, transferring: true });
+        const external = mode === "employee_phone" || mode === "external_number";
+        setActiveCall({ ...activeCall, transferring: true, onHold: external ? true : activeCall.onHold });
         toast.success(
-          mode === "employee_phone"
-            ? "Ringing employee — hang up when ready to leave the call"
+          external
+            ? "Ringing phone — customer is on hold. Hang up when ready to leave the call."
             : "Consultation started — hang up when ready to leave the call"
         );
       }

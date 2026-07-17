@@ -15,14 +15,23 @@ export async function GET() {
         recordCalls: true,
         transcribeCalls: true,
         skipIvrForKnownCustomers: true,
+        queueWaitClipId: true,
+        holdMusicClipId: true,
         businessHours: true,
+        queueWaitClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
+        holdMusicClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
       },
     });
 
-    const [numbers, flows, groups, callerId] = await Promise.all([
+    const [numbers, flows, groups, clips, callerId] = await Promise.all([
       prisma.phoneNumber.count({ where: { companyId: user.companyId } }),
       prisma.callFlow.count({ where: { companyId: user.companyId } }),
       prisma.agentGroup.count({ where: { companyId: user.companyId } }),
+      prisma.voiceClip.findMany({
+        where: { companyId: user.companyId },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, blobUrl: true, mimeType: true },
+      }),
       getCompanyCallerId(user.companyId),
     ]);
 
@@ -35,6 +44,7 @@ export async function GET() {
     return NextResponse.json({
       ...company,
       twilioPhone: callerId ?? company?.twilioPhone ?? null,
+      clips,
       counts: { numbers, flows, groups },
       twilioConfigured,
       webhooks: {
@@ -62,7 +72,40 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { recordCalls, transcribeCalls, skipIvrForKnownCustomers, businessHours } = body;
+    const {
+      recordCalls,
+      transcribeCalls,
+      skipIvrForKnownCustomers,
+      businessHours,
+      queueWaitClipId,
+      holdMusicClipId,
+    } = body;
+
+    if (queueWaitClipId !== undefined && queueWaitClipId !== null) {
+      const clip = await prisma.voiceClip.findFirst({
+        where: { id: String(queueWaitClipId), companyId: user.companyId },
+      });
+      if (!clip) {
+        return NextResponse.json({ error: "Queue wait clip not found" }, { status: 400 });
+      }
+    }
+    if (holdMusicClipId !== undefined && holdMusicClipId !== null) {
+      const clip = await prisma.voiceClip.findFirst({
+        where: { id: String(holdMusicClipId), companyId: user.companyId },
+      });
+      if (!clip) {
+        return NextResponse.json({ error: "Hold music clip not found" }, { status: 400 });
+      }
+    }
+
+    if (body.requireQueueHoldClips) {
+      if (!queueWaitClipId || !holdMusicClipId) {
+        return NextResponse.json(
+          { error: "Queue wait audio and hold music clips are both required" },
+          { status: 400 }
+        );
+      }
+    }
 
     const company = await prisma.company.update({
       where: { id: user.companyId },
@@ -73,6 +116,20 @@ export async function PATCH(request: NextRequest) {
           ? { skipIvrForKnownCustomers: Boolean(skipIvrForKnownCustomers) }
           : {}),
         ...(businessHours !== undefined ? { businessHours } : {}),
+        ...(queueWaitClipId !== undefined
+          ? { queueWaitClipId: queueWaitClipId ? String(queueWaitClipId) : null }
+          : {}),
+        ...(holdMusicClipId !== undefined
+          ? { holdMusicClipId: holdMusicClipId ? String(holdMusicClipId) : null }
+          : {}),
+      },
+      select: {
+        id: true,
+        recordCalls: true,
+        transcribeCalls: true,
+        skipIvrForKnownCustomers: true,
+        queueWaitClipId: true,
+        holdMusicClipId: true,
       },
     });
 

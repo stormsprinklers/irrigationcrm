@@ -16,26 +16,46 @@ export async function POST(
     const user = await requireSessionUser();
     const { sessionId } = await params;
     const body = await request.json();
-    const { targetUserId, type, mode } = body as {
+    const { targetUserId, type, mode, phone, displayName } = body as {
       targetUserId?: string;
       type?: "warm" | "cold";
-      mode?: "agent" | "employee_phone";
+      mode?: "agent" | "employee_phone" | "external_number";
+      phone?: string;
+      displayName?: string;
     };
 
-    if (!targetUserId || !type) {
-      return NextResponse.json({ error: "targetUserId and type required" }, { status: 400 });
+    if (!type) {
+      return NextResponse.json({ error: "type required" }, { status: 400 });
     }
 
-    const transferMode = mode === "employee_phone" ? "employee_phone" : "agent";
-
-    if (transferMode === "employee_phone") {
+    if (mode === "external_number") {
+      if (!phone?.trim()) {
+        return NextResponse.json({ error: "phone is required" }, { status: 400 });
+      }
       const session = await externalPhoneTransfer(
         user.companyId,
         sessionId,
-        targetUserId,
+        { phone: phone.trim(), displayName },
         type
       );
       return NextResponse.json(session);
+    }
+
+    if (mode === "employee_phone") {
+      if (!targetUserId) {
+        return NextResponse.json({ error: "targetUserId required" }, { status: 400 });
+      }
+      const session = await externalPhoneTransfer(
+        user.companyId,
+        sessionId,
+        { userId: targetUserId },
+        type
+      );
+      return NextResponse.json(session);
+    }
+
+    if (!targetUserId) {
+      return NextResponse.json({ error: "targetUserId and type required" }, { status: 400 });
     }
 
     const targetPresence = await prisma.agentPresence.findFirst({

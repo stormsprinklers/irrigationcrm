@@ -7,13 +7,18 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RequiredClipPicker } from "@/components/voice/RequiredClipPicker";
+import type { VoiceClip } from "@/components/voice/AudioSourcePicker";
 
 type VoiceOverview = {
   twilioPhone: string | null;
   recordCalls: boolean;
   transcribeCalls: boolean;
   skipIvrForKnownCustomers: boolean;
+  queueWaitClipId: string | null;
+  holdMusicClipId: string | null;
   twilioConfigured: boolean;
+  clips: VoiceClip[];
   counts: { numbers: number; flows: number; groups: number };
   webhooks: Record<string, string>;
 };
@@ -21,6 +26,7 @@ type VoiceOverview = {
 export default function SettingsVoicePage() {
   const [data, setData] = useState<VoiceOverview | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingAudio, setSavingAudio] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/voice")
@@ -29,6 +35,9 @@ export default function SettingsVoicePage() {
         setData({
           ...payload,
           skipIvrForKnownCustomers: payload.skipIvrForKnownCustomers !== false,
+          queueWaitClipId: payload.queueWaitClipId ?? null,
+          holdMusicClipId: payload.holdMusicClipId ?? null,
+          clips: Array.isArray(payload.clips) ? payload.clips : [],
         })
       )
       .catch(() => toast.error("Failed to load voice settings"));
@@ -55,6 +64,37 @@ export default function SettingsVoicePage() {
     toast.success("Voice settings saved");
   }
 
+  async function saveQueueHoldAudio() {
+    if (!data) return;
+    if (!data.queueWaitClipId || !data.holdMusicClipId) {
+      toast.error("Upload and select audio clips for both queue wait and hold music");
+      return;
+    }
+    setSavingAudio(true);
+    const res = await fetch("/api/settings/voice", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        queueWaitClipId: data.queueWaitClipId,
+        holdMusicClipId: data.holdMusicClipId,
+        requireQueueHoldClips: true,
+      }),
+    });
+    setSavingAudio(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      toast.error(err?.error ?? "Failed to save queue & hold audio");
+      return;
+    }
+    const updated = await res.json();
+    setData({
+      ...data,
+      queueWaitClipId: updated.queueWaitClipId ?? data.queueWaitClipId,
+      holdMusicClipId: updated.holdMusicClipId ?? data.holdMusicClipId,
+    });
+    toast.success("Queue & hold audio saved");
+  }
+
   if (!data) {
     return (
       <ContentArea>
@@ -65,6 +105,7 @@ export default function SettingsVoicePage() {
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const audioReady = Boolean(data.queueWaitClipId && data.holdMusicClipId);
 
   return (
     <ContentArea className="max-w-2xl">
@@ -91,6 +132,53 @@ export default function SettingsVoicePage() {
           </Link>
           <Link href="/settings/voice/groups" className="text-primary underline">
             {data.counts.groups} agent groups
+          </Link>
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-border bg-white p-6">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Queue & hold audio</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Both clips are required. Queue wait music plays for callers waiting for an agent; hold
+              music plays when a CSR puts a live call on hold.
+            </p>
+          </div>
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              audioReady ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-900"
+            }`}
+          >
+            {audioReady ? "Configured" : "Required"}
+          </span>
+        </div>
+
+        <div className="space-y-6">
+          <RequiredClipPicker
+            label="Queue wait music"
+            description="Looped while the caller is in the company queue."
+            clipId={data.queueWaitClipId}
+            clips={data.clips}
+            onChange={(id) => setData({ ...data, queueWaitClipId: id })}
+            onClipsChange={(clips) => setData({ ...data, clips })}
+          />
+          <RequiredClipPicker
+            label="Hold music"
+            description="Looped when an agent places the customer on hold."
+            clipId={data.holdMusicClipId}
+            clips={data.clips}
+            onChange={(id) => setData({ ...data, holdMusicClipId: id })}
+            onClipsChange={(clips) => setData({ ...data, clips })}
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button size="sm" onClick={() => void saveQueueHoldAudio()} disabled={savingAudio}>
+            {savingAudio ? "Saving…" : "Save queue & hold audio"}
+          </Button>
+          <Link href="/settings/voice/clips" className="text-sm text-primary underline">
+            Manage audio clip library
           </Link>
         </div>
       </section>

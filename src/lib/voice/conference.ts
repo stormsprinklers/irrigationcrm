@@ -165,17 +165,27 @@ export async function toggleHold(sessionId: string, hold: boolean) {
   const client = getTwilioClient();
   const conferenceSid = await ensureInConference(sessionId);
 
+  const holdUrl = hold
+    ? `${appBaseUrl()}/api/twilio/voice/hold/music?companyId=${encodeURIComponent(session.companyId)}`
+    : undefined;
+
   const participants = await client.conferences(conferenceSid).participants.list();
   // Hold only the customer (PSTN parent) leg so the CSR can still talk / hear hold status.
   const customerParticipant = participants.find((p) => p.callSid === session.callSid);
   if (customerParticipant) {
-    await client.conferences(conferenceSid).participants(session.callSid).update({ hold });
+    await client.conferences(conferenceSid).participants(session.callSid).update({
+      hold,
+      ...(hold ? { holdUrl, holdMethod: "POST" as const } : {}),
+    });
   } else if (participants.length) {
     // Fallback: hold the non-agent participant
     for (const p of participants) {
       if (session.agentCallSid && p.callSid === session.agentCallSid) continue;
       if (p.label === "consult" || p.label === "external") continue;
-      await client.conferences(conferenceSid).participants(p.callSid).update({ hold });
+      await client.conferences(conferenceSid).participants(p.callSid).update({
+        hold,
+        ...(hold ? { holdUrl, holdMethod: "POST" as const } : {}),
+      });
       break;
     }
   }
@@ -293,30 +303,67 @@ export async function warmTransfer(
 }
 
 /**
- * Transfer by ringing an employee's personal phone from the company number
- * and bridging everyone into the same conference.
+ * Transfer by ringing an employee's phone (or any E.164 number) from the
+ * company caller ID and bridging into the same conference — the customer never
+ * sees or dials the destination cell number.
  */
 export async function externalPhoneTransfer(
   companyId: string,
   sessionId: string,
-  targetUserId: string,
+  target: { userId: string } | { phone: string; displayName?: string },
   type: "warm" | "cold" = "warm"
 ) {
   const session = await getSessionForCompany(companyId, sessionId);
   if (!session) throw new Error("Session not found");
 
-  const employee = await prisma.user.findFirst({
-    where: { id: targetUserId, companyId, status: "ACTIVE" },
-    select: { id: true, name: true, phone: true },
-  });
-  if (!employee?.phone?.trim()) {
-    throw new Error("Employee does not have a phone number on file");
+  let toPhone: string;
+  let targetUserId: string | null = null;
+  let displayName: string | undefined;
+
+  if ("userId" in target) {
+    const employee = await prisma.user.findFirst({
+      where: { id: target.userId, companyId, status: "ACTIVE" },
+      select: { id: true, name: true, phone: true },
+    });
+    if (!employee?.phone?.trim()) {
+      throw new Error("Employee does not have a phone number on file");
+    }
+    toPhone = normalizePhone(employee.phone);
+    targetUserId = employee.id;
+    displayName = employee.name;
+  } else {
+    toPhone = normalizePhone(target.phone);
+    if (!toPhone || toPhone.length < 10) {
+      throw new Error("Enter a valid phone number to transfer to");
+    }
+    displayName = target.displayName?.trim() || toPhone;
   }
 
   const callerId = (await getCompanyCallerId(companyId)) ?? session.toNumber;
-  const toPhone = normalizePhone(employee.phone);
+  if (!callerId) {
+    throw new Error("Company phone number is not configured for outbound transfers");
+  }
+
   const client = getTwilioClient();
   const conferenceSid = await ensureInConference(sessionId);
+
+  // Warm external: park customer on hold music while the cell rings / consult happens.
+  if (type === "warm") {
+    try {
+      const participants = await client.conferences(conferenceSid).participants.list();
+      const customer = participants.find((p) => p.callSid === session.callSid);
+      if (customer) {
+        const { appBaseUrl } = await import("./identity");
+        await client.conferences(conferenceSid).participants(session.callSid).update({
+          hold: true,
+          holdUrl: `${appBaseUrl()}/api/twilio/voice/hold/music?companyId=${encodeURIComponent(companyId)}`,
+          holdMethod: "POST",
+        });
+      }
+    } catch (err) {
+      console.warn("Could not hold customer during external transfer:", err);
+    }
+  }
 
   await client.conferences(conferenceSid).participants.create({
     from: callerId,
@@ -329,8 +376,8 @@ export async function externalPhoneTransfer(
   await recordCallParticipant({
     companyId,
     callSessionId: sessionId,
-    userId: employee.id,
-    displayName: employee.name,
+    userId: targetUserId,
+    displayName,
     phoneE164: toPhone,
     role: "EXTERNAL_TRANSFER",
   });
@@ -342,7 +389,8 @@ export async function externalPhoneTransfer(
       status: CallSessionStatus.TRANSFERRING,
       transferType: type === "warm" ? TransferType.WARM : TransferType.COLD,
       transferTargetUserId: targetUserId,
-      ...(type === "cold" ? { assignedUserId: targetUserId } : {}),
+      ...(type === "cold" && targetUserId ? { assignedUserId: targetUserId } : {}),
+      ...(type === "warm" ? { holdStartedAt: new Date() } : {}),
     },
   });
 }
@@ -352,6 +400,19 @@ export async function leaveCallAfterTransfer(companyId: string, sessionId: strin
   const session = await getSessionForCompany(companyId, sessionId);
   if (!session) throw new Error("Session not found");
 
+  // Take customer off hold so they connect with the transferred party.
+  if (session.conferenceSid && session.callSid) {
+    try {
+      const client = getTwilioClient();
+      await client
+        .conferences(session.conferenceSid)
+        .participants(session.callSid)
+        .update({ hold: false });
+    } catch (err) {
+      console.warn("Could not unhold customer after transfer leave:", err);
+    }
+  }
+
   if (session.transferTargetUserId) {
     await prisma.callSession.update({
       where: { id: sessionId },
@@ -360,6 +421,17 @@ export async function leaveCallAfterTransfer(companyId: string, sessionId: strin
         status: CallSessionStatus.IN_PROGRESS,
         transferType: null,
         transferTargetUserId: null,
+        holdStartedAt: null,
+      },
+    });
+  } else {
+    await prisma.callSession.update({
+      where: { id: sessionId },
+      data: {
+        status: CallSessionStatus.IN_PROGRESS,
+        transferType: null,
+        transferTargetUserId: null,
+        holdStartedAt: null,
       },
     });
   }
