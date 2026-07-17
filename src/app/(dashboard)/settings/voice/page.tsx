@@ -17,7 +17,11 @@ type VoiceOverview = {
   skipIvrForKnownCustomers: boolean;
   queueWaitClipId: string | null;
   holdMusicClipId: string | null;
+  aiReceptionistEnabled: boolean;
+  aiReceptionistMaxMinutes: number;
+  aiReceptionistSmsConfirm: boolean;
   twilioConfigured: boolean;
+  sidebandConfigured: boolean;
   clips: VoiceClip[];
   counts: { numbers: number; flows: number; groups: number };
   webhooks: Record<string, string>;
@@ -37,6 +41,10 @@ export default function SettingsVoicePage() {
           skipIvrForKnownCustomers: payload.skipIvrForKnownCustomers !== false,
           queueWaitClipId: payload.queueWaitClipId ?? null,
           holdMusicClipId: payload.holdMusicClipId ?? null,
+          aiReceptionistEnabled: Boolean(payload.aiReceptionistEnabled),
+          aiReceptionistMaxMinutes: payload.aiReceptionistMaxMinutes ?? 12,
+          aiReceptionistSmsConfirm: payload.aiReceptionistSmsConfirm !== false,
+          sidebandConfigured: Boolean(payload.sidebandConfigured),
           clips: Array.isArray(payload.clips) ? payload.clips : [],
         })
       )
@@ -53,6 +61,9 @@ export default function SettingsVoicePage() {
         recordCalls: data.recordCalls,
         transcribeCalls: data.transcribeCalls,
         skipIvrForKnownCustomers: data.skipIvrForKnownCustomers,
+        aiReceptionistEnabled: data.aiReceptionistEnabled,
+        aiReceptionistMaxMinutes: data.aiReceptionistMaxMinutes,
+        aiReceptionistSmsConfirm: data.aiReceptionistSmsConfirm,
       }),
     });
     setSaving(false);
@@ -203,6 +214,52 @@ export default function SettingsVoicePage() {
         </div>
         <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
           {saving ? "Saving..." : "Save"}
+        </Button>
+      </section>
+
+      <section className="mb-6 rounded-lg border border-border bg-white p-6">
+        <h3 className="mb-2 text-lg font-semibold">AI receptionist</h3>
+        <p className="mb-4 text-sm text-muted-foreground">
+          Enables the AI receptionist step in call flows. Requires a sideband worker (
+          <code className="text-xs">SIDEBAND_PUBLIC_WSS_URL</code>) and{" "}
+          <code className="text-xs">OPENAI_API_KEY</code> /{" "}
+          <code className="text-xs">AI_RECEPTIONIST_SECRET</code>. Sideband:{" "}
+          {data.sidebandConfigured ? "URL configured" : "not configured"}.
+        </p>
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={data.aiReceptionistEnabled}
+              onCheckedChange={(c) => setData({ ...data, aiReceptionistEnabled: Boolean(c) })}
+            />
+            Enable AI receptionist
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={data.aiReceptionistSmsConfirm}
+              onCheckedChange={(c) => setData({ ...data, aiReceptionistSmsConfirm: Boolean(c) })}
+            />
+            Send SMS appointment confirmations
+          </label>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Default max call minutes</label>
+            <input
+              type="number"
+              min={3}
+              max={30}
+              className="flex h-10 w-32 rounded-md border border-input bg-background px-3 text-sm"
+              value={data.aiReceptionistMaxMinutes}
+              onChange={(e) =>
+                setData({
+                  ...data,
+                  aiReceptionistMaxMinutes: Number(e.target.value) || 12,
+                })
+              }
+            />
+          </div>
+        </div>
+        <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
+          {saving ? "Saving..." : "Save AI settings"}
         </Button>
       </section>
 

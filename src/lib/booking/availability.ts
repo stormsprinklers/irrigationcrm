@@ -66,6 +66,18 @@ export async function getAvailableSlots(params: AvailabilityParams): Promise<Boo
     select: { startAt: true, endAt: true },
   });
 
+  const activeHolds = await prisma.appointmentHold.findMany({
+    where: {
+      companyId: params.companyId,
+      expiresAt: { gt: from },
+      startAt: { lt: rangeEnd },
+      endAt: { gt: rangeStart },
+    },
+    select: { startAt: true, endAt: true },
+  });
+
+  const busyBlocks = [...existingVisits, ...activeHolds];
+
   const slots: BookingSlot[] = [];
 
   for (let offset = 0; offset < days; offset++) {
@@ -103,8 +115,8 @@ export async function getAvailableSlots(params: AvailabilityParams): Promise<Boo
         continue;
       }
 
-      const hasConflict = existingVisits.some((visit) =>
-        slotsOverlap(cursor, slotEnd, visit.startAt, visit.endAt)
+      const hasConflict = busyBlocks.some((block) =>
+        slotsOverlap(cursor, slotEnd, block.startAt, block.endAt)
       );
 
       if (!hasConflict) {

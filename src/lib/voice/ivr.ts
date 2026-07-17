@@ -8,6 +8,11 @@ import twilio from "twilio";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
+import {
+  createStreamToken,
+  getSidebandPublicWssUrl,
+  isAiReceptionistConfigured,
+} from "@/lib/ai-receptionist/auth";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
 import { resolveHoursBranchNextNodeId, type HoursBranchConfig } from "./hours-branch";
@@ -36,6 +41,12 @@ export type IvrNodeConfig = {
   voicemailDigit?: string;
   /** QUEUE: optional VOICEMAIL (or other) node after leaving the queue. */
   voicemailNodeId?: string;
+  /** AI_RECEPTIONIST */
+  voice?: string;
+  transferNodeId?: string;
+  allowedTools?: string[];
+  maxCallMinutes?: number;
+  discloseScript?: string;
   /** HOURS_BRANCH: schedule windows → next steps (see hours-branch.ts). */
   rules?: Array<{
     id: string;
@@ -92,6 +103,9 @@ export type FlowContext = {
   flowId: string;
   companyId: string;
   from?: string;
+  to?: string;
+  callSid?: string;
+  callSessionId?: string;
   recordCalls: boolean;
   transcribeCalls: boolean;
 };
@@ -387,6 +401,11 @@ export async function renderIvrNode(
       response.hangup();
       break;
 
+    case CallFlowNodeType.AI_RECEPTIONIST: {
+      await renderAiReceptionistNode(response, node, nodes, ctx, config);
+      break;
+    }
+
     default:
       response.say("This option is not available.");
   }
@@ -394,11 +413,79 @@ export async function renderIvrNode(
   return response.toString();
 }
 
+async function renderAiReceptionistNode(
+  response: InstanceType<typeof twilio.twiml.VoiceResponse>,
+  node: CallFlowNode,
+  nodes: CallFlowNode[],
+  ctx: FlowContext,
+  config: IvrNodeConfig
+) {
+  const company = await prisma.company.findUnique({
+    where: { id: ctx.companyId },
+    select: { aiReceptionistEnabled: true, name: true },
+  });
+
+  const voicemailNode =
+    (config.voicemailNodeId
+      ? nodes.find((n) => n.id === config.voicemailNodeId)
+      : null) ??
+    nodes.find((n) => n.type === CallFlowNodeType.VOICEMAIL) ??
+    null;
+
+  const fallbackUrl = voicemailNode
+    ? `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${ctx.flowId}&goto=${voicemailNode.id}`
+    : `${appBaseUrl()}/api/twilio/voice/ai-receptionist/voicemail?companyId=${ctx.companyId}`;
+
+  if (
+    !company?.aiReceptionistEnabled ||
+    !isAiReceptionistConfigured() ||
+    !ctx.callSid ||
+    !ctx.from
+  ) {
+    response.say(
+      "Our automated receptionist is temporarily unavailable. Please leave a message after the tone."
+    );
+    response.redirect({ method: "POST" }, fallbackUrl);
+    return;
+  }
+
+  const sidebandUrl = getSidebandPublicWssUrl();
+  const token = createStreamToken({
+    companyId: ctx.companyId,
+    callSid: ctx.callSid,
+    flowId: ctx.flowId,
+    nodeId: node.id,
+    from: ctx.from,
+    to: ctx.to,
+    callSessionId: ctx.callSessionId,
+  });
+
+  const connect = response.connect({
+    action: `${appBaseUrl()}/api/twilio/voice/ai-receptionist/stream-status?companyId=${encodeURIComponent(ctx.companyId)}&flowId=${encodeURIComponent(ctx.flowId)}&nodeId=${encodeURIComponent(node.id)}`,
+    method: "POST",
+  });
+  const stream = connect.stream({ url: sidebandUrl });
+  stream.parameter({ name: "token", value: token });
+  stream.parameter({ name: "companyId", value: ctx.companyId });
+  stream.parameter({ name: "callSid", value: ctx.callSid });
+  stream.parameter({ name: "flowId", value: ctx.flowId });
+  stream.parameter({ name: "nodeId", value: node.id });
+  stream.parameter({ name: "from", value: ctx.from });
+  if (ctx.to) stream.parameter({ name: "to", value: ctx.to });
+  if (ctx.callSessionId) {
+    stream.parameter({ name: "callSessionId", value: ctx.callSessionId });
+  }
+
+  // If the stream ends without a REST redirect (transfer/voicemail), fall through.
+  response.redirect({ method: "POST" }, fallbackUrl);
+}
+
 export async function renderIvrNodeById(
   nodeId: string,
   flowId: string,
   companyId: string,
-  from?: string
+  from?: string,
+  extras?: { to?: string; callSid?: string; callSessionId?: string }
 ): Promise<string | null> {
   const flow = await prisma.callFlow.findUnique({
     where: { id: flowId },
@@ -418,6 +505,9 @@ export async function renderIvrNodeById(
     flowId,
     companyId,
     from,
+    to: extras?.to,
+    callSid: extras?.callSid,
+    callSessionId: extras?.callSessionId,
     recordCalls: company?.recordCalls ?? true,
     transcribeCalls: company?.transcribeCalls ?? true,
   });

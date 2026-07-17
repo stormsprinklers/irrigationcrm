@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
+  Bot,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -38,7 +39,8 @@ type NodeType =
   | "VOICEMAIL"
   | "QUEUE"
   | "HANGUP"
-  | "HOURS_BRANCH";
+  | "HOURS_BRANCH"
+  | "AI_RECEPTIONIST";
 
 type Branch = "open" | "closed";
 
@@ -100,6 +102,11 @@ const STEP_META: Record<
     icon: Clock,
     blurb: "Hold the caller with your queue wait music from Voice settings",
   },
+  AI_RECEPTIONIST: {
+    label: "AI receptionist",
+    icon: Bot,
+    blurb: "Live AI answers, books appointments, and can transfer to a human",
+  },
   HOURS_BRANCH: {
     label: "Schedule branch",
     icon: CalendarClock,
@@ -112,6 +119,7 @@ const STEP_META: Record<
 const ADD_STEP_ORDER: NodeType[] = [
   "PLAY",
   "IVR",
+  "AI_RECEPTIONIST",
   "DIAL_USER",
   "DIAL_GROUP",
   "FORWARD",
@@ -148,6 +156,14 @@ function defaultConfig(type: NodeType, branch: Branch = "open"): Record<string, 
         return { greetingText: "Please leave a message after the tone." };
       case "QUEUE":
         return { voicemailDigit: "1", voicemailNodeId: "" };
+      case "AI_RECEPTIONIST":
+        return {
+          voice: "alloy",
+          transferNodeId: "",
+          voicemailNodeId: "",
+          maxCallMinutes: 12,
+          discloseScript: "",
+        };
       default:
         return {};
     }
@@ -235,6 +251,8 @@ function stepSummary(
       const digit = String(config.voicemailDigit ?? "").trim();
       return digit ? `Hold · press ${digit} for voicemail` : "Hold with music";
     }
+    case "AI_RECEPTIONIST":
+      return "Books jobs · can transfer to human";
     case "HANGUP":
       return "Call will disconnect";
     default:
@@ -742,6 +760,96 @@ function StepEditor({
         onGroupsChange={onGroupsChange}
         onNodeChange={onNodeChange}
       />
+    );
+  }
+
+  if (node.type === "AI_RECEPTIONIST") {
+    const sameBranchNodes = flow.nodes.filter(
+      (n) => n.id && n !== node && nodeBranch(n) === branch
+    );
+    const transferTargets = sameBranchNodes.filter(
+      (n) => n.type === "DIAL_GROUP" || n.type === "DIAL_USER" || n.type === "QUEUE"
+    );
+    const voicemailTargets = sameBranchNodes.filter(
+      (n) => n.type === "VOICEMAIL" || n.type === "PLAY" || n.type === "HANGUP"
+    );
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Requires AI receptionist enabled under Voice settings, plus a running sideband worker
+          (<code className="text-xs">SIDEBAND_PUBLIC_WSS_URL</code>).
+        </p>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Voice</label>
+          <select
+            className={selectClass}
+            value={String(config.voice ?? "alloy")}
+            onChange={(e) => onConfigChange({ ...config, voice: e.target.value })}
+          >
+            {["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"].map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Transfer to (human)</label>
+          <select
+            className={selectClass}
+            value={String(config.transferNodeId ?? "")}
+            onChange={(e) => onConfigChange({ ...config, transferNodeId: e.target.value })}
+          >
+            <option value="">Select a ring / queue step…</option>
+            {transferTargets.map((n) => {
+              const i = flow.nodes.indexOf(n);
+              return (
+                <option key={n.id} value={n.id}>
+                  #{i + 1} {STEP_META[n.type].label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Fallback voicemail step</label>
+          <select
+            className={selectClass}
+            value={String(config.voicemailNodeId ?? "")}
+            onChange={(e) => onConfigChange({ ...config, voicemailNodeId: e.target.value })}
+          >
+            <option value="">Default company voicemail</option>
+            {voicemailTargets.map((n) => {
+              const i = flow.nodes.indexOf(n);
+              return (
+                <option key={n.id} value={n.id}>
+                  #{i + 1} {STEP_META[n.type].label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Max call minutes</label>
+          <Input
+            type="number"
+            min={3}
+            max={30}
+            value={Number(config.maxCallMinutes ?? 12)}
+            onChange={(e) =>
+              onConfigChange({ ...config, maxCallMinutes: Number(e.target.value) || 12 })
+            }
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Disclosure script (optional)</label>
+          <Input
+            value={String(config.discloseScript ?? "")}
+            onChange={(e) => onConfigChange({ ...config, discloseScript: e.target.value })}
+            placeholder="Leave blank for the default automated-receptionist disclosure"
+          />
+        </div>
+      </div>
     );
   }
 

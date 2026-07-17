@@ -51,6 +51,8 @@ export async function POST(request: NextRequest) {
       flowId: flow.id,
       companyId: flow.companyId,
       from: params.From,
+      to: params.To,
+      callSid: params.CallSid,
       recordCalls: company?.recordCalls ?? true,
       transcribeCalls: company?.transcribeCalls ?? true,
     });
@@ -74,6 +76,8 @@ export async function POST(request: NextRequest) {
     flowId: flow.id,
     companyId: flow.companyId,
     from: params.From,
+    to: params.To,
+    callSid: params.CallSid,
     recordCalls: company?.recordCalls ?? true,
     transcribeCalls: company?.transcribeCalls ?? true,
   };

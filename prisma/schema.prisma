@@ -383,6 +383,17 @@ enum CallFlowNodeType {
   PLAY
   /// Route to different steps based on day-of-week / time-of-day windows.
   HOURS_BRANCH
+  /// Live AI receptionist via Twilio Media Streams + OpenAI Realtime.
+  AI_RECEPTIONIST
+}
+
+enum ReceptionistCallStatus {
+  CONNECTING
+  ACTIVE
+  TRANSFERRED
+  VOICEMAIL
+  COMPLETED
+  FAILED
 }
 
 enum PhoneNumberType {
@@ -578,6 +589,10 @@ model Company {
   outboundCommsDisabledReason  String?
   outboundCommsDisabledAt      DateTime?
   outboundCommsDisabledById    String?
+  /// Feature flag: AI receptionist call-flow node may connect Media Streams.
+  aiReceptionistEnabled        Boolean  @default(false)
+  aiReceptionistMaxMinutes     Int      @default(12)
+  aiReceptionistSmsConfirm     Boolean  @default(true)
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
@@ -623,6 +638,9 @@ model Company {
   agentPresences         AgentPresence[]
   callSessions           CallSession[]
   callParticipants       CallParticipant[]
+  receptionistCalls      ReceptionistCall[]
+  appointmentHolds       AppointmentHold[]
+  receptionistToolInvocations ReceptionistToolInvocation[]
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
@@ -788,6 +806,8 @@ model User {
   zip          String?
   birthDate    DateTime?
   tags         String[]       @default([])
+  /// When set (e.g. AI_RECEPTIONIST), this is a non-login system account for automated notes.
+  systemKind   String?
   payType            PayType?
   hourlyRate         Decimal?       @db.Decimal(10, 2)
   commissionPercent  Decimal?       @db.Decimal(5, 2)
@@ -929,6 +949,7 @@ model Customer {
   blockedEntry         BlockedContact?
   callLogs             CallLog[]
   callConversions      CallConversion[]
+  receptionistCalls    ReceptionistCall[]
   conversations        Conversation[]
   emailMessages        EmailMessage[]
   properties           CustomerProperty[]
@@ -1738,6 +1759,76 @@ model CallSession {
   @@index([companyId, status])
   @@index([assignedUserId])
   @@index([agentCallSid])
+}
+
+/// Live AI receptionist session for one Twilio CallSid.
+model ReceptionistCall {
+  id               String                 @id @default(cuid())
+  companyId        String
+  callSid          String                 @unique
+  callSessionId    String?
+  callLogId        String?
+  flowId           String?
+  nodeId           String?
+  status           ReceptionistCallStatus @default(CONNECTING)
+  fromE164         String
+  toE164           String?
+  customerId       String?
+  conversationJson Json                   @default("{}")
+  transcript       String                 @default("")
+  summary          String?
+  failureReason    String?
+  startedAt        DateTime               @default(now())
+  endedAt          DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  company  Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?                 @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  holds    AppointmentHold[]
+  tools    ReceptionistToolInvocation[]
+
+  @@index([companyId, status])
+  @@index([customerId])
+}
+
+/// Soft hold on a booking slot while the AI confirms details with the caller.
+model AppointmentHold {
+  id               String   @id @default(cuid())
+  companyId        String
+  receptionistCallId String?
+  startAt          DateTime
+  endAt            DateTime
+  expiresAt        DateTime
+  idempotencyKey   String
+  createdAt        DateTime @default(now())
+
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receptionistCall ReceptionistCall? @relation(fields: [receptionistCallId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, idempotencyKey])
+  @@index([companyId, startAt, endAt])
+  @@index([expiresAt])
+}
+
+model ReceptionistToolInvocation {
+  id                 String   @id @default(cuid())
+  companyId          String
+  receptionistCallId String
+  tool               String
+  argsHash           String
+  resultCode         String
+  latencyMs          Int      @default(0)
+  idempotencyKey     String?
+  errorMessage       String?
+  createdAt          DateTime @default(now())
+
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receptionistCall ReceptionistCall @relation(fields: [receptionistCallId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, idempotencyKey])
+  @@index([receptionistCallId, createdAt])
+  @@index([companyId, tool])
 }
 
 /// Employees who joined a call (answered, softphone transfer, or personal-phone transfer).

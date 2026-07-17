@@ -18,6 +18,9 @@ export async function GET() {
         queueWaitClipId: true,
         holdMusicClipId: true,
         businessHours: true,
+        aiReceptionistEnabled: true,
+        aiReceptionistMaxMinutes: true,
+        aiReceptionistSmsConfirm: true,
         queueWaitClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
         holdMusicClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
       },
@@ -41,12 +44,15 @@ export async function GET() {
         process.env.TWILIO_TWIML_APP_SID
     );
 
+    const sidebandConfigured = Boolean(process.env.SIDEBAND_PUBLIC_WSS_URL?.trim());
+
     return NextResponse.json({
       ...company,
       twilioPhone: callerId ?? company?.twilioPhone ?? null,
       clips,
       counts: { numbers, flows, groups },
       twilioConfigured,
+      sidebandConfigured,
       webhooks: {
         voiceInbound: "/api/twilio/voice/inbound",
         voiceClient: "/api/twilio/voice/client",
@@ -79,6 +85,9 @@ export async function PATCH(request: NextRequest) {
       businessHours,
       queueWaitClipId,
       holdMusicClipId,
+      aiReceptionistEnabled,
+      aiReceptionistMaxMinutes,
+      aiReceptionistSmsConfirm,
     } = body;
 
     if (queueWaitClipId !== undefined && queueWaitClipId !== null) {
@@ -122,6 +131,20 @@ export async function PATCH(request: NextRequest) {
         ...(holdMusicClipId !== undefined
           ? { holdMusicClipId: holdMusicClipId ? String(holdMusicClipId) : null }
           : {}),
+        ...(aiReceptionistEnabled !== undefined
+          ? { aiReceptionistEnabled: Boolean(aiReceptionistEnabled) }
+          : {}),
+        ...(aiReceptionistMaxMinutes !== undefined
+          ? {
+              aiReceptionistMaxMinutes: Math.min(
+                30,
+                Math.max(3, Number(aiReceptionistMaxMinutes) || 12)
+              ),
+            }
+          : {}),
+        ...(aiReceptionistSmsConfirm !== undefined
+          ? { aiReceptionistSmsConfirm: Boolean(aiReceptionistSmsConfirm) }
+          : {}),
       },
       select: {
         id: true,
@@ -130,6 +153,9 @@ export async function PATCH(request: NextRequest) {
         skipIvrForKnownCustomers: true,
         queueWaitClipId: true,
         holdMusicClipId: true,
+        aiReceptionistEnabled: true,
+        aiReceptionistMaxMinutes: true,
+        aiReceptionistSmsConfirm: true,
       },
     });
 

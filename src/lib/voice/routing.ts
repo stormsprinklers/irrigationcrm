@@ -211,8 +211,9 @@ export async function buildInboundTwiml(params: TwilioParams) {
     },
   });
 
+  let callSessionId: string | undefined;
   if (callSid && from) {
-    await createInboundSession({
+    const session = await createInboundSession({
       companyId: company.id,
       callSid,
       from: normalizePhone(from),
@@ -220,7 +221,19 @@ export async function buildInboundTwiml(params: TwilioParams) {
       customerId: customer?.id,
       phoneNumberId: phoneRecord?.id,
     });
+    callSessionId = session.id;
   }
+
+  const baseCtx = (): FlowContext => ({
+    flowId: phoneRecord?.callFlow?.id ?? "",
+    companyId: company.id,
+    from,
+    to,
+    callSid,
+    callSessionId,
+    recordCalls: company.recordCalls,
+    transcribeCalls: company.transcribeCalls,
+  });
 
   if (
     !isWithinBusinessHours(company.businessHours, company.timezone) &&
@@ -230,14 +243,10 @@ export async function buildInboundTwiml(params: TwilioParams) {
       (n) => n.id === phoneRecord.callFlow!.afterHoursNodeId
     );
     if (afterNode) {
-      const ctx: FlowContext = {
+      return renderIvrNode(afterNode, phoneRecord.callFlow.nodes, {
+        ...baseCtx(),
         flowId: phoneRecord.callFlow.id,
-        companyId: company.id,
-        from,
-        recordCalls: company.recordCalls,
-        transcribeCalls: company.transcribeCalls,
-      };
-      return renderIvrNode(afterNode, phoneRecord.callFlow.nodes, ctx);
+      });
     }
   }
 
@@ -247,11 +256,8 @@ export async function buildInboundTwiml(params: TwilioParams) {
 
   if (entryNode && phoneRecord?.callFlow) {
     const ctx: FlowContext = {
+      ...baseCtx(),
       flowId: phoneRecord.callFlow.id,
-      companyId: company.id,
-      from,
-      recordCalls: company.recordCalls,
-      transcribeCalls: company.transcribeCalls,
     };
 
     // Known customers skip spam-reduction IVR and ring CSRs directly (configurable).
