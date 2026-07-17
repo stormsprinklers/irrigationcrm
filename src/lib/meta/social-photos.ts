@@ -275,9 +275,6 @@ export function parsePickablePhotoId(photoId: string) {
   if (photoId.startsWith("ig:")) {
     return { source: "instagram" as const, externalId: photoId.slice(3) };
   }
-  if (photoId.startsWith("drive:")) {
-    return { source: "drive" as const, externalId: photoId.slice(6) };
-  }
   return { source: "visit" as const, externalId: photoId };
 }
 
@@ -288,9 +285,6 @@ export async function fetchSocialPhotoBytes(
 ) {
   const parsed = parsePickablePhotoId(photoId);
   if (parsed.source === "visit") {
-    throw new Error("Not a social photo");
-  }
-  if (parsed.source === "drive") {
     throw new Error("Not a social photo");
   }
 

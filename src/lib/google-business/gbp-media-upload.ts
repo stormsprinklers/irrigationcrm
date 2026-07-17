@@ -1,7 +1,6 @@
 import { fetchBlobBytes } from "@/lib/blob/download";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
-import { fetchDriveFileBytes } from "@/lib/google-drive/client";
 import { uploadGbpPhotoBytes } from "@/lib/google-business/v4-api";
 import { parsePickablePhotoId, fetchSocialPhotoBytes } from "@/lib/meta/social-photos";
 import { prisma } from "@/lib/prisma";
@@ -52,17 +51,6 @@ async function fetchPickablePhotoBytes(params: PickablePhotoParams) {
     return {
       buffer,
       mimeType: normalizeImageMimeType(mimeType || attachment.mimeType),
-    };
-  }
-
-  if (parsed.source === "drive") {
-    const { buffer, mimeType } = await fetchDriveFileBytes(
-      params.companyId,
-      parsed.externalId
-    );
-    return {
-      buffer,
-      mimeType: normalizeImageMimeType(mimeType),
     };
   }
 

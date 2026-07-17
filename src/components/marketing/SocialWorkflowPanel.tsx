@@ -8,7 +8,6 @@ import {
   Check,
   Copy,
   Facebook,
-  HardDrive,
   Instagram,
   Loader2,
   MessageSquare,
@@ -114,36 +113,6 @@ function PostComposer({
       ]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function pickFromDrive() {
-    setUploading(true);
-    try {
-      const { openGoogleDriveImagePicker, importDrivePickerDocs } = await import(
-        "@/lib/google-drive/picker-client"
-      );
-      const docs = await openGoogleDriveImagePicker({
-        multiSelect: true,
-        title: "Select images for social post",
-      });
-      if (docs.length === 0) return;
-      const { media: imported } = await importDrivePickerDocs(docs, { copyToBlob: true });
-      setMedia((prev) => [
-        ...prev,
-        ...imported.map((item) => ({
-          blobUrl: item.blobUrl,
-          fileName: item.fileName,
-          mimeType: item.mimeType,
-        })),
-      ]);
-      toast.success(
-        imported.length === 1 ? "Added Drive image" : `Added ${imported.length} Drive images`
-      );
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to import from Drive");
     } finally {
       setUploading(false);
     }
@@ -265,15 +234,6 @@ function PostComposer({
           />
           <span className="mt-1 text-[10px]">Upload</span>
         </label>
-        <button
-          type="button"
-          disabled={uploading}
-          className="flex h-20 w-20 flex-col items-center justify-center rounded border border-dashed text-muted-foreground hover:bg-muted/30 disabled:opacity-50"
-          onClick={() => void pickFromDrive()}
-        >
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
-          <span className="mt-1 text-[10px]">Drive</span>
-        </button>
       </div>
 
       <div className="flex flex-wrap justify-end gap-2">

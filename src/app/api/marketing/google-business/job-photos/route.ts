@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { GbpJobPhotoDto } from "@/lib/google-business/engagement-types";
-import { listDriveJobPhotos } from "@/lib/google-drive/client";
 import { fetchRecentSocialPhotos } from "@/lib/meta/social-photos";
 import { prisma } from "@/lib/prisma";
 
@@ -14,7 +13,7 @@ export async function GET() {
     const since = new Date();
     since.setDate(since.getDate() - DAYS);
 
-    const [attachments, socialPhotos, drivePhotos] = await Promise.all([
+    const [attachments, socialPhotos] = await Promise.all([
       prisma.visitAttachment.findMany({
         where: {
           mimeType: { startsWith: "image/" },
@@ -39,10 +38,6 @@ export async function GET() {
         },
       }),
       fetchRecentSocialPhotos(user.companyId, DAYS).catch(() => [] as GbpJobPhotoDto[]),
-      listDriveJobPhotos(
-        user.companyId,
-        (fileId) => `/api/marketing/google-drive/files/${fileId}/content`
-      ),
     ]);
 
     const visitPhotos: GbpJobPhotoDto[] = attachments.map((row) => ({
@@ -58,7 +53,7 @@ export async function GET() {
       permalink: null,
     }));
 
-    const photos = [...visitPhotos, ...socialPhotos, ...drivePhotos].sort(
+    const photos = [...visitPhotos, ...socialPhotos].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 

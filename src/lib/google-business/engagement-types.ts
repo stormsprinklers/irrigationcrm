@@ -54,7 +54,7 @@ export type GbpMediaItemDto = {
   category: string | null;
 };
 
-export type GbpPickablePhotoSource = "visit" | "facebook" | "instagram" | "drive";
+export type GbpPickablePhotoSource = "visit" | "facebook" | "instagram";
 
 export type GbpJobPhotoDto = {
   id: string;
