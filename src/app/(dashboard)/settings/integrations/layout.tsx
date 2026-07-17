@@ -7,7 +7,7 @@ export default function IntegrationsSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Integrations" sections={integrationsSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Integrations" sections={integrationsSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );

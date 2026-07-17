@@ -7,7 +7,7 @@ export default function JobSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Job settings" sections={jobSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Job settings" sections={jobSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );

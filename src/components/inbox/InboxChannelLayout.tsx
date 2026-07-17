@@ -11,9 +11,12 @@ type InboxChannelLayoutProps = {
   scope: InboxScope;
   list: React.ReactNode;
   detail: React.ReactNode;
-  /** Closes the mobile list drawer when a conversation/call is selected. */
   selectedId?: string | null;
   listLabel?: string;
+  listFirst?: boolean;
+  composing?: boolean;
+  onCompose?: () => void;
+  onMobileBack?: () => void;
 };
 
 export function InboxChannelLayout({
@@ -23,6 +26,10 @@ export function InboxChannelLayout({
   detail,
   selectedId = null,
   listLabel = "Conversations",
+  listFirst = false,
+  composing = false,
+  onCompose,
+  onMobileBack,
 }: InboxChannelLayoutProps) {
   const base = `/inbox/${channel}`;
   const scopes = getInboxScopes(channel);
@@ -56,6 +63,10 @@ export function InboxChannelLayout({
       detail={detail}
       listLabel={listLabel}
       selectedId={selectedId}
+      listFirst={listFirst}
+      composing={composing}
+      onCompose={onCompose}
+      onMobileBack={onMobileBack}
     />
   );
 }

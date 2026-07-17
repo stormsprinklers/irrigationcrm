@@ -10,7 +10,7 @@ export default function CommunicationsSettingsLayout({
     <ModuleLayout
       title="Communications"
       sections={communicationsSettingsSidebar}
-      className="min-h-full"
+      className="min-h-full" desktopSidebarOnly
     >
       {children}
     </ModuleLayout>

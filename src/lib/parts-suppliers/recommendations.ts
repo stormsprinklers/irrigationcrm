@@ -41,6 +41,10 @@ export async function rankSuppliersForPartsRun(params: {
     })),
   });
 
+  // If Distance Matrix is unavailable, fall back to straight-line distance so
+  // mobile/PWA still ranks by proximity instead of arbitrary list order.
+  const useHaversineFallback = driveTimes.size === 0;
+
   const ranked = candidates
     .map((supplier) => {
       const drive = driveTimes.get(supplier.id);
@@ -52,6 +56,15 @@ export async function rankSuppliersForPartsRun(params: {
           zip: supplier.zip,
         }) ?? supplier.name;
 
+      const haversineMiles = useHaversineFallback
+        ? haversineMilesBetween(
+            originLat,
+            originLng,
+            supplier.latitude!,
+            supplier.longitude!
+          )
+        : null;
+
       return {
         supplierId: supplier.id,
         name: supplier.name,
@@ -60,13 +73,15 @@ export async function rankSuppliersForPartsRun(params: {
         phone: supplier.phone,
         weekdayHours: supplier.weekdayHours,
         isOpenNow: isSupplierOpenNow(supplier.hoursJson, supplier.timezone ?? timezone),
-        driveMinutes: drive?.durationMinutes ?? null,
-        driveDistanceMiles: drive?.distanceMiles ?? null,
+        driveMinutes:
+          drive?.durationMinutes ??
+          (haversineMiles != null ? Math.max(1, Math.round(haversineMiles * 2.2)) : null),
+        driveDistanceMiles: drive?.distanceMiles ?? haversineMiles,
         mapsUrl: googleMapsDirectionsUrl(address),
       } satisfies PartsRunOption;
     })
     .sort((a, b) => {
-      // Open suppliers first, then closest by drive time.
+      // Open suppliers first, then closest by drive time / estimated distance.
       if (a.isOpenNow !== b.isOpenNow) return a.isOpenNow ? -1 : 1;
       const aDrive = a.driveMinutes ?? Number.MAX_SAFE_INTEGER;
       const bDrive = b.driveMinutes ?? Number.MAX_SAFE_INTEGER;
@@ -74,6 +89,17 @@ export async function rankSuppliersForPartsRun(params: {
     });
 
   return ranked.slice(0, limit);
+}
+
+function haversineMilesBetween(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(3958.8 * c * 10) / 10;
 }
 
 async function computeDriveTimes(params: {

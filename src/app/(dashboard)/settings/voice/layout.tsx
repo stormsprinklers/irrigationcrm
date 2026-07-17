@@ -7,7 +7,7 @@ export default function VoiceSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Voice" sections={voiceSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Voice" sections={voiceSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );

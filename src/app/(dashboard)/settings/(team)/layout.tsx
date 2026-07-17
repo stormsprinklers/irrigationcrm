@@ -7,7 +7,7 @@ export default function TeamSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Team" sections={teamSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Team" sections={teamSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );

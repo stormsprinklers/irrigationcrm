@@ -7,7 +7,7 @@ export default function PriceBookSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Price Book" sections={priceBookSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Price Book" sections={priceBookSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );

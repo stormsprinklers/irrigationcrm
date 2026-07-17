@@ -1,14 +1,9 @@
-import { settingsSidebar } from "@/config/navigation";
-import { ModuleLayout } from "@/components/layout/ModuleLayout";
+import { SettingsShell } from "@/components/settings/SettingsShell";
 
 export default function SettingsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <ModuleLayout title="Settings" sections={settingsSidebar}>
-      {children}
-    </ModuleLayout>
-  );
+  return <SettingsShell>{children}</SettingsShell>;
 }

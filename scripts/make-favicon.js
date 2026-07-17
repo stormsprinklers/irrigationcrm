@@ -2,19 +2,8 @@ const sharp = require("sharp");
 const path = require("path");
 const fs = require("fs");
 
-const src = path.join(
-  process.env.USERPROFILE,
-  ".cursor",
-  "projects",
-  "c-Users-jgree-OneDrive-Desktop-STORM-SPRINKLERS-APPS",
-  "assets",
-  "c__Users_jgree_AppData_Roaming_Cursor_User_workspaceStorage_3069cd118c90732aa7198774e2a10d9b_images_image-db6b63ff-c26d-4496-95d0-aed17fe952a0.png",
-);
+const src = path.join(__dirname, "..", "assets", "pwa-icon-source.png");
 const outDir = path.join(__dirname, "..", "public");
-
-function isNearWhite(r, g, b) {
-  return r > 235 && g > 235 && b > 235;
-}
 
 async function main() {
   if (!fs.existsSync(src)) {
@@ -27,39 +16,6 @@ async function main() {
   const meta = await sharp(src).metadata();
   console.log("source", meta.width, meta.height, meta.format);
 
-  const { data, info } = await sharp(src)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const w = info.width;
-  const h = info.height;
-  const visited = new Uint8Array(w * h);
-  const stack = [
-    [0, 0],
-    [w - 1, 0],
-    [0, h - 1],
-    [w - 1, h - 1],
-  ];
-
-  while (stack.length) {
-    const [x, y] = stack.pop();
-    if (x < 0 || y < 0 || x >= w || y >= h) continue;
-    const idx = y * w + x;
-    if (visited[idx]) continue;
-    visited[idx] = 1;
-    const i = idx * 4;
-    if (!isNearWhite(data[i], data[i + 1], data[i + 2])) continue;
-    data[i + 3] = 0;
-    stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
-  }
-
-  const transparent = await sharp(data, {
-    raw: { width: w, height: h, channels: 4 },
-  })
-    .png()
-    .toBuffer();
-
   const sizes = [
     { name: "favicon-16.png", size: 16 },
     { name: "icon.png", size: 32 },
@@ -70,15 +26,19 @@ async function main() {
   ];
 
   for (const { name, size } of sizes) {
-    await sharp(transparent)
-      .resize(size, size, {
-        fit: "contain",
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      })
+    await sharp(src)
+      .resize(size, size, { fit: "cover", position: "centre" })
       .png()
       .toFile(path.join(outDir, name));
     console.log("wrote", name, size);
   }
+
+  // Browsers accept a PNG written as favicon.ico for basic tab icons.
+  await sharp(src)
+    .resize(32, 32, { fit: "cover", position: "centre" })
+    .png()
+    .toFile(path.join(outDir, "favicon.ico"));
+  console.log("wrote favicon.ico");
 
   console.log("done");
 }

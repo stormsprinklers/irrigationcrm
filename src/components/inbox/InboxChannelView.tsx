@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { PenSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
 import { SmsThreadList } from "@/components/inbox/SmsThreadList";
 import { SmsMessagePane } from "@/components/inbox/SmsMessagePane";
@@ -32,6 +30,7 @@ export function InboxChannelView({
     [searchParams]
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isComposing, setIsComposing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const ch = parsed?.channel;
@@ -40,7 +39,10 @@ export function InboxChannelView({
   useEffect(() => {
     if (ch !== "sms" || sc !== "customers") return;
     const conversationId = searchParams.get("conversationId");
-    if (conversationId) setSelectedId(conversationId);
+    if (conversationId) {
+      setSelectedId(conversationId);
+      setIsComposing(false);
+    }
   }, [ch, sc, searchParams]);
 
   useEffect(() => {
@@ -55,7 +57,13 @@ export function InboxChannelView({
     fetch(`/api/inbox/sms/conversations/resolve?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.conversation?.id) setSelectedId(data.conversation.id);
+        if (data.conversation?.id) {
+          setSelectedId(data.conversation.id);
+          setIsComposing(false);
+        } else if (deepLink.phone || deepLink.customerId) {
+          setIsComposing(true);
+          setSelectedId(null);
+        }
       })
       .catch(() => {});
   }, [ch, sc, deepLink.customerId, deepLink.phone]);
@@ -97,45 +105,55 @@ export function InboxChannelView({
   const teamScope: CustomerTeamScope = sc;
 
   if (ch === "sms") {
+    const showCompose = isComposing || Boolean(selectedId);
     return (
       <div className="h-full w-full min-w-0">
         <InboxChannelLayout
           channel={ch}
           scope={sc}
           selectedId={selectedId}
+          listFirst
+          composing={isComposing && !selectedId}
+          onCompose={() => {
+            setSelectedId(null);
+            setIsComposing(true);
+          }}
+          onMobileBack={() => {
+            setSelectedId(null);
+            setIsComposing(false);
+          }}
           list={
             <div className="flex h-full flex-col">
-              <div className="hidden items-center justify-between border-b border-border px-4 py-2 md:flex">
-                <span className="text-sm font-medium">Conversations</span>
-                <Button variant="ghost" size="icon" onClick={() => setSelectedId(null)}>
-                  <PenSquare className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center justify-end border-b border-border px-2 py-1 md:hidden">
-                <Button variant="ghost" size="icon" onClick={() => setSelectedId(null)} aria-label="New message">
-                  <PenSquare className="h-4 w-4" />
-                </Button>
-              </div>
               <SmsThreadList
                 key={refreshKey}
                 scope={teamScope}
                 selectedId={selectedId}
-                onSelect={setSelectedId}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  setIsComposing(false);
+                }}
               />
             </div>
           }
           detail={
-            <SmsMessagePane
-              conversationId={selectedId}
-              scope={teamScope}
-              initialPhone={deepLink.phone}
-              initialCustomerId={deepLink.customerId}
-              initialName={deepLink.name}
-              onSent={(id) => {
-                setSelectedId(id);
-                setRefreshKey((k) => k + 1);
-              }}
-            />
+            showCompose || selectedId ? (
+              <SmsMessagePane
+                conversationId={selectedId}
+                scope={teamScope}
+                initialPhone={deepLink.phone}
+                initialCustomerId={deepLink.customerId}
+                initialName={deepLink.name}
+                onSent={(id) => {
+                  setSelectedId(id);
+                  setIsComposing(false);
+                  setRefreshKey((k) => k + 1);
+                }}
+              />
+            ) : (
+              <div className="hidden h-full items-center justify-center p-6 text-sm text-muted-foreground md:flex">
+                Select a conversation or compose a new message
+              </div>
+            )
           }
         />
       </div>

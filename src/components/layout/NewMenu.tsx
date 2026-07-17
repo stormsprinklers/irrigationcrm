@@ -38,21 +38,21 @@ function CreateModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-md rounded-lg border bg-background shadow-lg">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="relative z-10 flex max-h-[min(78dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem))] w-full max-w-md flex-col overflow-hidden rounded-lg border bg-background shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
           <h2 className="font-semibold">{title}</h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
       </div>
     </div>
   );
@@ -90,10 +90,8 @@ export function NewMenu() {
     date: defaultTimes.date,
     startTime: defaultTimes.startTime,
     endTime: defaultTimes.endTime,
-    serviceAreaId: "",
     assignedUserId: "",
     customerId: "",
-    zip: "",
     isCallback: false,
   });
 
@@ -118,9 +116,6 @@ export function NewMenu() {
             serviceAreas: data.serviceAreas ?? [],
             employees: data.employees ?? [],
           });
-          if (data.serviceAreas?.[0]?.id) {
-            setNewVisit((v) => ({ ...v, serviceAreaId: v.serviceAreaId || data.serviceAreas[0].id }));
-          }
         })
         .catch(() => toast.error("Failed to load schedule options"));
     }
@@ -149,10 +144,8 @@ export function NewMenu() {
       date: times.date,
       startTime: times.startTime,
       endTime: times.endTime,
-      serviceAreaId: filterOptions.serviceAreas[0]?.id ?? "",
       assignedUserId: "",
       customerId: "",
-      zip: "",
       isCallback: false,
     });
     setNewEstimate({ customerId: "", propertyId: "" });
@@ -186,10 +179,6 @@ export function NewMenu() {
       toast.error("Title is required");
       return;
     }
-    if (!newVisit.serviceAreaId && !newVisit.zip.trim()) {
-      toast.error("Select a service area or enter a zip code");
-      return;
-    }
 
     const startAt = new Date(`${newVisit.date}T${newVisit.startTime}`);
     const endAt = new Date(`${newVisit.date}T${newVisit.endTime}`);
@@ -198,9 +187,22 @@ export function NewMenu() {
       return;
     }
 
+    if (!newVisit.customerId) {
+      toast.error("Select a customer — service area is determined from their address");
+      return;
+    }
+
     const selectedCustomer = customers.find((c) => c.id === newVisit.customerId);
-    if (selectedCustomer?.doNotService) {
+    if (!selectedCustomer) {
+      toast.error("Select a customer");
+      return;
+    }
+    if (selectedCustomer.doNotService) {
       toast.error("This customer is marked DO NOT SERVICE and cannot be scheduled");
+      return;
+    }
+    if (!selectedCustomer.zip?.trim()) {
+      toast.error("This customer needs a zip code on their address before scheduling");
       return;
     }
     if (!newVisit.assignedUserId) {
@@ -218,13 +220,12 @@ export function NewMenu() {
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
           division: newVisit.division,
-          serviceAreaId: newVisit.serviceAreaId || undefined,
           assignedUserId: newVisit.assignedUserId || undefined,
-          customerId: newVisit.customerId || undefined,
-          zip: newVisit.zip.trim() || selectedCustomer?.zip || undefined,
-          address: selectedCustomer?.address || undefined,
-          city: selectedCustomer?.city || undefined,
-          state: selectedCustomer?.state || undefined,
+          customerId: selectedCustomer.id,
+          zip: selectedCustomer.zip,
+          address: selectedCustomer.address || undefined,
+          city: selectedCustomer.city || undefined,
+          state: selectedCustomer.state || undefined,
           isCallback: newVisit.isCallback,
         }),
       });
@@ -356,42 +357,41 @@ export function NewMenu() {
             value={newVisit.date}
             onChange={(e) => setNewVisit({ ...newVisit, date: e.target.value })}
             required
+            className="min-w-0"
           />
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="time"
-              value={newVisit.startTime}
-              onChange={(e) => setNewVisit({ ...newVisit, startTime: e.target.value })}
-              required
-            />
-            <Input
-              type="time"
-              value={newVisit.endTime}
-              onChange={(e) => setNewVisit({ ...newVisit, endTime: e.target.value })}
-              required
-            />
+          <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2">
+            <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+              Start
+              <Input
+                type="time"
+                value={newVisit.startTime}
+                onChange={(e) => setNewVisit({ ...newVisit, startTime: e.target.value })}
+                required
+                className="min-w-0"
+              />
+            </label>
+            <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+              End
+              <Input
+                type="time"
+                value={newVisit.endTime}
+                onChange={(e) => setNewVisit({ ...newVisit, endTime: e.target.value })}
+                required
+                className="min-w-0"
+              />
+            </label>
           </div>
-          <select
-            value={newVisit.serviceAreaId}
-            onChange={(e) => setNewVisit({ ...newVisit, serviceAreaId: e.target.value })}
-            className={selectClassName}
-          >
-            <option value="">Service area</option>
-            {filterOptions.serviceAreas.map((area) => (
-              <option key={area.id} value={area.id}>
-                {area.name}
-              </option>
-            ))}
-          </select>
           <select
             value={newVisit.customerId}
             onChange={(e) => setNewVisit({ ...newVisit, customerId: e.target.value })}
             className={selectClassName}
+            required
           >
-            <option value="">Customer (optional)</option>
+            <option value="">Customer (required)</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.name}
+                {customer.zip ? ` — ${customer.zip}` : ""}
                 {customer.doNotService ? " — DO NOT SERVICE" : ""}
               </option>
             ))}
@@ -409,11 +409,6 @@ export function NewMenu() {
               </option>
             ))}
           </select>
-          <Input
-            value={newVisit.zip}
-            onChange={(e) => setNewVisit({ ...newVisit, zip: e.target.value })}
-            placeholder="Zip (if no service area)"
-          />
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

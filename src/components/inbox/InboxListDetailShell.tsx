@@ -1,29 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PanelLeft, X } from "lucide-react";
+import { ChevronLeft, PanelLeft, PenSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type InboxListDetailShellProps = {
-  /** Breadcrumbs, tabs, and other chrome shown above the list on desktop / in the mobile top bar. */
   chrome: React.ReactNode;
   list: React.ReactNode;
   detail: React.ReactNode;
-  /** Label for the mobile list drawer toggle and header. */
   listLabel?: string;
-  /**
-   * When this becomes a non-empty string, the mobile list drawer closes so the
-   * selected conversation / lead detail fills the viewport.
-   */
   selectedId?: string | null;
+  /** When true, mobile shows the conversation list by default (not compose/detail). */
+  listFirst?: boolean;
+  /** Explicit compose mode (list-first SMS). */
+  composing?: boolean;
+  onCompose?: () => void;
+  onMobileBack?: () => void;
   className?: string;
 };
 
 /**
  * Shared inbox list + detail split:
- * - Desktop: side-by-side, list is a fixed narrow column.
- * - Mobile: detail fills the screen; list is a collapsible overlay drawer.
+ * - Desktop: side-by-side
+ * - Mobile (default): detail fills screen; list is a drawer
+ * - Mobile (listFirst): list fills screen until a thread/compose is opened
  */
 export function InboxListDetailShell({
   chrome,
@@ -31,9 +32,15 @@ export function InboxListDetailShell({
   detail,
   listLabel = "Conversations",
   selectedId = null,
+  listFirst = false,
+  composing = false,
+  onCompose,
+  onMobileBack,
   className,
 }: InboxListDetailShellProps) {
   const [listOpen, setListOpen] = useState(false);
+  const showDetailOnMobile = Boolean(selectedId) || composing;
+  const showListPane = listFirst ? !showDetailOnMobile : true;
 
   useEffect(() => {
     if (selectedId) setListOpen(false);
@@ -46,23 +53,64 @@ export function InboxListDetailShell({
         className
       )}
     >
-      <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 w-fit shrink-0 gap-1.5 px-2.5"
-          onClick={() => setListOpen(true)}
-          aria-expanded={listOpen}
-          aria-controls="inbox-list-drawer"
-        >
-          <PanelLeft className="h-4 w-4" />
-          <span className="text-xs font-medium">{listLabel}</span>
-        </Button>
-        <div className="min-w-0">{chrome}</div>
-      </div>
+      {/* Mobile chrome — list-first list view */}
+      {listFirst && !showDetailOnMobile ? (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold">{listLabel}</p>
+            {onCompose ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={onCompose}
+                aria-label="New message"
+              >
+                <PenSquare className="h-5 w-5" />
+              </Button>
+            ) : null}
+          </div>
+          <div className="min-w-0">{chrome}</div>
+        </div>
+      ) : null}
 
-      {listOpen ? (
+      {/* Mobile chrome — detail / compose with back */}
+      {listFirst && showDetailOnMobile ? (
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-white px-2 py-2 md:hidden">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1 px-2"
+            onClick={() => onMobileBack?.()}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            {listLabel}
+          </Button>
+        </div>
+      ) : null}
+
+      {/* Mobile chrome — legacy drawer toggle (non list-first) */}
+      {!listFirst ? (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 w-fit shrink-0 gap-1.5 px-2.5"
+            onClick={() => setListOpen(true)}
+            aria-expanded={listOpen}
+            aria-controls="inbox-list-drawer"
+          >
+            <PanelLeft className="h-4 w-4" />
+            <span className="text-xs font-medium">{listLabel}</span>
+          </Button>
+          <div className="min-w-0">{chrome}</div>
+        </div>
+      ) : null}
+
+      {!listFirst && listOpen ? (
         <button
           type="button"
           className="absolute inset-0 z-30 bg-black/40 md:hidden"
@@ -75,31 +123,56 @@ export function InboxListDetailShell({
         id="inbox-list-drawer"
         className={cn(
           "flex flex-col border-r border-border bg-white",
-          // Desktop: always-visible narrow column
           "md:relative md:flex md:h-full md:w-72 md:shrink-0 md:shadow-none",
-          // Mobile: narrower overlay drawer
-          "absolute inset-y-0 left-0 z-40 w-[min(16.5rem,78vw)] shadow-lg md:static",
-          !listOpen && "hidden md:flex"
+          listFirst
+            ? cn(
+                "min-h-0 flex-1 md:flex-none",
+                showListPane ? "flex" : "hidden md:flex"
+              )
+            : cn(
+                "absolute inset-y-0 left-0 z-40 w-[min(16.5rem,78vw)] shadow-lg md:static",
+                !listOpen && "hidden md:flex"
+              )
         )}
       >
         <div className="hidden shrink-0 border-b border-border px-4 py-3 md:block">
           {chrome}
         </div>
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2 md:hidden">
-          <span className="text-sm font-medium">{listLabel}</span>
-          <button
-            type="button"
-            onClick={() => setListOpen(false)}
-            className="rounded p-1 hover:bg-muted"
-            aria-label={`Close ${listLabel}`}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        {!listFirst ? (
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2 md:hidden">
+            <span className="text-sm font-medium">{listLabel}</span>
+            <button
+              type="button"
+              onClick={() => setListOpen(false)}
+              className="rounded p-1 hover:bg-muted"
+              aria-label={`Close ${listLabel}`}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="hidden items-center justify-between border-b border-border px-4 py-2 md:flex">
+            <span className="text-sm font-medium">{listLabel}</span>
+            {onCompose ? (
+              <Button variant="ghost" size="icon" onClick={onCompose} aria-label="New message">
+                <PenSquare className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-hidden">{list}</div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+      <div
+        className={cn(
+          "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white",
+          listFirst
+            ? showDetailOnMobile
+              ? "flex"
+              : "hidden md:flex"
+            : "flex"
+        )}
+      >
         {detail}
       </div>
     </div>

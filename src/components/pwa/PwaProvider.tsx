@@ -174,7 +174,7 @@ export function PwaProvider() {
   return (
     <>
       {showInstall ? (
-        <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-storm-ice/60 bg-white p-3 shadow-lg sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm sm:rounded-lg sm:border">
+        <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-storm-ice/60 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm sm:rounded-lg sm:border sm:pb-3">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 rounded-md bg-storm-navy/10 p-2 text-storm-navy">
               <Share className="h-4 w-4" />
@@ -203,7 +203,7 @@ export function PwaProvider() {
       ) : null}
 
       {showPushPrompt && !showInstall ? (
-        <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-storm-ice/60 bg-white p-3 shadow-lg sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm sm:rounded-lg sm:border">
+        <div className="fixed inset-x-0 bottom-0 z-[90] border-t border-storm-ice/60 bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg sm:left-auto sm:right-4 sm:bottom-4 sm:max-w-sm sm:rounded-lg sm:border sm:pb-3">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 rounded-md bg-storm-navy/10 p-2 text-storm-navy">
               <Bell className="h-4 w-4" />

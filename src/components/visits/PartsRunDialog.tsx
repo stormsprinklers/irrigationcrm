@@ -38,6 +38,8 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
           setUsedLiveLocation(true);
         } else if (position.reason === "denied") {
           toast.message("Location access denied — ranking suppliers from the job site instead.");
+        } else if (position.reason === "timeout" || position.reason === "unavailable") {
+          toast.message("Could not get GPS quickly — ranking from the job site instead.");
         }
 
         const query = params.toString();
@@ -51,6 +53,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
         }
         setOptions(data.options ?? []);
         setMessage(data.message ?? null);
+        if (data.usedUserLocation) setUsedLiveLocation(true);
       } finally {
         setLoading(false);
       }
@@ -88,15 +91,15 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:items-center sm:p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
         aria-label="Close"
         onClick={() => onOpenChange(false)}
       />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border bg-background shadow-lg">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="relative z-10 flex max-h-[min(78dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-1.5rem))] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-background shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
           <div className="flex items-center gap-2">
             <Wrench className="h-4 w-4 text-primary" />
             <h2 className="font-semibold">Parts Run</h2>
@@ -111,7 +114,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
           </button>
         </div>
 
-        <div className="space-y-3 p-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">
             {usedLiveLocation
               ? "Pick the closest open supplier to your current location. If the visit is in progress, your job timer will pause and Google Maps will open for directions."
@@ -123,7 +126,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
               <Loader2 className="h-4 w-4 animate-spin" />
               {usedLiveLocation
                 ? "Finding open suppliers near you..."
-                : "Requesting location and finding open suppliers..."}
+                : "Getting your location and ranking suppliers..."}
             </div>
           ) : options.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground">
@@ -133,14 +136,14 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
             options.map((option, index) => (
               <div key={option.supplierId} className="rounded-lg border p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-medium">
                       Option {index + 1}: {option.name}
                     </p>
                     <p className="text-sm text-muted-foreground">{option.address}</p>
                     {option.driveMinutes != null ? (
                       <p className="text-sm text-muted-foreground">
-                        ~{option.driveMinutes} min drive
+                        ~{option.driveMinutes} min
                         {option.driveDistanceMiles != null
                           ? ` · ${option.driveDistanceMiles} mi`
                           : ""}
@@ -152,8 +155,14 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
                       </p>
                     ) : null}
                   </div>
-                  <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                    Open
+                  <span
+                    className={
+                      option.isOpenNow
+                        ? "rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
+                        : "rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                    }
+                  >
+                    {option.isOpenNow ? "Open" : "Closed"}
                   </span>
                 </div>
 

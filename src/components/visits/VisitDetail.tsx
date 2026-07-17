@@ -372,9 +372,13 @@ export function VisitDetail({ visitId }: Props) {
         <VisitIrrigationSection customerId={visit.customer.id} property={visit.property} />
       ) : null}
 
-      <div className="flex justify-end">
-        <Button type="button" variant="outline" onClick={() => setPartsRunOpen(true)}>
-          <Wrench className="h-4 w-4" />
+      <div className="flex w-full sm:justify-end">
+        <Button
+          type="button"
+          className="h-12 w-full gap-2 text-base sm:h-9 sm:w-auto sm:text-sm"
+          onClick={() => setPartsRunOpen(true)}
+        >
+          <Wrench className="h-5 w-5 sm:h-4 sm:w-4" />
           Parts Run
         </Button>
       </div>

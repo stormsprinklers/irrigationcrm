@@ -7,7 +7,7 @@ export default function CustomerSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ModuleLayout title="Customer" sections={customerSettingsSidebar} className="min-h-full">
+    <ModuleLayout title="Customer" sections={customerSettingsSidebar} className="min-h-full" desktopSidebarOnly>
       {children}
     </ModuleLayout>
   );
