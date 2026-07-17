@@ -1,10 +1,35 @@
 import { z } from "zod";
 
+/**
+ * Normalize optional email for website lead ingest.
+ * Blank / placeholder values become null. Invalid addresses also become null
+ * so a bad email does not reject the entire lead (phone/name still land in CRM).
+ */
+export function normalizeOptionalLeadEmail(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower === "n/a" || lower === "na" || lower === "none" || lower === "null") {
+    return null;
+  }
+  // Basic shape check — invalid emails are dropped rather than failing the lead.
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+const optionalLeadEmail = z.preprocess(
+  normalizeOptionalLeadEmail,
+  z.string().email().nullable().optional()
+);
+
 export const websiteLeadSchema = z.object({
   externalId: z.string().min(1),
   name: z.string().min(1),
   phone: z.string().optional().nullable(),
-  email: z.string().email().optional().nullable().or(z.literal("")),
+  email: optionalLeadEmail,
   source: z.string().optional().nullable(),
   status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "LOST", "WON"]).optional(),
   notes: z.string().optional().nullable(),

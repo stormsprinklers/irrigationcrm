@@ -13,13 +13,29 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
+    await logIntegrationAudit({
+      companyId: auth.companyId,
+      integrationType: IntegrationType.WEBSITE,
+      action: "website.leads.create",
+      status: "error",
+      error: "Invalid JSON",
+    });
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = websiteLeadSchema.safeParse(body);
   if (!parsed.success) {
+    const details = parsed.error.flatten();
+    await logIntegrationAudit({
+      companyId: auth.companyId,
+      integrationType: IntegrationType.WEBSITE,
+      action: "website.leads.create",
+      payload: body,
+      status: "error",
+      error: `Validation failed: ${JSON.stringify(details.fieldErrors)}`,
+    });
     return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
+      { error: "Validation failed", details },
       { status: 400 }
     );
   }
@@ -30,13 +46,22 @@ export async function POST(request: NextRequest) {
       companyId: auth.companyId,
       integrationType: IntegrationType.WEBSITE,
       action: "website.leads.create",
-      payload: { externalId: parsed.data.externalId },
+      payload: {
+        externalId: parsed.data.externalId,
+        created: result.created,
+        updated: result.updated,
+        source: parsed.data.source ?? "website",
+        hasPhone: Boolean(parsed.data.phone?.trim()),
+        hasEmail: Boolean(parsed.data.email?.trim()),
+        hasNotes: Boolean(parsed.data.notes?.trim()),
+      },
       status: "success",
     });
     return NextResponse.json(
       {
         leadId: result.lead.id,
         created: result.created,
+        updated: result.updated,
       },
       { status: result.created ? 201 : 200 }
     );

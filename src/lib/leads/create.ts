@@ -5,30 +5,16 @@ import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
 import {
+  buildSparseLeadFillPatch,
+  isSparseLead,
+} from "@/lib/leads/merge-integration-lead";
+import {
   enrichPricingQuoteLead,
   isPricingQuoteLead,
 } from "@/lib/leads/pricing-quote-enrichment";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 
-export async function createLeadFromIntegration(
-  companyId: string,
-  input: WebsiteLeadInput
-) {
-  const existing = input.externalId
-    ? await prisma.lead.findFirst({
-        where: { companyId, externalId: input.externalId },
-      })
-    : null;
-
-  if (existing) {
-    return { lead: existing, created: false };
-  }
-
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { defaultLeadAssigneeId: true },
-  });
-
+async function buildNotesAndMetadata(input: WebsiteLeadInput) {
   const enrichment = isPricingQuoteLead(input.source)
     ? await enrichPricingQuoteLead(input)
     : null;
@@ -48,8 +34,8 @@ export async function createLeadFromIntegration(
     if (input.notes && input.notes !== enrichment.quoteTitle) {
       notesParts.push(input.notes);
     }
-  } else {
-    if (input.notes) notesParts.push(input.notes);
+  } else if (input.notes) {
+    notesParts.push(input.notes);
   }
   if (input.address) notesParts.push(`Address: ${input.address}`);
   if (input.city) notesParts.push(`City: ${input.city}`);
@@ -61,6 +47,57 @@ export async function createLeadFromIntegration(
     ...(enrichment?.metadataPatch ?? {}),
   };
 
+  return {
+    enrichment,
+    notes: notesParts.length ? notesParts.join("\n\n") : null,
+    metadata,
+  };
+}
+
+export async function createLeadFromIntegration(
+  companyId: string,
+  input: WebsiteLeadInput
+) {
+  const existing = input.externalId
+    ? await prisma.lead.findFirst({
+        where: { companyId, externalId: input.externalId },
+      })
+    : null;
+
+  if (existing) {
+    const { enrichment, notes, metadata } = await buildNotesAndMetadata(input);
+    const patch = buildSparseLeadFillPatch(existing, input, notes, metadata);
+    if (Object.keys(patch).length === 0) {
+      return { lead: existing, created: false, updated: false };
+    }
+
+    const wasSparse = isSparseLead(existing);
+    const lead = await prisma.lead.update({
+      where: { id: existing.id },
+      data: patch,
+    });
+
+    // If the first push was name-only and a later push brings contact/context,
+    // create the inbox entry that was skipped (or nearly empty) the first time.
+    if (wasSparse && !isSparseLead(lead)) {
+      await createInboxEntriesFromWebsiteLead(companyId, lead.id, input, enrichment);
+      after(async () => {
+        await notifyLeadCreated(companyId, lead).catch((err) => {
+          console.error("Failed to send lead-created email for filled sparse lead", err);
+        });
+      });
+    }
+
+    return { lead, created: false, updated: true };
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { defaultLeadAssigneeId: true },
+  });
+
+  const { enrichment, notes, metadata } = await buildNotesAndMetadata(input);
+
   const lead = await prisma.lead.create({
     data: {
       companyId,
@@ -69,7 +106,7 @@ export async function createLeadFromIntegration(
       email: input.email || null,
       source: input.source ?? "website",
       status: (input.status as LeadStatus) ?? LeadStatus.NEW,
-      notes: notesParts.length ? notesParts.join("\n\n") : null,
+      notes,
       externalId: input.externalId,
       metadata: Object.keys(metadata).length
         ? (metadata as Prisma.InputJsonValue)
@@ -118,5 +155,5 @@ export async function createLeadFromIntegration(
     ]);
   });
 
-  return { lead, created: true };
+  return { lead, created: true, updated: false };
 }
