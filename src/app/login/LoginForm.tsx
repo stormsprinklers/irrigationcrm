@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stormBrand } from "@/lib/branding";
-import { radarDocumentTitle } from "@/lib/radar-title";
+import { radarDocumentTitle } from "@/lib/radar-branding";
 
 type Step = "credentials" | "mfa";
 

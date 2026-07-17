@@ -1,8 +1,9 @@
 import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { radarDocumentTitle } from "@/lib/radar-branding";
 
-export const RADAR_APP_NAME = "Radar";
+export { RADAR_APP_NAME, radarDocumentTitle } from "@/lib/radar-branding";
 
 /** Resolve the tenant company name for document / UI titles. */
 export const getAppCompanyName = cache(async (): Promise<string | null> => {
@@ -27,11 +28,6 @@ export const getAppCompanyName = cache(async (): Promise<string | null> => {
     return null;
   }
 });
-
-export function radarDocumentTitle(companyName?: string | null): string {
-  const name = companyName?.trim();
-  return name ? `${RADAR_APP_NAME} - ${name}` : RADAR_APP_NAME;
-}
 
 export async function getRadarDocumentTitle(): Promise<string> {
   return radarDocumentTitle(await getAppCompanyName());
