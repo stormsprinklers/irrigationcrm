@@ -604,10 +604,24 @@ export default function FlowEditorPage() {
             <PhoneIncoming className="h-4 w-4" />
             Incoming call
           </div>
-          <div className="mt-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-sm text-muted-foreground">
-            {assignedNumbers.length > 0
-              ? `${assignedNumbers.length} phone number${assignedNumbers.length === 1 ? "" : "s"} assigned`
-              : "No phone numbers assigned yet"}
+          <div
+            className={`mt-1.5 rounded-md border px-3 py-1.5 text-sm ${
+              assignedNumbers.length > 0
+                ? "border-border bg-white text-muted-foreground"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            {assignedNumbers.length > 0 ? (
+              `${assignedNumbers.length} phone number${assignedNumbers.length === 1 ? "" : "s"} assigned`
+            ) : (
+              <>
+                No phone numbers assigned — inbound will ring CSRs instead. Assign this flow under{" "}
+                <Link href="/settings/voice/numbers" className="font-medium underline">
+                  Voice → Phone numbers
+                </Link>
+                .
+              </>
+            )}
           </div>
         </div>
 
@@ -773,12 +787,22 @@ function StepEditor({
     const voicemailTargets = sameBranchNodes.filter(
       (n) => n.type === "VOICEMAIL" || n.type === "PLAY" || n.type === "HANGUP"
     );
+    const openNodes = flow.nodes.filter((n) => nodeBranch(n) === "open");
+    const isFirstOpen = branch === "open" && openNodes[0] === node;
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Requires AI receptionist enabled under Voice settings, plus a running sideband worker
-          (<code className="text-xs">SIDEBAND_PUBLIC_WSS_URL</code>).
+          (<code className="text-xs">SIDEBAND_PUBLIC_WSS_URL</code>). Put this as the{" "}
+          <strong>first Open-hours step</strong>; use Ring group / Queue only as the transfer
+          target below. Assign this flow to your business number under Voice → Phone numbers.
         </p>
+        {!isFirstOpen && branch === "open" ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            AI Receptionist is not the first Open step. Move it to the top (or keep AI
+            receptionist enabled — inbound will prefer this step when the feature is on).
+          </p>
+        ) : null}
         <div>
           <label className="mb-1 block text-sm font-medium">Voice</label>
           <select

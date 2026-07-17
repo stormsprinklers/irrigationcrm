@@ -8,7 +8,7 @@ import {
 } from "@prisma/client";
 import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
-import { normalizePhone } from "@/lib/inbox/contacts";
+import { normalizePhone, phoneLookupVariants } from "@/lib/inbox/phone";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
@@ -21,6 +21,25 @@ import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence"
 function flowNodeBranch(config: unknown): "open" | "closed" {
   const branch = (config as { branch?: string } | null)?.branch;
   return branch === "closed" ? "closed" : "open";
+}
+
+type FlowNodeRow = {
+  id: string;
+  type: CallFlowNodeType;
+  sortOrder: number;
+  config: unknown;
+};
+
+function firstOpenAiReceptionist<T extends FlowNodeRow>(nodes: T[]): T | null {
+  return (
+    nodes
+      .filter(
+        (n) =>
+          n.type === CallFlowNodeType.AI_RECEPTIONIST &&
+          flowNodeBranch(n.config) === "open"
+      )
+      .sort((a, b) => a.sortOrder - b.sortOrder)[0] ?? null
+  );
 }
 
 type TwilioParams = Record<string, string>;
@@ -204,12 +223,39 @@ export async function buildInboundTwiml(params: TwilioParams) {
   }
 
   const customer = from ? await resolveCustomer(company.id, from) : null;
-  const phoneRecord = await prisma.phoneNumber.findFirst({
-    where: { companyId: company.id, e164: normalizePhone(to) },
+  const toVariants = phoneLookupVariants(to ?? "");
+
+  // Match PhoneNumber with the same format variants as company lookup so a
+  // slight E.164 mismatch does not drop the assigned call flow.
+  let phoneRecord = await prisma.phoneNumber.findFirst({
+    where: {
+      companyId: company.id,
+      OR: toVariants.map((e164) => ({ e164 })),
+    },
     include: {
       callFlow: { include: { nodes: { orderBy: { sortOrder: "asc" } } } },
     },
   });
+
+  // If the dialed number has no flow, fall back to another company number that does
+  // (common when company.twilioPhone is set but PhoneNumber.callFlowId was never assigned).
+  if (!phoneRecord?.callFlow) {
+    const withFlow = await prisma.phoneNumber.findFirst({
+      where: { companyId: company.id, callFlowId: { not: null } },
+      include: {
+        callFlow: { include: { nodes: { orderBy: { sortOrder: "asc" } } } },
+      },
+      orderBy: [{ isPrimary: "desc" }, { updatedAt: "desc" }],
+    });
+    if (withFlow?.callFlow) {
+      console.warn("[voice/inbound] dialed number has no call flow; using fallback number flow", {
+        dialed: to,
+        fallbackNumberId: withFlow.id,
+        flowId: withFlow.callFlow.id,
+      });
+      phoneRecord = withFlow;
+    }
+  }
 
   let callSessionId: string | undefined;
   if (callSid && from) {
@@ -235,44 +281,59 @@ export async function buildInboundTwiml(params: TwilioParams) {
     transcribeCalls: company.transcribeCalls,
   });
 
-  if (
-    !isWithinBusinessHours(company.businessHours, company.timezone) &&
-    phoneRecord?.callFlow?.afterHoursNodeId
-  ) {
-    const afterNode = phoneRecord.callFlow.nodes.find(
-      (n) => n.id === phoneRecord.callFlow!.afterHoursNodeId
-    );
+  const callFlow = phoneRecord?.callFlow;
+  const withinHours = isWithinBusinessHours(company.businessHours, company.timezone);
+
+  if (!withinHours && callFlow?.afterHoursNodeId) {
+    const afterNode = callFlow.nodes.find((n) => n.id === callFlow.afterHoursNodeId);
     if (afterNode) {
-      return renderIvrNode(afterNode, phoneRecord.callFlow.nodes, {
+      return renderIvrNode(afterNode, callFlow.nodes, {
         ...baseCtx(),
-        flowId: phoneRecord.callFlow.id,
+        flowId: callFlow.id,
       });
     }
   }
 
-  const entryNode =
-    phoneRecord?.callFlow?.nodes.find((n) => n.id === phoneRecord.callFlow?.entryNodeId) ??
-    phoneRecord?.callFlow?.nodes[0];
+  // When AI receptionist is enabled and present on the open path, answer with it
+  // even if a dial/IVR step is still marked as entry (common mis-order in the editor).
+  const aiOpenEntry =
+    company.aiReceptionistEnabled && callFlow
+      ? firstOpenAiReceptionist(callFlow.nodes)
+      : null;
 
-  if (entryNode && phoneRecord?.callFlow) {
+  const entryNode =
+    aiOpenEntry ??
+    callFlow?.nodes.find((n) => n.id === callFlow.entryNodeId) ??
+    callFlow?.nodes[0];
+
+  if (entryNode && callFlow) {
     const ctx: FlowContext = {
       ...baseCtx(),
-      flowId: phoneRecord.callFlow.id,
+      flowId: callFlow.id,
     };
 
+    console.info("[voice/inbound] routing", {
+      callSid,
+      flowId: callFlow.id,
+      entryType: entryNode.type,
+      entryId: entryNode.id,
+      aiPreferred: Boolean(aiOpenEntry),
+      withinHours,
+      knownCustomer: Boolean(customer?.id),
+    });
+
     // Known customers skip spam-reduction IVR and ring CSRs directly (configurable).
+    // Do not skip when we already preferred the AI receptionist entry.
     const skipIvr =
+      !aiOpenEntry &&
       company.skipIvrForKnownCustomers !== false &&
       Boolean(customer?.id) &&
       entryNode.type === CallFlowNodeType.IVR;
 
     if (skipIvr) {
-      const destination = resolvePostIvrDestination(
-        entryNode,
-        phoneRecord.callFlow.nodes
-      );
+      const destination = resolvePostIvrDestination(entryNode, callFlow.nodes);
       if (destination) {
-        return renderIvrNode(destination, phoneRecord.callFlow.nodes, ctx);
+        return renderIvrNode(destination, callFlow.nodes, ctx);
       }
       await dialAvailableAgents(response, company, from);
       return response.toString();
@@ -283,9 +344,15 @@ export async function buildInboundTwiml(params: TwilioParams) {
       return response.toString();
     }
 
-    return renderIvrNode(entryNode, phoneRecord.callFlow.nodes, ctx);
+    return renderIvrNode(entryNode, callFlow.nodes, ctx);
   }
 
+  console.warn("[voice/inbound] no call flow; dialing available agents", {
+    callSid,
+    to,
+    companyId: company.id,
+    phoneNumberId: phoneRecord?.id ?? null,
+  });
   await dialAvailableAgents(response, company, from);
   return response.toString();
 }
