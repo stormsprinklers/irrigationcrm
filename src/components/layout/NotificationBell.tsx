@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, Briefcase, Car, CheckCheck, Mail, MessageSquare, Phone, UserPlus } from "lucide-react";
+import { Bell, Briefcase, Car, CheckCheck, Mail, MessageSquare, Phone, Star, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,8 @@ type AppNotification = {
     | "LEAD_CREATED"
     | "HIRING_APPLICANT"
     | "HIRING_SCREEN_BOOKED"
-    | "VEHICLE_REMINDER";
+    | "VEHICLE_REMINDER"
+    | "GOOGLE_REVIEW";
   title: string;
   body?: string | null;
   href?: string | null;
@@ -45,6 +46,8 @@ function notificationIcon(type: AppNotification["type"]) {
       return Phone;
     case "VEHICLE_REMINDER":
       return Car;
+    case "GOOGLE_REVIEW":
+      return Star;
     default:
       return Mail;
   }

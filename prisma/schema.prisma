@@ -644,6 +644,7 @@ model Company {
   integrationAuditLogs   IntegrationAuditLog[]
   marketingEvents        MarketingEvent[]
   gbpReviewSlackDeliveries GbpReviewSlackDelivery[]
+  gbpReviewStaffNotifies   GbpReviewStaffNotify[]
   localSeoKeywords     LocalSeoKeyword[]
   localSeoTargetCities LocalSeoTargetCity[]
   localSeoSerpSearches LocalSeoSerpSearch[]
@@ -1351,6 +1352,7 @@ enum AppNotificationType {
   HIRING_APPLICANT
   HIRING_SCREEN_BOOKED
   VEHICLE_REMINDER
+  GOOGLE_REVIEW
 }
 
 model NotificationTemplate {
@@ -3161,6 +3163,19 @@ model GbpReviewSlackDelivery {
 
   @@unique([companyId, reviewId])
   @@index([companyId, deliveredAt])
+}
+
+/// Tracks Google reviews already pushed to staff (Radar PWA / in-app).
+model GbpReviewStaffNotify {
+  id          String   @id @default(cuid())
+  companyId   String
+  reviewId    String
+  notifiedAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, reviewId])
+  @@index([companyId, notifiedAt])
 }
 
 model ReferralProgramSettings {

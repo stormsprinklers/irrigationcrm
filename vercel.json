@@ -17,6 +17,10 @@
     {
       "path": "/api/cron/vehicles/reminders",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/google-reviews",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

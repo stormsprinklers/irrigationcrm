@@ -209,11 +209,14 @@ export async function createApplicantFromCareers(
   });
 
   if (!options?.skipNotify) {
+    const roleLabel = applicant.jobTitle || applicant.jobSlug;
+    const scoreLabel =
+      aiScore != null ? `Score: ${aiScore}/12` : "Score: pending";
     await notifyStaffInApp({
       companyId,
       type: AppNotificationType.HIRING_APPLICANT,
-      title: `New Job Applicant: ${applicant.name}`,
-      body: `${applicant.jobTitle || applicant.jobSlug}${aiScore != null ? ` · score ${aiScore}/12` : ""}`,
+      title: `New job applicant: ${applicant.name}`,
+      body: `${scoreLabel} · ${roleLabel}`,
       href: `/hiring/applicants/${applicant.id}`,
       userIds: await hiringNotifyUserIds(companyId, applicant.jobSlug),
     }).catch(() => {});

@@ -151,8 +151,11 @@ export async function notifyWebsiteFormInbox(params: {
   source?: string | null;
   body?: string | null;
 }) {
+  const formLabel = websiteLeadFormLabel(params.source);
   const title = websiteLeadNotificationTitle(params.source, params.name);
-  const body = params.body?.trim() || websiteLeadFormLabel(params.source);
+  const body =
+    params.body?.trim() ||
+    `New website ${formLabel.toLowerCase()} submission`;
 
   if (params.emailId) {
     await notifyStaffInApp({
@@ -173,5 +176,15 @@ export async function notifyWebsiteFormInbox(params: {
       body,
       href: `/inbox/leads?conversationId=${params.conversationId}`,
     });
+    return;
   }
+
+  // No inbox thread yet — still notify staff (push + bell).
+  await notifyStaffInApp({
+    companyId: params.companyId,
+    type: AppNotificationType.INBOX_LEAD,
+    title,
+    body,
+    href: "/customers/leads",
+  });
 }
