@@ -22,6 +22,17 @@ type PickerTokenResponse = {
   error?: string;
 };
 
+type PickerBuilder = {
+  addView: (view: unknown) => PickerBuilder;
+  enableFeature: (feature: string) => PickerBuilder;
+  setOAuthToken: (token: string) => PickerBuilder;
+  setDeveloperKey: (key: string) => PickerBuilder;
+  setAppId: (appId: string) => PickerBuilder;
+  setCallback: (cb: (data: PickerCallbackData) => void) => PickerBuilder;
+  setTitle: (title: string) => PickerBuilder;
+  build: () => { setVisible: (visible: boolean) => void };
+};
+
 declare global {
   interface Window {
     gapi?: {
@@ -37,16 +48,7 @@ declare global {
           setMimeTypes: (mimeTypes: string) => unknown;
         };
         Feature: { MULTISELECT_ENABLED: string; NAV_HIDDEN: string };
-        PickerBuilder: new () => {
-          addView: (view: unknown) => unknown;
-          enableFeature: (feature: string) => unknown;
-          setOAuthToken: (token: string) => unknown;
-          setDeveloperKey: (key: string) => unknown;
-          setAppId: (appId: string) => unknown;
-          setCallback: (cb: (data: PickerCallbackData) => void) => unknown;
-          setTitle: (title: string) => unknown;
-          build: () => { setVisible: (visible: boolean) => void };
-        };
+        PickerBuilder: new () => PickerBuilder;
       };
     };
   }
@@ -108,22 +110,20 @@ export async function openGoogleDriveImagePicker(options?: {
     view.setIncludeFolders(true);
     view.setMimeTypes("image/png,image/jpeg,image/jpg,image/webp,image/gif");
 
-    // PickerBuilder methods return the builder; typed loosely for gapi globals.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let builder: any = new pickerNs.PickerBuilder();
-    builder = builder.addView(view);
-    builder = builder.setOAuthToken(tokenData.accessToken);
-    builder = builder.setDeveloperKey(tokenData.apiKey);
-    builder = builder.setTitle(options?.title ?? "Select images from Google Drive");
-    builder = builder.setCallback((data: PickerCallbackData) => {
-      if (data.action === pickerNs.Action.CANCEL) {
-        resolve([]);
-        return;
-      }
-      if (data.action === pickerNs.Action.PICKED) {
-        resolve(data.docs ?? []);
-      }
-    });
+    let builder = new pickerNs.PickerBuilder()
+      .addView(view)
+      .setOAuthToken(tokenData.accessToken)
+      .setDeveloperKey(tokenData.apiKey)
+      .setTitle(options?.title ?? "Select images from Google Drive")
+      .setCallback((data: PickerCallbackData) => {
+        if (data.action === pickerNs.Action.CANCEL) {
+          resolve([]);
+          return;
+        }
+        if (data.action === pickerNs.Action.PICKED) {
+          resolve(data.docs ?? []);
+        }
+      });
 
     if (options?.multiSelect !== false) {
       builder = builder.enableFeature(pickerNs.Feature.MULTISELECT_ENABLED);
