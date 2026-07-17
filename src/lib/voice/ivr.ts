@@ -10,6 +10,7 @@ import { normalizePhone } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
+import { resolveHoursBranchNextNodeId, type HoursBranchConfig } from "./hours-branch";
 
 export type IvrNodeConfig = {
   prompt?: string;
@@ -31,6 +32,20 @@ export type IvrNodeConfig = {
   greetingClipId?: string;
   greetingText?: string;
   maxLengthSec?: number;
+  /** QUEUE: digit to leave queue and go to voicemail (e.g. "1" or "*"). */
+  voicemailDigit?: string;
+  /** QUEUE: optional VOICEMAIL (or other) node after leaving the queue. */
+  voicemailNodeId?: string;
+  /** HOURS_BRANCH: schedule windows → next steps (see hours-branch.ts). */
+  rules?: Array<{
+    id: string;
+    label: string;
+    days: number[];
+    start: string;
+    end: string;
+    nextNodeId: string;
+  }>;
+  defaultNextNodeId?: string;
 };
 
 /** The next step to run when a pass-through step (e.g. PLAY) finishes. */
@@ -258,14 +273,60 @@ export async function renderIvrNode(
       break;
     }
 
-    case CallFlowNodeType.QUEUE:
-      response.enqueue(
-        {
-          waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait?companyId=${encodeURIComponent(ctx.companyId)}`,
-        },
-        `company_${ctx.companyId}`
-      );
+    case CallFlowNodeType.QUEUE: {
+      const waitParams = new URLSearchParams({
+        companyId: ctx.companyId,
+        flowId: ctx.flowId,
+        nodeId: node.id,
+      });
+      // Use Enqueue action so we only run voicemail when QueueResult=leave
+      // (caller pressed the escape key). Agent answer / hangup must not fall through.
+      const actionParams = new URLSearchParams({ companyId: ctx.companyId });
+      if (config.voicemailDigit) {
+        if (config.voicemailNodeId) {
+          actionParams.set("flowId", ctx.flowId);
+          actionParams.set("nodeId", config.voicemailNodeId);
+        }
+        response.enqueue(
+          {
+            waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait?${waitParams.toString()}`,
+            action: `${appBaseUrl()}/api/twilio/voice/queue/voicemail?${actionParams.toString()}`,
+            method: "POST",
+          },
+          `company_${ctx.companyId}`
+        );
+      } else {
+        response.enqueue(
+          {
+            waitUrl: `${appBaseUrl()}/api/twilio/voice/queue/wait?${waitParams.toString()}`,
+          },
+          `company_${ctx.companyId}`
+        );
+      }
       break;
+    }
+
+    case CallFlowNodeType.HOURS_BRANCH: {
+      const company = await prisma.company.findUnique({
+        where: { id: ctx.companyId },
+        select: { timezone: true },
+      });
+      const nextId = resolveHoursBranchNextNodeId(
+        config as HoursBranchConfig,
+        company?.timezone
+      );
+      const next = nextId ? nodes.find((n) => n.id === nextId) : null;
+      if (next) {
+        response.redirect(
+          { method: "POST" },
+          `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${ctx.flowId}&goto=${next.id}`
+        );
+      } else {
+        response.say("We are closed right now. Please try again during business hours.");
+        response.hangup();
+      }
+      break;
+    }
 
     case CallFlowNodeType.FORWARD:
       if (config.forwardTo) {

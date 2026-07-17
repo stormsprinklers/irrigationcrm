@@ -375,11 +375,48 @@ export async function buildQueueTwiml(companyId: string) {
   return response.toString();
 }
 
-/** Wait music for callers in queue — uses the company-configured queue wait clip. */
-export async function buildQueueWaitTwiml(companyId: string | null) {
+type QueueWaitOptions = {
+  companyId: string | null;
+  flowId?: string | null;
+  nodeId?: string | null;
+  /** Digit pressed while waiting (from Gather action). */
+  digits?: string | null;
+};
+
+/** Wait music for callers in queue — optional Gather for voicemail escape key. */
+export async function buildQueueWaitTwiml(options: QueueWaitOptions | string | null) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
 
+  const opts: QueueWaitOptions =
+    typeof options === "string" || options === null
+      ? { companyId: options }
+      : options;
+
+  const { companyId, flowId, nodeId, digits } = opts;
+
+  let voicemailDigit: string | null = null;
+  if (companyId && flowId && nodeId) {
+    const node = await prisma.callFlowNode.findFirst({
+      where: { id: nodeId, flowId, flow: { companyId } },
+      select: { config: true },
+    });
+    const config = (node?.config ?? {}) as { voicemailDigit?: string };
+    voicemailDigit = config.voicemailDigit?.trim() || null;
+  }
+
+  if (digits && voicemailDigit && digits === voicemailDigit) {
+    response.leave();
+    return response.toString();
+  }
+
+  const waitQuery = new URLSearchParams();
+  if (companyId) waitQuery.set("companyId", companyId);
+  if (flowId) waitQuery.set("flowId", flowId);
+  if (nodeId) waitQuery.set("nodeId", nodeId);
+  const waitUrl = `${appBaseUrl()}/api/twilio/voice/queue/wait?${waitQuery.toString()}`;
+
+  let playUrl: string | null = null;
   if (companyId) {
     const company = await prisma.company.findUnique({
       where: { id: companyId },
@@ -387,20 +424,39 @@ export async function buildQueueWaitTwiml(companyId: string | null) {
     });
     if (company?.queueWaitClipId) {
       const { resolveVoiceClipPlayUrl } = await import("@/lib/voice/ivr");
-      const playUrl = await resolveVoiceClipPlayUrl(company.queueWaitClipId, companyId);
-      if (playUrl) {
-        response.play({ loop: 0 }, playUrl);
-        return response.toString();
-      }
+      playUrl = await resolveVoiceClipPlayUrl(company.queueWaitClipId, companyId);
     }
+  }
+
+  if (voicemailDigit) {
+    const gather = response.gather({
+      numDigits: 1,
+      timeout: 3,
+      action: waitUrl,
+      method: "POST",
+    });
+    // Brief prompt so callers know the escape key even when wait music plays.
+    gather.say(`Press ${voicemailDigit} at any time to leave a voicemail.`);
+    if (playUrl) {
+      gather.play({ loop: 0 }, playUrl);
+    } else {
+      gather.say("Please hold. An agent will be with you shortly.");
+      gather.pause({ length: 8 });
+    }
+    // If gather times out without a digit, restart wait music.
+    response.redirect({ method: "POST" }, waitUrl);
+    return response.toString();
+  }
+
+  if (playUrl) {
+    response.play({ loop: 0 }, playUrl);
+    return response.toString();
   }
 
   response.say("Please hold. An agent will be with you shortly.");
   response.pause({ length: 8 });
   if (companyId) {
-    response.redirect(
-      `${appBaseUrl()}/api/twilio/voice/queue/wait?companyId=${encodeURIComponent(companyId)}`
-    );
+    response.redirect({ method: "POST" }, waitUrl);
   }
   return response.toString();
 }

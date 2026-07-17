@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  CalendarClock,
   Hash,
   PhoneForwarded,
   PhoneIncoming,
@@ -35,7 +36,8 @@ type NodeType =
   | "FORWARD"
   | "VOICEMAIL"
   | "QUEUE"
-  | "HANGUP";
+  | "HANGUP"
+  | "HOURS_BRANCH";
 
 type FlowNode = {
   id?: string;
@@ -45,6 +47,15 @@ type FlowNode = {
 };
 
 type IvrOption = { digit: string; label: string; nextNodeId: string };
+
+type HoursRule = {
+  id: string;
+  label: string;
+  days: number[];
+  start: string;
+  end: string;
+  nextNodeId: string;
+};
 
 type CallFlow = {
   id: string;
@@ -77,10 +88,16 @@ const STEP_META: Record<
     icon: Clock,
     blurb: "Hold the caller with your queue wait music from Voice settings",
   },
+  HOURS_BRANCH: {
+    label: "Schedule branch",
+    icon: CalendarClock,
+    blurb: "Send callers down different paths by day and time",
+  },
   HANGUP: { label: "End call", icon: PhoneOff, blurb: "Hang up" },
 };
 
 const ADD_STEP_ORDER: NodeType[] = [
+  "HOURS_BRANCH",
   "PLAY",
   "IVR",
   "DIAL_USER",
@@ -90,6 +107,27 @@ const ADD_STEP_ORDER: NodeType[] = [
   "QUEUE",
   "HANGUP",
 ];
+
+const WEEKDAY_LABELS = [
+  { day: 0, label: "Sun" },
+  { day: 1, label: "Mon" },
+  { day: 2, label: "Tue" },
+  { day: 3, label: "Wed" },
+  { day: 4, label: "Thu" },
+  { day: 5, label: "Fri" },
+  { day: 6, label: "Sat" },
+] as const;
+
+function newHoursRule(): HoursRule {
+  return {
+    id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    label: "Weekdays",
+    days: [1, 2, 3, 4, 5],
+    start: "08:00",
+    end: "17:00",
+    nextNodeId: "",
+  };
+}
 
 function defaultConfig(type: NodeType): Record<string, unknown> {
   switch (type) {
@@ -108,6 +146,13 @@ function defaultConfig(type: NodeType): Record<string, unknown> {
       return { userId: "", timeoutSec: 30 };
     case "VOICEMAIL":
       return { greetingText: "Please leave a message after the tone." };
+    case "QUEUE":
+      return { voicemailDigit: "1", voicemailNodeId: "" };
+    case "HOURS_BRANCH":
+      return {
+        rules: [newHoursRule()],
+        defaultNextNodeId: "",
+      };
     default:
       return {};
   }
@@ -141,8 +186,14 @@ function stepSummary(
       return String(config.forwardTo ?? "") || "No number set";
     case "VOICEMAIL":
       return "Records a message";
-    case "QUEUE":
-      return "Hold with music";
+    case "QUEUE": {
+      const digit = String(config.voicemailDigit ?? "").trim();
+      return digit ? `Hold · press ${digit} for voicemail` : "Hold with music";
+    }
+    case "HOURS_BRANCH": {
+      const rules = (config.rules as HoursRule[] | undefined) ?? [];
+      return `${rules.length} schedule window${rules.length === 1 ? "" : "s"}`;
+    }
     case "HANGUP":
       return "Call will disconnect";
     default:
@@ -373,6 +424,10 @@ export default function FlowEditorPage() {
               Edit hours
             </Link>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Prefer a <span className="font-medium">Schedule branch</span> step for multiple
+            day/time paths (open, evening, weekend). Or jump to one after-hours step below.
+          </p>
           <div className="mt-2">
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               When closed (after hours)
@@ -712,16 +767,209 @@ function StepEditor({
     );
   }
 
-  // QUEUE / HANGUP have no extra config.
+  // QUEUE / HANGUP / HOURS_BRANCH config panels
   if (node.type === "QUEUE") {
+    const saved = flow.nodes.filter((n) => n.id);
     return (
-      <p className="text-sm text-muted-foreground">
-        {STEP_META.QUEUE.blurb}. Configure the required queue wait clip under{" "}
-        <a href="/settings/voice" className="text-primary underline">
-          Settings → Voice
-        </a>
-        .
-      </p>
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Queue wait music is set under{" "}
+          <a href="/settings/voice" className="text-primary underline">
+            Settings → Voice
+          </a>
+          .
+        </p>
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Key to leave a voicemail (optional)
+          </label>
+          <Input
+            value={String(config.voicemailDigit ?? "")}
+            onChange={(e) =>
+              onConfigChange({
+                ...config,
+                voicemailDigit: e.target.value.replace(/[^\d*#]/g, "").slice(0, 1),
+              })
+            }
+            placeholder="e.g. 1"
+            maxLength={1}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            While waiting, the caller can press this key to leave the queue and record a message.
+            Leave blank to disable.
+          </p>
+        </div>
+        {String(config.voicemailDigit ?? "").trim() ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium">Voicemail step</label>
+            <select
+              className={selectClass}
+              value={String(config.voicemailNodeId ?? "")}
+              onChange={(e) => onConfigChange({ ...config, voicemailNodeId: e.target.value })}
+            >
+              <option value="">Default company voicemail</option>
+              {saved
+                .map((n, i) => ({ n, i: flow.nodes.indexOf(n) }))
+                .filter(({ n }) => n.type === "VOICEMAIL" || n.type === "PLAY" || n.type === "HANGUP")
+                .map(({ n, i }) => (
+                  <option key={n.id} value={n.id ?? ""}>
+                    #{i + 1} {STEP_META[n.type].label}
+                  </option>
+                ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Save the flow after adding a Voicemail step to select it here.
+            </p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (node.type === "HOURS_BRANCH") {
+    const rules = ((config.rules as HoursRule[]) ?? []).map((r) => ({
+      ...r,
+      days: Array.isArray(r.days) ? r.days : [],
+    }));
+    const saved = flow.nodes.filter((n) => n.id && n !== node);
+
+    const updateRule = (ruleId: string, patch: Partial<HoursRule>) => {
+      onConfigChange({
+        ...config,
+        rules: rules.map((r) => (r.id === ruleId ? { ...r, ...patch } : r)),
+      });
+    };
+
+    const toggleDay = (ruleId: string, day: number) => {
+      const rule = rules.find((r) => r.id === ruleId);
+      if (!rule) return;
+      const days = rule.days.includes(day)
+        ? rule.days.filter((d) => d !== day)
+        : [...rule.days, day].sort((a, b) => a - b);
+      updateRule(ruleId, { days });
+    };
+
+    return (
+      <div className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          First matching window wins (company timezone). Add separate windows for daytime,
+          evenings, weekends, etc., each pointing to a different step.
+        </p>
+        {rules.map((rule, ruleIndex) => (
+          <div key={rule.id} className="space-y-2 rounded-md border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Input
+                value={rule.label}
+                onChange={(e) => updateRule(rule.id, { label: e.target.value })}
+                placeholder={`Window ${ruleIndex + 1}`}
+                className="h-8"
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  onConfigChange({
+                    ...config,
+                    rules: rules.filter((r) => r.id !== rule.id),
+                  })
+                }
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {WEEKDAY_LABELS.map(({ day, label }) => {
+                const on = rule.days.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleDay(rule.id, day)}
+                    className={cn(
+                      "rounded px-2 py-1 text-xs font-medium",
+                      on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">Start</label>
+                <Input
+                  type="time"
+                  value={rule.start}
+                  onChange={(e) => updateRule(rule.id, { start: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">End</label>
+                <Input
+                  type="time"
+                  value={rule.end}
+                  onChange={(e) => updateRule(rule.id, { end: e.target.value })}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-muted-foreground">Go to step</label>
+              <select
+                className={selectClass}
+                value={rule.nextNodeId}
+                onChange={(e) => updateRule(rule.id, { nextNodeId: e.target.value })}
+              >
+                <option value="">Select a saved step…</option>
+                {saved.map((n) => {
+                  const idx = flow.nodes.findIndex((x) => x === n);
+                  return (
+                    <option key={n.id} value={n.id ?? ""}>
+                      #{idx + 1} {STEP_META[n.type].label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+        ))}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            onConfigChange({
+              ...config,
+              rules: [...rules, newHoursRule()],
+            })
+          }
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add schedule window
+        </Button>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Otherwise (no match)</label>
+          <select
+            className={selectClass}
+            value={String(config.defaultNextNodeId ?? "")}
+            onChange={(e) => onConfigChange({ ...config, defaultNextNodeId: e.target.value })}
+          >
+            <option value="">Say closed & hang up</option>
+            {saved.map((n) => {
+              const idx = flow.nodes.findIndex((x) => x === n);
+              return (
+                <option key={n.id} value={n.id ?? ""}>
+                  #{idx + 1} {STEP_META[n.type].label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Tip: Save the flow after adding steps so they appear in these dropdowns.
+        </p>
+      </div>
     );
   }
 

@@ -381,6 +381,8 @@ enum CallFlowNodeType {
   VOICEMAIL
   HANGUP
   PLAY
+  /// Route to different steps based on day-of-week / time-of-day windows.
+  HOURS_BRANCH
 }
 
 enum PhoneNumberType {
