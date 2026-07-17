@@ -202,6 +202,51 @@ export async function toggleHold(sessionId: string, hold: boolean) {
   return { conferenceSid, hold };
 }
 
+/**
+ * End the call for everyone — used when the CSR hangs up (not leaving a warm transfer).
+ * Required after hold/transfer put the call in a conference with endConferenceOnExit=false
+ * on the agent, otherwise a held customer would keep hearing hold music forever.
+ */
+export async function endCallSession(companyId: string, sessionId: string) {
+  const session = await getSessionForCompany(companyId, sessionId);
+  if (!session) throw new Error("Session not found");
+
+  const client = getTwilioClient();
+  const conferenceSid =
+    (await findConferenceSid(sessionId, session.conferenceSid)) ?? session.conferenceSid;
+
+  if (conferenceSid) {
+    try {
+      await client.conferences(conferenceSid).update({ status: "completed" });
+    } catch (err) {
+      console.warn("Failed to complete conference on hangup:", err);
+    }
+  }
+
+  // Belt-and-suspenders: hang up remaining PSTN / agent legs if still alive.
+  for (const sid of [session.callSid, session.agentCallSid]) {
+    if (!sid) continue;
+    try {
+      await client.calls(sid).update({ status: "completed" });
+    } catch {
+      // already ended
+    }
+  }
+
+  await prisma.callSession.update({
+    where: { id: sessionId },
+    data: {
+      status: CallSessionStatus.COMPLETED,
+      holdStartedAt: null,
+      transferType: null,
+      transferTargetUserId: null,
+      endedAt: new Date(),
+    },
+  });
+
+  return { ok: true as const };
+}
+
 export async function coldTransfer(
   companyId: string,
   sessionId: string,

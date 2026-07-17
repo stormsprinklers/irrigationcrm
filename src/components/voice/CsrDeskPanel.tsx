@@ -69,7 +69,7 @@ export function CsrDeskPanel({
 }: {
   onVisitBooked?: (visitId: string) => void;
 }) {
-  const { ready, activeCall, disconnect, transfer, notifyVisitBooked } = useVoiceDevice();
+  const { ready, activeCall, disconnect, transfer, toggleHold, notifyVisitBooked } = useVoiceDevice();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [bookOpen, setBookOpen] = useState(false);
@@ -401,6 +401,13 @@ export function CsrDeskPanel({
           >
             <Calendar className="mr-2 h-4 w-4" />
             Book appointment
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!activeCall}
+            onClick={() => void toggleHold()}
+          >
+            {activeCall?.onHold ? "Resume call" : "Place on hold"}
           </Button>
           <Button
             variant="outline"

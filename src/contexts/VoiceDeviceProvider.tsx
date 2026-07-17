@@ -475,13 +475,27 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   }, [incomingCall]);
 
   const disconnect = useCallback(() => {
-    if (activeCall?.transferring && activeCall.sessionId) {
+    if (!activeCall) return;
+
+    // Warm transfer leave: CSR exits, customer stays with the transferred party.
+    if (activeCall.transferring && activeCall.sessionId) {
       void fetch(`/api/voice/calls/${activeCall.sessionId}/transfer/leave`, {
         method: "POST",
       }).catch(() => {});
       toast.success("You left the call — the transfer continues");
+      activeCall.call.disconnect();
+      setActiveCall(null);
+      void patchPresence("AVAILABLE");
+      return;
     }
-    activeCall?.call.disconnect();
+
+    // Normal hangup (including while customer is on hold): end everyone.
+    if (activeCall.sessionId) {
+      void fetch(`/api/voice/calls/${activeCall.sessionId}/hangup`, {
+        method: "POST",
+      }).catch(() => {});
+    }
+    activeCall.call.disconnect();
     setActiveCall(null);
     void patchPresence("AVAILABLE");
   }, [activeCall]);

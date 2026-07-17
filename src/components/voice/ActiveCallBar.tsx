@@ -15,11 +15,37 @@ import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointmentModal";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
+import { cn } from "@/lib/utils";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function CallActionButton({
+  label,
+  onClick,
+  ariaLabel,
+  variant = "outline",
+  className,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  ariaLabel: string;
+  variant?: "outline" | "destructive" | "default";
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("flex flex-col items-center gap-0.5", className)}>
+      <Button size="sm" variant={variant} onClick={onClick} aria-label={ariaLabel}>
+        {children}
+      </Button>
+      <span className="text-[10px] leading-tight text-muted-foreground">{label}</span>
+    </div>
+  );
 }
 
 export function ActiveCallBar() {
@@ -82,29 +108,44 @@ export function ActiveCallBar() {
             {activeCall.muted ? " · Muted" : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button size="sm" variant="outline" onClick={toggleMute} aria-label={activeCall.muted ? "Unmute" : "Mute"}>
+        <div className="flex flex-wrap items-start gap-2">
+          <CallActionButton
+            label={activeCall.muted ? "Unmute" : "Mute"}
+            ariaLabel={activeCall.muted ? "Unmute" : "Mute"}
+            onClick={toggleMute}
+          >
             {activeCall.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          </CallActionButton>
+          <CallActionButton
+            label={activeCall.onHold ? "Resume" : "Hold"}
+            ariaLabel={activeCall.onHold ? "Resume" : "Hold"}
             onClick={() => void toggleHold()}
-            aria-label={activeCall.onHold ? "Resume" : "Hold"}
           >
             {activeCall.onHold ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setTransferOpen(true)} aria-label="Transfer">
+          </CallActionButton>
+          <CallActionButton
+            label="Transfer"
+            ariaLabel="Transfer"
+            onClick={() => setTransferOpen(true)}
+          >
             <UserPlus className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="outline" onClick={openBookAppointment} aria-label="New appointment">
-            <Plus className="mr-1 h-4 w-4" />
-            New
-          </Button>
-          <Button size="sm" variant="destructive" className="ml-auto" onClick={disconnect}>
-            <PhoneOff className="mr-1 h-4 w-4" />
-            Hang up
-          </Button>
+          </CallActionButton>
+          <CallActionButton
+            label="New appt"
+            ariaLabel="New appointment"
+            onClick={openBookAppointment}
+          >
+            <Plus className="h-4 w-4" />
+          </CallActionButton>
+          <CallActionButton
+            label="Hang up"
+            ariaLabel="Hang up"
+            variant="destructive"
+            className="ml-auto"
+            onClick={disconnect}
+          >
+            <PhoneOff className="h-4 w-4" />
+          </CallActionButton>
         </div>
       </div>
       <TransferDialog
