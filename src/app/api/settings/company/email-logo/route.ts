@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { uploadPublicBlob } from "@/lib/blob/storage";
+import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { companySettingsSelect } from "@/lib/company/types";
 import { prisma } from "@/lib/prisma";
 
@@ -30,9 +31,11 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-    const blob = await uploadPublicBlob(`company-email/${user.companyId}/${Date.now()}-logo.${ext}`, file, {
-      contentType: file.type,
-    });
+    const blob = await uploadPrivateBlob(
+      `company-email/${user.companyId}/${Date.now()}-logo.${ext}`,
+      file,
+      { contentType: file.type }
+    );
 
     const company = await prisma.company.update({
       where: { id: user.companyId },
@@ -40,7 +43,12 @@ export async function POST(request: NextRequest) {
       select: companySettingsSelect,
     });
 
-    return NextResponse.json({ url: blob.url, company });
+    return NextResponse.json({
+      url: blob.url,
+      displayUrl: blobProxyUrl(blob.url),
+      publicUrl: absolutePublicBlobUrl(blob.url),
+      company,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

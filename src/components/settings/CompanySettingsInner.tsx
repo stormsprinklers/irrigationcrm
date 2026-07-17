@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay, type CompanySettingsDTO } from "@/lib/company/types";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { cn } from "@/lib/utils";
 
 const profileTabs = ["Profile", "Email branding", "Business hours"] as const;
@@ -184,8 +185,9 @@ export function CompanySettingsInner() {
             <label className="text-sm text-muted-foreground">Email logo</label>
             <div className="mt-2 flex flex-wrap items-center gap-4">
               {company.emailLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={company.emailLogoUrl}
+                  src={blobProxyUrl(company.emailLogoUrl) ?? company.emailLogoUrl}
                   alt={`${company.name} logo`}
                   className="h-14 w-14 rounded-xl border border-border object-cover"
                 />

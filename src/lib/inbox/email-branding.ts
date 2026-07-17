@@ -1,5 +1,6 @@
 import { getDefaultFromEmail, sendEmail, type SendEmailResult } from "@/lib/inbox/email";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 
 export type EmailBranding = {
   companyName: string;
@@ -39,8 +40,9 @@ export function wrapBrandedEmailHtml(
   html: string,
   branding: Pick<EmailBranding, "emailLogoUrl" | "companyName">
 ) {
-  const logoBlock = branding.emailLogoUrl
-    ? `<div style="margin-bottom:16px"><img src="${branding.emailLogoUrl}" alt="${escapeHtml(
+  const logoSrc = absolutePublicBlobUrl(branding.emailLogoUrl) ?? branding.emailLogoUrl;
+  const logoBlock = logoSrc
+    ? `<div style="margin-bottom:16px"><img src="${logoSrc}" alt="${escapeHtml(
         branding.companyName
       )}" width="56" height="56" style="display:block;width:56px;height:56px;border-radius:12px;object-fit:cover" /></div>`
     : "";

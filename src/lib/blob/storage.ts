@@ -39,12 +39,10 @@ export async function uploadPublicBlob(
   body: UploadBody,
   options: UploadOptions = {}
 ) {
-  assertBlobConfigured();
-
-  return put(pathname, body, {
-    access: "public",
-    token: getBlobToken(),
-    contentType: options.contentType,
-    addRandomSuffix: true,
+  // Store is private-access only — use private put. Callers that need a fetchable URL
+  // (email clients, Google APIs) must use absolutePublicBlobUrl() /api/public/blob.
+  return uploadPrivateBlob(pathname, body, {
+    ...options,
+    addRandomSuffix: options.addRandomSuffix ?? true,
   });
 }

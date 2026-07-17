@@ -1,5 +1,6 @@
 import { fetchBlobBytes } from "@/lib/blob/download";
-import { uploadPublicBlob } from "@/lib/blob/storage";
+import { uploadPrivateBlob } from "@/lib/blob/storage";
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { fetchDriveFileBytes } from "@/lib/google-drive/client";
 import { uploadGbpPhotoBytes } from "@/lib/google-business/v4-api";
 import { parsePickablePhotoId, fetchSocialPhotoBytes } from "@/lib/meta/social-photos";
@@ -92,13 +93,17 @@ export async function resolveGbpLocalPostPhotoSourceUrl(
   }
 
   const ext = imageExtensionForMime(mimeType);
-  const blob = await uploadPublicBlob(
+  const blob = await uploadPrivateBlob(
     `gbp/local-posts/${params.companyId}/${Date.now()}.${ext}`,
     buffer,
     { contentType: mimeType }
   );
 
-  return blob.url;
+  const publicUrl = absolutePublicBlobUrl(blob.url);
+  if (!publicUrl) {
+    throw new Error("Failed to build a public URL for the Google post photo");
+  }
+  return publicUrl;
 }
 
 export async function uploadGbpPhotoFromPickableId(params: UploadParams) {
