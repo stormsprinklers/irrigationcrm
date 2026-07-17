@@ -449,6 +449,15 @@ enum CampaignChannel {
   EMAIL
 }
 
+enum CampaignFlowNodeType {
+  TRIGGER
+  WAIT
+  SEND_EMAIL
+  SEND_SMS
+  BRANCH
+  EXIT
+}
+
 model Company {
   id                       String   @id @default(cuid())
   name                     String
@@ -905,6 +914,8 @@ model Customer {
   stripeCustomerId String?
   status           CustomerStatus @default(ACTIVE)
   doNotService     Boolean        @default(false)
+  /// Opt out of marketing email only — appointment/invoice/portal mail still allowed.
+  marketingEmailOptOut Boolean    @default(false)
   tags             String[]       @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1529,6 +1540,7 @@ model Campaign {
   list        ContactList?         @relation(fields: [listId], references: [id], onDelete: SetNull)
   recipients  CampaignRecipient[]
   steps       CampaignStep[]
+  flowNodes   CampaignFlowNode[]
   enrollments CampaignEnrollment[]
 
   @@index([companyId, status])
@@ -1556,16 +1568,48 @@ model CampaignEnrollment {
   campaignId       String
   customerId       String
   currentStepIndex Int                      @default(0)
+  /// Automation flow: current node (preferred over step index when flow nodes exist).
+  currentNodeId    String?
   nextSendAt       DateTime
   status           CampaignEnrollmentStatus @default(ACTIVE)
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  campaign Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  events   CampaignEnrollmentEvent[]
 
   @@unique([campaignId, customerId])
   @@index([campaignId, status, nextSendAt])
+  @@index([currentNodeId])
+}
+
+model CampaignFlowNode {
+  id         String               @id @default(cuid())
+  campaignId String
+  type       CampaignFlowNodeType
+  config     Json                 @default("{}")
+  sortOrder  Int                  @default(0)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, sortOrder])
+}
+
+model CampaignEnrollmentEvent {
+  id           String   @id @default(cuid())
+  enrollmentId String
+  nodeId       String?
+  eventType    String
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  enrollment CampaignEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId, createdAt])
+  @@index([nodeId])
 }
 
 model CampaignRecipient {

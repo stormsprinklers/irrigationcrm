@@ -74,6 +74,19 @@ export async function queryAudienceCustomers(
   take?: number
 ) {
   const where = await buildAudienceWhere(companyId, channel, filters);
+
+  const includeIds = filters?.includeCustomerIds?.filter(Boolean) ?? [];
+  const excludeIds = new Set(filters?.excludeCustomerIds?.filter(Boolean) ?? []);
+
+  if (includeIds.length > 0) {
+    where.id = { in: includeIds };
+  }
+
+  // Marketing email opt-outs never receive campaign email.
+  if (channel === "EMAIL") {
+    where.marketingEmailOptOut = false;
+  }
+
   const customers = await prisma.customer.findMany({
     where,
     select: {
@@ -83,6 +96,7 @@ export async function queryAudienceCustomers(
       phone: true,
       city: true,
       tags: true,
+      marketingEmailOptOut: true,
     },
     orderBy: { name: "asc" },
     ...(take ? { take } : {}),
@@ -101,7 +115,9 @@ export async function queryAudienceCustomers(
   );
 
   return customers.filter((c) => {
+    if (excludeIds.has(c.id)) return false;
     if (blockedCustomerIds.has(c.id)) return false;
+    if (channel === "EMAIL" && c.marketingEmailOptOut) return false;
     if (channel === "EMAIL" && c.email && blockedEmails.has(c.email.toLowerCase())) return false;
     if (channel === "SMS" && c.phone && blockedPhones.has(c.phone)) return false;
     return true;

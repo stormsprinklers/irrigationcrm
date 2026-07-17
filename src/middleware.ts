@@ -28,6 +28,7 @@ const publicPaths = [
   "/api/marketing/search-console/callback",
   "/api/marketing/google-ads/callback",
   "/api/marketing/google-analytics/callback",
+  "/api/marketing/unsubscribe",
   "/api/integrations",
   "/api/track",
   "/api/mobile/auth/login",

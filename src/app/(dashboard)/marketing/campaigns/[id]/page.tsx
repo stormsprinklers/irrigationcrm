@@ -38,7 +38,36 @@ type CampaignDetail = {
   } | null;
   list: { name: string } | null;
   steps: Array<{ sortOrder: number; channel: string; subject: string | null; delayDays: number }>;
-  enrollments: Array<{ status: string; currentStepIndex: number }>;
+  flowNodes?: Array<{ id: string; type: string; sortOrder: number; config: Record<string, unknown> }>;
+  flowMetrics?: {
+    byStatus: {
+      active: number;
+      completed: number;
+      cancelled: number;
+      paused: number;
+      total: number;
+    };
+    nodeStats: Array<{
+      nodeId: string;
+      type: string;
+      sortOrder: number;
+      counts: Record<string, number>;
+    }>;
+    enrollments: Array<{
+      id: string;
+      status: string;
+      currentNodeId: string | null;
+      nextSendAt: string;
+      customer: { id: string; name: string; email: string | null };
+      lastEvent: { eventType: string; createdAt: string } | null;
+    }>;
+  } | null;
+  enrollments: Array<{
+    status: string;
+    currentStepIndex: number;
+    currentNodeId?: string | null;
+    customer?: { name: string; email: string | null };
+  }>;
   recipients: Array<{
     id: string;
     email: string | null;
@@ -117,7 +146,7 @@ export default function MarketingCampaignDetailPage() {
             campaign.type === "DRIP" ? (
               campaign.status !== "ACTIVE" ? (
                 <Button size="sm" onClick={() => runAction("activate")} disabled={acting}>
-                  {acting ? "Activating..." : "Activate drip"}
+                  {acting ? "Activating..." : "Activate automation"}
                 </Button>
               ) : null
             ) : (
@@ -186,7 +215,114 @@ export default function MarketingCampaignDetailPage() {
         )}
       </div>
 
-      {campaign.type === "DRIP" && campaign.steps.length > 0 && (
+      {campaign.type === "DRIP" && campaign.flowMetrics ? (
+        <div className="mb-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+            {[
+              { label: "Enrolled", value: campaign.flowMetrics.byStatus.total },
+              { label: "Active", value: campaign.flowMetrics.byStatus.active },
+              { label: "Completed", value: campaign.flowMetrics.byStatus.completed },
+              { label: "Cancelled", value: campaign.flowMetrics.byStatus.cancelled },
+              { label: "Paused", value: campaign.flowMetrics.byStatus.paused },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg border bg-white p-4">
+                <p className="text-2xl font-semibold">{s.value}</p>
+                <p className="text-sm text-muted-foreground">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {campaign.flowMetrics.nodeStats.length > 0 ? (
+            <div className="rounded-lg border bg-white p-4">
+              <h3 className="mb-3 font-medium">Stage funnel</h3>
+              <ul className="space-y-2 text-sm">
+                {campaign.flowMetrics.nodeStats.map((n) => (
+                  <li key={n.nodeId} className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">
+                      #{n.sortOrder + 1} {n.type}
+                    </Badge>
+                    {Object.entries(n.counts).map(([k, v]) => (
+                      <span key={k} className="text-muted-foreground">
+                        {k}: {v}
+                      </span>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="rounded-lg border bg-white">
+            <div className="border-b px-4 py-3">
+              <h3 className="font-medium">Enrollments</h3>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Current stage</TableHead>
+                  <TableHead>Next action</TableHead>
+                  <TableHead>Last event</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaign.flowMetrics.enrollments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No enrollments yet. Activate the automation to enroll your audience.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  campaign.flowMetrics.enrollments.map((e) => {
+                    const node = campaign.flowNodes?.find((n) => n.id === e.currentNodeId);
+                    return (
+                      <TableRow key={e.id}>
+                        <TableCell>
+                          <p className="font-medium">{e.customer.name}</p>
+                          <p className="text-xs text-muted-foreground">{e.customer.email}</p>
+                        </TableCell>
+                        <TableCell>{e.status}</TableCell>
+                        <TableCell>
+                          {node
+                            ? `#${node.sortOrder + 1} ${node.type}`
+                            : e.currentNodeId ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(e.nextSendAt), "MMM d h:mm a")}
+                        </TableCell>
+                        <TableCell>
+                          {e.lastEvent
+                            ? `${e.lastEvent.eventType} · ${format(
+                                new Date(e.lastEvent.createdAt),
+                                "MMM d h:mm a"
+                              )}`
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : null}
+
+      {campaign.type === "DRIP" && (campaign.flowNodes?.length ?? 0) > 0 && (
+        <div className="mb-6 rounded-lg border bg-white p-4">
+          <h3 className="mb-3 font-medium">Automation steps</h3>
+          <ol className="space-y-2 text-sm">
+            {campaign.flowNodes!.map((node, i) => (
+              <li key={node.id}>
+                Step {i + 1}: {node.type}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {campaign.type === "DRIP" && campaign.steps.length > 0 && !(campaign.flowNodes?.length) && (
         <div className="mb-6 rounded-lg border bg-white p-4">
           <h3 className="mb-3 font-medium">Drip sequence</h3>
           <ol className="space-y-2 text-sm">

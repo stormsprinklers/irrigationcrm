@@ -6,6 +6,25 @@ export type AudienceFilters = {
   servicedFrom?: string;
   servicedTo?: string;
   priceBookItemIds?: string[];
+  /** When set, audience is limited to these customer IDs (still must match channel/block rules). */
+  includeCustomerIds?: string[];
+  /** Always removed from the audience after filters apply. */
+  excludeCustomerIds?: string[];
+};
+
+export type CampaignFlowNodeType =
+  | "TRIGGER"
+  | "WAIT"
+  | "SEND_EMAIL"
+  | "SEND_SMS"
+  | "BRANCH"
+  | "EXIT";
+
+export type CampaignFlowNodeInput = {
+  id?: string;
+  type: CampaignFlowNodeType;
+  sortOrder: number;
+  config: Record<string, unknown>;
 };
 
 export type DripSettings = {
@@ -53,4 +72,6 @@ export type CampaignFormState = {
   audienceFilters: AudienceFilters;
   dripSettings: DripSettings;
   steps: CampaignStepInput[];
+  /** Automation decision-tree nodes (DRIP campaigns). */
+  flowNodes: CampaignFlowNodeInput[];
 };

@@ -14,6 +14,10 @@ import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { buildCampaignStats } from "@/lib/marketing/stats";
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
+import {
+  appendMarketingUnsubscribeFooter,
+  marketingUnsubscribeUrl,
+} from "@/lib/marketing/unsubscribe";
 import { prisma } from "@/lib/prisma";
 
 const BATCH_SIZE = 50;
@@ -127,6 +131,7 @@ async function sendToRecipient(
   },
   recipient: {
     id: string;
+    customerId?: string | null;
     email: string | null;
     phone: string | null;
   },
@@ -149,6 +154,20 @@ async function sendToRecipient(
     emailLogoUrl: campaign.company.emailLogoUrl,
   };
   const fromPhone = campaign.company.twilioPhone;
+
+  if (recipient.customerId && channel === CampaignChannel.EMAIL) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: recipient.customerId, companyId: campaign.companyId },
+      select: { marketingEmailOptOut: true },
+    });
+    if (customer?.marketingEmailOptOut) {
+      await prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: "opt_out", error: "Marketing email opt-out" },
+      });
+      return false;
+    }
+  }
 
   const blocked = await isContactBlocked(
     campaign.companyId,
@@ -198,9 +217,19 @@ async function sendToRecipient(
     return false;
   }
 
-  const rawHtml =
-    bodyHtml ??
-    `<p>${bodyText.replace(/\n/g, "<br/>")}</p><p style="font-size:12px;color:#666">Unsubscribe: mailto:${fromEmail}?subject=unsubscribe</p>`;
+  let rawHtml =
+    bodyHtml ?? `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`;
+
+  if (recipient.customerId) {
+    const unsubUrl = marketingUnsubscribeUrl(recipient.customerId, campaign.companyId);
+    rawHtml = appendMarketingUnsubscribeFooter(rawHtml, unsubUrl);
+  } else {
+    rawHtml = appendMarketingUnsubscribeFooter(
+      rawHtml,
+      `mailto:${fromEmail}?subject=unsubscribe%20marketing`
+    );
+  }
+
   const html = rewriteTrackedLinks(rawHtml, recipient.id);
 
   const response = await sendCompanyEmail(branding, {
@@ -315,50 +344,8 @@ export async function sendCampaign(campaignId: string) {
 }
 
 export async function activateDripCampaign(campaignId: string) {
-  const campaign = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    include: { steps: { orderBy: { sortOrder: "asc" } } },
-  });
-  if (!campaign) throw new Error("Campaign not found");
-  await assertOutboundCommsEnabled(
-    campaign.companyId,
-    campaign.channel === CampaignChannel.SMS ? "sms" : "email"
-  );
-  if (campaign.type !== CampaignType.DRIP) throw new Error("Not a drip campaign");
-  if (campaign.steps.length === 0) throw new Error("Add at least one drip step");
-
-  const dripSettings = (campaign.dripSettings ?? {}) as DripSettings;
-  const filters = campaign.audienceFilters as AudienceFilters | null;
-  const customers = await queryAudienceCustomers(
-    campaign.companyId,
-    campaign.channel,
-    filters
-  );
-
-  const startAt = dripSettings.startAt ? new Date(dripSettings.startAt) : new Date();
-  const firstDelay = campaign.steps[0]?.delayDays ?? 0;
-  const nextSendAt = new Date(startAt);
-  nextSendAt.setDate(nextSendAt.getDate() + firstDelay);
-
-  await prisma.$transaction([
-    prisma.campaignEnrollment.deleteMany({ where: { campaignId } }),
-    prisma.campaignEnrollment.createMany({
-      data: customers.map((c) => ({
-        campaignId,
-        customerId: c.id,
-        currentStepIndex: 0,
-        nextSendAt,
-        status: CampaignEnrollmentStatus.ACTIVE,
-      })),
-      skipDuplicates: true,
-    }),
-    prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: CampaignStatus.ACTIVE },
-    }),
-  ]);
-
-  return { enrolled: customers.length };
+  const { activateFlowCampaign } = await import("@/lib/marketing/flow-engine");
+  return activateFlowCampaign(campaignId);
 }
 
 function startOfDay(d: Date) {
@@ -388,6 +375,9 @@ export async function processDripSends() {
   const freezeByCompany = new Map<string, boolean>();
 
   for (const enrollment of enrollments) {
+    // Flow-engine enrollments are handled by processFlowEnrollments.
+    if (enrollment.currentNodeId) continue;
+
     const campaign = enrollment.campaign;
 
     let frozen = freezeByCompany.get(campaign.companyId);

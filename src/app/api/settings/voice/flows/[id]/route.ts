@@ -68,7 +68,7 @@ export async function PATCH(
       }
     }
 
-    const flow = await prisma.callFlow.update({
+    let flow = await prisma.callFlow.update({
       where: { id, companyId: user.companyId },
       data: {
         ...(name !== undefined ? { name } : {}),
@@ -79,10 +79,29 @@ export async function PATCH(
       include: { nodes: { orderBy: { sortOrder: "asc" } } },
     });
 
-    if (!flow.entryNodeId && flow.nodes[0]) {
-      await prisma.callFlow.update({
+    // Derive open/closed entries from branch tags after steps persist (handles new node ids).
+    if (steps) {
+      const openFirst = flow.nodes.find((n) => {
+        const branch = (n.config as { branch?: string } | null)?.branch;
+        return branch !== "closed";
+      });
+      const closedFirst = flow.nodes.find((n) => {
+        const branch = (n.config as { branch?: string } | null)?.branch;
+        return branch === "closed";
+      });
+      flow = await prisma.callFlow.update({
+        where: { id: flow.id },
+        data: {
+          entryNodeId: openFirst?.id ?? flow.nodes[0]?.id ?? null,
+          afterHoursNodeId: closedFirst?.id ?? null,
+        },
+        include: { nodes: { orderBy: { sortOrder: "asc" } } },
+      });
+    } else if (!flow.entryNodeId && flow.nodes[0]) {
+      flow = await prisma.callFlow.update({
         where: { id: flow.id },
         data: { entryNodeId: flow.nodes[0].id },
+        include: { nodes: { orderBy: { sortOrder: "asc" } } },
       });
     }
 

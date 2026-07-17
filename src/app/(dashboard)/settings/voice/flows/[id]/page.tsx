@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AudioSourcePicker, type AudioValue, type VoiceClip } from "@/components/voice/AudioSourcePicker";
@@ -38,6 +39,8 @@ type NodeType =
   | "QUEUE"
   | "HANGUP"
   | "HOURS_BRANCH";
+
+type Branch = "open" | "closed";
 
 type FlowNode = {
   id?: string;
@@ -66,9 +69,18 @@ type CallFlow = {
   nodes: FlowNode[];
 };
 
-type AgentGroup = { id: string; name: string };
+type AgentGroup = {
+  id: string;
+  name: string;
+  members?: Array<{ userId: string; user: { id: string; name: string } }>;
+};
 type CompanyUser = { id: string; name: string };
-type PhoneNumber = { id: string; e164: string; friendlyName: string | null; callFlow: { id: string } | null };
+type PhoneNumber = {
+  id: string;
+  e164: string;
+  friendlyName: string | null;
+  callFlow: { id: string } | null;
+};
 
 const selectClass =
   "flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
@@ -96,8 +108,8 @@ const STEP_META: Record<
   HANGUP: { label: "End call", icon: PhoneOff, blurb: "Hang up" },
 };
 
+/** Schedule branch is legacy — hours are the top fork now. */
 const ADD_STEP_ORDER: NodeType[] = [
-  "HOURS_BRANCH",
   "PLAY",
   "IVR",
   "DIAL_USER",
@@ -108,54 +120,87 @@ const ADD_STEP_ORDER: NodeType[] = [
   "HANGUP",
 ];
 
-const WEEKDAY_LABELS = [
-  { day: 0, label: "Sun" },
-  { day: 1, label: "Mon" },
-  { day: 2, label: "Tue" },
-  { day: 3, label: "Wed" },
-  { day: 4, label: "Thu" },
-  { day: 5, label: "Fri" },
-  { day: 6, label: "Sat" },
-] as const;
-
-function newHoursRule(): HoursRule {
-  return {
-    id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    label: "Weekdays",
-    days: [1, 2, 3, 4, 5],
-    start: "08:00",
-    end: "17:00",
-    nextNodeId: "",
-  };
+function nodeBranch(node: FlowNode): Branch {
+  return node.config.branch === "closed" ? "closed" : "open";
 }
 
-function defaultConfig(type: NodeType): Record<string, unknown> {
-  switch (type) {
-    case "PLAY":
-      return { text: "Thank you for calling." };
-    case "IVR":
-      return {
-        promptText: "Press 1 for service, or stay on the line.",
-        options: [{ digit: "1", label: "Service", nextNodeId: "" }],
-      };
-    case "FORWARD":
-      return { forwardTo: "" };
-    case "DIAL_GROUP":
-      return { groupId: "" };
-    case "DIAL_USER":
-      return { userId: "", timeoutSec: 30 };
-    case "VOICEMAIL":
-      return { greetingText: "Please leave a message after the tone." };
-    case "QUEUE":
-      return { voicemailDigit: "1", voicemailNodeId: "" };
-    case "HOURS_BRANCH":
-      return {
-        rules: [newHoursRule()],
-        defaultNextNodeId: "",
-      };
-    default:
-      return {};
+function withBranch(config: Record<string, unknown>, branch: Branch): Record<string, unknown> {
+  return { ...config, branch };
+}
+
+function defaultConfig(type: NodeType, branch: Branch = "open"): Record<string, unknown> {
+  const base = (() => {
+    switch (type) {
+      case "PLAY":
+        return { text: "Thank you for calling." };
+      case "IVR":
+        return {
+          promptText: "Press 1 for service, or stay on the line.",
+          options: [{ digit: "1", label: "Service", nextNodeId: "" }],
+        };
+      case "FORWARD":
+        return { forwardTo: "" };
+      case "DIAL_GROUP":
+        return { groupId: "" };
+      case "DIAL_USER":
+        return { userId: "", timeoutSec: 30 };
+      case "VOICEMAIL":
+        return { greetingText: "Please leave a message after the tone." };
+      case "QUEUE":
+        return { voicemailDigit: "1", voicemailNodeId: "" };
+      default:
+        return {};
+    }
+  })();
+  return withBranch(base, branch);
+}
+
+function reindex(nodes: FlowNode[]): FlowNode[] {
+  return nodes.map((n, i) => ({ ...n, sortOrder: i }));
+}
+
+function orderByLanes(nodes: FlowNode[]): FlowNode[] {
+  const open = nodes.filter((n) => nodeBranch(n) === "open");
+  const closed = nodes.filter((n) => nodeBranch(n) === "closed");
+  return reindex([...open, ...closed]);
+}
+
+/** Normalize legacy linear / schedule-branch flows into open|closed lanes. */
+function migrateFlowForEditor(raw: CallFlow): CallFlow {
+  let nodes = raw.nodes.map((n) => ({
+    ...n,
+    config: { ...(n.config as Record<string, unknown>) },
+  }));
+
+  const hoursNode = nodes.find((n) => n.type === "HOURS_BRANCH");
+  if (hoursNode) {
+    const rules = (hoursNode.config.rules as HoursRule[] | undefined) ?? [];
+    const openId = rules[0]?.nextNodeId?.trim() || "";
+    const closedId = String(hoursNode.config.defaultNextNodeId ?? "").trim();
+    nodes = nodes.filter((n) => n.type !== "HOURS_BRANCH");
+    nodes = nodes.map((n) => {
+      if (n.id && n.id === closedId) {
+        return { ...n, config: withBranch(n.config, "closed") };
+      }
+      if (n.id && n.id === openId) {
+        return { ...n, config: withBranch(n.config, "open") };
+      }
+      return n;
+    });
   }
+
+  nodes = nodes.map((n) => ({
+    ...n,
+    config: withBranch(n.config, nodeBranch(n)),
+  }));
+
+  if (raw.afterHoursNodeId) {
+    nodes = nodes.map((n) =>
+      n.id === raw.afterHoursNodeId ? { ...n, config: withBranch(n.config, "closed") } : n
+    );
+  }
+
+  return { ...raw, nodes: orderByLanes(nodes) };
 }
 
 function stepSummary(
@@ -190,15 +235,17 @@ function stepSummary(
       const digit = String(config.voicemailDigit ?? "").trim();
       return digit ? `Hold · press ${digit} for voicemail` : "Hold with music";
     }
-    case "HOURS_BRANCH": {
-      const rules = (config.rules as HoursRule[] | undefined) ?? [];
-      return `${rules.length} schedule window${rules.length === 1 ? "" : "s"}`;
-    }
     case "HANGUP":
       return "Call will disconnect";
     default:
       return "";
   }
+}
+
+type ExpandKey = string;
+
+function expandKey(branch: Branch, laneIndex: number): ExpandKey {
+  return `${branch}:${laneIndex}`;
 }
 
 export default function FlowEditorPage() {
@@ -211,8 +258,8 @@ export default function FlowEditorPage() {
   const [users, setUsers] = useState<CompanyUser[]>([]);
   const [numbers, setNumbers] = useState<PhoneNumber[]>([]);
   const [saving, setSaving] = useState(false);
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const [addMenuAt, setAddMenuAt] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<ExpandKey | null>(null);
+  const [addMenuAt, setAddMenuAt] = useState<string | null>(null);
 
   function load() {
     Promise.all([
@@ -224,7 +271,7 @@ export default function FlowEditorPage() {
     ])
       .then(([fl, gr, cl, us, nums]) => {
         if (fl.error) throw new Error(fl.error);
-        setFlow(fl);
+        setFlow(migrateFlowForEditor(fl));
         setGroups(Array.isArray(gr) ? gr : []);
         setClips(Array.isArray(cl) ? cl : []);
         setUsers(
@@ -242,62 +289,90 @@ export default function FlowEditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId]);
 
-  function updateNodeConfig(index: number, config: Record<string, unknown>) {
+  const openNodes = useMemo(
+    () => (flow ? flow.nodes.filter((n) => nodeBranch(n) === "open") : []),
+    [flow]
+  );
+  const closedNodes = useMemo(
+    () => (flow ? flow.nodes.filter((n) => nodeBranch(n) === "closed") : []),
+    [flow]
+  );
+
+  function setOrderedNodes(open: FlowNode[], closed: FlowNode[]) {
     if (!flow) return;
-    const nodes = [...flow.nodes];
-    nodes[index] = { ...nodes[index], config };
-    setFlow({ ...flow, nodes });
+    setFlow({ ...flow, nodes: orderByLanes([...open, ...closed]) });
   }
 
-  function insertNode(position: number, type: NodeType) {
+  function updateLaneNode(branch: Branch, laneIndex: number, patch: Partial<FlowNode>) {
     if (!flow) return;
-    const nodes = [...flow.nodes];
-    nodes.splice(position, 0, { type, config: defaultConfig(type), sortOrder: position });
-    setFlow({ ...flow, nodes: nodes.map((n, i) => ({ ...n, sortOrder: i })) });
+    const open = [...openNodes];
+    const closed = [...closedNodes];
+    const lane = branch === "open" ? open : closed;
+    lane[laneIndex] = { ...lane[laneIndex], ...patch };
+    setOrderedNodes(open, closed);
+  }
+
+  function insertNode(branch: Branch, positionInLane: number, type: NodeType) {
+    if (!flow) return;
+    const open = [...openNodes];
+    const closed = [...closedNodes];
+    const lane = branch === "open" ? open : closed;
+    lane.splice(positionInLane, 0, {
+      type,
+      config: defaultConfig(type, branch),
+      sortOrder: 0,
+    });
+    setOrderedNodes(open, closed);
     setAddMenuAt(null);
-    setExpanded(position);
+    setExpanded(expandKey(branch, positionInLane));
   }
 
-  function removeNode(index: number) {
+  function removeLaneNode(branch: Branch, laneIndex: number) {
     if (!flow) return;
-    const removed = flow.nodes[index];
-    const nodes = flow.nodes
-      .filter((_, i) => i !== index)
-      .map((n, i) => ({ ...n, sortOrder: i }));
+    const open = [...openNodes];
+    const closed = [...closedNodes];
+    const lane = branch === "open" ? open : closed;
+    const removed = lane[laneIndex];
+    lane.splice(laneIndex, 1);
     setFlow({
       ...flow,
-      nodes,
+      nodes: orderByLanes([...open, ...closed]),
       entryNodeId: flow.entryNodeId === removed.id ? null : flow.entryNodeId,
       afterHoursNodeId: flow.afterHoursNodeId === removed.id ? null : flow.afterHoursNodeId,
     });
     setExpanded(null);
   }
 
-  function moveNode(index: number, dir: -1 | 1) {
+  function moveLaneNode(branch: Branch, laneIndex: number, dir: -1 | 1) {
     if (!flow) return;
-    const target = index + dir;
-    if (target < 0 || target >= flow.nodes.length) return;
-    const nodes = [...flow.nodes];
-    [nodes[index], nodes[target]] = [nodes[target], nodes[index]];
-    setFlow({ ...flow, nodes: nodes.map((n, i) => ({ ...n, sortOrder: i })) });
-    setExpanded(target);
+    const open = [...openNodes];
+    const closed = [...closedNodes];
+    const lane = branch === "open" ? open : closed;
+    const target = laneIndex + dir;
+    if (target < 0 || target >= lane.length) return;
+    [lane[laneIndex], lane[target]] = [lane[target], lane[laneIndex]];
+    setOrderedNodes(open, closed);
+    setExpanded(expandKey(branch, target));
   }
 
   async function save() {
     if (!flow) return;
     setSaving(true);
+    const ordered = orderByLanes(flow.nodes);
+    const open = ordered.filter((n) => nodeBranch(n) === "open");
+    const closed = ordered.filter((n) => nodeBranch(n) === "closed");
     const res = await fetch(`/api/settings/voice/flows/${flowId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: flow.name,
         description: flow.description,
-        entryNodeId: flow.nodes[0]?.id ?? null,
-        afterHoursNodeId: flow.afterHoursNodeId,
-        steps: flow.nodes.map((n, i) => ({
+        entryNodeId: open[0]?.id ?? null,
+        afterHoursNodeId: closed[0]?.id ?? null,
+        steps: ordered.map((n, i) => ({
           id: n.id,
           type: n.type,
-          config: n.config,
+          config: withBranch(n.config, nodeBranch(n)),
           sortOrder: i,
         })),
       }),
@@ -308,7 +383,7 @@ export default function FlowEditorPage() {
       return;
     }
     const updated = await res.json();
-    setFlow(updated);
+    setFlow(migrateFlowForEditor(updated));
     toast.success("Flow saved");
   }
 
@@ -322,53 +397,157 @@ export default function FlowEditorPage() {
   }
 
   const assignedNumbers = numbers.filter((n) => n.callFlow?.id === flow.id);
-  const savedNodes = flow.nodes.filter((n) => n.id);
 
-  const AddStepControl = ({ position }: { position: number }) => (
-    <div className="flex flex-col items-center">
-      <div className="h-4 w-px bg-border" />
-      {addMenuAt === position ? (
-        <div className="w-full max-w-sm rounded-lg border border-border bg-white p-2 shadow-sm">
-          <div className="mb-1 flex items-center justify-between px-1">
-            <span className="text-xs font-medium text-muted-foreground">Add a step</span>
-            <button type="button" onClick={() => setAddMenuAt(null)}>
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
+  const AddStepControl = ({
+    branch,
+    position,
+  }: {
+    branch: Branch;
+    position: number;
+  }) => {
+    const menuKey = `${branch}:${position}`;
+    return (
+      <div className="flex flex-col items-center">
+        <div className="h-3 w-px bg-border" />
+        {addMenuAt === menuKey ? (
+          <div className="z-10 w-full rounded-lg border border-border bg-white p-2 shadow-sm">
+            <div className="mb-1 flex items-center justify-between px-1">
+              <span className="text-xs font-medium text-muted-foreground">Add a step</span>
+              <button type="button" onClick={() => setAddMenuAt(null)}>
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-1">
+              {ADD_STEP_ORDER.map((t) => {
+                const meta = STEP_META[t];
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => insertNode(branch, position, t)}
+                    className="flex items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  >
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span>
+                      <span className="block font-medium">{meta.label}</span>
+                      <span className="block text-xs text-muted-foreground">{meta.blurb}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-1">
-            {ADD_STEP_ORDER.map((t) => {
-              const meta = STEP_META[t];
-              const Icon = meta.icon;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => insertNode(position, t)}
-                  className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                >
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{meta.label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{meta.blurb}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAddMenuAt(position)}
-          className="rounded-full border border-primary/40 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/5"
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddMenuAt(menuKey)}
+            className="rounded-full border border-primary/40 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/5"
+          >
+            Add step
+          </button>
+        )}
+        <div className="h-3 w-px bg-border" />
+      </div>
+    );
+  };
+
+  function renderLane(branch: Branch, nodes: FlowNode[]) {
+    const title = branch === "open" ? "Open hours" : "Closed / after hours";
+    return (
+      <div className="flex min-w-0 flex-1 flex-col items-center">
+        <div
+          className={cn(
+            "mb-1 w-full rounded-md px-2 py-1.5 text-center text-xs font-semibold",
+            branch === "open"
+              ? "bg-emerald-50 text-emerald-800"
+              : "bg-slate-100 text-slate-700"
+          )}
         >
-          Add step
-        </button>
-      )}
-      <div className="h-4 w-px bg-border" />
-    </div>
-  );
+          {title}
+        </div>
+        <AddStepControl branch={branch} position={0} />
+        {nodes.map((node, laneIndex) => {
+          const meta = STEP_META[node.type];
+          const Icon = meta.icon;
+          const key = expandKey(branch, laneIndex);
+          const isOpen = expanded === key;
+          return (
+            <div key={node.id ?? `new-${branch}-${laneIndex}`} className="flex w-full flex-col items-center">
+              <div className="w-full rounded-lg border border-border bg-white shadow-sm">
+                <div className="flex items-center gap-2 p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => setExpanded(isOpen ? null : key)}
+                  >
+                    <p className="text-sm font-semibold">{meta.label}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {stepSummary(node, { groups, users, clips })}
+                    </p>
+                  </button>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => moveLaneNode(branch, laneIndex, -1)}
+                      disabled={laneIndex === 0}
+                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveLaneNode(branch, laneIndex, 1)}
+                      disabled={laneIndex === nodes.length - 1}
+                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeLaneNode(branch, laneIndex)}
+                      className="rounded p-1 text-muted-foreground hover:bg-muted"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {isOpen ? (
+                  <div className="border-t border-border p-4">
+                    <StepEditor
+                      node={node}
+                      flow={flow}
+                      groups={groups}
+                      users={users}
+                      clips={clips}
+                      onClipsChange={setClips}
+                      onGroupsChange={setGroups}
+                      onNodeChange={(patch) => updateLaneNode(branch, laneIndex, patch)}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              <AddStepControl branch={branch} position={laneIndex + 1} />
+            </div>
+          );
+        })}
+        {nodes.length === 0 ? (
+          <p className="px-2 pb-2 text-center text-xs text-muted-foreground">
+            {branch === "open"
+              ? "Add steps for when you are open."
+              : "Optional. Leave empty to use the open path when closed."}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <ContentArea className="max-w-2xl">
+    <ContentArea className="max-w-4xl">
       <PageHeader
         breadcrumb={["Settings", "Voice", "Call flows", flow.name]}
         title="Call flow"
@@ -413,114 +592,38 @@ export default function FlowEditorPage() {
 
         <div className="h-4 w-px bg-border" />
 
-        {/* Call hours */}
-        <div className="w-full max-w-sm rounded-lg border border-border bg-white p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Clock className="h-4 w-4" />
-              Call hours
-            </div>
-            <Link href="/settings/voice/hours" className="text-xs text-primary hover:underline">
-              Edit hours
-            </Link>
+        {/* Business hours fork hub */}
+        <div className="w-full max-w-sm rounded-lg border border-border bg-white p-4 text-center shadow-sm">
+          <div className="flex items-center justify-center gap-2 text-sm font-semibold">
+            <CalendarClock className="h-4 w-4" />
+            Business hours
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            Prefer a <span className="font-medium">Schedule branch</span> step for multiple
-            day/time paths (open, evening, weekend). Or jump to one after-hours step below.
+            Callers follow the open path during company hours, or the closed path after hours.
           </p>
-          <div className="mt-2">
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              When closed (after hours)
-            </label>
-            <select
-              className={selectClass}
-              value={flow.afterHoursNodeId ?? ""}
-              onChange={(e) => setFlow({ ...flow, afterHoursNodeId: e.target.value || null })}
-            >
-              <option value="">Follow the same steps</option>
-              {savedNodes.map((n) => {
-                const idx = flow.nodes.findIndex((x) => x === n);
-                return (
-                  <option key={n.id} value={n.id ?? ""}>
-                    Jump to #{idx + 1} {STEP_META[n.type].label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          <Link
+            href="/settings/voice/hours"
+            className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+          >
+            Edit hours
+          </Link>
         </div>
 
-        <AddStepControl position={0} />
+        {/* Y-split connectors */}
+        <div className="relative h-8 w-full max-w-2xl">
+          <div className="absolute left-1/2 top-0 h-3 w-px -translate-x-1/2 bg-border" />
+          <div className="absolute left-[25%] right-[25%] top-3 h-px bg-border" />
+          <div className="absolute left-[25%] top-3 h-5 w-px bg-border" />
+          <div className="absolute right-[25%] top-3 h-5 w-px bg-border" />
+        </div>
 
-        {/* Steps */}
-        {flow.nodes.map((node, index) => {
-          const meta = STEP_META[node.type];
-          const Icon = meta.icon;
-          const isOpen = expanded === index;
-          return (
-            <div key={node.id ?? `new-${index}`} className="flex w-full flex-col items-center">
-              <div className="w-full max-w-sm rounded-lg border border-border bg-white shadow-sm">
-                <div className="flex items-center gap-3 p-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <button
-                    type="button"
-                    className="flex-1 text-left"
-                    onClick={() => setExpanded(isOpen ? null : index)}
-                  >
-                    <p className="text-sm font-semibold">{meta.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {stepSummary(node, { groups, users, clips })}
-                    </p>
-                  </button>
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() => moveNode(index, -1)}
-                      disabled={index === 0}
-                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
-                    >
-                      <ChevronUp className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveNode(index, 1)}
-                      disabled={index === flow.nodes.length - 1}
-                      className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeNode(index)}
-                      className="rounded p-1 text-muted-foreground hover:bg-muted"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+        {/* Side-by-side lanes */}
+        <div className="grid w-full max-w-2xl grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-4">
+          {renderLane("open", openNodes)}
+          {renderLane("closed", closedNodes)}
+        </div>
 
-                {isOpen ? (
-                  <div className="border-t border-border p-4">
-                    <StepEditor
-                      node={node}
-                      index={index}
-                      flow={flow}
-                      groups={groups}
-                      users={users}
-                      clips={clips}
-                      onClipsChange={setClips}
-                      onConfigChange={(config) => updateNodeConfig(index, config)}
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              <AddStepControl position={index + 1} />
-            </div>
-          );
-        })}
+        <div className="mt-4 h-4 w-px bg-border" />
 
         {/* End call */}
         <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
@@ -545,24 +648,28 @@ export default function FlowEditorPage() {
 
 function StepEditor({
   node,
-  index,
   flow,
   groups,
   users,
   clips,
   onClipsChange,
-  onConfigChange,
+  onGroupsChange,
+  onNodeChange,
 }: {
   node: FlowNode;
-  index: number;
   flow: CallFlow;
   groups: AgentGroup[];
   users: CompanyUser[];
   clips: VoiceClip[];
   onClipsChange: (clips: VoiceClip[]) => void;
-  onConfigChange: (config: Record<string, unknown>) => void;
+  onGroupsChange: (groups: AgentGroup[]) => void;
+  onNodeChange: (patch: Partial<FlowNode>) => void;
 }) {
   const config = node.config;
+  const branch = nodeBranch(node);
+
+  const onConfigChange = (next: Record<string, unknown>) =>
+    onNodeChange({ config: withBranch(next, branch) });
 
   const audioFor = (clipKey: string, textKey: string): AudioValue => ({
     clipId: (config[clipKey] as string) || undefined,
@@ -623,65 +730,23 @@ function StepEditor({
     );
   }
 
-  if (node.type === "DIAL_GROUP") {
+  if (node.type === "DIAL_USER" || node.type === "DIAL_GROUP") {
     return (
-      <div>
-        <label className="mb-1 block text-sm font-medium">Ring this team</label>
-        <select
-          className={selectClass}
-          value={String(config.groupId ?? "")}
-          onChange={(e) => onConfigChange({ ...config, groupId: e.target.value })}
-        >
-          <option value="">Default team</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-
-  if (node.type === "DIAL_USER") {
-    return (
-      <div className="space-y-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium">Ring this person</label>
-          <select
-            className={selectClass}
-            value={String(config.userId ?? "")}
-            onChange={(e) => onConfigChange({ ...config, userId: e.target.value })}
-          >
-            <option value="">Select a person…</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Rings their web softphone and iOS app (with a push notification when the app is closed).
-          </p>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Ring timeout (seconds)</label>
-          <Input
-            type="number"
-            min={10}
-            max={120}
-            value={Number(config.timeoutSec ?? 30)}
-            onChange={(e) =>
-              onConfigChange({ ...config, timeoutSec: Number(e.target.value) || 30 })
-            }
-          />
-        </div>
-      </div>
+      <RingStepEditor
+        node={node}
+        groups={groups}
+        users={users}
+        onGroupsChange={onGroupsChange}
+        onNodeChange={onNodeChange}
+      />
     );
   }
 
   if (node.type === "IVR") {
     const options = (config.options as IvrOption[]) ?? [];
+    const sameBranchNodes = flow.nodes.filter(
+      (n) => n.id && n !== node && nodeBranch(n) === branch
+    );
     return (
       <div className="space-y-3">
         <AudioSourcePicker
@@ -695,7 +760,10 @@ function StepEditor({
         <div>
           <p className="mb-2 text-sm font-medium">Digit options</p>
           {options.map((opt, optIdx) => (
-            <div key={optIdx} className="mb-2 grid grid-cols-[3rem_1fr_1.5fr_auto] items-center gap-2">
+            <div
+              key={optIdx}
+              className="mb-2 grid grid-cols-[3rem_1fr_1.5fr_auto] items-center gap-2"
+            >
               <Input
                 value={opt.digit}
                 onChange={(e) => {
@@ -725,13 +793,14 @@ function StepEditor({
                 }}
               >
                 <option value="">Go to step…</option>
-                {flow.nodes.map((n, i) =>
-                  i === index || !n.id ? null : (
+                {sameBranchNodes.map((n) => {
+                  const i = flow.nodes.indexOf(n);
+                  return (
                     <option key={n.id} value={n.id}>
                       #{i + 1} {STEP_META[n.type].label}
                     </option>
-                  )
-                )}
+                  );
+                })}
               </select>
               <button
                 type="button"
@@ -760,16 +829,16 @@ function StepEditor({
             Add option
           </Button>
           <p className="mt-2 text-xs text-muted-foreground">
-            Tip: “Go to step” only lists saved steps. Save the flow after adding steps to link them.
+            Tip: “Go to step” only lists saved steps in this path. Save the flow after adding steps
+            to link them.
           </p>
         </div>
       </div>
     );
   }
 
-  // QUEUE / HANGUP / HOURS_BRANCH config panels
   if (node.type === "QUEUE") {
-    const saved = flow.nodes.filter((n) => n.id);
+    const saved = flow.nodes.filter((n) => n.id && nodeBranch(n) === branch);
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
@@ -809,13 +878,17 @@ function StepEditor({
             >
               <option value="">Default company voicemail</option>
               {saved
-                .map((n, i) => ({ n, i: flow.nodes.indexOf(n) }))
-                .filter(({ n }) => n.type === "VOICEMAIL" || n.type === "PLAY" || n.type === "HANGUP")
-                .map(({ n, i }) => (
-                  <option key={n.id} value={n.id ?? ""}>
-                    #{i + 1} {STEP_META[n.type].label}
-                  </option>
-                ))}
+                .filter(
+                  (n) => n.type === "VOICEMAIL" || n.type === "PLAY" || n.type === "HANGUP"
+                )
+                .map((n) => {
+                  const i = flow.nodes.indexOf(n);
+                  return (
+                    <option key={n.id} value={n.id ?? ""}>
+                      #{i + 1} {STEP_META[n.type].label}
+                    </option>
+                  );
+                })}
             </select>
             <p className="mt-1 text-xs text-muted-foreground">
               Save the flow after adding a Voicemail step to select it here.
@@ -826,150 +899,13 @@ function StepEditor({
     );
   }
 
+  // Legacy HOURS_BRANCH (should be migrated away on load)
   if (node.type === "HOURS_BRANCH") {
-    const rules = ((config.rules as HoursRule[]) ?? []).map((r) => ({
-      ...r,
-      days: Array.isArray(r.days) ? r.days : [],
-    }));
-    const saved = flow.nodes.filter((n) => n.id && n !== node);
-
-    const updateRule = (ruleId: string, patch: Partial<HoursRule>) => {
-      onConfigChange({
-        ...config,
-        rules: rules.map((r) => (r.id === ruleId ? { ...r, ...patch } : r)),
-      });
-    };
-
-    const toggleDay = (ruleId: string, day: number) => {
-      const rule = rules.find((r) => r.id === ruleId);
-      if (!rule) return;
-      const days = rule.days.includes(day)
-        ? rule.days.filter((d) => d !== day)
-        : [...rule.days, day].sort((a, b) => a - b);
-      updateRule(ruleId, { days });
-    };
-
     return (
-      <div className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          First matching window wins (company timezone). Add separate windows for daytime,
-          evenings, weekends, etc., each pointing to a different step.
-        </p>
-        {rules.map((rule, ruleIndex) => (
-          <div key={rule.id} className="space-y-2 rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <Input
-                value={rule.label}
-                onChange={(e) => updateRule(rule.id, { label: e.target.value })}
-                placeholder={`Window ${ruleIndex + 1}`}
-                className="h-8"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  onConfigChange({
-                    ...config,
-                    rules: rules.filter((r) => r.id !== rule.id),
-                  })
-                }
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {WEEKDAY_LABELS.map(({ day, label }) => {
-                const on = rule.days.includes(day);
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggleDay(rule.id, day)}
-                    className={cn(
-                      "rounded px-2 py-1 text-xs font-medium",
-                      on ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Start</label>
-                <Input
-                  type="time"
-                  value={rule.start}
-                  onChange={(e) => updateRule(rule.id, { start: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">End</label>
-                <Input
-                  type="time"
-                  value={rule.end}
-                  onChange={(e) => updateRule(rule.id, { end: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">Go to step</label>
-              <select
-                className={selectClass}
-                value={rule.nextNodeId}
-                onChange={(e) => updateRule(rule.id, { nextNodeId: e.target.value })}
-              >
-                <option value="">Select a saved step…</option>
-                {saved.map((n) => {
-                  const idx = flow.nodes.findIndex((x) => x === n);
-                  return (
-                    <option key={n.id} value={n.id ?? ""}>
-                      #{idx + 1} {STEP_META[n.type].label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          </div>
-        ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            onConfigChange({
-              ...config,
-              rules: [...rules, newHoursRule()],
-            })
-          }
-        >
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          Add schedule window
-        </Button>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Otherwise (no match)</label>
-          <select
-            className={selectClass}
-            value={String(config.defaultNextNodeId ?? "")}
-            onChange={(e) => onConfigChange({ ...config, defaultNextNodeId: e.target.value })}
-          >
-            <option value="">Say closed & hang up</option>
-            {saved.map((n) => {
-              const idx = flow.nodes.findIndex((x) => x === n);
-              return (
-                <option key={n.id} value={n.id ?? ""}>
-                  #{idx + 1} {STEP_META[n.type].label}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Tip: Save the flow after adding steps so they appear in these dropdowns.
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        This schedule branch is legacy. Save the flow to convert it into the open/closed paths
+        above.
+      </p>
     );
   }
 
@@ -977,5 +913,361 @@ function StepEditor({
     <p className="text-sm text-muted-foreground">
       {STEP_META[node.type].blurb}. No extra settings needed.
     </p>
+  );
+}
+
+function RingStepEditor({
+  node,
+  groups,
+  users,
+  onGroupsChange,
+  onNodeChange,
+}: {
+  node: FlowNode;
+  groups: AgentGroup[];
+  users: CompanyUser[];
+  onGroupsChange: (groups: AgentGroup[]) => void;
+  onNodeChange: (patch: Partial<FlowNode>) => void;
+}) {
+  const branch = nodeBranch(node);
+  const config = node.config;
+  const [pendingUserIds, setPendingUserIds] = useState<string[]>([]);
+  const [upgradeName, setUpgradeName] = useState("");
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [manualCreateOpen, setManualCreateOpen] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [createMemberIds, setCreateMemberIds] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+
+  const selectedGroup = groups.find((g) => g.id === config.groupId);
+
+  useEffect(() => {
+    if (node.type === "DIAL_USER") {
+      const uid = String(config.userId ?? "");
+      setPendingUserIds(uid ? [uid] : []);
+      setShowUpgrade(false);
+    } else if (node.type === "DIAL_GROUP" && selectedGroup?.members) {
+      setPendingUserIds(selectedGroup.members.map((m) => m.userId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.type, config.userId, config.groupId, selectedGroup?.id]);
+
+  function applyAsUser(userId: string) {
+    onNodeChange({
+      type: "DIAL_USER",
+      config: withBranch(
+        { userId, timeoutSec: Number(config.timeoutSec ?? 30) },
+        branch
+      ),
+    });
+  }
+
+  async function createTeam(name: string, memberUserIds: string[]) {
+    const res = await fetch("/api/settings/voice/groups", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim() || "Call flow team",
+        ringStrategy: "SIMULTANEOUS",
+        ringTimeoutSec: Number(config.timeoutSec ?? 30),
+        memberUserIds,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to create team");
+    }
+    return (await res.json()) as AgentGroup;
+  }
+
+  async function upgradeToTeam(memberUserIds: string[], name: string) {
+    setUpgrading(true);
+    try {
+      const group = await createTeam(name, memberUserIds);
+      onGroupsChange([group, ...groups.filter((g) => g.id !== group.id)]);
+      onNodeChange({
+        type: "DIAL_GROUP",
+        config: withBranch(
+          { groupId: group.id, timeoutSec: Number(config.timeoutSec ?? 30) },
+          branch
+        ),
+      });
+      setShowUpgrade(false);
+      setUpgradeName("");
+      toast.success(`Created team “${group.name}”`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create team");
+    } finally {
+      setUpgrading(false);
+    }
+  }
+
+  async function handleCreateTeamSubmit() {
+    if (createMemberIds.length === 0) {
+      toast.error("Select at least one person");
+      return;
+    }
+    setCreating(true);
+    try {
+      const group = await createTeam(manualName || "Call flow team", createMemberIds);
+      onGroupsChange([group, ...groups.filter((g) => g.id !== group.id)]);
+      onNodeChange({
+        type: "DIAL_GROUP",
+        config: withBranch(
+          { groupId: group.id, timeoutSec: Number(config.timeoutSec ?? 30) },
+          branch
+        ),
+      });
+      setManualName("");
+      setCreateMemberIds([]);
+      setManualCreateOpen(false);
+      toast.success(`Created team “${group.name}”`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create team");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function addPerson(userId: string) {
+    if (!userId || pendingUserIds.includes(userId)) return;
+    const next = [...pendingUserIds, userId];
+    setPendingUserIds(next);
+
+    if (next.length === 1) {
+      applyAsUser(next[0]);
+      return;
+    }
+
+    if (next.length >= 2 && node.type === "DIAL_USER") {
+      const names = next
+        .map((id) => users.find((u) => u.id === id)?.name)
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(" & ");
+      setUpgradeName(names ? `${names} team` : "Call flow team");
+      setShowUpgrade(true);
+      setManualCreateOpen(false);
+      return;
+    }
+
+    if (node.type === "DIAL_GROUP" && config.groupId) {
+      void (async () => {
+        const res = await fetch(`/api/settings/voice/groups/${config.groupId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberUserIds: next }),
+        });
+        if (!res.ok) {
+          toast.error("Failed to update team members");
+          return;
+        }
+        const updated = (await res.json()) as AgentGroup;
+        onGroupsChange(groups.map((g) => (g.id === updated.id ? updated : g)));
+      })();
+    }
+  }
+
+  function removePerson(userId: string) {
+    const next = pendingUserIds.filter((id) => id !== userId);
+    setPendingUserIds(next);
+    setShowUpgrade(false);
+
+    if (next.length === 0) {
+      onNodeChange({
+        type: "DIAL_USER",
+        config: withBranch({ userId: "", timeoutSec: Number(config.timeoutSec ?? 30) }, branch),
+      });
+      return;
+    }
+
+    if (next.length === 1) {
+      applyAsUser(next[0]);
+      return;
+    }
+
+    if (node.type === "DIAL_GROUP" && config.groupId) {
+      void (async () => {
+        const res = await fetch(`/api/settings/voice/groups/${config.groupId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ memberUserIds: next }),
+        });
+        if (!res.ok) {
+          toast.error("Failed to update team members");
+          return;
+        }
+        const updated = (await res.json()) as AgentGroup;
+        onGroupsChange(groups.map((g) => (g.id === updated.id ? updated : g)));
+      })();
+    }
+  }
+
+  const availableToAdd = users.filter((u) => !pendingUserIds.includes(u.id));
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1 block text-sm font-medium">
+          {node.type === "DIAL_GROUP" ? "Ring this team" : "Ring these people"}
+        </label>
+        {node.type === "DIAL_GROUP" ? (
+          <select
+            className={cn(selectClass, "mb-2")}
+            value={String(config.groupId ?? "")}
+            onChange={(e) =>
+              onNodeChange({
+                type: "DIAL_GROUP",
+                config: withBranch({ groupId: e.target.value, timeoutSec: Number(config.timeoutSec ?? 30) }, branch),
+              })
+            }
+          >
+            <option value="">Default team</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {pendingUserIds.map((id) => {
+            const u = users.find((x) => x.id === id);
+            return (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium"
+              >
+                {u?.name ?? "Unknown"}
+                <button
+                  type="button"
+                  onClick={() => removePerson(id)}
+                  className="rounded-full p-0.5 hover:bg-background"
+                  aria-label={`Remove ${u?.name ?? "person"}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            );
+          })}
+          {pendingUserIds.length === 0 ? (
+            <span className="text-xs text-muted-foreground">No one selected yet</span>
+          ) : null}
+        </div>
+
+        {availableToAdd.length > 0 ? (
+          <select
+            className={selectClass}
+            value=""
+            onChange={(e) => {
+              addPerson(e.target.value);
+            }}
+          >
+            <option value="">Add a person…</option>
+            {availableToAdd.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        <p className="mt-1 text-xs text-muted-foreground">
+          Add a second person to ring as a team. Rings web softphone and iOS app.
+        </p>
+      </div>
+
+      {showUpgrade && pendingUserIds.length >= 2 ? (
+        <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+          <p className="text-sm font-medium">Save as a team</p>
+          <Input
+            value={upgradeName}
+            onChange={(e) => setUpgradeName(e.target.value)}
+            placeholder="Team name"
+          />
+          <Button
+            type="button"
+            size="sm"
+            disabled={upgrading}
+            onClick={() => void upgradeToTeam(pendingUserIds, upgradeName)}
+          >
+            {upgrading ? "Creating…" : "Create team & ring them"}
+          </Button>
+        </div>
+      ) : null}
+
+      <div>
+        <button
+          type="button"
+          className="text-xs font-medium text-primary hover:underline"
+          onClick={() => {
+            setManualCreateOpen((v) => !v);
+            setShowUpgrade(false);
+            if (!manualCreateOpen) {
+              setCreateMemberIds(pendingUserIds.length ? pendingUserIds : []);
+              setManualName("");
+            }
+          }}
+        >
+          {manualCreateOpen ? "Cancel new team" : "Create new team…"}
+        </button>
+        {manualCreateOpen ? (
+          <div className="mt-2 space-y-2 rounded-md border border-border p-3">
+            <Input
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              placeholder="Team name"
+            />
+            <div className="max-h-40 space-y-1.5 overflow-y-auto">
+              {users.map((u) => {
+                const checked = createMemberIds.includes(u.id);
+                return (
+                  <label key={u.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(v) =>
+                        setCreateMemberIds((prev) =>
+                          v ? [...prev, u.id] : prev.filter((id) => id !== u.id)
+                        )
+                      }
+                    />
+                    {u.name}
+                  </label>
+                );
+              })}
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={creating}
+              onClick={() => void handleCreateTeamSubmit()}
+            >
+              {creating ? "Creating…" : "Create team"}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium">Ring timeout (seconds)</label>
+        <Input
+          type="number"
+          min={10}
+          max={120}
+          value={Number(config.timeoutSec ?? 30)}
+          onChange={(e) =>
+            onNodeChange({
+              type: node.type,
+              config: withBranch(
+                { ...config, timeoutSec: Number(e.target.value) || 30 },
+                branch
+              ),
+            })
+          }
+        />
+      </div>
+    </div>
   );
 }

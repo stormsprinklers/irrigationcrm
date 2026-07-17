@@ -14,8 +14,14 @@ import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import { getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import { appBaseUrl, voiceClientIdentity } from "./identity";
+import { localTimeParts } from "./hours-branch";
 import { renderIvrGather, renderIvrNode, type FlowContext, type IvrNodeConfig } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
+
+function flowNodeBranch(config: unknown): "open" | "closed" {
+  const branch = (config as { branch?: string } | null)?.branch;
+  return branch === "closed" ? "closed" : "open";
+}
 
 type TwilioParams = Record<string, string>;
 
@@ -31,17 +37,21 @@ function resolvePostIvrDestination<
     const byId = nodes.find((n) => n.id === option.nextNodeId);
     if (byId) return byId;
   }
+  const branch = flowNodeBranch(entryNode.config);
   const later = nodes
     .filter(
       (n) =>
         n.sortOrder > entryNode.sortOrder &&
+        flowNodeBranch(n.config) === branch &&
         (n.type === CallFlowNodeType.DIAL_GROUP || n.type === CallFlowNodeType.DIAL_USER)
     )
     .sort((a, b) => a.sortOrder - b.sortOrder);
   if (later[0]) return later[0];
   return (
     nodes.find(
-      (n) => n.type === CallFlowNodeType.DIAL_GROUP || n.type === CallFlowNodeType.DIAL_USER
+      (n) =>
+        flowNodeBranch(n.config) === branch &&
+        (n.type === CallFlowNodeType.DIAL_GROUP || n.type === CallFlowNodeType.DIAL_USER)
     ) ?? null
   );
 }
@@ -69,18 +79,22 @@ async function dialAvailableAgents(
   }
 }
 
-function isWithinBusinessHours(businessHours: unknown): boolean {
+function isWithinBusinessHours(
+  businessHours: unknown,
+  timezone?: string | null
+): boolean {
   if (!businessHours || typeof businessHours !== "object") return true;
-  const now = new Date();
+  const { day, minutes } = localTimeParts(timezone);
   const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const dayKey = dayNames[now.getDay()];
-  const slot = (businessHours as Record<string, { open?: boolean; start?: string; end?: string }>)[dayKey];
+  const dayKey = dayNames[day];
+  const slot = (businessHours as Record<string, { open?: boolean; start?: string; end?: string }>)[
+    dayKey
+  ];
   if (!slot?.open) return false;
   if (!slot.start || !slot.end) return true;
   const [sh, sm] = slot.start.split(":").map(Number);
   const [eh, em] = slot.end.split(":").map(Number);
-  const mins = now.getHours() * 60 + now.getMinutes();
-  return mins >= sh * 60 + sm && mins <= eh * 60 + em;
+  return minutes >= sh * 60 + sm && minutes <= eh * 60 + em;
 }
 
 async function resolveCustomer(companyId: string, phone: string) {
@@ -208,7 +222,10 @@ export async function buildInboundTwiml(params: TwilioParams) {
     });
   }
 
-  if (!isWithinBusinessHours(company.businessHours) && phoneRecord?.callFlow?.afterHoursNodeId) {
+  if (
+    !isWithinBusinessHours(company.businessHours, company.timezone) &&
+    phoneRecord?.callFlow?.afterHoursNodeId
+  ) {
     const afterNode = phoneRecord.callFlow.nodes.find(
       (n) => n.id === phoneRecord.callFlow!.afterHoursNodeId
     );

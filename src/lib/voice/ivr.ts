@@ -48,13 +48,21 @@ export type IvrNodeConfig = {
   defaultNextNodeId?: string;
 };
 
+function flowNodeBranch(config: unknown): "open" | "closed" {
+  const branch = (config as { branch?: string } | null)?.branch;
+  return branch === "closed" ? "closed" : "open";
+}
+
 /** The next step to run when a pass-through step (e.g. PLAY) finishes. */
 function findNextSequentialNode(
   current: CallFlowNode,
   nodes: CallFlowNode[]
 ): CallFlowNode | null {
+  const branch = flowNodeBranch(current.config);
   const later = nodes
-    .filter((n) => n.sortOrder > current.sortOrder)
+    .filter(
+      (n) => n.sortOrder > current.sortOrder && flowNodeBranch(n.config) === branch
+    )
     .sort((a, b) => a.sortOrder - b.sortOrder);
   return later[0] ?? null;
 }

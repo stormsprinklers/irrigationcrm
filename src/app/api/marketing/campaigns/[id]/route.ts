@@ -14,9 +14,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
       include: {
         list: { select: { id: true, name: true } },
         steps: { orderBy: { sortOrder: "asc" } },
+        flowNodes: { orderBy: { sortOrder: "asc" } },
         enrollments: {
-          select: { id: true, status: true, currentStepIndex: true, nextSendAt: true },
-          take: 100,
+          select: {
+            id: true,
+            status: true,
+            currentStepIndex: true,
+            currentNodeId: true,
+            nextSendAt: true,
+            customer: { select: { id: true, name: true, email: true } },
+          },
+          take: 200,
+          orderBy: { updatedAt: "desc" },
         },
         recipients: {
           orderBy: { sentAt: "desc" },
@@ -27,6 +36,14 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    let flowMetrics = null;
+    try {
+      const { getCampaignFlowMetrics } = await import("@/lib/marketing/flow-engine");
+      flowMetrics = await getCampaignFlowMetrics(id);
+    } catch {
+      flowMetrics = null;
+    }
+
     return NextResponse.json({
       ...campaign,
       audienceFilters: campaign.audienceFilters,
@@ -35,6 +52,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       sentAt: campaign.sentAt?.toISOString() ?? null,
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
+      flowMetrics,
       recipients: campaign.recipients.map((r) => ({
         ...r,
         sentAt: r.sentAt?.toISOString() ?? null,

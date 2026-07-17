@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  processCampaignTriggers,
+  processFlowEnrollments,
+} from "@/lib/marketing/flow-engine";
 import { processDripSends } from "@/lib/marketing/send";
 
 export async function GET(request: NextRequest) {
@@ -10,8 +14,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await processDripSends();
-    return NextResponse.json({ ok: true, ...result });
+    const triggers = await processCampaignTriggers();
+    const flow = await processFlowEnrollments();
+    // Keep legacy linear drip processor for campaigns that still only have CampaignStep rows
+    // and no flow activity this run.
+    const legacy = await processDripSends();
+    return NextResponse.json({ ok: true, triggers, flow, legacy });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Drip processing failed";
     return NextResponse.json({ error: message }, { status: 500 });
