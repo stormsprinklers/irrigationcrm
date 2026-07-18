@@ -7,7 +7,8 @@
  *   OPENAI_API_KEY
  *   OPENAI_REALTIME_MODEL — optional, default gpt-realtime
  *
- * Audio: Twilio μ-law 8kHz ↔ OpenAI audio/pcmu (no resample) for clearer telephony audio.
+ * Audio: Twilio μ-law 8kHz ↔ OpenAI audio/pcmu (no resample).
+ * Barge-in: caller speech cancels the assistant response and clears Twilio playout.
  */
 
 import "dotenv/config";
@@ -44,7 +45,6 @@ function log(...args: unknown[]) {
 function clampMaxMinutes(raw: unknown) {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return 12;
-  // If someone accidentally stored seconds (e.g. 120–3600), convert to minutes.
   if (n > 45 && n <= 3600) return Math.min(45, Math.max(5, Math.round(n / 60)));
   return Math.min(45, Math.max(5, Math.round(n)));
 }
@@ -94,9 +94,10 @@ class CallBridge {
   private session: SessionBootstrap | null = null;
   private closed = false;
   private fatalOpenAi = false;
-  /** While the model is speaking, ignore Twilio mic audio to avoid echo false-turns. */
+  /** Tracks assistant TTS so we can barge-in (cancel + clear Twilio queue). */
   private assistantSpeaking = false;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
+  private speakEndTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingFnArgs: Record<string, string> = {};
   private leavingForHandoff = false;
 
@@ -131,9 +132,9 @@ class CallBridge {
     }
 
     if (msg.event === "media" && this.openai?.readyState === WebSocket.OPEN) {
-      if (this.assistantSpeaking || this.leavingForHandoff) return;
+      if (this.leavingForHandoff) return;
       const media = msg.media as { payload: string };
-      // Twilio payload is already base64 μ-law @ 8kHz — pass through as audio/pcmu.
+      // Always forward caller audio so they can interrupt the assistant.
       this.openai.send(
         JSON.stringify({
           type: "input_audio_buffer.append",
@@ -175,12 +176,13 @@ class CallBridge {
           audio: {
             input: {
               format: { type: "audio/pcmu" },
-              // Longer silence + higher threshold reduces false "caller spoke" turns from line noise/echo.
               turn_detection: {
                 type: "server_vad",
-                threshold: 0.7,
-                prefix_padding_ms: 400,
-                silence_duration_ms: 900,
+                threshold: 0.6,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 850,
+                interrupt_response: true,
+                create_response: true,
               },
               transcription: { model: "whisper-1" },
             },
@@ -222,13 +224,51 @@ class CallBridge {
     });
   }
 
-  private clearInputBuffer() {
-    if (this.openai?.readyState !== WebSocket.OPEN) return;
+  private clearTwilioAudio() {
+    if (!this.streamSid) return;
     try {
-      this.openai.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+      this.twilioWs.send(
+        JSON.stringify({
+          event: "clear",
+          streamSid: this.streamSid,
+        })
+      );
     } catch {
       /* ignore */
     }
+  }
+
+  private bargeIn() {
+    if (!this.assistantSpeaking || this.leavingForHandoff) return;
+    log("Barge-in — caller interrupted assistant");
+    this.assistantSpeaking = false;
+    if (this.speakEndTimer) {
+      clearTimeout(this.speakEndTimer);
+      this.speakEndTimer = null;
+    }
+    this.clearTwilioAudio();
+    if (this.openai?.readyState === WebSocket.OPEN) {
+      try {
+        this.openai.send(JSON.stringify({ type: "response.cancel" }));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  private markAssistantSpeaking(speaking: boolean) {
+    if (this.speakEndTimer) {
+      clearTimeout(this.speakEndTimer);
+      this.speakEndTimer = null;
+    }
+    if (speaking) {
+      this.assistantSpeaking = true;
+      return;
+    }
+    this.speakEndTimer = setTimeout(() => {
+      this.assistantSpeaking = false;
+      this.speakEndTimer = null;
+    }, 150);
   }
 
   private async onOpenAIMessage(raw: string) {
@@ -242,6 +282,8 @@ class CallBridge {
     const type = String(event.type || "");
 
     if (type === "error") {
+      const err = event.error as { code?: string } | undefined;
+      if (err?.code === "response_cancel_not_active") return;
       this.fatalOpenAi = true;
       log("OpenAI error event", JSON.stringify(event).slice(0, 800));
       return;
@@ -252,25 +294,23 @@ class CallBridge {
       return;
     }
 
+    // Caller started talking — stop AI audio immediately.
+    if (type === "input_audio_buffer.speech_started") {
+      this.bargeIn();
+      return;
+    }
+
     if (type === "response.created" || type === "output_audio_buffer.started") {
-      this.assistantSpeaking = true;
-      this.clearInputBuffer();
+      this.markAssistantSpeaking(true);
       return;
     }
 
     if (
       type === "response.done" ||
-      type === "response.output_audio.done" ||
-      type === "output_audio_buffer.stopped" ||
-      type === "response.cancelled"
+      type === "response.cancelled" ||
+      type === "output_audio_buffer.stopped"
     ) {
-      // Keep suppressing briefly after audio ends so tail echo doesn't trigger a turn.
-      if (type === "response.done" || type === "response.cancelled") {
-        setTimeout(() => {
-          this.assistantSpeaking = false;
-          this.clearInputBuffer();
-        }, 400);
-      }
+      this.markAssistantSpeaking(false);
       return;
     }
 
@@ -278,7 +318,7 @@ class CallBridge {
       (type === "response.output_audio.delta" || type === "response.audio.delta") &&
       this.streamSid
     ) {
-      this.assistantSpeaking = true;
+      this.markAssistantSpeaking(true);
       const delta = String(event.delta || "");
       this.twilioWs.send(
         JSON.stringify({
@@ -366,7 +406,6 @@ class CallBridge {
     const ok = Boolean((result as { ok?: boolean } | null)?.ok);
 
     if (handoff && ok) {
-      // Do not speak again — Twilio is leaving the Media Stream for dial/voicemail.
       this.leavingForHandoff = true;
       this.assistantSpeaking = false;
       setTimeout(() => {
@@ -426,6 +465,7 @@ class CallBridge {
     if (this.closed) return;
     this.closed = true;
     if (this.maxTimer) clearTimeout(this.maxTimer);
+    if (this.speakEndTimer) clearTimeout(this.speakEndTimer);
     if (this.session) {
       void fetch(`${CRM_BASE_URL}/api/ai/receptionist/transcript`, {
         method: "POST",
