@@ -847,6 +847,7 @@ export function CustomerProfile({ customerId }: Props) {
             <CustomerPaymentMethodsSection
               customerId={customer.id}
               customerEmail={customer.email}
+              customerPhone={customer.phone}
               canManage={canManagePayments}
             />
           )}
