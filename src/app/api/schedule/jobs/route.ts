@@ -93,7 +93,11 @@ export async function POST(request: NextRequest) {
       if (block) return badRequestResponse(block);
     }
 
-    const assignmentError = validateScheduledVisitAssignment(VisitStatus.SCHEDULED, assignedUserId);
+    const assignmentError = validateScheduledVisitAssignment(
+      VisitStatus.SCHEDULED,
+      assignedUserId,
+      crewId
+    );
     if (assignmentError) return badRequestResponse(assignmentError);
 
     const jobStart = new Date(startAt);

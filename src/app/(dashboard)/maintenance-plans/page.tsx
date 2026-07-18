@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { DueForBillingCard } from "@/components/maintenance-plans/DueForBillingCard";
+import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
 import { PlanSummaryCard } from "@/components/maintenance-plans/PlanSummaryCard";
 import { RecurringRevenueCard } from "@/components/maintenance-plans/RecurringRevenueCard";
 import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrrigationPanel";
@@ -20,6 +21,7 @@ import {
   formatCurrency,
   type BillingRowDisplay,
 } from "@/lib/maintenance-plans/format";
+import { isBillingPeriodLate } from "@/lib/maintenance-plans/late-payment";
 import type { DashboardDTO } from "@/lib/maintenance-plans/types";
 
 export default function MaintenancePlansPage() {
@@ -82,13 +84,33 @@ export default function MaintenancePlansPage() {
               </Link>
             </Button>
             <Button variant="ghost" size="icon" asChild>
-              <Link href="/settings/maintenance">
+              <Link href="/settings/integrations/rachio">
                 <Settings className="h-5 w-5" />
               </Link>
             </Button>
           </>
         }
       />
+
+      {!loading && (() => {
+        const lateRows = billingRows.filter((row) =>
+          isBillingPeriodLate({ status: row.status, dueDate: row.dueDate, paidAt: null })
+        );
+        if (!lateRows.length) return null;
+        const lateTotal = lateRows.reduce((sum, row) => sum + row.amount, 0);
+        return (
+          <LatePaymentAlert
+            className="mb-4"
+            title={
+              lateRows.length === 1
+                ? "Late maintenance plan payment"
+                : "Late maintenance plan payments"
+            }
+            amount={lateTotal}
+            description={`${lateRows.length} billing period${lateRows.length === 1 ? "" : "s"} failed or are past due.`}
+          />
+        );
+      })()}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading dashboard...</p>

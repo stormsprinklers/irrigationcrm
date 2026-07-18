@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { offerMatchesCustomer } from "./permissions";
+
+function resolveOfferImageUrl(imageUrl: string | null) {
+  if (!imageUrl) return null;
+  return absolutePublicBlobUrl(imageUrl) ?? blobProxyUrl(imageUrl) ?? imageUrl;
+}
 
 export async function listPortalOffersForCustomer(
   companyId: string,
@@ -22,7 +28,7 @@ export async function listPortalOffersForCustomer(
       id: o.id,
       title: o.title,
       description: o.description,
-      imageUrl: o.imageUrl,
+      imageUrl: resolveOfferImageUrl(o.imageUrl),
       ctaLabel: o.ctaLabel,
       ctaUrl: o.ctaUrl,
     }));

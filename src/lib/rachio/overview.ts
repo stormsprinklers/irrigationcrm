@@ -189,7 +189,11 @@ export async function getRachioOverview(companyId: string): Promise<{
       const link = linkByDeviceId.get(entity.id);
 
       return {
-        ...entity,
+        id: entity.id,
+        name: entity.name ?? "Unnamed device",
+        serialNumber: entity.serialNumber,
+        model: entity.model,
+        status: entity.status,
         zoneCount: entity.zoneCount ?? 0,
         kind: entity.kind,
         address: addressFields.address,

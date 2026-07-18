@@ -14,6 +14,11 @@ export function getInboxScopes(channel: InboxChannel): InboxScope[] {
   return CHANNEL_SCOPES[channel];
 }
 
+/** Channels that show an in-page Customers / Team switcher (not separate nav items). */
+export function channelHasInlineScopeSwitch(channel: InboxChannel): boolean {
+  return channel === "sms";
+}
+
 export function parseInboxRoute(channel: string, scope: string) {
   const validChannels: InboxChannel[] = ["voice", "sms", "email", "social"];
   if (!validChannels.includes(channel as InboxChannel)) return null;
@@ -34,7 +39,7 @@ export function scopeToEnum(scope: InboxScope) {
 }
 
 export function channelLabel(channel: InboxChannel) {
-  return { voice: "Voice", sms: "SMS", email: "Email", social: "Social" }[channel];
+  return { voice: "Voice", sms: "SMS", email: "Email", social: "Social DMs" }[channel];
 }
 
 export function scopeLabel(channel: InboxChannel, scope: InboxScope) {

@@ -20,6 +20,14 @@ export async function PUT(request: NextRequest, { params }: Params) {
       return badRequestResponse("userIds must be an array of strings");
     }
 
+    const foremanUserId =
+      typeof body.foremanUserId === "string" && body.foremanUserId
+        ? body.foremanUserId
+        : userIds[0] ?? null;
+    if (foremanUserId && !userIds.includes(foremanUserId)) {
+      return badRequestResponse("Foreman must be a crew member");
+    }
+
     const validUsers = await prisma.user.count({
       where: { companyId: user.companyId, id: { in: userIds }, status: "ACTIVE" },
     });
@@ -34,11 +42,16 @@ export async function PUT(request: NextRequest, { params }: Params) {
           data: userIds.map((userId: string) => ({ crewId: id, userId })),
         });
       }
+      await tx.crew.update({
+        where: { id },
+        data: { foremanUserId },
+      });
     });
 
     const updated = await prisma.crew.findUnique({
       where: { id },
       include: {
+        foreman: { select: { id: true, name: true, color: true, photoUrl: true } },
         members: {
           include: { user: { select: { id: true, name: true, color: true, photoUrl: true } } },
         },

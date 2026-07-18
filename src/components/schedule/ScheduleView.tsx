@@ -28,11 +28,39 @@ import {
   type ScheduleJobDTO,
 } from "@/lib/schedule/types";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
+import {
+  SCHEDULE_COLUMN_EXCLUDED_ROLES,
+  scheduleCrewColumnId,
+} from "@/lib/schedule/columns";
+import type { DivisionBookingWindows } from "@/lib/schedule/open-time-slots";
+import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
-  employees: { id: string; name: string; color?: string | null; photoUrl?: string | null }[];
-  crews: { id: string; name: string; color: string }[];
+  employees: {
+    id: string;
+    name: string;
+    color?: string | null;
+    photoUrl?: string | null;
+    role?: string;
+    division?: "SERVICE" | "INSTALL" | null;
+  }[];
+  crews: {
+    id: string;
+    name: string;
+    color: string;
+    photoUrl?: string | null;
+    avatarName?: string | null;
+    avatarColor?: string | null;
+    foremanUserId?: string | null;
+    division?: "SERVICE" | "INSTALL" | null;
+    members?: { userId?: string; user: { id: string } }[];
+  }[];
+  openTimeSlots?: {
+    enabled: boolean;
+    windows: DivisionBookingWindows;
+    workSchedules: Record<string, WorkScheduleDayDTO[]>;
+  };
 };
 
 export function ScheduleView() {
@@ -87,26 +115,61 @@ export function ScheduleView() {
     return `${format(weekStart, "MMMM d")}–${format(end, "d, yyyy")}`;
   }, [weekStart, focusDay, monthStart, viewMode]);
 
+  const columnEmployees = useMemo(() => {
+    const crewMemberIds = new Set(
+      filterOptions.crews.flatMap((crew) =>
+        (crew.members ?? []).map((m) => m.userId ?? m.user.id)
+      )
+    );
+    return filterOptions.employees.filter(
+      (employee) =>
+        !SCHEDULE_COLUMN_EXCLUDED_ROLES.includes(
+          (employee.role ?? "") as (typeof SCHEDULE_COLUMN_EXCLUDED_ROLES)[number]
+        ) && !crewMemberIds.has(employee.id)
+    );
+  }, [filterOptions.employees, filterOptions.crews]);
+
   const techColumns = useMemo((): TechColumn[] => {
     const cols: TechColumn[] = [];
     if (showUnassigned) {
       cols.push({ id: "__unassigned__", name: "Unassigned", isUnassigned: true });
     }
-    for (const employee of filterOptions.employees) {
+    for (const crew of filterOptions.crews) {
+      const columnId = scheduleCrewColumnId(crew.id);
+      if (!hiddenUserIds.includes(columnId)) {
+        cols.push({
+          id: columnId,
+          name: crew.name,
+          color: crew.avatarColor ?? crew.color,
+          photoUrl: crew.photoUrl,
+          isCrew: true,
+          scheduleUserId: crew.foremanUserId ?? null,
+          division: crew.division ?? "INSTALL",
+        });
+      }
+    }
+    for (const employee of columnEmployees) {
       if (!hiddenUserIds.includes(employee.id)) {
         cols.push({
           id: employee.id,
           name: employee.name,
           color: employee.color,
           photoUrl: employee.photoUrl,
+          scheduleUserId: employee.id,
+          division: employee.division ?? "SERVICE",
         });
       }
     }
     return cols;
-  }, [filterOptions.employees, hiddenUserIds, showUnassigned]);
+  }, [columnEmployees, filterOptions.crews, hiddenUserIds, showUnassigned]);
 
   const visibleJobs = useMemo(() => {
     return jobs.filter((job) => {
+      if (job.crew) {
+        const columnId = scheduleCrewColumnId(job.crew.id);
+        if (hiddenUserIds.includes(columnId)) return false;
+        return true;
+      }
       if (!showUnassigned && !job.assignedUser) return false;
       if (job.assignedUser && hiddenUserIds.includes(job.assignedUser.id)) return false;
       return true;
@@ -154,6 +217,7 @@ export function ScheduleView() {
           serviceAreas: data.serviceAreas,
           employees: data.employees,
           crews: data.crews,
+          openTimeSlots: data.openTimeSlots,
         });
       }
     } catch {
@@ -235,7 +299,10 @@ export function ScheduleView() {
           }}
           filters={filters}
           onFiltersChange={setFilters}
-          options={filterOptions}
+          options={{
+            ...filterOptions,
+            employees: columnEmployees,
+          }}
           showUnassigned={showUnassigned}
           onShowUnassignedChange={setShowUnassigned}
           hiddenUserIds={hiddenUserIds}
@@ -274,6 +341,9 @@ export function ScheduleView() {
             viewMode={viewMode}
             columns={techColumns}
             showUnassigned={showUnassigned}
+            openTimeSlotsEnabled={filterOptions.openTimeSlots?.enabled ?? true}
+            divisionBookingWindows={filterOptions.openTimeSlots?.windows ?? null}
+            workSchedules={filterOptions.openTimeSlots?.workSchedules}
             onDayClick={(day) => {
               setFocusDay(startOfDay(day));
               setViewMode("day");

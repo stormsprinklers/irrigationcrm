@@ -17,8 +17,20 @@ import { jobCardStyle } from "@/lib/schedule/colors";
 import type { ColorByMode, ScheduleJobDTO } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
 import { blobProxyUrl } from "@/lib/blob/urls";
-import { buildScheduleSlotClick } from "@/lib/schedule/quick-add";
+import { buildScheduleSlotClick, DEFAULT_ARRIVAL_WINDOW_HOURS } from "@/lib/schedule/quick-add";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
+import {
+  parseScheduleCrewColumnId,
+  scheduleCrewColumnId,
+} from "@/lib/schedule/columns";
+import {
+  openSlotsForDay,
+  toMinutes,
+  windowsForDivision,
+  type DivisionBookingWindows,
+  type BookingWindow,
+} from "@/lib/schedule/open-time-slots";
+import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 
 const SCHEDULE_START_HOUR = 4;
 const SCHEDULE_END_HOUR = 22;
@@ -40,6 +52,10 @@ export type TechColumn = {
   color?: string | null;
   photoUrl?: string | null;
   isUnassigned?: boolean;
+  isCrew?: boolean;
+  /** User whose work schedule drives Open Time Slots (foreman for crews). */
+  scheduleUserId?: string | null;
+  division?: "SERVICE" | "INSTALL" | null;
 };
 
 export type ScheduleViewMode = "week" | "day" | "month";
@@ -60,13 +76,14 @@ function getInitials(name: string) {
 }
 
 function isMultiDayBarJob(job: ScheduleJobDTO) {
-  if (job.crew) return true;
+  // Same-day crew jobs sit in the crew column; only multi-day spans use the top bar.
   const startDay = startOfDay(new Date(job.startAt));
   const endDay = startOfDay(new Date(job.endAt));
   return endDay.getTime() > startDay.getTime();
 }
 
 function getJobColumnId(job: ScheduleJobDTO) {
+  if (job.crew?.id) return scheduleCrewColumnId(job.crew.id);
   return job.assignedUser?.id ?? "__unassigned__";
 }
 
@@ -171,19 +188,75 @@ type TimeGridProps = {
   viewMode: "week" | "day";
   columns: TechColumn[];
   showUnassigned: boolean;
+  openTimeSlotsEnabled?: boolean;
+  divisionBookingWindows?: DivisionBookingWindows | null;
+  workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
+
+function OpenTimeSlotBoxes({
+  day,
+  column,
+  enabled,
+  windows,
+  workSchedules,
+  startHour,
+}: {
+  day: Date;
+  column: TechColumn;
+  enabled: boolean;
+  windows: DivisionBookingWindows | null | undefined;
+  workSchedules: Record<string, WorkScheduleDayDTO[]> | undefined;
+  startHour: number;
+}) {
+  if (!enabled || column.isUnassigned || !column.scheduleUserId || !windows) return null;
+  const schedule = workSchedules?.[column.scheduleUserId];
+  if (!schedule) return null;
+  const slots = openSlotsForDay(
+    schedule,
+    day.getDay(),
+    windowsForDivision(windows, column.division)
+  );
+  if (!slots.length) return null;
+
+  return (
+    <>
+      {slots.map((slot) => (
+        <OpenTimeSlotBox key={`${slot.start}-${slot.end}`} slot={slot} startHour={startHour} />
+      ))}
+    </>
+  );
+}
+
+function OpenTimeSlotBox({ slot, startHour }: { slot: BookingWindow; startHour: number }) {
+  const top = ((toMinutes(slot.start) / 60 - startHour) * HOUR_HEIGHT);
+  const height = ((toMinutes(slot.end) - toMinutes(slot.start)) / 60) * HOUR_HEIGHT;
+  if (height <= 0) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0.5 z-0 rounded-sm border border-dashed border-primary/40 bg-primary/[0.03]"
+      style={{ top, height }}
+      title={`Open ${slot.start}–${slot.end}`}
+    />
+  );
+}
 
 function handleGridClick(
   event: React.MouseEvent<HTMLElement>,
   day: Date,
-  assignedUserId: string | null,
-  assignedUserName: string | null,
+  column: TechColumn | null,
   onSlotClick?: (slot: ScheduleSlotClick) => void
 ) {
   if (!onSlotClick) return;
   const rect = event.currentTarget.getBoundingClientRect();
   const offsetY = event.clientY - rect.top;
+  const crewId = column?.isCrew ? parseScheduleCrewColumnId(column.id) : null;
+  const userId =
+    !column || column.isUnassigned || column.isCrew
+      ? null
+      : column.id === "__unassigned__"
+        ? null
+        : column.id;
   onSlotClick(
     buildScheduleSlotClick(
       day,
@@ -191,13 +264,28 @@ function handleGridClick(
       HOUR_HEIGHT,
       SCHEDULE_START_HOUR,
       SCHEDULE_END_HOUR,
-      assignedUserId === "__unassigned__" ? null : assignedUserId,
-      assignedUserName
+      userId,
+      column && !column.isCrew && !column.isUnassigned ? column.name : null,
+      DEFAULT_ARRIVAL_WINDOW_HOURS,
+      crewId,
+      column?.isCrew ? column.name : null
     )
   );
 }
 
-function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showUnassigned, onSlotClick }: TimeGridProps) {
+function TimeGrid({
+  jobs,
+  weekStart,
+  colorBy,
+  dayCount,
+  viewMode,
+  columns,
+  showUnassigned,
+  openTimeSlotsEnabled = false,
+  divisionBookingWindows = null,
+  workSchedules,
+  onSlotClick,
+}: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [weekDayWidth, setWeekDayWidth] = useState(DAY_MIN_WIDTH);
 
@@ -280,7 +368,7 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
   if (isDayView && columns.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-        Select at least one employee to display on the schedule.
+        Select at least one employee or crew to display on the schedule.
       </div>
     );
   }
@@ -470,8 +558,16 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
                             className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
                             aria-label={`Add visit for ${col.name} at ${format(day, "MMM d")}`}
                             onClick={(e) =>
-                              handleGridClick(e, day, col.id, col.name, onSlotClick)
+                              handleGridClick(e, day, col, onSlotClick)
                             }
+                          />
+                          <OpenTimeSlotBoxes
+                            day={day}
+                            column={col}
+                            enabled={openTimeSlotsEnabled}
+                            windows={divisionBookingWindows}
+                            workSchedules={workSchedules}
+                            startHour={startHour}
                           />
                           {SCHEDULE_HOURS.map((hour) => (
                             <div
@@ -520,7 +616,7 @@ function TimeGrid({ jobs, weekStart, colorBy, dayCount, viewMode, columns, showU
                     type="button"
                     className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
                     aria-label={`Add visit on ${format(day, "MMM d")}`}
-                    onClick={(e) => handleGridClick(e, day, null, null, onSlotClick)}
+                    onClick={(e) => handleGridClick(e, day, null, onSlotClick)}
                   />
                   {SCHEDULE_HOURS.map((hour) => (
                     <div
@@ -684,6 +780,9 @@ type Props = {
   viewMode?: ScheduleViewMode;
   columns: TechColumn[];
   showUnassigned: boolean;
+  openTimeSlotsEnabled?: boolean;
+  divisionBookingWindows?: DivisionBookingWindows | null;
+  workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   onDayClick?: (day: Date) => void;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
@@ -697,6 +796,9 @@ export function WeekGrid({
   viewMode = "week",
   columns,
   showUnassigned,
+  openTimeSlotsEnabled,
+  divisionBookingWindows,
+  workSchedules,
   onDayClick,
   onSlotClick,
 }: Props) {
@@ -713,6 +815,9 @@ export function WeekGrid({
       viewMode={viewMode === "day" ? "day" : "week"}
       columns={columns}
       showUnassigned={showUnassigned}
+      openTimeSlotsEnabled={openTimeSlotsEnabled}
+      divisionBookingWindows={divisionBookingWindows}
+      workSchedules={workSchedules}
       onSlotClick={onSlotClick}
     />
   );

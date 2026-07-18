@@ -11,6 +11,8 @@ export type CallHistoryListItem = {
   hasRecording: boolean;
   hasTranscript: boolean;
   hasSummary: boolean;
+  /** True when the AI receptionist handled (or started) this call. */
+  isAiAgent: boolean;
   customer: { id: string; name: string; phone: string | null } | null;
   employee: { id: string; name: string } | null;
 };

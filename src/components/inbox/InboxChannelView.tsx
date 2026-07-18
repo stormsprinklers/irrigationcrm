@@ -5,11 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
 import { SmsThreadList } from "@/components/inbox/SmsThreadList";
 import { SmsMessagePane } from "@/components/inbox/SmsMessagePane";
-import { CallHistoryList } from "@/components/inbox/CallHistoryList";
-import { VoicePanel } from "@/components/inbox/VoicePanel";
-import type { InboxChannel, InboxScope, CustomerTeamScope, SocialScope } from "@/lib/inbox/types";
+import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { isCustomerTeamScope, parseInboxRoute } from "@/lib/inbox/types";
-import { SocialDmMessagePane, SocialDmThreadList } from "@/components/inbox/SocialDmInbox";
 
 export function InboxChannelView({
   channel,
@@ -72,120 +69,63 @@ export function InboxChannelView({
     return <div className="p-6">Invalid inbox route</div>;
   }
 
-  if (ch === "social") {
-    const platform = sc as SocialScope;
-    return (
-      <InboxChannelLayout
-        channel={ch}
-        scope={sc}
-        selectedId={selectedId}
-        list={
-          <SocialDmThreadList
-            key={refreshKey}
-            platform={platform}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
-        }
-        detail={
-          <SocialDmMessagePane
-            platform={platform}
-            conversationId={selectedId}
-            onSent={() => setRefreshKey((k) => k + 1)}
-          />
-        }
-      />
-    );
-  }
-
-  if (!isCustomerTeamScope(sc)) {
+  if (!isCustomerTeamScope(sc) || ch !== "sms") {
     return <div className="p-6">Invalid inbox route</div>;
   }
 
   const teamScope: CustomerTeamScope = sc;
+  const showCompose = isComposing || Boolean(selectedId);
 
-  if (ch === "sms") {
-    const showCompose = isComposing || Boolean(selectedId);
-    return (
-      <div className="h-full w-full min-w-0">
-        <InboxChannelLayout
-          channel={ch}
-          scope={sc}
-          selectedId={selectedId}
-          listFirst
-          composing={isComposing && !selectedId}
-          onCompose={() => {
-            setSelectedId(null);
-            setIsComposing(true);
-          }}
-          onMobileBack={() => {
-            setSelectedId(null);
-            setIsComposing(false);
-          }}
-          list={
-            <div className="flex h-full flex-col">
-              <SmsThreadList
-                key={refreshKey}
-                scope={teamScope}
-                selectedId={selectedId}
-                onSelect={(id) => {
-                  setSelectedId(id);
-                  setIsComposing(false);
-                }}
-              />
-            </div>
-          }
-          detail={
-            showCompose || selectedId ? (
-              <SmsMessagePane
-                conversationId={selectedId}
-                scope={teamScope}
-                initialPhone={deepLink.phone}
-                initialCustomerId={deepLink.customerId}
-                initialName={deepLink.name}
-                onSent={(id) => {
-                  setSelectedId(id);
-                  setIsComposing(false);
-                  setRefreshKey((k) => k + 1);
-                }}
-              />
-            ) : (
-              <div className="hidden h-full items-center justify-center p-6 text-sm text-muted-foreground md:flex">
-                Select a conversation or compose a new message
-              </div>
-            )
-          }
-        />
-      </div>
-    );
-  }
-
-  if (ch === "voice") {
-    return (
+  return (
+    <div className="h-full w-full min-w-0">
       <InboxChannelLayout
         channel={ch}
         scope={sc}
         selectedId={selectedId}
-        listLabel="Call history"
+        listFirst
+        composing={isComposing && !selectedId}
+        onCompose={() => {
+          setSelectedId(null);
+          setIsComposing(true);
+        }}
+        onMobileBack={() => {
+          setSelectedId(null);
+          setIsComposing(false);
+        }}
         list={
-          <CallHistoryList
-            scope={teamScope}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+          <div className="flex h-full flex-col">
+            <SmsThreadList
+              key={refreshKey}
+              scope={teamScope}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setSelectedId(id);
+                setIsComposing(false);
+              }}
+            />
+          </div>
         }
         detail={
-          <VoicePanel
-            scope={teamScope}
-            selectedCallId={selectedId}
-            initialPhone={deepLink.phone}
-            initialCustomerId={deepLink.customerId}
-            initialName={deepLink.name}
-          />
+          showCompose || selectedId ? (
+            <SmsMessagePane
+              conversationId={selectedId}
+              scope={teamScope}
+              initialPhone={deepLink.phone}
+              initialCustomerId={deepLink.customerId}
+              initialName={deepLink.name}
+              onSent={(id) => {
+                setSelectedId(id);
+                setIsComposing(false);
+                setRefreshKey((k) => k + 1);
+              }}
+            />
+          ) : (
+            <div className="hidden h-full items-center justify-center p-6 text-sm text-muted-foreground md:flex">
+              Select a conversation or compose a new message
+            </div>
+          )
         }
       />
-    );
-  }
-
-  return <div className="p-6">Invalid inbox route</div>;
+    </div>
+  );
 }

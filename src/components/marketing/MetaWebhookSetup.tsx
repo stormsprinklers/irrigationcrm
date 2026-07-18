@@ -524,7 +524,7 @@ export function MetaWebhookSetup({ onSaved }: { onSaved?: () => void }) {
           <li>Open Recent posts and click Refresh to sync metrics from Meta.</li>
           <li>
             DMs will appear in{" "}
-            <Link href="/inbox/social/facebook" className="text-primary underline">
+            <Link href="/inbox/social" className="text-primary underline">
               Inbox → Social
             </Link>{" "}
             once message processing is enabled.

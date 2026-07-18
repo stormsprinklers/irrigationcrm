@@ -22,7 +22,7 @@ export function SmartIrrigationPanel({
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-base font-semibold">Smart irrigation</CardTitle>
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/settings/maintenance">
+          <Link href="/settings/integrations/rachio">
             <Settings className="h-4 w-4" />
             Settings
           </Link>
@@ -45,15 +45,15 @@ export function SmartIrrigationPanel({
               {deviceCount != null ? <p>{deviceCount} controller(s) on account</p> : null}
               <p>
                 Link controllers in{" "}
-                <Link href="/settings/maintenance" className="text-primary hover:underline">
-                  Settings → Maintenance
+                <Link href="/settings/integrations/rachio" className="text-primary hover:underline">
+                  Settings → Integrations → Rachio
                 </Link>
                 , then control them on each customer&apos;s <strong>Properties</strong> tab.
               </p>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Add your API key and test the connection in Settings → Maintenance.
+              Add your API key and test the connection in Settings → Integrations → Rachio.
             </p>
           )}
         </div>

@@ -52,7 +52,13 @@ export function RachioControllersHub({ connected }: { connected: boolean }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load Rachio controllers");
       if (signal?.aborted) return;
-      setDevices(Array.isArray(data.devices) ? data.devices : []);
+      const list = Array.isArray(data.devices) ? data.devices : [];
+      setDevices(
+        list.filter(
+          (device: RachioDeviceOverview) =>
+            device && typeof device === "object" && typeof device.id === "string" && device.id
+        )
+      );
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       toast.error(err instanceof Error ? err.message : "Failed to load Rachio controllers");
@@ -226,7 +232,7 @@ export function RachioControllersHub({ connected }: { connected: boolean }) {
                         </span>
                       </p>
                     ) : (
-                      <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+                      <p className="mt-1 text-sm text-amber-700">
                         Not linked to a property yet
                       </p>
                     )}

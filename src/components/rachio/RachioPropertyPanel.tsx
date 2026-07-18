@@ -159,7 +159,36 @@ export function RachioPropertyPanel({ customerId, propertyId, propertyName }: Pr
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading Rachio…</p>;
+    return null;
+  }
+
+  if (!linked) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="flex items-center gap-2">
+            <Droplets className="h-4 w-4 text-storm-sky" />
+            <CardTitle className="text-base">Rachio · {propertyName}</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            No Rachio timer linked to this property yet.
+          </p>
+          <RachioDeviceLinker
+            customerId={customerId}
+            propertyId={propertyId}
+            onLinked={() => void loadAll()}
+          />
+          <p className="text-xs text-muted-foreground">
+            Need an API key?{" "}
+            <Link href="/settings/integrations/rachio" className="text-primary hover:underline">
+              Configure Rachio in Settings
+            </Link>
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -170,28 +199,19 @@ export function RachioPropertyPanel({ customerId, propertyId, propertyName }: Pr
           <CardTitle className="text-base">Rachio · {propertyName}</CardTitle>
         </div>
         <div className="flex items-center gap-2">
-          {linked ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => void loadAll()}
-              disabled={refreshing}
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void loadAll()}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
-        {!linked ? (
-          <RachioDeviceLinker
-            customerId={customerId}
-            propertyId={propertyId}
-            onLinked={() => void loadAll()}
-          />
-        ) : (
-          <Tabs defaultValue="overview" className="w-full">
+        <Tabs defaultValue="overview" className="w-full">
             <TabsList className="mb-4 grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="zones">Zones</TabsTrigger>
@@ -378,16 +398,6 @@ export function RachioPropertyPanel({ customerId, propertyId, propertyName }: Pr
               )}
             </TabsContent>
           </Tabs>
-        )}
-
-        {!linked ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Need an API key?{" "}
-            <Link href="/settings/maintenance" className="text-primary hover:underline">
-              Configure Rachio in Settings
-            </Link>
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );

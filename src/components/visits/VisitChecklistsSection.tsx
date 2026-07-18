@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { ChecklistItemType } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
@@ -41,12 +41,21 @@ type Props = {
 
 export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
   const [checklists, setChecklists] = useState<VisitChecklist[]>([]);
+  const [mergeVisitChecklists, setMergeVisitChecklists] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/visits/${visitId}/checklists`);
-    if (res.ok) setChecklists(await res.json());
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setChecklists(data);
+      setMergeVisitChecklists(false);
+      return;
+    }
+    setChecklists(data.checklists ?? []);
+    setMergeVisitChecklists(Boolean(data.mergeVisitChecklists));
   }, [visitId]);
 
   useEffect(() => {
@@ -90,6 +99,24 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
     await onUpdated?.();
   }
 
+  async function completeAllChecklists() {
+    const incomplete = checklists.filter((c) => c.status !== "COMPLETED");
+    for (const checklist of incomplete) {
+      const res = await fetch(`/api/visits/${visitId}/checklists/${checklist.id}/complete`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? `Could not complete “${checklist.name}”`);
+        await load();
+        return;
+      }
+    }
+    toast.success(incomplete.length ? "Checklist marked complete" : "Already complete");
+    await load();
+    await onUpdated?.();
+  }
+
   async function uploadMedia(item: ChecklistItem, checklistId: string, file: File) {
     const formData = new FormData();
     formData.append("file", file);
@@ -113,6 +140,31 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
     });
   }
 
+  const mergedProgress = useMemo(() => {
+    return checklists.reduce(
+      (acc, checklist) => ({
+        requiredComplete: acc.requiredComplete + checklist.progress.requiredComplete,
+        requiredTotal: acc.requiredTotal + checklist.progress.requiredTotal,
+        itemCount: acc.itemCount + checklist.progress.itemCount,
+      }),
+      { requiredComplete: 0, requiredTotal: 0, itemCount: 0 }
+    );
+  }, [checklists]);
+
+  const mergedItems = useMemo(() => {
+    return checklists.flatMap((checklist) =>
+      checklist.items.map((item) => ({
+        checklistId: checklist.id,
+        checklistName: checklist.name,
+        item,
+      }))
+    );
+  }, [checklists]);
+
+  const anyRequired = checklists.some((c) => c.requiredForCompletion);
+  const allComplete =
+    checklists.length > 0 && checklists.every((c) => c.status === "COMPLETED");
+
   if (loading) {
     return (
       <Card>
@@ -123,6 +175,57 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
 
   if (!checklists.length) {
     return null;
+  }
+
+  if (mergeVisitChecklists) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <div className="space-y-1">
+            <CardTitle className="text-base">Checklist</CardTitle>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>
+                {mergedProgress.requiredComplete}/{mergedProgress.requiredTotal} required
+              </span>
+              {anyRequired && <Badge variant="outline">Required for job completion</Badge>}
+              <Badge variant="secondary">{allComplete ? "COMPLETED" : "IN PROGRESS"}</Badge>
+            </div>
+          </div>
+          {!allComplete && (
+            <Button size="sm" variant="outline" onClick={() => void completeAllChecklists()}>
+              Mark complete
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {mergedItems.map(({ checklistId, checklistName, item }) => (
+            <div key={`${checklistId}-${item.id}`} className="space-y-2 rounded-md border p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{item.label}</span>
+                {item.required && (
+                  <Badge variant="outline" className="text-[10px]">
+                    Required
+                  </Badge>
+                )}
+                <span className="text-[10px] text-muted-foreground">
+                  {CHECKLIST_ITEM_TYPE_LABELS[item.type]}
+                </span>
+                {checklists.length > 1 ? (
+                  <span className="text-[10px] text-muted-foreground">· {checklistName}</span>
+                ) : null}
+              </div>
+              {item.helpText && <p className="text-xs text-muted-foreground">{item.helpText}</p>}
+              <ChecklistItemInput
+                item={item}
+                disabled={savingItemId === item.id}
+                onSave={(response) => saveItem(checklistId, item.id, response)}
+                onUpload={(file) => uploadMedia(item, checklistId, file)}
+              />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -150,7 +253,7 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
           </CardHeader>
           <CardContent className="space-y-4">
             {checklist.items.map((item) => (
-              <div key={item.id} className="rounded-md border p-3 space-y-2">
+              <div key={item.id} className="space-y-2 rounded-md border p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">{item.label}</span>
                   {item.required && (

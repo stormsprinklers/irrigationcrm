@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PortalOfferCard, type PortalOfferCardData } from "./PortalOfferCard";
 import { PortalPropertySection } from "./PortalPropertySection";
 import { PortalShell, PortalPropertyLink } from "./PortalShell";
 
@@ -36,7 +37,7 @@ type Visit = {
 export function PortalDashboard({ slug }: { slug: string }) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [upcoming, setUpcoming] = useState<Visit[]>([]);
-  const [offers, setOffers] = useState<Array<{ id: string; title: string; description: string | null }>>([]);
+  const [offers, setOffers] = useState<PortalOfferCardData[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -95,18 +96,17 @@ export function PortalDashboard({ slug }: { slug: string }) {
         ) : null}
 
         {offers.length > 0 && me.company.features.offers ? (
-          <section className="portal-card">
-            <div className="flex items-center justify-between">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between px-1">
               <h2 className="portal-section-title">Offers for you</h2>
               <Link href={`/portal/${slug}/offers`} className="text-sm font-medium text-storm-sky hover:underline">
                 View all
               </Link>
             </div>
-            <ul className="mt-3 space-y-2">
+            <ul className="grid gap-3 sm:grid-cols-2">
               {offers.map((o) => (
-                <li key={o.id} className="text-sm">
-                  <p className="font-medium text-storm-navy">{o.title}</p>
-                  {o.description ? <p className="text-muted-foreground">{o.description}</p> : null}
+                <li key={o.id}>
+                  <PortalOfferCard offer={o} compact />
                 </li>
               ))}
             </ul>

@@ -2,20 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { PortalShell } from "./PortalShell";
-import { Button } from "@/components/ui/button";
-
-type Offer = {
-  id: string;
-  title: string;
-  description: string | null;
-  imageUrl: string | null;
-  ctaLabel: string | null;
-  ctaUrl: string | null;
-};
+import { PortalOfferCard, type PortalOfferCardData } from "./PortalOfferCard";
 
 export function PortalOffersList({ slug }: { slug: string }) {
-  const [me, setMe] = useState<{ company: { name: string; emailLogoUrl: string | null; features: Record<string, boolean> } } | null>(null);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [me, setMe] = useState<{
+    company: { name: string; emailLogoUrl: string | null; features: Record<string, boolean> };
+  } | null>(null);
+  const [offers, setOffers] = useState<PortalOfferCardData[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -30,28 +23,26 @@ export function PortalOffersList({ slug }: { slug: string }) {
   if (!me) return <p className="text-sm text-muted-foreground">Loading...</p>;
 
   return (
-    <PortalShell slug={slug} companyName={me.company.name} emailLogoUrl={me.company.emailLogoUrl} features={me.company.features as never}>
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Offers & rebates</h1>
+    <PortalShell
+      slug={slug}
+      companyName={me.company.name}
+      emailLogoUrl={me.company.emailLogoUrl}
+      features={me.company.features as never}
+    >
+      <div className="space-y-5">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-storm-navy">Offers & rebates</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Current promotions available for your account.
+          </p>
+        </div>
         {offers.length === 0 ? (
           <p className="text-sm text-muted-foreground">No offers available right now.</p>
         ) : (
-          <ul className="space-y-4">
+          <ul className="grid gap-4 sm:grid-cols-2">
             {offers.map((o) => (
-              <li key={o.id} className="rounded-lg border border-border bg-white p-4">
-                {o.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={o.imageUrl} alt="" className="mb-3 max-h-40 w-full rounded object-cover" />
-                ) : null}
-                <p className="font-medium">{o.title}</p>
-                {o.description ? <p className="mt-1 text-sm text-muted-foreground">{o.description}</p> : null}
-                {o.ctaUrl ? (
-                  <Button asChild className="mt-3" size="sm">
-                    <a href={o.ctaUrl} target="_blank" rel="noopener noreferrer">
-                      {o.ctaLabel ?? "Learn more"}
-                    </a>
-                  </Button>
-                ) : null}
+              <li key={o.id}>
+                <PortalOfferCard offer={o} />
               </li>
             ))}
           </ul>

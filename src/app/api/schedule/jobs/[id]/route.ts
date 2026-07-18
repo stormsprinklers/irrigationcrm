@@ -39,6 +39,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
     const nextAssignedUserId =
       body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
+    const nextCrewId =
+      body.crewId !== undefined ? (body.crewId as string | null) : existing.crewId;
 
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
@@ -52,7 +54,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
     if (availabilityError) return badRequestResponse(availabilityError);
 
-    const assignmentError = validateScheduledVisitAssignment(nextStatus, nextAssignedUserId);
+    const assignmentError = validateScheduledVisitAssignment(
+      nextStatus,
+      nextAssignedUserId,
+      nextCrewId
+    );
     if (assignmentError) return badRequestResponse(assignmentError);
 
     const visit = await prisma.visit.update({

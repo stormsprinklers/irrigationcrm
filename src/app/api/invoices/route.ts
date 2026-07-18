@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { getInvoiceForCompany, listInvoices } from "@/lib/invoices/queries";
+import {
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
+import { canAccessInvoices } from "@/lib/invoices/permissions";
+import { listInvoices } from "@/lib/invoices/queries";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
+    if (!canAccessInvoices(user.role)) return forbiddenResponse();
+
     const { searchParams } = request.nextUrl;
 
     const invoices = await listInvoices(user.companyId, {

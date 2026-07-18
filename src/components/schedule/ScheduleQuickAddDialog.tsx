@@ -38,6 +38,8 @@ export function ScheduleQuickAddDialog({
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDTO | null>(null);
   const [assignedUserId, setAssignedUserId] = useState("");
   const [assignedUserName, setAssignedUserName] = useState("");
+  const [crewId, setCrewId] = useState<string | null>(null);
+  const [crewName, setCrewName] = useState<string | null>(null);
   const [serviceAreaId, setServiceAreaId] = useState("");
   const [division, setDivision] = useState<"SERVICE" | "INSTALL">("SERVICE");
 
@@ -50,12 +52,14 @@ export function ScheduleQuickAddDialog({
     setSelectedCustomer(null);
     setServiceAreaId(serviceAreas[0]?.id ?? "");
     setDivision("SERVICE");
+    setCrewId(slot?.crewId ?? null);
+    setCrewName(slot?.crewName ?? null);
 
     const preassignedId =
       slot?.assignedUserId && slot.assignedUserId !== "__unassigned__" ? slot.assignedUserId : "";
     const preassignedEmployee = employees.find((employee) => employee.id === preassignedId);
     setAssignedUserId(preassignedId);
-    setAssignedUserName(preassignedEmployee?.name ?? "");
+    setAssignedUserName(preassignedEmployee?.name ?? slot?.assignedUserName ?? "");
   }, [open, slot, serviceAreas, employees]);
 
   if (!open || !slot) return null;
@@ -67,8 +71,8 @@ export function ScheduleQuickAddDialog({
       toast.error("Select a customer");
       return;
     }
-    if (!assignedUserId) {
-      toast.error("Assign a technician");
+    if (!crewId && !assignedUserId) {
+      toast.error("Assign a technician or crew");
       return;
     }
     if (selectedCustomer?.doNotService) {
@@ -91,7 +95,8 @@ export function ScheduleQuickAddDialog({
           endAt: slot.endAt.toISOString(),
           division,
           serviceAreaId: serviceAreaId || undefined,
-          assignedUserId,
+          assignedUserId: assignedUserId || undefined,
+          crewId: crewId || undefined,
           customerId,
           zip: selectedCustomer?.zip || undefined,
           address: selectedCustomer?.address || undefined,
@@ -161,20 +166,27 @@ export function ScheduleQuickAddDialog({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Technician</label>
-            <div className="mt-1">
-              <EmployeeSearchPicker
-                value={assignedUserId}
-                selectedName={assignedUserName}
-                employees={employees}
-                onValueChange={(id, name) => {
-                  setAssignedUserId(id);
-                  setAssignedUserName(name);
-                }}
-              />
+          {crewId ? (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Crew</label>
+              <p className="mt-1 rounded-md border border-border px-3 py-2 text-sm">{crewName}</p>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Technician</label>
+              <div className="mt-1">
+                <EmployeeSearchPicker
+                  value={assignedUserId}
+                  selectedName={assignedUserName}
+                  employees={employees}
+                  onValueChange={(id, name) => {
+                    setAssignedUserId(id);
+                    setAssignedUserName(name);
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

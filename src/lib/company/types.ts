@@ -30,6 +30,7 @@ export const companySettingsSelect = {
   portalAllowSchedule: true,
   portalShowMaintenance: true,
   portalShowChecklists: true,
+  mergeVisitChecklists: true,
   portalShowRachio: true,
   portalShowOffers: true,
   portalShowReferrals: true,
@@ -48,10 +49,13 @@ export const companySettingsSelect = {
   googleReviewUrl: true,
   websiteBaseUrl: true,
   arrivalWindowHours: true,
+  openTimeSlotsEnabled: true,
+  divisionBookingWindows: true,
   feedbackSurveyDelayHours: true,
   reviewRequestDelayHours: true,
   estimateFollowUpIntervalDays: true,
   leadSources: true,
+  archivedLeadSources: true,
   intakeRequiredFields: true,
   businessHours: true,
   referralCode: true,
@@ -96,6 +100,7 @@ export type CompanySettingsDTO = {
   portalAllowSchedule: boolean;
   portalShowMaintenance: boolean;
   portalShowChecklists: boolean;
+  mergeVisitChecklists: boolean;
   portalShowRachio: boolean;
   portalShowOffers: boolean;
   portalShowReferrals: boolean;
@@ -114,10 +119,13 @@ export type CompanySettingsDTO = {
   googleReviewUrl: string | null;
   websiteBaseUrl: string | null;
   arrivalWindowHours: number;
+  openTimeSlotsEnabled: boolean;
+  divisionBookingWindows: unknown;
   feedbackSurveyDelayHours: number;
   reviewRequestDelayHours: number;
   estimateFollowUpIntervalDays: number;
   leadSources: string[];
+  archivedLeadSources: string[];
   intakeRequiredFields: string[];
   businessHours: unknown;
   referralCode: string | null;

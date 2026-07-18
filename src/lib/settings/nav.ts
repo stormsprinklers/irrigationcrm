@@ -9,7 +9,6 @@ import {
   priceBookSettingsSidebar,
   settingsSidebar,
   teamSettingsSidebar,
-  voiceSettingsSidebar,
 } from "@/config/navigation";
 
 export type SettingsSectionNav = {
@@ -39,7 +38,9 @@ const SETTINGS_SECTIONS: Array<{
   {
     title: "Communications",
     match: (pathname) =>
-      pathname.startsWith("/settings/notifications") || pathname.startsWith("/settings/inbox"),
+      pathname.startsWith("/settings/notifications") ||
+      pathname.startsWith("/settings/inbox") ||
+      pathname.startsWith("/settings/voice"),
     sections: communicationsSettingsSidebar,
   },
   {
@@ -59,19 +60,14 @@ const SETTINGS_SECTIONS: Array<{
     sections: customerSettingsSidebar,
   },
   {
-    title: "Voice",
-    match: (pathname) => pathname.startsWith("/settings/voice"),
-    sections: voiceSettingsSidebar,
-  },
-  {
     title: "Price Book",
     match: (pathname) => pathname.startsWith("/settings/price-book"),
     sections: priceBookSettingsSidebar,
   },
   {
-    title: "Job settings",
+    title: "Visits",
     match: (pathname) =>
-      ["/settings/estimates", "/settings/checklists", "/settings/invoices", "/settings/maintenance"].some(
+      ["/settings/estimates", "/settings/checklists", "/settings/invoices"].some(
         (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
       ),
     sections: jobSettingsSidebar,
@@ -91,6 +87,11 @@ export function settingsRootSections() {
   return settingsSidebar;
 }
 
-export function isSettingsRootItemActive(pathname: string, href: string, exact?: boolean, activePrefixes?: string[]) {
+export function isSettingsRootItemActive(
+  pathname: string,
+  href: string,
+  exact?: boolean,
+  activePrefixes?: string[]
+) {
   return isNavActive(pathname, href, exact, activePrefixes);
 }

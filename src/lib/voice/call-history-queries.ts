@@ -49,13 +49,24 @@ const callLogInclude = {
 type CallLogRow = Prisma.CallLogGetPayload<{ include: typeof callLogInclude }>;
 
 const STAFF_ROLES = ["ANSWERED", "AGENT_TRANSFER", "EXTERNAL_TRANSFER"] as const;
+const AI_AGENT = { id: "ai-agent", name: "AI Agent" } as const;
 
 function mergedParticipantRows(row: CallLogRow) {
   return [...row.participants, ...(row.session?.participants ?? [])];
 }
 
-/** Who picked up / handled the live call — not who later saved wrap-up. */
-function resolveEmployee(row: CallLogRow) {
+function isAiReceptionistRow(
+  row: CallLogRow,
+  aiByCallLogId: Set<string>,
+  aiByCallSid: Set<string>
+) {
+  if (aiByCallLogId.has(row.id) || aiByCallSid.has(row.twilioCallSid)) return true;
+  const note = row.dispositionNote?.toLowerCase() ?? "";
+  return note.includes("ai receptionist") || note.includes("ai agent");
+}
+
+/** Human who picked up / handled the live call — not who later saved wrap-up. */
+function resolveHumanEmployee(row: CallLogRow) {
   if (row.conversion?.answeredBy) return row.conversion.answeredBy;
   if (row.user) return row.user;
 
@@ -71,6 +82,16 @@ function resolveEmployee(row: CallLogRow) {
 
   if (row.session?.assignedUser) return row.session.assignedUser;
   if (row.handledBy) return row.handledBy;
+  return null;
+}
+
+function resolveEmployee(
+  row: CallLogRow,
+  isAiAgent: boolean
+): { id: string; name: string } | null {
+  const human = resolveHumanEmployee(row);
+  if (human) return human;
+  if (isAiAgent) return { ...AI_AGENT };
   return null;
 }
 
@@ -95,8 +116,13 @@ function mapParticipants(row: CallLogRow): CallHistoryDetail["participants"] {
   return out;
 }
 
-function mapCallLog(row: CallLogRow): CallHistoryListItem {
-  const employee = resolveEmployee(row);
+function mapCallLog(
+  row: CallLogRow,
+  aiByCallLogId: Set<string>,
+  aiByCallSid: Set<string>
+): CallHistoryListItem {
+  const isAiAgent = isAiReceptionistRow(row, aiByCallLogId, aiByCallSid);
+  const employee = resolveEmployee(row, isAiAgent);
   return {
     id: row.id,
     direction: row.direction,
@@ -106,19 +132,24 @@ function mapCallLog(row: CallLogRow): CallHistoryListItem {
     endedAt: row.endedAt?.toISOString() ?? null,
     fromNumber: row.fromNumber,
     toNumber: row.toNumber,
-    answered: isCallAnswered(row.status, row.durationSec),
+    answered: isCallAnswered(row.status, row.durationSec) || isAiAgent,
     hasRecording: Boolean(row.recordingUrl),
     hasTranscript: Boolean(row.transcript?.trim()),
     hasSummary: Boolean(row.aiSummary?.trim()),
+    isAiAgent,
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,
   };
 }
 
-function toDetail(row: CallLogRow): CallHistoryDetail {
+function toDetail(
+  row: CallLogRow,
+  aiByCallLogId: Set<string>,
+  aiByCallSid: Set<string>
+): CallHistoryDetail {
   const participants = mapParticipants(row);
-  const base = mapCallLog(row);
-  const employee = resolveEmployee(row);
+  const base = mapCallLog(row, aiByCallLogId, aiByCallSid);
+  const employee = resolveEmployee(row, base.isAiAgent);
   return {
     ...base,
     employee: employee ? { id: employee.id, name: employee.name } : base.employee,
@@ -131,6 +162,26 @@ function toDetail(row: CallLogRow): CallHistoryDetail {
   };
 }
 
+async function loadAiReceptionistIndexes(rows: CallLogRow[]) {
+  const aiByCallLogId = new Set<string>();
+  const aiByCallSid = new Set<string>();
+  if (!rows.length) return { aiByCallLogId, aiByCallSid };
+
+  const callLogIds = rows.map((r) => r.id);
+  const callSids = rows.map((r) => r.twilioCallSid);
+  const receptionistCalls = await prisma.receptionistCall.findMany({
+    where: {
+      OR: [{ callLogId: { in: callLogIds } }, { callSid: { in: callSids } }],
+    },
+    select: { callLogId: true, callSid: true },
+  });
+  for (const call of receptionistCalls) {
+    if (call.callLogId) aiByCallLogId.add(call.callLogId);
+    aiByCallSid.add(call.callSid);
+  }
+  return { aiByCallLogId, aiByCallSid };
+}
+
 export async function listCallHistory(
   companyId: string,
   take = CALL_HISTORY_UI_LIMIT
@@ -141,7 +192,8 @@ export async function listCallHistory(
     orderBy: { startedAt: "desc" },
     take,
   });
-  return rows.map(mapCallLog);
+  const { aiByCallLogId, aiByCallSid } = await loadAiReceptionistIndexes(rows);
+  return rows.map((row) => mapCallLog(row, aiByCallLogId, aiByCallSid));
 }
 
 export async function listCustomerCallHistory(
@@ -155,7 +207,8 @@ export async function listCustomerCallHistory(
     orderBy: { startedAt: "desc" },
     take,
   });
-  return rows.map(toDetail);
+  const { aiByCallLogId, aiByCallSid } = await loadAiReceptionistIndexes(rows);
+  return rows.map((row) => toDetail(row, aiByCallLogId, aiByCallSid));
 }
 
 export async function getCallHistoryDetail(
@@ -167,5 +220,6 @@ export async function getCallHistoryDetail(
     include: callLogInclude,
   });
   if (!row) return null;
-  return toDetail(row);
+  const { aiByCallLogId, aiByCallSid } = await loadAiReceptionistIndexes([row]);
+  return toDetail(row, aiByCallLogId, aiByCallSid);
 }

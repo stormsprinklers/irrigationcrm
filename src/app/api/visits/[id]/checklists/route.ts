@@ -19,8 +19,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
     await syncVisitChecklists(id, user.companyId);
 
-    const checklists = await loadVisitChecklistsForValidation(id);
-    return NextResponse.json(checklists.map(serializeVisitChecklist));
+    const [checklists, company] = await Promise.all([
+      loadVisitChecklistsForValidation(id),
+      prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: { mergeVisitChecklists: true },
+      }),
+    ]);
+
+    return NextResponse.json({
+      mergeVisitChecklists: company?.mergeVisitChecklists ?? false,
+      checklists: checklists.map(serializeVisitChecklist),
+    });
   } catch {
     return unauthorizedResponse();
   }

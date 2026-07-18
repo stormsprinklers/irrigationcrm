@@ -14,6 +14,10 @@ export type InvoiceDTO = {
   customer: { id: string; name: string; phone: string | null; email: string | null };
   visit: { id: string; title: string } | null;
   estimate: { id: string; status: string } | null;
+  maintenancePlanEnrollment: {
+    id: string;
+    planName: string;
+  } | null;
   lineItems: Array<{
     id: string;
     name: string;

@@ -11,6 +11,7 @@ export async function GET() {
       where: { companyId: user.companyId },
       orderBy: { name: "asc" },
       include: {
+        foreman: { select: { id: true, name: true, color: true, photoUrl: true } },
         members: {
           include: { user: { select: { id: true, name: true, color: true, photoUrl: true } } },
         },

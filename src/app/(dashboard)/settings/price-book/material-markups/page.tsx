@@ -79,29 +79,49 @@ export default function MaterialMarkupsSettingsPage() {
       />
 
       <div className="mb-4 space-y-3 rounded-lg border border-border bg-white p-6">
+        <div className="hidden gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground sm:grid sm:grid-cols-4">
+          <span>Min cost ($)</span>
+          <span>Max cost ($)</span>
+          <span>Markup %</span>
+          <span className="sr-only">Notes</span>
+        </div>
         {tiers.map((tier, index) => (
           <div key={index} className="grid gap-2 sm:grid-cols-4">
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="Min cost"
-              value={tier.minCost}
-              onChange={(e) => updateTier(index, "minCost", e.target.value)}
-            />
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="Max cost (blank = no max)"
-              value={tier.maxCost}
-              onChange={(e) => updateTier(index, "maxCost", e.target.value)}
-            />
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="Markup %"
-              value={tier.markupPercent}
-              onChange={(e) => updateTier(index, "markupPercent", e.target.value)}
-            />
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground sm:hidden">Min cost ($)</label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="0.01"
+                aria-label="Min cost"
+                value={tier.minCost}
+                onChange={(e) => updateTier(index, "minCost", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground sm:hidden">
+                Max cost ($)
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Blank = no max"
+                aria-label="Max cost"
+                value={tier.maxCost}
+                onChange={(e) => updateTier(index, "maxCost", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground sm:hidden">Markup %</label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="100"
+                aria-label="Markup percent"
+                value={tier.markupPercent}
+                onChange={(e) => updateTier(index, "markupPercent", e.target.value)}
+              />
+            </div>
             <p className="flex items-center text-sm text-muted-foreground">% on cost</p>
           </div>
         ))}

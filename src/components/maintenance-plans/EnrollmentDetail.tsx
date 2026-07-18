@@ -18,6 +18,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import { latePaymentSummary } from "@/lib/maintenance-plans/late-payment";
+import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 
@@ -78,6 +80,7 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
   const canAccept = enrollment.status === "DRAFT" || enrollment.status === "SENT";
   const canCancel =
     enrollment.status !== "CANCELLED" && enrollment.status !== "DRAFT";
+  const late = latePaymentSummary(enrollment.billingPeriods ?? []);
 
   return (
     <div className="space-y-6">
@@ -111,6 +114,18 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
           )}
         </div>
       </div>
+
+      {late.count > 0 ? (
+        <LatePaymentAlert
+          title="Late on payment"
+          amount={late.total}
+          description={
+            late.count === 1
+              ? `Billing was due ${format(new Date(late.periods[0].dueDate), "MMM d, yyyy")}.`
+              : `${late.count} billing periods are overdue or failed.`
+          }
+        />
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -209,8 +224,13 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {enrollment.billingPeriods.map((bp) => (
-                  <TableRow key={bp.id}>
+                {enrollment.billingPeriods.map((bp) => {
+                  const periodLate = late.periods.some((p) => p.id === bp.id);
+                  return (
+                  <TableRow
+                    key={bp.id}
+                    className={periodLate ? "bg-red-50/80 dark:bg-red-950/20" : undefined}
+                  >
                     <TableCell>
                       {format(new Date(bp.periodStart), "MMM d")} –{" "}
                       {format(new Date(bp.periodEnd), "MMM d, yyyy")}
@@ -218,10 +238,17 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
                     <TableCell>{format(new Date(bp.dueDate), "MMM d, yyyy")}</TableCell>
                     <TableCell>{formatCurrency(bp.amount)}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{bp.status}</Badge>
+                      <Badge variant={periodLate ? "destructive" : "outline"}>
+                        {periodLate && bp.status === "FAILED"
+                          ? "FAILED"
+                          : periodLate
+                            ? "PAST DUE"
+                            : bp.status}
+                      </Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

@@ -39,15 +39,31 @@ import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permiss
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
-import { canIssueRefunds } from "@/lib/invoices/permissions";
+import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
+import { canAccessInvoices, canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
-import { PropertyIrrigationEditor } from "@/components/customers/PropertyIrrigationEditor";
 import { PropertyIrrigationWizard } from "@/components/customers/PropertyIrrigationWizard";
 import { PropertyIrrigationSummary } from "@/components/customers/PropertyIrrigationSummary";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import {
+  enrollmentHasLatePayment,
+  latePaymentSummary,
+} from "@/lib/maintenance-plans/late-payment";
+import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
+import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
+
+const EMPTY_PROPERTY_FORM = {
+  name: "",
+  address: "",
+  city: "",
+  state: "",
+  zip: "",
+  latitude: null as number | null,
+  longitude: null as number | null,
+};
 
 type Props = { customerId: string };
 
@@ -142,6 +158,7 @@ export function CustomerProfile({ customerId }: Props) {
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
+  const canViewInvoices = canAccessInvoices(userRole);
   const canRefund = canIssueRefunds(userRole);
   const canManagePayments =
     userRole === "CSR" || userRole === "MANAGER" || userRole === "ADMIN";
@@ -149,7 +166,15 @@ export function CustomerProfile({ customerId }: Props) {
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
   const [phones, setPhones] = useState<CustomerPhoneDTO[]>([]);
   const [visits, setVisits] = useState<
-    Array<{ id: string; title: string; status: string; startAt: string; total?: number }>
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      startAt: string;
+      total?: number;
+      assignedUser?: { id: string; name: string } | null;
+      crew?: { id: string; name: string } | null;
+    }>
   >([]);
   const [estimates, setEstimates] = useState<
     Array<{ id: string; status: string; total: number; createdAt: string }>
@@ -161,7 +186,10 @@ export function CustomerProfile({ customerId }: Props) {
       status: string;
       total: number;
       amountPaid: number;
+      balanceDue?: number;
       createdAt: string;
+      visit?: { id: string; title: string } | null;
+      maintenancePlanEnrollment?: { id: string; planName: string } | null;
     }>
   >([]);
   const [enrollments, setEnrollments] = useState<EnrollmentDTO[]>([]);
@@ -173,39 +201,52 @@ export function CustomerProfile({ customerId }: Props) {
   const [mergeCandidates, setMergeCandidates] = useState<CustomerDTO[]>([]);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [refundInvoiceId, setRefundInvoiceId] = useState<string | null>(null);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+  const [invoiceActingId, setInvoiceActingId] = useState<string | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [newProperty, setNewProperty] = useState({
-    name: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    latitude: null as number | null,
-    longitude: null as number | null,
-  });
+  const [newProperty, setNewProperty] = useState(EMPTY_PROPERTY_FORM);
+  const [addPropertyOpen, setAddPropertyOpen] = useState(false);
+  const [addingProperty, setAddingProperty] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [propertySearch, setPropertySearch] = useState("");
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
 
   useEffect(() => {
     if (tabFromUrl && validTabs.has(tabFromUrl)) {
-      setActiveTab(tabFromUrl);
+      if (tabFromUrl === "invoices" && !canViewInvoices) {
+        setActiveTab("profile");
+      } else {
+        setActiveTab(tabFromUrl);
+      }
     } else if (propertyIdFromUrl) {
       setActiveTab("properties");
     }
-  }, [tabFromUrl, propertyIdFromUrl]);
+  }, [tabFromUrl, propertyIdFromUrl, canViewInvoices]);
 
   useEffect(() => {
     if (activeTab !== "properties" || !propertyIdFromUrl || loading) return;
-    const el = document.getElementById(`property-${propertyIdFromUrl}`);
-    if (el) {
-      requestAnimationFrame(() => {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+    setSelectedPropertyId(propertyIdFromUrl);
+  }, [activeTab, propertyIdFromUrl, loading]);
+
+  useEffect(() => {
+    if (!properties.length) {
+      setSelectedPropertyId(null);
+      return;
     }
-  }, [activeTab, propertyIdFromUrl, loading, properties.length]);
+    setSelectedPropertyId((prev) => {
+      if (prev && properties.some((p) => p.id === prev)) return prev;
+      if (propertyIdFromUrl && properties.some((p) => p.id === propertyIdFromUrl)) {
+        return propertyIdFromUrl;
+      }
+      const primary = properties.find((p) => p.isPrimary);
+      return primary?.id ?? properties[0].id;
+    });
+  }, [properties, propertyIdFromUrl]);
 
   const load = useCallback(async () => {
     const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
@@ -214,7 +255,9 @@ export function CustomerProfile({ customerId }: Props) {
       fetch(`/api/customers/${customerId}/properties`),
       fetch(`/api/customers/${customerId}/phones`),
       fetch(`/api/estimates?customerId=${customerId}`),
-      fetch(`/api/invoices?customerId=${customerId}`),
+      canViewInvoices
+        ? fetch(`/api/invoices?customerId=${customerId}`)
+        : Promise.resolve(null),
       fetch(`/api/maintenance-plans/enrollments?customerId=${customerId}`),
     ]);
 
@@ -231,9 +274,11 @@ export function CustomerProfile({ customerId }: Props) {
       const data = await estimatesRes.json();
       setEstimates(data.estimates ?? []);
     }
-    if (invoicesRes.ok) {
+    if (invoicesRes?.ok) {
       const data = await invoicesRes.json();
       setInvoices(data.invoices ?? []);
+    } else if (!canViewInvoices) {
+      setInvoices([]);
     }
     if (enrollmentsRes.ok) {
       const data = await enrollmentsRes.json();
@@ -248,7 +293,7 @@ export function CustomerProfile({ customerId }: Props) {
       const jobs = await scheduleRes.json();
       setVisits(jobs.filter((j: { customer?: { id: string } }) => j.customer?.id === customerId));
     }
-  }, [customerId]);
+  }, [customerId, canViewInvoices]);
 
   useEffect(() => {
     load()
@@ -315,28 +360,36 @@ export function CustomerProfile({ customerId }: Props) {
   async function addProperty(e: React.FormEvent) {
     e.preventDefault();
     if (!newProperty.name.trim()) return;
-    const res = await fetch(`/api/customers/${customerId}/properties`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newProperty),
-    });
-    if (!res.ok) {
-      toast.error("Failed to add property");
-      return;
-    }
-    setNewProperty({
-      name: "",
-      address: "",
-      city: "",
-      state: "",
-      zip: "",
-      latitude: null,
-      longitude: null,
-    });
-    const propsRes = await fetch(`/api/customers/${customerId}/properties`);
-    if (propsRes.ok) {
-      const data = await propsRes.json();
-      setProperties(Array.isArray(data) ? data : []);
+    const payload = { ...newProperty };
+    setAddingProperty(true);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/properties`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        toast.error("Failed to add property");
+        return;
+      }
+      const created = await res.json().catch(() => null);
+      setNewProperty(EMPTY_PROPERTY_FORM);
+      setAddPropertyOpen(false);
+      const propsRes = await fetch(`/api/customers/${customerId}/properties`);
+      if (propsRes.ok) {
+        const data = await propsRes.json();
+        const list: CustomerPropertyDTO[] = Array.isArray(data) ? data : [];
+        setProperties(list);
+        const nextId =
+          (created && typeof created.id === "string" && created.id) ||
+          list.find((p) => p.name === payload.name)?.id ||
+          list[list.length - 1]?.id ||
+          null;
+        if (nextId) setSelectedPropertyId(nextId);
+      }
+      toast.success("Property added");
+    } finally {
+      setAddingProperty(false);
     }
   }
 
@@ -348,7 +401,83 @@ export function CustomerProfile({ customerId }: Props) {
       toast.error("Failed to delete property");
       return;
     }
-    setProperties((prev) => prev.filter((p) => p.id !== propertyId));
+    setProperties((prev) => {
+      const next = prev.filter((p) => p.id !== propertyId);
+      setSelectedPropertyId((current) => {
+        if (current !== propertyId) return current;
+        return next.find((p) => p.isPrimary)?.id ?? next[0]?.id ?? null;
+      });
+      return next;
+    });
+  }
+
+  async function refreshInvoices() {
+    if (!canViewInvoices) return;
+    const res = await fetch(`/api/invoices?customerId=${customerId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setInvoices(data.invoices ?? []);
+  }
+
+  async function remindInvoice(invoiceId: string) {
+    setInvoiceActingId(invoiceId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/remind`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.payUrl) {
+          await navigator.clipboard.writeText(data.payUrl);
+          toast.message(data.error ?? "Could not send reminder", {
+            description: "Pay link copied to clipboard.",
+          });
+        } else {
+          toast.error(data.error ?? "Failed to send reminder");
+        }
+        return;
+      }
+      toast.success("Payment reminder sent");
+      await refreshInvoices();
+    } finally {
+      setInvoiceActingId(null);
+    }
+  }
+
+  async function voidInvoice(invoiceId: string) {
+    setInvoiceActingId(invoiceId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/void`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to void invoice");
+        return;
+      }
+      toast.success("Invoice voided");
+      await refreshInvoices();
+    } finally {
+      setInvoiceActingId(null);
+    }
+  }
+
+  async function confirmDeleteInvoice(voidFirst: boolean) {
+    if (!deleteInvoiceId) return;
+    setDeletingInvoice(true);
+    try {
+      const res = await fetch(`/api/invoices/${deleteInvoiceId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voidFirst }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to delete invoice");
+        return;
+      }
+      toast.success(voidFirst ? "Invoice voided and deleted" : "Invoice deleted");
+      setDeleteInvoiceId(null);
+      await refreshInvoices();
+    } finally {
+      setDeletingInvoice(false);
+    }
   }
 
   async function sendPortalLink() {
@@ -577,10 +706,12 @@ export function CustomerProfile({ customerId }: Props) {
       )}
 
       <CustomerSummaryCard customerId={customerId} />
-      <CustomerPropertyMap
-        title={primaryProperty ? `${primaryProperty.name} location` : "Property location"}
-        location={mapLocation}
-      />
+      {activeTab !== "properties" ? (
+        <CustomerPropertyMap
+          title={primaryProperty ? `${primaryProperty.name} location` : "Property location"}
+          location={mapLocation}
+        />
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex h-auto flex-wrap">
@@ -589,7 +720,7 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="visits">Visits</TabsTrigger>
           <TabsTrigger value="calls">Calls</TabsTrigger>
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          {canViewInvoices ? <TabsTrigger value="invoices">Invoices</TabsTrigger> : null}
           <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
         </TabsList>
 
@@ -856,87 +987,195 @@ export function CustomerProfile({ customerId }: Props) {
 
         <TabsContent value="properties" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Properties</CardTitle>
+              <Button type="button" size="sm" onClick={() => setAddPropertyOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Add property
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {properties.map((property) => (
-                <div key={property.id} id={`property-${property.id}`} className="scroll-mt-6 space-y-3">
-                  <div className="flex items-start justify-between rounded-md border p-3">
-                    <div>
-                      <div className="font-medium">
-                        {property.name}
-                        {property.isPrimary && (
-                          <Badge variant="outline" className="ml-2">
-                            Primary
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {[property.address, property.city, property.state, property.zip]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-                      <PropertyIrrigationSummary
-                        zoneCount={property.irrigationZoneCount}
-                        shutoffValveLocation={property.shutoffValveLocation}
-                        controllerLocation={property.controllerLocation}
-                        irrigationMapStatus={property.irrigationMapStatus}
+              {properties.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No properties yet. Add one to manage irrigation, Rachio, and service locations.
+                </p>
+              ) : (
+                <>
+                  {properties.length > 1 ? (
+                    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+                      <label className="text-sm font-medium" htmlFor="property-picker">
+                        Select property
+                      </label>
+                      <Input
+                        value={propertySearch}
+                        onChange={(e) => setPropertySearch(e.target.value)}
+                        placeholder="Search by name or address..."
                       />
+                      <select
+                        id="property-picker"
+                        className={nativeSelectClassName}
+                        value={selectedPropertyId ?? ""}
+                        onChange={(e) => {
+                          setSelectedPropertyId(e.target.value);
+                          setPropertySearch("");
+                        }}
+                      >
+                        {(() => {
+                          const q = propertySearch.trim().toLowerCase();
+                          const filtered = properties.filter((property) => {
+                            if (!q) return true;
+                            const haystack = [
+                              property.name,
+                              property.address,
+                              property.city,
+                              property.state,
+                              property.zip,
+                            ]
+                              .filter(Boolean)
+                              .join(" ")
+                              .toLowerCase();
+                            return haystack.includes(q);
+                          });
+                          const selected = properties.find((p) => p.id === selectedPropertyId);
+                          const options =
+                            selected && !filtered.some((p) => p.id === selected.id)
+                              ? [selected, ...filtered]
+                              : filtered;
+                          return options.map((property) => (
+                            <option key={property.id} value={property.id}>
+                              {property.name}
+                              {property.isPrimary ? " (Primary)" : ""}
+                              {property.address
+                                ? ` — ${[property.address, property.city, property.state]
+                                    .filter(Boolean)
+                                    .join(", ")}`
+                                : ""}
+                            </option>
+                          ));
+                        })()}
+                      </select>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteProperty(property.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <RachioPropertyPanel
-                    customerId={customerId}
-                    propertyId={property.id}
-                    propertyName={property.name}
-                  />
-                  <PropertyIrrigationWizard customerId={customerId} propertyId={property.id} />
-                  {property.designProjectId && process.env.NEXT_PUBLIC_DESIGN_URL ? (
-                    <a
-                      href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary underline"
-                    >
-                      Open design project
-                    </a>
                   ) : null}
-                  <PropertyIrrigationEditor customerId={customerId} propertyId={property.id} />
-                  <CustomerPropertyMap
-                    title={`${property.name} map`}
-                    location={{
-                      address: property.address,
-                      city: property.city,
-                      state: property.state,
-                      zip: property.zip,
-                    }}
-                  />
-                </div>
-              ))}
 
-              <form onSubmit={addProperty} className="grid gap-2 border-t pt-4 sm:grid-cols-2">
-                <Input
-                  value={newProperty.name}
-                  onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
-                  placeholder="Property name"
-                  required
-                  className="sm:col-span-2"
-                />
-                <AddressFields
-                  addressLabel="Property address"
-                  value={newProperty}
-                  onChange={(fields) => setNewProperty((prev) => ({ ...prev, ...fields }))}
-                />
-                <Button type="submit" className="sm:col-span-2">
-                  <Plus className="h-4 w-4" />
-                  Add property
-                </Button>
-              </form>
+                  {(() => {
+                    const property =
+                      properties.find((p) => p.id === selectedPropertyId) ?? properties[0];
+                    if (!property) return null;
+                    return (
+                      <div
+                        key={property.id}
+                        id={`property-${property.id}`}
+                        className="scroll-mt-6 space-y-3"
+                      >
+                        <div className="flex items-start justify-between rounded-md border p-3">
+                          <div>
+                            <div className="font-medium">
+                              {property.name}
+                              {property.isPrimary && (
+                                <Badge variant="outline" className="ml-2">
+                                  Primary
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {[property.address, property.city, property.state, property.zip]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
+                            <PropertyIrrigationSummary
+                              zoneCount={property.irrigationZoneCount}
+                              shutoffValveLocation={property.shutoffValveLocation}
+                              controllerLocation={property.controllerLocation}
+                              irrigationMapStatus={property.irrigationMapStatus}
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteProperty(property.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <RachioPropertyPanel
+                          customerId={customerId}
+                          propertyId={property.id}
+                          propertyName={property.name}
+                        />
+                        <PropertyIrrigationWizard
+                          customerId={customerId}
+                          propertyId={property.id}
+                        />
+                        {property.designProjectId && process.env.NEXT_PUBLIC_DESIGN_URL ? (
+                          <a
+                            href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary underline"
+                          >
+                            Open design project
+                          </a>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </CardContent>
           </Card>
+
+          {addPropertyOpen ? (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/40"
+                aria-label="Close"
+                onClick={() => !addingProperty && setAddPropertyOpen(false)}
+              />
+              <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background shadow-lg">
+                <div className="flex items-center justify-between border-b px-4 py-3">
+                  <h2 className="font-semibold">Add property</h2>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={addingProperty}
+                    onClick={() => setAddPropertyOpen(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <form onSubmit={addProperty} className="grid gap-3 p-4 sm:grid-cols-2">
+                  <Input
+                    value={newProperty.name}
+                    onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
+                    placeholder="Property name"
+                    required
+                    className="sm:col-span-2"
+                    autoFocus
+                  />
+                  <AddressFields
+                    addressLabel="Property address"
+                    value={newProperty}
+                    onChange={(fields) => setNewProperty((prev) => ({ ...prev, ...fields }))}
+                  />
+                  <div className="flex justify-end gap-2 sm:col-span-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={addingProperty}
+                      onClick={() => setAddPropertyOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={addingProperty}>
+                      {addingProperty ? "Adding…" : "Add property"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="visits" className="space-y-4">
@@ -955,18 +1194,27 @@ export function CustomerProfile({ customerId }: Props) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Title</TableHead>
+                      <TableHead>Technician(s)</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visits.map((visit) => (
+                    {visits.map((visit) => {
+                      const technicians = [
+                        visit.assignedUser?.name,
+                        visit.crew?.name,
+                      ].filter(Boolean);
+                      return (
                       <TableRow key={visit.id}>
                         <TableCell>
                           <Link href={`/visits/${visit.id}`} className="font-medium text-primary hover:underline">
                             {visit.title}
                           </Link>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {technicians.length > 0 ? technicians.join(", ") : "Unassigned"}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{visit.status}</Badge>
@@ -976,7 +1224,8 @@ export function CustomerProfile({ customerId }: Props) {
                           {visit.total != null ? formatCurrency(visit.total) : "—"}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -1027,6 +1276,7 @@ export function CustomerProfile({ customerId }: Props) {
           </Card>
         </TabsContent>
 
+        {canViewInvoices ? (
         <TabsContent value="invoices">
           <Card>
             <CardContent className="pt-6">
@@ -1041,11 +1291,16 @@ export function CustomerProfile({ customerId }: Props) {
                       <TableHead>Total</TableHead>
                       <TableHead>Paid</TableHead>
                       <TableHead>Created</TableHead>
-                      {canRefund ? <TableHead className="text-right">Actions</TableHead> : null}
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.map((invoice) => (
+                    {invoices.map((invoice) => {
+                      const balanceDue =
+                        invoice.balanceDue ??
+                        Math.max(0, invoice.total - (invoice.amountPaid ?? 0));
+                      const acting = invoiceActingId === invoice.id;
+                      return (
                       <TableRow key={invoice.id}>
                         <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                         <TableCell>
@@ -1054,9 +1309,48 @@ export function CustomerProfile({ customerId }: Props) {
                         <TableCell>{formatCurrency(invoice.total)}</TableCell>
                         <TableCell>{formatCurrency(invoice.amountPaid ?? 0)}</TableCell>
                         <TableCell>{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
-                        {canRefund ? (
-                          <TableCell className="text-right">
-                            {invoice.amountPaid > 0 && invoice.status !== "REFUNDED" ? (
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {balanceDue > 0 && invoice.status !== "VOID" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={acting}
+                                onClick={() => void remindInvoice(invoice.id)}
+                              >
+                                Remind
+                              </Button>
+                            ) : null}
+                            {invoice.status !== "VOID" && invoice.status !== "REFUNDED" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={acting}
+                                onClick={() => void voidInvoice(invoice.id)}
+                              >
+                                Void
+                              </Button>
+                            ) : null}
+                            {invoice.visit ? (
+                              <Button type="button" variant="ghost" size="sm" asChild>
+                                <Link href={`/visits/${invoice.visit.id}`}>Visit</Link>
+                              </Button>
+                            ) : null}
+                            {invoice.maintenancePlanEnrollment ? (
+                              <Button type="button" variant="ghost" size="sm" asChild>
+                                <Link
+                                  href={`/maintenance-plans/enrollments/${invoice.maintenancePlanEnrollment.id}`}
+                                  title={invoice.maintenancePlanEnrollment.planName}
+                                >
+                                  Plan
+                                </Link>
+                              </Button>
+                            ) : null}
+                            {canRefund &&
+                            invoice.amountPaid > 0 &&
+                            invoice.status !== "REFUNDED" ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1067,18 +1361,52 @@ export function CustomerProfile({ customerId }: Props) {
                                 Refund
                               </Button>
                             ) : null}
-                          </TableCell>
-                        ) : null}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              disabled={acting}
+                              onClick={() => setDeleteInvoiceId(invoice.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
             </CardContent>
           </Card>
         </TabsContent>
+        ) : null}
 
         <TabsContent value="maintenance" className="space-y-4">
+          {(() => {
+            const lateEnrollments = enrollments.filter(enrollmentHasLatePayment);
+            if (!lateEnrollments.length) return null;
+            const periods = lateEnrollments.flatMap((e) => e.billingPeriods ?? []);
+            const { count, total } = latePaymentSummary(periods);
+            return (
+              <LatePaymentAlert
+                title={
+                  lateEnrollments.length === 1
+                    ? "Late on maintenance plan payment"
+                    : "Late on maintenance plan payments"
+                }
+                amount={total}
+                description={
+                  count === 1
+                    ? `${lateEnrollments[0].template.name} has an overdue billing period.`
+                    : `${count} billing periods are overdue across ${lateEnrollments.length} plans.`
+                }
+              />
+            );
+          })()}
+
           <div className="flex justify-end">
             <Button type="button" onClick={openEnrollModal}>
               <Plus className="h-4 w-4" />
@@ -1102,15 +1430,27 @@ export function CustomerProfile({ customerId }: Props) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {enrollments.map((enrollment) => (
-                      <TableRow key={enrollment.id}>
+                    {enrollments.map((enrollment) => {
+                      const late = enrollmentHasLatePayment(enrollment);
+                      return (
+                      <TableRow
+                        key={enrollment.id}
+                        className={late ? "bg-red-50/80 dark:bg-red-950/20" : undefined}
+                      >
                         <TableCell>
-                          <Link
-                            href={`/maintenance-plans/enrollments/${enrollment.id}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {enrollment.template.name}
-                          </Link>
+                          <div className="space-y-1">
+                            <Link
+                              href={`/maintenance-plans/enrollments/${enrollment.id}`}
+                              className="font-medium text-primary hover:underline"
+                            >
+                              {enrollment.template.name}
+                            </Link>
+                            {late ? (
+                              <Badge variant="destructive" className="text-[10px]">
+                                Late payment
+                              </Badge>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell>{enrollment.property.name}</TableCell>
                         <TableCell>
@@ -1119,7 +1459,8 @@ export function CustomerProfile({ customerId }: Props) {
                         <TableCell>{BILLING_FREQUENCY_LABELS[enrollment.billingFrequency]}</TableCell>
                         <TableCell>{formatCurrency(enrollment.template.basePrice)}</TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -1231,7 +1572,19 @@ export function CustomerProfile({ customerId }: Props) {
           customerName={customer.name}
           open
           onClose={() => setRefundInvoiceId(null)}
-          onRefunded={() => load()}
+          onRefunded={() => void refreshInvoices()}
+        />
+      ) : null}
+
+      {deleteInvoiceId ? (
+        <DeleteInvoiceDialog
+          open
+          invoiceNumber={
+            invoices.find((invoice) => invoice.id === deleteInvoiceId)?.invoiceNumber ?? ""
+          }
+          loading={deletingInvoice}
+          onClose={() => !deletingInvoice && setDeleteInvoiceId(null)}
+          onConfirm={(voidFirst) => void confirmDeleteInvoice(voidFirst)}
         />
       ) : null}
     </div>

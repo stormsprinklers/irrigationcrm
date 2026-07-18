@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { deliverInvoice } from "@/lib/invoices/deliver";
+import { canAccessInvoices } from "@/lib/invoices/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const { id } = await params;
+    if (!canAccessInvoices(user.role)) return forbiddenResponse();
 
+    const { id } = await params;
     const result = await deliverInvoice({ invoiceId: id, companyId: user.companyId, kind: "remind" });
     if ("error" in result && !result.invoice) {
       return NextResponse.json(

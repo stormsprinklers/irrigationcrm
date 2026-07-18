@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SprinklerProgrammingSetupTable } from "@/components/irrigation/SprinklerProgrammingSetupTable";
 import type { ControllerProgramGuide } from "@/lib/irrigation/runtime-engine";
 
 type Props = {
@@ -71,7 +72,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
     return (
       <section className="rounded-lg border border-border bg-white">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Controller programming guide</h2>
+          <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
         </div>
         <p className="p-4 text-sm text-muted-foreground">Calculating runtimes...</p>
       </section>
@@ -82,7 +83,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
     return (
       <section className="rounded-lg border border-border bg-white">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Controller programming guide</h2>
+          <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
         </div>
         <p className="p-4 text-sm text-muted-foreground">
           Add zones with vegetation and irrigation types to generate a programming guide.
@@ -95,10 +96,9 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
     <section className="rounded-lg border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-sm font-semibold">Controller programming guide</h2>
+          <h2 className="text-sm font-semibold">Controller settings</h2>
           <p className="text-xs text-muted-foreground">
-            ET₀ {guide.weeklyEToInches}&quot;/wk · Rain {guide.totalRainfallInches}&quot; · Effective{" "}
-            {guide.effectiveRainInches}&quot;
+            Recommendations update from zone attributes, weather, and the settings below.
           </p>
         </div>
         <Button type="button" variant="ghost" size="icon" onClick={() => void load(true)}>
@@ -144,47 +144,12 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
           </select>
         </div>
         <Button type="button" size="sm" onClick={() => void saveSettings()} disabled={saving}>
-          {saving ? "Updating..." : "Update settings"}
+          {saving ? "Updating..." : "Update recommendations"}
         </Button>
       </div>
 
-      <div className="max-h-[32rem] space-y-4 overflow-y-auto p-4">
-        <p className="text-xs text-muted-foreground">
-          Total: ~{Math.round(guide.totalGallonsPerWeek)} gal/week across all zones
-        </p>
-
-        {guide.notes.map((note) => (
-          <p key={note} className="text-xs text-amber-800">
-            {note}
-          </p>
-        ))}
-
-        {guide.programs.map((program) => (
-          <div key={program.id} className="rounded-md border">
-            <div className="space-y-1 px-3 py-3">
-              <p className="text-sm font-medium">{program.label}</p>
-              <p className="text-sm text-muted-foreground">
-                Start Times: {program.startTimes.join(", ")} · Estimated{" "}
-                {Math.round(program.totalGallonsPerWeek)} gal/wk
-              </p>
-              <ul className="space-y-1 pt-1">
-                {program.zones.map((zone) => (
-                  <li key={zone.zoneId} className="text-sm">
-                    Station {zone.stationNumber}:{" "}
-                    {zone.cycleSoak.enabled && zone.cycleSoak.cycleCount > 1
-                      ? `Runtime - ${zone.cycleSoak.minutesPerCycle} mins per cycle`
-                      : `Runtime - ${zone.runtimePerEventMinutes} mins`}
-                    {zone.establishmentNote ? (
-                      <span className="mt-1 block text-xs text-amber-700">
-                        {zone.establishmentNote}
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        ))}
+      <div className="p-4">
+        <SprinklerProgrammingSetupTable guide={guide} />
       </div>
     </section>
   );

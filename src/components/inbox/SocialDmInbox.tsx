@@ -21,10 +21,13 @@ const PLATFORM_CONFIG: Record<
   instagram: { label: "Instagram", icon: Instagram, color: "text-[#E4405F]" },
 };
 
+export type SocialPlatformFilter = SocialScope | "all";
+
 type Conversation = {
   id: string;
   title?: string | null;
   participantMetaId?: string | null;
+  platform?: SocialScope | null;
   customer?: { name: string; doNotService?: boolean } | null;
   messages: { body: string; sentAt: string }[];
 };
@@ -37,17 +40,26 @@ type Message = {
   sender?: { name: string } | null;
 };
 
+function PlatformBadge({ platform }: { platform: SocialScope }) {
+  const config = PLATFORM_CONFIG[platform];
+  const Icon = config.icon;
+  return (
+    <Badge variant="secondary" className="gap-1 text-[10px] font-normal">
+      <Icon className={`h-3 w-3 ${config.color}`} />
+      {config.label}
+    </Badge>
+  );
+}
+
 export function SocialDmThreadList({
-  platform,
+  platform = "all",
   selectedId,
   onSelect,
 }: {
-  platform: SocialScope;
+  platform?: SocialPlatformFilter;
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, platform: SocialScope) => void;
 }) {
-  const config = PLATFORM_CONFIG[platform];
-  const Icon = config.icon;
   const [threads, setThreads] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [metaConfigured, setMetaConfigured] = useState<boolean | null>(null);
@@ -85,15 +97,15 @@ export function SocialDmThreadList({
       <ScrollArea className="h-full">
         <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <Icon className={`h-6 w-6 ${config.color}`} />
+            <Facebook className="h-6 w-6 text-[#1877F2]" />
           </div>
-          <p className="text-sm font-medium">{config.label} not connected</p>
+          <p className="text-sm font-medium">Social DMs not connected</p>
           <p className="mt-2 max-w-xs text-sm text-muted-foreground">
             Connect Meta in{" "}
             <Link href="/settings/integrations/meta" className="text-primary underline">
               Settings → Meta webhooks
             </Link>{" "}
-            to receive {config.label} DMs here.
+            to receive Facebook and Instagram DMs here.
           </p>
         </div>
       </ScrollArea>
@@ -103,7 +115,7 @@ export function SocialDmThreadList({
   if (!threads.length) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        No {config.label} conversations yet. New DMs will appear here automatically.
+        No social conversations yet. New Facebook and Instagram DMs will appear here automatically.
       </div>
     );
   }
@@ -112,6 +124,9 @@ export function SocialDmThreadList({
     <ScrollArea className="h-full">
       <ul>
         {threads.map((thread) => {
+          const threadPlatform: SocialScope =
+            thread.platform === "instagram" ? "instagram" : "facebook";
+          const config = PLATFORM_CONFIG[threadPlatform];
           const label = thread.customer?.name ?? thread.title ?? `${config.label} user`;
           const snippet = thread.messages[0]?.body ?? "";
           const initials = label.slice(0, 2).toUpperCase();
@@ -120,26 +135,31 @@ export function SocialDmThreadList({
             <li key={thread.id}>
               <button
                 type="button"
-                onClick={() => onSelect(thread.id)}
+                onClick={() => onSelect(thread.id, threadPlatform)}
                 className={cn(
                   "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
                   selectedId === thread.id && "bg-highlight"
                 )}
               >
                 <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-primary/10 text-xs text-primary">{initials}</AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  {thread.customer?.name ? (
-                    <CustomerNameWithBadge
-                      name={thread.customer.name}
-                      doNotService={thread.customer.doNotService}
-                      nameClassName="truncate text-sm font-semibold"
-                      className="max-w-full"
-                    />
-                  ) : (
-                    <p className="truncate text-sm font-semibold">{label}</p>
-                  )}
+                  <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                    {thread.customer?.name ? (
+                      <CustomerNameWithBadge
+                        name={thread.customer.name}
+                        doNotService={thread.customer.doNotService}
+                        nameClassName="truncate text-sm font-semibold"
+                        className="max-w-full"
+                      />
+                    ) : (
+                      <p className="truncate text-sm font-semibold">{label}</p>
+                    )}
+                    <PlatformBadge platform={threadPlatform} />
+                  </div>
                   <p className="truncate text-sm text-muted-foreground">{snippet}</p>
                 </div>
               </button>
@@ -156,21 +176,26 @@ export function SocialDmMessagePane({
   conversationId,
   onSent,
 }: {
-  platform: SocialScope;
+  platform: SocialScope | null;
   conversationId: string | null;
   onSent?: () => void;
 }) {
-  const config = PLATFORM_CONFIG[platform];
-  const Icon = config.icon;
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [resolvedFromApi, setResolvedFromApi] = useState<SocialScope | null>(null);
+
+  const resolvedPlatform: SocialScope =
+    platform ?? resolvedFromApi ?? "facebook";
+  const config = PLATFORM_CONFIG[resolvedPlatform];
+  const Icon = config.icon;
 
   useEffect(() => {
     if (!conversationId) {
       setConversation(null);
       setMessages([]);
+      setResolvedFromApi(null);
       return;
     }
 
@@ -180,6 +205,9 @@ export function SocialDmMessagePane({
       const data = await res.json();
       setConversation(data.conversation);
       setMessages(data.messages ?? []);
+      if (data.platform === "facebook" || data.platform === "instagram") {
+        setResolvedFromApi(data.platform);
+      }
     }
 
     load();
@@ -210,30 +238,29 @@ export function SocialDmMessagePane({
   }
 
   const headerLabel =
-    conversation?.customer?.name ?? conversation?.title ?? `${config.label} conversation`;
+    conversation?.customer?.name ?? conversation?.title ?? "Social conversation";
 
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 ${config.color}`} />
-          <h3 className="font-semibold">{conversationId ? headerLabel : `${config.label} DMs`}</h3>
-          {conversationId ? (
-            <Badge variant="secondary" className="text-[10px]">
-              {config.label}
-            </Badge>
-          ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {conversationId ? <Icon className={`h-4 w-4 ${config.color}`} /> : null}
+          <h3 className="font-semibold">{conversationId ? headerLabel : "Social DMs"}</h3>
+          {conversationId ? <PlatformBadge platform={resolvedPlatform} /> : null}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {conversationId
             ? "Reply within Meta's messaging window (typically 24 hours after the customer's last message)."
-            : `Select a ${config.label} conversation`}
+            : "Select a Facebook or Instagram conversation"}
         </p>
       </div>
 
       {!conversationId ? (
         <div className="flex flex-1 flex-col items-center justify-center bg-muted/20 px-6 text-center">
-          <Icon className={`mb-3 h-10 w-10 opacity-40 ${config.color}`} />
+          <div className="mb-3 flex items-center gap-2 opacity-40">
+            <Facebook className="h-8 w-8 text-[#1877F2]" />
+            <Instagram className="h-8 w-8 text-[#E4405F]" />
+          </div>
           <p className="text-sm text-muted-foreground">Select a conversation from the list.</p>
         </div>
       ) : (
@@ -247,18 +274,21 @@ export function SocialDmMessagePane({
                     "max-w-[85%] rounded-lg px-3 py-2 text-sm",
                     msg.direction === "OUTBOUND"
                       ? "ml-auto bg-primary text-primary-foreground"
-                      : "bg-white border border-border"
+                      : "border border-border bg-white"
                   )}
                 >
                   <p className="whitespace-pre-wrap">{msg.body}</p>
                   <p
                     className={cn(
                       "mt-1 text-[10px]",
-                      msg.direction === "OUTBOUND" ? "text-primary-foreground/70" : "text-muted-foreground"
+                      msg.direction === "OUTBOUND"
+                        ? "text-primary-foreground/70"
+                        : "text-muted-foreground"
                     )}
                   >
                     {formatSmsMessageTime(msg.sentAt)}
                     {msg.direction === "OUTBOUND" && msg.sender?.name ? ` · ${msg.sender.name}` : ""}
+                    {` · ${config.label}`}
                   </p>
                 </div>
               ))}

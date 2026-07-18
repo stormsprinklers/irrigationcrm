@@ -67,7 +67,7 @@ function daysLabel(days: DayOfWeekCode[]): string {
     FRI: "Fri",
     SAT: "Sat",
   };
-  return days.map((d) => labels[d]).join(", ");
+  return days.map((d) => labels[d]).join(" / ");
 }
 
 function resolveZoneDaysOfWeek(

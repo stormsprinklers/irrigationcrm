@@ -9,6 +9,18 @@ export const invoiceInclude = {
   estimate: { select: { id: true, status: true } },
   lineItems: { orderBy: { sortOrder: "asc" as const } },
   payments: { orderBy: { paidAt: "desc" as const } },
+  maintenanceBillingPeriods: {
+    take: 1,
+    orderBy: { dueDate: "desc" as const },
+    select: {
+      enrollment: {
+        select: {
+          id: true,
+          template: { select: { name: true } },
+        },
+      },
+    },
+  },
 } satisfies Prisma.InvoiceInclude;
 
 type InvoicePayload = Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }>;
@@ -23,6 +35,7 @@ function computeAmountPaid(payments: InvoicePayload["payments"]) {
 export function serializeInvoice(invoice: InvoicePayload): InvoiceDTO {
   const amountPaid = computeAmountPaid(invoice.payments);
   const total = toNumber(invoice.total);
+  const enrollment = invoice.maintenanceBillingPeriods[0]?.enrollment ?? null;
 
   return {
     id: invoice.id,
@@ -40,6 +53,9 @@ export function serializeInvoice(invoice: InvoicePayload): InvoiceDTO {
     customer: invoice.customer,
     visit: invoice.visit,
     estimate: invoice.estimate,
+    maintenancePlanEnrollment: enrollment
+      ? { id: enrollment.id, planName: enrollment.template.name }
+      : null,
     lineItems: invoice.lineItems.map((item) => ({
       id: item.id,
       name: item.name,

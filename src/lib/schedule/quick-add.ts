@@ -7,6 +7,8 @@ export type ScheduleSlotClick = {
   endAt: Date;
   assignedUserId: string | null;
   assignedUserName: string | null;
+  crewId: string | null;
+  crewName: string | null;
 };
 
 export function snapScheduleSlot(
@@ -44,7 +46,9 @@ export function buildScheduleSlotClick(
   scheduleEndHour: number,
   assignedUserId: string | null,
   assignedUserName: string | null,
-  arrivalWindowHours = DEFAULT_ARRIVAL_WINDOW_HOURS
+  arrivalWindowHours = DEFAULT_ARRIVAL_WINDOW_HOURS,
+  crewId: string | null = null,
+  crewName: string | null = null
 ): ScheduleSlotClick {
   const { startAt, endAt } = snapScheduleSlot(
     day,
@@ -61,5 +65,7 @@ export function buildScheduleSlotClick(
     endAt,
     assignedUserId,
     assignedUserName,
+    crewId,
+    crewName,
   };
 }

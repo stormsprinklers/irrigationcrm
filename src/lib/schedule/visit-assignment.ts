@@ -14,10 +14,11 @@ export function requiresTechnicianAssignment(status: VisitStatus) {
 
 export function validateScheduledVisitAssignment(
   status: VisitStatus,
-  assignedUserId: string | null | undefined
+  assignedUserId: string | null | undefined,
+  crewId?: string | null | undefined
 ): string | null {
-  if (requiresTechnicianAssignment(status) && !assignedUserId) {
-    return "Assign a technician before scheduling this visit";
+  if (requiresTechnicianAssignment(status) && !assignedUserId && !crewId) {
+    return "Assign a technician or crew before scheduling this visit";
   }
   return null;
 }

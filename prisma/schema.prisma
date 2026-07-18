@@ -519,6 +519,8 @@ model Company {
   portalAllowSchedule      Boolean  @default(true)
   portalShowMaintenance    Boolean  @default(true)
   portalShowChecklists     Boolean  @default(true)
+  /// When true, visit UI presents all applied checklists as one combined checklist.
+  mergeVisitChecklists     Boolean  @default(false)
   portalShowRachio         Boolean  @default(true)
   portalShowOffers         Boolean  @default(true)
   portalShowReferrals      Boolean  @default(true)
@@ -537,10 +539,16 @@ model Company {
   googleReviewUrl          String?
   websiteBaseUrl           String?
   arrivalWindowHours       Int      @default(3)
+  /// When true, schedule Day view shows dashed open booking windows.
+  openTimeSlotsEnabled     Boolean  @default(true)
+  /// Per-division booking windows: { SERVICE: [{start,end}], INSTALL: [...] }
+  divisionBookingWindows   Json?
   feedbackSurveyDelayHours Int      @default(24)
   reviewRequestDelayHours  Int      @default(2)
   estimateFollowUpIntervalDays Int  @default(3)
   leadSources              String[] @default([])
+  /// Soft-removed lead sources kept for history / filters.
+  archivedLeadSources      String[] @default([])
   intakeRequiredFields     String[] @default([])
   businessHours            Json?
   referralCode             String?
@@ -827,6 +835,7 @@ model User {
   groupMemberships   InternalGroupMember[]
   serviceAreas       UserServiceArea[]
   crewMemberships    CrewMember[]
+  crewsAsForeman     Crew[]               @relation("CrewForeman")
   assignedVisits     Visit[]              @relation("AssignedVisits")
   assignedLeads      Lead[]               @relation("AssignedLeads")
   mobileSessions     MobileSession[]
@@ -2046,19 +2055,23 @@ model UserServiceArea {
 }
 
 model Crew {
-  id        String    @id @default(cuid())
-  companyId String
-  name      String
-  color     String    @default("#16A34A")
-  division  Division?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  companyId     String
+  name          String
+  color         String    @default("#16A34A")
+  division      Division?
+  /// Schedule Day column avatar; typically a crew member.
+  foremanUserId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  foreman User?        @relation("CrewForeman", fields: [foremanUserId], references: [id], onDelete: SetNull)
   members CrewMember[]
   visits  Visit[]
 
   @@index([companyId])
+  @@index([foremanUserId])
 }
 
 model CrewMember {

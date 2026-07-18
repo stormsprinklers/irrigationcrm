@@ -1,24 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Channel } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { socialScopeToChannel } from "@/lib/meta/messaging";
+import { channelToSocialPlatform, socialScopeToChannel } from "@/lib/meta/messaging";
 import type { SocialScope } from "@/lib/inbox/types";
 
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const platform = request.nextUrl.searchParams.get("platform") as SocialScope | null;
+    const platformParam = request.nextUrl.searchParams.get("platform");
 
-    if (!platform || (platform !== "facebook" && platform !== "instagram")) {
-      return NextResponse.json({ error: "platform must be facebook or instagram" }, { status: 400 });
+    let channels: Channel[];
+    if (!platformParam || platformParam === "all") {
+      channels = [Channel.FACEBOOK, Channel.INSTAGRAM];
+    } else if (platformParam === "facebook" || platformParam === "instagram") {
+      channels = [socialScopeToChannel(platformParam as SocialScope)];
+    } else {
+      return NextResponse.json(
+        { error: "platform must be facebook, instagram, or all" },
+        { status: 400 }
+      );
     }
-
-    const channel = socialScopeToChannel(platform);
 
     const conversations = await prisma.conversation.findMany({
       where: {
         companyId: user.companyId,
-        channel,
+        channel: { in: channels },
       },
       include: {
         customer: {
@@ -32,7 +39,12 @@ export async function GET(request: NextRequest) {
       orderBy: { lastMessageAt: "desc" },
     });
 
-    return NextResponse.json(conversations);
+    return NextResponse.json(
+      conversations.map((conversation) => ({
+        ...conversation,
+        platform: channelToSocialPlatform(conversation.channel),
+      }))
+    );
   } catch {
     return unauthorizedResponse();
   }

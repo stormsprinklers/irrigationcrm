@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, RefreshCw, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AerialZoneMapEditor } from "@/components/customers/AerialZoneMapEditor";
 import { AerialCropDialog, type AerialCropRect } from "@/components/customers/AerialCropDialog";
+import { PropertyIrrigationProgramView } from "@/components/customers/PropertyIrrigationProgramView";
+import { SprinklerProgrammingSetupTable } from "@/components/irrigation/SprinklerProgrammingSetupTable";
 import {
   IRRIGATION_TYPES,
   SHADE_LEVELS,
@@ -94,10 +96,17 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
   const [cropBusy, setCropBusy] = useState(false);
   const [propertyLoaded, setPropertyLoaded] = useState(false);
   const [importingDesign, setImportingDesign] = useState(false);
+  const [mapStatus, setMapStatus] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [scheduleSettings, setScheduleSettings] = useState({
+    grassSeason: "COOL" as "COOL" | "WARM",
+    droughtRestrictionsActive: true,
+    cycleSoakEnabled: false,
+  });
   const autoCaptureAttempted = useRef(false);
 
   const loadProperty = useCallback(
-    async (options: { keepStep?: boolean } = {}) => {
+    async (options: { keepStep?: boolean; forceEdit?: boolean } = {}) => {
       try {
         const res = await fetch(
           `/api/customers/${customerId}/properties/${propertyId}/irrigation-map`
@@ -118,10 +127,18 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         setShutoffValveLocation(p.shutoffValveLocation ?? "");
         setControllerLocation(p.controllerLocation ?? "");
         setWaterSource(p.waterSource ?? "");
+        setMapStatus(p.irrigationMapStatus ?? null);
+        setScheduleSettings({
+          grassSeason: (p.grassSeason as "COOL" | "WARM") ?? "COOL",
+          droughtRestrictionsActive: p.droughtRestrictionsActive ?? true,
+          cycleSoakEnabled: p.cycleSoakEnabled ?? false,
+        });
+        const savedStep = Math.min(p.irrigationWizardStep ?? 1, MAX_STEP);
         if (!options.keepStep) {
-          setStep(Math.min(p.irrigationWizardStep ?? 1, MAX_STEP));
+          setStep(savedStep);
         }
 
+        const hasZones = Boolean(p.irrigationMapZones?.length);
         if (p.irrigationMapZones?.length) {
           const loaded = p.irrigationMapZones.map(
             (z: Record<string, string | number | null | unknown>, i: number) => ({
@@ -138,6 +155,14 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           setZones(loaded);
         } else if (p.irrigationZoneCount) {
           setZones(zonesForCount(p.irrigationZoneCount, []));
+        }
+
+        if (!options.forceEdit && !options.keepStep) {
+          const showFinalView =
+            p.irrigationMapStatus === "PUBLISHED" || (hasZones && savedStep >= MAX_STEP);
+          setEditing(!showFinalView);
+        } else if (options.forceEdit) {
+          setEditing(true);
         }
       } catch {
         // ignore
@@ -301,6 +326,13 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
       );
       if (!res.ok) throw new Error();
       toast.success(publish ? "Irrigation guide published" : "Draft saved");
+      if (publish) {
+        setMapStatus("PUBLISHED");
+        setEditing(false);
+        await loadProperty({ keepStep: true });
+      } else {
+        setMapStatus((prev) => prev ?? "DRAFT");
+      }
     } catch {
       toast.error("Failed to save");
     } finally {
@@ -353,15 +385,89 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     color: ZONE_MAP_COLORS[i % ZONE_MAP_COLORS.length],
   }));
 
+  const previewGuide = useMemo(() => {
+    if (step !== 6) return null;
+    const weather = defaultWeatherFallback();
+    const settings = propertySettingsFromRecord(scheduleSettings);
+    return buildControllerGuide({
+      propertyId,
+      settings,
+      zones: zones.map((z, i) =>
+        zoneInputFromMapZone(
+          {
+            id: `wizard-${i}`,
+            name: z.name,
+            sortOrder: i,
+            vegetationType: z.vegetationType,
+            shadeLevel: z.shadeLevel,
+            slopeLevel: z.slopeLevel,
+            soilType: z.soilType,
+            irrigationType: z.irrigationType,
+            nozzleCount: z.nozzleCount,
+          },
+          i + 1
+        )
+      ),
+      weather: {
+        weeklyEToInches: weather.weeklyEToInches,
+        totalRainfallInches: weather.totalRainfallInches,
+        source: "open_meteo",
+      },
+    });
+  }, [step, propertyId, zones, scheduleSettings]);
+
+  if (!propertyLoaded) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading irrigation map…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <PropertyIrrigationProgramView
+        customerId={customerId}
+        propertyId={propertyId}
+        mapStatus={mapStatus}
+        onEdit={() => {
+          setEditing(true);
+          setStep((s) => (s < 1 ? 1 : s));
+        }}
+      />
+    );
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">
-          Irrigation wizard — Step {step} of {MAX_STEP}: {currentStep.title}
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">{currentStep.description}</p>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle className="text-base">
+            {step === MAX_STEP
+              ? "Review irrigation programming"
+              : `Irrigation map setup — Step ${step} of ${MAX_STEP}`}
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {step === MAX_STEP
+              ? "Confirm the recommended controller programs, then publish or keep editing."
+              : currentStep.description}
+          </p>
+        </div>
+        {mapStatus === "PUBLISHED" || zones.some((z) => z.polygon) ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(false)}>
+            Done
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
+        {step < MAX_STEP ? (
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {currentStep.title}
+          </p>
+        ) : null}
         {step === 1 && (
           <div className="space-y-3">
             <div className="space-y-2">
@@ -646,54 +752,12 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
                 readOnly
               />
             )}
-            <ul className="space-y-2 text-sm">
-              {(() => {
-                const weather = defaultWeatherFallback();
-                const settings = propertySettingsFromRecord({
-                  grassSeason: "COOL",
-                  droughtRestrictionsActive: true,
-                  cycleSoakEnabled: false,
-                });
-                const guide = buildControllerGuide({
-                  propertyId,
-                  settings,
-                  zones: zones.map((z, i) =>
-                    zoneInputFromMapZone(
-                      {
-                        id: `wizard-${i}`,
-                        name: z.name,
-                        sortOrder: i,
-                        vegetationType: z.vegetationType,
-                        shadeLevel: z.shadeLevel,
-                        slopeLevel: z.slopeLevel,
-                        soilType: z.soilType,
-                        irrigationType: z.irrigationType,
-                        nozzleCount: z.nozzleCount,
-                      },
-                      i + 1
-                    )
-                  ),
-                  weather: {
-                    weeklyEToInches: weather.weeklyEToInches,
-                    totalRainfallInches: 0.3,
-                    source: "open_meteo",
-                  },
-                });
-                return guide.programs.flatMap((p) =>
-                  p.zones.map((zone) => (
-                    <li key={zone.zoneId} className="rounded border p-2">
-                      <strong>{zone.name}</strong> — {zone.runtimePerEventMinutes} min/event ·{" "}
-                      {zone.daysPerWeek} days/wk · ~{zone.gallonsPerWeek} gal/wk
-                      {zone.cycleSoak.enabled ? ` · ${zone.cycleSoak.description}` : ""}
-                    </li>
-                  ))
-                );
-              })()}
-            </ul>
-            <p className="text-xs text-muted-foreground">
-              Preview uses default Utah ET₀ ({defaultWeatherFallback().weeklyEToInches}&quot;/wk).
-              Publish to save live weather-based programming guide.
-            </p>
+            {previewGuide ? (
+              <SprinklerProgrammingSetupTable
+                guide={previewGuide}
+                footerNote="Preview uses default Utah weather until you publish or refresh live recommendations."
+              />
+            ) : null}
           </div>
         )}
 

@@ -228,7 +228,7 @@ export async function getScheduleSummary(
 }
 
 export async function getScheduleFilters(companyId: string) {
-  const [serviceAreas, employees, crews] = await Promise.all([
+  const [serviceAreas, employees, crewsRaw, company] = await Promise.all([
     prisma.serviceArea.findMany({
       where: { companyId },
       orderBy: { sortOrder: "asc" },
@@ -243,14 +243,66 @@ export async function getScheduleFilters(companyId: string) {
       where: { companyId },
       orderBy: { name: "asc" },
       include: {
+        foreman: { select: { id: true, name: true, color: true, photoUrl: true } },
         members: {
           include: { user: { select: { id: true, name: true, color: true, photoUrl: true } } },
         },
       },
     }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        openTimeSlotsEnabled: true,
+        divisionBookingWindows: true,
+      },
+    }),
   ]);
 
-  return { serviceAreas, employees, crews };
+  const crews = crewsRaw.map((crew) => {
+    const avatar =
+      crew.foreman ??
+      crew.members.find((m) => m.userId === crew.foremanUserId)?.user ??
+      crew.members[0]?.user ??
+      null;
+    return {
+      id: crew.id,
+      name: crew.name,
+      color: crew.color,
+      division: crew.division,
+      foremanUserId: crew.foremanUserId ?? avatar?.id ?? null,
+      photoUrl: avatar?.photoUrl ?? null,
+      avatarName: avatar?.name ?? crew.name,
+      avatarColor: avatar?.color ?? crew.color,
+      members: crew.members,
+    };
+  });
+
+  const scheduleUserIds = new Set<string>();
+  for (const employee of employees) scheduleUserIds.add(employee.id);
+  for (const crew of crews) {
+    if (crew.foremanUserId) scheduleUserIds.add(crew.foremanUserId);
+  }
+
+  const { getEmployeeWorkSchedule } = await import("@/lib/schedule/time-off");
+  const { parseDivisionBookingWindows } = await import("@/lib/schedule/open-time-slots");
+
+  const workSchedulesEntries = await Promise.all(
+    [...scheduleUserIds].map(async (userId) => {
+      const days = await getEmployeeWorkSchedule(companyId, userId);
+      return [userId, days] as const;
+    })
+  );
+
+  return {
+    serviceAreas,
+    employees,
+    crews,
+    openTimeSlots: {
+      enabled: company?.openTimeSlotsEnabled ?? true,
+      windows: parseDivisionBookingWindows(company?.divisionBookingWindows),
+      workSchedules: Object.fromEntries(workSchedulesEntries),
+    },
+  };
 }
 
 export async function getVisitForCompany(companyId: string, visitId: string) {

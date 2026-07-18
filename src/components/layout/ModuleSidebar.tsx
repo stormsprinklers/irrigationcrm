@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { X } from "lucide-react";
-import type { NavSection } from "@/config/navigation";
+import { ChevronDown, X } from "lucide-react";
+import type { NavItem, NavSection } from "@/config/navigation";
 import { isNavActive } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +16,112 @@ type ModuleSidebarProps = {
   onClose?: () => void;
 };
 
+function itemOrChildActive(pathname: string, item: NavItem) {
+  if (isNavActive(pathname, item.href, item.exact, item.activePrefixes)) return true;
+  return (item.children ?? []).some((child) =>
+    isNavActive(pathname, child.href, child.exact, child.activePrefixes)
+  );
+}
+
+function NavLink({
+  item,
+  pathname,
+  onClose,
+  nested,
+}: {
+  item: NavItem;
+  pathname: string;
+  onClose?: () => void;
+  nested?: boolean;
+}) {
+  const active = isNavActive(pathname, item.href, item.exact, item.activePrefixes);
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      onClick={() => onClose?.()}
+      className={cn(
+        "relative flex items-center justify-between py-2 text-sm transition-colors hover:bg-muted/60",
+        nested ? "px-4 pl-8" : "px-4",
+        active ? "font-medium text-foreground" : "text-muted-foreground"
+      )}
+    >
+      {active ? (
+        <span className="absolute bottom-1 left-0 top-1 w-1 rounded-r bg-primary" />
+      ) : null}
+      <span>{item.label}</span>
+      {item.badge ? (
+        <Badge variant={item.badge === "Add on" ? "addon" : "new"} className="text-[10px]">
+          {item.badge}
+        </Badge>
+      ) : null}
+    </Link>
+  );
+}
+
+function ExpandableNavItem({
+  item,
+  pathname,
+  onClose,
+}: {
+  item: NavItem;
+  pathname: string;
+  onClose?: () => void;
+}) {
+  const children = item.children ?? [];
+  const groupActive = itemOrChildActive(pathname, item);
+  const [expanded, setExpanded] = useState(groupActive);
+
+  useEffect(() => {
+    if (groupActive) setExpanded(true);
+  }, [groupActive, pathname]);
+
+  if (!children.length) {
+    return (
+      <li>
+        <NavLink item={item} pathname={pathname} onClose={onClose} />
+      </li>
+    );
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        className={cn(
+          "relative flex w-full items-center justify-between px-4 py-2 text-left text-sm transition-colors hover:bg-muted/60",
+          groupActive ? "font-medium text-foreground" : "text-muted-foreground"
+        )}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        {groupActive ? (
+          <span className="absolute bottom-1 left-0 top-1 w-1 rounded-r bg-primary" />
+        ) : null}
+        <span>{item.label}</span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-180")}
+        />
+      </button>
+      {expanded ? (
+        <ul>
+          {children.map((child) => (
+            <li key={child.href}>
+              <NavLink item={child} pathname={pathname} onClose={onClose} nested />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
 export function ModuleSidebar({ title, sections, open = false, onClose }: ModuleSidebarProps) {
   const pathname = usePathname();
+  const hasExpandable = useMemo(
+    () => sections.some((section) => section.items.some((item) => (item.children?.length ?? 0) > 0)),
+    [sections]
+  );
 
   return (
     <aside
@@ -44,46 +149,20 @@ export function ModuleSidebar({ title, sections, open = false, onClose }: Module
       <nav className="flex-1 overflow-y-auto py-2" aria-label={`${title} navigation`}>
         {sections.map((section, sectionIndex) => (
           <div key={section.title ?? sectionIndex} className="mb-2">
-            {section.title ? (
+            {section.title && !hasExpandable ? (
               <p className="px-4 py-2 text-[11px] font-semibold tracking-wide text-muted-foreground">
                 {section.title}
               </p>
             ) : null}
             <ul>
-              {section.items.map((item) => {
-                const active = isNavActive(
-                  pathname,
-                  item.href,
-                  item.exact,
-                  item.activePrefixes
-                );
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      aria-current={active ? "page" : undefined}
-                      onClick={() => onClose?.()}
-                      className={cn(
-                        "relative flex items-center justify-between px-4 py-2 text-sm transition-colors hover:bg-muted/60",
-                        active ? "font-medium text-foreground" : "text-muted-foreground"
-                      )}
-                    >
-                      {active ? (
-                        <span className="absolute left-0 top-1 bottom-1 w-1 rounded-r bg-primary" />
-                      ) : null}
-                      <span>{item.label}</span>
-                      {item.badge ? (
-                        <Badge
-                          variant={item.badge === "Add on" ? "addon" : "new"}
-                          className="text-[10px]"
-                        >
-                          {item.badge}
-                        </Badge>
-                      ) : null}
-                    </Link>
-                  </li>
-                );
-              })}
+              {section.items.map((item) => (
+                <ExpandableNavItem
+                  key={item.href + item.label}
+                  item={item}
+                  pathname={pathname}
+                  onClose={onClose}
+                />
+              ))}
             </ul>
           </div>
         ))}

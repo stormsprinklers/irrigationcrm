@@ -6,6 +6,8 @@ export type NavItem = {
   exact?: boolean;
   /** Extra path prefixes that keep this item active (for grouped settings). */
   activePrefixes?: string[];
+  /** Nested links shown when this item is expanded (single expandable sidebar). */
+  children?: NavItem[];
 };
 
 export type NavSection = {
@@ -64,29 +66,19 @@ export const customerSidebar: NavSection[] = [
 
 export const inboxSidebar: NavSection[] = [
   {
-    title: "VOICE",
     items: [
       { label: "CSR Desk", href: "/inbox/voice/desk" },
-      { label: "Customers", href: "/inbox/voice/customers" },
-      { label: "Team", href: "/inbox/voice/team" },
-    ],
-  },
-  {
-    title: "SMS",
-    items: [
-      { label: "Customers", href: "/inbox/sms/customers" },
-      { label: "Team", href: "/inbox/sms/team" },
-    ],
-  },
-  {
-    title: "LEADS",
-    items: [{ label: "Leads", href: "/inbox/leads" }],
-  },
-  {
-    title: "SOCIAL",
-    items: [
-      { label: "Facebook DMs", href: "/inbox/social/facebook" },
-      { label: "Instagram DMs", href: "/inbox/social/instagram" },
+      {
+        label: "SMS",
+        href: "/inbox/sms/customers",
+        activePrefixes: ["/inbox/sms"],
+      },
+      { label: "Leads", href: "/inbox/leads" },
+      {
+        label: "Social DMs",
+        href: "/inbox/social",
+        activePrefixes: ["/inbox/social"],
+      },
     ],
   },
 ];
@@ -147,70 +139,6 @@ export const marketingSidebar: NavSection[] = [
   },
 ];
 
-export const settingsSidebar: NavSection[] = [
-  {
-    title: "GLOBAL SETTINGS",
-    items: [
-      {
-        label: "Company",
-        href: "/settings",
-        exact: true,
-        activePrefixes: ["/settings/appearance"],
-      },
-      {
-        label: "Team",
-        href: "/settings/employees",
-        activePrefixes: [
-          "/settings/employees",
-          "/settings/compensation",
-          "/settings/service-areas",
-        ],
-      },
-      {
-        label: "Communications",
-        href: "/settings/notifications",
-        activePrefixes: ["/settings/notifications", "/settings/inbox"],
-      },
-      { label: "Suppliers", href: "/settings/parts-suppliers" },
-      {
-        label: "Integrations",
-        href: "/settings/integrations",
-        activePrefixes: [
-          "/settings/integrations",
-          "/settings/serp-rankings",
-          "/settings/migrations",
-        ],
-      },
-    ],
-  },
-  {
-    title: "FEATURE CONFIGURATION",
-    items: [
-      {
-        label: "Customer",
-        href: "/settings/booking",
-        activePrefixes: [
-          "/settings/booking",
-          "/settings/customer-portal",
-          "/settings/leads",
-        ],
-      },
-      { label: "Voice", href: "/settings/voice" },
-      { label: "Price Book", href: "/settings/price-book" },
-      {
-        label: "Job settings",
-        href: "/settings/estimates",
-        activePrefixes: [
-          "/settings/estimates",
-          "/settings/checklists",
-          "/settings/invoices",
-          "/settings/maintenance",
-        ],
-      },
-    ],
-  },
-];
-
 export const companySettingsSidebar: NavSection[] = [
   {
     items: [
@@ -230,51 +158,6 @@ export const teamSettingsSidebar: NavSection[] = [
   },
 ];
 
-export const communicationsSettingsSidebar: NavSection[] = [
-  {
-    items: [
-      { label: "Notifications", href: "/settings/notifications" },
-      { label: "Inbox", href: "/settings/inbox" },
-    ],
-  },
-];
-
-export const customerSettingsSidebar: NavSection[] = [
-  {
-    items: [
-      { label: "Booking", href: "/settings/booking" },
-      { label: "Customer portal", href: "/settings/customer-portal" },
-      { label: "Leads", href: "/settings/leads" },
-    ],
-  },
-];
-
-export const integrationsSettingsSidebar: NavSection[] = [
-  {
-    items: [
-      { label: "Overview", href: "/settings/integrations", exact: true },
-      { label: "Slack", href: "/settings/integrations/slack" },
-      { label: "Meta webhooks", href: "/settings/integrations/meta" },
-      { label: "Google Business Profile", href: "/settings/integrations/google-business" },
-      { label: "Google Ads", href: "/settings/integrations/google-ads" },
-      { label: "Meta Ads", href: "/settings/integrations/meta-ads" },
-      { label: "Search rankings", href: "/settings/integrations/serp-rankings" },
-      { label: "Data migration", href: "/settings/integrations/migrations/housecall-pro" },
-    ],
-  },
-];
-
-export const jobSettingsSidebar: NavSection[] = [
-  {
-    items: [
-      { label: "Estimates", href: "/settings/estimates" },
-      { label: "Checklists", href: "/settings/checklists" },
-      { label: "Invoices", href: "/settings/invoices" },
-      { label: "Maintenance", href: "/settings/maintenance" },
-    ],
-  },
-];
-
 export const voiceSettingsSidebar: NavSection[] = [
   {
     items: [
@@ -288,6 +171,57 @@ export const voiceSettingsSidebar: NavSection[] = [
   },
 ];
 
+export const communicationsSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Notifications", href: "/settings/notifications" },
+      { label: "Inbox", href: "/settings/inbox" },
+      { label: "Voice overview", href: "/settings/voice", exact: true },
+      { label: "Phone numbers", href: "/settings/voice/numbers" },
+      { label: "Call flows", href: "/settings/voice/flows" },
+      { label: "Audio clips", href: "/settings/voice/clips" },
+      { label: "Agent groups", href: "/settings/voice/groups" },
+      { label: "Business hours", href: "/settings/voice/hours" },
+    ],
+  },
+];
+
+export const customerSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Booking", href: "/settings/booking" },
+      { label: "Customer portal", href: "/settings/customer-portal" },
+      { label: "Lead Sources", href: "/settings/leads" },
+    ],
+  },
+];
+
+export const integrationsSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Overview", href: "/settings/integrations", exact: true },
+      { label: "Slack", href: "/settings/integrations/slack" },
+      { label: "Meta webhooks", href: "/settings/integrations/meta" },
+      { label: "Google Business Profile", href: "/settings/integrations/google-business" },
+      { label: "Google Ads", href: "/settings/integrations/google-ads" },
+      { label: "Meta Ads", href: "/settings/integrations/meta-ads" },
+      { label: "Rachio", href: "/settings/integrations/rachio" },
+      { label: "Search rankings", href: "/settings/integrations/serp-rankings" },
+      { label: "Data migration", href: "/settings/integrations/migrations/housecall-pro" },
+    ],
+  },
+];
+
+export const jobSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "Estimates", href: "/settings/estimates" },
+      { label: "Checklists", href: "/settings/checklists" },
+      { label: "Invoices", href: "/settings/invoices" },
+    ],
+  },
+];
+
 export const priceBookSettingsSidebar: NavSection[] = [
   {
     items: [
@@ -295,6 +229,77 @@ export const priceBookSettingsSidebar: NavSection[] = [
       { label: "Labor rates", href: "/settings/price-book/labor-rates" },
       { label: "Material markups", href: "/settings/price-book/material-markups" },
       { label: "Bulk adjust", href: "/settings/price-book/bulk-adjust" },
+    ],
+  },
+];
+
+/** Single expandable Settings sidebar — no nested second menu. */
+export const settingsSidebar: NavSection[] = [
+  {
+    items: [
+      {
+        label: "Company",
+        href: "/settings",
+        exact: true,
+        activePrefixes: ["/settings/appearance"],
+        children: companySettingsSidebar[0]!.items,
+      },
+      {
+        label: "Team",
+        href: "/settings/employees",
+        activePrefixes: [
+          "/settings/employees",
+          "/settings/compensation",
+          "/settings/service-areas",
+        ],
+        children: teamSettingsSidebar[0]!.items,
+      },
+      {
+        label: "Communications",
+        href: "/settings/notifications",
+        activePrefixes: [
+          "/settings/notifications",
+          "/settings/inbox",
+          "/settings/voice",
+        ],
+        children: communicationsSettingsSidebar[0]!.items,
+      },
+      { label: "Suppliers", href: "/settings/parts-suppliers" },
+      {
+        label: "Integrations",
+        href: "/settings/integrations",
+        activePrefixes: [
+          "/settings/integrations",
+          "/settings/serp-rankings",
+          "/settings/migrations",
+        ],
+        children: integrationsSettingsSidebar[0]!.items,
+      },
+      {
+        label: "Customer",
+        href: "/settings/booking",
+        activePrefixes: [
+          "/settings/booking",
+          "/settings/customer-portal",
+          "/settings/leads",
+        ],
+        children: customerSettingsSidebar[0]!.items,
+      },
+      {
+        label: "Price Book",
+        href: "/settings/price-book",
+        children: priceBookSettingsSidebar[0]!.items,
+      },
+      {
+        label: "Visits",
+        href: "/settings/estimates",
+        activePrefixes: [
+          "/settings/estimates",
+          "/settings/checklists",
+          "/settings/invoices",
+        ],
+        children: jobSettingsSidebar[0]!.items,
+      },
     ],
   },
 ];

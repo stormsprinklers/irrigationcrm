@@ -19,11 +19,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ScheduleFilters } from "@/lib/schedule/types";
+import { scheduleCrewColumnId } from "@/lib/schedule/columns";
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
   employees: { id: string; name: string; color?: string | null; photoUrl?: string | null }[];
-  crews: { id: string; name: string; color: string }[];
+  crews: { id: string; name: string; color: string; photoUrl?: string | null }[];
 };
 
 type Props = {
@@ -79,9 +80,18 @@ export function ScheduleFilterSidebar({
     return options.serviceAreas.filter((area) => area.name.toLowerCase().includes(q));
   }, [areaSearch, options.serviceAreas]);
 
-  const visibleEmployeeCount = options.employees.length - hiddenUserIds.length;
+  const crewColumnIds = useMemo(
+    () => options.crews.map((crew) => scheduleCrewColumnId(crew.id)),
+    [options.crews]
+  );
+  const allColumnIds = useMemo(
+    () => [...crewColumnIds, ...options.employees.map((e) => e.id)],
+    [crewColumnIds, options.employees]
+  );
+  const visibleColumnCount = allColumnIds.filter((id) => !hiddenUserIds.includes(id)).length;
   const allEmployeesVisible =
-    hiddenUserIds.length === 0 && visibleEmployeeCount === options.employees.length;
+    hiddenUserIds.length === 0 &&
+    visibleColumnCount === allColumnIds.length;
 
   if (!open) return null;
 
@@ -240,13 +250,13 @@ export function ScheduleFilterSidebar({
                     onHiddenUserIdsChange([]);
                     onShowUnassignedChange(true);
                   } else {
-                    onHiddenUserIdsChange(options.employees.map((e) => e.id));
+                    onHiddenUserIdsChange(allColumnIds);
                     onShowUnassignedChange(false);
                   }
                 }}
                 onClick={(e) => e.stopPropagation()}
               />
-              Employees
+              Columns
             </span>
             <ChevronDown
               className={cn("h-4 w-4 transition-transform", employeesOpen && "rotate-180")}
@@ -261,6 +271,26 @@ export function ScheduleFilterSidebar({
                 />
                 <span>Unassigned</span>
               </label>
+              {options.crews.map((crew) => {
+                const columnId = scheduleCrewColumnId(crew.id);
+                const visible = !hiddenUserIds.includes(columnId);
+                return (
+                  <label key={columnId} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={visible}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          onHiddenUserIdsChange(hiddenUserIds.filter((id) => id !== columnId));
+                        } else {
+                          onHiddenUserIdsChange([...hiddenUserIds, columnId]);
+                        }
+                      }}
+                    />
+                    <span className="truncate">{crew.name}</span>
+                    <span className="text-[10px] text-muted-foreground">Crew</span>
+                  </label>
+                );
+              })}
               {options.employees.map((emp) => {
                 const visible = !hiddenUserIds.includes(emp.id);
                 return (
@@ -279,8 +309,8 @@ export function ScheduleFilterSidebar({
                   </label>
                 );
               })}
-              {options.employees.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No active employees</p>
+              {options.crews.length === 0 && options.employees.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No schedule columns</p>
               ) : null}
             </div>
           ) : null}

@@ -319,7 +319,7 @@ export function SocialPageClient() {
           Settings → Meta webhooks
         </Link>
         . After verification, Facebook and Instagram DMs will appear in{" "}
-        <Link href="/inbox/social/facebook" className="text-primary underline">
+        <Link href="/inbox/social" className="text-primary underline">
           Inbox → Social
         </Link>
         .

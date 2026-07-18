@@ -45,7 +45,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
     const nextAssignedUserId =
       body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
-
+    const nextCrewId =
+      body.crewId !== undefined ? (body.crewId as string | null) : existing.crewId;
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
 
@@ -60,7 +61,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: availabilityError }, { status: 400 });
     }
 
-    const assignmentError = validateScheduledVisitAssignment(nextStatus, nextAssignedUserId);
+    const assignmentError = validateScheduledVisitAssignment(
+      nextStatus,
+      nextAssignedUserId,
+      nextCrewId
+    );
     if (assignmentError) {
       return NextResponse.json({ error: assignmentError }, { status: 400 });
     }

@@ -1,5 +1,6 @@
 import { TimeOffStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { defaultEmployeeWorkSchedule } from "@/lib/schedule/open-time-slots";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 
 export type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
@@ -103,12 +104,7 @@ export async function getEmployeeWorkSchedule(companyId: string, userId: string)
   });
 
   if (rows.length === 0) {
-    return Array.from({ length: 7 }, (_, dayOfWeek) => ({
-      dayOfWeek,
-      isWorking: true,
-      startTime: null,
-      endTime: null,
-    }));
+    return defaultEmployeeWorkSchedule();
   }
 
   const byDay = new Map(rows.map((row) => [row.dayOfWeek, row]));
@@ -184,18 +180,26 @@ export async function assertEmployeeAvailableForAssignment(
     where: { companyId, userId },
   });
 
-  if (workDays.length > 0) {
-    const dayOfWeek = startAt.getDay();
-    const schedule = workDays.find((row) => row.dayOfWeek === dayOfWeek);
-    if (schedule && !schedule.isWorking) {
-      return `${employee.name} is not scheduled to work this day`;
-    }
-    if (schedule?.isWorking && schedule.startTime && schedule.endTime) {
-      const windowStart = parseTimeOnDate(startAt, schedule.startTime);
-      const windowEnd = parseTimeOnDate(startAt, schedule.endTime);
-      if (startAt < windowStart || endAt > windowEnd) {
-        return `${employee.name} is only scheduled ${schedule.startTime}–${schedule.endTime} this day`;
-      }
+  const schedule =
+    workDays.length > 0
+      ? workDays
+      : defaultEmployeeWorkSchedule().map((day) => ({
+          dayOfWeek: day.dayOfWeek,
+          isWorking: day.isWorking,
+          startTime: day.startTime,
+          endTime: day.endTime,
+        }));
+
+  const dayOfWeek = startAt.getDay();
+  const daySchedule = schedule.find((row) => row.dayOfWeek === dayOfWeek);
+  if (daySchedule && !daySchedule.isWorking) {
+    return `${employee.name} is not scheduled to work this day`;
+  }
+  if (daySchedule?.isWorking && daySchedule.startTime && daySchedule.endTime) {
+    const windowStart = parseTimeOnDate(startAt, daySchedule.startTime);
+    const windowEnd = parseTimeOnDate(startAt, daySchedule.endTime);
+    if (startAt < windowStart || endAt > windowEnd) {
+      return `${employee.name} is only scheduled ${daySchedule.startTime}–${daySchedule.endTime} this day`;
     }
   }
 
