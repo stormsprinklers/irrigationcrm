@@ -16,8 +16,9 @@ import { WebSocketServer, WebSocket } from "ws";
 const PORT = Number(process.env.PORT || process.env.SIDEBAND_PORT || 8090);
 const CRM_BASE_URL = (process.env.CRM_BASE_URL || "").replace(/\/$/, "");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+// GA Realtime models (preview gpt-4o-realtime-* + OpenAI-Beta header are retired).
 const REALTIME_MODEL =
-  process.env.OPENAI_REALTIME_MODEL || "gpt-4o-realtime-preview";
+  process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
 
 type SessionBootstrap = {
   receptionistCallId: string;
@@ -194,41 +195,50 @@ class CallBridge {
     if (!OPENAI_API_KEY || !this.session) throw new Error("OpenAI not configured");
 
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(REALTIME_MODEL)}`;
+    // GA Realtime: do NOT send OpenAI-Beta: realtime=v1 (rejected as beta_api_shape_disabled).
     this.openai = new WebSocket(url, {
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "realtime=v1",
       },
     });
 
     await new Promise<void>((resolve, reject) => {
       this.openai!.once("open", () => resolve());
-      this.openai!.once("error", reject);
+      this.openai!.once("error", (err) => reject(err));
     });
 
+    const voice = this.session.voice || "alloy";
     this.openai.send(
       JSON.stringify({
         type: "session.update",
         session: {
-          modalities: ["text", "audio"],
+          type: "realtime",
+          model: REALTIME_MODEL,
           instructions: this.session.instructions,
-          voice: this.session.voice || "alloy",
-          input_audio_format: "pcm16",
-          output_audio_format: "pcm16",
-          input_audio_transcription: { model: "whisper-1" },
-          turn_detection: { type: "server_vad" },
+          output_modalities: ["audio"],
+          audio: {
+            input: {
+              format: { type: "audio/pcm", rate: 24000 },
+              turn_detection: { type: "server_vad" },
+              transcription: { model: "whisper-1" },
+            },
+            output: {
+              format: { type: "audio/pcm", rate: 24000 },
+              voice,
+            },
+          },
           tools: this.session.tools,
           tool_choice: "auto",
         },
       })
     );
 
-    // Kick off greeting
+    // Kick off greeting after session is configured
     this.openai.send(
       JSON.stringify({
         type: "response.create",
         response: {
-          modalities: ["text", "audio"],
+          output_modalities: ["audio"],
           instructions: "Greet the caller now with the required automation disclosure.",
         },
       })
@@ -237,7 +247,11 @@ class CallBridge {
     this.openai.on("message", (raw) => {
       void this.onOpenAIMessage(raw.toString());
     });
-    this.openai.on("close", () => {
+    this.openai.on("error", (err) => {
+      log("OpenAI socket error", err);
+    });
+    this.openai.on("close", (code, reason) => {
+      log("OpenAI socket closed", code, reason?.toString?.() || reason);
       if (!this.closed) void this.failToVoicemail();
     });
   }
@@ -252,7 +266,21 @@ class CallBridge {
 
     const type = String(event.type || "");
 
-    if (type === "response.audio.delta" && this.streamSid) {
+    if (type === "error") {
+      log("OpenAI error event", JSON.stringify(event).slice(0, 800));
+      return;
+    }
+
+    if (type === "session.updated" || type === "session.created") {
+      log(type);
+      return;
+    }
+
+    // GA: response.output_audio.delta; legacy beta: response.audio.delta
+    if (
+      (type === "response.output_audio.delta" || type === "response.audio.delta") &&
+      this.streamSid
+    ) {
       const delta = String(event.delta || "");
       const pcm24 = Buffer.from(delta, "base64");
       const pcm8 = downsample24kTo8k(pcm24);
@@ -267,7 +295,10 @@ class CallBridge {
       return;
     }
 
-    if (type === "conversation.item.input_audio_transcription.completed") {
+    if (
+      type === "conversation.item.input_audio_transcription.completed" ||
+      type === "conversation.item.input_audio.transcription.completed"
+    ) {
       const transcript = String(event.transcript || "");
       if (transcript && this.session) {
         await appendTranscript(this.session.toolBearer, `\nCaller: ${transcript}`);
@@ -275,7 +306,10 @@ class CallBridge {
       return;
     }
 
-    if (type === "response.audio_transcript.done") {
+    if (
+      type === "response.output_audio_transcript.done" ||
+      type === "response.audio_transcript.done"
+    ) {
       const transcript = String(event.transcript || "");
       if (transcript && this.session) {
         await appendTranscript(this.session.toolBearer, `\nReceptionist: ${transcript}`);
