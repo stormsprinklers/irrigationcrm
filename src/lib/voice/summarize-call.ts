@@ -1,6 +1,9 @@
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
 
+/** Skip OpenAI summarization below this length to save tokens on short/failed connects. */
+export const MIN_TRANSCRIPT_WORDS_FOR_SUMMARY = 30;
+
 const SUMMARY_SYSTEM_PROMPT = `You write one-paragraph summaries of phone calls for an irrigation / sprinkler field-service company (Storm Sprinklers).
 
 Rules:
@@ -12,6 +15,13 @@ Rules:
 - Do not invent details that are not in the transcript. If the transcript is sparse, say what little can be gathered.
 - Write in past tense, third person (e.g. "The customer asked…").`;
 
+export function countTranscriptWords(transcript: string): number {
+  return transcript
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
 export async function generateCallSummaryFromTranscript(transcript: string): Promise<string> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
@@ -22,12 +32,14 @@ export async function generateCallSummaryFromTranscript(transcript: string): Pro
   if (!trimmed) {
     throw new Error("Transcript is empty");
   }
+  if (countTranscriptWords(trimmed) < MIN_TRANSCRIPT_WORDS_FOR_SUMMARY) {
+    throw new Error("Transcript too short to summarize");
+  }
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
@@ -71,6 +83,9 @@ export async function summarizeCallLog(
   if (!call) return { ok: false, skipped: "Call not found" };
   if (!call.transcript?.trim()) {
     return { ok: false, skipped: "No transcript" };
+  }
+  if (countTranscriptWords(call.transcript) < MIN_TRANSCRIPT_WORDS_FOR_SUMMARY) {
+    return { ok: true, skipped: "Transcript under 30 words" };
   }
   if (call.aiSummary?.trim() && !options?.force) {
     return { ok: true, summary: call.aiSummary, skipped: "Already summarized" };
