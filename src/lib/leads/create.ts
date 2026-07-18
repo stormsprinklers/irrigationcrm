@@ -6,6 +6,7 @@ import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
 import {
   enrichPricingQuoteLead,
+  formatQuoteEstimate,
   isPricingQuoteLead,
 } from "@/lib/leads/pricing-quote-enrichment";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
@@ -21,6 +22,50 @@ export async function createLeadFromIntegration(
     : null;
 
   if (existing) {
+    // Website sometimes first-pushed without quote prices; heal when a later
+    // payload (e.g. delayed no-book cron) includes a priced snapshot.
+    if (isPricingQuoteLead(input.source) && input.metadata) {
+      const existingMeta =
+        existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+          ? (existing.metadata as Record<string, unknown>)
+          : {};
+      const hadEstimate =
+        (typeof existingMeta.formattedEstimate === "string" && existingMeta.formattedEstimate) ||
+        formatQuoteEstimate(existingMeta.quote ?? existingMeta.pricing_quote_snapshot);
+      if (!hadEstimate) {
+        const enrichment = await enrichPricingQuoteLead(input);
+        if (enrichment?.estimateLabel || enrichment?.quoteTitle) {
+          const notesParts: string[] = [];
+          if (enrichment.estimateLabel) {
+            notesParts.push(
+              `Estimate shown: ${enrichment.estimateLabel}${
+                enrichment.quoteTitle ? ` (${enrichment.quoteTitle})` : ""
+              }`
+            );
+          } else if (enrichment.quoteTitle) {
+            notesParts.push(`Quoted option: ${enrichment.quoteTitle}`);
+          }
+          notesParts.push(`Issues: ${enrichment.issueSummary}`);
+
+          const metadata = {
+            ...existingMeta,
+            ...((input.metadata && typeof input.metadata === "object"
+              ? input.metadata
+              : {}) as Record<string, unknown>),
+            ...enrichment.metadataPatch,
+          };
+
+          const updated = await prisma.lead.update({
+            where: { id: existing.id },
+            data: {
+              notes: notesParts.join("\n\n"),
+              metadata: metadata as Prisma.InputJsonValue,
+            },
+          });
+          return { lead: updated, created: false };
+        }
+      }
+    }
     return { lead: existing, created: false };
   }
 

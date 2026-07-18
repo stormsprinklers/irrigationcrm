@@ -126,6 +126,42 @@ function statusLabel(status: string | null) {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
+/** Drop Name/Phone/Email/Source lines already shown in the lead chrome. */
+function stripRedundantLeadBody(
+  text: string,
+  contact: { name?: string | null; phone?: string | null; email?: string | null }
+) {
+  const phoneDigits = contact.phone?.replace(/\D/g, "") ?? "";
+  const emailLower = contact.email?.trim().toLowerCase() ?? "";
+  const nameLower = contact.name?.trim().toLowerCase() ?? "";
+
+  const withoutPrefix = text.replace(/^\[Website form — [^\]]+\]\s*/i, "");
+  const lines = withoutPrefix.split(/\r?\n/);
+  const kept: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      kept.push("");
+      continue;
+    }
+    if (/^New .+ submission$/i.test(trimmed)) continue;
+    if (/^(Name|Phone|Email|Source)\s*:/i.test(trimmed)) continue;
+    if (emailLower && trimmed.toLowerCase() === emailLower) continue;
+    if (nameLower && trimmed.toLowerCase() === nameLower) continue;
+    if (
+      phoneDigits.length >= 7 &&
+      trimmed.replace(/\D/g, "") === phoneDigits &&
+      trimmed.replace(/\D/g, "").length >= 7
+    ) {
+      continue;
+    }
+    kept.push(line);
+  }
+
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function leadMatchesTab(item: WebsiteLeadInboxItem, tab: LeadFilterTab) {
   const status = item.leadStatus;
   if (tab === "spam") return status === "SPAM";
@@ -402,6 +438,20 @@ export function WebsiteLeadsInbox() {
       }
     : null;
 
+  const submissionText = (() => {
+    if (!selected) return "";
+    const raw =
+      emailDetail?.bodyText ??
+      smsBody ??
+      selected.preview ??
+      "";
+    return stripRedundantLeadBody(raw, {
+      name: selected.name,
+      phone: selected.leadPhone,
+      email: selected.leadEmail,
+    });
+  })();
+
   const chrome = (
     <>
       <p className="text-xs text-muted-foreground">Inbox &gt; Leads</p>
@@ -502,8 +552,8 @@ export function WebsiteLeadsInbox() {
   ) : loadingDetail ? (
     <div className="p-6 text-sm text-muted-foreground">Loading...</div>
   ) : (
-    <>
-      <div className="flex items-start justify-between gap-4 border-b border-border p-4">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+      <div className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-lg font-semibold">{selected.name}</h3>
@@ -518,9 +568,16 @@ export function WebsiteLeadsInbox() {
               Source: {websiteLeadFormLabel(selected.source)}
             </p>
           ) : null}
-          {emailDetail ? (
-            <p className="text-sm text-muted-foreground">From: {emailDetail.fromEmail}</p>
-          ) : null}
+          {(selected.leadPhone || selected.leadEmail) && (
+            <p className="text-sm text-muted-foreground">
+              {[
+                selected.leadPhone ? formatPhoneDisplay(selected.leadPhone) : null,
+                selected.leadEmail,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">{formatWhen(selected.createdAt)}</p>
           {timerStart ? (
             <SpeedToLeadTimer
@@ -531,7 +588,7 @@ export function WebsiteLeadsInbox() {
           ) : null}
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="max-md:hidden" asChild>
             <Link href="/customers/leads">
               <ExternalLink className="mr-1 h-4 w-4" />
               All leads
@@ -546,37 +603,6 @@ export function WebsiteLeadsInbox() {
       </div>
 
       <div className="space-y-3 border-b border-border px-4 py-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          {selected.leadPhone ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 text-primary hover:underline"
-              onClick={() =>
-                void markContactedThenNavigate(buildInboxCustomerUrl("voice", linkParams!))
-              }
-            >
-              <Phone className="h-3.5 w-3.5" />
-              {formatPhoneDisplay(selected.leadPhone)}
-            </button>
-          ) : (
-            <span className="text-muted-foreground">No phone</span>
-          )}
-          {selected.leadEmail ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 text-primary hover:underline"
-              onClick={() =>
-                void markContactedThenNavigate(buildInboxCustomerUrl("email", linkParams!))
-              }
-            >
-              <Mail className="h-3.5 w-3.5" />
-              {selected.leadEmail}
-            </button>
-          ) : (
-            <span className="text-muted-foreground">No email</span>
-          )}
-        </div>
-
         <div className="flex flex-wrap gap-2">
           {selected.leadPhone ? (
             <>
@@ -651,8 +677,12 @@ export function WebsiteLeadsInbox() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        {emailDetail?.bodyHtml ? (
+      <div className="p-4">
+        {submissionText ? (
+          <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
+            {submissionText}
+          </div>
+        ) : emailDetail?.bodyHtml ? (
           <div
             className="prose prose-sm max-w-none whitespace-pre-wrap text-sm"
             dangerouslySetInnerHTML={{
@@ -660,12 +690,10 @@ export function WebsiteLeadsInbox() {
             }}
           />
         ) : (
-          <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
-            {emailDetail?.bodyText ?? smsBody ?? selected.preview}
-          </div>
+          <p className="text-sm text-muted-foreground">No additional details in this submission.</p>
         )}
       </div>
-    </>
+    </div>
   );
 
   return (
@@ -674,7 +702,9 @@ export function WebsiteLeadsInbox() {
       list={list}
       detail={detail}
       listLabel="Leads"
+      listFirst
       selectedId={selected ? `${selected.channel}:${selected.id}` : null}
+      onMobileBack={() => setSelected(null)}
     />
   );
 }

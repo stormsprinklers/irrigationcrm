@@ -16,14 +16,35 @@ type QuoteSnapshot = {
   id?: string;
   title?: string | null;
   description?: string | null;
-  price?: number | null;
-  price_range?: { min?: number; max?: number } | null;
-  priceRange?: { min?: number; max?: number } | null;
+  price?: number | string | null;
+  price_range?: { min?: number | string; max?: number | string } | null;
+  priceRange?: { min?: number | string; max?: number | string } | null;
+  min?: number | string;
+  max?: number | string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function asMoneyNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value.replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(n) ? n : null;
   }
   return null;
 }
@@ -46,13 +67,14 @@ export function formatQuoteEstimate(quote: unknown): string | null {
   if (!q) return null;
 
   const range = q.price_range ?? q.priceRange ?? null;
-  if (range && typeof range.min === "number" && typeof range.max === "number") {
-    if (range.min === range.max) return money(range.min);
-    return `${money(range.min)}–${money(range.max)}`;
+  const min = asMoneyNumber(range?.min ?? q.min);
+  const max = asMoneyNumber(range?.max ?? q.max);
+  if (min != null && max != null) {
+    if (min === max) return money(min);
+    return `${money(min)}–${money(max)}`;
   }
-  if (typeof q.price === "number" && Number.isFinite(q.price)) {
-    return money(q.price);
-  }
+  const price = asMoneyNumber(q.price);
+  if (price != null) return money(price);
   return null;
 }
 
@@ -60,9 +82,14 @@ function extractPricingContext(metadata: unknown) {
   const meta = asRecord(metadata) ?? {};
   const pricingInputs =
     asRecord(meta.pricingInputs) ?? asRecord(meta.pricing_inputs) ?? {};
-  const quote = meta.quote ?? meta.pricing_quote_snapshot ?? null;
+  const quote =
+    meta.quote ??
+    meta.pricing_quote_snapshot ??
+    meta.pricingQuoteSnapshot ??
+    null;
   const serviceCategory =
     (typeof meta.serviceCategory === "string" && meta.serviceCategory) ||
+    (typeof meta.service_category === "string" && meta.service_category) ||
     (typeof pricingInputs.serviceCategory === "string" && pricingInputs.serviceCategory) ||
     null;
   const serviceTitle =

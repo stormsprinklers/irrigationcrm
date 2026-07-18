@@ -134,7 +134,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const deviceRef = useRef<Device | null>(null);
   const refreshingTokenRef = useRef<Promise<boolean> | null>(null);
-  const recoveringTransportRef = useRef(false);
+  const recoveringTransportRef = useRef<Promise<boolean> | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
@@ -273,44 +273,51 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
   const recoverVoiceTransport = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (recoveringTransportRef.current) return false;
-      recoveringTransportRef.current = true;
-      try {
-        const device = deviceRef.current;
-        if (!device) return false;
-
-        // Don't bounce registration mid-call — only refresh the JWT.
-        if (device.isBusy) {
-          return refreshDeviceToken({ silent: opts?.silent ?? true });
-        }
-
-        const tokenOk = await refreshDeviceToken({
-          silent: opts?.silent ?? true,
-        });
-        if (!tokenOk) return false;
-
-        const current = deviceRef.current;
-        if (!current || current.isBusy) return tokenOk;
-
-        // State can still say "registered" with a dead signaling socket after a
-        // backgrounded tab. Bounce registration to rebuild the transport.
-        try {
-          if (current.state === "registered") {
-            await current.unregister();
-          }
-        } catch {
-          // ignore — register() below is what matters
-        }
-        try {
-          await current.register();
-          setError(null);
-          return true;
-        } catch {
-          return false;
-        }
-      } finally {
-        recoveringTransportRef.current = false;
+      if (recoveringTransportRef.current) {
+        return recoveringTransportRef.current;
       }
+
+      const run = (async () => {
+        try {
+          const device = deviceRef.current;
+          if (!device) return false;
+
+          // Don't bounce registration mid-call — only refresh the JWT.
+          if (device.isBusy) {
+            return refreshDeviceToken({ silent: opts?.silent ?? true });
+          }
+
+          const tokenOk = await refreshDeviceToken({
+            silent: opts?.silent ?? true,
+          });
+          if (!tokenOk) return false;
+
+          const current = deviceRef.current;
+          if (!current || current.isBusy) return tokenOk;
+
+          // State can still say "registered" with a dead signaling socket after a
+          // backgrounded tab. Bounce registration to rebuild the transport.
+          try {
+            if (current.state === "registered") {
+              await current.unregister();
+            }
+          } catch {
+            // ignore — register() below is what matters
+          }
+          try {
+            await current.register();
+            setError(null);
+            return true;
+          } catch {
+            return false;
+          }
+        } finally {
+          recoveringTransportRef.current = null;
+        }
+      })();
+
+      recoveringTransportRef.current = run;
+      return run;
     },
     [refreshDeviceToken]
   );
@@ -365,24 +372,25 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
             code === 20104 ||
             code === 31204 ||
             code === 31205;
-          // 31009: signaling WS dropped (common after background tabs). Recover quietly.
+          // 31009: signaling WS dropped (common after idle / background tabs).
           const isTransportError =
             code === 31009 ||
             /no transport available/i.test(message) ||
             /transport error/i.test(message);
 
+          // Idle-tab token/transport drops are expected — recover quietly.
+          // Never toast these; softphone readiness is enough signal if recovery fails.
           if (isTokenError || isTransportError) {
-            void (async () => {
-              const ok = await recoverVoiceTransport({ silent: true });
-              if (ok || cancelled) return;
-              setError(message);
-              toast.error(message);
-            })();
+            void recoverVoiceTransport({ silent: true }).then((ok) => {
+              if (!ok && !cancelled) setError(message);
+            });
             return;
           }
 
           setError(message);
-          toast.error(message);
+          if (document.visibilityState === "visible") {
+            toast.error(message);
+          }
         });
 
         device.on("incoming", async (call) => {
