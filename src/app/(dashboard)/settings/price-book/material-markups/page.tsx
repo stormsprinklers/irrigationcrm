@@ -73,8 +73,8 @@ export default function MaterialMarkupsSettingsPage() {
   return (
     <ContentArea className="max-w-3xl">
       <PageHeader
-        breadcrumb={["Settings", "Price Book", "Material markups"]}
-        title="Material markups"
+        breadcrumb={["Settings", "Price Book", "Material Markups"]}
+        title="Material Markups"
         subtitle="Tiered markup on cost (e.g. 150% markup on $10 cost → $25 sell price)"
       />
 

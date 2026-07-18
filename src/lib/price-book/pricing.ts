@@ -287,11 +287,6 @@ export async function recalculateCalculatedServicesUsingMaterial(materialItemId:
   }
 }
 
-export function buildLineItemDescriptionFromBreakdown(breakdown: ServicePriceBreakdown | null) {
-  if (!breakdown || breakdown.lines.length === 0) return null;
-  return breakdown.lines.map((l) => `${l.label}: $${l.amount.toFixed(2)}`).join(" · ");
-}
-
 export async function computeItemUnitCost(
   item: NonNullable<Awaited<ReturnType<typeof loadItemForPricing>>>
 ): Promise<number | null> {
@@ -336,10 +331,7 @@ export async function buildLineItemFromPriceBook(companyId: string, itemId: stri
   return {
     priceBookItemId: item.id,
     name: item.name,
-    description:
-      item.type === "SERVICE"
-        ? buildLineItemDescriptionFromBreakdown(computed.breakdown) ?? item.description
-        : item.description,
+    description: item.description,
     quantity: 1,
     unitPrice,
     unitCost,

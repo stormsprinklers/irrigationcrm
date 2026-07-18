@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -11,9 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 type Settings = {
   flatRatePricingEnabled: boolean;
   materialMarkupsEnabled: boolean;
-  openaiConfigured: boolean;
-  laborRateCount: number;
-  markupTierCount: number;
 };
 
 export default function PriceBookSettingsPage() {
@@ -23,7 +19,12 @@ export default function PriceBookSettingsPage() {
   useEffect(() => {
     fetch("/api/settings/price-book")
       .then((r) => r.json())
-      .then(setSettings)
+      .then((data: Settings) =>
+        setSettings({
+          flatRatePricingEnabled: Boolean(data.flatRatePricingEnabled),
+          materialMarkupsEnabled: Boolean(data.materialMarkupsEnabled),
+        })
+      )
       .catch(() => toast.error("Failed to load settings"));
   }, []);
 
@@ -43,7 +44,11 @@ export default function PriceBookSettingsPage() {
       toast.error("Failed to save");
       return;
     }
-    setSettings(await res.json());
+    const data = await res.json();
+    setSettings({
+      flatRatePricingEnabled: Boolean(data.flatRatePricingEnabled),
+      materialMarkupsEnabled: Boolean(data.materialMarkupsEnabled),
+    });
     toast.success("Price book settings saved");
   }
 
@@ -60,65 +65,50 @@ export default function PriceBookSettingsPage() {
     <ContentArea className="max-w-2xl">
       <PageHeader
         breadcrumb={["Settings", "Price Book"]}
-        title="Flat rate pricing"
-        subtitle="Housecall Pro-style labor rates, material markups, and calculated service prices"
+        title="Flat Rate Pricing"
+        subtitle="Build service prices from labor rates and material costs. Customers always see a single flat rate — never a parts and labor breakdown."
       />
 
-      <section className="mb-6 rounded-lg border border-border bg-white p-6">
+      <section className="rounded-lg border border-border bg-white p-6">
         <h3 className="mb-4 text-lg font-semibold">Pricing mode</h3>
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm">
             <Checkbox
+              className="mt-0.5"
               checked={settings.flatRatePricingEnabled}
               onCheckedChange={(c) =>
                 setSettings({ ...settings, flatRatePricingEnabled: Boolean(c) })
               }
             />
-            Enable flat rate pricing (labor + materials breakdown on services)
+            <span>
+              Enable flat rate pricing
+              <span className="mt-0.5 block text-muted-foreground">
+                Use labor hours and bundled materials to calculate a service&apos;s sell price in the
+                price book. Invoices, estimates, visits, and the customer portal show only the flat
+                rate.
+              </span>
+            </span>
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-start gap-2 text-sm">
             <Checkbox
+              className="mt-0.5"
               checked={settings.materialMarkupsEnabled}
               onCheckedChange={(c) =>
                 setSettings({ ...settings, materialMarkupsEnabled: Boolean(c) })
               }
             />
-            Apply tiered material markups from cost
+            <span>
+              Apply tiered material markups from cost
+              <span className="mt-0.5 block text-muted-foreground">
+                When calculating service prices, mark up linked material costs using your markup
+                tiers.
+              </span>
+            </span>
           </label>
         </div>
         <Button className="mt-4" size="sm" onClick={save} disabled={saving}>
           {saving ? "Saving..." : "Save"}
         </Button>
-      </section>
-
-      <section className="mb-6 rounded-lg border border-border bg-white p-6">
-        <h3 className="mb-2 text-lg font-semibold">Configuration</h3>
-        <ul className="space-y-1 text-sm">
-          <li>
-            <Link href="/settings/price-book/labor-rates" className="text-primary underline">
-              {settings.laborRateCount} labor rates
-            </Link>
-          </li>
-          <li>
-            <Link href="/settings/price-book/material-markups" className="text-primary underline">
-              {settings.markupTierCount} markup tiers
-            </Link>
-          </li>
-          <li>
-            <Link href="/settings/price-book/bulk-adjust" className="text-primary underline">
-              Bulk price adjust
-            </Link>
-          </li>
-        </ul>
-      </section>
-
-      <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
-        <p className="font-medium">OpenAI (descriptions &amp; images)</p>
-        <p className="mt-1 text-muted-foreground">
-          {settings.openaiConfigured
-            ? "OPENAI_API_KEY is configured on the server."
-            : "Set OPENAI_API_KEY in .env.local to enable AI description and image generation on price book items."}
-        </p>
       </section>
     </ContentArea>
   );

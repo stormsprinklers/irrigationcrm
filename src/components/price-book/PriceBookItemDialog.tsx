@@ -17,6 +17,12 @@ type MaterialOption = {
   unitCost?: number | null;
 };
 
+type CategoryOption = {
+  id: string;
+  name: string;
+  parent?: { id: string; name: string } | null;
+};
+
 type Props = {
   open: boolean;
   type: "SERVICE" | "MATERIAL";
@@ -46,8 +52,14 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
 
+function categoryLabel(category: CategoryOption) {
+  return category.parent?.name ? `${category.parent.name} / ${category.name}` : category.name;
+}
+
 export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onSaved }: Props) {
   const [form, setForm] = useState(emptyForm);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(categoryId);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [laborRates, setLaborRates] = useState<LaborRateDTO[]>([]);
   const [flatRateEnabled, setFlatRateEnabled] = useState(false);
@@ -61,6 +73,11 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
 
   useEffect(() => {
     if (!open) return;
+    setSelectedCategoryId(item?.categoryId ?? categoryId);
+    fetch(`/api/price-book/categories?type=${type}&flat=true`)
+      .then((r) => r.json())
+      .then((data) => setCategories(Array.isArray(data) ? data : []))
+      .catch(() => setCategories([]));
     fetch("/api/settings/price-book")
       .then((r) => r.json())
       .then((data) => setFlatRateEnabled(Boolean(data.flatRatePricingEnabled)))
@@ -69,7 +86,7 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
       .then((r) => r.json())
       .then(setLaborRates)
       .catch(() => setLaborRates([]));
-  }, [open]);
+  }, [open, type, categoryId, item?.categoryId]);
 
   useEffect(() => {
     if (!open) return;
@@ -185,7 +202,7 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
     setSaving(true);
     try {
       const payload = {
-        categoryId,
+        categoryId: selectedCategoryId || categoryId,
         type,
         name: form.name.trim(),
         description: form.description || null,
@@ -246,6 +263,30 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
           {item ? "Edit" : "Add"} {type === "SERVICE" ? "service" : "material"}
         </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Category</label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              required
+            >
+              {categories.length === 0 ? (
+                <option value={categoryId}>Current category</option>
+              ) : (
+                categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {categoryLabel(category)}
+                  </option>
+                ))
+              )}
+            </select>
+            {item && selectedCategoryId !== categoryId ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Saving will move this item to the selected category.
+              </p>
+            ) : null}
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Name</label>
             <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
@@ -467,7 +508,7 @@ export function PriceBookItemDialog({ open, type, categoryId, item, onClose, onS
 
           {type === "SERVICE" && !flatRateEnabled && (
             <p className="text-sm text-muted-foreground">
-              Enable flat rate pricing in Settings → Price Book to use labor rates and calculated prices.
+              Enable flat rate pricing in Settings → Price Book to calculate sell prices from labor rates and materials.
             </p>
           )}
 

@@ -43,7 +43,7 @@ const DEFAULT_VIEW_END_HOUR = 16;
 const HOUR_HEIGHT = 56;
 const TIME_GUTTER = 60;
 const DAY_MIN_WIDTH = 132;
-const TECH_COL_WIDTH = 52;
+const TECH_COL_MIN_WIDTH = 72;
 const MULTI_DAY_ROW_HEIGHT = 44;
 
 export type TechColumn = {
@@ -288,30 +288,35 @@ function TimeGrid({
 }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [weekDayWidth, setWeekDayWidth] = useState(DAY_MIN_WIDTH);
+  const [techColWidth, setTechColWidth] = useState(TECH_COL_MIN_WIDTH);
 
   const startHour = SCHEDULE_HOURS[0];
   const endHour = SCHEDULE_END_HOUR + 1;
   const totalHours = endHour - startHour;
   const gridHeight = totalHours * HOUR_HEIGHT;
   const isDayView = viewMode === "day";
-  const dayWidth = isDayView ? columns.length * TECH_COL_WIDTH : weekDayWidth;
+  const columnCount = Math.max(1, columns.length);
+  const dayWidth = isDayView ? columnCount * techColWidth : weekDayWidth;
   const gridMinWidth = TIME_GUTTER + dayCount * (isDayView ? dayWidth : DAY_MIN_WIDTH);
 
   useEffect(() => {
-    if (isDayView) return;
     const el = scrollRef.current;
     if (!el) return;
 
     const updateWidth = () => {
       const available = el.clientWidth - TIME_GUTTER;
-      setWeekDayWidth(Math.max(DAY_MIN_WIDTH, Math.floor(available / dayCount)));
+      if (isDayView) {
+        setTechColWidth(Math.max(TECH_COL_MIN_WIDTH, Math.floor(available / columnCount)));
+      } else {
+        setWeekDayWidth(Math.max(DAY_MIN_WIDTH, Math.floor(available / dayCount)));
+      }
     };
 
     updateWidth();
     const observer = new ResizeObserver(updateWidth);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [dayCount, isDayView]);
+  }, [columnCount, dayCount, isDayView]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -485,7 +490,7 @@ function TimeGrid({
                     <div
                       key={col.id}
                       className="border-r border-border/60 px-0.5 py-1 text-center last:border-r-0"
-                      style={{ width: TECH_COL_WIDTH }}
+                      style={{ width: techColWidth }}
                       title={col.name}
                     >
                       {col.isUnassigned ? (
@@ -551,7 +556,7 @@ function TimeGrid({
                         <div
                           key={`${dayKey}-${col.id}`}
                           className="relative border-r border-border/60 last:border-r-0"
-                          style={{ width: TECH_COL_WIDTH, height: gridHeight }}
+                          style={{ width: techColWidth, height: gridHeight }}
                         >
                           <button
                             type="button"
@@ -583,7 +588,7 @@ function TimeGrid({
                               lane={lane}
                               laneCount={laneCount}
                               colorBy={colorBy}
-                              columnWidth={TECH_COL_WIDTH}
+                              columnWidth={techColWidth}
                               startHour={startHour}
                             />
                           ))}

@@ -35,6 +35,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    if (body.categoryId !== undefined) {
+      const target = await prisma.priceBookCategory.findFirst({
+        where: {
+          id: String(body.categoryId),
+          companyId: user.companyId,
+          type: existing.type,
+        },
+        select: { id: true },
+      });
+      if (!target) {
+        return NextResponse.json(
+          { error: "Target category not found for this item type" },
+          { status: 400 }
+        );
+      }
+    }
+
     await prisma.priceBookItem.update({
       where: { id },
       data: {

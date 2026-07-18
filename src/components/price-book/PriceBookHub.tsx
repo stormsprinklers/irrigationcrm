@@ -58,6 +58,39 @@ export function PriceBookHub({ type, title, breadcrumb }: Props) {
     await load();
   }
 
+  async function renameCategory(category: PriceBookCategoryDTO) {
+    const name = prompt("Rename category", category.name);
+    if (!name?.trim() || name.trim() === category.name) return;
+    const res = await fetch(`/api/price-book/categories/${category.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) {
+      toast.error("Failed to rename category");
+      return;
+    }
+    toast.success("Category renamed");
+    await load();
+  }
+
+  async function deleteCategory(category: PriceBookCategoryDTO) {
+    const itemCount = category._count?.items ?? 0;
+    const childCount = category._count?.children ?? 0;
+    const warning =
+      itemCount || childCount
+        ? `Delete “${category.name}”? This permanently removes ${itemCount} item(s) and ${childCount} subcategory(ies).`
+        : `Delete “${category.name}”?`;
+    if (!confirm(warning)) return;
+    const res = await fetch(`/api/price-book/categories/${category.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      toast.error("Failed to delete category");
+      return;
+    }
+    toast.success("Category deleted");
+    await load();
+  }
+
   function handleImported(result: PriceBookImportResult) {
     load();
     if (result.errors.length > 0) {
@@ -147,7 +180,13 @@ export function PriceBookHub({ type, title, breadcrumb }: Props) {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {categories.map((category) => (
-            <CategoryCard key={category.id} category={category} href={`/price-book/categories/${category.id}`} />
+            <CategoryCard
+              key={category.id}
+              category={category}
+              href={`/price-book/categories/${category.id}`}
+              onRename={() => void renameCategory(category)}
+              onDelete={() => void deleteCategory(category)}
+            />
           ))}
         </div>
       )}

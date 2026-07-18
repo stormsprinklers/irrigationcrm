@@ -86,5 +86,4 @@ export type PriceBookImportResult = {
 export type PriceBookSettingsDTO = {
   flatRatePricingEnabled: boolean;
   materialMarkupsEnabled: boolean;
-  openaiConfigured: boolean;
 };

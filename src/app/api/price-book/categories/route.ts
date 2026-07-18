@@ -10,6 +10,22 @@ export async function GET(request: NextRequest) {
     const user = await requireSessionUser();
     const type = (request.nextUrl.searchParams.get("type") ?? "SERVICE") as PriceBookItemType;
     const parentId = request.nextUrl.searchParams.get("parentId");
+    const flat = request.nextUrl.searchParams.get("flat") === "true";
+
+    if (flat) {
+      const categories = await prisma.priceBookCategory.findMany({
+        where: { companyId: user.companyId, type },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+          parent: { select: { id: true, name: true } },
+          _count: { select: { items: true, children: true } },
+        },
+      });
+      return NextResponse.json(categories);
+    }
 
     if (parentId) {
       const categories = await prisma.priceBookCategory.findMany({

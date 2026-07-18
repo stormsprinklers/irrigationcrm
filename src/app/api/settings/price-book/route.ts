@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { listLaborRates, listMarkupTiers } from "@/lib/price-book/queries";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -14,17 +13,7 @@ export async function GET() {
       },
     });
 
-    const [laborRates, tiers] = await Promise.all([
-      listLaborRates(user.companyId),
-      listMarkupTiers(user.companyId),
-    ]);
-
-    return NextResponse.json({
-      ...company,
-      openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
-      laborRateCount: laborRates.length,
-      markupTierCount: tiers.length,
-    });
+    return NextResponse.json(company);
   } catch {
     return unauthorizedResponse();
   }
@@ -56,10 +45,7 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      ...company,
-      openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
-    });
+    return NextResponse.json(company);
   } catch {
     return unauthorizedResponse();
   }

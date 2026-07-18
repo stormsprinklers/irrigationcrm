@@ -53,8 +53,8 @@ export default function BulkAdjustSettingsPage() {
   return (
     <ContentArea className="max-w-3xl">
       <PageHeader
-        breadcrumb={["Settings", "Price Book", "Bulk adjust"]}
-        title="Bulk price adjust"
+        breadcrumb={["Settings", "Price Book", "Bulk Adjust"]}
+        title="Bulk Price Adjust"
         subtitle="Raise or lower catalog prices by percentage"
       />
 

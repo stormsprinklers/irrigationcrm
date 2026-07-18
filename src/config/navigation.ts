@@ -226,9 +226,9 @@ export const priceBookSettingsSidebar: NavSection[] = [
   {
     items: [
       { label: "Overview", href: "/settings/price-book" },
-      { label: "Labor rates", href: "/settings/price-book/labor-rates" },
-      { label: "Material markups", href: "/settings/price-book/material-markups" },
-      { label: "Bulk adjust", href: "/settings/price-book/bulk-adjust" },
+      { label: "Labor Rates", href: "/settings/price-book/labor-rates" },
+      { label: "Material Markups", href: "/settings/price-book/material-markups" },
+      { label: "Bulk Adjust", href: "/settings/price-book/bulk-adjust" },
     ],
   },
 ];

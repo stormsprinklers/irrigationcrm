@@ -70,7 +70,7 @@ export default function LaborRatesSettingsPage() {
 
   return (
     <ContentArea className="max-w-3xl">
-      <PageHeader breadcrumb={["Settings", "Price Book", "Labor rates"]} title="Labor rates" />
+      <PageHeader breadcrumb={["Settings", "Price Book", "Labor Rates"]} title="Labor Rates" />
 
       <form onSubmit={createRate} className="mb-8 space-y-4 rounded-lg border border-border bg-white p-6">
         <h3 className="font-semibold">Add labor rate</h3>
