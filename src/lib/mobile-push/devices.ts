@@ -47,6 +47,11 @@ export async function sendMobilePushToUsers(params: {
   title: string;
   body?: string | null;
   conversationId?: string;
+  visitId?: string;
+  customerId?: string;
+  estimateId?: string;
+  type?: string;
+  deepLink?: string;
 }) {
   if (!isApnsConfigured()) return;
   const uniqueUserIds = [...new Set(params.userIds.filter(Boolean))];
@@ -70,6 +75,11 @@ export async function sendMobilePushToUsers(params: {
       const result = await sendApnsNotification(device.deviceToken, {
         alert: { title: params.title, body: params.body },
         conversationId: params.conversationId,
+        visitId: params.visitId,
+        customerId: params.customerId,
+        estimateId: params.estimateId,
+        type: params.type,
+        deepLink: params.deepLink,
         badge: 1,
       });
 

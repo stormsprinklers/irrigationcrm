@@ -17,6 +17,11 @@ type InboxListDetailShellProps = {
   composing?: boolean;
   onCompose?: () => void;
   onMobileBack?: () => void;
+  /**
+   * `contain` (default): detail fills the pane; children manage inner scroll (chat).
+   * `page`: whole detail document scrolls (leads form submissions).
+   */
+  detailScroll?: "contain" | "page";
   className?: string;
 };
 
@@ -36,6 +41,7 @@ export function InboxListDetailShell({
   composing = false,
   onCompose,
   onMobileBack,
+  detailScroll = "contain",
   className,
 }: InboxListDetailShellProps) {
   const [listOpen, setListOpen] = useState(false);
@@ -165,7 +171,8 @@ export function InboxListDetailShell({
 
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white",
+          "min-h-0 min-w-0 flex-1 flex-col bg-white",
+          detailScroll === "page" ? "overflow-y-auto" : "overflow-hidden",
           listFirst
             ? showDetailOnMobile
               ? "flex"

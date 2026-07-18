@@ -9,6 +9,11 @@ type ApnsAlert = {
 export type ApnsPayload = {
   alert: ApnsAlert;
   conversationId?: string;
+  visitId?: string;
+  customerId?: string;
+  estimateId?: string;
+  type?: string;
+  deepLink?: string;
   badge?: number;
 };
 
@@ -70,8 +75,14 @@ export async function sendApnsNotification(
       },
       sound: "default",
       ...(payload.badge != null ? { badge: payload.badge } : {}),
+      ...(payload.type ? { category: payload.type } : {}),
     },
     ...(payload.conversationId ? { conversationId: payload.conversationId } : {}),
+    ...(payload.visitId ? { visitId: payload.visitId } : {}),
+    ...(payload.customerId ? { customerId: payload.customerId } : {}),
+    ...(payload.estimateId ? { estimateId: payload.estimateId } : {}),
+    ...(payload.type ? { type: payload.type } : {}),
+    ...(payload.deepLink ? { deepLink: payload.deepLink } : {}),
   });
 
   return new Promise((resolve) => {

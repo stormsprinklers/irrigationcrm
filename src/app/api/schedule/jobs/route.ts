@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
+import { isFieldRole } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
@@ -11,6 +12,7 @@ import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
+import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 
 function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
   return {
@@ -31,6 +33,25 @@ export async function GET(request: NextRequest) {
 
     const start = new Date(startParam);
     const end = new Date(endParam);
+
+    // Field roles must not see company-wide board; force assignee scope.
+    if (isFieldRole(user.role)) {
+      const { fieldVisitAssigneeWhere } = await import("@/lib/field/access");
+      const { serializeVisit, visitInclude } = await import("@/lib/visits/queries");
+      const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
+      const visits = await prisma.visit.findMany({
+        where: {
+          ...assigneeWhere,
+          status: { not: VisitStatus.CANCELLED },
+          startAt: { lt: end },
+          endAt: { gt: start },
+        },
+        include: visitInclude,
+        orderBy: { startAt: "asc" },
+      });
+      return NextResponse.json(visits.map(serializeVisit));
+    }
+
     const jobs = await listScheduleJobs(user.companyId, start, end, parseFilters(searchParams));
     return NextResponse.json(jobs);
   } catch {
@@ -41,8 +62,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
-
     const body = await request.json();
     const {
       title,
@@ -62,9 +81,24 @@ export async function POST(request: NextRequest) {
       callSessionId,
     } = body;
 
+    if (isFieldRole(user.role)) {
+      // Field self-schedule: must assign only to self, no crew.
+      if (crewId) {
+        return forbiddenResponse("Field roles may not assign crew on self-scheduled visits");
+      }
+      if (assignedUserId && assignedUserId !== user.id) {
+        return forbiddenResponse("Field roles may only assign visits to themselves");
+      }
+    } else {
+      const fieldDenied = forbiddenForFieldRole(user.role);
+      if (fieldDenied) return fieldDenied;
+    }
+
     if (!title || !startAt || !endAt || !division) {
       return badRequestResponse("title, startAt, endAt, and division are required");
     }
+
+    const effectiveAssignee = isFieldRole(user.role) ? user.id : assignedUserId;
 
     let zipForArea = zip ? String(zip) : null;
     if (propertyId) {
@@ -95,17 +129,17 @@ export async function POST(request: NextRequest) {
 
     const assignmentError = validateScheduledVisitAssignment(
       VisitStatus.SCHEDULED,
-      assignedUserId,
-      crewId
+      effectiveAssignee,
+      isFieldRole(user.role) ? null : crewId
     );
     if (assignmentError) return badRequestResponse(assignmentError);
 
     const jobStart = new Date(startAt);
     const jobEnd = new Date(endAt);
-    if (assignedUserId) {
+    if (effectiveAssignee) {
       const availabilityError = await validateAssignmentUpdate(
         user.companyId,
-        assignedUserId,
+        effectiveAssignee,
         jobStart,
         jobEnd
       );
@@ -124,8 +158,9 @@ export async function POST(request: NextRequest) {
         endAt: new Date(endAt),
         division: division as Division,
         serviceAreaId: resolvedServiceAreaId,
-        assignedUserId: assignedUserId ?? null,
-        crewId: crewId ?? null,
+        assignedUserId: effectiveAssignee ?? null,
+        crewId: isFieldRole(user.role) ? null : crewId ?? null,
+        createdByUserId: user.id,
         customerId: customerId ?? null,
         propertyId: propertyId ?? null,
         tags: visitTags,
@@ -141,6 +176,17 @@ export async function POST(request: NextRequest) {
     });
 
     await syncVisitChecklists(visit.id, user.companyId);
+
+    await writeStaffAuditLog({
+      companyId: user.companyId,
+      actorId: user.id,
+      entityType: "Visit",
+      entityId: visit.id,
+      action: "create",
+      after: { title: visit.title, assignedUserId: visit.assignedUserId },
+      visitId: visit.id,
+      customerId: visit.customerId,
+    });
 
     if (callSessionId) {
       const { linkVisitToCallSession } = await import("@/lib/voice/call-conversion");

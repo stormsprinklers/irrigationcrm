@@ -217,7 +217,23 @@ export function WebsiteLeadsInbox() {
       const match = nextItems.find(
         (item) => item.id === current.id && item.channel === current.channel
       );
-      return match ?? current;
+      if (!match) return current;
+      // Keep the same object when nothing meaningful changed so detail
+      // doesn't remount / flash Loading on the 15s poll.
+      if (
+        match.leadStatus === current.leadStatus &&
+        match.contactedAt === current.contactedAt &&
+        match.isRead === current.isRead &&
+        match.name === current.name &&
+        match.leadPhone === current.leadPhone &&
+        match.leadEmail === current.leadEmail &&
+        match.preview === current.preview &&
+        match.convertedCustomerId === current.convertedCustomerId &&
+        match.conversationId === current.conversationId
+      ) {
+        return current;
+      }
+      return match;
     });
   }, []);
 
@@ -273,15 +289,27 @@ export function WebsiteLeadsInbox() {
     }
   }, [filterTab, selected]);
 
+  const selectedDetailKey = selected ? `${selected.channel}:${selected.id}` : null;
+  const loadedDetailKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!selected) {
+    if (!selected || !selectedDetailKey) {
       setEmailDetail(null);
       setSmsBody(null);
+      loadedDetailKeyRef.current = null;
+      setLoadingDetail(false);
       return;
     }
 
+    const switching = loadedDetailKeyRef.current !== selectedDetailKey;
     let cancelled = false;
-    setLoadingDetail(true);
+
+    if (switching) {
+      setLoadingDetail(true);
+      setEmailDetail(null);
+      setSmsBody(null);
+    }
+
     if (selected.channel === "email") {
       fetch(`/api/inbox/email/${selected.id}`)
         .then((r) => r.json())
@@ -289,6 +317,7 @@ export function WebsiteLeadsInbox() {
           if (cancelled) return;
           setEmailDetail(data);
           setSmsBody(null);
+          loadedDetailKeyRef.current = selectedDetailKey;
           setItems((current) => {
             const target = current.find((item) => item.id === selected.id);
             if (!target || target.isRead) return current;
@@ -309,6 +338,7 @@ export function WebsiteLeadsInbox() {
     }
 
     if (!selected.conversationId) {
+      loadedDetailKeyRef.current = selectedDetailKey;
       setLoadingDetail(false);
       return;
     }
@@ -324,6 +354,7 @@ export function WebsiteLeadsInbox() {
         const message = messages.find((row: { id: string }) => row.id === selectedId);
         setSmsBody(message?.body ?? preview);
         setEmailDetail(null);
+        loadedDetailKeyRef.current = selectedDetailKey;
       })
       .catch(() => {
         if (!cancelled) toast.error("Failed to load form submission");
@@ -335,7 +366,9 @@ export function WebsiteLeadsInbox() {
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+    // Intentionally keyed by id/channel so poll refreshes of `selected` don't reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDetailKey]);
 
   function selectItem(item: WebsiteLeadInboxItem) {
     setSelected(item);
@@ -549,10 +582,11 @@ export function WebsiteLeadsInbox() {
     <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
       Select a form submission to view details.
     </div>
-  ) : loadingDetail ? (
+  ) : loadingDetail && !emailDetail && !smsBody && !selected.preview ? (
     <div className="p-6 text-sm text-muted-foreground">Loading...</div>
   ) : (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+    // Natural-height document: shell pane scrolls the whole page (not a nested body box).
+    <div className="pb-8">
       <div className="flex items-start justify-between gap-3 border-b border-border p-4">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -678,13 +712,15 @@ export function WebsiteLeadsInbox() {
       </div>
 
       <div className="p-4">
-        {submissionText ? (
-          <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">
+        {loadingDetail && !submissionText && !emailDetail?.bodyHtml ? (
+          <p className="text-sm text-muted-foreground">Loading submission…</p>
+        ) : submissionText ? (
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
             {submissionText}
           </div>
         ) : emailDetail?.bodyHtml ? (
           <div
-            className="prose prose-sm max-w-none whitespace-pre-wrap text-sm"
+            className="prose prose-sm max-w-none break-words text-sm"
             dangerouslySetInnerHTML={{
               __html: sanitizeEmailHtml(emailDetail.bodyHtml),
             }}
@@ -703,6 +739,7 @@ export function WebsiteLeadsInbox() {
       detail={detail}
       listLabel="Leads"
       listFirst
+      detailScroll="page"
       selectedId={selected ? `${selected.channel}:${selected.id}` : null}
       onMobileBack={() => setSelected(null)}
     />

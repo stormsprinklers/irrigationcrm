@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireFieldVisitAccess } from "@/lib/field/visit-guard";
 import { prisma } from "@/lib/prisma";
 import { callRecordingPlaybackPath } from "@/lib/voice/recording";
 
@@ -81,6 +82,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
     const notes = await prisma.visitNote.findMany({
       where: { visitId: id, visit: { companyId: user.companyId } },
       orderBy: { createdAt: "desc" },
@@ -96,6 +99,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
     const visit = await prisma.visit.findFirst({
       where: { id, companyId: user.companyId },
       select: { id: true, customerId: true },

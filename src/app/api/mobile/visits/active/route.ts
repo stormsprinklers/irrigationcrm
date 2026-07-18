@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { VisitStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { fieldVisitAssigneeWhere } from "@/lib/field/access";
 import { prisma } from "@/lib/prisma";
 import { serializeVisitDetail, visitDetailInclude } from "@/lib/visits/queries";
 
@@ -13,10 +14,10 @@ const ACTIVE_STATUSES: VisitStatus[] = [
 export async function GET(request: Request) {
   try {
     const user = await requireSessionUser(request);
+    const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
     const visit = await prisma.visit.findFirst({
       where: {
-        companyId: user.companyId,
-        assignedUserId: user.id,
+        ...assigneeWhere,
         status: { in: ACTIVE_STATUSES },
       },
       orderBy: { updatedAt: "desc" },

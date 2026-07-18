@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TimeEventType, VisitStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
+import { requireFieldVisitAccess } from "@/lib/field/visit-guard";
 import {
   computeDrivingEta,
   MapsEtaError,
@@ -63,6 +64,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
 
     const body = (await request.json()) as Record<string, unknown>;
     const type = body.type as TimeEventType;

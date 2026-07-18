@@ -121,6 +121,7 @@ export async function notifyInboundSms(params: {
       notifyUserIds = fieldStaff.map((user) => user.id);
     }
   } else {
+    // EXTERNAL: notify office staff + field techs eligible for this conversation's customer
     const staff = await prisma.user.findMany({
       where: {
         companyId: params.companyId,
@@ -130,6 +131,30 @@ export async function notifyInboundSms(params: {
       select: { id: true },
     });
     notifyUserIds = staff.map((user) => user.id);
+
+    if (params.conversationId) {
+      const conversation = await prisma.conversation.findFirst({
+        where: { id: params.conversationId, companyId: params.companyId },
+        select: { customerId: true },
+      });
+      if (conversation?.customerId) {
+        const { listEligibleCustomerIdsForFieldSms } = await import("@/lib/field/access");
+        const fieldUsers = await prisma.user.findMany({
+          where: {
+            companyId: params.companyId,
+            status: "ACTIVE",
+            role: { in: FIELD_ROLES },
+          },
+          select: { id: true, companyId: true, role: true },
+        });
+        for (const fieldUser of fieldUsers) {
+          const eligible = await listEligibleCustomerIdsForFieldSms(fieldUser);
+          if (eligible.includes(conversation.customerId)) {
+            notifyUserIds.push(fieldUser.id);
+          }
+        }
+      }
+    }
   }
 
   await notifyStaffInApp({

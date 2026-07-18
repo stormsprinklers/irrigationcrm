@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { isFieldRole } from "@/lib/employees";
+import { canAccessPropertyAsField } from "@/lib/field/property-access";
 import { runRachioZone } from "@/lib/rachio/property";
 import { RachioApiError } from "@/lib/rachio/types";
 
@@ -8,9 +10,13 @@ type Params = { params: Promise<{ id: string; propertyId: string; zoneId: string
 export async function PUT(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
-
     const { id: customerId, propertyId, zoneId } = await params;
+
+    if (isFieldRole(user.role)) {
+      const allowed = await canAccessPropertyAsField(user, customerId, propertyId);
+      if (!allowed) return forbiddenResponse("No access to this property");
+    }
+
     const body = await request.json();
     const durationMinutes = Number(body.durationMinutes ?? body.duration ?? 5);
 

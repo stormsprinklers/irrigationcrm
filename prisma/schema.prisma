@@ -550,6 +550,10 @@ model Company {
   /// Soft-removed lead sources kept for history / filters.
   archivedLeadSources      String[] @default([])
   intakeRequiredFields     String[] @default([])
+  /// Days before today that field techs may access customer SMS (assigned visits).
+  techSmsPastDays          Int      @default(7)
+  /// Days after today that field techs may access customer SMS (assigned visits).
+  techSmsFutureDays        Int      @default(7)
   businessHours            Json?
   referralCode             String?
   stripeConnectAccountId   String?
@@ -656,6 +660,9 @@ model Company {
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
+  techTimeSegments       TechTimeSegment[]
+  techTimeCorrections    TechTimeCorrection[]
+  staffAuditLogs         StaffAuditLog[]
   voiceClips             VoiceClip[]
   queueWaitClip          VoiceClip?  @relation("CompanyQueueWaitClip", fields: [queueWaitClipId], references: [id], onDelete: SetNull)
   holdMusicClip          VoiceClip?  @relation("CompanyHoldMusicClip", fields: [holdMusicClipId], references: [id], onDelete: SetNull)
@@ -837,6 +844,7 @@ model User {
   crewMemberships    CrewMember[]
   crewsAsForeman     Crew[]               @relation("CrewForeman")
   assignedVisits     Visit[]              @relation("AssignedVisits")
+  createdVisits      Visit[]              @relation("CreatedVisits")
   assignedLeads      Lead[]               @relation("AssignedLeads")
   mobileSessions     MobileSession[]
   mobilePushDevices  MobilePushDevice[]
@@ -852,6 +860,10 @@ model User {
   assignedCallSessions CallSession[] @relation("AssignedCallSessions")
   transferTargetSessions CallSession[] @relation("TransferTargetSessions")
   timeClockEntries       TimeClockEntry[]
+  techTimeSegments       TechTimeSegment[]
+  techTimeCorrections    TechTimeCorrection[] @relation("TechTimeCorrectionRequester")
+  reviewedTimeCorrections TechTimeCorrection[] @relation("TechTimeCorrectionReviewer")
+  staffAuditLogs         StaffAuditLog[]
   assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
   handledCallLogs        CallLog[]            @relation("HandledCallLogs")
   answeredCallConversions CallConversion[]    @relation("AnsweredCallConversions")
@@ -1398,6 +1410,16 @@ enum AppNotificationType {
   HIRING_SCREEN_BOOKED
   VEHICLE_REMINDER
   GOOGLE_REVIEW
+  JOB_ASSIGNED
+  SCHEDULE_CHANGED
+  VISIT_CANCELLED
+  MISSED_TRANSFER
+  ESTIMATE_APPROVED
+  PAYMENT_RECEIVED
+  ENROLLMENT_PROBLEM
+  TIMER_LEFT_RUNNING
+  VISIT_INCOMPLETE
+  SYNC_FAILED
 }
 
 model NotificationTemplate {
@@ -2097,6 +2119,8 @@ model Visit {
   serviceAreaId  String?
   assignedUserId String?
   crewId         String?
+  /// Staff user who created the visit (self-scheduled field jobs).
+  createdByUserId String?
   status         VisitStatus @default(SCHEDULED)
   tags           String[]    @default([])
   workSummary    String?     @db.Text
@@ -2125,9 +2149,11 @@ model Visit {
   property             CustomerProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   serviceArea          ServiceArea?            @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
   assignedUser         User?                   @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  createdByUser        User?                   @relation("CreatedVisits", fields: [createdByUserId], references: [id], onDelete: SetNull)
   crew                 Crew?                   @relation(fields: [crewId], references: [id], onDelete: SetNull)
   maintenancePlanVisit MaintenancePlanVisit?   @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
   timeEvents   VisitTimeEvent[]
+  techTimeSegments TechTimeSegment[]
   lineItems    VisitLineItem[]
   notes        VisitNote[]
   attachments  VisitAttachment[]
@@ -2145,6 +2171,7 @@ model Visit {
   @@index([companyId, startAt])
   @@index([serviceAreaId])
   @@index([assignedUserId])
+  @@index([createdByUserId])
   @@index([crewId])
   @@index([customerId])
   @@map("ScheduledJob")
@@ -2195,6 +2222,100 @@ model TimeClockEntry {
 
   @@index([companyId, clockInAt])
   @@index([userId, clockInAt])
+}
+
+enum TechTimeCategory {
+  DRIVING
+  WORKING
+  PARTS_RUN
+  BREAK
+  SHOP
+  TRAINING_MEETING
+}
+
+enum TechTimeSegmentSource {
+  MOBILE
+  WEB
+  SYSTEM
+}
+
+model TechTimeSegment {
+  id        String                @id @default(cuid())
+  companyId String
+  userId    String
+  category  TechTimeCategory
+  visitId   String?
+  startedAt DateTime
+  endedAt   DateTime?
+  source    TechTimeSegmentSource @default(MOBILE)
+  deviceId  String?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visit   Visit?  @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  corrections TechTimeCorrection[]
+
+  @@index([companyId, userId, startedAt])
+  @@index([userId, endedAt])
+  @@index([visitId])
+}
+
+enum TechTimeCorrectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model TechTimeCorrection {
+  id              String                   @id @default(cuid())
+  companyId       String
+  segmentId       String
+  requestedById   String
+  reviewedById    String?
+  status          TechTimeCorrectionStatus @default(PENDING)
+  requestedStart  DateTime?
+  requestedEnd    DateTime?
+  requestedCategory TechTimeCategory?
+  note            String?                  @db.Text
+  reviewNote      String?                  @db.Text
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  segment     TechTimeSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  requestedBy User            @relation("TechTimeCorrectionRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  reviewedBy  User?           @relation("TechTimeCorrectionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([segmentId])
+}
+
+model StaffAuditLog {
+  id         String   @id @default(cuid())
+  companyId  String
+  actorId    String
+  deviceId   String?
+  entityType String
+  entityId   String
+  action     String
+  field      String?
+  before     Json?
+  after      Json?
+  customerId String?
+  propertyId String?
+  visitId    String?
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([visitId])
+  @@index([customerId])
 }
 
 model EmployeeWorkSchedule {

@@ -3,6 +3,9 @@ import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
+import { isFieldRole } from "@/lib/employees";
+import { requireFieldVisitAccess } from "@/lib/field/visit-guard";
+import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 import { prisma } from "@/lib/prisma";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
@@ -16,6 +19,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
     const visit = await getVisitForCompany(user.companyId, id);
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(await serializeVisitDetail(visit));
@@ -29,17 +34,43 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
 
     const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
+
     const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
 
-    const fieldAllowedKeys = new Set(["workSummary"]);
+    const fieldSelfScheduleKeys = new Set([
+      "workSummary",
+      "startAt",
+      "endAt",
+      "title",
+      "address",
+      "city",
+      "state",
+      "zip",
+      "tags",
+      "isCallback",
+    ]);
     const bodyKeys = Object.keys(body);
     const workSummaryOnlyUpdate =
-      bodyKeys.length > 0 && bodyKeys.every((key) => fieldAllowedKeys.has(key));
-    const fieldDenied = forbiddenForFieldRole(user.role);
-    if (fieldDenied && !workSummaryOnlyUpdate) return fieldDenied;
+      bodyKeys.length > 0 && bodyKeys.every((key) => key === "workSummary");
+    const fieldSelfScheduleUpdate =
+      bodyKeys.length > 0 && bodyKeys.every((key) => fieldSelfScheduleKeys.has(key));
+
+    if (isFieldRole(user.role)) {
+      if (!fieldSelfScheduleUpdate && !workSummaryOnlyUpdate) {
+        return forbiddenResponse("Field roles may only update work summary or reschedule own visits");
+      }
+      if (body.assignedUserId !== undefined && body.assignedUserId !== user.id) {
+        return forbiddenResponse("Field roles may only assign visits to themselves");
+      }
+      if (body.crewId !== undefined) {
+        return forbiddenResponse("Field roles may not change crew assignment");
+      }
+    }
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
@@ -114,6 +145,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     await clearNeedsSchedulingForVisit(id);
+
+    await writeStaffAuditLog({
+      companyId: user.companyId,
+      actorId: user.id,
+      entityType: "Visit",
+      entityId: id,
+      action: "update",
+      before: {
+        startAt: existing.startAt.toISOString(),
+        endAt: existing.endAt.toISOString(),
+        workSummary: existing.workSummary,
+      },
+      after: {
+        startAt: nextStart.toISOString(),
+        endAt: nextEnd.toISOString(),
+        workSummary:
+          body.workSummary !== undefined
+            ? body.workSummary
+              ? String(body.workSummary).trim()
+              : null
+            : existing.workSummary,
+      },
+      visitId: id,
+      customerId: existing.customerId,
+    });
 
     const startChanged =
       body.startAt !== undefined &&

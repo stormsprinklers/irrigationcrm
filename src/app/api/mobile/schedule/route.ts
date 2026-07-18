@@ -5,7 +5,9 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { isFieldRole } from "@/lib/employees";
-import { listVisits } from "@/lib/visits/queries";
+import { fieldVisitAssigneeWhere } from "@/lib/field/access";
+import { prisma } from "@/lib/prisma";
+import { listVisits, serializeVisit, visitInclude } from "@/lib/visits/queries";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,12 +21,27 @@ export async function GET(request: NextRequest) {
 
     const start = new Date(startParam);
     const end = new Date(endParam);
-    const scopedToAssignee = isFieldRole(user.role);
+
+    if (isFieldRole(user.role)) {
+      const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
+      const visits = await prisma.visit.findMany({
+        where: {
+          ...assigneeWhere,
+          status: { not: "CANCELLED" },
+          startAt: { lt: end },
+          endAt: { gt: start },
+        },
+        include: visitInclude,
+        orderBy: { startAt: "asc" },
+      });
+      return NextResponse.json(visits.map(serializeVisit));
+    }
+
     const jobs = await listVisits(user.companyId, start, end, {
       serviceAreaIds: [],
       crewIds: [],
       divisions: [],
-      userIds: scopedToAssignee ? [user.id] : [],
+      userIds: [],
     });
 
     return NextResponse.json(jobs);
