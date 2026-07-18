@@ -20,6 +20,7 @@ const publicPaths = [
   "/api/portal/company",
   "/api/portal/feedback",
   "/api/twilio",
+  "/api/ai/receptionist",
   "/api/sendgrid",
   "/api/stripe/webhook",
   "/api/meta",
