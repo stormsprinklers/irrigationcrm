@@ -35,17 +35,21 @@ export function VisitIrrigationSection({ customerId, property }: Props) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <PropertyIrrigationMapEditor
-        customerId={customerId}
-        propertyId={property.id}
-        propertyName={property.name}
-        aerialImageUrl={property.aerialImageUrl}
-        propertyDiagramUrl={property.propertyDiagramUrl}
-        irrigationMapStatus={property.irrigationMapStatus}
-        allowInlineEdit
-      />
-      <ControllerProgramGuidePanel customerId={customerId} propertyId={property.id} />
+    <div className="grid min-w-0 max-w-full gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="min-w-0 max-w-full overflow-hidden">
+        <PropertyIrrigationMapEditor
+          customerId={customerId}
+          propertyId={property.id}
+          propertyName={property.name}
+          aerialImageUrl={property.aerialImageUrl}
+          propertyDiagramUrl={property.propertyDiagramUrl}
+          irrigationMapStatus={property.irrigationMapStatus}
+          allowInlineEdit
+        />
+      </div>
+      <div className="min-w-0 max-w-full overflow-hidden">
+        <ControllerProgramGuidePanel customerId={customerId} propertyId={property.id} />
+      </div>
     </div>
   );
 }

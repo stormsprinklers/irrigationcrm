@@ -47,6 +47,7 @@ type InvoiceSlice = {
 
 type EstimateSlice = {
   publicToken: string;
+  estimateNumber?: string | null;
 };
 
 function formatAddress(parts: Array<string | null | undefined>): string {
@@ -147,7 +148,7 @@ export function buildNotificationContext(params: {
     invoiceNumber: params.invoice?.invoiceNumber ?? "",
     invoice_number: params.invoice?.invoiceNumber ?? "",
     payUrl: invoiceLink,
-    estimateNumber: "",
+    estimateNumber: params.estimate?.estimateNumber ?? "",
   };
 
   return ctx;

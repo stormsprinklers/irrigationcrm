@@ -70,7 +70,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
 
   if (loading) {
     return (
-      <section className="rounded-lg border border-border bg-white">
+      <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
         </div>
@@ -81,7 +81,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
 
   if (!guide || guide.programs.length === 0) {
     return (
-      <section className="rounded-lg border border-border bg-white">
+      <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
         </div>
@@ -93,9 +93,9 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div>
+    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold">Controller settings</h2>
           <p className="text-xs text-muted-foreground">
             Recommendations update from zone attributes, weather, and the settings below.

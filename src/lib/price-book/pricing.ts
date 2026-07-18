@@ -335,6 +335,7 @@ export async function buildLineItemFromPriceBook(companyId: string, itemId: stri
     quantity: 1,
     unitPrice,
     unitCost,
+    unit: item.unit?.trim() || "each",
   };
 }
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { allocateEstimateNumber } from "@/lib/estimates/numbering";
+import { ensureEstimateOptions } from "@/lib/estimates/options";
 import { computeEstimateExpiry, getEstimateForCompany, listEstimates } from "@/lib/estimates/queries";
 import { getTemplateLineItemsForEstimate } from "@/lib/price-book/extras";
 import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
@@ -41,6 +43,7 @@ export async function POST(request: NextRequest) {
     if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
 
     const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
+    const estimateNumber = await allocateEstimateNumber(user.companyId);
 
     const estimate = await prisma.estimate.create({
       data: {
@@ -48,12 +51,27 @@ export async function POST(request: NextRequest) {
         customerId: body.customerId,
         propertyId: body.propertyId ?? null,
         visitId: body.visitId ?? null,
+        estimateNumber,
         status: EstimateStatus.DRAFT,
         expiresAt,
         depositRequired: company.estimateDepositRequired,
         depositType: company.estimateDepositType,
         depositAmount: company.estimateDepositAmount,
       },
+    });
+
+    const option = await prisma.estimateOption.create({
+      data: {
+        estimateId: estimate.id,
+        letter: null,
+        label: "Option",
+        sortOrder: 0,
+      },
+    });
+
+    await prisma.estimate.update({
+      where: { id: estimate.id },
+      data: { selectedOptionId: option.id },
     });
 
     if (body.templateId) {
@@ -65,11 +83,13 @@ export async function POST(request: NextRequest) {
           const total = computeLineItemTotal(qty, price);
           return {
             estimateId: estimate.id,
+            optionId: option.id,
             priceBookItemId: item.priceBookItemId,
             name: item.name,
             description: item.description,
             quantity: qty,
             unitPrice: price,
+            unit: item.unit || "each",
             total,
             sortOrder: index,
           };
@@ -77,6 +97,10 @@ export async function POST(request: NextRequest) {
         await prisma.estimateLineItem.createMany({ data: lineItems });
         const subtotal = lineItems.reduce((s, i) => s + i.total, 0);
         const totals = computeTotals(subtotal, 0);
+        await prisma.estimateOption.update({
+          where: { id: option.id },
+          data: totals,
+        });
         await prisma.estimate.update({
           where: { id: estimate.id },
           data: totals,
@@ -84,6 +108,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await ensureEstimateOptions(estimate.id);
     const full = await getEstimateForCompany(user.companyId, estimate.id);
     return NextResponse.json(full, { status: 201 });
   } catch {

@@ -14,7 +14,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     const { id } = await params;
     const estimate = await prisma.estimate.findFirst({
       where: { id, companyId: user.companyId },
-      include: { lineItems: true, discounts: true, customer: true, property: true },
+      include: {
+        lineItems: true,
+        discounts: true,
+        options: { orderBy: { sortOrder: "asc" } },
+        customer: true,
+        property: true,
+      },
     });
     if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -23,6 +29,18 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!target || !["this_visit", "new_visit"].includes(target)) {
       return badRequestResponse('target must be "this_visit" or "new_visit"');
     }
+
+    const optionId =
+      (typeof body.optionId === "string" && body.optionId) ||
+      estimate.selectedOptionId ||
+      estimate.options[0]?.id;
+
+    const lineItems = optionId
+      ? estimate.lineItems.filter((item) => item.optionId === optionId || !item.optionId)
+      : estimate.lineItems;
+    const discounts = optionId
+      ? estimate.discounts.filter((d) => d.optionId === optionId || !d.optionId)
+      : estimate.discounts;
 
     let visitId: string;
 
@@ -78,9 +96,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     await prisma.visitLineItem.deleteMany({ where: { visitId } });
     await prisma.discount.deleteMany({ where: { visitId } });
 
-    if (estimate.lineItems.length) {
+    if (lineItems.length) {
       await prisma.visitLineItem.createMany({
-        data: estimate.lineItems.map((item, index) => ({
+        data: lineItems.map((item, index) => ({
           visitId,
           priceBookItemId: item.priceBookItemId,
           name: item.name,
@@ -93,9 +111,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
-    if (estimate.discounts.length) {
+    if (discounts.length) {
       await prisma.discount.createMany({
-        data: estimate.discounts.map((d) => ({
+        data: discounts.map((d) => ({
           visitId,
           label: d.label,
           type: d.type,
@@ -106,7 +124,11 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await prisma.estimate.update({
       where: { id: estimate.id },
-      data: { visitId, status: "CONVERTED" },
+      data: {
+        visitId,
+        status: "CONVERTED",
+        ...(optionId ? { selectedOptionId: optionId } : {}),
+      },
     });
 
     return NextResponse.json({ visitId, estimateId: estimate.id });

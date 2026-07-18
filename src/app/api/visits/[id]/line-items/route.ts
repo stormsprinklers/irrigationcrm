@@ -116,6 +116,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         quantity,
         unitPrice,
         unitCost,
+        ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) } : {}),
         total: computeLineItemTotal(quantity, unitPrice),
       },
     });

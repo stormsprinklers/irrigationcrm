@@ -92,6 +92,8 @@ export function serializePortalEstimate(estimate: {
   id: string;
   publicToken: string;
   status: string;
+  estimateNumber?: string | null;
+  selectedOptionId?: string | null;
   total: { toNumber?: () => number } | number;
   subtotal: { toNumber?: () => number } | number;
   discountTotal: { toNumber?: () => number } | number;
@@ -105,29 +107,61 @@ export function serializePortalEstimate(estimate: {
   designProjectId?: string | null;
   premiumOptionTotal?: { toNumber?: () => number } | number | null;
   selectedQuoteTier?: string | null;
+  options?: Array<{
+    id: string;
+    letter: string | null;
+    label: string;
+    sortOrder: number;
+    subtotal: { toNumber?: () => number } | number;
+    discountTotal: { toNumber?: () => number } | number;
+    total: { toNumber?: () => number } | number;
+  }>;
   lineItems: Array<{
+    optionId?: string | null;
     name: string;
     description: string | null;
     quantity: { toNumber?: () => number } | number;
     unitPrice: { toNumber?: () => number } | number;
+    unit?: string | null;
     total: { toNumber?: () => number } | number;
     sortOrder: number;
   }>;
 }) {
   const hasDesign = Boolean(estimate.designProjectId);
+  const optionCount = estimate.options?.length ?? 0;
+  const options = (estimate.options ?? []).map((option) => {
+    const letter = option.letter;
+    const base = estimate.estimateNumber?.trim() || "EST";
+    const displayNumber = optionCount <= 1 ? base : `${base}${letter || "A"}`;
+    return {
+      id: option.id,
+      letter: option.letter,
+      label: option.label,
+      sortOrder: option.sortOrder,
+      subtotal: toNumber(option.subtotal as never),
+      discountTotal: toNumber(option.discountTotal as never),
+      total: toNumber(option.total as never),
+      displayNumber,
+    };
+  });
+
   const lineItems = estimate.lineItems.map((item) => ({
+    optionId: item.optionId ?? null,
     name: item.name,
     description: item.description,
     quantity: toNumber(item.quantity as never),
     unitPrice: toNumber(item.unitPrice as never),
+    unit: item.unit?.trim() || "each",
     total: toNumber(item.total as never),
     sortOrder: item.sortOrder,
   }));
 
   return {
     id: estimate.id,
+    estimateNumber: estimate.estimateNumber ?? null,
     publicToken: estimate.publicToken,
     status: estimate.status,
+    selectedOptionId: estimate.selectedOptionId ?? options[0]?.id ?? null,
     subtotal: toNumber(estimate.subtotal as never),
     discountTotal: toNumber(estimate.discountTotal as never),
     total: toNumber(estimate.total as never),
@@ -146,6 +180,7 @@ export function serializePortalEstimate(estimate: {
         ? toNumber(estimate.premiumOptionTotal as never)
         : null,
     selectedQuoteTier: estimate.selectedQuoteTier ?? null,
+    options,
     lineItems: hasDesign
       ? lineItems.filter((item) => item.name.toLowerCase().includes("installation"))
       : lineItems,

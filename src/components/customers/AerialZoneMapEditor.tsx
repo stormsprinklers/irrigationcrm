@@ -49,7 +49,7 @@ type Props = {
   onZoneRemove?: (index: number) => void;
 };
 
-const MAX_MAP_HEIGHT_PX = 448;
+const MAX_MAP_HEIGHT_PX = 360;
 
 export function AerialZoneMapEditor({
   imageUrl,
@@ -293,14 +293,14 @@ export function AerialZoneMapEditor({
       <div
         ref={outerRef}
         className={cn(
-          "relative w-full overflow-hidden rounded-md border bg-muted/20",
+          "relative w-full max-w-full min-w-0 overflow-hidden rounded-md border bg-muted/20",
           canInteract && (placingMarker ? "cursor-pointer" : "cursor-crosshair"),
           readOnly && "pointer-events-none"
         )}
         style={
           useCrop && croppedLayout
-            ? { height: croppedLayout.outerHeight, minHeight: 120 }
-            : { minHeight: 200 }
+            ? { height: croppedLayout.outerHeight, minHeight: 120, maxWidth: "100%" }
+            : { minHeight: 160, maxHeight: MAX_MAP_HEIGHT_PX, maxWidth: "100%" }
         }
         onClick={readOnly ? undefined : handleMapClick}
       >
@@ -326,8 +326,8 @@ export function AerialZoneMapEditor({
             src={imageUrl}
             alt="Property aerial"
             className={cn(
-              "block w-full select-none",
-              useCrop ? "h-full object-fill" : "max-h-[28rem] object-contain"
+              "block w-full max-w-full select-none",
+              useCrop ? "h-full object-fill" : "max-h-[min(70vw,20rem)] object-contain"
             )}
             draggable={false}
             onLoad={syncOverlaySize}

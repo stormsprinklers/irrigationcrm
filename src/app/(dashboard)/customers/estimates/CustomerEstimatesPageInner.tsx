@@ -31,6 +31,9 @@ export default function CustomerEstimatesPageInner() {
   const [estimates, setEstimates] = useState<
     Array<{
       id: string;
+      estimateNumber?: string | null;
+      displayNumber?: string | null;
+      optionCount?: number;
       status: string;
       total: number;
       createdAt: string;
@@ -109,6 +112,7 @@ export default function CustomerEstimatesPageInner() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Number</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Total</TableHead>
@@ -123,11 +127,14 @@ export default function CustomerEstimatesPageInner() {
                       href={`/estimates/${estimate.id}`}
                       className="font-medium text-primary hover:underline"
                     >
-                      <CustomerNameWithBadge
-                        name={estimate.customer.name}
-                        doNotService={estimate.customer.doNotService}
-                      />
+                      {estimate.displayNumber ?? estimate.estimateNumber ?? "—"}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <CustomerNameWithBadge
+                      name={estimate.customer.name}
+                      doNotService={estimate.customer.doNotService}
+                    />
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{estimate.status}</Badge>

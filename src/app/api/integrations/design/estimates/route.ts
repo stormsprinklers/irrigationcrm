@@ -63,6 +63,9 @@ export async function POST(request: NextRequest) {
     const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
     const status = input.status === "SENT" ? EstimateStatus.SENT : EstimateStatus.DRAFT;
 
+    const { allocateEstimateNumber } = await import("@/lib/estimates/numbering");
+    const estimateNumber = await allocateEstimateNumber(auth.companyId);
+
     const combinedLineItems = [
       ...input.lineItems,
       ...(input.premiumOption?.lineItems ?? []),
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
         description: item.description ?? null,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
+        unit: "each",
         total,
         sortOrder: index,
       };
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
         companyId: auth.companyId,
         customerId: input.customerId,
         propertyId: input.propertyId ?? null,
+        estimateNumber,
         status,
         expiresAt,
         depositRequired: true,
@@ -108,8 +113,34 @@ export async function POST(request: NextRequest) {
         subtotal: totals.subtotal,
         discountTotal: totals.discountTotal,
         total: totals.total,
-        lineItems: { create: lineItemsData },
       },
+    });
+
+    const option = await prisma.estimateOption.create({
+      data: {
+        estimateId: estimate.id,
+        letter: null,
+        label: "Option",
+        sortOrder: 0,
+        subtotal: totals.subtotal,
+        discountTotal: totals.discountTotal,
+        total: totals.total,
+      },
+    });
+
+    if (lineItemsData.length) {
+      await prisma.estimateLineItem.createMany({
+        data: lineItemsData.map((item) => ({
+          ...item,
+          estimateId: estimate.id,
+          optionId: option.id,
+        })),
+      });
+    }
+
+    await prisma.estimate.update({
+      where: { id: estimate.id },
+      data: { selectedOptionId: option.id },
     });
 
     if (input.propertyId && input.designProjectId) {

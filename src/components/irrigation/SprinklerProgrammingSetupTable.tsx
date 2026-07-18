@@ -1,6 +1,7 @@
 "use client";
 
 import type { ControllerProgram, ControllerProgramGuide } from "@/lib/irrigation/runtime-engine";
+import { cn } from "@/lib/utils";
 
 const PROGRAM_ROW_TINT: Record<string, string> = {
   A: "bg-white",
@@ -45,7 +46,7 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
   const startTimeHeaders = Array.from({ length: maxStartTimes }, (_, i) => `Start Time ${i + 1}`);
 
   return (
-    <div className={className}>
+    <div className={cn("min-w-0 max-w-full", className)}>
       <div className="mb-3">
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
           Sprinkler Programming Setup
@@ -55,8 +56,57 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-md border border-slate-200 shadow-sm">
-        <table className="w-full min-w-[44rem] border-collapse text-sm">
+      {/* Mobile: stacked cards — never forces horizontal page scroll */}
+      <div className="space-y-3 md:hidden">
+        {programs.map((program) => {
+          const tint = PROGRAM_ROW_TINT[program.id] ?? "bg-white";
+          return (
+            <div
+              key={program.id}
+              className={cn("overflow-hidden rounded-md border border-slate-200 shadow-sm", tint)}
+            >
+              <div className="border-b border-slate-200 bg-slate-800 px-3 py-2 text-white">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="text-xl font-bold tracking-tight">Program {program.id}</span>
+                  <span className="text-sm text-slate-200">{program.daysLabel}</span>
+                </div>
+                {program.startTimes.length > 0 ? (
+                  <p className="mt-1 text-xs text-slate-300">
+                    Starts: {program.startTimes.join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+              <ul className="divide-y divide-slate-200">
+                {program.zones.map((zone) => (
+                  <li key={`${program.id}-${zone.zoneId}`} className="px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">
+                          <span className="tabular-nums text-slate-500">#{zone.stationNumber}</span>{" "}
+                          {zone.name}
+                        </p>
+                        {zone.establishmentNote ? (
+                          <p className="mt-0.5 text-xs text-amber-700">{zone.establishmentNote}</p>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 text-right text-sm tabular-nums text-slate-800">
+                        <div>{formatRuntime(zone)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatGallons(zone.gallonsPerEvent)}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: full table, contained so it cannot widen the page */}
+      <div className="hidden max-w-full overflow-x-auto rounded-md border border-slate-200 shadow-sm md:block">
+        <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr className="bg-slate-800 text-white">
               <th className="px-3 py-2.5 text-center font-semibold">Program</th>

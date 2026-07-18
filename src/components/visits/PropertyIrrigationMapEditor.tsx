@@ -335,11 +335,11 @@ export function PropertyIrrigationMapEditor({
   const isEditing = editing && allowInlineEdit;
 
   return (
-    <section className="overflow-hidden rounded-lg border border-border bg-white">
+    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold">Irrigation map</h2>
-          <span className="text-sm text-muted-foreground">· {propertyName}</span>
+          <span className="truncate text-sm text-muted-foreground">· {propertyName}</span>
           {irrigationMapStatus === "PUBLISHED" ? (
             <Badge variant="secondary" className="text-[10px]">
               Published
@@ -356,7 +356,7 @@ export function PropertyIrrigationMapEditor({
           ) : null}
         </div>
         {allowInlineEdit ? (
-          <div className="flex gap-2">
+          <div className="flex max-w-full flex-wrap gap-2">
             {aerialUrl ? (
               <>
                 <Button

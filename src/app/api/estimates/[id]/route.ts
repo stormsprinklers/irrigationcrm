@@ -29,6 +29,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const body = await request.json();
     const newStatus = body.status !== undefined ? (body.status as EstimateStatus) : undefined;
+
+    if (newStatus === EstimateStatus.APPROVED && !existing.signatureBlobUrl) {
+      return NextResponse.json(
+        { error: "Customer signature is required to approve an estimate" },
+        { status: 400 }
+      );
+    }
+
     await prisma.estimate.update({
       where: { id },
       data: {

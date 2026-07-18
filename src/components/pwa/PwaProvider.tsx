@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Bell, Share, X } from "lucide-react";
 import { toast } from "sonner";
@@ -17,9 +18,18 @@ const DISMISS_PUSH_KEY = "radar-pwa-push-dismissed";
 
 type PushState = "loading" | "unsupported" | "needs-install" | "prompt" | "subscribed" | "denied";
 
+/** Customer-facing / public paths must never show Radar install or push prompts. */
+function isEmployeeAppPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  const publicPrefixes = ["/portal", "/pay", "/book", "/booking", "/r/", "/login", "/api/"];
+  return !publicPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+}
+
 export function PwaProvider() {
+  const pathname = usePathname();
   const { status } = useSession();
   const authenticated = status === "authenticated";
+  const employeeSurface = isEmployeeAppPath(pathname);
   const [standalone, setStandalone] = useState(false);
   const [ios, setIos] = useState(false);
   const [showInstall, setShowInstall] = useState(false);
@@ -37,13 +47,14 @@ export function PwaProvider() {
   );
 
   useEffect(() => {
+    if (!employeeSurface) return;
     setStandalone(isStandaloneDisplay());
     setIos(isIosDevice());
     void registerRadarServiceWorker();
-  }, []);
+  }, [employeeSurface]);
 
   useEffect(() => {
-    if (!authenticated || standalone || typeof window === "undefined") {
+    if (!authenticated || !employeeSurface || standalone || typeof window === "undefined") {
       setShowInstall(false);
       return;
     }
@@ -51,14 +62,12 @@ export function PwaProvider() {
       setShowInstall(false);
       return;
     }
-    // iOS cannot install programmatically — guide Share → Add to Home Screen.
-    // Also show a light tip on other mobile browsers.
     const mobile = ios || /Android/i.test(navigator.userAgent);
     setShowInstall(mobile);
-  }, [authenticated, standalone, ios]);
+  }, [authenticated, employeeSurface, standalone, ios]);
 
   const refreshPushState = useCallback(async () => {
-    if (!authenticated || !canUseNotifications) {
+    if (!authenticated || !employeeSurface || !canUseNotifications) {
       setPushState(canUseNotifications ? "loading" : "unsupported");
       return;
     }
@@ -84,14 +93,14 @@ export function PwaProvider() {
     } catch {
       setPushState("unsupported");
     }
-  }, [authenticated, canUseNotifications, ios, standalone]);
+  }, [authenticated, employeeSurface, canUseNotifications, ios, standalone]);
 
   useEffect(() => {
     void refreshPushState();
   }, [refreshPushState]);
 
   useEffect(() => {
-    if (!authenticated) {
+    if (!authenticated || !employeeSurface) {
       setShowPushPrompt(false);
       return;
     }
@@ -100,7 +109,7 @@ export function PwaProvider() {
       return;
     }
     setShowPushPrompt(pushState === "prompt" || pushState === "needs-install");
-  }, [authenticated, pushState]);
+  }, [authenticated, employeeSurface, pushState]);
 
   async function enablePush() {
     if (!canUseNotifications) {
@@ -169,7 +178,7 @@ export function PwaProvider() {
     }
   }
 
-  if (!authenticated) return null;
+  if (!authenticated || !employeeSurface) return null;
 
   return (
     <>

@@ -36,7 +36,10 @@ export const visitInclude = {
   serviceArea: { select: { id: true, name: true, color: true } },
   assignedUser: { select: { id: true, name: true, color: true, photoUrl: true } },
   crew: { select: { id: true, name: true, color: true } },
-  lineItems: true,
+  lineItems: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { priceBookItem: { select: { type: true, unit: true } } },
+  },
   discounts: true,
 } satisfies Prisma.VisitInclude;
 

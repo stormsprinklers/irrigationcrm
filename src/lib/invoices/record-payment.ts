@@ -29,8 +29,12 @@ function resolveInvoiceStatus(params: {
 export type RecordInvoicePaymentParams = {
   invoiceId: string;
   amount: number;
+  method?: "STRIPE" | "CASH" | "CHECK" | "OTHER";
   stripePaymentIntentId?: string | null;
   stripeCheckoutSessionId?: string | null;
+  recordedByUserId?: string | null;
+  /** Stable key from offline clients so retries do not create duplicate payments. */
+  clientIdempotencyKey?: string | null;
 };
 
 export type RecordInvoicePaymentResult = {
@@ -48,6 +52,25 @@ export async function recordInvoicePayment(
   if (params.stripePaymentIntentId) {
     const existing = await prisma.payment.findFirst({
       where: { stripePaymentIntentId: params.stripePaymentIntentId },
+    });
+    if (existing) {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id: existing.invoiceId },
+        select: { status: true, id: true },
+      });
+      return {
+        recorded: false,
+        alreadyRecorded: true,
+        invoiceStatus: invoice?.status ?? "PAID",
+        invoiceId: existing.invoiceId,
+      };
+    }
+  }
+
+  const idempotencyKey = params.clientIdempotencyKey?.trim() || null;
+  if (idempotencyKey) {
+    const existing = await prisma.payment.findFirst({
+      where: { clientIdempotencyKey: idempotencyKey },
     });
     if (existing) {
       const invoice = await prisma.invoice.findUnique({
@@ -90,8 +113,9 @@ export async function recordInvoicePayment(
       data: {
         invoiceId: invoice.id,
         amount: params.amount,
-        method: "STRIPE",
+        method: params.method ?? "STRIPE",
         stripePaymentIntentId: params.stripePaymentIntentId ?? null,
+        clientIdempotencyKey: idempotencyKey,
       },
     }),
     prisma.invoice.update({
@@ -108,6 +132,22 @@ export async function recordInvoicePayment(
       },
     }),
   ]);
+
+  if (params.method === "CASH" || params.method === "CHECK") {
+    const { notifyCashCheckPayment } = await import("@/lib/notifications/payment-events");
+    await notifyCashCheckPayment({
+      companyId: invoice.companyId,
+      invoiceId: invoice.id,
+      visitId: invoice.visitId,
+      amount: params.amount,
+      method: params.method,
+      customerName: invoice.customer.name,
+      invoiceNumber: invoice.invoiceNumber,
+      recordedByUserId: params.recordedByUserId ?? null,
+    }).catch((err) => {
+      console.error("Cash/check admin notify failed:", err);
+    });
+  }
 
   if (invoice.visitId && nextStatus === "PAID") {
     const visit = await prisma.visit.findFirst({

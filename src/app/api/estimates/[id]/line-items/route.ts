@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { ensureEstimateOptions } from "@/lib/estimates/options";
 import { getEstimateForCompany, recalculateEstimateTotals } from "@/lib/estimates/queries";
 import { buildLineItemFromPriceBook } from "@/lib/price-book/pricing";
 import { prisma } from "@/lib/prisma";
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     let description = body.description ?? null;
     let unitPrice = Number(body.unitPrice ?? 0);
     let priceBookItemId = body.priceBookItemId ?? null;
+    let unit = typeof body.unit === "string" && body.unit.trim() ? body.unit.trim() : "each";
     const quantity = Number(body.quantity ?? 1);
 
     if (body.priceBookItemId) {
@@ -47,26 +49,42 @@ export async function POST(request: NextRequest, { params }: Params) {
       description = fromBook.description ?? description;
       unitPrice = fromBook.unitPrice;
       priceBookItemId = fromBook.priceBookItemId;
+      unit = fromBook.unit || unit;
     }
 
     if (!name) return badRequestResponse("name is required");
 
+    await ensureEstimateOptions(id);
+    const estimate = await prisma.estimate.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { options: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const optionId =
+      (typeof body.optionId === "string" && body.optionId) ||
+      estimate.selectedOptionId ||
+      estimate.options[0]?.id;
+    if (!optionId) return badRequestResponse("No estimate option available");
+
     await prisma.estimateLineItem.create({
       data: {
         estimateId: id,
+        optionId,
         priceBookItemId,
         name,
         description,
         quantity,
         unitPrice,
+        unit,
         total: computeLineItemTotal(quantity, unitPrice),
         sortOrder: body.sortOrder ?? 0,
       },
     });
 
     await recalculateEstimateTotals(id);
-    const estimate = await getEstimateForCompany(user.companyId, id);
-    return NextResponse.json(estimate, { status: 201 });
+    const updated = await getEstimateForCompany(user.companyId, id);
+    return NextResponse.json(updated, { status: 201 });
   } catch {
     return unauthorizedResponse();
   }
@@ -92,6 +110,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data: {
         ...(body.name !== undefined ? { name: String(body.name) } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
+        ...(body.unit !== undefined ? { unit: String(body.unit).trim() || "each" } : {}),
+        ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) } : {}),
         quantity,
         unitPrice,
         total: computeLineItemTotal(quantity, unitPrice),

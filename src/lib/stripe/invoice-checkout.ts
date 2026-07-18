@@ -28,6 +28,8 @@ export async function createInvoiceCheckoutSession(params: {
   const stripe = getStripeClient();
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    // Card only — skips Stripe Link / wallet chooser so field checkout opens on the card form.
+    payment_method_types: ["card"],
     customer_email: params.customerEmail ?? undefined,
     line_items: [
       {

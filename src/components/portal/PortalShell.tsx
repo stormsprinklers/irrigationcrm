@@ -24,10 +24,19 @@ type Props = {
   companyName: string;
   emailLogoUrl?: string | null;
   features: Features;
+  /** Public estimate links — branding only, no portal nav / sign-out. */
+  guest?: boolean;
   children: React.ReactNode;
 };
 
-export function PortalShell({ slug, companyName, emailLogoUrl, features, children }: Props) {
+export function PortalShell({
+  slug,
+  companyName,
+  emailLogoUrl,
+  features,
+  guest = false,
+  children,
+}: Props) {
   const pathname = usePathname();
   const base = `/portal/${slug}`;
   const logoUrl = resolvePortalLogoUrl(emailLogoUrl);
@@ -50,7 +59,7 @@ export function PortalShell({ slug, companyName, emailLogoUrl, features, childre
     <div className="portal-shell min-h-screen bg-[#f8fafc]">
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
         <div className="portal-container flex items-center justify-between gap-4 py-3">
-          <Link href={base} className="flex shrink-0 items-center">
+          <Link href={guest ? "#" : base} className="flex shrink-0 items-center" onClick={guest ? (e) => e.preventDefault() : undefined}>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -62,41 +71,45 @@ export function PortalShell({ slug, companyName, emailLogoUrl, features, childre
               <span className="font-display text-lg uppercase tracking-wide text-storm-navy">{companyName}</span>
             )}
           </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-storm-navy hover:text-storm-coral"
-            onClick={() => void logout()}
-          >
-            <LogOut className="mr-1 h-4 w-4" />
-            Sign out
-          </Button>
+          {!guest ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-storm-navy hover:text-storm-coral"
+              onClick={() => void logout()}
+            >
+              <LogOut className="mr-1 h-4 w-4" />
+              Sign out
+            </Button>
+          ) : null}
         </div>
       </header>
 
       <div className="portal-container py-6">
-        <nav className="mb-6 flex flex-wrap gap-2">
-          {nav.map((item) => {
-            const active =
-              item.href === base ? pathname === base : pathname.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "inline-flex min-h-11 items-center gap-1.5 rounded px-3 py-2 text-sm font-semibold transition-colors",
-                  active
-                    ? "bg-storm-coral text-white"
-                    : "border border-storm-ice bg-white text-storm-navy hover:bg-storm-ice/60"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        {!guest ? (
+          <nav className="mb-6 flex flex-wrap gap-2">
+            {nav.map((item) => {
+              const active =
+                item.href === base ? pathname === base : pathname.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "inline-flex min-h-11 items-center gap-1.5 rounded px-3 py-2 text-sm font-semibold transition-colors",
+                    active
+                      ? "bg-storm-coral text-white"
+                      : "border border-storm-ice bg-white text-storm-navy hover:bg-storm-ice/60"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        ) : null}
         {children}
       </div>
     </div>

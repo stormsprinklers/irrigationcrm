@@ -1,0 +1,1 @@
+ALTER TABLE "EstimateLineItem" ADD COLUMN IF NOT EXISTS "unit" TEXT NOT NULL DEFAULT 'each';

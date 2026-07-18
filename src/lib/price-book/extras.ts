@@ -61,9 +61,17 @@ export async function listTemplates(companyId: string) {
 export async function getTemplateLineItemsForEstimate(companyId: string, templateId: string) {
   const template = await prisma.estimateTemplate.findFirst({
     where: { id: templateId, companyId },
-    include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        include: { priceBookItem: { select: { unit: true } } },
+      },
+    },
   });
-  return template?.lineItems ?? [];
+  return (template?.lineItems ?? []).map((item) => ({
+    ...item,
+    unit: item.priceBookItem?.unit?.trim() || "each",
+  }));
 }
 
 export function serializePricingForm(

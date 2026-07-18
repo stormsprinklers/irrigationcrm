@@ -1,5 +1,17 @@
+export type EstimateOptionDTO = {
+  id: string;
+  letter: string | null;
+  label: string;
+  sortOrder: number;
+  subtotal: number;
+  discountTotal: number;
+  total: number;
+  displayNumber: string;
+};
+
 export type EstimateDTO = {
   id: string;
+  estimateNumber: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;
@@ -8,6 +20,7 @@ export type EstimateDTO = {
   signatureBlobUrl: string | null;
   signedAt: string | null;
   approvedAt: string | null;
+  selectedOptionId: string | null;
   subtotal: number;
   discountTotal: number;
   total: number;
@@ -20,20 +33,25 @@ export type EstimateDTO = {
     email: string | null;
     doNotService: boolean;
   };
-  property: { id: string; name: string; address: string | null } | null;
+  property: { id: string; name: string; address: string | null; city: string | null; state: string | null; zip: string | null } | null;
   visit: { id: string; title: string; startAt: string } | null;
+  options: EstimateOptionDTO[];
   lineItems: Array<{
     id: string;
+    optionId: string | null;
     name: string;
     description: string | null;
     quantity: number;
     unitPrice: number;
+    unit: string;
+    itemType: string | null;
     total: number;
     sortOrder: number;
     priceBookItemId: string | null;
   }>;
   discounts: Array<{
     id: string;
+    optionId: string | null;
     label: string | null;
     type: "PERCENT" | "FIXED";
     amount: number;
@@ -64,5 +82,8 @@ export type EstimateDTO = {
 
 export type EstimateListItem = Pick<
   EstimateDTO,
-  "id" | "status" | "total" | "createdAt" | "expiresAt" | "customer" | "visit"
->;
+  "id" | "estimateNumber" | "status" | "total" | "createdAt" | "expiresAt" | "customer" | "visit"
+> & {
+  optionCount: number;
+  displayNumber: string | null;
+};

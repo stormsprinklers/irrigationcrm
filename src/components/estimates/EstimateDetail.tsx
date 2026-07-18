@@ -10,6 +10,7 @@ import {
   Copy,
   FileText,
   Loader2,
+  Plus,
   Send,
   Trash2,
   Upload,
@@ -23,14 +24,28 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
 
+type EstimateOptionData = {
+  id: string;
+  letter: string | null;
+  label: string;
+  sortOrder: number;
+  subtotal: number;
+  discountTotal: number;
+  total: number;
+  displayNumber: string;
+};
+
 type EstimateData = {
   id: string;
+  estimateNumber: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;
+  selectedOptionId: string | null;
   subtotal: number;
   discountTotal: number;
   total: number;
@@ -45,16 +60,20 @@ type EstimateData = {
   };
   property: { id: string; name: string; address: string | null } | null;
   visit: { id: string; title: string; startAt: string } | null;
+  options: EstimateOptionData[];
   lineItems: Array<{
     id: string;
+    optionId: string | null;
     name: string;
     description: string | null;
     quantity: number;
     unitPrice: number;
+    unit?: string;
     total: number;
   }>;
   discounts: Array<{
     id: string;
+    optionId: string | null;
     label: string | null;
     type: "PERCENT" | "FIXED";
     amount: number;
@@ -91,6 +110,7 @@ function formatCurrency(value: number) {
 function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise<void>; saving: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  const hasInk = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -98,21 +118,31 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.strokeStyle = "#111";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
   }, []);
 
   function getPoint(e: React.MouseEvent | React.TouchEvent) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     if ("touches" in e) {
       const touch = e.touches[0];
-      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+      return {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY,
+      };
     }
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
   }
 
   function startDraw(e: React.MouseEvent | React.TouchEvent) {
+    e.preventDefault();
     drawing.current = true;
     const ctx = canvasRef.current?.getContext("2d");
     const point = getPoint(e);
@@ -122,10 +152,12 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
 
   function draw(e: React.MouseEvent | React.TouchEvent) {
     if (!drawing.current) return;
+    e.preventDefault();
     const ctx = canvasRef.current?.getContext("2d");
     const point = getPoint(e);
     ctx?.lineTo(point.x, point.y);
     ctx?.stroke();
+    hasInk.current = true;
   }
 
   function stopDraw() {
@@ -136,21 +168,29 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk.current = false;
   }
 
   async function save() {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (!hasInk.current) {
+      toast.error("Customer signature is required");
+      return;
+    }
     await onSave(canvas.toDataURL("image/png"));
   }
 
   return (
     <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Have the customer sign with their finger or stylus, then save to approve.
+      </p>
       <canvas
         ref={canvasRef}
-        width={500}
-        height={160}
-        className="w-full rounded-md border border-border bg-white touch-none"
+        width={700}
+        height={240}
+        className="h-48 w-full touch-none rounded-md border border-border bg-white sm:h-56"
         onMouseDown={startDraw}
         onMouseMove={draw}
         onMouseUp={stopDraw}
@@ -164,7 +204,7 @@ function SignaturePad({ onSave, saving }: { onSave: (dataUrl: string) => Promise
           Clear
         </Button>
         <Button type="button" size="sm" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save signature"}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve with signature"}
         </Button>
       </div>
     </div>
@@ -186,10 +226,18 @@ export function EstimateDetail({ estimateId }: Props) {
   const [copyVisitId, setCopyVisitId] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [activeOptionId, setActiveOptionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/estimates/${estimateId}`);
-    if (res.ok) setEstimate(await res.json());
+    if (res.ok) {
+      const data = (await res.json()) as EstimateData;
+      setEstimate(data);
+      setActiveOptionId((current) => {
+        if (current && data.options.some((o) => o.id === current)) return current;
+        return data.selectedOptionId ?? data.options[0]?.id ?? null;
+      });
+    }
   }, [estimateId]);
 
   useEffect(() => {
@@ -210,13 +258,15 @@ export function EstimateDetail({ estimateId }: Props) {
           description: item.description,
           unitPrice: Number(item.unitPrice),
           quantity: 1,
+          optionId: activeOptionId,
         }),
       });
       if (!res.ok) {
         toast.error("Failed to add line item");
         return;
       }
-      setEstimate(await res.json());
+      const data = (await res.json()) as EstimateData;
+      setEstimate(data);
     } finally {
       setSaving(false);
     }
@@ -246,6 +296,7 @@ export function EstimateDetail({ estimateId }: Props) {
           label: discountLabel || null,
           type: discountType,
           amount: Number(discountAmount),
+          optionId: activeOptionId,
         }),
       });
       if (!res.ok) {
@@ -326,11 +377,12 @@ export function EstimateDetail({ estimateId }: Props) {
         body: JSON.stringify({ signature: dataUrl }),
       });
       if (!res.ok) {
-        toast.error("Failed to save signature");
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(data.error ?? "Failed to save signature");
         return;
       }
       setEstimate(await res.json());
-      toast.success("Signature saved");
+      toast.success("Estimate approved with signature");
     } finally {
       setSaving(false);
     }
@@ -339,7 +391,7 @@ export function EstimateDetail({ estimateId }: Props) {
   async function copyToVisit(target: "this_visit" | "new_visit", visitIdOverride?: string) {
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { target };
+      const body: Record<string, unknown> = { target, optionId: activeOptionId };
       if (target === "this_visit") {
         const vid = visitIdOverride ?? copyVisitId.trim() ?? estimate?.visit?.id;
         if (!vid) {
@@ -407,6 +459,75 @@ export function EstimateDetail({ estimateId }: Props) {
     );
   }
 
+  const activeOption =
+    estimate.options.find((o) => o.id === activeOptionId) ?? estimate.options[0] ?? null;
+  const optionLineItems = estimate.lineItems.filter(
+    (item) => !activeOption || item.optionId === activeOption.id || !item.optionId
+  );
+  const optionDiscounts = estimate.discounts.filter(
+    (d) => !activeOption || d.optionId === activeOption.id || !d.optionId
+  );
+  const optionSubtotal = activeOption?.subtotal ?? estimate.subtotal;
+  const optionDiscountTotal = activeOption?.discountTotal ?? estimate.discountTotal;
+  const optionTotal = activeOption?.total ?? estimate.total;
+
+  async function selectOption(optionId: string) {
+    setActiveOptionId(optionId);
+    const res = await fetch(`/api/estimates/${estimateId}/options`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ optionId, select: true }),
+    });
+    if (res.ok) setEstimate(await res.json());
+  }
+
+  async function addOption(mode: "fresh" | "duplicate") {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/options`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          duplicateFromOptionId: mode === "duplicate" ? activeOptionId : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to add option");
+        return;
+      }
+      const data = (await res.json()) as EstimateData;
+      setEstimate(data);
+      const newest = data.options[data.options.length - 1];
+      if (newest) setActiveOptionId(newest.id);
+      toast.success(mode === "duplicate" ? "Option duplicated" : "Blank option added");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeOption(optionId: string) {
+    if (!confirm("Delete this option and its line items?")) return;
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `/api/estimates/${estimateId}/options?optionId=${encodeURIComponent(optionId)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to delete option");
+        return;
+      }
+      const data = (await res.json()) as EstimateData;
+      setEstimate(data);
+      setActiveOptionId(data.selectedOptionId ?? data.options[0]?.id ?? null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -418,12 +539,17 @@ export function EstimateDetail({ estimateId }: Props) {
             </Link>
           </Button>
           <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {activeOption?.displayNumber ?? estimate.estimateNumber ?? "Estimate"}
+            </h1>
+            <Badge variant="outline">{estimate.status}</Badge>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <CustomerNameWithBadge
               name={estimate.customer.name}
               doNotService={estimate.customer.doNotService}
-              nameClassName="text-2xl font-semibold"
+              nameClassName="text-sm font-medium"
             />
-            <Badge variant="outline">{estimate.status}</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             {estimate.expiresAt
@@ -466,6 +592,63 @@ export function EstimateDetail({ estimateId }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-3">
+              <CardTitle className="text-base">Options</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving || !activeOptionId}
+                  onClick={() => addOption("duplicate")}
+                >
+                  <Copy className="h-4 w-4" />
+                  Duplicate current
+                </Button>
+                <Button variant="outline" size="sm" disabled={saving} onClick={() => addOption("fresh")}>
+                  <Plus className="h-4 w-4" />
+                  New blank
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {estimate.options.map((option) => {
+                  const selected = option.id === activeOption?.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectOption(option.id)}
+                      className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : "hover:bg-muted/60"
+                      }`}
+                    >
+                      <div className="font-semibold">{option.displayNumber}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {option.label} · {formatCurrency(option.total)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeOption && estimate.options.length > 1 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  disabled={saving}
+                  onClick={() => removeOption(activeOption.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete {activeOption.displayNumber}
+                </Button>
+              ) : null}
+            </CardContent>
+          </Card>
+
           {estimate.designProjectId ? (
             <EstimateDesignSection
               estimateId={estimate.id}
@@ -488,21 +671,33 @@ export function EstimateDetail({ estimateId }: Props) {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-              <CardTitle className="text-base">Line items</CardTitle>
+              <CardTitle className="text-base">
+                Line items
+                {activeOption ? (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({activeOption.displayNumber})
+                  </span>
+                ) : null}
+              </CardTitle>
               <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)} disabled={saving}>
                 Add item
               </Button>
             </CardHeader>
             <CardContent className="space-y-3">
-              {estimate.lineItems.length === 0 ? (
+              {optionLineItems.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No line items yet.</p>
               ) : (
-                estimate.lineItems.map((item) => (
+                optionLineItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                     <div>
                       <div className="font-medium">{item.name}</div>
                       <div className="text-muted-foreground">
-                        {item.quantity} × {formatCurrency(item.unitPrice)}
+                        {formatEstimateLineQtyPrice({
+                          quantity: item.quantity,
+                          unitPrice: item.unitPrice,
+                          unit: item.unit,
+                          currency: formatCurrency,
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -517,17 +712,17 @@ export function EstimateDetail({ estimateId }: Props) {
               <div className="border-t pt-3 text-sm">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>{formatCurrency(estimate.subtotal)}</span>
+                  <span>{formatCurrency(optionSubtotal)}</span>
                 </div>
-                {estimate.discountTotal > 0 && (
+                {optionDiscountTotal > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Discounts</span>
-                    <span>-{formatCurrency(estimate.discountTotal)}</span>
+                    <span>-{formatCurrency(optionDiscountTotal)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
-                  <span>{formatCurrency(estimate.total)}</span>
+                  <span>{formatCurrency(optionTotal)}</span>
                 </div>
               </div>
             </CardContent>
@@ -561,7 +756,7 @@ export function EstimateDetail({ estimateId }: Props) {
                   Add
                 </Button>
               </form>
-              {estimate.discounts.map((d) => (
+              {optionDiscounts.map((d) => (
                 <div key={d.id} className="flex items-center justify-between rounded-md border p-3 text-sm">
                   <span>
                     {d.label ?? "Discount"} — {d.type === "PERCENT" ? `${d.amount}%` : formatCurrency(d.amount)}
@@ -663,7 +858,7 @@ export function EstimateDetail({ estimateId }: Props) {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Signature</CardTitle>
+              <CardTitle className="text-base">Customer signature</CardTitle>
             </CardHeader>
             <CardContent>
               {estimate.signatureBlobUrl ? (
@@ -683,6 +878,11 @@ export function EstimateDetail({ estimateId }: Props) {
               ) : (
                 <SignaturePad onSave={saveSignature} saving={saving} />
               )}
+              {!estimate.signatureBlobUrl ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A signature is required before this estimate can be approved.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

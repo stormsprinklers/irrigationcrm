@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DiscountType } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { ensureEstimateOptions } from "@/lib/estimates/options";
 import { getEstimateForCompany, recalculateEstimateTotals } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -23,15 +24,25 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
-    const estimate = await prisma.estimate.findFirst({ where: { id, companyId: user.companyId } });
+    const estimate = await prisma.estimate.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { options: { orderBy: { sortOrder: "asc" } } },
+    });
     if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
     if (!body.type || body.amount === undefined) return badRequestResponse("type and amount required");
 
+    await ensureEstimateOptions(id);
+    const optionId =
+      (typeof body.optionId === "string" && body.optionId) ||
+      estimate.selectedOptionId ||
+      estimate.options[0]?.id;
+
     await prisma.discount.create({
       data: {
         estimateId: id,
+        optionId: optionId ?? null,
         label: body.label ?? null,
         type: body.type as DiscountType,
         amount: Number(body.amount),

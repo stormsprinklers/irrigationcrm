@@ -80,7 +80,12 @@ export default function CustomerInvoicesPage() {
     if (action === "copy") {
       const invoice = invoices.find((inv) => inv.id === id);
       if (!invoice) return;
-      const payLink = `${window.location.origin}/pay/${invoice.publicToken}`;
+      const payBase =
+        (process.env.NEXT_PUBLIC_PAY_URL || process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(
+          /\/$/,
+          ""
+        );
+      const payLink = `${payBase}/pay/${invoice.publicToken}`;
       await navigator.clipboard.writeText(payLink);
       toast.success("Pay link copied");
       return;
