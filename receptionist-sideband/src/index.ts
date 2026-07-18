@@ -94,8 +94,11 @@ class CallBridge {
   private session: SessionBootstrap | null = null;
   private closed = false;
   private fatalOpenAi = false;
+  /** While the model is speaking, ignore Twilio mic audio to avoid echo false-turns. */
+  private assistantSpeaking = false;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingFnArgs: Record<string, string> = {};
+  private leavingForHandoff = false;
 
   constructor(private twilioWs: WebSocket) {}
 
@@ -128,6 +131,7 @@ class CallBridge {
     }
 
     if (msg.event === "media" && this.openai?.readyState === WebSocket.OPEN) {
+      if (this.assistantSpeaking || this.leavingForHandoff) return;
       const media = msg.media as { payload: string };
       // Twilio payload is already base64 μ-law @ 8kHz — pass through as audio/pcmu.
       this.openai.send(
@@ -171,11 +175,12 @@ class CallBridge {
           audio: {
             input: {
               format: { type: "audio/pcmu" },
+              // Longer silence + higher threshold reduces false "caller spoke" turns from line noise/echo.
               turn_detection: {
                 type: "server_vad",
-                threshold: 0.5,
-                prefix_padding_ms: 300,
-                silence_duration_ms: 600,
+                threshold: 0.7,
+                prefix_padding_ms: 400,
+                silence_duration_ms: 900,
               },
               transcription: { model: "whisper-1" },
             },
@@ -196,7 +201,7 @@ class CallBridge {
         response: {
           output_modalities: ["audio"],
           instructions:
-            "Greet the caller now in English with the required automation disclosure.",
+            "Greet the caller now in English with the required automation disclosure. Then stop and wait.",
         },
       })
     );
@@ -210,11 +215,20 @@ class CallBridge {
     });
     this.openai.on("close", (code, reason) => {
       log("OpenAI socket closed", code, reason?.toString?.() || reason);
-      if (!this.closed) {
+      if (!this.closed && !this.leavingForHandoff) {
         log("OpenAI closed; falling back to voicemail", { fatal: this.fatalOpenAi });
         void this.failToVoicemail();
       }
     });
+  }
+
+  private clearInputBuffer() {
+    if (this.openai?.readyState !== WebSocket.OPEN) return;
+    try {
+      this.openai.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+    } catch {
+      /* ignore */
+    }
   }
 
   private async onOpenAIMessage(raw: string) {
@@ -238,12 +252,34 @@ class CallBridge {
       return;
     }
 
+    if (type === "response.created" || type === "output_audio_buffer.started") {
+      this.assistantSpeaking = true;
+      this.clearInputBuffer();
+      return;
+    }
+
+    if (
+      type === "response.done" ||
+      type === "response.output_audio.done" ||
+      type === "output_audio_buffer.stopped" ||
+      type === "response.cancelled"
+    ) {
+      // Keep suppressing briefly after audio ends so tail echo doesn't trigger a turn.
+      if (type === "response.done" || type === "response.cancelled") {
+        setTimeout(() => {
+          this.assistantSpeaking = false;
+          this.clearInputBuffer();
+        }, 400);
+      }
+      return;
+    }
+
     if (
       (type === "response.output_audio.delta" || type === "response.audio.delta") &&
       this.streamSid
     ) {
+      this.assistantSpeaking = true;
       const delta = String(event.delta || "");
-      // audio/pcmu: delta is already base64 μ-law — forward to Twilio as-is.
       this.twilioWs.send(
         JSON.stringify({
           event: "media",
@@ -325,16 +361,31 @@ class CallBridge {
         },
       })
     );
+
+    const handoff = name === "transfer_to_human" || name === "fallback_voicemail";
+    const ok = Boolean((result as { ok?: boolean } | null)?.ok);
+
+    if (handoff && ok) {
+      // Do not speak again — Twilio is leaving the Media Stream for dial/voicemail.
+      this.leavingForHandoff = true;
+      this.assistantSpeaking = false;
+      setTimeout(() => {
+        this.shutdown(name === "transfer_to_human" ? "TRANSFERRED" : "VOICEMAIL");
+      }, 750);
+      return;
+    }
+
     this.openai.send(
       JSON.stringify({
         type: "response.create",
-        response: { output_modalities: ["audio"] },
+        response: {
+          output_modalities: ["audio"],
+          instructions: handoff
+            ? "Briefly apologize that transfer failed and offer voicemail or to try again."
+            : "Continue the conversation. If you just asked a question, stop and wait for the caller.",
+        },
       })
     );
-
-    if (name === "transfer_to_human" || name === "fallback_voicemail") {
-      this.shutdown(name === "transfer_to_human" ? "TRANSFERRED" : "VOICEMAIL");
-    }
   }
 
   private async softTimeout() {
@@ -345,13 +396,17 @@ class CallBridge {
         reason: "max_duration",
       })) as { ok?: boolean };
       if (!result?.ok) await this.failToVoicemail();
-      else this.shutdown("TRANSFERRED");
+      else {
+        this.leavingForHandoff = true;
+        setTimeout(() => this.shutdown("TRANSFERRED"), 750);
+      }
     } catch {
       await this.failToVoicemail();
     }
   }
 
   private async failToVoicemail() {
+    if (this.leavingForHandoff) return;
     if (!this.session) {
       this.twilioWs.close();
       return;
@@ -360,6 +415,7 @@ class CallBridge {
       await callTool(this.session.toolBearer, "fallback_voicemail", {
         reason: "sideband_failure",
       });
+      this.leavingForHandoff = true;
     } catch (err) {
       log("Voicemail fallback failed", err);
     }

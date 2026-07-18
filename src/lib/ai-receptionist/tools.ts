@@ -870,21 +870,27 @@ async function runTool(
         where: { id: call.nodeId, flowId: call.flowId },
       });
       const config = (node?.config ?? {}) as { transferNodeId?: string };
-      const transferNodeId = config.transferNodeId;
-      if (!transferNodeId) {
-        return { ok: false, error: "No transfer destination configured", code: "NO_TRANSFER" };
-      }
-      const url = `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(call.flowId)}&goto=${encodeURIComponent(transferNodeId)}`;
+      const transferNodeId = config.transferNodeId?.trim();
+      const url = transferNodeId
+        ? `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(call.flowId)}&goto=${encodeURIComponent(transferNodeId)}`
+        : `${appBaseUrl()}/api/twilio/voice/ai-receptionist/transfer-agents?companyId=${encodeURIComponent(ctx.companyId)}`;
       await redirectCall(ctx.callSid, url);
       await prisma.receptionistCall.update({
         where: { id: ctx.receptionistCallId },
         data: {
           status: ReceptionistCallStatus.TRANSFERRED,
           endedAt: new Date(),
-          failureReason: args.reason ? String(args.reason) : "transfer_to_human",
+          failureReason: args.reason
+            ? String(args.reason)
+            : transferNodeId
+              ? "transfer_to_human"
+              : "transfer_to_human_fallback_agents",
         },
       });
-      return { ok: true, data: { transferred: true, transferNodeId } };
+      return {
+        ok: true,
+        data: { transferred: true, transferNodeId: transferNodeId || null, fallbackAgents: !transferNodeId },
+      };
     }
 
     case "fallback_voicemail": {

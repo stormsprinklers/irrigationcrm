@@ -7,8 +7,8 @@ import { appBaseUrl } from "@/lib/voice/identity";
 
 /**
  * Twilio Connect action when the Media Stream ends.
- * If the call was already transferred/voicemail via REST, this is a no-op hangup.
- * Otherwise redirect to configured voicemail.
+ * After a REST redirect (transfer/voicemail), Connect still hits this action —
+ * we must continue the call, never hang up on TRANSFERRED/VOICEMAIL.
  */
 export async function POST(request: NextRequest) {
   const params = await parseTwilioWebhook(request);
@@ -22,17 +22,55 @@ export async function POST(request: NextRequest) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
 
+  const aiNode =
+    flowId && nodeId
+      ? await prisma.callFlowNode.findFirst({ where: { id: nodeId, flowId } })
+      : null;
+  const config = (aiNode?.config ?? {}) as {
+    transferNodeId?: string;
+    voicemailNodeId?: string;
+  };
+
   if (callSid) {
     const existing = await prisma.receptionistCall.findUnique({
       where: { callSid },
       select: { status: true },
     });
-    if (
-      existing &&
-      (existing.status === ReceptionistCallStatus.TRANSFERRED ||
-        existing.status === ReceptionistCallStatus.VOICEMAIL ||
-        existing.status === ReceptionistCallStatus.COMPLETED)
-    ) {
+
+    if (existing?.status === ReceptionistCallStatus.TRANSFERRED) {
+      if (flowId && config.transferNodeId) {
+        response.redirect(
+          { method: "POST" },
+          `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(flowId)}&goto=${encodeURIComponent(config.transferNodeId)}`
+        );
+      } else {
+        // Transfer already redirected via REST; keep the call alive with a short pause.
+        response.pause({ length: 1 });
+      }
+      return new NextResponse(response.toString(), {
+        headers: { "Content-Type": "text/xml" },
+      });
+    }
+
+    if (existing?.status === ReceptionistCallStatus.VOICEMAIL) {
+      if (flowId && config.voicemailNodeId) {
+        response.redirect(
+          { method: "POST" },
+          `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(flowId)}&goto=${encodeURIComponent(config.voicemailNodeId)}`
+        );
+      } else {
+        const vmCompany = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+        response.redirect(
+          { method: "POST" },
+          `${appBaseUrl()}/api/twilio/voice/ai-receptionist/voicemail${vmCompany}`
+        );
+      }
+      return new NextResponse(response.toString(), {
+        headers: { "Content-Type": "text/xml" },
+      });
+    }
+
+    if (existing?.status === ReceptionistCallStatus.COMPLETED) {
       response.hangup();
       return new NextResponse(response.toString(), {
         headers: { "Content-Type": "text/xml" },
@@ -49,18 +87,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (flowId && nodeId) {
-    const node = await prisma.callFlowNode.findFirst({ where: { id: nodeId, flowId } });
-    const config = (node?.config ?? {}) as { voicemailNodeId?: string };
-    if (config.voicemailNodeId) {
-      response.redirect(
-        { method: "POST" },
-        `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(flowId)}&goto=${encodeURIComponent(config.voicemailNodeId)}`
-      );
-      return new NextResponse(response.toString(), {
-        headers: { "Content-Type": "text/xml" },
-      });
-    }
+  if (flowId && config.voicemailNodeId) {
+    response.redirect(
+      { method: "POST" },
+      `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${encodeURIComponent(flowId)}&goto=${encodeURIComponent(config.voicemailNodeId)}`
+    );
+    return new NextResponse(response.toString(), {
+      headers: { "Content-Type": "text/xml" },
+    });
   }
 
   const vmCompany = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
