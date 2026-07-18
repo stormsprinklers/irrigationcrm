@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 
@@ -44,19 +44,45 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const existing = await prisma.serviceArea.findFirst({
       where: { id, companyId: user.companyId },
-      include: { _count: { select: { visits: true } } },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (existing._count.visits > 0) {
-      return badRequestResponse("Cannot delete area with scheduled jobs");
-    }
 
-    await prisma.serviceArea.delete({ where: { id } });
+    // Visits keep their address zip; serviceAreaId is SetNull via FK when this area is removed.
+    // Re-link any visits whose zip still matches a remaining area (e.g. after zip moves).
+    const visits = await prisma.visit.findMany({
+      where: { companyId: user.companyId, serviceAreaId: id },
+      select: { id: true, zip: true, property: { select: { zip: true } } },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      for (const visit of visits) {
+        const zip = visit.zip || visit.property?.zip;
+        if (!zip) continue;
+        const zipCode = zip.replace(/\D/g, "").slice(0, 5);
+        if (zipCode.length !== 5) continue;
+        const match = await tx.serviceAreaZip.findFirst({
+          where: {
+            zipCode,
+            serviceArea: { companyId: user.companyId, id: { not: id } },
+          },
+          select: { serviceAreaId: true },
+        });
+        if (match) {
+          await tx.visit.update({
+            where: { id: visit.id },
+            data: { serviceAreaId: match.serviceAreaId },
+          });
+        }
+      }
+      await tx.serviceArea.delete({ where: { id } });
+    });
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    console.error("Delete service area failed", error);
     return NextResponse.json({ error: "Failed to delete service area" }, { status: 500 });
   }
 }

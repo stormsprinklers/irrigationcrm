@@ -15,7 +15,7 @@ export function getJobColor(job: ScheduleJobDTO, colorBy: ColorByMode): string {
       return DIVISION_COLORS[job.division] ?? "#64748B";
     case "area":
     default:
-      return job.serviceArea.color;
+      return job.serviceArea?.color ?? "#64748B";
   }
 }
 

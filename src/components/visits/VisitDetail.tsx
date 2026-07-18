@@ -72,7 +72,7 @@ type VisitDetailData = {
   designExportMetadata?: Record<string, unknown> | null;
   installDurationDays?: number | null;
   designProjectId?: string | null;
-  serviceArea: { id: string; name: string; color: string };
+  serviceArea: { id: string; name: string; color: string } | null;
   assignedUser: { id: string; name: string; color: string | null; photoUrl: string | null } | null;
   lineItems: Array<{
     id: string;

@@ -91,7 +91,7 @@ function assignLanes(jobs: ScheduleJobDTO[]) {
 }
 
 function jobLocation(job: ScheduleJobDTO) {
-  return [job.city, job.state].filter(Boolean).join(", ") || job.serviceArea.name;
+  return [job.city, job.state].filter(Boolean).join(", ") || job.serviceArea?.name || "No area";
 }
 
 function JobBlock({

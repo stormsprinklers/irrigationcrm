@@ -2081,7 +2081,7 @@ model Visit {
   startAt        DateTime
   endAt          DateTime
   division       Division
-  serviceAreaId  String
+  serviceAreaId  String?
   assignedUserId String?
   crewId         String?
   status         VisitStatus @default(SCHEDULED)
@@ -2110,7 +2110,7 @@ model Visit {
   company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer             Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
   property             CustomerProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  serviceArea          ServiceArea             @relation(fields: [serviceAreaId], references: [id])
+  serviceArea          ServiceArea?            @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
   assignedUser         User?                   @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
   crew                 Crew?                   @relation(fields: [crewId], references: [id], onDelete: SetNull)
   maintenancePlanVisit MaintenancePlanVisit?   @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)

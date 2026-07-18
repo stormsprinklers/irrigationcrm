@@ -96,13 +96,11 @@ export function ServiceAreaManager() {
   }
 
   async function deleteArea(area: ServiceArea) {
-    if (area._count.visits > 0) {
-      toast.error("Cannot delete an area that has scheduled visits");
-      return;
-    }
     if (
       !confirm(
-        `Delete "${area.name}"? Zip codes and employee assignments for this area will be removed.`
+        area._count.visits > 0
+          ? `Delete "${area.name}"? ${area._count.visits} visit(s) will stay on the schedule and keep their address zip. Zip codes and employee assignments for this area will be removed.`
+          : `Delete "${area.name}"? Zip codes and employee assignments for this area will be removed.`
       )
     ) {
       return;
@@ -179,7 +177,6 @@ export function ServiceAreaManager() {
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={selected._count.visits > 0}
                 onClick={() => void deleteArea(selected)}
               >
                 Delete area
@@ -189,8 +186,9 @@ export function ServiceAreaManager() {
 
           {selected._count.visits > 0 ? (
             <p className="text-xs text-muted-foreground">
-              This area cannot be deleted because it has {selected._count.visits} scheduled visit
-              {selected._count.visits === 1 ? "" : "s"}.
+              {selected._count.visits} visit{selected._count.visits === 1 ? "" : "s"} currently
+              use this area. Deleting it will clear that tag; visits keep their address zip and can
+              rematch if you add the zip to another area.
             </p>
           ) : null}
 

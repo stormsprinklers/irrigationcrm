@@ -66,12 +66,27 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("title, startAt, endAt, and division are required");
     }
 
-    let resolvedServiceAreaId = serviceAreaId;
-    if (!resolvedServiceAreaId && zip) {
-      const area = await resolveServiceAreaByZip(user.companyId, String(zip));
-      resolvedServiceAreaId = area?.id;
+    let zipForArea = zip ? String(zip) : null;
+    if (propertyId) {
+      const property = await prisma.customerProperty.findFirst({
+        where: { id: String(propertyId), companyId: user.companyId },
+        select: { zip: true },
+      });
+      if (property?.zip) zipForArea = property.zip;
     }
-    if (!resolvedServiceAreaId) return badRequestResponse("serviceAreaId or valid zip is required");
+
+    // Service area is derived from the job/property zip when possible.
+    let resolvedServiceAreaId: string | null = null;
+    if (zipForArea) {
+      const area = await resolveServiceAreaByZip(user.companyId, zipForArea);
+      resolvedServiceAreaId = area?.id ?? null;
+    }
+    if (!resolvedServiceAreaId && serviceAreaId) {
+      resolvedServiceAreaId = String(serviceAreaId);
+    }
+    if (!resolvedServiceAreaId && !zipForArea) {
+      return badRequestResponse("A property zip or service area is required");
+    }
 
     if (customerId) {
       const block = await getCustomerServiceBlock(user.companyId, customerId);

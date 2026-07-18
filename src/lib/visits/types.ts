@@ -35,7 +35,7 @@ export type VisitDTO = {
     doNotService?: boolean;
   } | null;
   property: { id: string; name: string; address: string | null } | null;
-  serviceArea: { id: string; name: string; color: string };
+  serviceArea: { id: string; name: string; color: string } | null;
   assignedUser: {
     id: string;
     name: string;
