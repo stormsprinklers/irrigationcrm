@@ -5,6 +5,7 @@ import {
   extractBearer,
   verifyStreamToken,
 } from "@/lib/ai-receptionist/auth";
+import { ensureReceptionistCallLog } from "@/lib/ai-receptionist/call-log";
 import { buildReceptionistSystemPrompt } from "@/lib/ai-receptionist/prompt";
 import {
   AI_RECEPTIONIST_TAG,
@@ -145,6 +146,16 @@ export async function POST(request: NextRequest) {
         nodeId: claims.nodeId,
         customerId: matched?.id ?? undefined,
       },
+    });
+
+    await ensureReceptionistCallLog({
+      companyId: claims.companyId,
+      callSid: claims.callSid,
+      fromE164,
+      toE164: claims.to ? normalizePhone(claims.to) : null,
+      customerId: matched?.id ?? null,
+      callSessionId: claims.callSessionId ?? null,
+      receptionistCallId: receptionistCall.id,
     });
 
     const rawMax = nodeConfig.maxCallMinutes ?? company.aiReceptionistMaxMinutes ?? 12;

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { extractBearer, verifyToolBearer } from "@/lib/ai-receptionist/auth";
+import { ensureReceptionistCallLog } from "@/lib/ai-receptionist/call-log";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -31,13 +32,30 @@ export async function POST(request: NextRequest) {
     });
     if (!call) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    let callLogId = call.callLogId;
+    if (!callLogId) {
+      const log = await ensureReceptionistCallLog({
+        companyId: call.companyId,
+        callSid: call.callSid,
+        fromE164: call.fromE164,
+        toE164: call.toE164,
+        customerId: call.customerId,
+        callSessionId: call.callSessionId,
+        receptionistCallId: call.id,
+      });
+      callLogId = log.id;
+    }
+
     const data: {
       transcript?: string;
       summary?: string;
       status?: "ACTIVE" | "COMPLETED" | "FAILED" | "TRANSFERRED" | "VOICEMAIL";
       failureReason?: string;
       endedAt?: Date;
+      callLogId?: string;
     } = {};
+
+    if (!call.callLogId && callLogId) data.callLogId = callLogId;
 
     if (parsed.data.transcriptAppend) {
       data.transcript = `${call.transcript}${parsed.data.transcriptAppend}`;
@@ -54,13 +72,42 @@ export async function POST(request: NextRequest) {
       data,
     });
 
-    if (parsed.data.summary && call.callLogId) {
+    const nextTranscript = data.transcript ?? call.transcript;
+    if (callLogId && (parsed.data.transcriptAppend || parsed.data.summary || parsed.data.status)) {
       await prisma.callLog.update({
-        where: { id: call.callLogId },
+        where: { id: callLogId },
         data: {
-          aiSummary: parsed.data.summary,
-          transcript: data.transcript ?? call.transcript,
+          ...(parsed.data.transcriptAppend || parsed.data.summary
+            ? { transcript: nextTranscript }
+            : {}),
+          ...(parsed.data.summary ? { aiSummary: parsed.data.summary } : {}),
+          ...(parsed.data.status && parsed.data.status !== "ACTIVE"
+            ? {
+                status: parsed.data.status.toLowerCase(),
+                endedAt: new Date(),
+              }
+            : {}),
+          ...(call.customerId
+            ? { customerId: call.customerId }
+            : {}),
         },
+      });
+    }
+
+    // When the AI call ends, summarize from the live transcript if we have one.
+    if (
+      callLogId &&
+      parsed.data.status &&
+      parsed.data.status !== "ACTIVE" &&
+      nextTranscript.trim()
+    ) {
+      after(async () => {
+        try {
+          const { summarizeCallLog } = await import("@/lib/voice/summarize-call");
+          await summarizeCallLog(callLogId!);
+        } catch (err) {
+          console.error("AI receptionist call summary failed", callLogId, err);
+        }
       });
     }
 

@@ -471,6 +471,17 @@ async function renderAiReceptionistNode(
   // Brief cue so a fast stream failure is distinguishable from a bare voicemail entry.
   response.say("One moment while I connect you.");
 
+  // Media Streams / <Connect> do not inherit Dial recording — start an async recording.
+  if (ctx.recordCalls) {
+    const start = response.start();
+    start.recording({
+      recordingStatusCallback: `${appBaseUrl()}/api/twilio/voice/recording`,
+      recordingStatusCallbackMethod: "POST",
+      recordingStatusCallbackEvent: ["completed"],
+      track: "both",
+    });
+  }
+
   const connect = response.connect({
     action: `${appBaseUrl()}/api/twilio/voice/ai-receptionist/stream-status?companyId=${encodeURIComponent(ctx.companyId)}&flowId=${encodeURIComponent(ctx.flowId)}&nodeId=${encodeURIComponent(node.id)}`,
     method: "POST",
