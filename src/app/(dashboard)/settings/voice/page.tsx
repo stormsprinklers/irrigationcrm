@@ -20,6 +20,9 @@ type VoiceOverview = {
   aiReceptionistEnabled: boolean;
   aiReceptionistMaxMinutes: number;
   aiReceptionistSmsConfirm: boolean;
+  aiReceptionistTone: string;
+  aiReceptionistPolicies: string;
+  aiReceptionistKnowledge: string;
   twilioConfigured: boolean;
   sidebandConfigured: boolean;
   clips: VoiceClip[];
@@ -44,6 +47,9 @@ export default function SettingsVoicePage() {
           aiReceptionistEnabled: Boolean(payload.aiReceptionistEnabled),
           aiReceptionistMaxMinutes: payload.aiReceptionistMaxMinutes ?? 12,
           aiReceptionistSmsConfirm: payload.aiReceptionistSmsConfirm !== false,
+          aiReceptionistTone: payload.aiReceptionistTone ?? "",
+          aiReceptionistPolicies: payload.aiReceptionistPolicies ?? "",
+          aiReceptionistKnowledge: payload.aiReceptionistKnowledge ?? "",
           sidebandConfigured: Boolean(payload.sidebandConfigured),
           clips: Array.isArray(payload.clips) ? payload.clips : [],
         })
@@ -64,6 +70,9 @@ export default function SettingsVoicePage() {
         aiReceptionistEnabled: data.aiReceptionistEnabled,
         aiReceptionistMaxMinutes: data.aiReceptionistMaxMinutes,
         aiReceptionistSmsConfirm: data.aiReceptionistSmsConfirm,
+        aiReceptionistTone: data.aiReceptionistTone,
+        aiReceptionistPolicies: data.aiReceptionistPolicies,
+        aiReceptionistKnowledge: data.aiReceptionistKnowledge,
       }),
     });
     setSaving(false);
@@ -71,7 +80,14 @@ export default function SettingsVoicePage() {
       toast.error("Failed to save");
       return;
     }
-    setData({ ...data, ...(await res.json()) });
+    const updated = await res.json();
+    setData({
+      ...data,
+      ...updated,
+      aiReceptionistTone: updated.aiReceptionistTone ?? "",
+      aiReceptionistPolicies: updated.aiReceptionistPolicies ?? "",
+      aiReceptionistKnowledge: updated.aiReceptionistKnowledge ?? "",
+    });
     toast.success("Voice settings saved");
   }
 
@@ -245,8 +261,8 @@ export default function SettingsVoicePage() {
             <label className="mb-1 block text-sm font-medium">Default max call minutes</label>
             <input
               type="number"
-              min={3}
-              max={30}
+              min={5}
+              max={45}
               className="flex h-10 w-32 rounded-md border border-input bg-background px-3 text-sm"
               value={data.aiReceptionistMaxMinutes}
               onChange={(e) =>
@@ -255,6 +271,33 @@ export default function SettingsVoicePage() {
                   aiReceptionistMaxMinutes: Number(e.target.value) || 12,
                 })
               }
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Tone / speaking style</label>
+            <textarea
+              className="min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="e.g. Friendly and concise. Avoid slang. Say Storm Sprinklers clearly."
+              value={data.aiReceptionistTone}
+              onChange={(e) => setData({ ...data, aiReceptionistTone: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Company policies</label>
+            <textarea
+              className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="e.g. No quotes over the phone. Emergency shutoffs transfer immediately. Same-day only if a tech is free."
+              value={data.aiReceptionistPolicies}
+              onChange={(e) => setData({ ...data, aiReceptionistPolicies: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Knowledge base</label>
+            <textarea
+              className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Service area notes, winterization season, warranty basics, office hours, common FAQs…"
+              value={data.aiReceptionistKnowledge}
+              onChange={(e) => setData({ ...data, aiReceptionistKnowledge: e.target.value })}
             />
           </div>
         </div>

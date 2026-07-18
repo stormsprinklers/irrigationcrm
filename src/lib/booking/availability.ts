@@ -137,8 +137,31 @@ export function formatSlotLabel(startAt: string, endAt: string, timeZone?: strin
   const tz = resolveCompanyTimezone(timeZone);
   const start = new Date(startAt);
   const end = new Date(endAt);
+
+  const ymd = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+
+  const startYmd = ymd(start);
+  const todayYmd = ymd(new Date());
+  const [ty, tm, td] = todayYmd.split("-").map(Number);
+  const tomorrowYmd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(Date.UTC(ty, tm - 1, td + 1)));
+
+  let relative = "";
+  if (startYmd === todayYmd) relative = "Today · ";
+  else if (startYmd === tomorrowYmd) relative = "Tomorrow · ";
+
   const day = start.toLocaleString("en-US", {
-    weekday: "short",
+    weekday: "long",
     month: "short",
     day: "numeric",
     timeZone: tz,
@@ -153,5 +176,6 @@ export function formatSlotLabel(startAt: string, endAt: string, timeZone?: strin
     minute: "2-digit",
     timeZone: tz,
   });
-  return `${day} · ${startTime} – ${endTime}`;
+  // Always include weekday+date so the model never invents "tomorrow" for Monday.
+  return `${relative}${day} · ${startTime} – ${endTime}`;
 }

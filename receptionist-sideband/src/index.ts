@@ -5,7 +5,9 @@
  *   PORT / SIDEBAND_PORT
  *   CRM_BASE_URL — e.g. https://crm.example.com
  *   OPENAI_API_KEY
- *   OPENAI_REALTIME_MODEL — optional, default gpt-4o-realtime-preview
+ *   OPENAI_REALTIME_MODEL — optional, default gpt-realtime
+ *
+ * Audio: Twilio μ-law 8kHz ↔ OpenAI audio/pcmu (no resample) for clearer telephony audio.
  */
 
 import "dotenv/config";
@@ -16,7 +18,6 @@ import { WebSocketServer, WebSocket } from "ws";
 const PORT = Number(process.env.PORT || process.env.SIDEBAND_PORT || 8090);
 const CRM_BASE_URL = (process.env.CRM_BASE_URL || "").replace(/\/$/, "");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-// GA Realtime models (preview gpt-4o-realtime-* + OpenAI-Beta header are retired).
 const REALTIME_MODEL =
   process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
 
@@ -38,6 +39,14 @@ type SessionBootstrap = {
 
 function log(...args: unknown[]) {
   console.log(new Date().toISOString(), ...args);
+}
+
+function clampMaxMinutes(raw: unknown) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 12;
+  // If someone accidentally stored seconds (e.g. 120–3600), convert to minutes.
+  if (n > 45 && n <= 3600) return Math.min(45, Math.max(5, Math.round(n / 60)));
+  return Math.min(45, Math.max(5, Math.round(n)));
 }
 
 async function bootstrapSession(token: string): Promise<SessionBootstrap> {
@@ -79,66 +88,12 @@ async function appendTranscript(bearer: string, text: string) {
   }).catch(() => undefined);
 }
 
-function mulawToPcm16(mulaw: Buffer): Buffer {
-  const pcm = Buffer.alloc(mulaw.length * 2);
-  for (let i = 0; i < mulaw.length; i++) {
-    let mu = ~mulaw[i];
-    const sign = mu & 0x80;
-    const exponent = (mu >> 4) & 0x07;
-    const mantissa = mu & 0x0f;
-    let sample = ((mantissa << 3) + 0x84) << exponent;
-    sample -= 0x84;
-    if (sign !== 0) sample = -sample;
-    pcm.writeInt16LE(sample, i * 2);
-  }
-  return pcm;
-}
-
-function pcm16ToMulaw(pcm: Buffer): Buffer {
-  const out = Buffer.alloc(Math.floor(pcm.length / 2));
-  for (let i = 0; i < out.length; i++) {
-    let sample = pcm.readInt16LE(i * 2);
-    const sign = sample < 0 ? 0x80 : 0;
-    if (sample < 0) sample = -sample;
-    if (sample > 32635) sample = 32635;
-    sample += 0x84;
-    let exponent = 7;
-    for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; expMask >>= 1) {
-      exponent--;
-    }
-    const mantissa = (sample >> (exponent + 3)) & 0x0f;
-    out[i] = ~(sign | (exponent << 4) | mantissa);
-  }
-  return out;
-}
-
-/** Naive upsample 8k PCM16 → 24k by repeating samples (Realtime often expects 24k). */
-function upsample8kTo24k(pcm8: Buffer): Buffer {
-  const samples = pcm8.length / 2;
-  const out = Buffer.alloc(samples * 3 * 2);
-  for (let i = 0; i < samples; i++) {
-    const s = pcm8.readInt16LE(i * 2);
-    out.writeInt16LE(s, i * 6);
-    out.writeInt16LE(s, i * 6 + 2);
-    out.writeInt16LE(s, i * 6 + 4);
-  }
-  return out;
-}
-
-function downsample24kTo8k(pcm24: Buffer): Buffer {
-  const samples = Math.floor(pcm24.length / 6);
-  const out = Buffer.alloc(samples * 2);
-  for (let i = 0; i < samples; i++) {
-    out.writeInt16LE(pcm24.readInt16LE(i * 6), i * 2);
-  }
-  return out;
-}
-
 class CallBridge {
   private openai: WebSocket | null = null;
   private streamSid: string | null = null;
   private session: SessionBootstrap | null = null;
   private closed = false;
+  private fatalOpenAi = false;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingFnArgs: Record<string, string> = {};
 
@@ -160,10 +115,10 @@ class CallBridge {
       try {
         this.session = await bootstrapSession(token);
         await this.openOpenAI();
-        this.maxTimer = setTimeout(
-          () => void this.softTimeout(),
-          (this.session.maxCallMinutes || 12) * 60 * 1000
-        );
+        const maxMinutes = clampMaxMinutes(this.session.maxCallMinutes);
+        const ms = maxMinutes * 60 * 1000;
+        log("Max call timer armed", { maxMinutes, ms });
+        this.maxTimer = setTimeout(() => void this.softTimeout(), ms);
         log("Session active", this.session.receptionistCallId);
       } catch (err) {
         log("Bootstrap failed", err);
@@ -174,13 +129,11 @@ class CallBridge {
 
     if (msg.event === "media" && this.openai?.readyState === WebSocket.OPEN) {
       const media = msg.media as { payload: string };
-      const mulaw = Buffer.from(media.payload, "base64");
-      const pcm8 = mulawToPcm16(mulaw);
-      const pcm24 = upsample8kTo24k(pcm8);
+      // Twilio payload is already base64 μ-law @ 8kHz — pass through as audio/pcmu.
       this.openai.send(
         JSON.stringify({
           type: "input_audio_buffer.append",
-          audio: pcm24.toString("base64"),
+          audio: media.payload,
         })
       );
       return;
@@ -195,7 +148,6 @@ class CallBridge {
     if (!OPENAI_API_KEY || !this.session) throw new Error("OpenAI not configured");
 
     const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(REALTIME_MODEL)}`;
-    // GA Realtime: do NOT send OpenAI-Beta: realtime=v1 (rejected as beta_api_shape_disabled).
     this.openai = new WebSocket(url, {
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
@@ -218,12 +170,17 @@ class CallBridge {
           output_modalities: ["audio"],
           audio: {
             input: {
-              format: { type: "audio/pcm", rate: 24000 },
-              turn_detection: { type: "server_vad" },
+              format: { type: "audio/pcmu" },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.5,
+                prefix_padding_ms: 300,
+                silence_duration_ms: 600,
+              },
               transcription: { model: "whisper-1" },
             },
             output: {
-              format: { type: "audio/pcm", rate: 24000 },
+              format: { type: "audio/pcmu" },
               voice,
             },
           },
@@ -233,13 +190,13 @@ class CallBridge {
       })
     );
 
-    // Kick off greeting after session is configured
     this.openai.send(
       JSON.stringify({
         type: "response.create",
         response: {
           output_modalities: ["audio"],
-          instructions: "Greet the caller now with the required automation disclosure.",
+          instructions:
+            "Greet the caller now in English with the required automation disclosure.",
         },
       })
     );
@@ -249,10 +206,14 @@ class CallBridge {
     });
     this.openai.on("error", (err) => {
       log("OpenAI socket error", err);
+      this.fatalOpenAi = true;
     });
     this.openai.on("close", (code, reason) => {
       log("OpenAI socket closed", code, reason?.toString?.() || reason);
-      if (!this.closed) void this.failToVoicemail();
+      if (!this.closed) {
+        log("OpenAI closed; falling back to voicemail", { fatal: this.fatalOpenAi });
+        void this.failToVoicemail();
+      }
     });
   }
 
@@ -267,6 +228,7 @@ class CallBridge {
     const type = String(event.type || "");
 
     if (type === "error") {
+      this.fatalOpenAi = true;
       log("OpenAI error event", JSON.stringify(event).slice(0, 800));
       return;
     }
@@ -276,20 +238,17 @@ class CallBridge {
       return;
     }
 
-    // GA: response.output_audio.delta; legacy beta: response.audio.delta
     if (
       (type === "response.output_audio.delta" || type === "response.audio.delta") &&
       this.streamSid
     ) {
       const delta = String(event.delta || "");
-      const pcm24 = Buffer.from(delta, "base64");
-      const pcm8 = downsample24kTo8k(pcm24);
-      const mulaw = pcm16ToMulaw(pcm8);
+      // audio/pcmu: delta is already base64 μ-law — forward to Twilio as-is.
       this.twilioWs.send(
         JSON.stringify({
           event: "media",
           streamSid: this.streamSid,
-          media: { payload: mulaw.toString("base64") },
+          media: { payload: delta },
         })
       );
       return;
@@ -346,7 +305,15 @@ class CallBridge {
     }
 
     log("Tool call", name);
-    const result = await callTool(this.session.toolBearer, name, args);
+    let result: unknown;
+    try {
+      result = await callTool(this.session.toolBearer, name, args);
+    } catch (err) {
+      log("Tool HTTP failed", name, err);
+      result = { ok: false, error: "Tool request failed", code: "TOOL_HTTP" };
+    }
+
+    if (this.openai.readyState !== WebSocket.OPEN) return;
 
     this.openai.send(
       JSON.stringify({
@@ -358,26 +325,30 @@ class CallBridge {
         },
       })
     );
-    this.openai.send(JSON.stringify({ type: "response.create" }));
+    this.openai.send(
+      JSON.stringify({
+        type: "response.create",
+        response: { output_modalities: ["audio"] },
+      })
+    );
 
-    if (
-      name === "transfer_to_human" ||
-      name === "fallback_voicemail"
-    ) {
+    if (name === "transfer_to_human" || name === "fallback_voicemail") {
       this.shutdown(name === "transfer_to_human" ? "TRANSFERRED" : "VOICEMAIL");
     }
   }
 
   private async softTimeout() {
     if (this.closed || !this.session) return;
+    log("Soft timeout — max call duration reached");
     try {
-      await callTool(this.session.toolBearer, "transfer_to_human", {
+      const result = (await callTool(this.session.toolBearer, "transfer_to_human", {
         reason: "max_duration",
-      });
+      })) as { ok?: boolean };
+      if (!result?.ok) await this.failToVoicemail();
+      else this.shutdown("TRANSFERRED");
     } catch {
       await this.failToVoicemail();
     }
-    this.shutdown("TRANSFERRED");
   }
 
   private async failToVoicemail() {

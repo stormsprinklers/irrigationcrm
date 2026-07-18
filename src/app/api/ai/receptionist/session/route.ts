@@ -63,6 +63,9 @@ export async function POST(request: NextRequest) {
         timezone: true,
         aiReceptionistEnabled: true,
         aiReceptionistMaxMinutes: true,
+        aiReceptionistTone: true,
+        aiReceptionistPolicies: true,
+        aiReceptionistKnowledge: true,
         businessHours: true,
       },
     });
@@ -144,9 +147,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const maxMinutes = nodeConfig.maxCallMinutes ?? company.aiReceptionistMaxMinutes ?? 12;
+    const rawMax = nodeConfig.maxCallMinutes ?? company.aiReceptionistMaxMinutes ?? 12;
+    // Clamp: treat accidental huge values as minutes still, never seconds.
+    const maxMinutes = Math.min(45, Math.max(5, Number(rawMax) || 12));
     const instructions = buildReceptionistSystemPrompt({
-      company: { name: company.name, timezone: company.timezone },
+      company: {
+        name: company.name,
+        timezone: company.timezone,
+        tone: company.aiReceptionistTone,
+        policies: company.aiReceptionistPolicies,
+        knowledge: company.aiReceptionistKnowledge,
+      },
       callerPhone: fromE164,
       customer: matched
         ? {

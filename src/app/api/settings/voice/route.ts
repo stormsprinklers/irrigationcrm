@@ -21,6 +21,9 @@ export async function GET() {
         aiReceptionistEnabled: true,
         aiReceptionistMaxMinutes: true,
         aiReceptionistSmsConfirm: true,
+        aiReceptionistTone: true,
+        aiReceptionistPolicies: true,
+        aiReceptionistKnowledge: true,
         queueWaitClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
         holdMusicClip: { select: { id: true, name: true, blobUrl: true, mimeType: true } },
       },
@@ -88,6 +91,9 @@ export async function PATCH(request: NextRequest) {
       aiReceptionistEnabled,
       aiReceptionistMaxMinutes,
       aiReceptionistSmsConfirm,
+      aiReceptionistTone,
+      aiReceptionistPolicies,
+      aiReceptionistKnowledge,
     } = body;
 
     if (queueWaitClipId !== undefined && queueWaitClipId !== null) {
@@ -137,13 +143,22 @@ export async function PATCH(request: NextRequest) {
         ...(aiReceptionistMaxMinutes !== undefined
           ? {
               aiReceptionistMaxMinutes: Math.min(
-                30,
-                Math.max(3, Number(aiReceptionistMaxMinutes) || 12)
+                45,
+                Math.max(5, Number(aiReceptionistMaxMinutes) || 12)
               ),
             }
           : {}),
         ...(aiReceptionistSmsConfirm !== undefined
           ? { aiReceptionistSmsConfirm: Boolean(aiReceptionistSmsConfirm) }
+          : {}),
+        ...(aiReceptionistTone !== undefined
+          ? { aiReceptionistTone: String(aiReceptionistTone || "").trim() || null }
+          : {}),
+        ...(aiReceptionistPolicies !== undefined
+          ? { aiReceptionistPolicies: String(aiReceptionistPolicies || "").trim() || null }
+          : {}),
+        ...(aiReceptionistKnowledge !== undefined
+          ? { aiReceptionistKnowledge: String(aiReceptionistKnowledge || "").trim() || null }
           : {}),
       },
       select: {
@@ -156,6 +171,9 @@ export async function PATCH(request: NextRequest) {
         aiReceptionistEnabled: true,
         aiReceptionistMaxMinutes: true,
         aiReceptionistSmsConfirm: true,
+        aiReceptionistTone: true,
+        aiReceptionistPolicies: true,
+        aiReceptionistKnowledge: true,
       },
     });
 

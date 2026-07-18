@@ -593,6 +593,10 @@ model Company {
   aiReceptionistEnabled        Boolean  @default(false)
   aiReceptionistMaxMinutes     Int      @default(12)
   aiReceptionistSmsConfirm     Boolean  @default(true)
+  /// Optional prompt overrides for the AI receptionist (tone, policies, FAQ/knowledge).
+  aiReceptionistTone           String?  @db.Text
+  aiReceptionistPolicies       String?  @db.Text
+  aiReceptionistKnowledge      String?  @db.Text
   defaultLeadAssigneeId    String?
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
