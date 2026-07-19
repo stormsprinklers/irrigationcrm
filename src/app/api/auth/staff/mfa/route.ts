@@ -91,6 +91,7 @@ export async function PUT(request: NextRequest) {
             passwordHash: true,
             phone: true,
             lmsUserId: true,
+            appleDemoAccount: true,
           },
         },
       },

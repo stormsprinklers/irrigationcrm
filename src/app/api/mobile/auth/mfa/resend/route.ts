@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
             passwordHash: true,
             phone: true,
             lmsUserId: true,
+            appleDemoAccount: true,
           },
         },
       },
