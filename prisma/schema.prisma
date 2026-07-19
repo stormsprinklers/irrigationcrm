@@ -480,6 +480,10 @@ model Company {
   supportEmail             String?
   phone                    String?
   website                  String?
+  /// Public URL for company Terms of Service (iOS, receipts, portal).
+  termsOfServiceUrl        String?
+  /// Public URL for company Privacy Policy (iOS, receipts, portal).
+  privacyPolicyUrl         String?
   legalName                String?
   industry                 String?
   description              String?
@@ -531,6 +535,8 @@ model Company {
   portalRachioAllowRun     Boolean  @default(false)
   notifyEstimateSent       Boolean  @default(true)
   notifyInvoicePaid        Boolean  @default(true)
+  /// Customer email/SMS when a Stripe Checkout / card payment fails, with retry link.
+  notifyInvoicePaymentFailed Boolean @default(true)
   notifyVisitScheduled     Boolean  @default(true)
   notifyVisitEnRoute       Boolean  @default(true)
   notifyVisitEnRouteIncludeTechnicianPhoto Boolean @default(false)
@@ -1420,6 +1426,7 @@ enum AppNotificationType {
   MISSED_TRANSFER
   ESTIMATE_APPROVED
   PAYMENT_RECEIVED
+  PAYMENT_FAILED
   ENROLLMENT_PROBLEM
   TIMER_LEFT_RUNNING
   VISIT_INCOMPLETE

@@ -45,7 +45,11 @@ const EVENT_COMPANY_TOGGLE: Partial<
   VISIT_EN_ROUTE: { key: "notifyVisitEnRoute", label: "Send on-the-way notifications" },
   REVIEW_REQUEST: { key: "notifyReviewRequest", label: "Send review requests" },
   FEEDBACK_SURVEY: { key: "notifyFeedbackSurvey", label: "Send feedback surveys" },
-  INVOICE_PAID_RECEIPT: { key: "notifyInvoicePaid", label: "Send invoice paid receipts" },
+  INVOICE_PAID_RECEIPT: { key: "notifyInvoicePaid", label: "Send invoice paid receipts (CRM email/SMS — not Stripe)" },
+  INVOICE_PAYMENT_FAILED: {
+    key: "notifyInvoicePaymentFailed",
+    label: "Send payment failed notices with retry link",
+  },
   ESTIMATE_SENT: { key: "notifyEstimateSent", label: "Send estimate sent notifications" },
   ESTIMATE_FOLLOW_UP: { key: "notifyEstimateFollowUp", label: "Send estimate follow-ups" },
 };

@@ -53,6 +53,7 @@ const EVENT_TOGGLE_MAP: Record<NotificationEvent, keyof CompanyNotifyFlags | nul
   INVOICE_SENT: null,
   INVOICE_REMINDER: null,
   INVOICE_PAID_RECEIPT: "notifyInvoicePaid",
+  INVOICE_PAYMENT_FAILED: "notifyInvoicePaymentFailed",
   ESTIMATE_SENT: "notifyEstimateSent",
   ESTIMATE_FOLLOW_UP: "notifyEstimateFollowUp",
   FEEDBACK_SURVEY: "notifyFeedbackSurvey",
@@ -66,6 +67,7 @@ type CompanyNotifyFlags = {
   notifyVisitEnRoute: boolean;
   notifyReviewRequest: boolean;
   notifyInvoicePaid: boolean;
+  notifyInvoicePaymentFailed: boolean;
   notifyEstimateSent: boolean;
   notifyEstimateFollowUp: boolean;
   notifyFeedbackSurvey: boolean;
@@ -116,6 +118,8 @@ export async function sendOperationalNotification(params: {
       sendgridFrom: true,
       emailSenderName: true,
       emailLogoUrl: true,
+      termsOfServiceUrl: true,
+      privacyPolicyUrl: true,
       notifyVisitScheduled: true,
       notifyVisitTimeUpdated: true,
       notifyVisitCancelled: true,
@@ -124,6 +128,7 @@ export async function sendOperationalNotification(params: {
       notifyVisitEnRouteIncludeTechnicianPhoto: true,
       notifyReviewRequest: true,
       notifyInvoicePaid: true,
+      notifyInvoicePaymentFailed: true,
       notifyEstimateSent: true,
       notifyEstimateFollowUp: true,
       notifyFeedbackSurvey: true,
@@ -166,6 +171,8 @@ export async function sendOperationalNotification(params: {
     ...params.context,
     companyName: company.name,
     company_name: company.name,
+    terms_of_service_url: company.termsOfServiceUrl?.trim() ?? "",
+    privacy_policy_url: company.privacyPolicyUrl?.trim() ?? "",
     customerName: params.recipient.name ?? params.context.customerName ?? "Customer",
   };
 
@@ -319,6 +326,7 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
     "VISIT_COMPLETED",
     "REVIEW_REQUEST",
     "INVOICE_PAID_RECEIPT",
+    "INVOICE_PAYMENT_FAILED",
     "FEEDBACK_SURVEY",
     "ESTIMATE_FOLLOW_UP",
   ]);

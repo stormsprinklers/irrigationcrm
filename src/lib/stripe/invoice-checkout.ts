@@ -1,5 +1,7 @@
+import { getAppBaseUrl } from "@/lib/app-url";
 import { getStripeClient } from "@/lib/stripe/client";
 import { prisma } from "@/lib/prisma";
+import { toNumber } from "@/lib/visits/totals";
 
 type CheckoutInvoice = {
   id: string;
@@ -26,10 +28,10 @@ export async function createInvoiceCheckoutSession(params: {
   }
 
   const stripe = getStripeClient();
+  // automatic_payment_methods enables Apple Pay, Klarna, Link, etc. per Stripe Dashboard settings.
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    // Card only — skips Stripe Link / wallet chooser so field checkout opens on the card form.
-    payment_method_types: ["card"],
+    automatic_payment_methods: { enabled: true },
     customer_email: params.customerEmail ?? undefined,
     line_items: [
       {
@@ -70,4 +72,62 @@ export async function createInvoiceCheckoutSession(params: {
   }
 
   return session;
+}
+
+/**
+ * Create a fresh Stripe Checkout Session for an invoice and return session.url.
+ * Once a Stripe custom domain finishes provisioning, session.url is automatically branded.
+ */
+export async function createStripeCheckoutPayUrl(params: {
+  invoiceId: string;
+  companyId: string;
+  mobileReturn?: boolean;
+}): Promise<{ url: string; sessionId: string; amount: number } | null> {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: params.invoiceId, companyId: params.companyId },
+    include: {
+      customer: true,
+      visit: { select: { id: true, title: true } },
+      payments: true,
+    },
+  });
+  if (!invoice?.customer) return null;
+
+  const paid = invoice.payments.reduce((sum, payment) => {
+    if (payment.refundedAt) return sum;
+    return sum + toNumber(payment.amount);
+  }, 0);
+  const balanceDue = Math.max(0, toNumber(invoice.total) - paid);
+  if (balanceDue <= 0) return null;
+
+  const appUrl = getAppBaseUrl();
+  const visitId = invoice.visitId;
+  const successUrl =
+    params.mobileReturn && visitId
+      ? `stormcrm://payment-return?visitId=${visitId}&session_id={CHECKOUT_SESSION_ID}`
+      : visitId
+        ? `${appUrl}/visits/${visitId}?payment=success&session_id={CHECKOUT_SESSION_ID}`
+        : `${appUrl}/customers/invoices?invoiceId=${invoice.id}&payment=success&session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl =
+    params.mobileReturn && visitId
+      ? `stormcrm://payment-return?visitId=${visitId}&payment=cancelled`
+      : visitId
+        ? `${appUrl}/visits/${visitId}?payment=cancelled`
+        : `${appUrl}/customers/invoices?invoiceId=${invoice.id}&payment=cancelled`;
+
+  const session = await createInvoiceCheckoutSession({
+    invoice: {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      companyId: invoice.companyId,
+      visitId: invoice.visitId,
+    },
+    customerEmail: invoice.customer.email,
+    productName: invoice.visit?.title ?? `Invoice ${invoice.invoiceNumber}`,
+    amount: balanceDue,
+    successUrl,
+    cancelUrl,
+  });
+
+  return { url: session.url!, sessionId: session.id, amount: balanceDue };
 }

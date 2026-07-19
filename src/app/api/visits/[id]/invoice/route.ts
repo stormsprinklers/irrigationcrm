@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { deliverInvoice } from "@/lib/invoices/deliver";
 import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
+import { createStripeCheckoutPayUrl } from "@/lib/stripe/invoice-checkout";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           {
             error: delivery.error,
             payUrl: delivery.payUrl,
+            payLink: delivery.payUrl,
             invoice: synced.invoice,
             balanceDue: synced.balanceDue,
           },
@@ -42,9 +44,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
+    // Prepare / QR: return a live Stripe Checkout session.url when possible.
+    let payLink = synced.payLink;
+    try {
+      const checkout = await createStripeCheckoutPayUrl({
+        invoiceId: synced.invoiceId,
+        companyId: user.companyId,
+      });
+      if (checkout?.url) payLink = checkout.url;
+    } catch (err) {
+      console.error("createStripeCheckoutPayUrl failed:", err);
+    }
+
     return NextResponse.json({
       invoice: synced.invoice,
-      payLink: synced.payLink,
+      payLink,
       balanceDue: synced.balanceDue,
     });
   } catch {

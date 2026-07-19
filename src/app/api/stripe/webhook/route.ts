@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  handleCheckoutSessionAsyncPaymentFailed,
   handleCheckoutSessionAsyncPaymentSucceeded,
   handleCheckoutSessionCompleted,
   handleInvoicePaid,
   handleInvoicePaymentFailed,
+  handlePaymentIntentPaymentFailed,
   handlePaymentIntentSucceeded,
   handleSubscriptionDeleted,
   handleSubscriptionUpdated,
@@ -38,8 +40,16 @@ export async function POST(request: NextRequest) {
     await handleCheckoutSessionAsyncPaymentSucceeded(event.data.object);
   }
 
+  if (event.type === "checkout.session.async_payment_failed") {
+    await handleCheckoutSessionAsyncPaymentFailed(event.data.object);
+  }
+
   if (event.type === "payment_intent.succeeded") {
     await handlePaymentIntentSucceeded(event.data.object);
+  }
+
+  if (event.type === "payment_intent.payment_failed") {
+    await handlePaymentIntentPaymentFailed(event.data.object);
   }
 
   if (event.type === "invoice.paid") {

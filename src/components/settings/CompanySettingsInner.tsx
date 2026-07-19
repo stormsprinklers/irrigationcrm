@@ -157,6 +157,39 @@ export function CompanySettingsInner() {
               onChange={(e) => setCompany({ ...company, description: e.target.value })}
             />
           </section>
+          <section className="rounded-lg border border-border bg-white p-6">
+            <h3 className="mb-1 text-lg font-semibold">Legal links</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Used in the field app (estimate approval), receipts, and other customer-facing places.
+              Paste full URLs (https://…).
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-sm text-muted-foreground">Terms of Service URL</label>
+                <Input
+                  className="mt-1"
+                  type="url"
+                  placeholder="https://www.stormsprinklers.com/terms"
+                  value={company.termsOfServiceUrl ?? ""}
+                  onChange={(e) =>
+                    setCompany({ ...company, termsOfServiceUrl: e.target.value || null })
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground">Privacy Policy URL</label>
+                <Input
+                  className="mt-1"
+                  type="url"
+                  placeholder="https://www.stormsprinklers.com/privacy-policy"
+                  value={company.privacyPolicyUrl ?? ""}
+                  onChange={(e) =>
+                    setCompany({ ...company, privacyPolicyUrl: e.target.value || null })
+                  }
+                />
+              </div>
+            </div>
+          </section>
         </div>
       ) : tab === "Email branding" ? (
         <section className="rounded-lg border border-border bg-white p-6 space-y-6">

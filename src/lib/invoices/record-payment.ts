@@ -147,6 +147,31 @@ export async function recordInvoicePayment(
     }).catch((err) => {
       console.error("Cash/check admin notify failed:", err);
     });
+  } else {
+    // Stripe / card / other online payments
+    const { notifyAdminsOfPaymentOutcome } = await import("@/lib/notifications/payment-events");
+    let technicianName: string | null = null;
+    if (invoice.visitId) {
+      const visit = await prisma.visit.findFirst({
+        where: { id: invoice.visitId, companyId: invoice.companyId },
+        select: { assignedUser: { select: { name: true } } },
+      });
+      technicianName = visit?.assignedUser?.name ?? null;
+    }
+    await notifyAdminsOfPaymentOutcome({
+      companyId: invoice.companyId,
+      outcome: "succeeded",
+      amount: params.amount,
+      customerName: invoice.customer.name,
+      technicianName,
+      invoiceId: invoice.id,
+      visitId: invoice.visitId,
+      invoiceNumber: invoice.invoiceNumber,
+      methodLabel: params.method === "STRIPE" || !params.method ? "Stripe" : params.method,
+      stripePaymentIntentId: params.stripePaymentIntentId ?? null,
+    }).catch((err) => {
+      console.error("Admin payment-received notify failed:", err);
+    });
   }
 
   if (invoice.visitId && nextStatus === "PAID") {
@@ -178,7 +203,7 @@ export async function recordInvoicePayment(
       invoiceId: invoice.id,
       companyId: invoice.companyId,
       event: "INVOICE_PAID_RECEIPT",
-      smsBackupOnly: true,
+      // Send both email and SMS when configured (CRM receipt, not Stripe's).
     });
   }
 

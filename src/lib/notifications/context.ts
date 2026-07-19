@@ -15,6 +15,8 @@ type CompanySlice = {
   googleReviewUrl?: string | null;
   websiteBaseUrl?: string | null;
   arrivalWindowHours?: number | null;
+  termsOfServiceUrl?: string | null;
+  privacyPolicyUrl?: string | null;
 };
 
 type CustomerSlice = {
@@ -124,6 +126,8 @@ export function buildNotificationContext(params: {
     customer_address: visitAddress,
     technician_first_name: technicianFirst,
     company_name: params.company.name,
+    terms_of_service_url: params.company.termsOfServiceUrl?.trim() ?? "",
+    privacy_policy_url: params.company.privacyPolicyUrl?.trim() ?? "",
     visit_date: startAt ? formatVisitDate(startAt, timezone) : "",
     visit_arrival_window: startAt ? formatArrivalWindow(startAt, arrivalHours, timezone) : "",
     invoice_amount: params.invoice ? formatCurrency(params.invoice.amount) : "",

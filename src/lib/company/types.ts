@@ -9,6 +9,8 @@ export const companySettingsSelect = {
   supportEmail: true,
   phone: true,
   website: true,
+  termsOfServiceUrl: true,
+  privacyPolicyUrl: true,
   legalName: true,
   industry: true,
   description: true,
@@ -37,6 +39,7 @@ export const companySettingsSelect = {
   portalRachioAllowRun: true,
   notifyEstimateSent: true,
   notifyInvoicePaid: true,
+  notifyInvoicePaymentFailed: true,
   notifyVisitScheduled: true,
   notifyVisitEnRoute: true,
   notifyVisitEnRouteIncludeTechnicianPhoto: true,
@@ -79,6 +82,8 @@ export type CompanySettingsDTO = {
   supportEmail: string | null;
   phone: string | null;
   website: string | null;
+  termsOfServiceUrl: string | null;
+  privacyPolicyUrl: string | null;
   legalName: string | null;
   industry: string | null;
   description: string | null;
@@ -107,6 +112,7 @@ export type CompanySettingsDTO = {
   portalRachioAllowRun: boolean;
   notifyEstimateSent: boolean;
   notifyInvoicePaid: boolean;
+  notifyInvoicePaymentFailed: boolean;
   notifyVisitScheduled: boolean;
   notifyVisitEnRoute: boolean;
   notifyVisitEnRouteIncludeTechnicianPhoto: boolean;

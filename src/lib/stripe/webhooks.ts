@@ -77,6 +77,32 @@ export async function handlePaymentIntentSucceeded(paymentIntent: Stripe.Payment
   });
 }
 
+export async function handlePaymentIntentPaymentFailed(paymentIntent: Stripe.PaymentIntent) {
+  const invoiceId = paymentIntent.metadata?.invoiceId;
+  if (!invoiceId) return;
+
+  const amount = (paymentIntent.amount ?? 0) / 100;
+  const { handleInvoicePaymentFailure } = await import("@/lib/notifications/payment-events");
+  await handleInvoicePaymentFailure({
+    invoiceId,
+    amount: amount > 0 ? amount : null,
+    stripePaymentIntentId: paymentIntent.id,
+  });
+}
+
+export async function handleCheckoutSessionAsyncPaymentFailed(session: Stripe.Checkout.Session) {
+  const invoiceId = session.metadata?.invoiceId;
+  if (!invoiceId) return;
+
+  const amount = session.amount_total != null ? session.amount_total / 100 : null;
+  const { handleInvoicePaymentFailure } = await import("@/lib/notifications/payment-events");
+  await handleInvoicePaymentFailure({
+    invoiceId,
+    amount,
+    stripePaymentIntentId: getPaymentIntentId(session),
+  });
+}
+
 export async function handleCheckoutSessionById(sessionId: string) {
   return confirmCheckoutSession(sessionId);
 }
