@@ -206,6 +206,7 @@ export const integrationsSettingsSidebar: NavSection[] = [
       { label: "Google Ads", href: "/settings/integrations/google-ads" },
       { label: "Meta Ads", href: "/settings/integrations/meta-ads" },
       { label: "Rachio", href: "/settings/integrations/rachio" },
+      { label: "Apple demo", href: "/settings/integrations/apple-demo" },
       { label: "Search rankings", href: "/settings/integrations/serp-rankings" },
       { label: "Data migration", href: "/settings/integrations/migrations/housecall-pro" },
     ],

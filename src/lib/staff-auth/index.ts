@@ -18,7 +18,16 @@ const TICKET_TTL = "3m";
 
 export type StaffAuthUser = Pick<
   User,
-  "id" | "email" | "name" | "companyId" | "role" | "status" | "passwordHash" | "phone" | "lmsUserId"
+  | "id"
+  | "email"
+  | "name"
+  | "companyId"
+  | "role"
+  | "status"
+  | "passwordHash"
+  | "phone"
+  | "lmsUserId"
+  | "appleDemoAccount"
 >;
 
 function hashOpaque(value: string) {
@@ -98,6 +107,7 @@ export async function findActiveStaffByEmail(email: string): Promise<StaffAuthUs
       passwordHash: true,
       phone: true,
       lmsUserId: true,
+      appleDemoAccount: true,
     },
   });
   if (!user || user.status !== "ACTIVE" || !user.passwordHash) return null;
@@ -208,6 +218,7 @@ export async function verifyStaffMfaChallenge(
           passwordHash: true,
           phone: true,
           lmsUserId: true,
+          appleDemoAccount: true,
         },
       },
     },
@@ -243,16 +254,45 @@ export async function verifyStaffMfaChallenge(
   return { ok: true, user: challenge.user, challengeId: challenge.id };
 }
 
+export type BeginStaffLoginResult =
+  | {
+      ok: true;
+      mfaRequired: false;
+      user: StaffAuthUser;
+    }
+  | {
+      ok: true;
+      mfaRequired: true;
+      challengeId: string;
+      phoneMasked: string;
+      debugCode?: string;
+    }
+  | { ok: false; error: string; code: "NO_PHONE" | "SMS_CONFIG" | "INVALID" };
+
 export async function beginStaffPasswordLogin(
   email: string,
   password: string,
   purpose: AuthMfaPurpose,
-): Promise<StartMfaResult> {
+): Promise<BeginStaffLoginResult> {
   const user = await findActiveStaffByEmail(email);
   if (!user || !(await verifyStaffPassword(user, password))) {
     return { ok: false, error: "Invalid email or password.", code: "INVALID" };
   }
-  return startStaffMfaChallenge(user, purpose);
+
+  // App Store review / Apple demo technician — password only, no SMS MFA.
+  if (user.appleDemoAccount) {
+    return { ok: true, mfaRequired: false, user };
+  }
+
+  const mfa = await startStaffMfaChallenge(user, purpose);
+  if (!mfa.ok) return mfa;
+  return {
+    ok: true,
+    mfaRequired: true,
+    challengeId: mfa.challengeId,
+    phoneMasked: mfa.phoneMasked,
+    ...(mfa.debugCode ? { debugCode: mfa.debugCode } : {}),
+  };
 }
 
 function ticketSecret() {

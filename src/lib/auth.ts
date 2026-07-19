@@ -2,7 +2,11 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { AuthMfaPurpose } from "@prisma/client";
 import { getAuthSecret } from "@/lib/auth-secret";
-import { verifyStaffMfaChallenge } from "@/lib/staff-auth";
+import {
+  findActiveStaffByEmail,
+  verifyStaffMfaChallenge,
+  verifyStaffPassword,
+} from "@/lib/staff-auth";
 
 declare module "next-auth" {
   interface Session {
@@ -37,16 +41,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         challengeId: { label: "Challenge", type: "text" },
         code: { label: "Code", type: "text" },
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const challengeId = credentials?.challengeId
-          ? String(credentials.challengeId)
-          : "";
-        const code = credentials?.code ? String(credentials.code) : "";
-        if (!challengeId || !code) return null;
         if (!process.env.DATABASE_URL) return null;
 
         try {
+          const email = credentials?.email ? String(credentials.email).trim().toLowerCase() : "";
+          const password = credentials?.password ? String(credentials.password) : "";
+
+          // Apple demo / App Store review account — password-only sign-in (no MFA).
+          if (email && password) {
+            const user = await findActiveStaffByEmail(email);
+            if (!user?.appleDemoAccount) return null;
+            if (!(await verifyStaffPassword(user, password))) return null;
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              companyId: user.companyId,
+              role: user.role,
+            };
+          }
+
+          const challengeId = credentials?.challengeId
+            ? String(credentials.challengeId)
+            : "";
+          const code = credentials?.code ? String(credentials.code) : "";
+          if (!challengeId || !code) return null;
+
           const result = await verifyStaffMfaChallenge(
             challengeId,
             code,

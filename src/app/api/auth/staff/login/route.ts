@@ -25,6 +25,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error, code: result.code }, { status });
     }
 
+    if (!result.mfaRequired) {
+      return NextResponse.json({
+        mfaRequired: false,
+        appleDemo: true,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          companyId: result.user.companyId,
+          role: result.user.role,
+        },
+      });
+    }
+
     return NextResponse.json({
       mfaRequired: true,
       challengeId: result.challengeId,

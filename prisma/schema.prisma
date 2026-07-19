@@ -837,6 +837,8 @@ model User {
   tags         String[]       @default([])
   /// When set (e.g. AI_RECEPTIONIST), this is a non-login system account for automated notes.
   systemKind   String?
+  /// App Store review / Apple demo technician — no phone or MFA required; disable via Integrations.
+  appleDemoAccount Boolean @default(false)
   payType            PayType?
   hourlyRate         Decimal?       @db.Decimal(10, 2)
   commissionPercent  Decimal?       @db.Decimal(5, 2)

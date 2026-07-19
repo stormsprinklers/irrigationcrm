@@ -43,11 +43,33 @@ export default function LoginForm({ companyName }: { companyName?: string | null
       });
       const data = (await res.json()) as {
         error?: string;
+        mfaRequired?: boolean;
         challengeId?: string;
         phoneMasked?: string;
         debugCode?: string;
+        appleDemo?: boolean;
       };
-      if (!res.ok || !data.challengeId) {
+      if (!res.ok) {
+        setError(data.error ?? "Invalid email or password");
+        return;
+      }
+
+      // Apple demo account — complete NextAuth session without SMS MFA.
+      if (data.mfaRequired === false) {
+        const result = await signIn("credentials", {
+          email: email.trim().toLowerCase(),
+          password,
+          redirect: false,
+        });
+        if (!result?.ok) {
+          setError("Sign in failed. Please try again.");
+          return;
+        }
+        window.location.assign(callbackUrl);
+        return;
+      }
+
+      if (!data.challengeId) {
         setError(data.error ?? "Invalid email or password");
         return;
       }

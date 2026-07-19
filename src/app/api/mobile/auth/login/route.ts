@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const email = String(body.email ?? "").trim();
     const password = String(body.password ?? "");
+    const deviceName = body.deviceName ? String(body.deviceName).slice(0, 120) : undefined;
 
     if (!email || !password) {
       return badRequestResponse("email and password are required");
@@ -22,6 +23,28 @@ export async function POST(request: NextRequest) {
           ? 403
           : 401;
       return NextResponse.json({ error: message }, { status });
+    }
+
+    // Apple App Store demo technician — skip SMS MFA.
+    if (result.user.appleDemoAccount) {
+      const tokens = await issueMobileSession({
+        userId: result.user.id,
+        companyId: result.user.companyId,
+        role: result.user.role,
+        deviceName,
+      });
+      return NextResponse.json({
+        mfaRequired: false,
+        appleDemo: true,
+        ...tokens,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          companyId: result.user.companyId,
+          role: result.user.role,
+        },
+      });
     }
 
     const mfa = await startStaffMfaChallenge(result.user, AuthMfaPurpose.MOBILE_LOGIN);

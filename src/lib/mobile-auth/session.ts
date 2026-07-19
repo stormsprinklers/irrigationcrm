@@ -23,6 +23,7 @@ export async function authenticateMobileUser(email: string, password: string) {
       passwordHash: true,
       phone: true,
       lmsUserId: true,
+      appleDemoAccount: true,
     },
   });
   if (!user?.passwordHash || user.status !== "ACTIVE") {
