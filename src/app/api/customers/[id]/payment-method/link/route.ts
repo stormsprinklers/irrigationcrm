@@ -29,11 +29,21 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!stripeCustomerId) return badRequestResponse("Failed to create Stripe customer");
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+    const body = (await request.json().catch(() => ({}))) as {
+      mobileReturn?: boolean;
+      platform?: string;
+      successUrl?: string;
+      cancelUrl?: string;
+    };
+    const mobileReturn = body.mobileReturn === true || body.platform === "ios";
     const session = await createCardSetupCheckoutSession({
       customerId: customer.id,
       companyId: user.companyId,
       stripeCustomerId,
       appUrl,
+      mobileReturn,
+      successUrl: body.successUrl,
+      cancelUrl: body.cancelUrl,
     });
 
     if (!session.url) {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { BillingFrequency, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { requireCardOnFileOrSetupUrl } from "@/lib/customers/stripe";
 import { getEnrollment, listEnrollments } from "@/lib/maintenance-plans/queries";
 import { canManageEnrollments, canViewMaintenancePlans } from "@/lib/maintenance-plans/permissions";
 import { prisma } from "@/lib/prisma";
@@ -62,6 +64,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const mobileReturn = body.mobileReturn === true || body.platform === "ios";
+    const appUrl = getAppBaseUrl(request.nextUrl.origin);
+    const cardCheck = await requireCardOnFileOrSetupUrl({
+      customerId: body.customerId,
+      companyId: user.companyId,
+      appUrl,
+      mobileReturn,
+      successUrl: mobileReturn
+        ? undefined
+        : `${appUrl}/customers/${body.customerId}?tab=plans&cardSetup=success`,
+      cancelUrl: mobileReturn
+        ? undefined
+        : `${appUrl}/customers/${body.customerId}?tab=plans&cardSetup=cancelled`,
+    });
+
+    if (!cardCheck.ok) {
+      return NextResponse.json(
+        {
+          error: cardCheck.error,
+          code: cardCheck.code,
+          setupUrl: cardCheck.setupUrl || null,
+          customerId: body.customerId,
+        },
+        { status: 409 }
+      );
+    }
+
     const enrollment = await prisma.maintenancePlanEnrollment.create({
       data: {
         companyId: user.companyId,
@@ -73,6 +102,8 @@ export async function POST(request: NextRequest) {
         startDate: body.startDate ? new Date(body.startDate) : new Date(),
         autoRenew: body.autoRenew !== undefined ? Boolean(body.autoRenew) : template.autoRenewDefault,
         selectedAddonIds,
+        stripeCustomerId: cardCheck.stripeCustomerId,
+        stripePaymentMethodId: cardCheck.paymentMethodId,
       },
     });
 

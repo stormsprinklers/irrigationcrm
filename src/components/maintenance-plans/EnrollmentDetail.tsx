@@ -43,12 +43,22 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
     try {
       const res = await fetch(`/api/maintenance-plans/enrollments/${enrollment.id}/accept`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error("Failed to activate enrollment");
+        if (data.code === "CARD_REQUIRED" && data.setupUrl) {
+          toast.message("Card on file required", {
+            description: "Add a card, then accept again to activate the plan.",
+          });
+          window.open(data.setupUrl as string, "_blank", "noopener,noreferrer");
+          return;
+        }
+        toast.error(data.error ?? "Failed to activate enrollment");
         return;
       }
-      onUpdated(await res.json());
+      onUpdated(data);
       toast.success("Enrollment activated");
     } finally {
       setActing(false);

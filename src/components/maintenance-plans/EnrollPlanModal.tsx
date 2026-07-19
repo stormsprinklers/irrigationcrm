@@ -92,16 +92,22 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
           selectedAddonIds,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        toast.error(err.error ?? "Failed to enroll customer");
+        if (data.code === "CARD_REQUIRED" && data.setupUrl) {
+          toast.message("Card on file required", {
+            description: "Add a card to continue enrollment. We'll open Stripe checkout.",
+          });
+          window.open(data.setupUrl as string, "_blank", "noopener,noreferrer");
+          return;
+        }
+        toast.error(data.error ?? "Failed to enroll customer");
         return;
       }
-      const enrollment = await res.json();
       toast.success("Enrollment created");
       onEnrolled();
       onClose();
-      window.location.href = `/maintenance-plans/enrollments/${enrollment.id}`;
+      window.location.href = `/maintenance-plans/enrollments/${data.id}`;
     } catch {
       toast.error("Failed to enroll customer");
     } finally {
@@ -213,6 +219,11 @@ export function EnrollPlanModal({ customerId, properties, open, onClose, onEnrol
               )}
             </>
           )}
+
+          <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            A card on file is required. If this customer doesn&apos;t have one, enrollment will open
+            Stripe card setup first.
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>

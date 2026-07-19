@@ -28,10 +28,10 @@ export async function createInvoiceCheckoutSession(params: {
   }
 
   const stripe = getStripeClient();
-  // automatic_payment_methods enables Apple Pay, Klarna, Link, etc. per Stripe Dashboard settings.
+  // Omit payment_method_types so Checkout uses payment methods enabled in the Stripe Dashboard
+  // (card, Apple Pay, Klarna, Link, etc.). Do not use PaymentIntent-only `automatic_payment_methods`.
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    automatic_payment_methods: { enabled: true },
     customer_email: params.customerEmail ?? undefined,
     line_items: [
       {
