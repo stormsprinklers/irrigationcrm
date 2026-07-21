@@ -184,6 +184,9 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
           ~{Math.round(guide.totalGallonsPerWeek).toLocaleString()} gal/week total · ET₀{" "}
           {guide.weeklyEToInches}&quot;/wk
           {guide.droughtMode ? " · Drought schedule" : ""}
+          {guide.addressRestriction
+            ? ` · ${guide.addressRestriction.city} ${guide.addressRestriction.parity} address`
+            : ""}
         </p>
         {footerNote ? <p className="italic">{footerNote}</p> : null}
       </div>
