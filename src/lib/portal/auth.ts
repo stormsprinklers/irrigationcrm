@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession, type PortalSessionPayload } from "./session";
-import type { PortalCompany } from "./company";
+import { portalCompanySelect, type PortalCompany } from "./company";
 
 export type PortalCustomerContext = PortalSessionPayload & {
   customer: {
@@ -32,35 +32,7 @@ export async function requirePortalCustomer(): Promise<PortalCustomerContext | n
     }),
     prisma.company.findUnique({
       where: { id: session.companyId },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        supportEmail: true,
-        website: true,
-        description: true,
-        emailLogoUrl: true,
-        sendgridFrom: true,
-        emailSenderName: true,
-        timezone: true,
-        businessHours: true,
-        bookingSlug: true,
-        bookingLeadTimeHours: true,
-        portalEnabled: true,
-        portalSlug: true,
-        portalShowInvoices: true,
-        portalShowEstimates: true,
-        portalShowJobs: true,
-        portalRescheduleLeadHours: true,
-        portalCancelLeadHours: true,
-        portalAllowSchedule: true,
-        portalShowMaintenance: true,
-        portalShowChecklists: true,
-        portalShowRachio: true,
-        portalShowOffers: true,
-        portalShowReferrals: true,
-        portalRachioAllowRun: true,
-      },
+      select: portalCompanySelect,
     }),
   ]);
 

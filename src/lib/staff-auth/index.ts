@@ -170,7 +170,10 @@ export async function startStaffMfaChallenge(
         companyId: user.companyId,
         from,
         to: phone,
-        body: `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
+        body:
+          purpose === "EXPENSE_CARD_ADMIN"
+            ? `Storm Sprinklers expense card verification code: ${code}. Expires in 10 minutes.`
+            : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
         bypassCommsFreeze: true,
       });
     } catch (err) {

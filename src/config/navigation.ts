@@ -144,6 +144,7 @@ export const companySettingsSidebar: NavSection[] = [
     items: [
       { label: "Company details", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
+      { label: "Company Expense Cards", href: "/settings/expense-cards" },
     ],
   },
 ];
@@ -242,7 +243,7 @@ export const settingsSidebar: NavSection[] = [
         label: "Company",
         href: "/settings",
         exact: true,
-        activePrefixes: ["/settings/appearance"],
+        activePrefixes: ["/settings/appearance", "/settings/expense-cards"],
         children: companySettingsSidebar[0]!.items,
       },
       {

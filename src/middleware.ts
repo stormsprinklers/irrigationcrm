@@ -23,6 +23,7 @@ const publicPaths = [
   "/api/ai/receptionist",
   "/api/sendgrid",
   "/api/stripe/webhook",
+  "/api/stripe/issuing-authorization",
   "/api/meta",
   "/api/invoices/public",
   "/api/marketing/google-business/callback",

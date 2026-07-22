@@ -629,6 +629,10 @@ model Company {
   notifyLeadCreated        Boolean  @default(true)
   flatRatePricingEnabled   Boolean  @default(false)
   materialMarkupsEnabled   Boolean  @default(true)
+  /// Stripe Issuing expense cards program for this company.
+  expenseCardsEnabled      Boolean  @default(false)
+  /// Default spend limits and card controls (daily/monthly cents, block flags, MCC allowlist).
+  expenseCardDefaultsJson  Json?
   commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
   payPeriodType            PayPeriodType   @default(BIWEEKLY)
   payPeriodAnchorDate      DateTime?
@@ -678,6 +682,8 @@ model Company {
   timeClockEntries       TimeClockEntry[]
   techTimeSegments       TechTimeSegment[]
   techTimeCorrections    TechTimeCorrection[]
+  expenseCardRolePolicies ExpenseCardRolePolicy[]
+  expenseCards           ExpenseCard[]
   staffAuditLogs         StaffAuditLog[]
   voiceClips             VoiceClip[]
   queueWaitClip          VoiceClip?  @relation("CompanyQueueWaitClip", fields: [queueWaitClipId], references: [id], onDelete: SetNull)
@@ -908,12 +914,70 @@ model User {
   resolvedVehicleIssues    VehicleIssue[]         @relation("VehicleIssueResolver")
   authMfaChallenges        AuthMfaChallenge[]
   passwordResetTokens      PasswordResetToken[]
+  expenseCard              ExpenseCard?
+  createdExpenseCards      ExpenseCard[] @relation("ExpenseCardCreator")
 }
 
 enum AuthMfaPurpose {
   LOGIN
   MOBILE_LOGIN
   LMS_LOGIN
+  EXPENSE_CARD_ADMIN
+}
+
+enum ExpenseCardStatus {
+  ACTIVE
+  INACTIVE
+  CANCELED
+}
+
+/// Role-level defaults for Stripe Issuing expense cards (limits + controls).
+model ExpenseCardRolePolicy {
+  id                 String   @id @default(cuid())
+  companyId          String
+  role               UserRole
+  dailyLimitCents    Int?
+  monthlyLimitCents  Int?
+  blockAtm           Boolean?
+  blockInternational Boolean?
+  blockOnline        Boolean?
+  /// Stripe MCC / category codes allowlist (empty = inherit company defaults).
+  allowedCategories  String[] @default([])
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, role])
+  @@index([companyId])
+}
+
+/// Maps an employee to a Stripe Issuing virtual card. Never stores PAN/CVC/PIN.
+model ExpenseCard {
+  id                   String            @id @default(cuid())
+  companyId            String
+  userId               String            @unique
+  stripeCardholderId   String
+  stripeCardId         String            @unique
+  status               ExpenseCardStatus @default(ACTIVE)
+  last4                String?
+  /// Per-employee overrides; null inherits role → company defaults.
+  dailyLimitCents      Int?
+  monthlyLimitCents    Int?
+  blockAtm             Boolean?
+  blockInternational   Boolean?
+  blockOnline          Boolean?
+  allowedCategories    String[]          @default([])
+  createdByUserId      String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("ExpenseCardCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([stripeCardId])
 }
 
 /// Short-lived SMS OTP challenge for staff sign-in (CRM, mobile, LMS).

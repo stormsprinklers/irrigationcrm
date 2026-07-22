@@ -24,7 +24,9 @@ const SETTINGS_SECTIONS: Array<{
   {
     title: "Company",
     match: (pathname) =>
-      pathname === "/settings" || pathname.startsWith("/settings/appearance"),
+      pathname === "/settings" ||
+      pathname.startsWith("/settings/appearance") ||
+      pathname.startsWith("/settings/expense-cards"),
     sections: companySettingsSidebar,
   },
   {
