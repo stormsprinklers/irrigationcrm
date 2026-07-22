@@ -15,6 +15,7 @@ type EstimateSettings = {
   estimateDepositAmount: string | number | null;
   deferredVisitDepositThreshold: string | number;
   deferredVisitDepositPercent: string | number;
+  estimateWarrantyText: string | null;
   defaultInstallDurationDays: number;
   supplierEmail: string | null;
   supplierPartsAutoSend: boolean;
@@ -66,7 +67,7 @@ export default function SettingsEstimatesPage() {
       <PageHeader
         breadcrumb={["Settings", "Estimates"]}
         title="Estimates"
-        subtitle="Default expiry, portal deposits, and post-approval scheduling deposits"
+        subtitle="Default expiry, customer warranty copy, portal deposits, and post-approval scheduling deposits"
       />
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -83,6 +84,24 @@ export default function SettingsEstimatesPage() {
                   setSettings({ ...settings, estimateExpiryDays: Number(e.target.value) })
                 }
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Warranty (customer estimate page)</label>
+              <textarea
+                className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                value={settings.estimateWarrantyText ?? ""}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    estimateWarrantyText: e.target.value || null,
+                  })
+                }
+                placeholder="Example: All labor and materials are covered by our 1-year workmanship warranty…"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Shown on the estimate link customers open from email or SMS. Leave blank to hide the
+                warranty section.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox

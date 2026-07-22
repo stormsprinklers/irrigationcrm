@@ -28,6 +28,7 @@ export const portalCompanySelect = {
   portalShowOffers: true,
   portalShowReferrals: true,
   portalRachioAllowRun: true,
+  estimateWarrantyText: true,
 } as const;
 
 export type PortalCompany = {
@@ -58,6 +59,7 @@ export type PortalCompany = {
   portalShowOffers: boolean;
   portalShowReferrals: boolean;
   portalRachioAllowRun: boolean;
+  estimateWarrantyText: string | null;
 };
 
 export function resolvePortalSlug(company: { portalSlug: string | null; bookingSlug: string | null }) {

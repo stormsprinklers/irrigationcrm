@@ -57,13 +57,20 @@ export async function POST(request: NextRequest, { params }: Params) {
         return badRequestResponse("schedule.title, startAt, endAt, and division are required for new_visit");
       }
 
-      let serviceAreaId = schedule.serviceAreaId;
+      let serviceAreaId = schedule.serviceAreaId ?? null;
       if (!serviceAreaId && (schedule.zip || estimate.property?.zip || estimate.customer.zip)) {
         const zip = schedule.zip ?? estimate.property?.zip ?? estimate.customer.zip;
         const area = await resolveServiceAreaByZip(user.companyId, String(zip));
-        serviceAreaId = area?.id;
+        serviceAreaId = area?.id ?? null;
       }
-      if (!serviceAreaId) return badRequestResponse("serviceAreaId or valid zip is required");
+      if (!serviceAreaId) {
+        const fallback = await prisma.serviceArea.findFirst({
+          where: { companyId: user.companyId },
+          orderBy: { createdAt: "asc" },
+        });
+        serviceAreaId = fallback?.id ?? null;
+      }
+      // serviceAreaId is optional on Visit — proceed even if none is configured.
 
       const assignmentError = validateScheduledVisitAssignment(
         VisitStatus.SCHEDULED,

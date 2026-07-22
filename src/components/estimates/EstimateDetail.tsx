@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
+  CheckCircle2,
   Copy,
   FileText,
   Loader2,
@@ -224,10 +225,12 @@ export function EstimateDetail({ estimateId }: Props) {
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
   const [saving, setSaving] = useState(false);
-  const [copyVisitId, setCopyVisitId] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
+  const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
+    "choose"
+  );
   const [activeOptionId, setActiveOptionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -247,6 +250,20 @@ export function EstimateDetail({ estimateId }: Props) {
       .catch(() => toast.error("Failed to load estimate"))
       .finally(() => setLoading(false));
   }, [load]);
+
+  // Poll while waiting for the customer to approve on the portal link.
+  useEffect(() => {
+    if (estimate?.status !== "SENT") return;
+    const id = window.setInterval(() => {
+      void load();
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [estimate?.status, load]);
+
+  function openPostApproval(mode: "choose" | "today" | "schedule") {
+    setPostApprovalMode(mode);
+    setPostApprovalOpen(true);
+  }
 
   async function addLineItem(item: PriceBookItemDTO) {
     setSaving(true);
@@ -385,45 +402,8 @@ export function EstimateDetail({ estimateId }: Props) {
       }
       setEstimate(await res.json());
       toast.success("Estimate approved with signature");
+      setPostApprovalMode("choose");
       setPostApprovalOpen(true);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function copyToVisit(target: "this_visit" | "new_visit", visitIdOverride?: string) {
-    setSaving(true);
-    try {
-      const body: Record<string, unknown> = { target, optionId: activeOptionId };
-      if (target === "this_visit") {
-        const vid = visitIdOverride ?? copyVisitId.trim() ?? estimate?.visit?.id;
-        if (!vid) {
-          toast.error("Enter a visit ID");
-          return;
-        }
-        body.visitId = vid;
-      } else {
-        body.schedule = {
-          title: `Work from estimate`,
-          startAt: new Date().toISOString(),
-          endAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-          division: "SERVICE",
-          zip: estimate?.property?.address ? undefined : undefined,
-        };
-      }
-
-      const res = await fetch(`/api/estimates/${estimateId}/copy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        toast.error("Failed to copy to visit");
-        return;
-      }
-      const data = await res.json();
-      toast.success("Copied to visit");
-      window.location.href = `/visits/${data.visitId}`;
     } finally {
       setSaving(false);
     }
@@ -574,28 +554,25 @@ export function EstimateDetail({ estimateId }: Props) {
             Send
           </Button>
           {estimate.status === "APPROVED" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPostApprovalOpen(true)}
-              disabled={saving}
-            >
-              <Copy className="h-4 w-4" />
-              Schedule work
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                copyToVisit(estimate.visit ? "this_visit" : "new_visit", estimate.visit?.id)
-              }
-              disabled={saving}
-            >
-              <Copy className="h-4 w-4" />
-              Copy to visit
-            </Button>
-          )}
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => openPostApproval("today")}
+                disabled={saving}
+              >
+                Complete Today
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openPostApproval("schedule")}
+                disabled={saving}
+              >
+                Schedule Visit
+              </Button>
+            </>
+          ) : null}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
               <Trash2 className="h-4 w-4" />
@@ -604,6 +581,28 @@ export function EstimateDetail({ estimateId }: Props) {
           ) : null}
         </div>
       </div>
+
+      {estimate.status === "APPROVED" || estimate.status === "CONVERTED" ? (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+          <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-600" />
+          <div>
+            <p className="font-semibold">
+              {estimate.status === "CONVERTED" ? "Estimate converted" : "Estimate approved"}
+            </p>
+            <p className="text-sm text-emerald-800/80">
+              {estimate.signedAt
+                ? `Customer signed ${format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")}`
+                : "Customer signature on file"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {estimate.status === "SENT" ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          Waiting for customer approval — this page updates automatically when they sign.
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -901,31 +900,30 @@ export function EstimateDetail({ estimateId }: Props) {
             </CardContent>
           </Card>
 
-          {estimate.visit && (
+          {estimate.status === "APPROVED" ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Copy to visit</CardTitle>
+                <CardTitle className="text-base">Next step</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Input
-                  value={copyVisitId || estimate.visit.id}
-                  onChange={(e) => setCopyVisitId(e.target.value)}
-                  placeholder="Visit ID"
-                />
+                <Button
+                  className="w-full"
+                  onClick={() => openPostApproval("today")}
+                  disabled={saving}
+                >
+                  Complete Today
+                </Button>
                 <Button
                   className="w-full"
                   variant="outline"
-                  onClick={() => {
-                    const visitId = copyVisitId || estimate.visit?.id;
-                    if (visitId) copyToVisit("this_visit", visitId);
-                  }}
+                  onClick={() => openPostApproval("schedule")}
                   disabled={saving}
                 >
-                  Copy line items to visit
+                  Schedule Visit
                 </Button>
               </CardContent>
             </Card>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -961,6 +959,7 @@ export function EstimateDetail({ estimateId }: Props) {
         estimateTotal={optionTotal}
         linkedVisitId={estimate.visit?.id ?? null}
         optionId={activeOptionId}
+        initialMode={postApprovalMode}
         onClose={() => setPostApprovalOpen(false)}
         onConverted={() => {
           void load();

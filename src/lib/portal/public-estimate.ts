@@ -3,8 +3,21 @@ import { portalCompanySelect, type PortalCompany } from "./company";
 import { portalFeatureEnabled } from "./permissions";
 
 const estimateLineItemsInclude = {
-  lineItems: { orderBy: { sortOrder: "asc" as const } },
+  lineItems: {
+    orderBy: { sortOrder: "asc" as const },
+    include: { priceBookItem: { select: { type: true } } },
+  },
   options: { orderBy: { sortOrder: "asc" as const } },
+  discounts: true,
+  visit: {
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      endAt: true,
+      assignedUser: { select: { name: true, photoUrl: true, title: true } },
+    },
+  },
 };
 
 /**
@@ -32,6 +45,7 @@ export function portalCompanyPayload(company: PortalCompany) {
   return {
     name: company.name,
     emailLogoUrl: company.emailLogoUrl,
+    estimateWarrantyText: company.estimateWarrantyText ?? null,
     features: {
       jobs: portalFeatureEnabled(company, "jobs"),
       invoices: portalFeatureEnabled(company, "invoices"),

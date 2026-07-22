@@ -120,8 +120,22 @@ export async function POST(request: NextRequest, { params }: Params) {
       subtotal: total,
     },
     include: {
-      lineItems: { orderBy: { sortOrder: "asc" } },
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        include: { priceBookItem: { select: { type: true } } },
+      },
       options: { orderBy: { sortOrder: "asc" } },
+      discounts: true,
+      visit: {
+        select: {
+          id: true,
+          title: true,
+          startAt: true,
+          endAt: true,
+          assignedUser: { select: { name: true, photoUrl: true, title: true } },
+        },
+      },
+      company: { select: { estimateWarrantyText: true } },
     },
   });
 

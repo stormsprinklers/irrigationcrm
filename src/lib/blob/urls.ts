@@ -29,7 +29,7 @@ export function canAccessBlobPath(companyId: string, pathname: string) {
 
 /** Paths safe to expose without auth (email logos, Google-fetchable marketing media, portal offers). */
 export function canPublicAccessBlobPath(pathname: string) {
-  return /^(company-email|gbp\/local-posts|portal-offers)\/[^/]+\//.test(pathname);
+  return /^(company-email|gbp\/local-posts|portal-offers|employees)\/[^/]+\//.test(pathname);
 }
 
 function appOrigin() {

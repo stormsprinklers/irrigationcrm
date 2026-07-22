@@ -228,9 +228,7 @@ async function createScheduledVisitFromEstimate(params: {
     });
     serviceAreaId = fallback?.id ?? null;
   }
-  if (!serviceAreaId) {
-    return { error: "No service area found — set a zip or configure a service area" };
-  }
+  // serviceAreaId is optional — create the visit even when no service area is configured.
 
   const assignmentError = validateScheduledVisitAssignment(
     VisitStatus.SCHEDULED,

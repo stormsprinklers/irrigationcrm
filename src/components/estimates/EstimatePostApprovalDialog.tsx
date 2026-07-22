@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addHours, format } from "date-fns";
 import { CalendarClock, Loader2 } from "lucide-react";
@@ -15,6 +15,8 @@ type Props = {
   estimateTotal: number;
   linkedVisitId: string | null;
   optionId: string | null;
+  /** choose = ask; today = complete today immediately; schedule = date picker */
+  initialMode?: "choose" | "today" | "schedule";
   onClose: () => void;
   onConverted: (visitId: string) => void;
 };
@@ -36,6 +38,7 @@ export function EstimatePostApprovalDialog({
   estimateTotal,
   linkedVisitId,
   optionId,
+  initialMode = "choose",
   onClose,
   onConverted,
 }: Props) {
@@ -50,15 +53,19 @@ export function EstimatePostApprovalDialog({
   const [percent, setPercent] = useState(50);
   const [resultVisitId, setResultVisitId] = useState<string | null>(null);
   const [depositDue, setDepositDue] = useState(0);
+  const autoRan = useRef(false);
 
   useEffect(() => {
-    if (!open) return;
-    setStep("timing");
+    if (!open) {
+      autoRan.current = false;
+      return;
+    }
     setResultVisitId(null);
     setDepositDue(0);
     const start = addHours(new Date(), 24);
     setStartLocal(toLocalInputValue(start));
     setEndLocal(toLocalInputValue(addHours(start, 2)));
+    setStep(initialMode === "schedule" ? "schedule" : "timing");
     fetch("/api/settings/estimates")
       .then((r) => r.json())
       .then((data) => {
@@ -70,7 +77,7 @@ export function EstimatePostApprovalDialog({
         }
       })
       .catch(() => undefined);
-  }, [open]);
+  }, [open, initialMode]);
 
   const previewDeposit = useMemo(() => {
     if (estimateTotal <= threshold) return 0;
@@ -128,7 +135,7 @@ export function EstimatePostApprovalDialog({
         setStep("deposit");
         toast.success("Visit scheduled — collect deposit");
       } else {
-        toast.success("Visit scheduled for another day");
+        toast.success("Visit scheduled");
         router.push(`/visits/${data.visitId}`);
         onClose();
       }
@@ -136,6 +143,13 @@ export function EstimatePostApprovalDialog({
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (!open || initialMode !== "today" || autoRan.current) return;
+    autoRan.current = true;
+    void submit("today");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when opened in today mode
+  }, [open, initialMode]);
 
   if (!open) return null;
 
@@ -150,20 +164,23 @@ export function EstimatePostApprovalDialog({
         }}
       />
       <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-        {step === "timing" ? (
+        {initialMode === "today" && step === "timing" ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Completing work today…
+          </div>
+        ) : null}
+
+        {step === "timing" && initialMode !== "today" ? (
           <>
             <h2 className="text-lg font-semibold">When is this work happening?</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Are you completing this work today, or another day?
             </p>
             <div className="mt-6 flex flex-col gap-2">
-              <Button
-                type="button"
-                disabled={saving}
-                onClick={() => void submit("today")}
-              >
+              <Button type="button" disabled={saving} onClick={() => void submit("today")}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Completing today
+                Complete Today
               </Button>
               <Button
                 type="button"
@@ -172,7 +189,7 @@ export function EstimatePostApprovalDialog({
                 onClick={() => setStep("schedule")}
               >
                 <CalendarClock className="h-4 w-4" />
-                Another day
+                Schedule Visit
               </Button>
             </div>
           </>
@@ -180,7 +197,7 @@ export function EstimatePostApprovalDialog({
 
         {step === "schedule" ? (
           <>
-            <h2 className="text-lg font-semibold">Schedule the visit</h2>
+            <h2 className="text-lg font-semibold">Schedule Visit</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Choose a day and time. Estimate total: {formatCurrency(estimateTotal)}.
             </p>
@@ -210,9 +227,7 @@ export function EstimatePostApprovalDialog({
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
                 {previewDeposit > 0 ? (
                   <>
-                    <p className="font-medium">
-                      Deposit due: {formatCurrency(previewDeposit)}
-                    </p>
+                    <p className="font-medium">Deposit due: {formatCurrency(previewDeposit)}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Totals over {formatCurrency(threshold)} require a {percent}% deposit when
                       booking for another day.
@@ -229,17 +244,23 @@ export function EstimatePostApprovalDialog({
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving}
-                onClick={() => setStep("timing")}
-              >
-                Back
-              </Button>
+              {initialMode === "choose" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => setStep("timing")}
+                >
+                  Back
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
+                  Cancel
+                </Button>
+              )}
               <Button type="button" disabled={saving} onClick={() => void submit("another_day")}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Schedule visit
+                Schedule Visit
               </Button>
             </div>
           </>
@@ -250,11 +271,9 @@ export function EstimatePostApprovalDialog({
             <h2 className="text-lg font-semibold">Collect deposit</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Visit scheduled
-              {startLocal
-                ? ` for ${format(new Date(startLocal), "MMM d, yyyy h:mm a")}`
-                : ""}
-              . Collect {formatCurrency(depositDue)} now ({percent}% of{" "}
-              {formatCurrency(estimateTotal)}).
+              {startLocal ? ` for ${format(new Date(startLocal), "MMM d, yyyy h:mm a")}` : ""}.
+              Collect {formatCurrency(depositDue)} now ({percent}% of {formatCurrency(estimateTotal)}
+              ).
             </p>
             <div className="mt-6 flex flex-col gap-2">
               <CollectPaymentButton

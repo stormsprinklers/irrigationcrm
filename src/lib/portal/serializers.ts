@@ -125,7 +125,22 @@ export function serializePortalEstimate(estimate: {
     unit?: string | null;
     total: { toNumber?: () => number } | number;
     sortOrder: number;
+    priceBookItem?: { type: string } | null;
   }>;
+  discounts?: Array<{
+    optionId?: string | null;
+    label: string | null;
+    type: string;
+    amount: { toNumber?: () => number } | number;
+  }>;
+  visit?: {
+    id: string;
+    title: string;
+    startAt: Date | null;
+    endAt: Date | null;
+    assignedUser?: { name: string; photoUrl: string | null; title: string | null } | null;
+  } | null;
+  company?: { estimateWarrantyText?: string | null } | null;
 }) {
   const hasDesign = Boolean(estimate.designProjectId);
   const optionCount = estimate.options?.length ?? 0;
@@ -154,7 +169,31 @@ export function serializePortalEstimate(estimate: {
     unit: item.unit?.trim() || "each",
     total: toNumber(item.total as never),
     sortOrder: item.sortOrder,
+    itemType: item.priceBookItem?.type ?? "SERVICE",
   }));
+
+  const discounts = (estimate.discounts ?? []).map((d) => ({
+    optionId: d.optionId ?? null,
+    label: d.label,
+    type: d.type,
+    amount: toNumber(d.amount as never),
+  }));
+
+  const visit = estimate.visit
+    ? {
+        id: estimate.visit.id,
+        title: estimate.visit.title,
+        startAt: estimate.visit.startAt?.toISOString() ?? null,
+        endAt: estimate.visit.endAt?.toISOString() ?? null,
+        technician: estimate.visit.assignedUser
+          ? {
+              name: estimate.visit.assignedUser.name,
+              photoUrl: estimate.visit.assignedUser.photoUrl,
+              title: estimate.visit.assignedUser.title,
+            }
+          : null,
+      }
+    : null;
 
   return {
     id: estimate.id,
@@ -181,9 +220,10 @@ export function serializePortalEstimate(estimate: {
         : null,
     selectedQuoteTier: estimate.selectedQuoteTier ?? null,
     options,
-    lineItems: hasDesign
-      ? lineItems.filter((item) => item.name.toLowerCase().includes("installation"))
-      : lineItems,
+    lineItems,
+    discounts,
+    visit,
+    warrantyText: estimate.company?.estimateWarrantyText?.trim() || null,
   };
 }
 

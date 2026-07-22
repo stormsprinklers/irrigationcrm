@@ -1,12 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { PortalShell } from "./PortalShell";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
+
+type LineItem = {
+  optionId?: string | null;
+  name: string;
+  description: string | null;
+  quantity: number;
+  unitPrice: number;
+  unit?: string;
+  total: number;
+  itemType?: string;
+};
+
+type Discount = {
+  optionId?: string | null;
+  label: string | null;
+  type: "PERCENT" | "FIXED" | string;
+  amount: number;
+};
 
 type Estimate = {
   id: string;
@@ -22,27 +41,41 @@ type Estimate = {
   depositRequired: boolean;
   hasDesign: boolean;
   premiumOptionTotal: number | null;
+  warrantyText?: string | null;
   options: Array<{
     id: string;
     label: string;
     displayNumber: string;
+    subtotal: number;
+    discountTotal: number;
     total: number;
   }>;
-  lineItems: Array<{
-    optionId?: string | null;
-    name: string;
-    description: string | null;
-    quantity: number;
-    unitPrice: number;
-    total: number;
-  }>;
+  lineItems: LineItem[];
+  discounts?: Discount[];
+  visit?: {
+    id: string;
+    title: string;
+    startAt: string | null;
+    endAt: string | null;
+    technician: { name: string; photoUrl: string | null; title: string | null } | null;
+  } | null;
 };
 
 type CompanyBranding = {
   name: string;
   emailLogoUrl: string | null;
+  estimateWarrantyText?: string | null;
   features: Record<string, boolean>;
 };
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+function techPhotoSrc(photoUrl: string | null | undefined) {
+  if (!photoUrl) return null;
+  return absolutePublicBlobUrl(photoUrl) ?? blobProxyUrl(photoUrl) ?? photoUrl;
+}
 
 export function PortalEstimateView({ slug, token }: { slug: string; token: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -107,18 +140,38 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     };
   }, [token]);
 
+  const activeOption = useMemo(() => {
+    if (!estimate?.options?.length) return null;
+    return estimate.options.find((o) => o.id === selectedOptionId) ?? estimate.options[0] ?? null;
+  }, [estimate, selectedOptionId]);
+
+  const visibleLineItems = useMemo(() => {
+    if (!estimate) return [];
+    if (!activeOption) return estimate.lineItems;
+    return estimate.lineItems.filter(
+      (item) => !item.optionId || item.optionId === activeOption.id
+    );
+  }, [estimate, activeOption]);
+
+  const visibleDiscounts = useMemo(() => {
+    if (!estimate?.discounts?.length) return [];
+    if (!activeOption) return estimate.discounts;
+    return estimate.discounts.filter((d) => !d.optionId || d.optionId === activeOption.id);
+  }, [estimate, activeOption]);
+
   function displayTotal() {
     if (!estimate) return 0;
-    if (estimate.options?.length) {
-      const option =
-        estimate.options.find((o) => o.id === selectedOptionId) ?? estimate.options[0];
-      if (option) return option.total;
-    }
+    if (activeOption) return activeOption.total;
     if (selectedTier === "PREMIUM" && estimate.premiumOptionTotal != null) {
       return estimate.premiumOptionTotal;
     }
-    const standard = estimate.lineItems.find((i) => i.name.toLowerCase().includes("standard"));
-    return standard?.total ?? estimate.total;
+    return estimate.total;
+  }
+
+  function displaySubtotal() {
+    if (!estimate) return 0;
+    if (activeOption) return activeOption.subtotal;
+    return estimate.subtotal;
   }
 
   function getPoint(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
@@ -242,6 +295,9 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
 
   const canSign = estimate.status === "SENT";
   const needsDeposit = estimate.status === "APPROVED" && estimate.depositRequired;
+  const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
+  const tech = estimate.visit?.technician ?? null;
+  const photoSrc = techPhotoSrc(tech?.photoUrl);
 
   return (
     <PortalShell
@@ -257,6 +313,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
             ← Back to portal
           </Link>
         ) : null}
+
         <div>
           <h1 className="text-2xl font-semibold">
             {estimate.options?.length > 1
@@ -271,10 +328,52 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
           ) : null}
         </div>
 
+        {(tech || estimate.visit?.startAt) && (
+          <section className="rounded-lg border bg-white p-4">
+            <div className="flex items-start gap-3">
+              {tech ? (
+                photoSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photoSrc}
+                    alt=""
+                    className="h-12 w-12 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+                    {tech.name.charAt(0)}
+                  </div>
+                )
+              ) : null}
+              <div className="min-w-0 flex-1">
+                {tech ? (
+                  <>
+                    <p className="font-medium">{tech.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {tech.title?.trim() || "Your technician"}
+                    </p>
+                  </>
+                ) : null}
+                {estimate.visit?.startAt ? (
+                  <p className="mt-1 text-sm">
+                    Appointment{" "}
+                    {format(new Date(estimate.visit.startAt), "EEE, MMM d · h:mm a")}
+                    {estimate.visit.endAt
+                      ? ` – ${format(new Date(estimate.visit.endAt), "h:mm a")}`
+                      : ""}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        )}
+
         {estimate.hasDesign && designSnapshot ? (
           <section className="space-y-2">
             <h2 className="text-sm font-medium">System layout</h2>
-            <p className="text-xs text-muted-foreground">Click each zone to see sprinkler head locations.</p>
+            <p className="text-xs text-muted-foreground">
+              Click each zone to see sprinkler head locations.
+            </p>
             <DesignZoneViewer snapshot={designSnapshot as never} />
           </section>
         ) : null}
@@ -292,7 +391,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
               >
                 <p className="font-medium">{option.displayNumber}</p>
                 <p className="text-sm text-muted-foreground">{option.label}</p>
-                <p className="mt-2 font-semibold">${option.total.toFixed(2)}</p>
+                <p className="mt-2 font-semibold">{formatCurrency(option.total)}</p>
               </button>
             ))}
           </section>
@@ -315,29 +414,107 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
               <p className="text-sm text-muted-foreground">
                 PRS heads, flow & weather sensors, 1-year maintenance
               </p>
-              <p className="mt-2 font-semibold">${estimate.premiumOptionTotal.toFixed(2)}</p>
+              <p className="mt-2 font-semibold">
+                {formatCurrency(estimate.premiumOptionTotal)}
+              </p>
             </button>
           </section>
-        ) : (
-          <div className="rounded-lg border p-4">
-            <p className="text-sm text-muted-foreground">Total investment</p>
-            <p className="text-2xl font-semibold">${displayTotal().toFixed(2)}</p>
+        ) : null}
+
+        <section className="rounded-lg border bg-white p-4">
+          <h2 className="mb-3 text-sm font-medium">Line items</h2>
+          {visibleLineItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No line items on this estimate.</p>
+          ) : (
+            <ul className="space-y-3">
+              {visibleLineItems.map((item, index) => (
+                <li key={`${item.name}-${index}`} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {item.name}
+                        {item.itemType === "MATERIAL" ? (
+                          <span className="ml-2 text-xs font-normal uppercase tracking-wide text-muted-foreground">
+                            Material
+                          </span>
+                        ) : null}
+                      </p>
+                      {item.description ? (
+                        <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">
+                          {item.description}
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Qty {item.quantity}
+                        {item.unit ? ` ${item.unit}` : ""} × {formatCurrency(item.unitPrice)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-medium">{formatCurrency(item.total)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {visibleDiscounts.length > 0 ? (
+            <div className="mt-4 space-y-2 border-t pt-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Discounts
+              </p>
+              {visibleDiscounts.map((discount, index) => (
+                <div key={`${discount.label}-${index}`} className="flex justify-between gap-3 text-sm">
+                  <span>{discount.label?.trim() || "Discount"}</span>
+                  <span className="text-emerald-700">
+                    −
+                    {discount.type === "PERCENT"
+                      ? `${discount.amount}%`
+                      : formatCurrency(discount.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span>{formatCurrency(displaySubtotal())}</span>
+            </div>
+            {(activeOption?.discountTotal ?? estimate.discountTotal) > 0 ? (
+              <div className="flex justify-between text-emerald-700">
+                <span>Discounts</span>
+                <span>
+                  −{formatCurrency(activeOption?.discountTotal ?? estimate.discountTotal)}
+                </span>
+              </div>
+            ) : null}
+            <div className="flex justify-between text-base font-semibold">
+              <span>Total</span>
+              <span>{formatCurrency(displayTotal())}</span>
+            </div>
           </div>
-        )}
+        </section>
+
+        {warrantyText ? (
+          <section className="rounded-lg border bg-white p-4">
+            <h2 className="mb-2 text-sm font-medium">Warranty</h2>
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{warrantyText}</p>
+          </section>
+        ) : null}
 
         {canSign ? (
           <div className="space-y-2">
             <p className="text-sm font-medium">
               Sign to approve
               {(estimate.options?.length ?? 0) > 1
-                ? ` (${estimate.options.find((o) => o.id === selectedOptionId)?.displayNumber ?? "option"})`
+                ? ` (${activeOption?.displayNumber ?? "option"})`
                 : selectedTier === "PREMIUM"
                   ? " (Premium)"
                   : estimate.premiumOptionTotal != null
                     ? " (Standard)"
                     : ""}
             </p>
-            <p className="text-lg font-semibold">${displayTotal().toFixed(2)}</p>
+            <p className="text-lg font-semibold">{formatCurrency(displayTotal())}</p>
             <p className="text-sm text-muted-foreground">Sign with your finger in the box below.</p>
             <canvas
               ref={canvasRef}
@@ -357,7 +534,11 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
                 Clear
               </Button>
               <Button onClick={() => void sign()} disabled={loading}>
-                {loading ? "Submitting..." : estimate.depositRequired ? "Approve & pay deposit" : "Approve estimate"}
+                {loading
+                  ? "Submitting..."
+                  : estimate.depositRequired
+                    ? "Approve & pay deposit"
+                    : "Approve estimate"}
               </Button>
             </div>
           </div>
@@ -366,7 +547,9 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
             {loading ? "Loading..." : "Pay deposit to book installation"}
           </Button>
         ) : estimate.signedAt ? (
-          <p className="text-sm text-muted-foreground">Signed on {format(new Date(estimate.signedAt), "MMM d, yyyy")}</p>
+          <p className="text-sm text-muted-foreground">
+            Signed on {format(new Date(estimate.signedAt), "MMM d, yyyy")}
+          </p>
         ) : null}
       </div>
     </PortalShell>

@@ -22,7 +22,24 @@ async function loadEstimate(companyId: string, customerId: string, idOrToken: st
       OR: [{ id: idOrToken }, { publicToken: idOrToken }],
       status: { not: "DRAFT" },
     },
-    include: { lineItems: { orderBy: { sortOrder: "asc" } }, options: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        include: { priceBookItem: { select: { type: true } } },
+      },
+      options: { orderBy: { sortOrder: "asc" } },
+      discounts: true,
+      visit: {
+        select: {
+          id: true,
+          title: true,
+          startAt: true,
+          endAt: true,
+          assignedUser: { select: { name: true, photoUrl: true, title: true } },
+        },
+      },
+      company: { select: { estimateWarrantyText: true } },
+    },
   });
 }
 
