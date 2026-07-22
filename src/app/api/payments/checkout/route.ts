@@ -20,6 +20,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: synced.error }, { status: synced.status });
     }
 
+    const requestedAmount =
+      typeof body.amount === "number" && body.amount > 0 ? body.amount : null;
+    const amount = requestedAmount
+      ? Math.min(requestedAmount, synced.balanceDue)
+      : synced.balanceDue;
+
+    if (amount <= 0) {
+      return badRequestResponse("Nothing due on this visit");
+    }
+
     const visit = await prisma.visit.findFirst({
       where: { id: visitId, companyId: user.companyId },
       include: { customer: true },
@@ -45,7 +55,7 @@ export async function POST(request: NextRequest) {
       },
       customerEmail: visit.customer.email,
       productName: visit.title,
-      amount: synced.balanceDue,
+      amount,
       successUrl,
       cancelUrl,
     });
@@ -55,6 +65,7 @@ export async function POST(request: NextRequest) {
       /** Same as url when Stripe session is created — prefer this for QR / share. */
       payLink: session.url,
       balanceDue: synced.balanceDue,
+      amount,
       invoice: synced.invoice,
     });
   } catch {

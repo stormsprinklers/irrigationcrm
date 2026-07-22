@@ -504,6 +504,10 @@ model Company {
   estimateDepositRequired  Boolean  @default(false)
   estimateDepositType      DepositType?
   estimateDepositAmount    Decimal? @db.Decimal(10, 2)
+  /// After estimate approval, when work is booked for another day: require a deposit if visit total exceeds this amount (USD).
+  deferredVisitDepositThreshold Decimal @default(1000) @db.Decimal(10, 2)
+  /// Percent of visit total to collect as deposit when over the deferred-visit threshold (e.g. 50 = 50%).
+  deferredVisitDepositPercent   Decimal @default(50) @db.Decimal(5, 2)
   defaultInstallDurationDays Int    @default(4)
   supplierEmail            String?
   supplierPartsAutoSend    Boolean  @default(false)

@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { isFieldRole } from "@/lib/employees";
 import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
+import { EstimatePostApprovalDialog } from "@/components/estimates/EstimatePostApprovalDialog";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Badge } from "@/components/ui/badge";
@@ -226,6 +227,7 @@ export function EstimateDetail({ estimateId }: Props) {
   const [copyVisitId, setCopyVisitId] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [postApprovalOpen, setPostApprovalOpen] = useState(false);
   const [activeOptionId, setActiveOptionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -383,6 +385,7 @@ export function EstimateDetail({ estimateId }: Props) {
       }
       setEstimate(await res.json());
       toast.success("Estimate approved with signature");
+      setPostApprovalOpen(true);
     } finally {
       setSaving(false);
     }
@@ -570,17 +573,29 @@ export function EstimateDetail({ estimateId }: Props) {
             <Send className="h-4 w-4" />
             Send
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              copyToVisit(estimate.visit ? "this_visit" : "new_visit", estimate.visit?.id)
-            }
-            disabled={saving}
-          >
-            <Copy className="h-4 w-4" />
-            Copy to visit
-          </Button>
+          {estimate.status === "APPROVED" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPostApprovalOpen(true)}
+              disabled={saving}
+            >
+              <Copy className="h-4 w-4" />
+              Schedule work
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                copyToVisit(estimate.visit ? "this_visit" : "new_visit", estimate.visit?.id)
+              }
+              disabled={saving}
+            >
+              <Copy className="h-4 w-4" />
+              Copy to visit
+            </Button>
+          )}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
               <Trash2 className="h-4 w-4" />
@@ -939,6 +954,18 @@ export function EstimateDetail({ estimateId }: Props) {
           </div>
         </div>
       ) : null}
+
+      <EstimatePostApprovalDialog
+        open={postApprovalOpen}
+        estimateId={estimateId}
+        estimateTotal={optionTotal}
+        linkedVisitId={estimate.visit?.id ?? null}
+        optionId={activeOptionId}
+        onClose={() => setPostApprovalOpen(false)}
+        onConverted={() => {
+          void load();
+        }}
+      />
 
       <ItemPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addLineItem} />
     </div>

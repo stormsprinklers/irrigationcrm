@@ -13,6 +13,8 @@ type EstimateSettings = {
   estimateDepositRequired: boolean;
   estimateDepositType: "PERCENT" | "FIXED" | null;
   estimateDepositAmount: string | number | null;
+  deferredVisitDepositThreshold: string | number;
+  deferredVisitDepositPercent: string | number;
   defaultInstallDurationDays: number;
   supplierEmail: string | null;
   supplierPartsAutoSend: boolean;
@@ -64,7 +66,7 @@ export default function SettingsEstimatesPage() {
       <PageHeader
         breadcrumb={["Settings", "Estimates"]}
         title="Estimates"
-        subtitle="Default expiry and deposit settings for new estimates"
+        subtitle="Default expiry, portal deposits, and post-approval scheduling deposits"
       />
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -126,6 +128,65 @@ export default function SettingsEstimatesPage() {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-white p-4">
+          <h3 className="mb-1 text-lg font-semibold">Deferred visit deposit</h3>
+          <p className="mb-4 text-sm text-muted-foreground">
+            After a technician approves an estimate, they choose whether the work is done{" "}
+            <span className="font-medium text-foreground">today</span> or on{" "}
+            <span className="font-medium text-foreground">another day</span>. When they book for
+            another day, these rules decide if a deposit must be collected before leaving.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">
+                Deposit threshold (USD)
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={Number(settings.deferredVisitDepositThreshold ?? 1000)}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    deferredVisitDepositThreshold: e.target.value
+                      ? Number(e.target.value)
+                      : 1000,
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Visits booked for another day with line items totaling more than this amount
+                require a deposit. At or under this amount, no deposit is required. Default:
+                $1,000.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Deposit percent</label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={Number(settings.deferredVisitDepositPercent ?? 50)}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    deferredVisitDepositPercent: e.target.value
+                      ? Number(e.target.value)
+                      : 50,
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                When the threshold is exceeded, collect this percentage of the visit total.
+                Example with defaults: a $1,200 job requires a $600 deposit (50%); a $900 job
+                requires none. Default: 50%.
+              </p>
+            </div>
           </div>
         </section>
 

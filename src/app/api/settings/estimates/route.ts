@@ -13,6 +13,8 @@ export async function GET() {
         estimateDepositRequired: true,
         estimateDepositType: true,
         estimateDepositAmount: true,
+        deferredVisitDepositThreshold: true,
+        deferredVisitDepositPercent: true,
         defaultInstallDurationDays: true,
         supplierEmail: true,
         supplierPartsAutoSend: true,
@@ -47,6 +49,22 @@ export async function PATCH(request: NextRequest) {
         ...(body.estimateDepositAmount !== undefined
           ? { estimateDepositAmount: body.estimateDepositAmount ?? null }
           : {}),
+        ...(body.deferredVisitDepositThreshold !== undefined
+          ? {
+              deferredVisitDepositThreshold: Math.max(
+                0,
+                Number(body.deferredVisitDepositThreshold)
+              ),
+            }
+          : {}),
+        ...(body.deferredVisitDepositPercent !== undefined
+          ? {
+              deferredVisitDepositPercent: Math.min(
+                100,
+                Math.max(0, Number(body.deferredVisitDepositPercent))
+              ),
+            }
+          : {}),
         ...(body.defaultInstallDurationDays !== undefined
           ? { defaultInstallDurationDays: Number(body.defaultInstallDurationDays) }
           : {}),
@@ -60,6 +78,8 @@ export async function PATCH(request: NextRequest) {
         estimateDepositRequired: true,
         estimateDepositType: true,
         estimateDepositAmount: true,
+        deferredVisitDepositThreshold: true,
+        deferredVisitDepositPercent: true,
         defaultInstallDurationDays: true,
         supplierEmail: true,
         supplierPartsAutoSend: true,

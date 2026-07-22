@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 type Props = {
   visitId: string;
   total: number;
+  /** Optional partial amount (e.g. deposit). Defaults to `total`. */
+  amount?: number;
   disabled?: boolean;
   paid?: boolean;
 };
 
-export function CollectPaymentButton({ visitId, total, disabled, paid }: Props) {
+export function CollectPaymentButton({ visitId, total, amount, disabled, paid }: Props) {
   const [loading, setLoading] = useState(false);
+  const collectAmount = amount != null && amount > 0 ? amount : total;
 
   async function handleCollect() {
     setLoading(true);
@@ -21,7 +24,7 @@ export function CollectPaymentButton({ visitId, total, disabled, paid }: Props) 
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitId }),
+        body: JSON.stringify({ visitId, amount: collectAmount }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -39,10 +42,10 @@ export function CollectPaymentButton({ visitId, total, disabled, paid }: Props) 
   const formatted = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(total);
+  }).format(collectAmount);
 
   return (
-    <Button onClick={handleCollect} disabled={disabled || loading || total <= 0}>
+    <Button onClick={handleCollect} disabled={disabled || loading || collectAmount <= 0}>
       <CreditCard className="h-4 w-4" />
       {loading ? "Redirecting..." : paid ? "Paid" : `Collect ${formatted}`}
     </Button>
