@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  forbiddenForFieldRole,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { canEditCustomerTags, canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { deleteCustomerForCompany } from "@/lib/customers/delete";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
@@ -84,15 +90,28 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
+    const fieldDenied = forbiddenForFieldRole(user.role);
+    if (fieldDenied) return fieldDenied;
+    if (!canManageCustomers(user.role)) return forbiddenResponse();
 
     const { id } = await params;
-    const existing = await prisma.customer.findFirst({ where: { id, companyId: user.companyId } });
-    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-    await prisma.customer.delete({ where: { id } });
+    const result = await deleteCustomerForCompany(user.companyId, id);
+    if ("notFound" in result && result.notFound) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: "error" in result ? result.error : "Failed to delete customer" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ ok: true });
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("[customers] delete failed", error);
+    const message = error instanceof Error ? error.message : "Failed to delete customer";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

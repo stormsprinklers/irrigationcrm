@@ -573,12 +573,14 @@ export function CustomerProfile({ customerId }: Props) {
     setActionLoading(true);
     try {
       const res = await fetch(`/api/customers/${customerId}`, { method: "DELETE" });
-      if (!res.ok) {
-        toast.error("Failed to delete customer");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok !== true) {
+        toast.error(typeof data.error === "string" ? data.error : "Failed to delete customer");
         return;
       }
       toast.success("Customer deleted");
-      router.push("/customers");
+      router.replace("/customers");
+      router.refresh();
     } finally {
       setActionLoading(false);
       setDeleteOpen(false);

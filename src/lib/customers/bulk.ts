@@ -1,12 +1,9 @@
 import { CustomerStatus } from "@prisma/client";
+import { bulkDeleteCustomers } from "@/lib/customers/delete";
 import { mergeCustomers } from "@/lib/customers/merge";
 import { prisma } from "@/lib/prisma";
 
-export async function bulkDeleteCustomers(companyId: string, customerIds: string[]) {
-  await prisma.customer.deleteMany({
-    where: { companyId, id: { in: customerIds } },
-  });
-}
+export { bulkDeleteCustomers };
 
 export async function bulkArchiveCustomers(companyId: string, customerIds: string[], archive: boolean) {
   await prisma.customer.updateMany({
