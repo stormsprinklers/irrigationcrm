@@ -256,7 +256,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
               checked={form.isCallback}
               onChange={(e) => setForm({ ...form, isCallback: e.target.checked })}
             />
-            Callback job
+            Callback visit
           </label>
           <div className="flex gap-2 pt-1">
             <Button type="submit" disabled={saving}>

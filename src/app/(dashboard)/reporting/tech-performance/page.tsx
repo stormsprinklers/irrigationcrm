@@ -15,7 +15,7 @@ export default function ReportingTechPerformancePage() {
       {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : null}
       {data ? (
         <ReportTable
-          columns={["Technician", "Visits completed", "Revenue", "Avg job size", "Hours"]}
+          columns={["Technician", "Visits completed", "Revenue", "Avg visit size", "Hours"]}
           rows={data.rows.map((r) => [r.name, r.visitsCompleted, r.revenueFormatted, r.avgJobSize, r.hours])}
         />
       ) : null}

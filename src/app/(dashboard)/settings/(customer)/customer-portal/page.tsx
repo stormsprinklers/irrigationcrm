@@ -25,7 +25,7 @@ export default function SettingsCustomerPortalPage() {
   const portalUrl = portalSlug ? `${appUrl}/portal/${portalSlug}` : "";
 
   const toggles = [
-    { key: "portalShowJobs" as const, label: "Show visits / jobs" },
+    { key: "portalShowJobs" as const, label: "Show visits" },
     { key: "portalShowEstimates" as const, label: "Show estimates" },
     { key: "portalShowInvoices" as const, label: "Show invoices" },
     { key: "portalShowMaintenance" as const, label: "Show maintenance plans" },

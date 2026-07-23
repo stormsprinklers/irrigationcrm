@@ -111,12 +111,12 @@ export async function getHomeSummary(
       href: "/customers/estimates",
     },
     {
-      title: "Jobs",
+      title: "Visits",
       highlight: {
         label: `${unscheduledVisits.length} Unscheduled · ${needsSchedulingEstimates.length} need scheduling`,
         value: formatCurrency(unscheduledTotal),
       },
-      linkLabel: "View all jobs",
+      linkLabel: "View all visits",
       href: "/customers/jobs",
     },
     {
@@ -131,10 +131,10 @@ export async function getHomeSummary(
   ];
 
   const kpis: HomeKpi[] = [
-    { label: "Job Revenue Earned", value: formatCurrency(totalRevenue), change: "—" },
-    { label: "Jobs Completed", value: String(jobsCompleted), change: "—" },
-    { label: "Average Job Size", value: formatCurrency(avgJobSize), change: "—" },
-    { label: "Total New Jobs Booked", value: String(bookedVisits), change: "—" },
+    { label: "Visit Revenue Earned", value: formatCurrency(totalRevenue), change: "—" },
+    { label: "Visits Completed", value: String(jobsCompleted), change: "—" },
+    { label: "Average Visit Size", value: formatCurrency(avgJobSize), change: "—" },
+    { label: "Total New Visits Booked", value: String(bookedVisits), change: "—" },
     { label: "New Customers", value: String(newCustomers), change: "—" },
   ];
 

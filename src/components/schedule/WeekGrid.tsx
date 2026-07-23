@@ -706,7 +706,7 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="shrink-0 border-b border-border px-4 py-3 text-sm text-muted-foreground">
         <span>
-          {monthJobCount} job{monthJobCount === 1 ? "" : "s"} ·{" "}
+          {monthJobCount} visit{monthJobCount === 1 ? "" : "s"} ·{" "}
           <strong className="text-foreground">
             {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
               monthRevenue
@@ -754,7 +754,7 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
                 {inMonth && jobCount > 0 ? (
                   <div className="space-y-0.5 text-[11px]">
                     <p className="font-medium text-foreground">
-                      {jobCount} job{jobCount === 1 ? "" : "s"}
+                      {jobCount} visit{jobCount === 1 ? "" : "s"}
                     </p>
                     <p className="text-muted-foreground">
                       {new Intl.NumberFormat("en-US", {

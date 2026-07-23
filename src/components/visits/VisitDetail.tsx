@@ -499,7 +499,7 @@ export function VisitDetail({ visitId }: Props) {
                   checked={Boolean(visit.isCallback)}
                   onChange={(e) => toggleCallback(e.target.checked)}
                 />
-                Callback job (excludes callback-specific checklists)
+                Callback visit (excludes callback-specific checklists)
               </label>
             </div>
           ) : null}

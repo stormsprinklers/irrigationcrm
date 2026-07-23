@@ -14,8 +14,8 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   ADMIN: "Full access including delete and billing settings",
   MANAGER: "Manage schedule, employees, and customers",
   CSR: "Handle inbox, customers, and scheduling",
-  TECH: "Service technician — view assigned service jobs and team inbox",
-  INSTALLER: "Install crew member — view assigned install jobs and team inbox",
+  TECH: "Service technician — view assigned service visits and team inbox",
+  INSTALLER: "Install crew member — view assigned install visits and team inbox",
   SALES: "Manage leads, estimates, and customer sales pipeline",
   SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
 };

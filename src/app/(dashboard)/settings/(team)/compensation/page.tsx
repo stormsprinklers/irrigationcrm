@@ -22,13 +22,13 @@ type CompensationSettings = {
 const COMMISSION_BASIS_OPTIONS = [
   {
     value: "COMPLETED_JOB_REVENUE",
-    label: "Completed job revenue",
+    label: "Completed visit revenue",
     description: "Commission based on visit totals after discounts.",
   },
   {
     value: "COLLECTED_INVOICE",
     label: "Collected invoice",
-    description: "Commission based on payments received on job invoices.",
+    description: "Commission based on payments received on visit invoices.",
   },
   {
     value: "GROSS_PROFIT",

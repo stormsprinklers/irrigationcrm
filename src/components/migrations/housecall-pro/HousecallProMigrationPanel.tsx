@@ -133,7 +133,7 @@ export function HousecallProMigrationPanel() {
   async function handleRollback() {
     if (
       !confirm(
-        "This permanently deletes all customers, jobs, invoices, and other records imported from Housecall Pro. Continue?"
+        "This permanently deletes all customers, visits, invoices, and other records imported from Housecall Pro. Continue?"
       )
     ) {
       return;
@@ -357,7 +357,7 @@ export function HousecallProMigrationPanel() {
             <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ["Customers", preview.customers],
-                ["Jobs", preview.jobs],
+                ["Visits", preview.jobs],
                 ["Estimates", preview.estimates],
                 ["Invoices", preview.invoices],
                 ["Employees", preview.employees],

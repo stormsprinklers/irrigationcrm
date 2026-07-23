@@ -154,7 +154,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
       },
     });
     if (futureJobs > 0) {
-      return badRequestResponse("Employee has future scheduled jobs. Archive instead.");
+      return badRequestResponse("Employee has future scheduled visits. Archive instead.");
     }
 
     await prisma.user.delete({ where: { id } });

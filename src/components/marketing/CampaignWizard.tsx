@@ -191,7 +191,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
                     type: "DRIP" as CampaignType,
                     title: "Automation",
                     description:
-                      "A multi-step sequence with waits and branches (opened email? clicked link?). Enroll from your audience or from triggers like a completed job.",
+                      "A multi-step sequence with waits and branches (opened email? clicked link?). Enroll from your audience or from triggers like a completed visit.",
                   },
                 ] as const
               ).map((option) => (

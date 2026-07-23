@@ -8,7 +8,7 @@ const FEATURES = [
   {
     title: "Customers & scheduling",
     description:
-      "Manage leads, jobs, visits, estimates, and invoices for your irrigation business in one place.",
+      "Manage leads, visits, estimates, and invoices for your irrigation business in one place.",
   },
   {
     title: "Marketing & SEO",

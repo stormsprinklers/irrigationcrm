@@ -40,16 +40,16 @@ export default function CustomerJobsPage() {
     fetch(`/api/visits${params}`)
       .then((r) => r.json())
       .then((data) => setVisits(data.visits ?? []))
-      .catch(() => toast.error("Failed to load jobs"))
+      .catch(() => toast.error("Failed to load visits"))
       .finally(() => setLoading(false));
   }, [search]);
 
   return (
     <ContentArea>
-      <PageHeader breadcrumb={["Customers", "Jobs"]} title="Jobs" />
+      <PageHeader breadcrumb={["Customers", "Visits"]} title="Visits" />
       <div className="mb-4">
         <Input
-          placeholder="Search jobs"
+          placeholder="Search visits"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
@@ -58,13 +58,13 @@ export default function CustomerJobsPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
       ) : visits.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No jobs found.</p>
+        <p className="text-sm text-muted-foreground">No visits found.</p>
       ) : (
         <div className="rounded-lg border border-border bg-white">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Job</TableHead>
+                <TableHead>Visit</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Scheduled</TableHead>

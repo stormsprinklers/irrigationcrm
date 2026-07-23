@@ -45,7 +45,7 @@ function visitTitleFromHcpJob(record: HcpRecord, customerName: string | null): s
     hcpString(record.work_order_number) ??
     hcpString(record.number);
   if (jobNumber) {
-    return `Job #${jobNumber.replace(/^#/, "")}`;
+    return `Visit #${jobNumber.replace(/^#/, "")}`;
   }
 
   const name = hcpString(record.name);
@@ -53,7 +53,7 @@ function visitTitleFromHcpJob(record: HcpRecord, customerName: string | null): s
   if (name && !isInternalHcpLabel(name)) return name;
   if (description && !isInternalHcpLabel(description)) return description;
 
-  return customerName ? `Job for ${customerName}` : "Job for Unknown customer";
+  return customerName ? `Visit for ${customerName}` : "Visit for Unknown customer";
 }
 
 function jobSchedule(record: HcpRecord) {
@@ -118,7 +118,7 @@ function jobLineItems(record: HcpRecord): HcpRecord[] {
   if (totalCents != null && totalCents !== "" && totalCents !== 0) {
     return [
       {
-        name: "Imported job total",
+        name: "Imported visit total",
         quantity: 1,
         unit_price: totalCents,
         total: totalCents,
@@ -323,7 +323,7 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
       }
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Job import failed");
+      result.errors.push(err instanceof Error ? err.message : "Visit import failed");
     }
   }
 

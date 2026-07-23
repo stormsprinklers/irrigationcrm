@@ -415,7 +415,7 @@ export function NewMenu() {
               checked={newVisit.isCallback}
               onChange={(e) => setNewVisit({ ...newVisit, isCallback: e.target.checked })}
             />
-            Callback job
+            Callback visit
           </label>
           <div className="flex gap-2 pt-1">
             <Button type="submit" disabled={saving}>

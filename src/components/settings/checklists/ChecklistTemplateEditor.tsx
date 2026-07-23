@@ -269,7 +269,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
                 setForm((p) => ({ ...p, requiredForCompletion: e.target.checked }))
               }
             />
-            Mandatory for job completion
+            Mandatory for visit completion
           </label>
         </CardContent>
       </Card>
@@ -291,7 +291,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
                 }))
               }
             />
-            Apply to all jobs
+            Apply to all visits
           </label>
           {!form.applyToAllJobs && (
             <div className="flex flex-wrap gap-4">
@@ -320,10 +320,10 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
               checked={form.excludeCallbacks}
               onChange={(e) => setForm((p) => ({ ...p, excludeCallbacks: e.target.checked }))}
             />
-            Exclude callback jobs
+            Exclude callback visits
           </label>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Also apply when these line items are on the job</label>
+            <label className="text-sm font-medium">Also apply when these line items are on the visit</label>
             <Input
               placeholder="Search price book services…"
               value={priceBookSearch}

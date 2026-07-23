@@ -76,7 +76,7 @@ export function ChecklistTemplateList() {
       {!templates.length ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No checklists yet. Create one for technicians to complete on jobs.
+            No checklists yet. Create one for technicians to complete on visits.
           </CardContent>
         </Card>
       ) : (
@@ -89,7 +89,7 @@ export function ChecklistTemplateList() {
                     <h3 className="font-medium">{template.name}</h3>
                     {!template.active && <Badge variant="secondary">Inactive</Badge>}
                     {template.requiredForCompletion && (
-                      <Badge variant="outline">Required to complete job</Badge>
+                      <Badge variant="outline">Required to complete visit</Badge>
                     )}
                   </div>
                   {template.description && (

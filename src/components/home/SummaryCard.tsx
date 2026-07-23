@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 const iconMap: Record<string, React.ReactNode> = {
   Estimates: <ClipboardList className="h-5 w-5 text-muted-foreground" />,
   Jobs: <Wrench className="h-5 w-5 text-muted-foreground" />,
+  Visits: <Wrench className="h-5 w-5 text-muted-foreground" />,
   Invoices: <FileText className="h-5 w-5 text-muted-foreground" />,
 };
 

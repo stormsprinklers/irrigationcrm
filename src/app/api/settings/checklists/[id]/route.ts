@@ -132,7 +132,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!applyToAllJobs && body.divisions !== undefined && divisions.length === 0) {
       const linkCount = await prisma.checklistTemplateLineItem.count({ where: { templateId: id } });
       if (linkCount === 0) {
-        return badRequestResponse("Select at least one division, line item trigger, or apply to all jobs");
+        return badRequestResponse("Select at least one division, line item trigger, or apply to all visits");
       }
     }
 

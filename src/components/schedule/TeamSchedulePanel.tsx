@@ -225,7 +225,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             <ArrowLeft className="mr-1 h-4 w-4" />
-            Job schedule
+            Visit schedule
           </Button>
           <CalendarOff className="h-4 w-4 text-muted-foreground" />
           <h2 className="font-semibold">Team schedules</h2>
@@ -282,7 +282,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
                   ) : null}
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Set which days this employee works. Non-working days block job assignments.
+                  Set which days this employee works. Non-working days block visit assignments.
                 </p>
                 <div className="space-y-2">
                   {workSchedule.map((day) => (

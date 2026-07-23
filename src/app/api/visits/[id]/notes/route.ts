@@ -134,7 +134,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       const noteBody =
         (typeof body.body === "string" && body.body.trim()) ||
         call.aiSummary?.trim() ||
-        "Call linked to this job.";
+        "Call linked to this visit.";
 
       const note = await prisma.visitNote.create({
         data: {

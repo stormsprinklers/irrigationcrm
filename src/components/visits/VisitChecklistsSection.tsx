@@ -187,7 +187,7 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
               <span>
                 {mergedProgress.requiredComplete}/{mergedProgress.requiredTotal} required
               </span>
-              {anyRequired && <Badge variant="outline">Required for job completion</Badge>}
+              {anyRequired && <Badge variant="outline">Required for visit completion</Badge>}
               <Badge variant="secondary">{allComplete ? "COMPLETED" : "IN PROGRESS"}</Badge>
             </div>
           </div>
@@ -240,7 +240,7 @@ export function VisitChecklistsSection({ visitId, onUpdated }: Props) {
                   {checklist.progress.requiredComplete}/{checklist.progress.requiredTotal} required
                 </span>
                 {checklist.requiredForCompletion && (
-                  <Badge variant="outline">Required for job completion</Badge>
+                  <Badge variant="outline">Required for visit completion</Badge>
                 )}
                 <Badge variant="secondary">{checklist.status.replace(/_/g, " ")}</Badge>
               </div>

@@ -76,7 +76,7 @@ async function assertVisitOwned(ctx: ToolContext, visitId: string) {
       customer: { select: { id: true, phone: true, doNotService: true } },
     },
   });
-  if (!visit) return { ok: false as const, error: "Job not found", code: "NOT_FOUND" };
+  if (!visit) return { ok: false as const, error: "Visit not found", code: "NOT_FOUND" };
 
   const call = await getCall(ctx);
   const state = (call?.conversationJson ?? {}) as ReceptionistConversationState;
@@ -87,7 +87,7 @@ async function assertVisitOwned(ctx: ToolContext, visitId: string) {
       ? await findCustomerByPhone(ctx.companyId, ctx.fromE164)
       : null;
     if (!match || match.id !== visit.customerId) {
-      return { ok: false as const, error: "Job not accessible for this caller", code: "FORBIDDEN" };
+      return { ok: false as const, error: "Visit not accessible for this caller", code: "FORBIDDEN" };
     }
   }
   return { ok: true as const, visit };
@@ -731,7 +731,7 @@ async function runTool(
         owned.visit.status !== VisitStatus.SCHEDULED &&
         owned.visit.status !== VisitStatus.UNSCHEDULED
       ) {
-        return { ok: false, error: "This job cannot be rescheduled", code: "INVALID_STATUS" };
+        return { ok: false, error: "This visit cannot be rescheduled", code: "INVALID_STATUS" };
       }
       const startAt = new Date(String(args.startAt));
       const endAt = args.endAt

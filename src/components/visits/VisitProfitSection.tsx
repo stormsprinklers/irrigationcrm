@@ -45,7 +45,7 @@ export function VisitProfitSection({ visitId }: Props) {
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-white p-4">
-        <h3 className="text-sm font-semibold">Job profit</h3>
+        <h3 className="text-sm font-semibold">Visit profit</h3>
         <p className="mt-2 text-sm text-muted-foreground">Loading...</p>
       </div>
     );
@@ -55,9 +55,9 @@ export function VisitProfitSection({ visitId }: Props) {
 
   return (
     <div className="rounded-lg border border-border bg-white p-4">
-      <h3 className="text-sm font-semibold">Job profit</h3>
+      <h3 className="text-sm font-semibold">Visit profit</h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        Revenue minus line-item costs, job labor, and estimated commission.
+        Revenue minus line-item costs, visit labor, and estimated commission.
       </p>
 
       <dl className="mt-4 space-y-2 text-sm">
@@ -75,7 +75,7 @@ export function VisitProfitSection({ visitId }: Props) {
         </div>
         {profit.actualLaborCost > 0 ? (
           <div className="flex justify-between">
-            <dt className="text-muted-foreground">Actual job labor</dt>
+            <dt className="text-muted-foreground">Actual visit labor</dt>
             <dd>−{formatCurrency(profit.actualLaborCost)}</dd>
           </div>
         ) : null}

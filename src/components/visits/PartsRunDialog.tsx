@@ -37,9 +37,9 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
           params.set("originLng", String(position.lng));
           setUsedLiveLocation(true);
         } else if (position.reason === "denied") {
-          toast.message("Location access denied — ranking suppliers from the job site instead.");
+          toast.message("Location access denied — ranking suppliers from the visit site instead.");
         } else if (position.reason === "timeout" || position.reason === "unavailable") {
-          toast.message("Could not get GPS quickly — ranking from the job site instead.");
+          toast.message("Could not get GPS quickly — ranking from the visit site instead.");
         }
 
         const query = params.toString();
@@ -77,7 +77,7 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
       }
 
       if (data.paused) {
-        toast.success("Job timer paused");
+        toast.success("Visit timer paused");
         onPaused();
       }
 
@@ -117,8 +117,8 @@ export function PartsRunDialog({ visitId, open, onOpenChange, onPaused }: Props)
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">
             {usedLiveLocation
-              ? "Pick the closest open supplier to your current location. If the visit is in progress, your job timer will pause and Google Maps will open for directions."
-              : "Pick the closest open supplier to this job site. If the visit is in progress, your job timer will pause and Google Maps will open for directions."}
+              ? "Pick the closest open supplier to your current location. If the visit is in progress, your visit timer will pause and Google Maps will open for directions."
+              : "Pick the closest open supplier to this visit site. If the visit is in progress, your visit timer will pause and Google Maps will open for directions."}
           </p>
 
           {loading ? (

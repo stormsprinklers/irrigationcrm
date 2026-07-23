@@ -252,7 +252,7 @@ function stepSummary(
       return digit ? `Hold · press ${digit} for voicemail` : "Hold with music";
     }
     case "AI_RECEPTIONIST":
-      return "Books jobs · can transfer to human";
+      return "Books visits · can transfer to human";
     case "HANGUP":
       return "Call will disconnect";
     default:

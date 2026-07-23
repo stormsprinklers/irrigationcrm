@@ -346,7 +346,7 @@ function NodeConfigEditor({
             onChange={(e) => onConfigChange({ ...config, kind: e.target.value })}
           >
             <option value="manual_audience">When campaign is activated (audience filters)</option>
-            <option value="job_completed">Job / visit completed</option>
+            <option value="job_completed">Visit completed</option>
             <option value="form_no_booking">Form filled, no appointment</option>
             <option value="city">Customer city matches</option>
           </select>
@@ -354,7 +354,7 @@ function NodeConfigEditor({
         {kind === "job_completed" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-xs text-muted-foreground">Min job value ($)</label>
+              <label className="text-xs text-muted-foreground">Min visit value ($)</label>
               <Input
                 type="number"
                 className="mt-1"
@@ -368,7 +368,7 @@ function NodeConfigEditor({
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Max job value ($)</label>
+              <label className="text-xs text-muted-foreground">Max visit value ($)</label>
               <Input
                 type="number"
                 className="mt-1"

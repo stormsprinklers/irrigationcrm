@@ -62,7 +62,7 @@ export async function GET() {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
-    const message = error instanceof Error ? error.message : "Failed to load job photos";
+    const message = error instanceof Error ? error.message : "Failed to load visit photos";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

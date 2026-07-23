@@ -22,7 +22,7 @@ export function formatChecklistRules(template: {
 }): string {
   const parts: string[] = [];
   if (template.applyToAllJobs) {
-    parts.push("All jobs");
+    parts.push("All visits");
   } else if (template.divisions.length) {
     parts.push(
       template.divisions.map((d) => (d === "INSTALL" ? "Install" : "Service")).join(", ")

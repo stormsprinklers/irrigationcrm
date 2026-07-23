@@ -12,7 +12,7 @@ export async function GET() {
   const ctx = await requirePortalCustomer();
   if (!ctx) return portalUnauthorizedResponse();
   if (!portalFeatureEnabled(ctx.company, "jobs")) {
-    return portalForbiddenResponse("Jobs are not available in the portal");
+    return portalForbiddenResponse("Visits are not available in the portal");
   }
 
   const visits = await prisma.visit.findMany({

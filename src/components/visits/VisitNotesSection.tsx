@@ -88,7 +88,7 @@ export function VisitNotesSection({ visitId, customerId, notes, onUpdated }: Pro
 
   async function openCallPicker() {
     if (!customerId) {
-      toast.error("This job has no customer to match calls against");
+      toast.error("This visit has no customer to match calls against");
       return;
     }
     setPickerOpen(true);
@@ -120,7 +120,7 @@ export function VisitNotesSection({ visitId, customerId, notes, onUpdated }: Pro
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to link call");
-      toast.success("Call linked to job notes");
+      toast.success("Call linked to visit notes");
       setPickerOpen(false);
       setSelectedCallId("");
       await onUpdated();

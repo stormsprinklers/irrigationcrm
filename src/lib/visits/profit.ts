@@ -119,7 +119,7 @@ export async function computeVisitProfit(companyId: string, visitId: string): Pr
   const hasBundledLabor = visit.lineItems.some((li) => li.priceBookItemId != null);
   if (hasBundledLabor && actualLaborCost > 0) {
     notes.push(
-      "Service line items may include bundled labor in material COGS; actual job hours are shown separately."
+      "Service line items may include bundled labor in material COGS; actual visit hours are shown separately."
     );
   }
 

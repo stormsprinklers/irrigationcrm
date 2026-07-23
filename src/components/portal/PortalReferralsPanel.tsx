@@ -138,8 +138,8 @@ export function PortalReferralsPanel({ slug }: { slug: string }) {
           </p>
           {data.settings ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              Earn {formatReward(data.settings.installRewardCents)} for install jobs and{" "}
-              {formatReward(data.settings.serviceRewardCents)} for service jobs.
+              Earn {formatReward(data.settings.installRewardCents)} for install visits and{" "}
+              {formatReward(data.settings.serviceRewardCents)} for service visits.
             </p>
           ) : null}
         </div>

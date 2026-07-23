@@ -156,14 +156,14 @@ export function CallDetailView({
 
   async function linkToJob() {
     if (!selectedVisitId) {
-      toast.error("Select a job first");
+      toast.error("Select a visit first");
       return;
     }
     setLinking(true);
     try {
       const bodyText =
         detail.aiSummary?.trim() ||
-        "Call linked to this job. See recording and transcript below.";
+        "Call linked to this visit. See recording and transcript below.";
       const res = await fetch(`/api/visits/${selectedVisitId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +171,7 @@ export function CallDetailView({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Failed to link call");
-      toast.success("Call linked to job notes");
+      toast.success("Call linked to visit notes");
       setDetail({ ...detail, visitId: selectedVisitId });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to link call");
@@ -301,14 +301,14 @@ export function CallDetailView({
 
       {detail.customer?.id ? (
         <div>
-          <p className="mb-2 text-sm font-medium">Link to job notes</p>
+          <p className="mb-2 text-sm font-medium">Link to visit notes</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-xs"
               value={selectedVisitId}
               onChange={(e) => setSelectedVisitId(e.target.value)}
             >
-              <option value="">Select a job…</option>
+              <option value="">Select a visit…</option>
               {visits.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.title} · {new Date(v.startAt).toLocaleDateString()}

@@ -48,10 +48,10 @@ export function GoogleBusinessEngagementPanel() {
     try {
       const res = await fetch("/api/marketing/google-business/job-photos");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to load job photos");
+      if (!res.ok) throw new Error(data.error ?? "Failed to load visit photos");
       setJobPhotos(data.photos ?? []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load job photos");
+      toast.error(err instanceof Error ? err.message : "Failed to load visit photos");
       setJobPhotos([]);
     } finally {
       setLoadingPhotos(false);
@@ -413,7 +413,7 @@ function PostsTab({
           selectedId={selectedPhotoId}
           onSelect={setSelectedPhotoId}
           onReload={onReloadPhotos}
-          label="Optional photo from recent jobs or social (last 14 days)"
+          label="Optional photo from recent visits or social (last 14 days)"
         />
         <Button type="button" disabled={posting} onClick={() => void publishPost()}>
           {posting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
@@ -539,7 +539,7 @@ function PhotosTab({
           multi
           onSelect={(id) => togglePhoto(id)}
           onReload={onReloadPhotos}
-          label="Recent job & social photos (last 14 days)"
+          label="Recent visit & social photos (last 14 days)"
         />
         <Button type="button" disabled={uploading || selectedIds.length === 0} onClick={() => void uploadSelected()}>
           {uploading ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
@@ -579,7 +579,7 @@ function PhotosTab({
 function sourceLabel(source: GbpJobPhotoDto["source"]) {
   if (source === "facebook") return "Facebook";
   if (source === "instagram") return "Instagram";
-  return "Job visit";
+  return "Visit";
 }
 
 function JobPhotoPicker({

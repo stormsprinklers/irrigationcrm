@@ -44,7 +44,7 @@ async function fetchPickablePhotoBytes(params: PickablePhotoParams) {
     });
 
     if (!attachment) {
-      throw new Error("Job photo not found");
+      throw new Error("Visit photo not found");
     }
 
     const { buffer, mimeType } = await fetchBlobBytes(attachment.blobUrl);
@@ -126,7 +126,7 @@ export async function uploadGbpPhotoFromAttachment(params: AttachmentUploadParam
   });
 
   if (!attachment) {
-    throw new Error("Job photo not found");
+    throw new Error("Visit photo not found");
   }
 
   const { buffer, mimeType } = await fetchBlobBytes(attachment.blobUrl);

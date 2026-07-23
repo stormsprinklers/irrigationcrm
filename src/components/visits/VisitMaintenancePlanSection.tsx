@@ -200,7 +200,7 @@ export function VisitMaintenancePlanSection({ visitId, customerId, propertyId, o
 
               {assignable.length > 0 && (
                 <div className="space-y-2 rounded-lg border border-dashed p-3">
-                  <p className="text-sm font-medium">Assign plan visit to this job</p>
+                  <p className="text-sm font-medium">Assign plan visit to this visit</p>
                   <p className="text-xs text-muted-foreground">
                     Link an included seasonal visit from their active plan. Plan discounts will be applied automatically.
                   </p>

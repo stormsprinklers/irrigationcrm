@@ -475,7 +475,7 @@ export function TemplateWizard({ templateId, initial }: Props) {
                       )
                     }
                   >
-                    <option value="ALL_JOBS">All jobs</option>
+                    <option value="ALL_JOBS">All visits</option>
                     <option value="PLAN_PRICE">Plan price</option>
                     <option value="VISIT_LABOR">Visit labor</option>
                   </select>

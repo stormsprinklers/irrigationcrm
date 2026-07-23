@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     const divisions = applyToAllJobs ? [] : parseDivisions(body.divisions);
 
     if (!applyToAllJobs && !divisions.length && !priceBookItemIds.length) {
-      return badRequestResponse("Select at least one division, line item trigger, or apply to all jobs");
+      return badRequestResponse("Select at least one division, line item trigger, or apply to all visits");
     }
 
     if (priceBookItemIds.length) {

@@ -56,7 +56,7 @@ export const customerSidebar: NavSection[] = [
   {
     items: [
       { label: "Customers", href: "/customers" },
-      { label: "Jobs", href: "/customers/jobs" },
+      { label: "Visits", href: "/customers/jobs" },
       { label: "Estimates", href: "/customers/estimates" },
       { label: "Leads", href: "/customers/leads" },
       { label: "Invoices", href: "/customers/invoices" },
