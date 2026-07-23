@@ -88,6 +88,22 @@ export async function POST(request: NextRequest) {
   return authorizationResponse(decision.approved, event.api_version);
 }
 
+/** Dashboard / uptime probes often use GET; browsers hit this too. */
+export async function GET() {
+  return authorizationResponse(false);
+}
+
+/** Some validators use HEAD for reachability. */
+export async function HEAD() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Stripe-Version": DEFAULT_STRIPE_VERSION,
+    },
+  });
+}
+
 async function decideAuthorization(
   auth: Stripe.Issuing.Authorization
 ): Promise<{ approved: boolean; reason?: string }> {
