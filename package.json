@@ -8,7 +8,7 @@
     "vercel-build": "tsx prisma/predeploy-backfill.ts && prisma db push --accept-data-loss && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && patch-package",
     "db:push": "tsx prisma/predeploy-backfill.ts && prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
     "build:utah-locations": "node scripts/build-utah-locations.mjs"
@@ -64,6 +64,7 @@
     "@types/web-push": "^3.6.4",
     "eslint": "^9.29.0",
     "eslint-config-next": "^15.3.4",
+    "patch-package": "^8.0.1",
     "tailwindcss": "^4.1.11",
     "tsx": "^4.22.4",
     "typescript": "^5.8.3"
