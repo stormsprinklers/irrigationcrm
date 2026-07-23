@@ -32,11 +32,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       include: { template: true },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (existing.status !== "DRAFT" && existing.status !== "SENT") {
-      return badRequestResponse("Only draft or sent enrollments can be updated");
+    if (existing.status === "CANCELLED") {
+      return badRequestResponse("Cancelled enrollments cannot be updated");
     }
 
     const body = await request.json();
+
+    const updatingCoreFields =
+      body.billingFrequency !== undefined ||
+      body.startDate !== undefined ||
+      body.autoRenew !== undefined ||
+      body.propertyId !== undefined;
+    const updatingAddonsOnly =
+      body.selectedAddonIds !== undefined && !updatingCoreFields;
+
+    // Full edits stay draft/sent-only; add-on remove/adjust is allowed on active plans.
+    if (updatingCoreFields && existing.status !== "DRAFT" && existing.status !== "SENT") {
+      return badRequestResponse("Only draft or sent enrollments can be updated");
+    }
+    if (!updatingAddonsOnly && !updatingCoreFields && body.selectedAddonIds === undefined) {
+      return badRequestResponse("No changes provided");
+    }
 
     if (body.billingFrequency !== undefined) {
       const frequency = body.billingFrequency as BillingFrequency;
@@ -45,28 +61,34 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    if (body.selectedAddonIds !== undefined && Array.isArray(body.selectedAddonIds)) {
-      const addonCount = await prisma.maintenancePlanAddon.count({
-        where: {
-          templateId: existing.templateId,
-          id: { in: body.selectedAddonIds },
-          active: true,
-        },
-      });
-      if (addonCount !== body.selectedAddonIds.length) {
-        return badRequestResponse("One or more selected addons are invalid");
+    if (body.selectedAddonIds !== undefined) {
+      if (!Array.isArray(body.selectedAddonIds)) {
+        return badRequestResponse("selectedAddonIds must be an array");
       }
+      const ids = body.selectedAddonIds.map((v: unknown) => String(v));
+      if (ids.length) {
+        const addonCount = await prisma.maintenancePlanAddon.count({
+          where: {
+            templateId: existing.templateId,
+            id: { in: ids },
+          },
+        });
+        if (addonCount !== ids.length) {
+          return badRequestResponse("One or more selected addons are invalid");
+        }
+      }
+      body.selectedAddonIds = ids;
     }
 
     await prisma.maintenancePlanEnrollment.update({
       where: { id },
       data: {
-        ...(body.billingFrequency !== undefined ? { billingFrequency: body.billingFrequency as BillingFrequency } : {}),
+        ...(body.billingFrequency !== undefined
+          ? { billingFrequency: body.billingFrequency as BillingFrequency }
+          : {}),
         ...(body.startDate !== undefined ? { startDate: new Date(body.startDate) } : {}),
         ...(body.autoRenew !== undefined ? { autoRenew: Boolean(body.autoRenew) } : {}),
-        ...(body.selectedAddonIds !== undefined
-          ? { selectedAddonIds: Array.isArray(body.selectedAddonIds) ? body.selectedAddonIds : [] }
-          : {}),
+        ...(body.selectedAddonIds !== undefined ? { selectedAddonIds: body.selectedAddonIds } : {}),
         ...(body.propertyId !== undefined ? { propertyId: body.propertyId } : {}),
       },
     });

@@ -74,6 +74,8 @@ export type EnrollmentDTO = {
   acceptedAt: string | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  selectedAddonIds: string[];
+  selectedAddons: AddonDTO[];
   customer: {
     id: string;
     name: string;

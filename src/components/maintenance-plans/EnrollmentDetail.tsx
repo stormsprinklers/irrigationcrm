@@ -115,7 +115,29 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
   const canAccept = enrollment.status === "DRAFT" || enrollment.status === "SENT";
   const canCancel =
     enrollment.status !== "CANCELLED" && enrollment.status !== "DRAFT";
+  const canEditAddons = enrollment.status !== "CANCELLED";
   const late = latePaymentSummary(enrollment.billingPeriods ?? []);
+
+  async function removeAddon(addonId: string) {
+    setActing(true);
+    try {
+      const nextIds = enrollment.selectedAddonIds.filter((id) => id !== addonId);
+      const res = await fetch(`/api/maintenance-plans/enrollments/${enrollment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedAddonIds: nextIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to remove add-on");
+        return;
+      }
+      onUpdated(data);
+      toast.success("Add-on removed");
+    } finally {
+      setActing(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -192,6 +214,49 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {(enrollment.selectedAddons?.length > 0 || canEditAddons) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Add-ons</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {enrollment.selectedAddons?.length ? (
+              <ul className="space-y-2">
+                {enrollment.selectedAddons.map((addon) => (
+                  <li
+                    key={addon.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">{addon.name}</p>
+                      {addon.description ? (
+                        <p className="text-xs text-muted-foreground">{addon.description}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">+{formatCurrency(addon.price)}</span>
+                      {canEditAddons ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={acting}
+                          onClick={() => void removeAddon(addon.id)}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No add-ons on this enrollment.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -37,6 +37,7 @@ type DiscountDraft = {
 };
 
 type AddonDraft = {
+  id?: string;
   name: string;
   description: string;
   price: string;
@@ -106,12 +107,15 @@ export function TemplateWizard({ templateId, initial }: Props) {
     })) ?? []
   );
   const [addons, setAddons] = useState<AddonDraft[]>(
-    initial?.addons.map((a) => ({
-      name: a.name,
-      description: a.description ?? "",
-      price: String(a.price),
-      active: a.active,
-    })) ?? []
+    initial?.addons
+      .filter((a) => a.active)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        description: a.description ?? "",
+        price: String(a.price),
+        active: a.active,
+      })) ?? []
   );
   const [cancellationFeeType, setCancellationFeeType] = useState<CancellationFeeType>(
     initial?.cancellationFeeType ?? "NONE"
@@ -142,6 +146,10 @@ export function TemplateWizard({ templateId, initial }: Props) {
 
   function addAddon() {
     setAddons((prev) => [...prev, { name: "", description: "", price: "", active: true }]);
+  }
+
+  function removeAddon(index: number) {
+    setAddons((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function submit() {
@@ -208,6 +216,34 @@ export function TemplateWizard({ templateId, initial }: Props) {
           toast.error("Failed to update template");
           return;
         }
+
+        const keptIds = new Set(addons.map((a) => a.id).filter(Boolean) as string[]);
+        const previouslyActive = (initial?.addons ?? []).filter((a) => a.active);
+        for (const existing of previouslyActive) {
+          if (!keptIds.has(existing.id)) {
+            const del = await fetch(
+              `/api/maintenance-plans/templates/${templateId}/addons/${existing.id}`,
+              { method: "DELETE" }
+            );
+            if (!del.ok) {
+              toast.error(`Failed to remove add-on “${existing.name}”`);
+              return;
+            }
+          }
+        }
+        for (const a of addons) {
+          if (a.id || !a.name || !a.price) continue;
+          await fetch(`/api/maintenance-plans/templates/${templateId}/addons`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: a.name,
+              description: a.description || null,
+              price: Number(a.price),
+              active: a.active,
+            }),
+          });
+        }
       } else {
         const res = await fetch("/api/maintenance-plans/templates", {
           method: "POST",
@@ -237,9 +273,7 @@ export function TemplateWizard({ templateId, initial }: Props) {
           });
         }
 
-        const existingAddonCount = 0;
-        const newAddons = addons.slice(existingAddonCount);
-        for (const a of newAddons) {
+        for (const a of addons) {
           if (!a.name || !a.price) continue;
           await fetch(`/api/maintenance-plans/templates/${id}/addons`, {
             method: "POST",
@@ -491,7 +525,7 @@ export function TemplateWizard({ templateId, initial }: Props) {
           {step === 4 && (
             <div className="space-y-4">
               {addons.map((a, index) => (
-                <div key={index} className="grid gap-3 rounded-md border p-3 sm:grid-cols-3">
+                <div key={a.id ?? `new-${index}`} className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_8rem_auto]">
                   <Input
                     placeholder="Add-on name"
                     value={a.name}
@@ -506,7 +540,9 @@ export function TemplateWizard({ templateId, initial }: Props) {
                     value={a.description}
                     onChange={(e) =>
                       setAddons((prev) =>
-                        prev.map((x, i) => (i === index ? { ...x, description: e.target.value } : x))
+                        prev.map((x, i) =>
+                          i === index ? { ...x, description: e.target.value } : x
+                        )
                       )
                     }
                   />
@@ -520,6 +556,14 @@ export function TemplateWizard({ templateId, initial }: Props) {
                       )
                     }
                   />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => removeAddon(index)}
+                    aria-label={`Remove add-on ${a.name || index + 1}`}
+                  >
+                    Remove
+                  </Button>
                 </div>
               ))}
               <Button type="button" variant="outline" onClick={addAddon}>

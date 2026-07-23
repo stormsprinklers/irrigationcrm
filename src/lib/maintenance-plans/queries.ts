@@ -33,6 +33,7 @@ const enrollmentInclude = {
       basePrice: true,
       cancellationFeeType: true,
       cancellationFeeAmount: true,
+      addons: { orderBy: { sortOrder: "asc" as const } },
     },
   },
   planVisits: {
@@ -112,6 +113,19 @@ export function serializeTemplate(
 export function serializeEnrollment(
   e: Prisma.MaintenancePlanEnrollmentGetPayload<{ include: typeof enrollmentInclude }>
 ): EnrollmentDTO {
+  const addonById = new Map(e.template.addons.map((a) => [a.id, a]));
+  const selectedAddons = e.selectedAddonIds
+    .map((id) => addonById.get(id))
+    .filter((a): a is NonNullable<typeof a> => Boolean(a))
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      price: toNumber(a.price),
+      active: a.active,
+      sortOrder: a.sortOrder,
+    }));
+
   return {
     id: e.id,
     status: e.status,
@@ -124,6 +138,8 @@ export function serializeEnrollment(
     acceptedAt: e.acceptedAt?.toISOString() ?? null,
     cancelledAt: e.cancelledAt?.toISOString() ?? null,
     cancellationReason: e.cancellationReason,
+    selectedAddonIds: e.selectedAddonIds,
+    selectedAddons,
     cancellationFeeCharged:
       e.cancellationFeeCharged != null ? toNumber(e.cancellationFeeCharged) : null,
     customer: e.customer,
