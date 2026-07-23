@@ -65,3 +65,67 @@ export function monthlyRecurringAmount(basePrice: number, frequency: BillingFreq
   const months = frequencyMonths(frequency);
   return period / months;
 }
+
+/** Start of the plan-year window that contains `asOf` (aligned to enrollment startDate). */
+export function currentPlanYearStart(startDate: Date, asOf: Date = new Date()) {
+  const start = new Date(startDate);
+  start.setHours(0, 0, 0, 0);
+  let yearStart = start;
+  while (addYears(yearStart, 1).getTime() <= asOf.getTime()) {
+    yearStart = addYears(yearStart, 1);
+  }
+  return yearStart;
+}
+
+/**
+ * Remainder of the current plan year's balance: annual list price minus amounts
+ * already PAID in that plan year. Monthly/quarterly cancel → unpaid months/quarters.
+ * Annual prepaid → typically $0.
+ */
+export function computeRemainderOfYearCancellationFee(params: {
+  basePrice: number;
+  startDate: Date;
+  asOf?: Date;
+  paidPeriods: Array<{ periodStart: Date; amount: number }>;
+}) {
+  const annual = Math.max(0, params.basePrice);
+  if (annual <= 0) return 0;
+
+  const asOf = params.asOf ?? new Date();
+  const yearStart = currentPlanYearStart(params.startDate, asOf);
+  const yearEnd = addYears(yearStart, 1);
+
+  const paidInYear = params.paidPeriods
+    .filter((p) => {
+      const t = p.periodStart.getTime();
+      return t >= yearStart.getTime() && t < yearEnd.getTime();
+    })
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  return Math.max(0, Math.round((annual - paidInYear) * 100) / 100);
+}
+
+export function computeCancellationFee(params: {
+  basePrice: number;
+  feeType: "NONE" | "FIXED" | "PERCENT" | "REMAINDER_OF_YEAR" | string;
+  feeAmount: number | null;
+  startDate?: Date;
+  paidPeriods?: Array<{ periodStart: Date; amount: number }>;
+}) {
+  const { feeType, feeAmount, basePrice } = params;
+  if (feeType === "NONE") return 0;
+  if (feeType === "REMAINDER_OF_YEAR") {
+    if (!params.startDate) return 0;
+    return computeRemainderOfYearCancellationFee({
+      basePrice,
+      startDate: params.startDate,
+      paidPeriods: params.paidPeriods ?? [],
+    });
+  }
+  if (feeAmount == null) return 0;
+  if (feeType === "FIXED") return feeAmount;
+  if (feeType === "PERCENT") {
+    return Math.round(basePrice * (feeAmount / 100) * 100) / 100;
+  }
+  return 0;
+}

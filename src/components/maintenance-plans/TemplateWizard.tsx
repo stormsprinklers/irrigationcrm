@@ -174,7 +174,8 @@ export function TemplateWizard({ templateId, initial }: Props) {
         autoRenewDefault,
         cancellationFeeType,
         cancellationFeeAmount:
-          cancellationFeeType !== "NONE" && cancellationFeeAmount
+          (cancellationFeeType === "FIXED" || cancellationFeeType === "PERCENT") &&
+          cancellationFeeAmount
             ? Number(cancellationFeeAmount)
             : null,
         cancellationNoticeDays: Number(cancellationNoticeDays) || 0,
@@ -539,11 +540,20 @@ export function TemplateWizard({ templateId, initial }: Props) {
                   <option value="NONE">None</option>
                   <option value="FIXED">Fixed amount</option>
                   <option value="PERCENT">Percent of plan price</option>
+                  <option value="REMAINDER_OF_YEAR">Remainder of year balance</option>
                 </select>
+                {cancellationFeeType === "REMAINDER_OF_YEAR" ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    On cancel, charge the unpaid remainder of the current plan year (annual price
+                    minus amounts already paid). Best for monthly or quarterly billing.
+                  </p>
+                ) : null}
               </div>
-              {cancellationFeeType !== "NONE" && (
+              {(cancellationFeeType === "FIXED" || cancellationFeeType === "PERCENT") && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Fee amount</label>
+                  <label className="mb-1 block text-sm font-medium">
+                    {cancellationFeeType === "PERCENT" ? "Percent" : "Fee amount ($)"}
+                  </label>
                   <Input
                     type="number"
                     min={0}
@@ -586,6 +596,16 @@ export function TemplateWizard({ templateId, initial }: Props) {
               <p>
                 <span className="font-medium">Billing:</span>{" "}
                 {allowedFrequencies.map((f) => BILLING_FREQUENCY_LABELS[f]).join(", ")}
+              </p>
+              <p>
+                <span className="font-medium">Cancellation fee:</span>{" "}
+                {cancellationFeeType === "NONE"
+                  ? "None"
+                  : cancellationFeeType === "REMAINDER_OF_YEAR"
+                    ? "Remainder of year balance"
+                    : cancellationFeeType === "PERCENT"
+                      ? `${cancellationFeeAmount || "0"}% of plan price`
+                      : formatCurrency(Number(cancellationFeeAmount) || 0)}
               </p>
             </div>
           )}

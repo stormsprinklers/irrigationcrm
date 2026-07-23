@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 
+export { computeCancellationFee } from "@/lib/maintenance-plans/billing";
+
 export async function applyPlanDiscountsToVisit(visitId: string, enrollmentId: string) {
   const enrollment = await prisma.maintenancePlanEnrollment.findUnique({
     where: { id: enrollmentId },
@@ -40,16 +42,6 @@ export async function completeMaintenancePlanVisit(visitId: string) {
     where: { id: visit.maintenancePlanVisitId },
     data: { status: "COMPLETED", completedAt: new Date() },
   });
-}
-
-export function computeCancellationFee(
-  basePrice: number,
-  feeType: "NONE" | "FIXED" | "PERCENT",
-  feeAmount: number | null
-) {
-  if (feeType === "NONE" || feeAmount == null) return 0;
-  if (feeType === "FIXED") return feeAmount;
-  return Math.round(basePrice * (feeAmount / 100) * 100) / 100;
 }
 
 export async function recordMaintenanceInvoicePayment(params: {

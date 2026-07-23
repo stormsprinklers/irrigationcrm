@@ -82,7 +82,14 @@ export type EnrollmentDTO = {
     doNotService: boolean;
   };
   property: { id: string; name: string; address: string | null };
-  template: { id: string; name: string; basePrice: number };
+  template: {
+    id: string;
+    name: string;
+    basePrice: number;
+    cancellationFeeType: CancellationFeeType;
+    cancellationFeeAmount: number | null;
+  };
+  cancellationFeeCharged?: number | null;
   planVisits?: PlanVisitDTO[];
   billingPeriods?: BillingPeriodDTO[];
 };

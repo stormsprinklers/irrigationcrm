@@ -285,6 +285,8 @@ enum CancellationFeeType {
   NONE
   FIXED
   PERCENT
+  /// Unpaid remainder of the current plan year (annual price minus paid periods).
+  REMAINDER_OF_YEAR
 }
 
 enum PlanDiscountAppliesTo {

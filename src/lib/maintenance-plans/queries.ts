@@ -26,7 +26,15 @@ const templateInclude = {
 const enrollmentInclude = {
   customer: { select: { id: true, name: true, phone: true, email: true, doNotService: true } },
   property: { select: { id: true, name: true, address: true } },
-  template: { select: { id: true, name: true, basePrice: true } },
+  template: {
+    select: {
+      id: true,
+      name: true,
+      basePrice: true,
+      cancellationFeeType: true,
+      cancellationFeeAmount: true,
+    },
+  },
   planVisits: {
     orderBy: [{ dueYear: "asc" as const }, { dueMonth: "asc" as const }],
     include: {
@@ -116,12 +124,19 @@ export function serializeEnrollment(
     acceptedAt: e.acceptedAt?.toISOString() ?? null,
     cancelledAt: e.cancelledAt?.toISOString() ?? null,
     cancellationReason: e.cancellationReason,
+    cancellationFeeCharged:
+      e.cancellationFeeCharged != null ? toNumber(e.cancellationFeeCharged) : null,
     customer: e.customer,
     property: e.property,
     template: {
       id: e.template.id,
       name: e.template.name,
       basePrice: toNumber(e.template.basePrice),
+      cancellationFeeType: e.template.cancellationFeeType,
+      cancellationFeeAmount:
+        e.template.cancellationFeeAmount != null
+          ? toNumber(e.template.cancellationFeeAmount)
+          : null,
     },
     planVisits: e.planVisits.map(
       (pv): PlanVisitDTO => ({

@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import { computeCancellationFee } from "@/lib/maintenance-plans/billing";
 import { latePaymentSummary } from "@/lib/maintenance-plans/late-payment";
 import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
@@ -78,14 +79,38 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
         toast.error(err.error ?? "Failed to cancel enrollment");
         return;
       }
-      onUpdated(await res.json());
+      const data = await res.json();
+      onUpdated(data);
       setShowCancel(false);
       setCancelReason("");
-      toast.success("Enrollment cancelled");
+      if (data.cancellationFeeChargeError) {
+        toast.message("Enrollment cancelled", {
+          description: `Fee ${formatCurrency(Number(data.cancellationFeeCharged) || 0)} was not charged: ${data.cancellationFeeChargeError}`,
+        });
+      } else if (Number(data.cancellationFeeCharged) > 0) {
+        toast.success(
+          `Enrollment cancelled — charged ${formatCurrency(Number(data.cancellationFeeCharged))} cancellation fee`
+        );
+      } else {
+        toast.success("Enrollment cancelled");
+      }
     } finally {
       setActing(false);
     }
   }
+
+  const previewCancellationFee = computeCancellationFee({
+    basePrice: enrollment.template.basePrice,
+    feeType: enrollment.template.cancellationFeeType,
+    feeAmount: enrollment.template.cancellationFeeAmount,
+    startDate: new Date(enrollment.startDate),
+    paidPeriods: (enrollment.billingPeriods ?? [])
+      .filter((p) => p.status === "PAID")
+      .map((p) => ({
+        periodStart: new Date(p.periodStart),
+        amount: p.amount,
+      })),
+  });
 
   const canAccept = enrollment.status === "DRAFT" || enrollment.status === "SENT";
   const canCancel =
@@ -280,6 +305,21 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
                 <p className="mt-1 text-sm text-muted-foreground">
                   This will cancel {enrollment.template.name} for {enrollment.customer.name}. Pending
                   billing periods will be closed out.
+                  {previewCancellationFee > 0 ? (
+                    <>
+                      {" "}
+                      Estimated cancellation fee:{" "}
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(previewCancellationFee)}
+                      </span>
+                      {enrollment.template.cancellationFeeType === "REMAINDER_OF_YEAR"
+                        ? " (remainder of this plan year)."
+                        : "."}{" "}
+                      The card on file will be charged when you confirm.
+                    </>
+                  ) : enrollment.template.cancellationFeeType === "REMAINDER_OF_YEAR" ? (
+                    <> No remaining year balance to charge.</>
+                  ) : null}
                 </p>
               </div>
               <Button
