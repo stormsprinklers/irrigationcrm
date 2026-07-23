@@ -583,7 +583,9 @@ export function ExpenseCardsSettingsPanel() {
             <p className="mt-1 text-xs text-muted-foreground">
               Prefer moving money from your Stripe Payments balance (invoice/card proceeds) into
               Issuing when the Issuing balance drops below a minimum. Optional ACH pull uses the bank
-              linked in the Stripe Dashboard. Checked hourly by cron.
+              linked in the Stripe Dashboard. Checked hourly by cron. Pending ACH is counted toward
+              the minimum, and another bank pull will not start until the previous one settles
+              (usually 3–5 business days; locked up to 7 days).
             </p>
           </div>
 
@@ -672,8 +674,9 @@ export function ExpenseCardsSettingsPanel() {
             <div>
               <label className="text-sm font-medium">ACH bank fallback</label>
               <p className="text-xs text-muted-foreground">
-                If Payments balance cannot cover the refill, pull from the bank account linked for
-                top-ups in Stripe Dashboard. ACH can take up to 5 business days.
+                If Payments balance cannot cover the refill, pull from the bank linked for top-ups in
+                Stripe Dashboard. ACH takes 3–5 business days — the system will not start another ACH
+                while one is pending or within 7 days of a pending pull.
               </p>
             </div>
           </div>

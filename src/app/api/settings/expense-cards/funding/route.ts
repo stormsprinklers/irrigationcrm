@@ -106,6 +106,9 @@ export async function POST(request: NextRequest) {
         expenseCardAchFallbackEnabled: true,
         expenseCardLastTopUpAt: true,
         expenseCardLastTopUpStatus: true,
+        expenseCardLastTopUpMethod: true,
+        expenseCardLastTopUpStripeId: true,
+        expenseCardLastTopUpError: true,
       },
     });
     if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });

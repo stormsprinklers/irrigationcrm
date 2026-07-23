@@ -18,16 +18,17 @@ export async function getIssuingFundingBalances(): Promise<FundingBalances> {
   const stripe = getStripeClient();
   const [balance, pendingTopUps] = await Promise.all([
     stripe.balance.retrieve(),
-    stripe.topups.list({ status: "pending", limit: 20 }),
+    // Fetch enough pending top-ups that hourly cron cannot miss an in-flight ACH.
+    stripe.topups.list({ status: "pending", limit: 100 }),
   ]);
 
   const pendingAchTopUpCents = pendingTopUps.data
+    .filter((t) => t.currency === "usd")
     .filter((t) => {
       const dest = (t as Stripe.Topup & { destination_balance?: string }).destination_balance;
       // Prefer Issuing-destined top-ups; if field absent, count all pending (US Issuing default).
       return !dest || dest === "issuing";
     })
-    .filter((t) => t.currency === "usd")
     .reduce((sum, t) => sum + t.amount, 0);
 
   return {
@@ -36,6 +37,15 @@ export async function getIssuingFundingBalances(): Promise<FundingBalances> {
     issuingAvailableCents: sumUsd(balance.issuing?.available),
     pendingAchTopUpCents,
   };
+}
+
+export async function getTopUpStatus(topUpId: string) {
+  const stripe = getStripeClient();
+  try {
+    return await stripe.topups.retrieve(topUpId);
+  } catch {
+    return null;
+  }
 }
 
 /**
