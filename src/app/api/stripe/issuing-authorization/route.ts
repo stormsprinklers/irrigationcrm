@@ -7,54 +7,85 @@ import { getOpenClockEntry } from "@/lib/timesheets/clock";
 
 export const runtime = "nodejs";
 
+const DEFAULT_STRIPE_VERSION = "2025-03-31.basil";
+
 /**
  * Synchronous Stripe Issuing authorization webhook.
  * Must respond within ~2s. Configure Autopilot/timeout to decline on failure.
  *
  * Env: STRIPE_ISSUING_AUTH_WEBHOOK_SECRET (preferred) or STRIPE_WEBHOOK_SECRET
+ *
+ * Dashboard save validates this URL and expects HTTP 200 + Stripe-Version +
+ * `{ approved: boolean }`. Unsigned / bad-signature probes get that shape with
+ * approved:false — we never run business logic without a verified signature.
  */
+function authorizationResponse(
+  approved: boolean,
+  apiVersion?: string | null
+) {
+  return NextResponse.json(
+    { approved },
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Stripe-Version": apiVersion || DEFAULT_STRIPE_VERSION,
+      },
+    }
+  );
+}
+
 export async function POST(request: NextRequest) {
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  const webhookSecret =
-    process.env.STRIPE_ISSUING_AUTH_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
+  const secrets = [
+    process.env.STRIPE_ISSUING_AUTH_WEBHOOK_SECRET,
+    process.env.STRIPE_WEBHOOK_SECRET,
+  ].filter((s): s is string => Boolean(s?.trim()));
 
-  if (!secretKey || !webhookSecret) {
-    return NextResponse.json({ error: "Stripe Issuing auth webhook not configured" }, { status: 503 });
+  if (!secretKey || secrets.length === 0) {
+    console.error("[issuing-auth] missing STRIPE_SECRET_KEY or webhook secret");
+    // Still return valid shape so Dashboard URL validation can succeed once
+    // secrets are added; never approve without verification.
+    return authorizationResponse(false);
   }
 
   const stripe = new Stripe(secretKey);
   const signature = request.headers.get("stripe-signature");
+  const rawBody = await request.text();
+
   if (!signature) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
+    // Stripe Dashboard (and curl) may probe without a signature.
+    console.warn("[issuing-auth] probe or request missing Stripe-Signature — declining shape only");
+    return authorizationResponse(false);
   }
 
-  let event: Stripe.Event;
-  try {
-    const rawBody = await request.text();
-    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
-  } catch (err) {
-    console.error("[issuing-auth] signature verification failed", err);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  let event: Stripe.Event | null = null;
+  let lastError: unknown;
+  for (const secret of secrets) {
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+      break;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (!event) {
+    // Common during first Dashboard save: Stripe signs with the new endpoint
+    // secret before you've stored it. Return the expected response shape so
+    // the URL can be saved; then set STRIPE_ISSUING_AUTH_WEBHOOK_SECRET.
+    console.error("[issuing-auth] signature verification failed", lastError);
+    return authorizationResponse(false);
   }
 
   if (event.type !== "issuing_authorization.request") {
-    return NextResponse.json({ received: true });
+    return authorizationResponse(false, event.api_version);
   }
 
   const auth = event.data.object as Stripe.Issuing.Authorization;
   const decision = await decideAuthorization(auth);
 
-  return NextResponse.json(
-    { approved: decision.approved },
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        // Stripe docs require Stripe-Version on auth webhook responses
-        "Stripe-Version": event.api_version ?? "2025-03-31.basil",
-      },
-    }
-  );
+  return authorizationResponse(decision.approved, event.api_version);
 }
 
 async function decideAuthorization(
@@ -128,7 +159,9 @@ async function decideAuthorization(
     const category = String(auth.merchant_data?.category ?? "").toLowerCase();
     if (
       controls.blockAtm &&
-      (category.includes("cash") || category.includes("atm") || category === "automated_cash_disburse")
+      (category.includes("cash") ||
+        category.includes("atm") ||
+        category === "automated_cash_disburse")
     ) {
       return { approved: false, reason: "atm_blocked" };
     }
@@ -136,7 +169,6 @@ async function decideAuthorization(
     if (controls.allowedCategories.length) {
       const allowed = new Set(controls.allowedCategories.map((c) => c.toLowerCase()));
       if (category && !allowed.has(category)) {
-        // Also allow if merchant category code matches loosely
         const match = [...allowed].some(
           (a) => category.includes(a) || a.includes(category)
         );
