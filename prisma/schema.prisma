@@ -635,6 +635,22 @@ model Company {
   expenseCardsEnabled      Boolean  @default(false)
   /// Default spend limits and card controls (daily/monthly cents, block flags, MCC allowlist).
   expenseCardDefaultsJson  Json?
+  /// Auto-refill Issuing when available balance falls below the minimum.
+  expenseCardAutoTopUpEnabled     Boolean   @default(false)
+  /// Trigger a refill when Issuing available balance is below this (cents).
+  expenseCardMinBalanceCents      Int       @default(50000)
+  /// Amount to move into Issuing when below the minimum (cents).
+  expenseCardTopUpAmountCents     Int       @default(100000)
+  /// If Stripe Payments balance cannot cover the refill, attempt ACH pull from the linked bank.
+  expenseCardAchFallbackEnabled   Boolean   @default(false)
+  expenseCardLastTopUpAt          DateTime?
+  expenseCardLastTopUpAmountCents Int?
+  /// stripe_balance | ach_topup
+  expenseCardLastTopUpMethod      String?
+  /// succeeded | pending | failed | skipped
+  expenseCardLastTopUpStatus      String?
+  expenseCardLastTopUpError       String?   @db.Text
+  expenseCardLastTopUpStripeId    String?
   commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
   payPeriodType            PayPeriodType   @default(BIWEEKLY)
   payPeriodAnchorDate      DateTime?
@@ -1505,6 +1521,7 @@ enum AppNotificationType {
   TIMER_LEFT_RUNNING
   VISIT_INCOMPLETE
   SYNC_FAILED
+  EXPENSE_CARD_FUNDING
 }
 
 model NotificationTemplate {

@@ -56,13 +56,46 @@ type ActivityItem = {
   type?: string;
 };
 
-type Tab = "defaults" | "roles" | "cards" | "activity";
+type AutoTopUpSettings = {
+  enabled: boolean;
+  minBalanceCents: number;
+  topUpAmountCents: number;
+  achFallbackEnabled: boolean;
+  lastAt: string | null;
+  lastAmountCents: number | null;
+  lastMethod: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  lastStripeId: string | null;
+};
+
+type FundingBalances = {
+  currency: string;
+  paymentsAvailableCents: number;
+  issuingAvailableCents: number;
+  pendingAchTopUpCents: number;
+};
+
+type Tab = "defaults" | "funding" | "roles" | "cards" | "activity";
 
 function formatMoneyFromCents(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     cents / 100
   );
 }
+
+const DEFAULT_AUTO_TOP_UP: AutoTopUpSettings = {
+  enabled: false,
+  minBalanceCents: 50000,
+  topUpAmountCents: 100000,
+  achFallbackEnabled: false,
+  lastAt: null,
+  lastAmountCents: null,
+  lastMethod: null,
+  lastStatus: null,
+  lastError: null,
+  lastStripeId: null,
+};
 
 export function ExpenseCardsSettingsPanel() {
   const [tab, setTab] = useState<Tab>("defaults");
@@ -84,6 +117,9 @@ export function ExpenseCardsSettingsPanel() {
   const [authorizations, setAuthorizations] = useState<ActivityItem[]>([]);
   const [transactions, setTransactions] = useState<ActivityItem[]>([]);
   const [editingRole, setEditingRole] = useState<string>("TECH");
+  const [autoTopUp, setAutoTopUp] = useState<AutoTopUpSettings>(DEFAULT_AUTO_TOP_UP);
+  const [balances, setBalances] = useState<FundingBalances | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/settings/expense-cards");
@@ -96,6 +132,14 @@ export function ExpenseCardsSettingsPanel() {
     setRolePolicies(data.rolePolicies ?? []);
     setCards(data.cards ?? []);
     setEmployees(data.employees ?? []);
+    if (data.autoTopUp) {
+      setAutoTopUp({
+        ...DEFAULT_AUTO_TOP_UP,
+        ...data.autoTopUp,
+      });
+    }
+    setBalances(data.balances ?? null);
+    setBalanceError(data.balanceError ?? null);
   }, []);
 
   useEffect(() => {
@@ -199,6 +243,62 @@ export function ExpenseCardsSettingsPanel() {
       });
       if (!data) return;
       toast.success("Program settings saved");
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveFunding() {
+    setSaving(true);
+    try {
+      const data = await mutate("/api/settings/expense-cards", {
+        method: "PATCH",
+        body: JSON.stringify({
+          actionToken,
+          autoTopUp: {
+            enabled: autoTopUp.enabled,
+            minBalanceCents: autoTopUp.minBalanceCents,
+            topUpAmountCents: autoTopUp.topUpAmountCents,
+            achFallbackEnabled: autoTopUp.achFallbackEnabled,
+          },
+        }),
+      });
+      if (!data) return;
+      toast.success("Funding settings saved");
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function runTopUpNow() {
+    setSaving(true);
+    try {
+      const data = await mutate("/api/settings/expense-cards/funding", {
+        method: "POST",
+        body: JSON.stringify({ action: "run_now", actionToken }),
+      });
+      if (!data) return;
+      const result = data.result as {
+        action: string;
+        reason: string;
+        amountCents?: number;
+        method?: string;
+      };
+      if (result.action === "transferred" || result.action === "ach_pending") {
+        toast.success(
+          result.amountCents
+            ? `${result.reason} (${formatMoneyFromCents(result.amountCents)}${
+                result.method ? ` via ${result.method === "ach_topup" ? "ACH" : "Stripe balance"}` : ""
+              })`
+            : result.reason
+        );
+      } else if (result.action === "skipped") {
+        toast.message(result.reason);
+      } else {
+        toast.error(result.reason);
+      }
       await load();
     } finally {
       setSaving(false);
@@ -362,6 +462,7 @@ export function ExpenseCardsSettingsPanel() {
         {(
           [
             ["defaults", "Program defaults"],
+            ["funding", "Funding"],
             ["roles", "Role policies"],
             ["cards", "Employee cards"],
             ["activity", "Activity"],
@@ -391,7 +492,7 @@ export function ExpenseCardsSettingsPanel() {
           </div>
           <p className="text-xs text-muted-foreground">
             Cards are virtual only (never ordered as physical plastic). They can only be used while
-            the employee is clocked in. Fund your Stripe Issuing balance in the Stripe Dashboard.
+            the employee is clocked in. Configure Issuing balance auto-refill on the Funding tab.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -471,6 +572,147 @@ export function ExpenseCardsSettingsPanel() {
             <Button type="button" disabled={saving} onClick={() => void saveDefaults()}>
               {saving ? "Saving…" : "Save program defaults"}
             </Button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {tab === "funding" ? (
+        <section className="space-y-4 rounded-lg border border-border bg-white p-4">
+          <div>
+            <h3 className="text-sm font-semibold">Issuing balance auto-refill</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Prefer moving money from your Stripe Payments balance (invoice/card proceeds) into
+              Issuing when the Issuing balance drops below a minimum. Optional ACH pull uses the bank
+              linked in the Stripe Dashboard. Checked hourly by cron.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Issuing available</p>
+              <p className="text-lg font-semibold">
+                {balances ? formatMoneyFromCents(balances.issuingAvailableCents) : "—"}
+              </p>
+            </div>
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Payments available</p>
+              <p className="text-lg font-semibold">
+                {balances ? formatMoneyFromCents(balances.paymentsAvailableCents) : "—"}
+              </p>
+            </div>
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+              <p className="text-xs text-muted-foreground">Pending ACH top-ups</p>
+              <p className="text-lg font-semibold">
+                {balances ? formatMoneyFromCents(balances.pendingAchTopUpCents) : "—"}
+              </p>
+            </div>
+          </div>
+          {balanceError ? (
+            <p className="text-sm text-amber-800">Could not load balances: {balanceError}</p>
+          ) : null}
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={autoTopUp.enabled}
+              disabled={!canMutate}
+              onCheckedChange={(v) => setAutoTopUp({ ...autoTopUp, enabled: Boolean(v) })}
+            />
+            <label className="text-sm font-medium">Enable automatic top-up</label>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Minimum Issuing balance (USD)</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                disabled={!canMutate}
+                value={centsToDollars(autoTopUp.minBalanceCents)}
+                onChange={(e) =>
+                  setAutoTopUp({
+                    ...autoTopUp,
+                    minBalanceCents: dollarsToCents(Number(e.target.value) || 0),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Refill when available Issuing (plus pending ACH) falls below this.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Refill amount (USD)</label>
+              <Input
+                type="number"
+                min={5}
+                step="0.01"
+                disabled={!canMutate}
+                value={centsToDollars(autoTopUp.topUpAmountCents)}
+                onChange={(e) =>
+                  setAutoTopUp({
+                    ...autoTopUp,
+                    topUpAmountCents: dollarsToCents(Number(e.target.value) || 0),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Amount moved each time (minimum $5).
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Checkbox
+              checked={autoTopUp.achFallbackEnabled}
+              disabled={!canMutate}
+              onCheckedChange={(v) =>
+                setAutoTopUp({ ...autoTopUp, achFallbackEnabled: Boolean(v) })
+              }
+            />
+            <div>
+              <label className="text-sm font-medium">ACH bank fallback</label>
+              <p className="text-xs text-muted-foreground">
+                If Payments balance cannot cover the refill, pull from the bank account linked for
+                top-ups in Stripe Dashboard. ACH can take up to 5 business days.
+              </p>
+            </div>
+          </div>
+
+          {(autoTopUp.lastAt || autoTopUp.lastStatus) && (
+            <div className="rounded-md border border-border px-3 py-2 text-sm">
+              <p className="font-medium">Last top-up attempt</p>
+              <p className="text-muted-foreground">
+                {autoTopUp.lastAt
+                  ? new Date(autoTopUp.lastAt).toLocaleString()
+                  : "—"}
+                {autoTopUp.lastStatus ? ` · ${autoTopUp.lastStatus}` : ""}
+                {autoTopUp.lastMethod
+                  ? ` · ${autoTopUp.lastMethod === "ach_topup" ? "ACH" : "Stripe balance"}`
+                  : ""}
+                {autoTopUp.lastAmountCents != null
+                  ? ` · ${formatMoneyFromCents(autoTopUp.lastAmountCents)}`
+                  : ""}
+              </p>
+              {autoTopUp.lastError ? (
+                <p className="mt-1 text-amber-800">{autoTopUp.lastError}</p>
+              ) : null}
+            </div>
+          )}
+
+          {canMutate ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={saving} onClick={() => void saveFunding()}>
+                {saving ? "Saving…" : "Save funding settings"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={saving || !enabled}
+                onClick={() => void runTopUpNow()}
+              >
+                Top up now
+              </Button>
+            </div>
           ) : null}
         </section>
       ) : null}

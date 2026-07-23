@@ -34,6 +34,16 @@ export async function GET() {
       select: {
         expenseCardsEnabled: true,
         expenseCardDefaultsJson: true,
+        expenseCardAutoTopUpEnabled: true,
+        expenseCardMinBalanceCents: true,
+        expenseCardTopUpAmountCents: true,
+        expenseCardAchFallbackEnabled: true,
+        expenseCardLastTopUpAt: true,
+        expenseCardLastTopUpAmountCents: true,
+        expenseCardLastTopUpMethod: true,
+        expenseCardLastTopUpStatus: true,
+        expenseCardLastTopUpError: true,
+        expenseCardLastTopUpStripeId: true,
         address: true,
         city: true,
         state: true,
@@ -63,6 +73,15 @@ export async function GET() {
       }),
     ]);
 
+    let balances = null;
+    let balanceError: string | null = null;
+    try {
+      const { getIssuingFundingBalances } = await import("@/lib/stripe/issuing/funding");
+      balances = await getIssuingFundingBalances();
+    } catch (err) {
+      balanceError = err instanceof Error ? err.message : "Failed to load Stripe balances";
+    }
+
     return NextResponse.json({
       enabled: company.expenseCardsEnabled,
       defaults: parseCompanyDefaults(company.expenseCardDefaultsJson),
@@ -72,6 +91,20 @@ export async function GET() {
         state: company.state,
         postal_code: company.zip,
       },
+      autoTopUp: {
+        enabled: company.expenseCardAutoTopUpEnabled,
+        minBalanceCents: company.expenseCardMinBalanceCents,
+        topUpAmountCents: company.expenseCardTopUpAmountCents,
+        achFallbackEnabled: company.expenseCardAchFallbackEnabled,
+        lastAt: company.expenseCardLastTopUpAt?.toISOString() ?? null,
+        lastAmountCents: company.expenseCardLastTopUpAmountCents,
+        lastMethod: company.expenseCardLastTopUpMethod,
+        lastStatus: company.expenseCardLastTopUpStatus,
+        lastError: company.expenseCardLastTopUpError,
+        lastStripeId: company.expenseCardLastTopUpStripeId,
+      },
+      balances,
+      balanceError,
       rolePolicies,
       roles: EXPENSE_CARD_ROLES,
       cards,
@@ -115,6 +148,40 @@ export async function PATCH(request: NextRequest) {
             : {}),
           ...(body.defaults !== undefined
             ? { expenseCardDefaultsJson: merged as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
+    }
+
+    if (body.autoTopUp && typeof body.autoTopUp === "object") {
+      const at = body.autoTopUp as {
+        enabled?: boolean;
+        minBalanceCents?: number;
+        topUpAmountCents?: number;
+        achFallbackEnabled?: boolean;
+      };
+      const minBalanceCents =
+        at.minBalanceCents !== undefined
+          ? Math.max(0, Math.round(Number(at.minBalanceCents) || 0))
+          : undefined;
+      const topUpAmountCents =
+        at.topUpAmountCents !== undefined
+          ? Math.max(500, Math.round(Number(at.topUpAmountCents) || 0))
+          : undefined;
+      await prisma.company.update({
+        where: { id: user.companyId },
+        data: {
+          ...(at.enabled !== undefined
+            ? { expenseCardAutoTopUpEnabled: Boolean(at.enabled) }
+            : {}),
+          ...(minBalanceCents !== undefined
+            ? { expenseCardMinBalanceCents: minBalanceCents }
+            : {}),
+          ...(topUpAmountCents !== undefined
+            ? { expenseCardTopUpAmountCents: topUpAmountCents }
+            : {}),
+          ...(at.achFallbackEnabled !== undefined
+            ? { expenseCardAchFallbackEnabled: Boolean(at.achFallbackEnabled) }
             : {}),
         },
       });
