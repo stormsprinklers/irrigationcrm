@@ -194,11 +194,24 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[expense-cards] issue failed", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to issue expense card";
-    if (message.includes("STRIPE_SECRET_KEY")) {
+    const stripeErr = error as {
+      message?: string;
+      raw?: { message?: string; code?: string; doc_url?: string };
+      type?: string;
+    };
+    let message =
+      stripeErr.raw?.message ||
+      (error instanceof Error ? error.message : "Failed to issue expense card");
+
+    if (
+      message.includes("card_issuing_prepaid_card_cross_river") ||
+      (message.includes("card_issuing") && message.includes("capability"))
+    ) {
+      message =
+        "Stripe Issuing is not fully activated on this account yet. In Stripe Dashboard → Settings → Issuing (or Account requirements), finish verification and accept Cross River Bank / Issuing terms for the prepaid card capability. Then retry issuing.";
+    } else if (message.includes("STRIPE_SECRET_KEY")) {
       return NextResponse.json({ error: message }, { status: 503 });
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
