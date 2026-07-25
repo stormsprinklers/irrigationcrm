@@ -687,6 +687,7 @@ model Company {
   maintenancePlans       MaintenancePlanTemplate[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
   phoneNumbers           PhoneNumber[]
+  twilioPortInRequests   TwilioPortInRequest[]
   callFlows              CallFlow[]
   agentGroups            AgentGroup[]
   agentPresences         AgentPresence[]
@@ -907,6 +908,7 @@ model User {
   reviewedTimeCorrections TechTimeCorrection[] @relation("TechTimeCorrectionReviewer")
   staffAuditLogs         StaffAuditLog[]
   assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
+  twilioPortInRequests   TwilioPortInRequest[] @relation("PortInCreatedBy")
   handledCallLogs        CallLog[]            @relation("HandledCallLogs")
   answeredCallConversions CallConversion[]    @relation("AnsweredCallConversions")
   callParticipants         CallParticipant[]
@@ -1461,9 +1463,44 @@ model PhoneNumber {
   callSessions CallSession[]
   callLogs     CallLog[]
   callConversions CallConversion[]
+  portInRequests TwilioPortInRequest[]
 
   @@unique([companyId, e164])
   @@index([companyId])
+}
+
+/// Twilio Porting API (Public Beta) port-in request tracked in CRM settings.
+model TwilioPortInRequest {
+  id                          String    @id @default(cuid())
+  companyId                   String
+  createdByUserId             String?
+  e164                        String
+  twilioPortInRequestSid      String    @unique
+  twilioPortInPhoneNumberSid  String?
+  twilioDocumentSid           String?
+  /// Mirror of Twilio port-in request / phone-number status.
+  status                      String    @default("In Review")
+  portable                    Boolean?
+  rejectionReason             String?
+  rejectionReasonCode         String?
+  notPortableReason           String?
+  losingCarrierJson           Json?
+  notificationEmails          String[]  @default([])
+  targetPortInDate            DateTime?
+  targetPortInTimeRangeStart  String?
+  targetPortInTimeRangeEnd    String?
+  phoneNumberId               String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   User?        @relation("PortInCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, e164])
+  @@index([twilioPortInRequestSid])
+  @@map("twilio_port_in_requests")
 }
 
 model VoiceClip {

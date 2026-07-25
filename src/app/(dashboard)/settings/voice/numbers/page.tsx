@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PortNumberWizard } from "@/components/settings/voice/PortNumberWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,7 +34,7 @@ const NUMBER_TYPES = [
 ];
 
 export default function VoiceNumbersPage() {
-  const [tab, setTab] = useState<"list" | "buy">("list");
+  const [tab, setTab] = useState<"list" | "buy" | "port">("list");
   const [numbers, setNumbers] = useState<PhoneNumberRow[]>([]);
   const [flows, setFlows] = useState<CallFlowOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -69,6 +70,9 @@ export default function VoiceNumbersPage() {
 
   useEffect(() => {
     load();
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "port") setTab("port");
   }, []);
 
   async function addNumber(e: React.FormEvent) {
@@ -180,19 +184,24 @@ export default function VoiceNumbersPage() {
         subtitle="Manage tracking numbers, assign call flows, and purchase from Twilio"
       />
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Button variant={tab === "list" ? "default" : "outline"} onClick={() => setTab("list")}>
           Your numbers
         </Button>
         <Button variant={tab === "buy" ? "default" : "outline"} onClick={() => setTab("buy")}>
           Buy a number
         </Button>
+        <Button variant={tab === "port" ? "default" : "outline"} onClick={() => setTab("port")}>
+          Port a number
+        </Button>
         <Button variant="outline" onClick={syncFromTwilio} disabled={syncing}>
           {syncing ? "Syncing..." : "Import from Twilio"}
         </Button>
       </div>
 
-      {tab === "buy" ? (
+      {tab === "port" ? (
+        <PortNumberWizard onImported={load} />
+      ) : tab === "buy" ? (
         <div className="space-y-4 rounded-lg border border-border bg-white p-6">
           <h3 className="font-semibold">Search available numbers</h3>
           <div className="flex gap-2">
