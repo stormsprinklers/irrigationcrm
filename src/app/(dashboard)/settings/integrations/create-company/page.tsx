@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -18,12 +18,40 @@ type CompanyRow = {
   isCurrent: boolean;
 };
 
+function missingRequiredFields(params: {
+  name: string;
+  adminName: string;
+  adminEmail: string;
+  adminPhone: string;
+  adminPassword: string;
+  confirmPassword: string;
+}) {
+  const missing: string[] = [];
+  if (!params.name.trim()) missing.push("Company name");
+  if (!params.adminName.trim()) missing.push("Admin name");
+  if (!params.adminEmail.trim()) missing.push("Admin email");
+  else if (!params.adminEmail.includes("@")) {
+    missing.push("Admin email (needs a valid email)");
+  }
+  if (!params.adminPhone.trim()) missing.push("Admin mobile phone");
+  if (!params.adminPassword.trim()) missing.push("Password");
+  else if (params.adminPassword.trim().length < 8) {
+    missing.push("Password (at least 8 characters)");
+  }
+  if (!params.confirmPassword.trim()) missing.push("Confirm password");
+  else if (params.adminPassword !== params.confirmPassword) {
+    missing.push("Confirm password (must match password)");
+  }
+  return missing;
+}
+
 export default function CreateCompanyPage() {
   const { data: session, update } = useSession();
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [busy, setBusy] = useState(false);
   const [createdAdminUserId, setCreatedAdminUserId] = useState<string | null>(null);
+  const [showMissing, setShowMissing] = useState(false);
 
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");
@@ -41,6 +69,19 @@ export default function CreateCompanyPage() {
   const [adminPassword, setAdminPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [linkToMyAccount, setLinkToMyAccount] = useState(true);
+
+  const missing = useMemo(
+    () =>
+      missingRequiredFields({
+        name,
+        adminName,
+        adminEmail,
+        adminPhone,
+        adminPassword,
+        confirmPassword,
+      }),
+    [name, adminName, adminEmail, adminPhone, adminPassword, confirmPassword]
+  );
 
   const load = useCallback(async () => {
     setLoadingList(true);
@@ -68,10 +109,20 @@ export default function CreateCompanyPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (adminPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
+    setShowMissing(true);
+    const stillMissing = missingRequiredFields({
+      name,
+      adminName,
+      adminEmail,
+      adminPhone,
+      adminPassword,
+      confirmPassword,
+    });
+    if (stillMissing.length) {
+      toast.error(`Missing or invalid: ${stillMissing.join(", ")}`);
       return;
     }
+
     setBusy(true);
     setCreatedAdminUserId(null);
     try {
@@ -103,6 +154,7 @@ export default function CreateCompanyPage() {
       }
       toast.success(`Created ${data.company.name}`);
       setCreatedAdminUserId(data.admin?.id ?? null);
+      setShowMissing(false);
       setName("");
       setLegalName("");
       setIndustry("");
@@ -176,7 +228,11 @@ export default function CreateCompanyPage() {
         </div>
       ) : null}
 
-      <form onSubmit={(e) => void submit(e)} className="space-y-6 rounded-xl border border-border bg-card p-5">
+      <form
+        onSubmit={(e) => void submit(e)}
+        className="space-y-6 rounded-xl border border-border bg-card p-5"
+        noValidate
+      >
         <div>
           <h2 className="font-semibold">Company</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -187,7 +243,7 @@ export default function CreateCompanyPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Chestnut & Cheer"
-                required
+                autoComplete="organization"
               />
             </label>
             <label className="text-sm sm:col-span-2">
@@ -273,7 +329,7 @@ export default function CreateCompanyPage() {
                 className="mt-1"
                 value={adminName}
                 onChange={(e) => setAdminName(e.target.value)}
-                required
+                autoComplete="name"
               />
             </label>
             <label className="text-sm sm:col-span-2">
@@ -284,7 +340,7 @@ export default function CreateCompanyPage() {
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 placeholder="admin@utah.christmas"
-                required
+                autoComplete="email"
               />
             </label>
             <label className="text-sm sm:col-span-2">
@@ -293,7 +349,7 @@ export default function CreateCompanyPage() {
                 className="mt-1"
                 value={adminPhone}
                 onChange={(e) => setAdminPhone(e.target.value)}
-                required
+                autoComplete="tel"
               />
             </label>
             <label className="text-sm">
@@ -304,8 +360,6 @@ export default function CreateCompanyPage() {
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 autoComplete="new-password"
-                required
-                minLength={8}
               />
             </label>
             <label className="text-sm">
@@ -316,8 +370,6 @@ export default function CreateCompanyPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
-                required
-                minLength={8}
               />
             </label>
           </div>
@@ -330,7 +382,13 @@ export default function CreateCompanyPage() {
           </label>
         </div>
 
-        <Button type="submit" disabled={busy || !name.trim() || !adminEmail.trim()}>
+        {showMissing && missing.length > 0 ? (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            Still needed: {missing.join(", ")}
+          </div>
+        ) : null}
+
+        <Button type="submit" disabled={busy}>
           {busy ? "Creating…" : "Create company"}
         </Button>
       </form>
