@@ -210,6 +210,8 @@ export const integrationsSettingsSidebar: NavSection[] = [
       { label: "Apple demo", href: "/settings/integrations/apple-demo" },
       { label: "Search rankings", href: "/settings/integrations/serp-rankings" },
       { label: "Data migration", href: "/settings/integrations/migrations/housecall-pro" },
+      { label: "Import from Storm", href: "/settings/integrations/company-import" },
+      { label: "Company account links", href: "/settings/integrations/account-links" },
     ],
   },
 ];

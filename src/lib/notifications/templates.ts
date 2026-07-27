@@ -14,6 +14,7 @@ export const NOTIFICATION_EVENTS = [
   "ESTIMATE_SENT",
   "ESTIMATE_FOLLOW_UP",
   "FEEDBACK_SURVEY",
+  "LEAD_ACKNOWLEDGED",
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
@@ -39,6 +40,9 @@ export const MERGE_FIELD_HINTS = [
   "{about_technician_link}",
   "{estimate_link}",
   "{survey_link}",
+  "{booking_link}",
+  "{estimate_range}",
+  "{company_phone}",
 ];
 
 export const EVENT_LABELS: Record<NotificationEvent, string> = {
@@ -55,6 +59,7 @@ export const EVENT_LABELS: Record<NotificationEvent, string> = {
   ESTIMATE_SENT: "Estimate sent",
   ESTIMATE_FOLLOW_UP: "Estimate follow-up",
   FEEDBACK_SURVEY: "Feedback survey",
+  LEAD_ACKNOWLEDGED: "Website lead acknowledged",
 };
 
 export const DEFAULT_TEMPLATES: Array<{
@@ -227,6 +232,21 @@ export const DEFAULT_TEMPLATES: Array<{
     event: "FEEDBACK_SURVEY",
     subject: "How was your visit? — {company_name}",
     body: "Hi {customer_first_name},\n\nWe'd love to hear about your recent visit:\n\n{survey_link}\n\n— {company_name}",
+  },
+  {
+    slug: "lead_acknowledged",
+    name: "Website lead acknowledged",
+    channel: "SMS",
+    event: "LEAD_ACKNOWLEDGED",
+    body: "Hi {customer_first_name}, we got your request! {company_name} will follow up soon. Ballpark: {estimate_range} Book: {booking_link}",
+  },
+  {
+    slug: "lead_acknowledged",
+    name: "Website lead acknowledged",
+    channel: "EMAIL",
+    event: "LEAD_ACKNOWLEDGED",
+    subject: "We received your request — {company_name}",
+    body: "Hi {customer_first_name},\n\nThanks for reaching out to {company_name}. Our team is reviewing your details and will follow up shortly.\n\n{estimate_range}\n\nBook a time with us:\n{booking_link}\n\nOr call/text {company_phone}.\n\n— {company_name}",
   },
 ];
 

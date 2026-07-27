@@ -3,13 +3,19 @@ import { after } from "next/server";
 import { parseAttributionFromMetadata, recordTouchEvent } from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
+import { notifyLeadAcknowledged } from "@/lib/notifications/lead-acknowledged";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
+import {
+  persistLeadPhotosFromMetadata,
+  updateLeadMetadataPhotos,
+} from "@/lib/leads/persist-photos";
 import {
   enrichPricingQuoteLead,
   formatQuoteEstimate,
   isPricingQuoteLead,
 } from "@/lib/leads/pricing-quote-enrichment";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
+import { ensureDefaultNotificationTemplates } from "@/lib/notifications/send";
 
 export async function createLeadFromIntegration(
   companyId: string,
@@ -134,13 +140,27 @@ export async function createLeadFromIntegration(
   // Fire-and-forget was getting cut off on serverless after the response returned.
   await createInboxEntriesFromWebsiteLead(companyId, lead.id, input, enrichment);
 
+  // Persist photos to blob (rewrites metadata) before customer/staff notify.
+  let leadForNotify = lead;
+  if (Object.keys(metadata).length) {
+    try {
+      const nextMeta = await persistLeadPhotosFromMetadata(companyId, lead.id, metadata);
+      if (nextMeta !== metadata) {
+        leadForNotify = await updateLeadMetadataPhotos(lead.id, nextMeta);
+      }
+    } catch (err) {
+      console.error("Failed to persist lead photos", err);
+    }
+  }
+
   // Email + attribution can run after the HTTP response; `after` keeps the
   // serverless invocation alive so they aren't dropped mid-flight.
   after(async () => {
+    await ensureDefaultNotificationTemplates(companyId).catch(() => {});
     await Promise.all([
       recordTouchEvent({
         companyId,
-        leadId: lead.id,
+        leadId: leadForNotify.id,
         eventType: "FORM_SUBMIT",
         method: AttributionFirstTouchMethod.FORM,
         attribution: {
@@ -157,11 +177,14 @@ export async function createLeadFromIntegration(
       }).catch((err) => {
         console.error("Failed to record lead attribution touch", err);
       }),
-      notifyLeadCreated(companyId, lead).catch((err) => {
+      notifyLeadCreated(companyId, leadForNotify).catch((err) => {
         console.error("Failed to send lead-created email", err);
+      }),
+      notifyLeadAcknowledged(companyId, leadForNotify).catch((err) => {
+        console.error("Failed to send lead acknowledgment", err);
       }),
     ]);
   });
 
-  return { lead, created: true };
+  return { lead: leadForNotify, created: true };
 }

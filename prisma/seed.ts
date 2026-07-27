@@ -898,6 +898,218 @@ async function main() {
     "../src/lib/notifications/send"
   );
   await ensureDefaultNotificationTemplates(company.id);
+
+  // --- Chestnut & Cheer (second company) ---
+  const { generateIntegrationKey } = await import("../src/lib/integrations/keys");
+  const ccCompany = await prisma.company.upsert({
+    where: { id: "chestnut-cheer-company" },
+    update: {
+      name: "Chestnut & Cheer",
+      legalName: "Chestnut & Cheer Christmas Lights",
+      address: "1372 W Center St",
+      city: "Orem",
+      state: "UT",
+      zip: "84057",
+      supportEmail: "hello@utah.christmas",
+      phone: "385-999-6887",
+      website: "https://utah.christmas",
+      industry: "Christmas Light Installation",
+      description:
+        "Chestnut & Cheer installs temporary and permanent Christmas lighting for homes and businesses across Utah County and Salt Lake County.",
+      leadSources: ["Website", "Referral", "Google", "Returning customer"],
+      referralCode: "CC-REF",
+      bookingSlug: "chestnut-cheer",
+      onlineBookingEnabled: true,
+      bookingLeadTimeHours: 24,
+      intakeRequiredFields: ["name", "phone", "email"],
+    },
+    create: {
+      id: "chestnut-cheer-company",
+      name: "Chestnut & Cheer",
+      legalName: "Chestnut & Cheer Christmas Lights",
+      address: "1372 W Center St",
+      city: "Orem",
+      state: "UT",
+      zip: "84057",
+      supportEmail: "hello@utah.christmas",
+      phone: "385-999-6887",
+      website: "https://utah.christmas",
+      industry: "Christmas Light Installation",
+      description:
+        "Chestnut & Cheer installs temporary and permanent Christmas lighting for homes and businesses across Utah County and Salt Lake County.",
+      sendgridFrom: "hello@utah.christmas",
+      leadSources: ["Website", "Referral", "Google", "Returning customer"],
+      referralCode: "CC-REF",
+      bookingSlug: "chestnut-cheer",
+      onlineBookingEnabled: true,
+      bookingLeadTimeHours: 24,
+      intakeRequiredFields: ["name", "phone", "email"],
+      estimateExpiryDays: 14,
+    },
+  });
+
+  await ensureDefaultNotificationTemplates(ccCompany.id);
+
+  // Service areas (subset of Storm ZIPs) so public booking zip checks work
+  for (const area of SERVICE_AREAS) {
+    const record = await prisma.serviceArea.upsert({
+      where: { companyId_slug: { companyId: ccCompany.id, slug: area.slug } },
+      update: { name: area.name, color: area.color, sortOrder: area.sortOrder },
+      create: {
+        companyId: ccCompany.id,
+        name: area.name,
+        slug: area.slug,
+        color: area.color,
+        sortOrder: area.sortOrder,
+      },
+    });
+    for (const zip of area.zips) {
+      const existing = await prisma.serviceAreaZip.findFirst({
+        where: { zipCode: zip, serviceArea: { companyId: ccCompany.id } },
+      });
+      if (!existing) {
+        await prisma.serviceAreaZip.create({
+          data: { serviceAreaId: record.id, zipCode: zip },
+        });
+      }
+    }
+  }
+
+  // Christmas lighting price book for staff quoting
+  const CC_PRICE_BOOK = [
+    {
+      slug: "cc-temporary-lighting",
+      name: "Temporary Christmas Lighting",
+      items: [
+        { name: "Year 1 package (starts at)", unitPrice: 699, sku: "CC-Y1" },
+        { name: "Year 2+ reinstall (starts at)", unitPrice: 299, sku: "CC-Y2" },
+        { name: "Roofline lighting (per linear ft)", unitPrice: 12, sku: "CC-ROOF-FT" },
+        { name: "Peak / dormer accent", unitPrice: 175, sku: "CC-PEAK" },
+        { name: "Tree wrap — medium", unitPrice: 450, sku: "CC-TREE-M" },
+        { name: "Tree wrap — large", unitPrice: 850, sku: "CC-TREE-L" },
+        { name: "Wreath / garland package", unitPrice: 225, sku: "CC-WREATH" },
+        { name: "Design consultation (credited)", unitPrice: 0, sku: "CC-CONSULT" },
+        { name: "Service call / mid-season adjust", unitPrice: 125, sku: "CC-SERVICE" },
+      ],
+    },
+    {
+      slug: "cc-commercial",
+      name: "Commercial / HOA",
+      items: [
+        { name: "Commercial site survey", unitPrice: 250, sku: "CC-COM-SURVEY" },
+        { name: "Commercial lighting (starts at)", unitPrice: 2500, sku: "CC-COM-START" },
+      ],
+    },
+  ];
+
+  for (let i = 0; i < CC_PRICE_BOOK.length; i++) {
+    const cat = CC_PRICE_BOOK[i];
+    const category = await prisma.priceBookCategory.upsert({
+      where: { companyId_slug: { companyId: ccCompany.id, slug: cat.slug } },
+      update: { name: cat.name, sortOrder: i, type: "SERVICE" },
+      create: {
+        companyId: ccCompany.id,
+        type: "SERVICE",
+        name: cat.name,
+        slug: cat.slug,
+        sortOrder: i,
+      },
+    });
+    for (let j = 0; j < cat.items.length; j++) {
+      const item = cat.items[j];
+      const existing = await prisma.priceBookItem.findFirst({
+        where: { categoryId: category.id, name: item.name },
+      });
+      if (!existing) {
+        await prisma.priceBookItem.create({
+          data: {
+            categoryId: category.id,
+            type: "SERVICE",
+            name: item.name,
+            sku: item.sku,
+            unitPrice: item.unitPrice,
+            pricingMode: "MANUAL",
+            sortOrder: j,
+          },
+        });
+      }
+    }
+  }
+
+  await prisma.user.upsert({
+    where: { email: "admin@utah.christmas" },
+    update: {
+      companyId: ccCompany.id,
+      name: "C&C Admin",
+      firstName: "C&C",
+      lastName: "Admin",
+      role: UserRole.ADMIN,
+      status: EmployeeStatus.ACTIVE,
+      passwordHash: devAdminPasswordHash,
+    },
+    create: {
+      companyId: ccCompany.id,
+      email: "admin@utah.christmas",
+      name: "C&C Admin",
+      firstName: "C&C",
+      lastName: "Admin",
+      role: UserRole.ADMIN,
+      status: EmployeeStatus.ACTIVE,
+      passwordHash: devAdminPasswordHash,
+    },
+  });
+
+  // Link Storm admin ↔ C&C admin for company switcher (same operator)
+  const stormAdmin = await prisma.user.findUnique({
+    where: { email: "admin@stormsprinklers.com" },
+    select: { id: true },
+  });
+  const ccAdmin = await prisma.user.findUnique({
+    where: { email: "admin@utah.christmas" },
+    select: { id: true },
+  });
+  if (stormAdmin && ccAdmin) {
+    for (const [a, b] of [
+      [stormAdmin.id, ccAdmin.id],
+      [ccAdmin.id, stormAdmin.id],
+    ] as const) {
+      await prisma.userAccountLink.upsert({
+        where: { userId_linkedUserId: { userId: a, linkedUserId: b } },
+        update: {},
+        create: { userId: a, linkedUserId: b },
+      });
+    }
+  }
+
+  const existingCcWebsiteKey = await prisma.integrationCredential.findFirst({
+    where: { companyId: ccCompany.id, type: "WEBSITE", label: "Christmas lights website" },
+  });
+  if (!existingCcWebsiteKey) {
+    const { rawKey, keyHash, keyPrefix } = generateIntegrationKey();
+    await prisma.integrationCredential.create({
+      data: {
+        companyId: ccCompany.id,
+        type: "WEBSITE",
+        label: "Christmas lights website",
+        keyHash,
+        keyPrefix,
+        enabled: true,
+      },
+    });
+    console.log("");
+    console.log("Chestnut & Cheer company seeded.");
+    console.log("C&C CRM login: admin@utah.christmas / Test123");
+    console.log("Public booking: /book/chestnut-cheer");
+    console.log("Set on christmas-lights-website .env.local:");
+    console.log(`  CRM_INTEGRATION_URL=<your-crm-origin>/api/integrations`);
+    console.log(`  CRM_INTEGRATION_KEY=${rawKey}`);
+    console.log(`  NEXT_PUBLIC_CRM_BOOKING_URL=<your-crm-origin>/book/chestnut-cheer`);
+    console.log("(This key is shown once — create a new key in Settings → Integrations if lost.)");
+  } else {
+    console.log("Chestnut & Cheer company already has a website integration key.");
+    console.log("C&C CRM login: admin@utah.christmas / Test123");
+    console.log("Public booking: /book/chestnut-cheer");
+  }
 }
 
 main()

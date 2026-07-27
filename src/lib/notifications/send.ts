@@ -57,6 +57,7 @@ const EVENT_TOGGLE_MAP: Record<NotificationEvent, keyof CompanyNotifyFlags | nul
   ESTIMATE_SENT: "notifyEstimateSent",
   ESTIMATE_FOLLOW_UP: "notifyEstimateFollowUp",
   FEEDBACK_SURVEY: "notifyFeedbackSurvey",
+  LEAD_ACKNOWLEDGED: null,
 };
 
 type CompanyNotifyFlags = {
@@ -329,6 +330,7 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
     "INVOICE_PAYMENT_FAILED",
     "FEEDBACK_SURVEY",
     "ESTIMATE_FOLLOW_UP",
+    "LEAD_ACKNOWLEDGED",
   ]);
 
   for (const tpl of DEFAULT_TEMPLATES) {

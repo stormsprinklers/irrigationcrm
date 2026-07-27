@@ -18,6 +18,7 @@ import { canViewVehicles } from "@/lib/vehicles/permissions";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
+import { CompanySwitcher } from "@/components/layout/CompanySwitcher";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -171,6 +172,7 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          <CompanySwitcher />
           <NewMenu />
 
           <NotificationBell />

@@ -936,6 +936,22 @@ model User {
   passwordResetTokens      PasswordResetToken[]
   expenseCard              ExpenseCard?
   createdExpenseCards      ExpenseCard[] @relation("ExpenseCardCreator")
+  accountLinksFrom         UserAccountLink[] @relation("AccountLinkFrom")
+  accountLinksTo           UserAccountLink[] @relation("AccountLinkTo")
+}
+
+/// Bidirectional link between staff users on different companies (same person).
+model UserAccountLink {
+  id           String   @id @default(cuid())
+  userId       String
+  linkedUserId String
+  createdAt    DateTime @default(now())
+
+  user       User @relation("AccountLinkFrom", fields: [userId], references: [id], onDelete: Cascade)
+  linkedUser User @relation("AccountLinkTo", fields: [linkedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, linkedUserId])
+  @@index([linkedUserId])
 }
 
 enum AuthMfaPurpose {

@@ -6,6 +6,8 @@ const FORM_LABELS: Record<string, string> = {
   "maintenance-signup": "Service Plan Interest Form",
   "pricing-quote": "Unbooked Estimate",
   "unbooked-estimate": "Unbooked Estimate",
+  "christmas-estimate": "Christmas Lighting Estimate",
+  "christmas-lighting-estimate": "Christmas Lighting Estimate",
   careers: "New Job Applicant",
 };
 
