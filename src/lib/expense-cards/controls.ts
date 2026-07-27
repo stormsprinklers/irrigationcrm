@@ -1,14 +1,30 @@
 import type { ExpenseCard, ExpenseCardRolePolicy, UserRole } from "@prisma/client";
+import { normalizeStripeCategories } from "@/lib/expense-cards/stripe-categories";
 
-/** Storm default MCC allowlist: fuel, auto service/parts, hardware/suppliers. */
+/**
+ * Storm default allowlist — Stripe Issuing category enum values only.
+ * @see https://docs.stripe.com/api/issuing/cards/object#issuing_card_object-spending_controls-allowed_categories
+ */
 export const DEFAULT_ALLOWED_CATEGORIES = [
   "service_stations",
   "automated_fuel_dispensers",
+  "auto_service_shops",
   "automotive_parts_and_accessories_stores",
-  "automotive_service_shops",
-  "car_and_truck_dealers_parts_and_service",
+  "automotive_tire_stores",
+  "auto_and_home_supply_stores",
+  "motor_vehicle_supplies_and_new_parts",
   "hardware_stores",
   "home_supply_warehouse_stores",
+  "hardware_equipment_and_supplies",
+  "lumber_building_materials_stores",
+  "construction_materials",
+  "industrial_supplies",
+  "plumbing_heating_equipment_and_supplies",
+  "heating_plumbing_a_c",
+  "electrical_parts_and_equipment",
+  "nurseries_lawn_and_garden_supply_stores",
+  "landscaping_services",
+  "wholesale_clubs",
   "miscellaneous_specialty_retail",
 ] as const;
 
@@ -50,7 +66,7 @@ export function parseCompanyDefaults(raw: unknown): ExpenseCardControls {
     blockOnline: data.blockOnline ?? PROGRAM_DEFAULTS.blockOnline,
     allowedCategories:
       Array.isArray(data.allowedCategories) && data.allowedCategories.length
-        ? data.allowedCategories.map(String)
+        ? normalizeStripeCategories(data.allowedCategories.map(String))
         : [...PROGRAM_DEFAULTS.allowedCategories],
   };
 }
@@ -97,7 +113,7 @@ export function resolveEffectiveControls(params: {
       blockOnline: layer.blockOnline != null ? layer.blockOnline : current.blockOnline,
       allowedCategories:
         layer.allowedCategories && layer.allowedCategories.length
-          ? layer.allowedCategories
+          ? normalizeStripeCategories(layer.allowedCategories)
           : current.allowedCategories,
     };
   };

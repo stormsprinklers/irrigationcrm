@@ -11,11 +11,11 @@ export async function ensureAiReceptionistSystemUser(companyId: string) {
   if (existing) return existing.id;
 
   const email = `ai-receptionist+${companyId}@system.local`;
-  const byEmail = await prisma.user.findUnique({
-    where: { email },
+  const byEmail = await prisma.user.findFirst({
+    where: { companyId, email },
     select: { id: true, companyId: true, systemKind: true },
   });
-  if (byEmail && byEmail.companyId === companyId) {
+  if (byEmail) {
     if (byEmail.systemKind !== AI_RECEPTIONIST_SYSTEM_KIND) {
       await prisma.user.update({
         where: { id: byEmail.id },

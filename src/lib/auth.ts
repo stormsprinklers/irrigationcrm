@@ -4,6 +4,7 @@ import { AuthMfaPurpose } from "@prisma/client";
 import { getAuthSecret } from "@/lib/auth-secret";
 import {
   findActiveStaffByEmail,
+  findActiveStaffById,
   verifyStaffMfaChallenge,
   verifyStaffPassword,
 } from "@/lib/staff-auth";
@@ -43,6 +44,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         code: { label: "Code", type: "text" },
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
+        companyId: { label: "Company", type: "text" },
+        userId: { label: "User", type: "text" },
       },
       async authorize(credentials) {
         if (!process.env.DATABASE_URL) return null;
@@ -50,11 +53,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const email = credentials?.email ? String(credentials.email).trim().toLowerCase() : "";
           const password = credentials?.password ? String(credentials.password) : "";
+          const companyId = credentials?.companyId
+            ? String(credentials.companyId)
+            : "";
+          const userId = credentials?.userId ? String(credentials.userId) : "";
 
           // Apple demo / App Store review account — password-only sign-in (no MFA).
           if (email && password) {
-            const user = await findActiveStaffByEmail(email);
+            const user = userId
+              ? await findActiveStaffById(userId)
+              : await findActiveStaffByEmail(email, companyId || null);
             if (!user?.appleDemoAccount) return null;
+            if (email && user.email.toLowerCase() !== email) return null;
             if (!(await verifyStaffPassword(user, password))) return null;
             return {
               id: user.id,

@@ -93,24 +93,65 @@ function twilioSendErrorMessage(err: unknown): string {
   return "Failed to send verification text. Try again or contact an admin.";
 }
 
-export async function findActiveStaffByEmail(email: string): Promise<StaffAuthUser | null> {
+const STAFF_AUTH_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  companyId: true,
+  role: true,
+  status: true,
+  passwordHash: true,
+  phone: true,
+  lmsUserId: true,
+  appleDemoAccount: true,
+} as const;
+
+/** All active staff rows sharing an email (one per company). */
+export async function findActiveStaffAccountsByEmail(
+  email: string
+): Promise<StaffAuthUser[]> {
   const normalized = email.toLowerCase().trim();
-  const user = await prisma.user.findUnique({
-    where: { email: normalized },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      companyId: true,
-      role: true,
-      status: true,
-      passwordHash: true,
-      phone: true,
-      lmsUserId: true,
-      appleDemoAccount: true,
+  const users = await prisma.user.findMany({
+    where: {
+      email: normalized,
+      status: "ACTIVE",
+      passwordHash: { not: null },
+      systemKind: null,
     },
+    select: STAFF_AUTH_SELECT,
+    orderBy: { createdAt: "asc" },
   });
-  if (!user || user.status !== "ACTIVE" || !user.passwordHash) return null;
+  return users;
+}
+
+export async function findActiveStaffByEmail(
+  email: string,
+  companyId?: string | null
+): Promise<StaffAuthUser | null> {
+  const normalized = email.toLowerCase().trim();
+  if (companyId) {
+    const user = await prisma.user.findFirst({
+      where: {
+        email: normalized,
+        companyId,
+        status: "ACTIVE",
+        passwordHash: { not: null },
+        systemKind: null,
+      },
+      select: STAFF_AUTH_SELECT,
+    });
+    return user;
+  }
+
+  const users = await findActiveStaffAccountsByEmail(normalized);
+  return users[0] ?? null;
+}
+
+export async function findActiveStaffById(id: string): Promise<StaffAuthUser | null> {
+  const user = await prisma.user.findFirst({
+    where: { id, status: "ACTIVE", passwordHash: { not: null }, systemKind: null },
+    select: STAFF_AUTH_SELECT,
+  });
   return user;
 }
 
@@ -257,6 +298,12 @@ export async function verifyStaffMfaChallenge(
   return { ok: true, user: challenge.user, challengeId: challenge.id };
 }
 
+export type CompanyChoice = {
+  companyId: string;
+  companyName: string;
+  userId: string;
+};
+
 export type BeginStaffLoginResult =
   | {
       ok: true;
@@ -270,16 +317,56 @@ export type BeginStaffLoginResult =
       phoneMasked: string;
       debugCode?: string;
     }
+  | {
+      ok: true;
+      needsCompanyChoice: true;
+      mfaRequired?: never;
+      companies: CompanyChoice[];
+    }
   | { ok: false; error: string; code: "NO_PHONE" | "SMS_CONFIG" | "INVALID" };
 
 export async function beginStaffPasswordLogin(
   email: string,
   password: string,
   purpose: AuthMfaPurpose,
+  companyId?: string | null
 ): Promise<BeginStaffLoginResult> {
-  const user = await findActiveStaffByEmail(email);
-  if (!user || !(await verifyStaffPassword(user, password))) {
+  const accounts = await findActiveStaffAccountsByEmail(email);
+  if (!accounts.length) {
     return { ok: false, error: "Invalid email or password.", code: "INVALID" };
+  }
+
+  const matched: StaffAuthUser[] = [];
+  for (const account of accounts) {
+    if (await verifyStaffPassword(account, password)) matched.push(account);
+  }
+  if (!matched.length) {
+    return { ok: false, error: "Invalid email or password.", code: "INVALID" };
+  }
+
+  let user: StaffAuthUser | undefined;
+  if (companyId) {
+    user = matched.find((a) => a.companyId === companyId);
+    if (!user) {
+      return { ok: false, error: "Invalid email or password.", code: "INVALID" };
+    }
+  } else if (matched.length === 1) {
+    user = matched[0];
+  } else {
+    const companies = await prisma.company.findMany({
+      where: { id: { in: matched.map((m) => m.companyId) } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(companies.map((c) => [c.id, c.name]));
+    return {
+      ok: true,
+      needsCompanyChoice: true,
+      companies: matched.map((m) => ({
+        companyId: m.companyId,
+        companyName: nameById.get(m.companyId) ?? "Company",
+        userId: m.id,
+      })),
+    };
   }
 
   // App Store review / Apple demo technician — password only, no SMS MFA.
@@ -338,10 +425,13 @@ export async function verifyLmsAuthTicket(ticket: string) {
 }
 
 export async function requestPasswordReset(email: string, returnTo?: string | null) {
-  const user = await findActiveStaffByEmail(email);
+  const users = await findActiveStaffAccountsByEmail(email);
   // Always return success wording to avoid account enumeration.
-  if (!user) return { ok: true as const };
+  if (!users.length) return { ok: true as const };
 
+  // One reset token; completing it updates every active account with this email
+  // so multi-company operators keep a shared password.
+  const user = users[0]!;
   const raw = randomBytes(32).toString("hex");
   await prisma.passwordResetToken.create({
     data: {
@@ -392,11 +482,22 @@ export async function resetStaffPassword(rawToken: string, newPassword: string) 
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
+  const siblings = await prisma.user.findMany({
+    where: {
+      email: row.user.email.toLowerCase(),
+      status: "ACTIVE",
+      systemKind: null,
+    },
+    select: { id: true },
+  });
+
   await prisma.$transaction([
-    prisma.user.update({
-      where: { id: row.userId },
-      data: { passwordHash },
-    }),
+    ...siblings.map((sib) =>
+      prisma.user.update({
+        where: { id: sib.id },
+        data: { passwordHash },
+      })
+    ),
     prisma.passwordResetToken.update({
       where: { id: row.id },
       data: { usedAt: new Date() },

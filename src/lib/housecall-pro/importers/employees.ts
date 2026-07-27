@@ -85,13 +85,10 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
         });
         result.updated++;
       } else {
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        const existingUser = await prisma.user.findFirst({
+          where: { companyId: ctx.companyId, email },
+        });
         if (existingUser) {
-          if (existingUser.companyId !== ctx.companyId) {
-            result.skipped++;
-            result.errors.push(`Email ${email} belongs to another company`);
-            continue;
-          }
           await prisma.user.update({
             where: { id: existingUser.id },
             data: userData,

@@ -45,8 +45,10 @@ export async function POST(request: NextRequest) {
     const nameFields = parseEmployeeNameFields({ firstName, lastName, name });
     if ("error" in nameFields) return badRequestResponse(nameFields.error);
 
-    const existing = await prisma.user.findUnique({ where: { email: String(email).toLowerCase() } });
-    if (existing) return badRequestResponse("Email already in use");
+    const existing = await prisma.user.findFirst({
+      where: { companyId: user.companyId, email: String(email).toLowerCase() },
+    });
+    if (existing) return badRequestResponse("Email already in use at this company");
 
     let plainPassword = "password123";
     if (body.password != null && String(body.password).length > 0) {

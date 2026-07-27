@@ -119,7 +119,7 @@ async function main() {
   });
 
   const austin = await prisma.user.upsert({
-    where: { email: "austin@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "austin@stormsprinklers.com" } },
     update: {
       title: "Operations Manager",
       status: EmployeeStatus.ACTIVE,
@@ -146,7 +146,7 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email: "admin@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "admin@stormsprinklers.com" } },
     update: {
       passwordHash: devAdminPasswordHash,
       status: EmployeeStatus.ACTIVE,
@@ -168,7 +168,7 @@ async function main() {
   });
 
   const jordan = await prisma.user.upsert({
-    where: { email: "tech@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "tech@stormsprinklers.com" } },
     update: {
       title: "Lead Technician",
       status: EmployeeStatus.ACTIVE,
@@ -199,7 +199,7 @@ async function main() {
   });
 
   const mike = await prisma.user.upsert({
-    where: { email: "mike@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "mike@stormsprinklers.com" } },
     update: {
       title: "Service Technician",
       status: EmployeeStatus.ACTIVE,
@@ -230,7 +230,7 @@ async function main() {
   });
 
   const sarah = await prisma.user.upsert({
-    where: { email: "sarah@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "sarah@stormsprinklers.com" } },
     update: {
       title: "CSR",
       status: EmployeeStatus.ACTIVE,
@@ -1037,7 +1037,7 @@ async function main() {
   }
 
   await prisma.user.upsert({
-    where: { email: "admin@utah.christmas" },
+    where: { companyId_email: { companyId: ccCompany.id, email: "admin@utah.christmas" } },
     update: {
       companyId: ccCompany.id,
       name: "C&C Admin",
@@ -1061,11 +1061,11 @@ async function main() {
 
   // Link Storm admin ↔ C&C admin for company switcher (same operator)
   const stormAdmin = await prisma.user.findUnique({
-    where: { email: "admin@stormsprinklers.com" },
+    where: { companyId_email: { companyId: company.id, email: "admin@stormsprinklers.com" } },
     select: { id: true },
   });
   const ccAdmin = await prisma.user.findUnique({
-    where: { email: "admin@utah.christmas" },
+    where: { companyId_email: { companyId: ccCompany.id, email: "admin@utah.christmas" } },
     select: { id: true },
   });
   if (stormAdmin && ccAdmin) {

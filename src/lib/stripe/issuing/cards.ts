@@ -1,9 +1,10 @@
 import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripe/client";
 import type { ExpenseCardControls } from "@/lib/expense-cards/controls";
+import { normalizeStripeCategories } from "@/lib/expense-cards/stripe-categories";
 
 /** Categories Stripe uses for ATM / cash access. */
-const ATM_CASH_CATEGORIES = ["cash", "automated_cash_disburse"] as const;
+const ATM_CASH_CATEGORIES = ["automated_cash_disburse", "manual_cash_disburse"] as const;
 
 /**
  * Map CRM controls → Stripe `spending_controls`.
@@ -24,12 +25,18 @@ export function buildSpendingControls(
 
   // Prefer allowlist when present (ATM/cash already excluded unless listed).
   // Only use blocked_categories when there is no allowlist.
-  if (controls.allowedCategories.length) {
+  const allowedCategories = normalizeStripeCategories(controls.allowedCategories);
+  if (allowedCategories.length) {
     const allowed = controls.blockAtm
-      ? controls.allowedCategories.filter(
+      ? allowedCategories.filter(
           (c) => !ATM_CASH_CATEGORIES.includes(c as (typeof ATM_CASH_CATEGORIES)[number])
         )
-      : controls.allowedCategories;
+      : allowedCategories;
+    if (!allowed.length) {
+      throw new Error(
+        "No valid Stripe merchant categories remain after filtering. Pick categories from Stripe's Issuing list."
+      );
+    }
     result.allowed_categories =
       allowed as Stripe.Issuing.CardCreateParams.SpendingControls.AllowedCategory[];
   } else if (controls.blockAtm) {

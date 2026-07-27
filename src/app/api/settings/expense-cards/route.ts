@@ -12,6 +12,7 @@ import {
   parseCompanyDefaults,
   type ExpenseCardControls,
 } from "@/lib/expense-cards/controls";
+import { normalizeStripeCategories } from "@/lib/expense-cards/stripe-categories";
 import { prisma } from "@/lib/prisma";
 
 function requireMfaToken(request: NextRequest, body: Record<string, unknown>) {
@@ -136,10 +137,10 @@ export async function PATCH(request: NextRequest) {
         where: { id: user.companyId },
         select: { expenseCardDefaultsJson: true },
       });
-      const merged = {
+      const merged = parseCompanyDefaults({
         ...parseCompanyDefaults(current?.expenseCardDefaultsJson),
         ...((body.defaults as Partial<ExpenseCardControls>) ?? {}),
-      };
+      });
       await prisma.company.update({
         where: { id: user.companyId },
         data: {
@@ -212,7 +213,7 @@ export async function PATCH(request: NextRequest) {
           blockAtm: rp.blockAtm ?? null,
           blockInternational: rp.blockInternational ?? null,
           blockOnline: rp.blockOnline ?? null,
-          allowedCategories: rp.allowedCategories ?? [],
+          allowedCategories: normalizeStripeCategories(rp.allowedCategories ?? []),
         },
         update: {
           dailyLimitCents: rp.dailyLimitCents ?? null,
@@ -220,7 +221,7 @@ export async function PATCH(request: NextRequest) {
           blockAtm: rp.blockAtm ?? null,
           blockInternational: rp.blockInternational ?? null,
           blockOnline: rp.blockOnline ?? null,
-          allowedCategories: rp.allowedCategories ?? [],
+          allowedCategories: normalizeStripeCategories(rp.allowedCategories ?? []),
         },
       });
     }

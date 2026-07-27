@@ -9,14 +9,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const email = String(body.email ?? "").trim();
     const password = String(body.password ?? "");
+    const companyId = body.companyId ? String(body.companyId) : null;
     const deviceName = body.deviceName ? String(body.deviceName).slice(0, 120) : undefined;
 
     if (!email || !password) {
       return badRequestResponse("email and password are required");
     }
 
-    const result = await authenticateMobileUser(email, password);
+    const result = await authenticateMobileUser(email, password, companyId);
     if ("error" in result) {
+      if ("needsCompanyChoice" in result && result.needsCompanyChoice) {
+        return NextResponse.json({
+          needsCompanyChoice: true,
+          companies: result.companies,
+        });
+      }
       const message = result.error ?? "Invalid email or password";
       const status =
         message.includes("technicians and admins") || message.includes("Storm CRM staff")

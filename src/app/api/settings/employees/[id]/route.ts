@@ -37,8 +37,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { serviceAreaIds, ...fields } = body;
 
     if (fields.email && fields.email !== existing.email) {
-      const dup = await prisma.user.findUnique({ where: { email: String(fields.email).toLowerCase() } });
-      if (dup) return badRequestResponse("Email already in use");
+      const dup = await prisma.user.findFirst({
+        where: {
+          companyId: user.companyId,
+          email: String(fields.email).toLowerCase(),
+          NOT: { id },
+        },
+      });
+      if (dup) return badRequestResponse("Email already in use at this company");
     }
 
     const nextRole = fields.role !== undefined ? (fields.role as UserRole) : existing.role;

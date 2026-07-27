@@ -4,7 +4,7 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Validates that the current user may switch into the target user account.
+ * Switch into another company account that shares this email, or a linked account.
  * Client then calls next-auth `update()` with the returned session payload.
  */
 export async function POST(request: NextRequest) {
@@ -19,17 +19,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Already on this account" }, { status: 400 });
     }
 
-    const link = await prisma.userAccountLink.findUnique({
-      where: {
-        userId_linkedUserId: { userId: user.id, linkedUserId: targetUserId },
-      },
+    const current = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, email: true },
     });
-    if (!link) {
-      return NextResponse.json({ error: "Account not linked" }, { status: 403 });
-    }
+    if (!current) return unauthorizedResponse();
 
     const target = await prisma.user.findFirst({
-      where: { id: targetUserId, status: EmployeeStatus.ACTIVE },
+      where: { id: targetUserId, status: EmployeeStatus.ACTIVE, systemKind: null },
       select: {
         id: true,
         email: true,
@@ -41,6 +38,23 @@ export async function POST(request: NextRequest) {
     });
     if (!target) {
       return NextResponse.json({ error: "Target user inactive" }, { status: 404 });
+    }
+
+    const sameEmail =
+      target.email.toLowerCase() === current.email.toLowerCase();
+    const link = sameEmail
+      ? null
+      : await prisma.userAccountLink.findUnique({
+          where: {
+            userId_linkedUserId: {
+              userId: user.id,
+              linkedUserId: targetUserId,
+            },
+          },
+        });
+
+    if (!sameEmail && !link) {
+      return NextResponse.json({ error: "Account not linked" }, { status: 403 });
     }
 
     return NextResponse.json({

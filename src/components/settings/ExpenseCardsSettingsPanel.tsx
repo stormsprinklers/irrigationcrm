@@ -15,6 +15,7 @@ import {
   type ExpenseCardControls,
 } from "@/lib/expense-cards/controls";
 import { encryptIssuingPin } from "@/lib/expense-cards/encrypt-pin";
+import { StripeCategoryMultiSelect } from "@/components/settings/StripeCategoryMultiSelect";
 
 type Employee = {
   id: string;
@@ -548,24 +549,18 @@ export function ExpenseCardsSettingsPanel() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">
-              Allowed merchant categories (Stripe category codes, comma-separated)
+              Allowed merchant categories
             </label>
-            <textarea
-              className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+            <StripeCategoryMultiSelect
               disabled={!canMutate}
-              value={defaults.allowedCategories.join(", ")}
-              onChange={(e) =>
-                setDefaults({
-                  ...defaults,
-                  allowedCategories: e.target.value
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
+              value={defaults.allowedCategories}
+              onChange={(allowedCategories) =>
+                setDefaults({ ...defaults, allowedCategories })
               }
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Default preset targets fuel, auto service/parts, and hardware suppliers.
+              Default preset targets fuel, auto service/parts, hardware, and irrigation
+              suppliers (Stripe Issuing category codes only).
             </p>
           </div>
           {canMutate ? (

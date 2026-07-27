@@ -47,7 +47,9 @@ export async function createAppleDemoAccount(companyId: string): Promise<
   }
 
   const email = appleDemoEmailForCompany(companyId);
-  const emailTaken = await prisma.user.findUnique({ where: { email } });
+  const emailTaken = await prisma.user.findFirst({
+    where: { companyId, email },
+  });
   if (emailTaken) {
     return { error: "Demo email is already in use. Contact support." };
   }

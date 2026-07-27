@@ -4,13 +4,6 @@ import { prisma } from "@/lib/prisma";
 export const STORM_COMPANY_ID = "seed-company";
 export const CHESTNUT_CHEER_COMPANY_ID = "chestnut-cheer-company";
 
-function ccEmail(email: string): string {
-  const [local, domain] = email.split("@");
-  if (!domain) return `${email}+chestnut`;
-  const base = local.includes("+") ? local.split("+")[0] : local;
-  return `${base}+chestnut@${domain}`;
-}
-
 export async function listStormEmployees() {
   return prisma.user.findMany({
     where: { companyId: STORM_COMPANY_ID, systemKind: null, appleDemoAccount: false },
@@ -77,14 +70,16 @@ export async function importEmployeesToChestnut(
   const skipped: { sourceId: string; reason: string }[] = [];
 
   for (const user of source) {
-    const email = ccEmail(user.email);
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const email = user.email.toLowerCase();
+    const existing = await prisma.user.findFirst({
+      where: { companyId: targetCompanyId, email },
+    });
     if (existing) {
-      skipped.push({ sourceId: user.id, reason: `Email already exists: ${email}` });
+      skipped.push({ sourceId: user.id, reason: `Email already exists on C&C: ${email}` });
       continue;
     }
 
-    await prisma.user.create({
+    const createdUser = await prisma.user.create({
       data: {
         companyId: targetCompanyId,
         firstName: user.firstName,
@@ -102,10 +97,30 @@ export async function importEmployeesToChestnut(
         city: user.city,
         state: user.state,
         zip: user.zip,
+        // Copy password hash so same email can sign in to either company.
+        passwordHash: user.passwordHash,
         tags: [...user.tags, `imported-from-storm:${user.id}`],
-        // passwordHash intentionally omitted — invite/reset required
       },
     });
+
+    // Auto-link for company switcher
+    await prisma.$transaction([
+      prisma.userAccountLink.upsert({
+        where: {
+          userId_linkedUserId: { userId: user.id, linkedUserId: createdUser.id },
+        },
+        update: {},
+        create: { userId: user.id, linkedUserId: createdUser.id },
+      }),
+      prisma.userAccountLink.upsert({
+        where: {
+          userId_linkedUserId: { userId: createdUser.id, linkedUserId: user.id },
+        },
+        update: {},
+        create: { userId: createdUser.id, linkedUserId: user.id },
+      }),
+    ]);
+
     created.push({ sourceId: user.id, email, name: user.name });
   }
 

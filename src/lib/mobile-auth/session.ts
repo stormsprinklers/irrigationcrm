@@ -9,10 +9,20 @@ import {
   MOBILE_ACCESS_TOKEN_TTL_SECONDS,
 } from "@/lib/mobile-auth/tokens";
 
-export async function authenticateMobileUser(email: string, password: string) {
+export async function authenticateMobileUser(
+  email: string,
+  password: string,
+  companyId?: string | null
+) {
   const normalizedEmail = email.toLowerCase().trim();
-  const user = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
+  const users = await prisma.user.findMany({
+    where: {
+      email: normalizedEmail,
+      status: "ACTIVE",
+      passwordHash: { not: null },
+      systemKind: null,
+      ...(companyId ? { companyId } : {}),
+    },
     select: {
       id: true,
       email: true,
@@ -24,18 +34,35 @@ export async function authenticateMobileUser(email: string, password: string) {
       phone: true,
       lmsUserId: true,
       appleDemoAccount: true,
+      company: { select: { id: true, name: true } },
     },
   });
-  if (!user?.passwordHash || user.status !== "ACTIVE") {
+
+  const matched = [];
+  for (const user of users) {
+    if (!user.passwordHash) continue;
+    if (!(await bcrypt.compare(password, user.passwordHash))) continue;
+    if (!canAccessMobileApp(user.role)) continue;
+    matched.push(user);
+  }
+
+  if (!matched.length) {
     return { error: "Invalid email or password" as const };
   }
-  if (!canAccessMobileApp(user.role)) {
-    return { error: "This app is for Storm CRM staff only" as const };
+
+  if (!companyId && matched.length > 1) {
+    return {
+      error: "Select a company" as const,
+      needsCompanyChoice: true as const,
+      companies: matched.map((u) => ({
+        companyId: u.companyId,
+        companyName: u.company.name,
+        userId: u.id,
+      })),
+    };
   }
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    return { error: "Invalid email or password" as const };
-  }
+
+  const user = matched[0]!;
   return { user };
 }
 

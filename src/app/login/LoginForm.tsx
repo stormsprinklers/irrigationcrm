@@ -11,7 +11,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { stormBrand } from "@/lib/branding";
 import { radarDocumentTitle } from "@/lib/radar-branding";
 
-type Step = "credentials" | "mfa";
+type Step = "credentials" | "company" | "mfa";
+
+type CompanyChoice = {
+  companyId: string;
+  companyName: string;
+  userId: string;
+};
 
 export default function LoginForm({ companyName }: { companyName?: string | null }) {
   const searchParams = useSearchParams();
@@ -20,14 +26,15 @@ export default function LoginForm({ companyName }: { companyName?: string | null
   const [step, setStep] = useState<Step>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [companies, setCompanies] = useState<CompanyChoice[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState("");
   const [phoneMasked, setPhoneMasked] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleCredentials(e: React.FormEvent) {
-    e.preventDefault();
+  async function startLogin(companyId?: string | null) {
     setLoading(true);
     setError("");
 
@@ -39,18 +46,29 @@ export default function LoginForm({ companyName }: { companyName?: string | null
           email: email.trim().toLowerCase(),
           password,
           purpose: "LOGIN",
+          ...(companyId ? { companyId } : {}),
         }),
       });
       const data = (await res.json()) as {
         error?: string;
         mfaRequired?: boolean;
+        needsCompanyChoice?: boolean;
+        companies?: CompanyChoice[];
         challengeId?: string;
         phoneMasked?: string;
         debugCode?: string;
         appleDemo?: boolean;
+        user?: { id: string; companyId: string };
       };
       if (!res.ok) {
         setError(data.error ?? "Invalid email or password");
+        return;
+      }
+
+      if (data.needsCompanyChoice && data.companies?.length) {
+        setCompanies(data.companies);
+        setSelectedCompanyId(null);
+        setStep("company");
         return;
       }
 
@@ -59,6 +77,8 @@ export default function LoginForm({ companyName }: { companyName?: string | null
         const result = await signIn("credentials", {
           email: email.trim().toLowerCase(),
           password,
+          companyId: data.user?.companyId ?? companyId ?? "",
+          userId: data.user?.id ?? "",
           redirect: false,
         });
         if (!result?.ok) {
@@ -83,6 +103,20 @@ export default function LoginForm({ companyName }: { companyName?: string | null
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    await startLogin(null);
+  }
+
+  async function handleCompany(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCompanyId) {
+      setError("Select a company to continue.");
+      return;
+    }
+    await startLogin(selectedCompanyId);
   }
 
   async function handleMfa(e: React.FormEvent) {
@@ -215,7 +249,51 @@ export default function LoginForm({ companyName }: { companyName?: string | null
                 </Link>
               </p>
             </form>
-          ) : (
+          ) : null}
+
+          {step === "company" ? (
+            <form onSubmit={handleCompany} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                This email is used on multiple companies. Choose which one to sign
+                into.
+              </p>
+              <div className="space-y-2">
+                {companies.map((c) => (
+                  <button
+                    key={c.companyId}
+                    type="button"
+                    onClick={() => setSelectedCompanyId(c.companyId)}
+                    className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
+                      selectedCompanyId === c.companyId
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                        : "border-border hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="font-medium">{c.companyName}</div>
+                  </button>
+                ))}
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={loading || !selectedCompanyId}>
+                {loading ? "Continuing…" : "Continue"}
+              </Button>
+              <button
+                type="button"
+                className="w-full text-sm text-storm-medium-blue hover:underline"
+                onClick={() => {
+                  setStep("credentials");
+                  setCompanies([]);
+                  setSelectedCompanyId(null);
+                  setError("");
+                }}
+                disabled={loading}
+              >
+                Back
+              </button>
+            </form>
+          ) : null}
+
+          {step === "mfa" ? (
             <form onSubmit={handleMfa} className="space-y-4">
               <p className="text-sm text-muted-foreground">
                 Enter the 6-digit code texted to {phoneMasked || "your phone"}.
@@ -243,7 +321,7 @@ export default function LoginForm({ companyName }: { companyName?: string | null
                   type="button"
                   className="text-storm-medium-blue hover:underline"
                   onClick={() => {
-                    setStep("credentials");
+                    setStep(companies.length > 1 ? "company" : "credentials");
                     setCode("");
                     setError("");
                   }}
@@ -261,7 +339,7 @@ export default function LoginForm({ companyName }: { companyName?: string | null
                 </button>
               </div>
             </form>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </div>

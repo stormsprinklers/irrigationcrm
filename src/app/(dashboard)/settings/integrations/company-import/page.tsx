@@ -134,8 +134,8 @@ export default function CompanyImportPage() {
         <h1 className="font-display text-2xl font-bold">Import from Storm Sprinklers</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Copy selected employees, customers, and templates into Chestnut &amp; Cheer.
-          Employees get a <code>+chestnut</code> email alias and must reset their password.
-          Twilio numbers are not copied — configure messaging separately.
+          Employees keep the same email and password so they can switch companies after
+          sign-in. Twilio numbers are not copied — configure messaging separately.
         </p>
       </div>
 
@@ -145,7 +145,7 @@ export default function CompanyImportPage() {
 
       <ImportSection
         title="Employees"
-        description="Creates C&C user accounts (invite/reset required)."
+        description="Creates C&C user accounts with the same email (company switcher enabled)."
         items={employees.map((e) => ({
           id: e.id,
           label: `${e.name} · ${e.email} · ${e.role}`,

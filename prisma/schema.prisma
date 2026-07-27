@@ -850,7 +850,7 @@ model User {
   firstName    String         @default("")
   lastName     String         @default("")
   name         String
-  email        String         @unique
+  email        String
   passwordHash String?
   phone        String?
   role         UserRole       @default(CSR)
@@ -938,6 +938,9 @@ model User {
   createdExpenseCards      ExpenseCard[] @relation("ExpenseCardCreator")
   accountLinksFrom         UserAccountLink[] @relation("AccountLinkFrom")
   accountLinksTo           UserAccountLink[] @relation("AccountLinkTo")
+
+  @@unique([companyId, email])
+  @@index([email])
 }
 
 /// Bidirectional link between staff users on different companies (same person).

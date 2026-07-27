@@ -18,10 +18,9 @@ import { canViewVehicles } from "@/lib/vehicles/permissions";
 import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
-import { CompanySwitcher } from "@/components/layout/CompanySwitcher";
+import { UserAccountMenu } from "@/components/layout/UserAccountMenu";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,15 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 function filterOtherNav(items: NavItem[], role: string | undefined) {
   return items.filter((item) => {
@@ -84,7 +74,6 @@ export function TopNav() {
   const [dialerOpen, setDialerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileOtherOpen, setMobileOtherOpen] = useState(false);
-  const userName = session?.user?.name ?? "User";
   const role = session?.user?.role;
   const navItems = primaryNav;
   const otherItems = filterOtherNav(otherNav, role);
@@ -172,7 +161,6 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
-          <CompanySwitcher />
           <NewMenu />
 
           <NotificationBell />
@@ -192,11 +180,7 @@ export function TopNav() {
             </Link>
           </Button>
 
-          <Avatar className="ml-0.5 h-8 w-8 sm:ml-1">
-            <AvatarFallback className="bg-primary/10 text-xs text-primary">
-              {getInitials(userName)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAccountMenu />
         </div>
       </div>
 

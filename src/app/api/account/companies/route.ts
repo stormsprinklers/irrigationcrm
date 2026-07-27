@@ -7,7 +7,51 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-async function listLinkedAccounts(userId: string) {
+type SwitchableAccount = {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  companyId: string;
+  companyName: string;
+  source: "same-email" | "linked";
+};
+
+async function listSwitchableAccounts(
+  userId: string,
+  email: string,
+  companyId: string
+): Promise<SwitchableAccount[]> {
+  const byId = new Map<string, SwitchableAccount>();
+
+  const sameEmail = await prisma.user.findMany({
+    where: {
+      email: email.toLowerCase(),
+      status: EmployeeStatus.ACTIVE,
+      systemKind: null,
+      NOT: { id: userId },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      company: { select: { id: true, name: true } },
+    },
+  });
+
+  for (const u of sameEmail) {
+    byId.set(u.id, {
+      userId: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      companyId: u.company.id,
+      companyName: u.company.name,
+      source: "same-email",
+    });
+  }
+
   const links = await prisma.userAccountLink.findMany({
     where: { userId },
     include: {
@@ -24,16 +68,24 @@ async function listLinkedAccounts(userId: string) {
     },
   });
 
-  return links
-    .filter((l) => l.linkedUser.status === EmployeeStatus.ACTIVE)
-    .map((l) => ({
+  for (const l of links) {
+    if (l.linkedUser.status !== EmployeeStatus.ACTIVE) continue;
+    if (l.linkedUser.company.id === companyId) continue;
+    if (byId.has(l.linkedUser.id)) continue;
+    byId.set(l.linkedUser.id, {
       userId: l.linkedUser.id,
       name: l.linkedUser.name,
       email: l.linkedUser.email,
       role: l.linkedUser.role,
       companyId: l.linkedUser.company.id,
       companyName: l.linkedUser.company.name,
-    }));
+      source: "linked",
+    });
+  }
+
+  return Array.from(byId.values()).sort((a, b) =>
+    a.companyName.localeCompare(b.companyName)
+  );
 }
 
 export async function GET() {
@@ -51,7 +103,12 @@ export async function GET() {
     });
     if (!current) return unauthorizedResponse();
 
-    const linked = await listLinkedAccounts(user.id);
+    const switchable = await listSwitchableAccounts(
+      current.id,
+      current.email,
+      current.company.id
+    );
+
     return NextResponse.json({
       current: {
         userId: current.id,
@@ -60,8 +117,11 @@ export async function GET() {
         role: current.role,
         companyId: current.company.id,
         companyName: current.company.name,
+        source: "same-email" as const,
       },
-      linked,
+      switchable,
+      /** @deprecated use switchable */
+      linked: switchable,
     });
   } catch {
     return unauthorizedResponse();
@@ -111,7 +171,16 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ ok: true, linked: await listLinkedAccounts(user.id) });
+    const me = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { email: true, companyId: true },
+    });
+    if (!me) return unauthorizedResponse();
+
+    return NextResponse.json({
+      ok: true,
+      switchable: await listSwitchableAccounts(user.id, me.email, me.companyId),
+    });
   } catch {
     return unauthorizedResponse();
   }
