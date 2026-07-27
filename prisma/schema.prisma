@@ -494,6 +494,12 @@ model Company {
   sendgridInboundDomain    String?
   emailSenderName          String?
   emailLogoUrl             String?
+  /// CRM app logo shown in the staff dashboard nav (per company).
+  brandLogoUrl             String?
+  /// Hex primary brand color for CRM chrome (e.g. #4C9BC8).
+  brandPrimaryColor        String?
+  /// Hex secondary / accent brand color (e.g. navy #102341).
+  brandSecondaryColor      String?
   recordCalls              Boolean  @default(true)
   transcribeCalls          Boolean  @default(true)
   /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.

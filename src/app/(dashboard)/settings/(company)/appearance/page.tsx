@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -30,6 +31,17 @@ export default function SettingsAppearancePage() {
         title="Appearance"
         subtitle="Choose how Irrigation CRM looks on this device"
       />
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-6">
+        <h3 className="text-lg font-semibold">Company branding</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Logo and brand colors are per company (Storm vs Chestnut &amp; Cheer, etc.). Edit them under{" "}
+          <Link href="/settings" className="text-primary underline">
+            Settings → Company → Branding
+          </Link>
+          .
+        </p>
+      </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="text-lg font-semibold">Color theme</h3>

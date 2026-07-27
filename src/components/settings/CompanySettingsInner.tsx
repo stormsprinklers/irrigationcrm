@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay, type CompanySettingsDTO } from "@/lib/company/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { stormBrand } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
-const profileTabs = ["Profile", "Email branding", "Business hours"] as const;
+const profileTabs = ["Profile", "Branding", "Email branding", "Business hours"] as const;
 
 const profileFields: { key: keyof CompanySettingsDTO; label: string }[] = [
   { key: "name", label: "Business name" },
@@ -28,13 +30,24 @@ const profileFields: { key: keyof CompanySettingsDTO; label: string }[] = [
 
 const dayKeys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 
+function normalizeHexInput(value: string) {
+  const raw = value.trim();
+  if (!raw) return null;
+  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return value;
+  return withHash.toUpperCase();
+}
+
 export function CompanySettingsInner() {
+  const { refresh: refreshBrand } = useCompanyBrand();
   const [tab, setTab] = useState<(typeof profileTabs)[number]>("Profile");
   const [company, setCompany] = useState<CompanySettingsDTO | null>(null);
   const [hours, setHours] = useState<Record<string, BusinessHoursDay>>(DEFAULT_BUSINESS_HOURS);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingBrandLogo, setUploadingBrandLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const brandLogoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/settings/company")
@@ -52,13 +65,20 @@ export function CompanySettingsInner() {
     if (!company) return;
     setSaving(true);
     try {
+      const payload = {
+        ...company,
+        businessHours: hours,
+        brandPrimaryColor: normalizeHexInput(company.brandPrimaryColor ?? "") || null,
+        brandSecondaryColor: normalizeHexInput(company.brandSecondaryColor ?? "") || null,
+      };
       const res = await fetch("/api/settings/company", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...company, businessHours: hours }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Save failed");
       setCompany(await res.json());
+      await refreshBrand();
       toast.success("Company settings saved");
     } catch {
       toast.error("Failed to save settings");
@@ -97,6 +117,41 @@ export function CompanySettingsInner() {
       toast.error(err instanceof Error ? err.message : "Remove failed");
     } finally {
       setUploadingLogo(false);
+    }
+  }
+
+  async function uploadBrandLogo(file: File) {
+    setUploadingBrandLogo(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const res = await fetch("/api/settings/company/brand-logo", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setCompany(data.company);
+      await refreshBrand();
+      toast.success("CRM logo updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingBrandLogo(false);
+      if (brandLogoInputRef.current) brandLogoInputRef.current.value = "";
+    }
+  }
+
+  async function removeBrandLogo() {
+    setUploadingBrandLogo(true);
+    try {
+      const res = await fetch("/api/settings/company/brand-logo", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Remove failed");
+      setCompany(data.company);
+      await refreshBrand();
+      toast.success("CRM logo removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setUploadingBrandLogo(false);
     }
   }
 
@@ -191,6 +246,129 @@ export function CompanySettingsInner() {
             </div>
           </section>
         </div>
+      ) : tab === "Branding" ? (
+        <section className="rounded-lg border border-border bg-white p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold">CRM branding</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Logo and colors for this company in the staff CRM. Switch companies to edit another
+              brand&apos;s look.
+            </p>
+          </div>
+
+          <div>
+            <label className="text-sm text-muted-foreground">App logo (top navigation)</label>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  blobProxyUrl(company.brandLogoUrl) ||
+                  blobProxyUrl(company.emailLogoUrl) ||
+                  stormBrand.logoPath
+                }
+                alt={`${company.name} logo`}
+                className="h-14 w-auto max-w-[200px] rounded-md border border-border bg-card object-contain p-1"
+              />
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={brandLogoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadBrandLogo(file);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingBrandLogo}
+                  onClick={() => brandLogoInputRef.current?.click()}
+                >
+                  {uploadingBrandLogo
+                    ? "Uploading..."
+                    : company.brandLogoUrl
+                      ? "Replace logo"
+                      : "Upload logo"}
+                </Button>
+                {company.brandLogoUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={uploadingBrandLogo}
+                    onClick={() => void removeBrandLogo()}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              PNG or WebP with a transparent background works best. If empty, the email logo is used,
+              then the default Storm logo.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="text-sm text-muted-foreground">Primary color</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="color"
+                  className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
+                  value={
+                    /^#[0-9a-fA-F]{6}$/.test(company.brandPrimaryColor ?? "")
+                      ? (company.brandPrimaryColor as string)
+                      : stormBrand.sky
+                  }
+                  onChange={(e) =>
+                    setCompany({ ...company, brandPrimaryColor: e.target.value.toUpperCase() })
+                  }
+                />
+                <Input
+                  value={company.brandPrimaryColor ?? ""}
+                  placeholder={stormBrand.sky}
+                  onChange={(e) =>
+                    setCompany({ ...company, brandPrimaryColor: e.target.value || null })
+                  }
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Buttons, active nav underline, and links (hex like {stormBrand.sky}).
+              </p>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Secondary color</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="color"
+                  className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
+                  value={
+                    /^#[0-9a-fA-F]{6}$/.test(company.brandSecondaryColor ?? "")
+                      ? (company.brandSecondaryColor as string)
+                      : stormBrand.navy
+                  }
+                  onChange={(e) =>
+                    setCompany({ ...company, brandSecondaryColor: e.target.value.toUpperCase() })
+                  }
+                />
+                <Input
+                  value={company.brandSecondaryColor ?? ""}
+                  placeholder={stormBrand.navy}
+                  onChange={(e) =>
+                    setCompany({ ...company, brandSecondaryColor: e.target.value || null })
+                  }
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Main text / navy-style accent (hex like {stormBrand.navy}).
+              </p>
+            </div>
+          </div>
+        </section>
       ) : tab === "Email branding" ? (
         <section className="rounded-lg border border-border bg-white p-6 space-y-6">
           <div>

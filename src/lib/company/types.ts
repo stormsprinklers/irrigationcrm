@@ -16,6 +16,9 @@ export const companySettingsSelect = {
   description: true,
   emailSenderName: true,
   emailLogoUrl: true,
+  brandLogoUrl: true,
+  brandPrimaryColor: true,
+  brandSecondaryColor: true,
   invoicePrefix: true,
   invoiceTerms: true,
   invoiceFooter: true,
@@ -89,6 +92,9 @@ export type CompanySettingsDTO = {
   description: string | null;
   emailSenderName: string | null;
   emailLogoUrl: string | null;
+  brandLogoUrl: string | null;
+  brandPrimaryColor: string | null;
+  brandSecondaryColor: string | null;
   invoicePrefix: string | null;
   invoiceTerms: string | null;
   invoiceFooter: string | null;

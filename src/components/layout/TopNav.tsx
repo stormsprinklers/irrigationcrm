@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
@@ -16,6 +15,7 @@ import {
 import { canAccessHiring } from "@/lib/hiring/permissions";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 import { stormBrand } from "@/lib/branding";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
 import { UserAccountMenu } from "@/components/layout/UserAccountMenu";
@@ -71,6 +71,7 @@ function NavLink({
 export function TopNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const { brand } = useCompanyBrand();
   const [dialerOpen, setDialerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileOtherOpen, setMobileOtherOpen] = useState(false);
@@ -96,12 +97,12 @@ export function TopNav() {
         </Button>
 
         <Link href="/home" className="flex shrink-0 items-center">
-          <Image
-            src={stormBrand.logoPath}
-            alt="Storm Sprinklers"
+          {/* eslint-disable-next-line @next/next/no-img-element -- brand logos may be blob proxy URLs */}
+          <img
+            src={brand.logoUrl || stormBrand.logoPath}
+            alt={brand.companyName || "Company"}
             width={320}
             height={320}
-            priority
             className="h-10 w-auto rounded-sm bg-card object-contain sm:h-[4.5rem]"
           />
         </Link>
