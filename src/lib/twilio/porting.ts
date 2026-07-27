@@ -185,17 +185,21 @@ export type PortInRequest = {
 };
 
 export async function createPortInRequest(params: CreatePortInParams): Promise<PortInRequest> {
+  // Only include pin when set — null/empty can confuse carriers that treat it as provided.
+  const phoneEntry: Record<string, string> = {
+    phone_number: params.phoneNumber,
+  };
+  const trimmedPin = params.pin?.trim();
+  if (trimmedPin) {
+    phoneEntry.pin = trimmedPin;
+  }
+
   const payload: Record<string, unknown> = {
     account_sid: accountSid(),
     target_port_in_date: params.targetPortInDate,
     notification_emails: params.notificationEmails,
     losing_carrier_information: params.losingCarrier,
-    phone_numbers: [
-      {
-        phone_number: params.phoneNumber,
-        pin: params.pin || null,
-      },
-    ],
+    phone_numbers: [phoneEntry],
     documents: [params.documentSid],
   };
   if (params.targetPortInTimeRangeStart) {

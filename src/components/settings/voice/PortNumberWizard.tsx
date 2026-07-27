@@ -466,6 +466,10 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
               <li>Keep your current phone service active until the port completes.</li>
               <li>Have a recent utility bill (PDF/JPG/PNG, ≤10MB, dated within 30 days).</li>
               <li>Name and billing address must match your losing carrier exactly.</li>
+              <li>
+                Get the port / account PIN from your losing carrier (required for most mobile
+                numbers; many landline carriers require one too).
+              </li>
               <li>Expect 5–15+ days; Twilio or the carrier may adjust the port date.</li>
               <li>
                 An authorized representative must be able to open email and sign Twilio&apos;s
@@ -580,18 +584,25 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
                 onChange={(e) => setAccountTelephoneNumber(e.target.value)}
               />
             </label>
-            {(portability?.pinRequired ||
-              (portability?.numberType ?? "").toUpperCase().includes("MOBILE")) && (
-              <label className="text-sm sm:col-span-2">
-                Mobile / port PIN (from losing carrier)
-                <Input
-                  className="mt-1"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  autoComplete="off"
-                />
-              </label>
-            )}
+            <label className="text-sm sm:col-span-2">
+              Port / account PIN
+              {portability?.pinRequired ? (
+                <span className="text-destructive"> *</span>
+              ) : null}
+              <Input
+                className="mt-1"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                autoComplete="off"
+                placeholder="From your losing carrier"
+                required={Boolean(portability?.pinRequired)}
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {portability?.pinRequired
+                  ? "Required for this number. Ask your current carrier for the porting PIN (sometimes called account PIN or transfer PIN)."
+                  : "Recommended. Many carriers require a PIN to authorize the port — enter it if your carrier provided one."}
+              </span>
+            </label>
             <label className="text-sm sm:col-span-2">
               Billing street
               <Input className="mt-1" value={street} onChange={(e) => setStreet(e.target.value)} />
@@ -689,6 +700,14 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
                 Customer: {customerName} ({customerType})
               </li>
               <li>Account #: {accountNumber}</li>
+              <li>
+                Port PIN:{" "}
+                {pin.trim()
+                  ? `provided (${pin.trim().length} characters)`
+                  : portability?.pinRequired
+                    ? "missing (required)"
+                    : "not provided"}
+              </li>
               <li>
                 Address: {street}, {city}, {state} {zip}
               </li>
