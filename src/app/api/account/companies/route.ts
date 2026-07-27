@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EmployeeStatus } from "@prisma/client";
 import {
-  forbiddenResponse,
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
@@ -128,11 +127,10 @@ export async function GET() {
   }
 }
 
-/** Create a bidirectional account link (ADMIN only). */
+/** Create a bidirectional account link for the signed-in user. */
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN") return forbiddenResponse();
 
     const body = await request.json();
     const linkedUserId = String(body.linkedUserId ?? "");

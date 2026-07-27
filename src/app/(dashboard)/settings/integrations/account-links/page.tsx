@@ -64,10 +64,11 @@ export default function AccountLinksPage() {
   return (
     <div className="mx-auto max-w-xl space-y-6 p-6">
       <div>
-        <h1 className="font-display text-2xl font-bold">Company account links</h1>
+        <h1 className="font-display text-2xl font-bold">Add account</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Link your login to a staff user on another company (e.g. Storm ↔ Chestnut
-          &amp; Cheer). Use the company switcher in the top nav to hop between brands.
+          &amp; Cheer). After linking, use <strong>Switch accounts</strong> in the
+          avatar menu to hop between brands.
         </p>
       </div>
 

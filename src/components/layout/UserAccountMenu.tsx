@@ -1,14 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { Building2, Check, Loader2, LogOut } from "lucide-react";
+import {
+  ArrowLeftRight,
+  Building2,
+  Check,
+  Loader2,
+  LogOut,
+  UserPlus,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -113,10 +124,15 @@ export function UserAccountMenu() {
           </div>
         </DropdownMenuLabel>
 
-        {accounts.length > 0 ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Switch company</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={switching}>
+            <ArrowLeftRight className="mr-2 h-4 w-4" />
+            Switch accounts
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-64">
+            <DropdownMenuLabel>Accounts</DropdownMenuLabel>
             <DropdownMenuItem disabled className="opacity-100">
               <Check className="mr-2 h-4 w-4 shrink-0" />
               <div className="min-w-0">
@@ -134,13 +150,25 @@ export function UserAccountMenu() {
                 <div className="min-w-0">
                   <div className="truncate font-medium">{acct.companyName}</div>
                   <div className="truncate text-xs text-muted-foreground">
-                    {acct.source === "same-email" ? acct.email : acct.email}
+                    {acct.email}
                   </div>
                 </div>
               </DropdownMenuItem>
             ))}
-          </>
-        ) : null}
+            {accounts.length === 0 ? (
+              <DropdownMenuItem disabled className="text-muted-foreground">
+                No other accounts yet
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+
+        <DropdownMenuItem asChild>
+          <Link href="/settings/integrations/account-links">
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add account
+          </Link>
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
         <DropdownMenuItem

@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EmployeeStatus } from "@prisma/client";
 import {
-  forbiddenResponse,
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
-/** Admin lookup of a staff user on another company by email. */
+/** Lookup a staff user on another company by email (for account linking). */
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN") return forbiddenResponse();
 
     const email = request.nextUrl.searchParams.get("email")?.trim().toLowerCase();
     if (!email) {
