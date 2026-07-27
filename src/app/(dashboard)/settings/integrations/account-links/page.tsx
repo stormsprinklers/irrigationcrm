@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 type SearchUser = {
@@ -69,6 +70,13 @@ export default function AccountLinksPage() {
           Link your login to a staff user on another company (e.g. Storm ↔ Chestnut
           &amp; Cheer). After linking, use <strong>Switch accounts</strong> in the
           avatar menu to hop between brands.
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Need a new brand in this CRM?{" "}
+          <Link href="/settings/integrations/create-company" className="underline">
+            Create a company
+          </Link>
+          .
         </p>
       </div>
 

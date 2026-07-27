@@ -2,6 +2,11 @@ import type Stripe from "stripe";
 import { getStripeClient } from "@/lib/stripe/client";
 import type { ExpenseCardControls } from "@/lib/expense-cards/controls";
 import { normalizeStripeCategories } from "@/lib/expense-cards/stripe-categories";
+import {
+  fundingSourceCreateParams,
+  MISSING_FINANCIAL_ACCOUNT_MESSAGE,
+  resolveIssuingCardFundingSource,
+} from "@/lib/stripe/issuing/financial-account";
 
 /** Categories Stripe uses for ATM / cash access. */
 const ATM_CASH_CATEGORIES = ["automated_cash_disburse", "manual_cash_disburse"] as const;
@@ -101,20 +106,38 @@ export async function createVirtualIssuingCard(params: {
   encryptedPin?: string | null;
 }) {
   const stripe = getStripeClient();
-  return stripe.issuing.cards.create({
-    cardholder: params.cardholderId,
-    currency: "usd",
-    type: "virtual",
-    status: "active",
-    spending_controls: buildSpendingControls(params.controls),
-    metadata: {
-      companyId: params.companyId,
-      userId: params.userId,
-    },
-    ...(params.encryptedPin
-      ? { pin: { encrypted_number: params.encryptedPin } }
-      : {}),
-  });
+  const funding = await resolveIssuingCardFundingSource();
+  const fundingParams = fundingSourceCreateParams(funding);
+
+  try {
+    return await stripe.issuing.cards.create({
+      cardholder: params.cardholderId,
+      currency: "usd",
+      type: "virtual",
+      status: "active",
+      spending_controls: buildSpendingControls(params.controls),
+      metadata: {
+        companyId: params.companyId,
+        userId: params.userId,
+      },
+      ...(params.encryptedPin
+        ? { pin: { encrypted_number: params.encryptedPin } }
+        : {}),
+      ...fundingParams,
+    } as Stripe.Issuing.CardCreateParams);
+  } catch (error) {
+    const message =
+      (error as { raw?: { message?: string } })?.raw?.message ||
+      (error instanceof Error ? error.message : "");
+    if (
+      /v2 financial account/i.test(message) ||
+      /financial_account_v2/i.test(message) ||
+      (/financial account/i.test(message) && /must be specified/i.test(message))
+    ) {
+      throw new Error(MISSING_FINANCIAL_ACCOUNT_MESSAGE);
+    }
+    throw error;
+  }
 }
 
 export async function updateIssuingCardControls(params: {

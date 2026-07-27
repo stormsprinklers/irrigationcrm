@@ -209,6 +209,13 @@ export async function POST(request: NextRequest) {
     ) {
       message =
         "Stripe Issuing is not fully activated on this account yet. In Stripe Dashboard → Settings → Issuing (or Account requirements), finish verification and accept Cross River Bank / Issuing terms for the prepaid card capability. Then retry issuing.";
+    } else if (
+      /v2 financial account/i.test(message) ||
+      /financial account id must be specified/i.test(message) ||
+      message.includes("STRIPE_ISSUING_FINANCIAL_ACCOUNT")
+    ) {
+      message =
+        "Stripe requires a Financial Account ID to issue cards. Set STRIPE_ISSUING_FINANCIAL_ACCOUNT_V2 in Vercel (from Stripe Dashboard → Issuing / Financial Accounts), redeploy, then retry.";
     } else if (message.includes("STRIPE_SECRET_KEY")) {
       return NextResponse.json({ error: message }, { status: 503 });
     }

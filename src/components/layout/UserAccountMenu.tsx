@@ -94,6 +94,8 @@ export function UserAccountMenu() {
   const userName = session?.user?.name ?? current?.name ?? "User";
   const userEmail = session?.user?.email ?? current?.email ?? "";
   const companyName = current?.companyName ?? "Company";
+  const isAdmin =
+    session?.user?.role === "ADMIN" || current?.role === "ADMIN";
 
   return (
     <DropdownMenu>
@@ -162,6 +164,15 @@ export function UserAccountMenu() {
             ) : null}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+
+        {isAdmin ? (
+          <DropdownMenuItem asChild>
+            <Link href="/settings/integrations/create-company">
+              <Building2 className="mr-2 h-4 w-4" />
+              Create company
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
 
         <DropdownMenuItem asChild>
           <Link href="/settings/integrations/account-links">
