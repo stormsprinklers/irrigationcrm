@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { sanitizeBrandPalette, type BrandPalette } from "@/lib/brand-palette";
 import { companySettingsSelect } from "@/lib/company/types";
 import { prisma } from "@/lib/prisma";
 
@@ -34,6 +35,21 @@ export async function PATCH(request: NextRequest) {
       if (key in allowed) {
         data[key] = body[key];
       }
+    }
+
+    if ("brandPalette" in data || "brandPrimaryColor" in data || "brandSecondaryColor" in data) {
+      const fromBody =
+        data.brandPalette && typeof data.brandPalette === "object"
+          ? (data.brandPalette as Partial<BrandPalette>)
+          : {};
+      const palette = sanitizeBrandPalette({
+        ...fromBody,
+        primary: (data.brandPrimaryColor as string | null | undefined) ?? fromBody.primary,
+        secondary: (data.brandSecondaryColor as string | null | undefined) ?? fromBody.secondary,
+      });
+      data.brandPalette = palette;
+      data.brandPrimaryColor = palette.primary;
+      data.brandSecondaryColor = palette.secondary;
     }
 
     const company = await prisma.company.update({

@@ -3,6 +3,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { stormBrand } from "@/lib/branding";
+import {
+  type BrandPalette,
+  DEFAULT_BRAND_PALETTE,
+  contrastForeground,
+  resolveBrandPalette,
+} from "@/lib/brand-palette";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 export type CompanyBrand = {
@@ -11,6 +17,7 @@ export type CompanyBrand = {
   logoUrl: string;
   primaryColor: string;
   secondaryColor: string;
+  palette: BrandPalette;
 };
 
 type CompanyBrandContextValue = {
@@ -19,41 +26,48 @@ type CompanyBrandContextValue = {
   refresh: () => Promise<void>;
 };
 
-const DEFAULT_PRIMARY = stormBrand.sky;
-const DEFAULT_SECONDARY = stormBrand.navy;
-
 const CompanyBrandContext = createContext<CompanyBrandContextValue | null>(null);
 
-function normalizeHex(value: string | null | undefined, fallback: string) {
-  const raw = (value ?? "").trim();
-  if (!raw) return fallback;
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return fallback;
-  return withHash.toUpperCase();
-}
-
-function applyBrandCss(primary: string, secondary: string) {
+function applyBrandCss(palette: BrandPalette) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
+  const { primary, secondary, soft, panel, accent } = palette;
+
   root.style.setProperty("--primary", primary);
+  root.style.setProperty("--primary-foreground", contrastForeground(primary));
   root.style.setProperty("--ring", primary);
+
+  root.style.setProperty("--secondary", soft);
+  root.style.setProperty("--secondary-foreground", secondary);
+  root.style.setProperty("--accent", soft);
+  root.style.setProperty("--accent-foreground", secondary);
+  root.style.setProperty("--highlight", soft);
+  root.style.setProperty("--highlight-panel", panel);
+
   root.style.setProperty("--foreground", secondary);
   root.style.setProperty("--card-foreground", secondary);
   root.style.setProperty("--popover-foreground", secondary);
-  root.style.setProperty("--secondary-foreground", secondary);
-  root.style.setProperty("--accent-foreground", secondary);
+
+  if (accent) {
+    root.style.setProperty("--brand-accent", accent);
+  } else {
+    root.style.removeProperty("--brand-accent");
+  }
 }
+
+const fallbackBrand: CompanyBrand = {
+  companyId: "",
+  companyName: "Company",
+  logoUrl: stormBrand.logoPath,
+  primaryColor: DEFAULT_BRAND_PALETTE.primary,
+  secondaryColor: DEFAULT_BRAND_PALETTE.secondary,
+  palette: DEFAULT_BRAND_PALETTE,
+};
 
 export function CompanyBrandProvider({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const companyId = session?.user?.companyId ?? "";
-  const [brand, setBrand] = useState<CompanyBrand>({
-    companyId: "",
-    companyName: "Company",
-    logoUrl: stormBrand.logoPath,
-    primaryColor: DEFAULT_PRIMARY,
-    secondaryColor: DEFAULT_SECONDARY,
-  });
+  const [brand, setBrand] = useState<CompanyBrand>(fallbackBrand);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -66,8 +80,7 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
       const res = await fetch("/api/settings/company/branding");
       if (!res.ok) return;
       const data = await res.json();
-      const primary = normalizeHex(data.brandPrimaryColor, DEFAULT_PRIMARY);
-      const secondary = normalizeHex(data.brandSecondaryColor, DEFAULT_SECONDARY);
+      const palette = resolveBrandPalette(data);
       const logoUrl =
         blobProxyUrl(data.brandLogoUrl) ||
         blobProxyUrl(data.emailLogoUrl) ||
@@ -76,10 +89,11 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         companyId,
         companyName: data.name || "Company",
         logoUrl,
-        primaryColor: primary,
-        secondaryColor: secondary,
+        primaryColor: palette.primary,
+        secondaryColor: palette.secondary,
+        palette,
       });
-      applyBrandCss(primary, secondary);
+      applyBrandCss(palette);
     } finally {
       setLoading(false);
     }
@@ -103,13 +117,7 @@ export function useCompanyBrand() {
   const ctx = useContext(CompanyBrandContext);
   if (!ctx) {
     return {
-      brand: {
-        companyId: "",
-        companyName: "Company",
-        logoUrl: stormBrand.logoPath,
-        primaryColor: DEFAULT_PRIMARY,
-        secondaryColor: DEFAULT_SECONDARY,
-      } satisfies CompanyBrand,
+      brand: fallbackBrand,
       loading: false,
       refresh: async () => {},
     };

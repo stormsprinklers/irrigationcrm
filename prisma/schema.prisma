@@ -500,6 +500,8 @@ model Company {
   brandPrimaryColor        String?
   /// Hex secondary / accent brand color (e.g. navy #102341).
   brandSecondaryColor      String?
+  /// Full brand palette JSON: primary, secondary, soft, panel, accent, extras[].
+  brandPalette             Json?
   recordCalls              Boolean  @default(true)
   transcribeCalls          Boolean  @default(true)
   /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.

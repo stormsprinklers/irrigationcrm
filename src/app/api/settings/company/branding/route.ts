@@ -14,6 +14,7 @@ export async function GET() {
         brandLogoUrl: true,
         brandPrimaryColor: true,
         brandSecondaryColor: true,
+        brandPalette: true,
         emailLogoUrl: true,
       },
     });

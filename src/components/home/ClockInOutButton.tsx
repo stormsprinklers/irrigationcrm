@@ -123,7 +123,6 @@ export function ClockInOutButton() {
               ? "bg-green-600 text-white hover:bg-green-700"
               : undefined
           }
-          variant={isClockedIn ? "default" : "secondary"}
           onClick={handleToggle}
         >
           {toggling ? "..." : isClockedIn ? "Clock Out" : "Clock In"}

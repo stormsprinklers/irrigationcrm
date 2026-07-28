@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DEFAULT_BRAND_PALETTE,
+  resolveBrandPalette,
+  sanitizeBrandPalette,
+  type BrandPalette,
+} from "@/lib/brand-palette";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay, type CompanySettingsDTO } from "@/lib/company/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
@@ -30,12 +37,49 @@ const profileFields: { key: keyof CompanySettingsDTO; label: string }[] = [
 
 const dayKeys = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 
-function normalizeHexInput(value: string) {
-  const raw = value.trim();
-  if (!raw) return null;
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return value;
-  return withHash.toUpperCase();
+function hexPickerValue(value: string | null | undefined, fallback: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value ?? "") ? (value as string) : fallback;
+}
+
+function BrandColorField({
+  label,
+  hint,
+  value,
+  fallback,
+  onChange,
+  onClear,
+}: {
+  label: string;
+  hint: string;
+  value: string | null;
+  fallback: string;
+  onChange: (hex: string) => void;
+  onClear?: () => void;
+}) {
+  return (
+    <div>
+      <label className="text-sm text-muted-foreground">{label}</label>
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          type="color"
+          className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
+          value={hexPickerValue(value, fallback)}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+        />
+        <Input
+          value={value ?? ""}
+          placeholder={fallback}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {onClear ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onClear}>
+            Clear
+          </Button>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
 }
 
 export function CompanySettingsInner() {
@@ -61,15 +105,41 @@ export function CompanySettingsInner() {
       .catch(() => toast.error("Failed to load company settings"));
   }, []);
 
+  function updatePalette(patch: Partial<BrandPalette>) {
+    if (!company) return;
+    const current = {
+      ...resolveBrandPalette(company),
+      ...(company.brandPalette && typeof company.brandPalette === "object"
+        ? (company.brandPalette as Partial<BrandPalette>)
+        : {}),
+    };
+    const next: BrandPalette = {
+      primary: patch.primary ?? current.primary,
+      secondary: patch.secondary ?? current.secondary,
+      soft: patch.soft ?? current.soft,
+      panel: patch.panel ?? current.panel,
+      accent: patch.accent !== undefined ? patch.accent : current.accent,
+      extras: patch.extras ?? current.extras,
+    };
+    setCompany({
+      ...company,
+      brandPrimaryColor: next.primary,
+      brandSecondaryColor: next.secondary,
+      brandPalette: next,
+    });
+  }
+
   async function save() {
     if (!company) return;
     setSaving(true);
     try {
+      const palette = sanitizeBrandPalette(resolveBrandPalette(company));
       const payload = {
         ...company,
         businessHours: hours,
-        brandPrimaryColor: normalizeHexInput(company.brandPrimaryColor ?? "") || null,
-        brandSecondaryColor: normalizeHexInput(company.brandSecondaryColor ?? "") || null,
+        brandPrimaryColor: palette.primary,
+        brandSecondaryColor: palette.secondary,
+        brandPalette: palette,
       };
       const res = await fetch("/api/settings/company", {
         method: "PATCH",
@@ -312,62 +382,146 @@ export function CompanySettingsInner() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-sm text-muted-foreground">Primary color</label>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="color"
-                  className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
-                  value={
-                    /^#[0-9a-fA-F]{6}$/.test(company.brandPrimaryColor ?? "")
-                      ? (company.brandPrimaryColor as string)
-                      : stormBrand.sky
-                  }
-                  onChange={(e) =>
-                    setCompany({ ...company, brandPrimaryColor: e.target.value.toUpperCase() })
-                  }
-                />
-                <Input
-                  value={company.brandPrimaryColor ?? ""}
-                  placeholder={stormBrand.sky}
-                  onChange={(e) =>
-                    setCompany({ ...company, brandPrimaryColor: e.target.value || null })
-                  }
-                />
+          {(() => {
+            const palette = resolveBrandPalette(company);
+            return (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold">Brand palette</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    These colors drive CRM chrome (buttons, cards, text) and seed the email campaign
+                    builder palette.
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <BrandColorField
+                    label="Primary"
+                    hint="Buttons, links, and active nav."
+                    value={palette.primary}
+                    fallback={DEFAULT_BRAND_PALETTE.primary}
+                    onChange={(hex) => updatePalette({ primary: hex })}
+                  />
+                  <BrandColorField
+                    label="Secondary"
+                    hint="Main text and dark accents."
+                    value={palette.secondary}
+                    fallback={DEFAULT_BRAND_PALETTE.secondary}
+                    onChange={(hex) => updatePalette({ secondary: hex })}
+                  />
+                  <BrandColorField
+                    label="Soft"
+                    hint="Secondary buttons and tinted home cards."
+                    value={palette.soft}
+                    fallback={DEFAULT_BRAND_PALETTE.soft}
+                    onChange={(hex) => updatePalette({ soft: hex })}
+                  />
+                  <BrandColorField
+                    label="Panel"
+                    hint="Lighter panel backgrounds on the home screen."
+                    value={palette.panel}
+                    fallback={DEFAULT_BRAND_PALETTE.panel}
+                    onChange={(hex) => updatePalette({ panel: hex })}
+                  />
+                  <BrandColorField
+                    label="Accent"
+                    hint="Optional accent for email CTAs and highlights."
+                    value={palette.accent}
+                    fallback={DEFAULT_BRAND_PALETTE.accent ?? stormBrand.coral}
+                    onChange={(hex) => updatePalette({ accent: hex || null })}
+                    onClear={() => updatePalette({ accent: null })}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-sm text-muted-foreground">Extra colors</label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        updatePalette({ extras: [...palette.extras, "#CCCCCC"] })
+                      }
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Add color
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Extra swatches for the email AI (backgrounds, borders, etc.).
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {palette.extras.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No extra colors yet.</p>
+                    ) : (
+                      palette.extras.map((extra, idx) => (
+                        <div key={`extra-${idx}`} className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
+                            value={hexPickerValue(extra, "#CCCCCC")}
+                            onChange={(e) => {
+                              const next = palette.extras.map((c, i) =>
+                                i === idx ? e.target.value.toUpperCase() : c
+                              );
+                              updatePalette({ extras: next });
+                            }}
+                          />
+                          <Input
+                            value={extra}
+                            onChange={(e) => {
+                              const next = palette.extras.map((c, i) =>
+                                i === idx ? e.target.value : c
+                              );
+                              updatePalette({ extras: next });
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              updatePalette({
+                                extras: palette.extras.filter((_, i) => i !== idx),
+                              })
+                            }
+                            aria-label={`Remove extra color ${idx + 1}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-foreground">Preview</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["Primary", palette.primary],
+                        ["Secondary", palette.secondary],
+                        ["Soft", palette.soft],
+                        ["Panel", palette.panel],
+                        ...(palette.accent ? ([["Accent", palette.accent]] as const) : []),
+                        ...palette.extras.map((c, i) => [`Extra ${i + 1}`, c] as const),
+                      ] as const
+                    ).map(([label, hex]) => (
+                      <div key={label} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="h-6 w-6 rounded border border-border"
+                          style={{ backgroundColor: hex }}
+                          title={hex}
+                        />
+                        <span className="text-muted-foreground">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Buttons, active nav underline, and links (hex like {stormBrand.sky}).
-              </p>
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Secondary color</label>
-              <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="color"
-                  className="h-10 w-12 cursor-pointer rounded border border-input bg-background"
-                  value={
-                    /^#[0-9a-fA-F]{6}$/.test(company.brandSecondaryColor ?? "")
-                      ? (company.brandSecondaryColor as string)
-                      : stormBrand.navy
-                  }
-                  onChange={(e) =>
-                    setCompany({ ...company, brandSecondaryColor: e.target.value.toUpperCase() })
-                  }
-                />
-                <Input
-                  value={company.brandSecondaryColor ?? ""}
-                  placeholder={stormBrand.navy}
-                  onChange={(e) =>
-                    setCompany({ ...company, brandSecondaryColor: e.target.value || null })
-                  }
-                />
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Main text / navy-style accent (hex like {stormBrand.navy}).
-              </p>
-            </div>
-          </div>
+            );
+          })()}
         </section>
       ) : tab === "Email branding" ? (
         <section className="rounded-lg border border-border bg-white p-6 space-y-6">
@@ -375,7 +529,8 @@ export function CompanySettingsInner() {
             <h3 className="text-lg font-semibold">Email branding</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Controls how outbound emails appear to customers (invoices, estimates, inbox, and campaigns).
-              The from address itself is set under Settings → Inbox.
+              Brand colors are set under the Branding tab and also seed campaign AI. The from address
+              itself is set under Settings → Inbox.
             </p>
           </div>
 

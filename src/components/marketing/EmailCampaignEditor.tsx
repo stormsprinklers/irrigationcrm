@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { brandPaletteToEmailSwatches } from "@/lib/brand-palette";
 import { stormBrand } from "@/lib/branding";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,9 @@ type Props = {
 type PaletteState = {
   primary: string;
   secondary: string;
+  soft: string;
+  panel: string;
+  accent: string | null;
   extras: string[];
 };
 
@@ -63,16 +67,17 @@ function EmailCampaignEditorInner({
   defaultExpanded = true,
 }: Props) {
   const { brand } = useCompanyBrand();
-  const defaultPalette = useMemo<PaletteState>(
-    () => ({
-      primary: normalizeHex(brand.primaryColor, stormBrand.sky),
-      secondary: normalizeHex(brand.secondaryColor, stormBrand.navy),
-      extras: [stormBrand.coral, stormBrand.ice, "#FFFFFF"].map((c) =>
-        normalizeHex(c, "#FFFFFF")
-      ),
-    }),
-    [brand.primaryColor, brand.secondaryColor]
-  );
+  const defaultPalette = useMemo<PaletteState>(() => {
+    const p = brand.palette;
+    return {
+      primary: normalizeHex(p.primary, stormBrand.sky),
+      secondary: normalizeHex(p.secondary, stormBrand.navy),
+      soft: normalizeHex(p.soft, stormBrand.ice),
+      panel: normalizeHex(p.panel, "#E8F4FA"),
+      accent: p.accent ? normalizeHex(p.accent, stormBrand.coral) : null,
+      extras: p.extras.map((c) => normalizeHex(c, "#FFFFFF")),
+    };
+  }, [brand.palette]);
 
   const [generating, setGenerating] = useState(false);
   const [mobilePreview, setMobilePreview] = useState(false);
@@ -104,6 +109,14 @@ function EmailCampaignEditorInner({
     }
     setGenerating(true);
     try {
+      const brandPalette = brandPaletteToEmailSwatches({
+        primary: palette.primary,
+        secondary: palette.secondary,
+        soft: palette.soft,
+        panel: palette.panel,
+        accent: palette.accent,
+        extras: palette.extras,
+      });
       const res = await fetch("/api/marketing/campaigns/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,11 +124,7 @@ function EmailCampaignEditorInner({
           prompt: aiPrompt,
           subject,
           existingHtml: htmlDraft.trim() || undefined,
-          brandPalette: {
-            primary: palette.primary,
-            secondary: palette.secondary,
-            extras: palette.extras,
-          },
+          brandPalette,
         }),
       });
       const data = await res.json();
@@ -228,6 +237,35 @@ function EmailCampaignEditorInner({
               value={palette.secondary}
               onChange={(hex) => setPalette((p) => ({ ...p, secondary: hex }))}
             />
+            <PaletteRow
+              label="Soft"
+              value={palette.soft}
+              onChange={(hex) => setPalette((p) => ({ ...p, soft: hex }))}
+            />
+            <PaletteRow
+              label="Panel"
+              value={palette.panel}
+              onChange={(hex) => setPalette((p) => ({ ...p, panel: hex }))}
+            />
+            {palette.accent ? (
+              <PaletteRow
+                label="Accent"
+                value={palette.accent}
+                onChange={(hex) => setPalette((p) => ({ ...p, accent: hex }))}
+                onRemove={() => setPalette((p) => ({ ...p, accent: null }))}
+              />
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full"
+                onClick={() => setPalette((p) => ({ ...p, accent: stormBrand.coral }))}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add accent
+              </Button>
+            )}
 
             {palette.extras.map((extra, idx) => (
               <PaletteRow
@@ -383,7 +421,7 @@ function PaletteRow({
         </Button>
       ) : (
         <span className="w-7 shrink-0 text-[10px] font-medium uppercase text-muted-foreground">
-          {label === "Primary" ? "Pri" : label === "Secondary" ? "Sec" : ""}
+          {label.slice(0, 3)}
         </span>
       )}
     </div>
