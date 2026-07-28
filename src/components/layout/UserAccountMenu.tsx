@@ -17,9 +17,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -116,7 +113,12 @@ export function UserAccountMenu() {
           </Avatar>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72">
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        collisionPadding={12}
+        className="max-h-[min(24rem,calc(100dvh-4rem))] w-[min(18rem,calc(100vw-1.5rem))] overflow-y-auto"
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="truncate font-medium">{userName}</div>
           <div className="truncate text-xs text-muted-foreground">{userEmail}</div>
@@ -128,42 +130,38 @@ export function UserAccountMenu() {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger disabled={switching}>
-            <ArrowLeftRight className="mr-2 h-4 w-4" />
-            Switch accounts
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-64">
-            <DropdownMenuLabel>Accounts</DropdownMenuLabel>
-            <DropdownMenuItem disabled className="opacity-100">
-              <Check className="mr-2 h-4 w-4 shrink-0" />
-              <div className="min-w-0">
-                <div className="truncate font-medium">{companyName}</div>
-                <div className="truncate text-xs text-muted-foreground">Current</div>
-              </div>
-            </DropdownMenuItem>
-            {accounts.map((acct) => (
-              <DropdownMenuItem
-                key={acct.userId}
-                onClick={() => void switchTo(acct.userId)}
-                disabled={switching}
-              >
-                <Building2 className="mr-2 h-4 w-4 shrink-0 opacity-60" />
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{acct.companyName}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {acct.email}
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-            {accounts.length === 0 ? (
-              <DropdownMenuItem disabled className="text-muted-foreground">
-                No other accounts yet
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {/* Inline (not a side submenu) so account options stay on-screen on mobile */}
+        <DropdownMenuLabel className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          Switch accounts
+        </DropdownMenuLabel>
+        <DropdownMenuItem disabled className="opacity-100">
+          <Check className="mr-2 h-4 w-4 shrink-0" />
+          <div className="min-w-0">
+            <div className="truncate font-medium">{companyName}</div>
+            <div className="truncate text-xs text-muted-foreground">Current</div>
+          </div>
+        </DropdownMenuItem>
+        {accounts.map((acct) => (
+          <DropdownMenuItem
+            key={acct.userId}
+            onClick={() => void switchTo(acct.userId)}
+            disabled={switching}
+          >
+            <Building2 className="mr-2 h-4 w-4 shrink-0 opacity-60" />
+            <div className="min-w-0">
+              <div className="truncate font-medium">{acct.companyName}</div>
+              <div className="truncate text-xs text-muted-foreground">{acct.email}</div>
+            </div>
+          </DropdownMenuItem>
+        ))}
+        {accounts.length === 0 ? (
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            No other accounts yet
+          </DropdownMenuItem>
+        ) : null}
+
+        <DropdownMenuSeparator />
 
         {isAdmin ? (
           <DropdownMenuItem asChild>
