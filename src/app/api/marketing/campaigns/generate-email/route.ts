@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { prompt, subject, ctaUrl } = body;
+    const { prompt, subject, ctaUrl, existingHtml, brandPalette } = body;
 
     if (!prompt?.trim()) {
       return badRequestResponse("prompt is required");
@@ -26,6 +26,17 @@ export async function POST(request: NextRequest) {
       subject: subject ? String(subject) : undefined,
       companyName: company.name,
       ctaUrl: ctaUrl ? String(ctaUrl) : undefined,
+      existingHtml: existingHtml ? String(existingHtml) : undefined,
+      brandPalette:
+        brandPalette && typeof brandPalette === "object"
+          ? {
+              primary: String((brandPalette as { primary?: string }).primary ?? ""),
+              secondary: String((brandPalette as { secondary?: string }).secondary ?? ""),
+              extras: Array.isArray((brandPalette as { extras?: unknown }).extras)
+                ? ((brandPalette as { extras: unknown[] }).extras.map(String) as string[])
+                : undefined,
+            }
+          : undefined,
     });
 
     return NextResponse.json(result);

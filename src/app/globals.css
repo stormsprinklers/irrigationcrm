@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "grapesjs/dist/css/grapes.min.css";
 @import "leaflet/dist/leaflet.css";
 
 @custom-variant dark (&:is(.dark *));

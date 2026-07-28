@@ -1,11 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, Maximize2, Minimize2, Monitor, Smartphone, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  Plus,
+  Smartphone,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { stormBrand } from "@/lib/branding";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { cn } from "@/lib/utils";
@@ -21,37 +31,25 @@ type Props = {
   defaultExpanded?: boolean;
 };
 
-type GrapesEditor = {
-  getHtml: () => string;
-  getCss: () => string;
-  setComponents: (html: string) => void;
-  destroy: () => void;
-  runCommand: (cmd: string) => unknown;
-  on: (event: string, cb: () => void) => void;
-  AssetManager: { add: (asset: { src: string }) => void };
+type PaletteState = {
+  primary: string;
+  secondary: string;
+  extras: string[];
 };
 
-function exportInlinedHtml(editor: GrapesEditor): string {
-  try {
-    const inlined = editor.runCommand("gjs-get-inlined-html");
-    if (typeof inlined === "string" && inlined.trim()) return inlined;
-  } catch {
-    // fall through
-  }
-  const html = editor.getHtml();
-  const css = editor.getCss()?.trim();
-  if (!css) return html;
-  if (/<\/head>/i.test(html)) {
-    return html.replace(/<\/head>/i, `<style>${css}</style></head>`);
-  }
-  return `<div>${html}<style>${css}</style></div>`;
+function normalizeHex(value: string, fallback: string) {
+  const raw = value.trim();
+  if (!raw) return fallback;
+  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
+  if (!/^#[0-9a-fA-F]{6}$/i.test(withHash)) return fallback;
+  return withHash.toUpperCase();
 }
 
 function wrapPreviewShell(html: string): string {
   if (!html.trim()) {
-    return `<div style="padding:24px;color:#6b7280;font-family:Arial,sans-serif">Start designing your email…</div>`;
+    return `<div style="padding:24px;color:#6b7280;font-family:Arial,sans-serif">Paste your email HTML to preview it here…</div>`;
   }
-  if (html.includes("<html") || html.includes("<body")) return html;
+  if (/<html[\s>]/i.test(html) || /<body[\s>]/i.test(html)) return html;
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111827;max-width:640px;margin:0 auto;padding:16px">${html}</div>`;
 }
 
@@ -64,138 +62,42 @@ function EmailCampaignEditorInner({
   onAiPromptChange,
   defaultExpanded = true,
 }: Props) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const grapesRef = useRef<GrapesEditor | null>(null);
+  const { brand } = useCompanyBrand();
+  const defaultPalette = useMemo<PaletteState>(
+    () => ({
+      primary: normalizeHex(brand.primaryColor, stormBrand.sky),
+      secondary: normalizeHex(brand.secondaryColor, stormBrand.navy),
+      extras: [stormBrand.coral, stormBrand.ice, "#FFFFFF"].map((c) =>
+        normalizeHex(c, "#FFFFFF")
+      ),
+    }),
+    [brand.primaryColor, brand.secondaryColor]
+  );
+
   const [generating, setGenerating] = useState(false);
   const [mobilePreview, setMobilePreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState(bodyHtml);
+  const [htmlDraft, setHtmlDraft] = useState(bodyHtml);
   const [expanded, setExpanded] = useState(defaultExpanded);
-
-  const syncFromEditor = useCallback(() => {
-    const editor = grapesRef.current;
-    if (!editor) return;
-    const html = exportInlinedHtml(editor);
-    setPreviewHtml(html);
-    onBodyChange(html, htmlToPlainText(html));
-  }, [onBodyChange]);
+  const [palette, setPalette] = useState<PaletteState>(defaultPalette);
+  const [paletteSeeded, setPaletteSeeded] = useState(false);
 
   useEffect(() => {
-    let destroyed = false;
-
-    async function init() {
-      const grapesjs = (await import("grapesjs")).default;
-      const preset = (await import("grapesjs-preset-newsletter")).default;
-
-      if (!editorRef.current || destroyed) return;
-
-      const editor = grapesjs.init({
-        container: editorRef.current,
-        height: expanded ? "70vh" : "560px",
-        width: "auto",
-        storageManager: false,
-        fromElement: false,
-        plugins: [preset],
-        pluginsOpts: {
-          "grapesjs-preset-newsletter": {
-            modalTitleImport: "Import template",
-          },
-        },
-        assetManager: {
-          upload: false,
-          autoAdd: true,
-        },
-        colorPicker: {
-          appendTo: "parent",
-          offset: { top: 26, left: -166 },
-        },
-        // Brand palette available via style manager color inputs
-        canvas: {
-          styles: [],
-        },
-      }) as unknown as GrapesEditor & {
-        StyleManager?: { getProperties?: () => unknown };
-        getConfig?: () => { styleManager?: unknown };
-      };
-
-      // Inject Storm brand colors into the editor color picker swatches when supported.
-      try {
-        const style = document.createElement("style");
-        style.setAttribute("data-storm-brand-colors", "1");
-        style.textContent = `
-          .gjs-clm-color-picker, .sp-container { --storm-navy: ${stormBrand.navy}; }
-        `;
-        document.head.appendChild(style);
-        const picker = (editor as unknown as { ColorPicker?: { set?: (c: string) => void } }).ColorPicker;
-        void picker;
-        // Add swatches via grapesjs config if present
-        const config = (editor as unknown as { getConfig: () => { colorPicker?: { palette?: string[][] } } }).getConfig?.();
-        if (config?.colorPicker) {
-          config.colorPicker.palette = [
-            [stormBrand.navy, stormBrand.sky, stormBrand.coral, stormBrand.ice, "#FFFFFF", "#111827"],
-          ];
-        }
-      } catch {
-        // non-fatal
-      }
-
-      grapesRef.current = editor;
-
-      if (bodyHtml) {
-        editor.setComponents(bodyHtml);
-        setPreviewHtml(bodyHtml);
-      }
-
-      editor.on("update", () => syncFromEditor());
-      editor.on("asset:add", () => syncFromEditor());
-
-      const container = editorRef.current;
-      container.addEventListener("dragover", (e) => e.preventDefault());
-      container.addEventListener("drop", async (e) => {
-        const file = e.dataTransfer?.files?.[0];
-        if (!file || !file.type.startsWith("image/")) return;
-        e.preventDefault();
-        const formData = new FormData();
-        formData.append("file", file);
-        try {
-          const res = await fetch("/api/marketing/assets/upload", {
-            method: "POST",
-            body: formData,
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error ?? "Upload failed");
-          editor.AssetManager.add({ src: data.url });
-          syncFromEditor();
-          toast.success("Image added — drag it onto the canvas");
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Image upload failed");
-        }
-      });
-
-      // Initial sync so preview matches canvas
-      syncFromEditor();
-    }
-
-    init();
-
-    return () => {
-      destroyed = true;
-      grapesRef.current?.destroy();
-      grapesRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const editor = grapesRef.current;
-    if (!editor || !bodyHtml) return;
-    const current = exportInlinedHtml(editor);
-    if (current !== bodyHtml && !bodyHtml.includes(current.slice(0, 40))) {
-      editor.setComponents(bodyHtml);
-      setPreviewHtml(bodyHtml);
-    }
+    setHtmlDraft(bodyHtml);
   }, [bodyHtml]);
 
-  async function generateEmail() {
+  useEffect(() => {
+    if (paletteSeeded) return;
+    if (!brand.companyId && brand.primaryColor === stormBrand.sky) return;
+    setPalette(defaultPalette);
+    setPaletteSeeded(true);
+  }, [brand.companyId, brand.primaryColor, defaultPalette, paletteSeeded]);
+
+  function applyHtml(next: string) {
+    setHtmlDraft(next);
+    onBodyChange(next, htmlToPlainText(next));
+  }
+
+  async function runAi() {
     if (!aiPrompt.trim()) {
       toast.error("Enter a prompt first");
       return;
@@ -205,21 +107,30 @@ function EmailCampaignEditorInner({
       const res = await fetch("/api/marketing/campaigns/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: aiPrompt, subject }),
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          subject,
+          existingHtml: htmlDraft.trim() || undefined,
+          brandPalette: {
+            primary: palette.primary,
+            secondary: palette.secondary,
+            extras: palette.extras,
+          },
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Generation failed");
+      if (!res.ok) throw new Error(data.error ?? "AI request failed");
       onSubjectChange(data.subject ?? subject);
-      grapesRef.current?.setComponents(data.bodyHtml ?? "");
-      setPreviewHtml(data.bodyHtml ?? "");
-      onBodyChange(data.bodyHtml ?? "", data.bodyText ?? htmlToPlainText(data.bodyHtml ?? ""));
-      toast.success("Email generated");
+      applyHtml(data.bodyHtml ?? "");
+      toast.success(htmlDraft.trim() ? "HTML updated" : "Email generated");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Generation failed");
+      toast.error(err instanceof Error ? err.message : "AI request failed");
     } finally {
       setGenerating(false);
     }
   }
+
+  const hasExistingHtml = Boolean(htmlDraft.trim());
 
   return (
     <div
@@ -230,10 +141,10 @@ function EmailCampaignEditorInner({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Email designer</h3>
+          <h3 className="text-sm font-semibold">Email HTML</h3>
           <p className="text-xs text-muted-foreground">
-            Drag blocks from the left panel. Brand colors: navy {stormBrand.navy}, sky{" "}
-            {stormBrand.sky}, coral {stormBrand.coral}. Drop images onto the canvas.
+            Paste your email HTML on the left. Preview updates live. Use AI to generate a new
+            email or edit the HTML you already have.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
@@ -254,7 +165,7 @@ function EmailCampaignEditorInner({
       <div
         className={cn(
           "grid gap-4",
-          expanded ? "lg:grid-cols-[240px_1fr_360px]" : "lg:grid-cols-[220px_1fr_300px]"
+          expanded ? "lg:grid-cols-[260px_1fr_360px]" : "lg:grid-cols-[240px_1fr_300px]"
         )}
       >
         <div className="space-y-3 rounded-lg border bg-white p-4">
@@ -263,18 +174,22 @@ function EmailCampaignEditorInner({
             className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             value={aiPrompt}
             onChange={(e) => onAiPromptChange(e.target.value)}
-            placeholder="Describe your campaign: offer, tone, CTA..."
+            placeholder={
+              hasExistingHtml
+                ? "Describe edits: make the CTA use primary, shorten the intro…"
+                : "Describe your campaign: offer, tone, CTA…"
+            }
           />
-          <Button type="button" className="w-full" onClick={generateEmail} disabled={generating}>
+          <Button type="button" className="w-full" onClick={runAi} disabled={generating}>
             {generating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating...
+                Working…
               </>
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                Generate email
+                {hasExistingHtml ? "Edit with AI" : "Generate email"}
               </>
             )}
           </Button>
@@ -282,36 +197,101 @@ function EmailCampaignEditorInner({
             <label className="text-xs text-muted-foreground">Subject</label>
             <Input className="mt-1" value={subject} onChange={(e) => onSubjectChange(e.target.value)} />
           </div>
+
           <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">Brand palette</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {[stormBrand.navy, stormBrand.sky, stormBrand.coral, stormBrand.ice, "#FFFFFF"].map(
-                (c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    title={c}
-                    className="h-6 w-6 rounded border border-border"
-                    style={{ backgroundColor: c }}
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(c);
-                      toast.success(`Copied ${c}`);
-                    }}
-                  />
-                )
-              )}
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium text-foreground">Brand palette</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setPalette(defaultPalette);
+                  toast.success("Palette reset to company branding");
+                }}
+              >
+                Reset
+              </Button>
             </div>
-            <p className="mt-1">Click to copy hex into the color picker.</p>
+            <p className="mt-1">
+              Edit colors for AI generate/edit. Click a swatch to copy hex into your HTML.
+            </p>
+
+            <PaletteRow
+              label="Primary"
+              value={palette.primary}
+              onChange={(hex) => setPalette((p) => ({ ...p, primary: hex }))}
+            />
+            <PaletteRow
+              label="Secondary"
+              value={palette.secondary}
+              onChange={(hex) => setPalette((p) => ({ ...p, secondary: hex }))}
+            />
+
+            {palette.extras.map((extra, idx) => (
+              <PaletteRow
+                key={`extra-${idx}`}
+                label={`Extra ${idx + 1}`}
+                value={extra}
+                onChange={(hex) =>
+                  setPalette((p) => ({
+                    ...p,
+                    extras: p.extras.map((c, i) => (i === idx ? hex : c)),
+                  }))
+                }
+                onRemove={() =>
+                  setPalette((p) => ({
+                    ...p,
+                    extras: p.extras.filter((_, i) => i !== idx),
+                  }))
+                }
+              />
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full"
+              onClick={() =>
+                setPalette((p) => ({
+                  ...p,
+                  extras: [...p.extras, "#CCCCCC"],
+                }))
+              }
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add color
+            </Button>
           </div>
         </div>
 
-        <div className="min-h-[520px] rounded-lg border bg-white p-1">
-          <div ref={editorRef} />
+        <div className="flex min-h-[520px] flex-col rounded-lg border bg-white">
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <h3 className="text-sm font-semibold">HTML source</h3>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!htmlDraft}
+              onClick={() => applyHtml("")}
+            >
+              Clear
+            </Button>
+          </div>
+          <textarea
+            className="min-h-[480px] flex-1 resize-y rounded-b-lg bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
+            value={htmlDraft}
+            onChange={(e) => applyHtml(e.target.value)}
+            spellCheck={false}
+            placeholder="Paste a full email HTML document here…"
+          />
         </div>
 
         <div className="space-y-3 rounded-lg border bg-white p-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Send preview</h3>
+            <h3 className="text-sm font-semibold">Live preview</h3>
             <div className="flex gap-1">
               <Button
                 type="button"
@@ -332,7 +312,7 @@ function EmailCampaignEditorInner({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Matches the HTML that will be sent (styles inlined).
+            Shows the HTML that will be sent (desktop / mobile width).
           </p>
           <div className="overflow-hidden rounded border bg-slate-50">
             <iframe
@@ -343,11 +323,69 @@ function EmailCampaignEditorInner({
                 margin: mobilePreview ? "0 auto" : undefined,
                 display: "block",
               }}
-              srcDoc={wrapPreviewShell(previewHtml)}
+              srcDoc={wrapPreviewShell(htmlDraft)}
             />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PaletteRow({
+  label,
+  value,
+  onChange,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+  onRemove?: () => void;
+}) {
+  const hex = normalizeHex(value, "#000000");
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <button
+        type="button"
+        title={`Copy ${hex}`}
+        className="h-7 w-7 shrink-0 rounded border border-border"
+        style={{ backgroundColor: hex }}
+        onClick={() => {
+          void navigator.clipboard?.writeText(hex);
+          toast.success(`Copied ${hex}`);
+        }}
+      />
+      <input
+        type="color"
+        aria-label={`${label} color picker`}
+        className="h-7 w-8 cursor-pointer rounded border border-border bg-transparent p-0"
+        value={hex}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+      />
+      <Input
+        className="h-7 flex-1 font-mono text-xs"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => onChange(normalizeHex(value, hex))}
+        aria-label={`${label} hex`}
+      />
+      {onRemove ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={onRemove}
+          aria-label={`Remove ${label}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      ) : (
+        <span className="w-7 shrink-0 text-[10px] font-medium uppercase text-muted-foreground">
+          {label === "Primary" ? "Pri" : label === "Secondary" ? "Sec" : ""}
+        </span>
+      )}
     </div>
   );
 }
