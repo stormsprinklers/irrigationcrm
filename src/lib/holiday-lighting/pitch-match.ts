@@ -7,6 +7,7 @@ import {
 import type {
   HolidayMeasurementSegment,
   HolidayMeasurements,
+  StreetViewNormPoint,
   StreetViewRoofTrace,
 } from "@/lib/holiday-lighting/types";
 
@@ -16,25 +17,32 @@ function newId() {
     : `trace-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Apply a street-view roof trace onto its linked satellite segment (pitch → true length). */
+export function midpoint(a: StreetViewNormPoint, b: StreetViewNormPoint): StreetViewNormPoint {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/**
+ * Apply a street-view roof trace onto its linked satellite segment (pitch → true length).
+ * Gable points are [leftEave, rightEave, peak]. Single slope is [endA, endB] along the roof edge.
+ */
 export function applyStreetTraceToSegment(
   segment: HolidayMeasurementSegment,
   trace: StreetViewRoofTrace
 ): HolidayMeasurementSegment {
-  const horizontal =
-    segment.horizontalLengthFt ??
-    segment.lengthFt ??
-    0;
+  const horizontal = segment.horizontalLengthFt ?? segment.lengthFt ?? 0;
   const pts = trace.points;
   if (pts.length >= 3) {
-    const left = pitchDegFromImageLine(pts[0]!, pts[1]!);
-    const right = pitchDegFromImageLine(pts[1]!, pts[2]!);
-    const gable = gableLengthsFromBase(horizontal, left, right);
+    const left = pts[0]!;
+    const right = pts[1]!;
+    const peak = pts[2]!;
+    const leftPitch = pitchDegFromImageLine(left, peak);
+    const rightPitch = pitchDegFromImageLine(right, peak);
+    const gable = gableLengthsFromBase(horizontal, leftPitch, rightPitch);
     return {
       ...segment,
       horizontalLengthFt: horizontal,
-      pitchDeg: left,
-      pitchDegRight: right,
+      pitchDeg: leftPitch,
+      pitchDegRight: rightPitch,
       riseFt: gable.riseFt,
       lengthFt: gable.leftLengthFt,
       lengthFtRight: gable.rightLengthFt,
@@ -53,6 +61,18 @@ export function applyStreetTraceToSegment(
     };
   }
   return segment;
+}
+
+/** Preview pitch-corrected lengths without persisting. */
+export function previewSegmentFromPoints(
+  segment: HolidayMeasurementSegment,
+  points: StreetViewNormPoint[]
+): HolidayMeasurementSegment {
+  return applyStreetTraceToSegment(segment, {
+    id: "preview",
+    satelliteSegmentId: segment.id,
+    points,
+  });
 }
 
 export function upsertStreetTrace(

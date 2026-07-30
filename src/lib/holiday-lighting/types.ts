@@ -28,7 +28,10 @@ export type StreetViewNormPoint = { x: number; y: number };
 export type StreetViewRoofTrace = {
   id: string;
   satelliteSegmentId: string;
-  /** 2 points = single slope; 3 points = gable (left eave → peak → right eave). */
+  /**
+   * 2 points = single slope (both ends of the roof edge).
+   * 3 points = gable (left eave, right eave, peak). Diagonals left→peak and right→peak are derived.
+   */
   points: StreetViewNormPoint[];
 };
 
