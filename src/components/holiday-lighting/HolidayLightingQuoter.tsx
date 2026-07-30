@@ -7,7 +7,10 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
-import { HolidayMapPanel } from "@/components/holiday-lighting/HolidayMapPanel";
+import {
+  HolidayMapPanel,
+  type HolidayMapPanelHandle,
+} from "@/components/holiday-lighting/HolidayMapPanel";
 import {
   PaintCanvas,
   type PaintCanvasHandle,
@@ -97,6 +100,7 @@ export function HolidayLightingQuoter({
   const [estimate, setEstimate] = useState<QuoteRecord["estimate"]>(null);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
+  const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadQuote = useCallback(async (id: string) => {
@@ -299,8 +303,9 @@ export function HolidayLightingQuoter({
   }
 
   async function captureStreetView() {
-    if (!center) {
-      toast.error("Search or locate an address first");
+    const pose = mapPanelRef.current?.getStreetViewPose();
+    if (!pose) {
+      toast.error("Street View is not ready — wait for the map to load, then aim the viewer");
       return;
     }
     try {
@@ -308,14 +313,31 @@ export function HolidayLightingQuoter({
       const keyData = await keyRes.json();
       if (!keyRes.ok) throw new Error(keyData.error ?? "Maps key unavailable");
       const key = (keyData.key as string) || getBrowserMapsApiKey();
-      const url = `https://maps.googleapis.com/maps/api/streetview?size=1024x768&location=${center.lat},${center.lng}&fov=80&pitch=5&key=${encodeURIComponent(key)}`;
+      const params = new URLSearchParams({
+        size: "1024x768",
+        heading: String(pose.heading),
+        pitch: String(pose.pitch),
+        fov: String(pose.fov),
+        key,
+      });
+      // Prefer the exact panorama the viewer is on, then fall back to lat/lng.
+      if (pose.panoId) {
+        params.set("pano", pose.panoId);
+      } else {
+        params.set("location", `${pose.lat},${pose.lng}`);
+      }
+      const url = `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`;
       const res = await fetch(url);
       if (!res.ok) {
         throw new Error("Street View capture failed — upload a photo instead.");
       }
       const blob = await res.blob();
+      // Google returns a tiny error image JSON/GIF when coverage is missing.
+      if (blob.size < 5_000) {
+        throw new Error("No Street View image for this view — try a different angle or upload a photo.");
+      }
       setPhotoUrl(URL.createObjectURL(blob));
-      toast.success("Street View frame captured — paint light locations");
+      toast.success("Captured current Street View — paint light locations");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not capture Street View");
     }
@@ -428,6 +450,7 @@ export function HolidayLightingQuoter({
         </div>
         <div className="min-h-[420px] flex-1">
           <HolidayMapPanel
+            ref={mapPanelRef}
             center={center}
             measurements={measurements}
             defaultLightStyleKey={selections.defaultLightStyleKey}
