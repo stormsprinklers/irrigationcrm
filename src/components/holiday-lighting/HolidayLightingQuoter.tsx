@@ -436,7 +436,7 @@ export function HolidayLightingQuoter({
       toast.error("Capture or upload a street photo first");
       return;
     }
-    if (!measurements.segments.some((s) => s.kind === "roofline" || s.kind === "garland")) {
+    if (!measurements.segments.some((s) => s.kind === "roofline")) {
       toast.error("Draw at least one roofline on the satellite map");
       return;
     }
@@ -522,11 +522,7 @@ export function HolidayLightingQuoter({
   );
 
   const matchedCount = useMemo(
-    () =>
-      measurements.segments.filter(
-        (s) =>
-          (s.kind === "roofline" || s.kind === "garland") && s.pitchDeg != null
-      ).length,
+    () => measurements.segments.filter((s) => s.kind === "roofline" && s.pitchDeg != null).length,
     [measurements.segments]
   );
 
@@ -633,8 +629,7 @@ export function HolidayLightingQuoter({
               Locate
             </Button>
             <p className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">
-              {totalFt.toFixed(1)} ft · {matchedCount} pitched · {measurements.placements.length}{" "}
-              trees
+              {totalFt.toFixed(1)} ft · {matchedCount} pitched
             </p>
           </div>
 
@@ -775,7 +770,7 @@ export function HolidayLightingQuoter({
             <section className="space-y-3 rounded-lg border border-border bg-white p-4">
               <h3 className="text-sm font-semibold">Quote builder</h3>
               <p className="text-xs text-muted-foreground">
-                {totalFt.toFixed(1)} ft measured · {measurements.placements.length} trees/bushes
+                {totalFt.toFixed(1)} ft measured
               </p>
 
               <div>
@@ -884,7 +879,7 @@ export function HolidayLightingQuoter({
       <ConfirmDialog
         open={clearConfirmOpen}
         title="Clear this lighting quote?"
-        description="This removes all strands, trees/bushes, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
+        description="This removes all rooflines, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
         confirmLabel="Clear everything"
         confirmVariant="destructive"
         onConfirm={() => void clearQuoteWork()}

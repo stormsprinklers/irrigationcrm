@@ -5,10 +5,8 @@ import { pathLengthFeet } from "@/lib/holiday-lighting/geo";
 import { loadGoogleMaps } from "@/lib/holiday-lighting/load-maps";
 import type {
   HolidayLatLng,
-  HolidayMeasurementPlacement,
   HolidayMeasurementSegment,
   HolidayMeasurements,
-  HolidaySegmentKind,
 } from "@/lib/holiday-lighting/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,7 +33,8 @@ export type HolidayMapPanelHandle = {
   getStreetViewPose: () => StreetViewCapturePose | null;
 };
 
-type DrawMode = "select" | "roofline" | "peak" | "garland" | "tree" | "bush";
+/** Roofline-only for now; tree/bush placement tools come back later. */
+type DrawMode = "select" | "roofline";
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -147,24 +146,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     }, [measurements, ready, activeSegmentId]);
 
     function handleMapClick(latLng: HolidayLatLng) {
-      const currentMode = modeRef.current;
-      if (currentMode === "tree" || currentMode === "bush") {
-        const placement: HolidayMeasurementPlacement = {
-          id: newId(),
-          kind: currentMode,
-          size: currentMode === "bush" ? "small" : "medium",
-          label: currentMode === "bush" ? "Bush" : "Tree",
-          latLng,
-        };
-        onChange({
-          ...measurements,
-          placements: [...measurements.placements, placement],
-        });
-        return;
-      }
-
-      if (currentMode === "select") return;
-
+      if (modeRef.current === "select") return;
       draftPath.current = [...draftPath.current, latLng];
       updateDraftLine();
     }
@@ -184,29 +166,19 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     }
 
     function finishSegment() {
-      const kind = modeRef.current;
-      if (kind !== "roofline" && kind !== "peak" && kind !== "garland") return;
-      if (draftPath.current.length < 2 && kind !== "peak") return;
-      if (kind === "peak" && draftPath.current.length < 1) return;
+      if (modeRef.current !== "roofline") return;
+      if (draftPath.current.length < 2) return;
 
-      const path =
-        kind === "peak" && draftPath.current.length === 1
-          ? [draftPath.current[0]!, draftPath.current[0]!]
-          : draftPath.current;
-    const segment: HolidayMeasurementSegment = {
-      id: newId(),
-      label:
-        kind === "roofline"
-          ? `Roofline ${measurements.segments.length + 1}`
-          : kind === "peak"
-            ? `Peak ${measurements.segments.length + 1}`
-            : `Garland ${measurements.segments.length + 1}`,
-      kind: kind as HolidaySegmentKind,
-      path,
-      lengthFt: pathLengthFeet(path),
-      horizontalLengthFt: pathLengthFeet(path),
-      lightStyleKey: defaultLightStyleKey,
-    };
+      const path = draftPath.current;
+      const segment: HolidayMeasurementSegment = {
+        id: newId(),
+        label: `Roofline ${measurements.segments.filter((s) => s.kind === "roofline").length + 1}`,
+        kind: "roofline",
+        path,
+        lengthFt: pathLengthFeet(path),
+        horizontalLengthFt: pathLengthFeet(path),
+        lightStyleKey: defaultLightStyleKey,
+      };
       onChange({
         ...measurements,
         segments: [...measurements.segments, segment],
@@ -302,10 +274,6 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           {(
             [
               ["roofline", "Draw roofline"],
-              ["peak", "Mark peak"],
-              ["garland", "Draw garland"],
-              ["tree", "Place tree"],
-              ["bush", "Place bush"],
               ["select", "Select"],
             ] as const
           ).map(([id, label]) => (
@@ -322,7 +290,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               {label}
             </Button>
           ))}
-          {mode === "roofline" || mode === "garland" || mode === "peak" ? (
+          {mode === "roofline" ? (
             <>
               <Button type="button" size="sm" onClick={finishSegment}>
                 Finish segment
@@ -370,12 +338,11 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
 
         <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-white p-2 text-sm">
           <p className="text-xs font-medium text-muted-foreground">
-            Strands ({measurements.segments.length}) · Trees/bushes (
-            {measurements.placements.length})
+            Rooflines ({measurements.segments.filter((s) => s.kind === "roofline").length})
           </p>
           {measurements.segments.length === 0 ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">
-              No strands yet — draw a roofline on the satellite map.
+              No rooflines yet — click along the roof edge, then Finish segment.
             </p>
           ) : (
             measurements.segments.map((s) => (
@@ -391,10 +358,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   className="min-w-0 flex-1 truncate px-1 py-1 text-left"
                   onClick={() => selectSegment(s.id)}
                 >
-                  <span>
-                    {s.label}{" "}
-                    <span className="text-muted-foreground">({s.kind})</span>
-                  </span>
+                  <span>{s.label}</span>
                   <span className="ml-2 font-mono text-xs text-muted-foreground">
                     {s.lengthFt.toFixed(1)} ft
                   </span>

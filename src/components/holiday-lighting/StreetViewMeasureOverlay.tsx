@@ -93,15 +93,11 @@ export function StreetViewMeasureOverlay({
     setDraft([]);
   }
 
-  const matchableSegments = measurements.segments.filter(
-    (s) => s.kind === "roofline" || s.kind === "garland"
-  );
+  const matchableSegments = measurements.segments.filter((s) => s.kind === "roofline");
 
   // Auto-select a matchable strand so the photo is immediately drawable.
   useEffect(() => {
-    const matchable = measurements.segments.filter(
-      (s) => s.kind === "roofline" || s.kind === "garland"
-    );
+    const matchable = measurements.segments.filter((s) => s.kind === "roofline");
     if (selectedSegmentId && matchable.some((s) => s.id === selectedSegmentId)) {
       return;
     }
