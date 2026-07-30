@@ -19,10 +19,9 @@ import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetVi
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
-import type { CustomerDTO } from "@/lib/customers/types";
+import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 import { billedSegmentLengthFt, refreshPitchCorrections } from "@/lib/holiday-lighting/pitch-match";
 import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import {
@@ -49,6 +48,7 @@ type QuoteRecord = {
   lat: number | null;
   lng: number | null;
   customerId: string | null;
+  propertyId: string | null;
   measurements: unknown;
   selections: unknown;
   previewImageUrl: string | null;
@@ -72,6 +72,16 @@ type WizardStep = 1 | 2;
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+function formatAddressLine(address: string, city: string, state: string, zip: string) {
+  const cityState = [city.trim(), state.trim()].filter(Boolean).join(", ");
+  const tail = [cityState, zip.trim()].filter(Boolean).join(" ");
+  const street = address.trim();
+  if (!street) return tail;
+  if (!tail) return street;
+  if (city.trim() && street.toLowerCase().includes(city.trim().toLowerCase())) return street;
+  return `${street}, ${tail}`;
 }
 
 export function HolidayLightingQuoter({
@@ -98,6 +108,8 @@ export function HolidayLightingQuoter({
   const [zip, setZip] = useState(initialZip ?? "");
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [customerName, setCustomerName] = useState(initialCustomerName ?? "");
+  const [propertyId, setPropertyId] = useState("");
+  const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
   const [center, setCenter] = useState<HolidayLatLng | null>(null);
   const [measurements, setMeasurements] = useState<HolidayMeasurements>(EMPTY_HOLIDAY_MEASUREMENTS);
   const [selections, setSelections] = useState<HolidayQuoteSelections>(DEFAULT_HOLIDAY_SELECTIONS);
@@ -127,6 +139,7 @@ export function HolidayLightingQuoter({
       setZip(q.zip ?? "");
       setCustomerId(q.customerId ?? "");
       setCustomerName(q.customer?.name ?? "");
+      setPropertyId(q.propertyId ?? "");
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
       setMeasurements(parseHolidayMeasurements(q.measurements));
       setSelections(parseHolidaySelections(q.selections));
@@ -174,6 +187,33 @@ export function HolidayLightingQuoter({
     }
   }, [initialId, loadQuote, initialCustomerId, initialCustomerName, initialAddress]);
 
+  useEffect(() => {
+    if (!customerId) {
+      setProperties([]);
+      setPropertyId("");
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/customers/${customerId}/properties`)
+      .then(async (r) => {
+        if (!r.ok) return;
+        const list = (await r.json()) as CustomerPropertyDTO[];
+        if (cancelled) return;
+        setProperties(list);
+        setPropertyId((prev) => {
+          if (prev && list.some((p) => p.id === prev)) return prev;
+          if (list.length === 1) return list[0]!.id;
+          return "";
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setProperties([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
   async function ensureQuote(): Promise<string> {
     if (quoteId) return quoteId;
     const res = await fetch("/api/holiday-lighting/quotes", {
@@ -181,6 +221,7 @@ export function HolidayLightingQuoter({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerId: customerId || null,
+        propertyId: propertyId || null,
         address,
         city,
         state,
@@ -209,6 +250,7 @@ export function HolidayLightingQuoter({
       lat: number | null;
       lng: number | null;
       customerId: string | null;
+      propertyId: string | null;
       sourcePhotoUrl: string | null;
       previewImageUrl: string | null;
     }>,
@@ -289,10 +331,32 @@ export function HolidayLightingQuoter({
     }
   }
 
+  function applyProperty(property: CustomerPropertyDTO) {
+    setPropertyId(property.id);
+    setAddress(property.address ?? "");
+    setCity(property.city ?? "");
+    setState(property.state ?? "UT");
+    setZip(property.zip ?? "");
+    void save(
+      {
+        propertyId: property.id,
+        address: property.address ?? "",
+        city: property.city ?? "",
+        state: property.state ?? "UT",
+        zip: property.zip ?? "",
+      },
+      { quiet: true }
+    );
+  }
+
   function onCustomerPicked(id: string, name: string) {
     setCustomerId(id);
     setCustomerName(name);
-    if (!id) void save({ customerId: null }, { quiet: true });
+    if (!id) {
+      setPropertyId("");
+      setProperties([]);
+      void save({ customerId: null, propertyId: null }, { quiet: true });
+    }
   }
 
   function onCustomerSelect(customer: CustomerDTO) {
@@ -318,6 +382,11 @@ export function HolidayLightingQuoter({
       void save({ customerId: customer.id }, { quiet: true });
     }
   }
+
+  const addressLine = useMemo(
+    () => formatAddressLine(address, city, state, zip),
+    [address, city, state, zip]
+  );
 
   async function onPhotoSelected(file: File) {
     setPhotoUrl(URL.createObjectURL(file));
@@ -514,58 +583,60 @@ export function HolidayLightingQuoter({
       </div>
 
       {step === 1 ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <div className="rounded-lg border border-border bg-white p-3">
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Customer
-                </label>
-                <CustomerSearchPicker
-                  value={customerId}
-                  selectedName={customerName}
-                  onValueChange={onCustomerPicked}
-                  onCustomerSelect={onCustomerSelect}
-                  placeholder="Search customers by name, phone, email…"
-                />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-4">
-                <div className="sm:col-span-2">
-                  <AddressAutocompleteInput
-                    value={address}
-                    onChange={setAddress}
-                    onResolved={applyResolvedAddress}
-                    placeholder="Search street address…"
-                  />
-                </div>
-                <Input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-                <div className="flex gap-2">
-                  <Input
-                    className="w-16"
-                    placeholder="ST"
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                  />
-                  <Input placeholder="ZIP" value={zip} onChange={(e) => setZip(e.target.value)} />
-                </div>
-              </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
+            <CustomerSearchPicker
+              compact
+              className="w-full min-w-[180px] sm:w-56"
+              value={customerId}
+              selectedName={customerName}
+              onValueChange={onCustomerPicked}
+              onCustomerSelect={onCustomerSelect}
+              placeholder="Customer…"
+            />
+            {properties.length > 0 ? (
+              <select
+                className="h-9 min-w-[140px] max-w-[220px] flex-1 rounded-md border border-input bg-background px-2 text-sm sm:flex-none"
+                value={propertyId}
+                onChange={(e) => {
+                  const next = properties.find((p) => p.id === e.target.value);
+                  if (next) applyProperty(next);
+                  else {
+                    setPropertyId("");
+                    void save({ propertyId: null }, { quiet: true });
+                  }
+                }}
+                aria-label="Property"
+              >
+                <option value="">Property…</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name || p.address || "Property"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="min-w-[220px] flex-[2]">
+              <AddressAutocompleteInput
+                value={addressLine}
+                onChange={(value) => {
+                  setAddress(value);
+                  setCity("");
+                  setState("");
+                  setZip("");
+                }}
+                onResolved={applyResolvedAddress}
+                placeholder="Address, city, state, ZIP…"
+              />
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button type="button" size="sm" onClick={() => void geocode()}>
-                Locate on map
-              </Button>
-              <p className="self-center text-xs text-muted-foreground">
-                {totalFt.toFixed(1)} ft billable · {matchedCount} pitch-matched ·{" "}
-                {measurements.placements.length} trees/bushes
-              </p>
-            </div>
+            <Button type="button" size="sm" className="h-9" onClick={() => void geocode()}>
+              Locate
+            </Button>
+            <p className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">
+              {totalFt.toFixed(1)} ft · {matchedCount} pitched · {measurements.placements.length}{" "}
+              trees
+            </p>
           </div>
-
-          <p className="text-sm text-muted-foreground">
-            Draw roof segments on the satellite map (plan length), capture Street View of the house,
-            then match each segment on the photo to measure pitch. Plan length is the horizontal run;
-            pitch converts it to true roof length and rise.
-          </p>
 
           <div className="relative z-0 grid min-h-0 flex-1 gap-4 xl:grid-cols-2">
             <div className="relative z-0 flex min-h-[420px] flex-col gap-2">
