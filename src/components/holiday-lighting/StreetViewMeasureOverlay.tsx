@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { upsertStreetTrace } from "@/lib/holiday-lighting/pitch-match";
 import { pitchDegFromImageLine } from "@/lib/holiday-lighting/roof-pitch";
 import type {
@@ -28,7 +35,7 @@ export function StreetViewMeasureOverlay({
   onChange,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
-  const [drawMode, setDrawMode] = useState<DrawMode>("single");
+  const [drawMode, setDrawMode] = useState<DrawMode>("gable");
   const [draft, setDraft] = useState<StreetViewNormPoint[]>([]);
   const [aspect, setAspect] = useState(4 / 3);
   const needed = drawMode === "gable" ? 3 : 2;
@@ -135,22 +142,60 @@ export function StreetViewMeasureOverlay({
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={drawMode === "single" ? "default" : "outline"}
-          onClick={() => setDrawMode("single")}
-        >
-          Single slope
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={drawMode === "gable" ? "default" : "outline"}
-          onClick={() => setDrawMode("gable")}
-        >
-          Gable (two slopes)
-        </Button>
+        <TooltipProvider delayDuration={200}>
+          <div className="flex items-center gap-2 rounded-md border border-border bg-white px-2 py-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "text-xs font-medium transition-colors",
+                    drawMode === "single" ? "text-foreground" : "text-muted-foreground"
+                  )}
+                  onClick={() => setDrawMode("single")}
+                >
+                  Single slope
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                One continuous roof edge — click both ends of the slope.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Switch
+                    checked={drawMode === "gable"}
+                    onCheckedChange={(checked) => setDrawMode(checked ? "gable" : "single")}
+                    aria-label="Gable roof mode"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {drawMode === "gable"
+                  ? "Gable on: click left eave, peak, then right eave."
+                  : "Switch on for a gable (two slopes meeting at a peak)."}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "text-xs font-medium transition-colors",
+                    drawMode === "gable" ? "text-foreground" : "text-muted-foreground"
+                  )}
+                  onClick={() => setDrawMode("gable")}
+                >
+                  Gable
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Two slopes meeting at a peak — click left eave, peak, then right eave.
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
         {selectedSegmentId && selectedTrace ? (
           <Button type="button" size="sm" variant="ghost" onClick={clearTrace}>
             Clear match
