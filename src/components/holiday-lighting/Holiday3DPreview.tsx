@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { densifyPath } from "@/lib/holiday-lighting/geo";
-import { loadMaps3d, type Maps3dLibrary } from "@/lib/holiday-lighting/load-maps";
+import { loadMaps3d } from "@/lib/holiday-lighting/load-maps";
 import type {
   HolidayLatLng,
   HolidayMeasurements,
@@ -31,8 +31,8 @@ export function Holiday3DPreview({
   className,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<InstanceType<Maps3dLibrary["Map3DElement"]> | null>(null);
-  const libRef = useRef<Maps3dLibrary | null>(null);
+  const mapRef = useRef<google.maps.maps3d.Map3DElement | null>(null);
+  const libRef = useRef<google.maps.Maps3DLibrary | null>(null);
   const overlaysRef = useRef<HTMLElement[]>([]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,8 @@ export function Holiday3DPreview({
 
   useEffect(() => {
     let cancelled = false;
-    if (!center || !hostRef.current) {
+    const host = hostRef.current;
+    if (!center || !host) {
       setReady(false);
       return;
     }
@@ -49,23 +50,21 @@ export function Holiday3DPreview({
       try {
         setError(null);
         const lib = await loadMaps3d();
-        if (cancelled || !hostRef.current) return;
+        if (cancelled) return;
         libRef.current = lib;
 
-        const mode = lib.MapMode?.HYBRID ?? "HYBRID";
         const map3d = new lib.Map3DElement({
           center: { lat: center.lat, lng: center.lng, altitude: 20 },
           range: 220,
           tilt: 60,
           heading: 25,
-          mode,
-          defaultUIHidden: false,
+          mode: lib.MapMode.HYBRID,
         });
         map3d.style.width = "100%";
         map3d.style.height = "100%";
         map3d.style.display = "block";
 
-        hostRef.current.replaceChildren(map3d);
+        host.replaceChildren(map3d);
         mapRef.current = map3d;
         setReady(true);
       } catch (err) {
@@ -83,16 +82,15 @@ export function Holiday3DPreview({
       cancelled = true;
       mapRef.current?.stopCameraAnimation?.();
       mapRef.current = null;
-      if (hostRef.current) hostRef.current.replaceChildren();
+      host.replaceChildren();
     };
-  }, [center?.lat, center?.lng]);
+  }, [center]);
 
   useEffect(() => {
     const map3d = mapRef.current;
     const lib = libRef.current;
     if (!ready || !map3d || !lib) return;
 
-    const altitudeMode = lib.AltitudeMode?.RELATIVE_TO_MESH ?? "RELATIVE_TO_MESH";
     const children: HTMLElement[] = [];
 
     for (const segment of measurements.segments) {
@@ -104,7 +102,7 @@ export function Holiday3DPreview({
           lng: p.lng,
           altitude: 0.4,
         })),
-        altitudeMode,
+        altitudeMode: lib.AltitudeMode.RELATIVE_TO_MESH,
         strokeColor: strokeForStyle(segment.lightStyleKey ?? defaultLightStyleKey),
         strokeWidth: 10,
         drawsOccludedSegments: true,
@@ -120,14 +118,13 @@ export function Holiday3DPreview({
           lng: placement.latLng.lng,
           altitude: 0.5,
         },
-        altitudeMode,
+        altitudeMode: lib.AltitudeMode.RELATIVE_TO_MESH,
         label: placement.label,
         extruded: true,
       });
       children.push(marker);
     }
 
-    // Keep the map element; swap only our overlay children.
     for (const node of overlaysRef.current) {
       try {
         map3d.removeChild(node);
@@ -143,12 +140,8 @@ export function Holiday3DPreview({
     const map3d = mapRef.current;
     if (!map3d || !center) return;
     if (orbiting) {
-      map3d.stopCameraAnimation?.();
+      map3d.stopCameraAnimation();
       setOrbiting(false);
-      return;
-    }
-    if (typeof map3d.flyCameraAround !== "function") {
-      setError("Orbit animation is not available in this Maps build.");
       return;
     }
     map3d.flyCameraAround({

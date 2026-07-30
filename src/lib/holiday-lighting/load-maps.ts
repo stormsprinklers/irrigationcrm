@@ -90,37 +90,13 @@ export function loadGoogleMaps(): Promise<typeof google> {
 }
 
 /** Load Photorealistic 3D Maps (`maps3d`) after the base Maps JS API is ready. */
-export async function loadMaps3d(): Promise<Maps3dLibrary> {
+export async function loadMaps3d(): Promise<google.maps.Maps3DLibrary> {
   const g = await loadGoogleMaps();
   if (typeof g.maps.importLibrary !== "function") {
     throw new Error("This Maps API build does not support importLibrary / 3D Maps");
   }
-  return (await g.maps.importLibrary("maps3d")) as Maps3dLibrary;
+  return g.maps.importLibrary("maps3d");
 }
-
-/** Minimal typing for the maps3d preview surface we use. */
-export type Maps3dLibrary = {
-  Map3DElement: new (options?: Record<string, unknown>) => HTMLElement & {
-    center?: { lat: number; lng: number; altitude?: number };
-    range?: number;
-    tilt?: number;
-    heading?: number;
-    mode?: string;
-    append: (...nodes: Node[]) => void;
-    replaceChildren: (...nodes: Node[]) => void;
-    flyCameraAround?: (opts: Record<string, unknown>) => void;
-    stopCameraAnimation?: () => void;
-  };
-  MapMode?: { HYBRID: string; SATELLITE: string };
-  Polyline3DElement: new (options?: Record<string, unknown>) => HTMLElement;
-  Marker3DElement: new (options?: Record<string, unknown>) => HTMLElement;
-  AltitudeMode?: {
-    RELATIVE_TO_MESH: string;
-    RELATIVE_TO_GROUND: string;
-    CLAMP_TO_GROUND: string;
-    ABSOLUTE: string;
-  };
-};
 
 /** True if a Maps key is available via public env or will be fetched from the API. */
 export function mapsKeyLikelyConfigured() {
