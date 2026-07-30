@@ -86,8 +86,33 @@ export function StreetViewMeasureOverlay({
     setDraft([]);
   }
 
+  const matchableSegments = measurements.segments.filter(
+    (s) => s.kind === "roofline" || s.kind === "garland"
+  );
+
+  // Auto-select a matchable strand so the photo is immediately drawable.
+  useEffect(() => {
+    const matchable = measurements.segments.filter(
+      (s) => s.kind === "roofline" || s.kind === "garland"
+    );
+    if (selectedSegmentId && matchable.some((s) => s.id === selectedSegmentId)) {
+      return;
+    }
+    const streetTraces = measurements.streetTraces ?? [];
+    const firstUnmatched = matchable.find(
+      (seg) => !streetTraces.some((t) => t.satelliteSegmentId === seg.id)
+    );
+    const nextId = firstUnmatched?.id ?? matchable[0]?.id ?? null;
+    if (nextId !== selectedSegmentId) onSelectSegment(nextId);
+  }, [
+    measurements.segments,
+    measurements.streetTraces,
+    onSelectSegment,
+    selectedSegmentId,
+  ]);
+
   const draftHint = !selectedSegmentId
-    ? "Select a satellite segment below, then click on the photo."
+    ? "Select a satellite segment above, then click on the photo."
     : drawMode === "single"
       ? draft.length === 0
         ? "Click one end of this roof edge, then the other."
@@ -108,7 +133,7 @@ export function StreetViewMeasureOverlay({
       : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -137,9 +162,91 @@ export function StreetViewMeasureOverlay({
         <p className="text-xs font-medium text-primary">Draft pitch ≈ {livePitch}°</p>
       ) : null}
 
+      <ul className="relative z-20 max-h-40 space-y-1 overflow-y-auto rounded-md border border-border bg-white p-2 text-xs shadow-sm">
+        {matchableSegments.length === 0 ? (
+          <li className="text-muted-foreground">Draw a roofline on the satellite map first.</li>
+        ) : (
+          matchableSegments.map((seg) => {
+            const matched = traces.some((t) => t.satelliteSegmentId === seg.id);
+            const horizontal = seg.horizontalLengthFt ?? seg.lengthFt;
+            const selected = selectedSegmentId === seg.id;
+            return (
+              <li key={seg.id}>
+                <div
+                  className={cn(
+                    "flex items-start gap-1 rounded-md border px-1 py-0.5 transition-colors",
+                    selected
+                      ? "border-primary bg-primary/10 ring-1 ring-primary/40"
+                      : "border-transparent hover:bg-muted"
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 px-1 py-1 text-left"
+                    onPointerDown={(e) => {
+                      // Prefer pointerdown so Google Maps panes can't steal the click.
+                      e.stopPropagation();
+                      onSelectSegment(seg.id);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectSegment(seg.id);
+                    }}
+                  >
+                    <span className="flex justify-between gap-2 font-medium">
+                      <span className="truncate">{seg.label}</span>
+                      <span
+                        className={cn(
+                          "shrink-0",
+                          matched ? "text-emerald-700" : "text-amber-700"
+                        )}
+                      >
+                        {selected ? "Selected · " : ""}
+                        {matched ? "Matched" : "Needs pitch"}
+                      </span>
+                    </span>
+                    <span className="font-mono text-[11px] text-muted-foreground">
+                      Plan {horizontal.toFixed(1)} ft
+                      {seg.pitchDeg != null ? ` · ${seg.pitchDeg}°` : ""}
+                      {seg.pitchDegRight != null ? ` / ${seg.pitchDegRight}°` : ""}
+                      {seg.riseFt != null ? ` · rise ${seg.riseFt.toFixed(1)} ft` : ""}
+                      {seg.pitchDeg != null
+                        ? seg.lengthFtRight != null
+                          ? ` · true ${seg.lengthFt.toFixed(1)}+${seg.lengthFtRight.toFixed(1)} ft`
+                          : ` · true ${seg.lengthFt.toFixed(1)} ft`
+                        : ""}
+                    </span>
+                  </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="mt-0.5 h-7 shrink-0 px-2 text-destructive hover:text-destructive"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange({
+                        ...measurements,
+                        segments: measurements.segments.filter((s) => s.id !== seg.id),
+                        streetTraces: (measurements.streetTraces ?? []).filter(
+                          (t) => t.satelliteSegmentId !== seg.id
+                        ),
+                      });
+                      if (selectedSegmentId === seg.id) onSelectSegment(null);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </li>
+            );
+          })
+        )}
+      </ul>
+
       <div
         className={cn(
-          "relative w-full overflow-hidden rounded-md border border-border bg-muted",
+          "relative z-0 w-full overflow-hidden rounded-md border border-border bg-muted",
           selectedSegmentId ? "cursor-crosshair" : "cursor-not-allowed"
         )}
         style={{ aspectRatio: `${aspect}` }}
@@ -197,74 +304,6 @@ export function StreetViewMeasureOverlay({
           ) : null}
         </svg>
       </div>
-
-      <ul className="max-h-36 space-y-1 overflow-y-auto rounded-md border border-border bg-white p-2 text-xs">
-        {measurements.segments.filter((s) => s.kind === "roofline" || s.kind === "garland")
-          .length === 0 ? (
-          <li className="text-muted-foreground">Draw a roofline on the satellite map first.</li>
-        ) : (
-          measurements.segments
-            .filter((s) => s.kind === "roofline" || s.kind === "garland")
-            .map((seg) => {
-              const matched = traces.some((t) => t.satelliteSegmentId === seg.id);
-              const horizontal = seg.horizontalLengthFt ?? seg.lengthFt;
-              return (
-                <li key={seg.id}>
-                  <div
-                    className={cn(
-                      "flex items-start gap-1 rounded px-1 py-0.5 hover:bg-muted",
-                      selectedSegmentId === seg.id && "bg-muted"
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 flex-col gap-0.5 px-1 py-1 text-left"
-                      onClick={() =>
-                        onSelectSegment(selectedSegmentId === seg.id ? null : seg.id)
-                      }
-                    >
-                      <span className="flex justify-between gap-2 font-medium">
-                        <span className="truncate">{seg.label}</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {matched ? "Matched" : "Needs pitch"}
-                        </span>
-                      </span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
-                        Plan {horizontal.toFixed(1)} ft
-                        {seg.pitchDeg != null ? ` · ${seg.pitchDeg}°` : ""}
-                        {seg.pitchDegRight != null ? ` / ${seg.pitchDegRight}°` : ""}
-                        {seg.riseFt != null ? ` · rise ${seg.riseFt.toFixed(1)} ft` : ""}
-                        {seg.pitchDeg != null
-                          ? seg.lengthFtRight != null
-                            ? ` · true ${seg.lengthFt.toFixed(1)}+${seg.lengthFtRight.toFixed(1)} ft`
-                            : ` · true ${seg.lengthFt.toFixed(1)} ft`
-                          : ""}
-                      </span>
-                    </button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="mt-0.5 h-7 shrink-0 px-2 text-destructive hover:text-destructive"
-                      onClick={() => {
-                        onChange({
-                          ...measurements,
-                          segments: measurements.segments.filter((s) => s.id !== seg.id),
-                          streetTraces: (measurements.streetTraces ?? []).filter(
-                            (t) => t.satelliteSegmentId !== seg.id
-                          ),
-                        });
-                        if (selectedSegmentId === seg.id) onSelectSegment(null);
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </li>
-              );
-            })
-        )}
-      </ul>
     </div>
   );
 }

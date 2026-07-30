@@ -567,14 +567,15 @@ export function HolidayLightingQuoter({
             pitch converts it to true roof length and rise.
           </p>
 
-          <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-2">
-            <div className="flex min-h-[420px] flex-col gap-2">
+          <div className="relative z-0 grid min-h-0 flex-1 gap-4 xl:grid-cols-2">
+            <div className="relative z-0 flex min-h-[420px] flex-col gap-2">
               <h3 className="text-sm font-semibold">Satellite measure</h3>
               <HolidayMapPanel
                 ref={mapPanelRef}
                 center={center}
                 measurements={measurements}
                 defaultLightStyleKey={selections.defaultLightStyleKey}
+                onSelectSegment={setMatchSegmentId}
                 onChange={(next) => {
                   const segments = next.segments.map((seg) => {
                     const prev = measurements.segments.find((s) => s.id === seg.id);
@@ -605,7 +606,7 @@ export function HolidayLightingQuoter({
               />
             </div>
 
-            <div className="flex min-h-[420px] flex-col gap-2">
+            <div className="relative z-10 flex min-h-[420px] flex-col gap-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">Street View pitch match</h3>
                 <div className="flex flex-wrap gap-2">

@@ -19,6 +19,7 @@ type Props = {
   measurements: HolidayMeasurements;
   onChange: (next: HolidayMeasurements) => void;
   defaultLightStyleKey: string;
+  onSelectSegment?: (id: string | null) => void;
 };
 
 export type StreetViewCapturePose = {
@@ -50,7 +51,7 @@ function streetViewZoomToFov(zoom: number) {
 
 export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
   function HolidayMapPanel(
-    { center, measurements, onChange, defaultLightStyleKey },
+    { center, measurements, onChange, defaultLightStyleKey, onSelectSegment },
     ref
   ) {
     const mapRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,11 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
     const modeRef = useRef(mode);
     modeRef.current = mode;
+
+    function selectSegment(id: string | null) {
+      setActiveSegmentId(id);
+      onSelectSegment?.(id);
+    }
 
     useImperativeHandle(ref, () => ({
       getStreetViewPose: () => {
@@ -208,7 +214,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       draftPath.current = [];
       draftLine.current?.setMap(null);
       draftLine.current = null;
-      setActiveSegmentId(segment.id);
+      selectSegment(segment.id);
     }
 
     function clearDraft() {
@@ -234,7 +240,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           strokeWeight: segment.id === activeSegmentId ? 4 : 3,
           map,
         });
-        line.addListener("click", () => setActiveSegmentId(segment.id));
+        line.addListener("click", () => selectSegment(segment.id));
         polylines.current.push(line);
       }
 
@@ -257,7 +263,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           (t) => t.satelliteSegmentId !== id
         ),
       });
-      if (activeSegmentId === id) setActiveSegmentId(null);
+      if (activeSegmentId === id) selectSegment(null);
     }
 
     function removeActiveSegment() {
@@ -267,7 +273,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
 
     function clearAllMeasurements() {
       clearDraft();
-      setActiveSegmentId(null);
+      selectSegment(null);
       onChange({
         ...measurements,
         segments: [],
@@ -345,18 +351,18 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           </p>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-2">
+        <div className="relative z-0 grid min-h-0 flex-1 gap-2 lg:grid-cols-2">
           <div
             ref={mapRef}
             className={cn(
-              "min-h-[280px] rounded-md border border-border bg-muted",
+              "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
               !ready && "animate-pulse"
             )}
           />
           <div
             ref={panoRef}
             className={cn(
-              "min-h-[280px] rounded-md border border-border bg-muted",
+              "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
               !ready && "animate-pulse"
             )}
           />
@@ -383,7 +389,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                 <button
                   type="button"
                   className="min-w-0 flex-1 truncate px-1 py-1 text-left"
-                  onClick={() => setActiveSegmentId(s.id)}
+                  onClick={() => selectSegment(s.id)}
                 >
                   <span>
                     {s.label}{" "}
