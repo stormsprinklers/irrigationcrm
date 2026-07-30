@@ -50,7 +50,7 @@ type PropertyLocation = {
 type Props = {
   propertyId: string;
   property: PropertyLocation;
-  features: { rachio: boolean };
+  features: { rachio: boolean; irrigation?: boolean };
   showTitle?: boolean;
 };
 
@@ -60,6 +60,7 @@ function isImageAttachment(mimeType: string, fileName: string) {
 }
 
 export function PortalPropertySection({ propertyId, property, features, showTitle = true }: Props) {
+  const showIrrigation = features.irrigation !== false;
   const [rachio, setRachio] = useState<RachioData | null>(null);
   const [irrigation, setIrrigation] = useState<{
     propertyDiagramUrl: string | null;
@@ -74,13 +75,15 @@ export function PortalPropertySection({ propertyId, property, features, showTitl
         .then((r) => r.json())
         .then(setRachio);
     }
-    fetch(`/api/portal/properties/${propertyId}/irrigation`)
-      .then((r) => r.json())
-      .then(setIrrigation);
+    if (showIrrigation) {
+      fetch(`/api/portal/properties/${propertyId}/irrigation`)
+        .then((r) => r.json())
+        .then(setIrrigation);
+    }
     fetch("/api/portal/attachments")
       .then((r) => (r.ok ? r.json() : { attachments: [] }))
       .then((data) => setAttachments(data.attachments ?? []));
-  }, [propertyId, features.rachio]);
+  }, [propertyId, features.rachio, showIrrigation]);
 
   async function runZone(zoneId: string) {
     try {
@@ -122,7 +125,7 @@ export function PortalPropertySection({ propertyId, property, features, showTitl
         }}
       />
 
-      {irrigation?.propertyDiagramUrl ? (
+      {showIrrigation && irrigation?.propertyDiagramUrl ? (
         <section className="portal-card">
           <h3 className="portal-section-title">Irrigation map</h3>
           {/* eslint-disable-next-line @next/next/no-img-element */}

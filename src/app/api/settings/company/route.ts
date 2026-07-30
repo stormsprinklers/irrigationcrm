@@ -32,6 +32,8 @@ export async function PATCH(request: NextRequest) {
     const data: Record<string, unknown> = {};
     for (const key of Object.keys(body)) {
       if (key === "id") continue;
+      // From address is managed under Settings → Inbox, not company profile save.
+      if (key === "sendgridFrom") continue;
       if (key in allowed) {
         data[key] = body[key];
       }

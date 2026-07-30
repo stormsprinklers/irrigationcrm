@@ -13,6 +13,7 @@ type Features = {
   estimates: boolean;
   maintenance: boolean;
   checklists: boolean;
+  irrigation?: boolean;
   rachio: boolean;
   offers: boolean;
   referrals: boolean;

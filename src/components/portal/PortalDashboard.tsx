@@ -71,7 +71,10 @@ export function PortalDashboard({ slug }: { slug: string }) {
           <PortalPropertySection
             propertyId={singleProperty.id}
             property={singleProperty}
-            features={{ rachio: Boolean(me.company.features.rachio) }}
+            features={{
+              rachio: Boolean(me.company.features.rachio),
+              irrigation: Boolean(me.company.features.irrigation),
+            }}
             showTitle
           />
         ) : null}

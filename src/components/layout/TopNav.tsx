@@ -76,7 +76,12 @@ export function TopNav() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileOtherOpen, setMobileOtherOpen] = useState(false);
   const role = session?.user?.role;
-  const navItems = primaryNav;
+  const navItems = primaryNav.filter((item) => {
+    if (item.href === "/holiday-lighting/quote") {
+      return brand.holidayLightingFeaturesEnabled;
+    }
+    return true;
+  });
   const otherItems = filterOtherNav(otherNav, role);
   const otherActive = isOtherNavActive(pathname, otherItems);
   const lmsUrl = process.env.NEXT_PUBLIC_LMS_URL?.replace(/\/$/, "") || "";

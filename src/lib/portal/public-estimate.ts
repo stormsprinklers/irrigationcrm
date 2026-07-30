@@ -52,11 +52,13 @@ export function portalCompanyPayload(company: PortalCompany) {
       estimates: portalFeatureEnabled(company, "estimates"),
       maintenance: portalFeatureEnabled(company, "maintenance"),
       checklists: portalFeatureEnabled(company, "checklists"),
+      irrigation: portalFeatureEnabled(company, "irrigation"),
       rachio: portalFeatureEnabled(company, "rachio"),
       offers: portalFeatureEnabled(company, "offers"),
       referrals: portalFeatureEnabled(company, "referrals"),
       allowSchedule: company.portalAllowSchedule,
-      rachioAllowRun: company.portalRachioAllowRun,
+      rachioAllowRun:
+        portalFeatureEnabled(company, "rachio") && company.portalRachioAllowRun,
     },
   };
 }

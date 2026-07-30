@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import { RachioControllersHub } from "@/components/rachio/RachioControllersHub";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ type RachioTestResult = {
 };
 
 export default function SettingsRachioPage() {
+  const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const [rachioApiKey, setRachioApiKey] = useState("");
   const [rachioPersonId, setRachioPersonId] = useState<string | null>(null);
   const [rachioTest, setRachioTest] = useState<RachioTestResult | null>(null);
@@ -102,12 +104,23 @@ export default function SettingsRachioPage() {
         title="Rachio"
         subtitle="Connect your Rachio account and link controllers to customer properties."
         actions={
-          <Button size="sm" onClick={() => void save()} disabled={saving}>
-            {saving ? "Saving..." : "Save key"}
-          </Button>
+          irrigationEnabled ? (
+            <Button size="sm" onClick={() => void save()} disabled={saving}>
+              {saving ? "Saving..." : "Save key"}
+            </Button>
+          ) : undefined
         }
       />
 
+      {!irrigationEnabled ? (
+        <div className="rounded-lg border border-border bg-white p-6 text-sm text-muted-foreground">
+          Irrigation tools are turned off for this company. Enable them under{" "}
+          <Link href="/settings" className="text-primary underline">
+            Settings → Company → Industry features
+          </Link>
+          .
+        </div>
+      ) : (
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -167,6 +180,7 @@ export default function SettingsRachioPage() {
           <Link href="/settings/integrations">Back to integrations</Link>
         </Button>
       </div>
+      )}
     </ContentArea>
   );
 }

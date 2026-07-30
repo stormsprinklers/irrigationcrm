@@ -37,7 +37,10 @@ export function PortalPropertyView({ slug, propertyId }: { slug: string; propert
         <PortalPropertySection
           propertyId={propertyId}
           property={property}
-          features={{ rachio: Boolean(me.company.features.rachio) }}
+          features={{
+            rachio: Boolean(me.company.features.rachio),
+            irrigation: Boolean(me.company.features.irrigation),
+          }}
           showTitle
         />
       </div>

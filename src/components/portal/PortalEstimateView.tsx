@@ -445,8 +445,15 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
                         </p>
                       ) : null}
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Qty {item.quantity}
-                        {item.unit ? ` ${item.unit}` : ""} × {formatCurrency(item.unitPrice)}
+                        {item.quantity === 1 && (!item.unit || item.unit === "each")
+                          ? null
+                          : (
+                              <>
+                                Qty {item.quantity}
+                                {item.unit ? ` ${item.unit}` : ""} ×{" "}
+                                {formatCurrency(item.unitPrice)}
+                              </>
+                            )}
                       </p>
                     </div>
                     <p className="shrink-0 font-medium">{formatCurrency(item.total)}</p>

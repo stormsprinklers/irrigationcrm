@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(result.stream, {
       headers: {
-        "Content-Type": result.blob.contentType,
+        "Content-Type": contentTypeForPathname(pathname, result.blob.contentType),
         "Cache-Control": "public, max-age=86400",
         "X-Content-Type-Options": "nosniff",
       },
@@ -39,4 +39,11 @@ export async function GET(request: NextRequest) {
     console.error("Public blob proxy error:", error);
     return NextResponse.json({ error: "Failed to load file" }, { status: 500 });
   }
+}
+
+function contentTypeForPathname(pathname: string, stored: string | null | undefined) {
+  const lower = pathname.toLowerCase();
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".pem")) return "application/pem-certificate-chain";
+  return stored || "application/octet-stream";
 }

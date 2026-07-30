@@ -21,6 +21,7 @@ export const primaryNav: NavItem[] = [
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
+  { label: "Holiday Lighting", href: "/holiday-lighting/quote" },
   { label: "Marketing", href: "/marketing" },
   { label: "Reporting", href: "/reporting" },
   { label: "Settings", href: "/settings" },
@@ -144,6 +145,7 @@ export const companySettingsSidebar: NavSection[] = [
     items: [
       { label: "Company details", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
+      { label: "Holiday lighting catalog", href: "/settings/holiday-lighting" },
       { label: "Company Expense Cards", href: "/settings/expense-cards" },
     ],
   },
@@ -246,7 +248,7 @@ export const settingsSidebar: NavSection[] = [
         label: "Company",
         href: "/settings",
         exact: true,
-        activePrefixes: ["/settings/appearance", "/settings/expense-cards"],
+        activePrefixes: ["/settings/appearance", "/settings/expense-cards", "/settings/holiday-lighting"],
         children: companySettingsSidebar[0]!.items,
       },
       {

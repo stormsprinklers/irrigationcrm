@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 import { requestCurrentPosition } from "@/lib/maps/geolocation";
+import { useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
 
 type VisitDetailData = {
@@ -156,6 +157,7 @@ export function VisitDetail({ visitId }: Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const canDelete = !isFieldRole(session?.user?.role ?? "");
   const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
   const showProfit = canViewProfitMargins(session?.user?.role ?? "");
@@ -368,34 +370,38 @@ export function VisitDetail({ visitId }: Props) {
         eta={visitEta(visit)}
       />
 
-      {visit.customer?.id ? (
+      {irrigationEnabled && visit.customer?.id ? (
         <VisitIrrigationSection customerId={visit.customer.id} property={visit.property} />
       ) : null}
 
-      <div className="flex w-full sm:justify-end">
-        <Button
-          type="button"
-          className="h-12 w-full gap-2 text-base sm:h-9 sm:w-auto sm:text-sm"
-          onClick={() => setPartsRunOpen(true)}
-        >
-          <Wrench className="h-5 w-5 sm:h-4 sm:w-4" />
-          Parts Run
-        </Button>
-      </div>
+      {irrigationEnabled ? (
+        <div className="flex w-full sm:justify-end">
+          <Button
+            type="button"
+            className="h-12 w-full gap-2 text-base sm:h-9 sm:w-auto sm:text-sm"
+            onClick={() => setPartsRunOpen(true)}
+          >
+            <Wrench className="h-5 w-5 sm:h-4 sm:w-4" />
+            Parts Run
+          </Button>
+        </div>
+      ) : null}
 
-      <PartsRunDialog
-        visitId={visit.id}
-        open={partsRunOpen}
-        onOpenChange={setPartsRunOpen}
-        onPaused={async () => {
-          const timeRes = await fetch(`/api/visits/${visitId}/time`);
-          if (timeRes.ok) setTimeEvents(await timeRes.json());
-          const visitRes = await fetch(`/api/visits/${visitId}`);
-          if (visitRes.ok) setVisit(await visitRes.json());
-        }}
-      />
+      {irrigationEnabled ? (
+        <PartsRunDialog
+          visitId={visit.id}
+          open={partsRunOpen}
+          onOpenChange={setPartsRunOpen}
+          onPaused={async () => {
+            const timeRes = await fetch(`/api/visits/${visitId}/time`);
+            if (timeRes.ok) setTimeEvents(await timeRes.json());
+            const visitRes = await fetch(`/api/visits/${visitId}`);
+            if (visitRes.ok) setVisit(await visitRes.json());
+          }}
+        />
+      ) : null}
 
-      {visit.designExportMetadata ? (
+      {irrigationEnabled && visit.designExportMetadata ? (
         <VisitInstallPlanSection
           designExportMetadata={visit.designExportMetadata}
           estimatedManHours={

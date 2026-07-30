@@ -9,6 +9,8 @@ import {
   contrastForeground,
   resolveBrandPalette,
 } from "@/lib/brand-palette";
+import { irrigationFeaturesEnabled as resolveIrrigationFeatures } from "@/lib/company/features";
+import { holidayLightingFeaturesEnabled as resolveHolidayFeatures } from "@/lib/company/features";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 export type CompanyBrand = {
@@ -18,6 +20,8 @@ export type CompanyBrand = {
   primaryColor: string;
   secondaryColor: string;
   palette: BrandPalette;
+  irrigationFeaturesEnabled: boolean;
+  holidayLightingFeaturesEnabled: boolean;
 };
 
 type CompanyBrandContextValue = {
@@ -62,6 +66,8 @@ const fallbackBrand: CompanyBrand = {
   primaryColor: DEFAULT_BRAND_PALETTE.primary,
   secondaryColor: DEFAULT_BRAND_PALETTE.secondary,
   palette: DEFAULT_BRAND_PALETTE,
+  irrigationFeaturesEnabled: true,
+  holidayLightingFeaturesEnabled: false,
 };
 
 export function CompanyBrandProvider({ children }: { children: React.ReactNode }) {
@@ -92,6 +98,8 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         primaryColor: palette.primary,
         secondaryColor: palette.secondary,
         palette,
+        irrigationFeaturesEnabled: resolveIrrigationFeatures(data),
+        holidayLightingFeaturesEnabled: resolveHolidayFeatures(data),
       });
       applyBrandCss(palette);
     } finally {
@@ -123,4 +131,16 @@ export function useCompanyBrand() {
     };
   }
   return ctx;
+}
+
+/** Staff CRM: whether irrigation tools (Rachio, maps, programming, suppliers) should show. */
+export function useIrrigationFeatures() {
+  const { brand, loading } = useCompanyBrand();
+  return { enabled: brand.irrigationFeaturesEnabled, loading };
+}
+
+/** Staff CRM: whether holiday lighting quoting tools should show. */
+export function useHolidayLightingFeatures() {
+  const { brand, loading } = useCompanyBrand();
+  return { enabled: brand.holidayLightingFeaturesEnabled, loading };
 }

@@ -28,6 +28,7 @@ export const portalCompanySelect = {
   portalShowOffers: true,
   portalShowReferrals: true,
   portalRachioAllowRun: true,
+  irrigationFeaturesEnabled: true,
   estimateWarrantyText: true,
 } as const;
 
@@ -59,6 +60,7 @@ export type PortalCompany = {
   portalShowOffers: boolean;
   portalShowReferrals: boolean;
   portalRachioAllowRun: boolean;
+  irrigationFeaturesEnabled: boolean;
   estimateWarrantyText: string | null;
 };
 

@@ -30,11 +30,18 @@ export default function SettingsCustomerPortalPage() {
     { key: "portalShowInvoices" as const, label: "Show invoices" },
     { key: "portalShowMaintenance" as const, label: "Show maintenance plans" },
     { key: "portalShowChecklists" as const, label: "Show completed checklists" },
-    { key: "portalShowRachio" as const, label: "Show Rachio smart irrigation" },
+    ...(company.irrigationFeaturesEnabled !== false
+      ? [
+          { key: "portalShowRachio" as const, label: "Show Rachio smart irrigation" },
+          {
+            key: "portalRachioAllowRun" as const,
+            label: "Allow customers to manually run Rachio zones",
+          },
+        ]
+      : []),
     { key: "portalShowOffers" as const, label: "Show offers & rebates" },
     { key: "portalShowReferrals" as const, label: "Show referrals program" },
     { key: "portalAllowSchedule" as const, label: "Allow customers to schedule visits" },
-    { key: "portalRachioAllowRun" as const, label: "Allow customers to manually run Rachio zones" },
   ];
 
   return (

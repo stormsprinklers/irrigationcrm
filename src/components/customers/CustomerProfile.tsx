@@ -36,6 +36,7 @@ import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection"
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { useIrrigationFeatures, useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
@@ -135,6 +136,8 @@ export function CustomerProfile({ customerId }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
+  const { enabled: irrigationEnabled } = useIrrigationFeatures();
+  const { enabled: holidayEnabled } = useHolidayLightingFeatures();
   const validTabs = new Set([
     "profile",
     "properties",
@@ -991,15 +994,26 @@ export function CustomerProfile({ customerId }: Props) {
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
               <CardTitle className="text-base">Properties</CardTitle>
-              <Button type="button" size="sm" onClick={() => setAddPropertyOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Add property
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {holidayEnabled ? (
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href={`/holiday-lighting/quote/new?customerId=${customerId}`}>
+                      Holiday lighting quote
+                    </Link>
+                  </Button>
+                ) : null}
+                <Button type="button" size="sm" onClick={() => setAddPropertyOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Add property
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {properties.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No properties yet. Add one to manage irrigation, Rachio, and service locations.
+                  {irrigationEnabled
+                    ? "No properties yet. Add one to manage irrigation, Rachio, and service locations."
+                    : "No properties yet. Add one to manage service locations."}
                 </p>
               ) : (
                 <>
@@ -1084,12 +1098,14 @@ export function CustomerProfile({ customerId }: Props) {
                                 .filter(Boolean)
                                 .join(", ")}
                             </p>
-                            <PropertyIrrigationSummary
-                              zoneCount={property.irrigationZoneCount}
-                              shutoffValveLocation={property.shutoffValveLocation}
-                              controllerLocation={property.controllerLocation}
-                              irrigationMapStatus={property.irrigationMapStatus}
-                            />
+                            {irrigationEnabled ? (
+                              <PropertyIrrigationSummary
+                                zoneCount={property.irrigationZoneCount}
+                                shutoffValveLocation={property.shutoffValveLocation}
+                                controllerLocation={property.controllerLocation}
+                                irrigationMapStatus={property.irrigationMapStatus}
+                              />
+                            ) : null}
                           </div>
                           <Button
                             variant="ghost"
@@ -1099,16 +1115,22 @@ export function CustomerProfile({ customerId }: Props) {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                        <RachioPropertyPanel
-                          customerId={customerId}
-                          propertyId={property.id}
-                          propertyName={property.name}
-                        />
-                        <PropertyIrrigationWizard
-                          customerId={customerId}
-                          propertyId={property.id}
-                        />
-                        {property.designProjectId && process.env.NEXT_PUBLIC_DESIGN_URL ? (
+                        {irrigationEnabled ? (
+                          <>
+                            <RachioPropertyPanel
+                              customerId={customerId}
+                              propertyId={property.id}
+                              propertyName={property.name}
+                            />
+                            <PropertyIrrigationWizard
+                              customerId={customerId}
+                              propertyId={property.id}
+                            />
+                          </>
+                        ) : null}
+                        {irrigationEnabled &&
+                        property.designProjectId &&
+                        process.env.NEXT_PUBLIC_DESIGN_URL ? (
                           <a
                             href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
                             target="_blank"

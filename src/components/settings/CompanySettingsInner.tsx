@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   DEFAULT_BRAND_PALETTE,
@@ -15,8 +16,9 @@ import {
   type BrandPalette,
 } from "@/lib/brand-palette";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay, type CompanySettingsDTO } from "@/lib/company/types";
-import { blobProxyUrl } from "@/lib/blob/urls";
+import { absolutePublicBlobUrl, blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
+import { bimiDnsHost, buildBimiTxtRecord, domainFromSendgridFrom } from "@/lib/inbox/bimi";
 import { cn } from "@/lib/utils";
 
 const profileTabs = ["Profile", "Branding", "Email branding", "Business hours"] as const;
@@ -90,8 +92,13 @@ export function CompanySettingsInner() {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBrandLogo, setUploadingBrandLogo] = useState(false);
+  const [uploadingBimiLogo, setUploadingBimiLogo] = useState(false);
+  const [uploadingBimiCert, setUploadingBimiCert] = useState(false);
+  const [copiedBimiField, setCopiedBimiField] = useState<"host" | "txt" | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const brandLogoInputRef = useRef<HTMLInputElement>(null);
+  const bimiLogoInputRef = useRef<HTMLInputElement>(null);
+  const bimiCertInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/settings/company")
@@ -225,6 +232,86 @@ export function CompanySettingsInner() {
     }
   }
 
+  async function uploadBimiLogo(file: File) {
+    setUploadingBimiLogo(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const res = await fetch("/api/settings/company/bimi-logo", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setCompany(data.company);
+      toast.success("BIMI logo uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingBimiLogo(false);
+      if (bimiLogoInputRef.current) bimiLogoInputRef.current.value = "";
+    }
+  }
+
+  async function removeBimiLogo() {
+    setUploadingBimiLogo(true);
+    try {
+      const res = await fetch("/api/settings/company/bimi-logo", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Remove failed");
+      setCompany(data.company);
+      toast.success("BIMI logo removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setUploadingBimiLogo(false);
+    }
+  }
+
+  async function uploadBimiCertificate(file: File) {
+    setUploadingBimiCert(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const res = await fetch("/api/settings/company/bimi-certificate", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setCompany(data.company);
+      toast.success("BIMI certificate uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingBimiCert(false);
+      if (bimiCertInputRef.current) bimiCertInputRef.current.value = "";
+    }
+  }
+
+  async function removeBimiCertificate() {
+    setUploadingBimiCert(true);
+    try {
+      const res = await fetch("/api/settings/company/bimi-certificate", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Remove failed");
+      setCompany(data.company);
+      toast.success("BIMI certificate removed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setUploadingBimiCert(false);
+    }
+  }
+
+  async function copyText(value: string, field: "host" | "txt") {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedBimiField(field);
+      toast.success("Copied to clipboard");
+      window.setTimeout(() => setCopiedBimiField(null), 2000);
+    } catch {
+      toast.error("Could not copy");
+    }
+  }
+
   if (!company) {
     return (
       <ContentArea className="max-w-4xl">
@@ -272,6 +359,49 @@ export function CompanySettingsInner() {
                 </div>
               ))}
             </div>
+          </section>
+          <section className="rounded-lg border border-border bg-white p-6">
+            <h3 className="mb-1 text-lg font-semibold">Industry features</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Turn off irrigation-only tools for companies that don&apos;t need them (for example
+              Christmas lights). This hides Rachio, irrigation maps and programming, parts suppliers,
+              visit Parts Run, and portal watering/smart irrigation.
+            </p>
+            <label className="flex items-start gap-3 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={company.irrigationFeaturesEnabled !== false}
+                onCheckedChange={(checked) =>
+                  setCompany({ ...company, irrigationFeaturesEnabled: Boolean(checked) })
+                }
+              />
+              <span>
+                <span className="font-medium">Irrigation tools</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Rachio, property irrigation maps, sprinkler programming guides, parts suppliers,
+                  and related portal features.
+                </span>
+              </span>
+            </label>
+            <label className="mt-4 flex items-start gap-3 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={company.holidayLightingFeaturesEnabled === true}
+                onCheckedChange={(checked) =>
+                  setCompany({
+                    ...company,
+                    holidayLightingFeaturesEnabled: Boolean(checked),
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium">Holiday lighting tools</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Satellite / Street View quoting, light catalog, AI lighting previews, and holiday
+                  estimate builder.
+                </span>
+              </span>
+            </label>
           </section>
           <section className="rounded-lg border border-border bg-white p-6">
             <h3 className="mb-4 text-lg font-semibold">Company Description</h3>
@@ -590,13 +720,310 @@ export function CompanySettingsInner() {
               </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Square images work best (at least 96×96 px). The logo appears at the top of HTML emails.
-              For the circular avatar next to your name in Gmail, also add the same image to{" "}
-              <a href="https://gravatar.com" className="text-primary underline" target="_blank" rel="noreferrer">
-                Gravatar
-              </a>{" "}
-              using your outbound email address, or set up BIMI with your domain.
+              Square images work best (at least 96×96 px). This logo appears at the top of HTML email
+              bodies only — it does not set the circular avatar next to your name in Gmail, Yahoo, or
+              Apple Mail. Use the Inbox avatar (BIMI) section below for that.
             </p>
+          </div>
+
+          <div className="space-y-4 border-t border-border pt-6">
+            <div>
+              <h4 className="text-sm font-semibold">Inbox avatar (BIMI)</h4>
+              <p className="mt-1 text-xs text-muted-foreground">
+                BIMI publishes a brand logo that supporting inboxes can show next to authenticated
+                mail. Upload a square SVG Tiny PS logo, optionally attach a VMC/CMC certificate, then
+                add the DNS TXT record on your From domain. Gmail does not use Gravatar for inbox
+                avatars.
+              </p>
+            </div>
+
+            {(() => {
+              const fromDomain = domainFromSendgridFrom(company.sendgridFrom);
+              const dnsHost = fromDomain ? bimiDnsHost(fromDomain) : null;
+              const txtRecord = buildBimiTxtRecord({
+                bimiLogoUrl: company.bimiLogoUrl,
+                bimiCertificateUrl: company.bimiCertificateUrl,
+              });
+              const publicLogoUrl = absolutePublicBlobUrl(company.bimiLogoUrl);
+              const publicCertUrl = absolutePublicBlobUrl(company.bimiCertificateUrl);
+
+              return (
+                <>
+                  <div>
+                    <label className="text-sm text-muted-foreground">BIMI logo (SVG)</label>
+                    <div className="mt-2 flex flex-wrap items-center gap-4">
+                      {company.bimiLogoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={blobProxyUrl(company.bimiLogoUrl) ?? company.bimiLogoUrl}
+                          alt={`${company.name} BIMI logo`}
+                          className="h-14 w-14 rounded-full border border-border bg-card object-contain p-1"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-border text-[10px] text-muted-foreground">
+                          SVG
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          ref={bimiLogoInputRef}
+                          type="file"
+                          accept=".svg,image/svg+xml"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) void uploadBimiLogo(file);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={uploadingBimiLogo}
+                          onClick={() => bimiLogoInputRef.current?.click()}
+                        >
+                          {uploadingBimiLogo
+                            ? "Uploading..."
+                            : company.bimiLogoUrl
+                              ? "Replace SVG"
+                              : "Upload SVG"}
+                        </Button>
+                        {company.bimiLogoUrl ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={uploadingBimiLogo}
+                            onClick={() => void removeBimiLogo()}
+                          >
+                            Remove
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Must be SVG Tiny PS (square, no scripts/external refs). BIMI Group recommends
+                      ≤32KB.{" "}
+                      <a
+                        href="https://bimigroup.org/svg-requirements/"
+                        className="text-primary underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        SVG requirements
+                      </a>
+                      {publicLogoUrl ? (
+                        <>
+                          {" "}
+                          · Public URL:{" "}
+                          <span className="break-all font-mono text-[11px]">{publicLogoUrl}</span>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-sm text-muted-foreground">
+                      Certificate (optional — required for Gmail / Apple)
+                    </label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <input
+                        ref={bimiCertInputRef}
+                        type="file"
+                        accept=".pem,application/x-pem-file,application/pem-certificate-chain,text/plain"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadBimiCertificate(file);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingBimiCert}
+                        onClick={() => bimiCertInputRef.current?.click()}
+                      >
+                        {uploadingBimiCert
+                          ? "Uploading..."
+                          : company.bimiCertificateUrl
+                            ? "Replace PEM"
+                            : "Upload PEM"}
+                      </Button>
+                      {company.bimiCertificateUrl ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={uploadingBimiCert}
+                          onClick={() => void removeBimiCertificate()}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Upload the PEM chain from your VMC or CMC issuer, or paste an HTTPS URL below
+                      and Save.{" "}
+                      <a
+                        href="https://www.digicert.com/tls-ssl/verified-mark-certificates"
+                        className="text-primary underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        DigiCert VMC
+                      </a>
+                    </p>
+                    <Input
+                      className="mt-2 font-mono text-xs"
+                      placeholder={
+                        company.bimiCertificateUrl && isBlobStorageUrl(company.bimiCertificateUrl)
+                          ? "PEM uploaded — paste an HTTPS URL to replace it"
+                          : "https://…/certificate.pem"
+                      }
+                      value={
+                        company.bimiCertificateUrl && isBlobStorageUrl(company.bimiCertificateUrl)
+                          ? ""
+                          : (company.bimiCertificateUrl ?? "")
+                      }
+                      onChange={(e) => {
+                        const next = e.target.value.trim();
+                        if (
+                          !next &&
+                          company.bimiCertificateUrl &&
+                          isBlobStorageUrl(company.bimiCertificateUrl)
+                        ) {
+                          return;
+                        }
+                        setCompany({
+                          ...company,
+                          bimiCertificateUrl: next || null,
+                        });
+                      }}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Leave blank if you uploaded a PEM above. Pasting a URL and clicking Save replaces
+                      the uploaded certificate.
+                      {publicCertUrl ? (
+                        <>
+                          {" "}
+                          Active public URL:{" "}
+                          <span className="break-all font-mono text-[11px]">{publicCertUrl}</span>
+                        </>
+                      ) : null}
+                    </p>
+                  </div>
+
+                  <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">From domain</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {fromDomain ? (
+                          <>
+                            Using <span className="font-mono text-foreground">{fromDomain}</span> from
+                            your Inbox From address. Publish BIMI DNS on this domain.
+                          </>
+                        ) : (
+                          <>
+                            Set your outbound From address under{" "}
+                            <a href="/settings/inbox" className="text-primary underline">
+                              Settings → Inbox
+                            </a>{" "}
+                            so we can show the DNS host name.
+                          </>
+                        )}
+                      </p>
+                    </div>
+
+                    {dnsHost ? (
+                      <div>
+                        <p className="text-xs font-medium text-foreground">DNS TXT host</p>
+                        <div className="mt-1 flex items-start gap-2">
+                          <code className="flex-1 break-all rounded border border-border bg-background px-2 py-1.5 text-[11px]">
+                            {dnsHost}
+                          </code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void copyText(dnsHost, "host")}
+                          >
+                            {copiedBimiField === "host" ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <p className="text-xs font-medium text-foreground">DNS TXT value</p>
+                      {txtRecord ? (
+                        <div className="mt-1 flex items-start gap-2">
+                          <code className="flex-1 break-all rounded border border-border bg-background px-2 py-1.5 text-[11px]">
+                            {txtRecord}
+                          </code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void copyText(txtRecord, "txt")}
+                          >
+                            {copiedBimiField === "txt" ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Upload a BIMI SVG and ensure{" "}
+                          <code className="text-[11px]">NEXT_PUBLIC_APP_URL</code> is an{" "}
+                          <code className="text-[11px]">https://</code> app URL so providers can fetch
+                          the logo.
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Setup checklist</p>
+                      <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+                        <li>SPF and DKIM aligned to your From domain (SendGrid DNS).</li>
+                        <li>
+                          DMARC policy <code className="text-[11px]">p=quarantine</code> or{" "}
+                          <code className="text-[11px]">p=reject</code> with{" "}
+                          <code className="text-[11px]">pct=100</code>.
+                        </li>
+                        <li>Publish the BIMI TXT record above at your DNS host.</li>
+                        <li>
+                          Gmail needs a VMC or CMC; Apple Mail needs a DigiCert VMC. Yahoo often shows
+                          the logo without a certificate.
+                        </li>
+                        <li>
+                          Outlook / Microsoft 365 do not display BIMI logos today. Recipients who save
+                          you as a contact may still see their contact photo.
+                        </li>
+                      </ol>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Validate with the{" "}
+                        <a
+                          href="https://bimigroup.org/bimi-generator/"
+                          className="text-primary underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          BIMI Group generator
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </section>
       ) : (

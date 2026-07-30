@@ -13,6 +13,7 @@ import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrriga
 import { UnscheduledVisitsCard } from "@/components/maintenance-plans/UnscheduledVisitsCard";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import { isBillingPeriodLate } from "@/lib/maintenance-plans/late-payment";
 import type { DashboardDTO } from "@/lib/maintenance-plans/types";
 
 export default function MaintenancePlansPage() {
+  const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const [dashboard, setDashboard] = useState<DashboardDTO | null>(null);
   const [billingRows, setBillingRows] = useState<BillingRowDisplay[]>([]);
   const [loading, setLoading] = useState(true);
@@ -190,9 +192,11 @@ export default function MaintenancePlansPage() {
             <UnscheduledVisitsCard />
           </div>
 
-          <div className="lg:col-span-2">
-            <SmartIrrigationPanel />
-          </div>
+          {irrigationEnabled ? (
+            <div className="lg:col-span-2">
+              <SmartIrrigationPanel />
+            </div>
+          ) : null}
         </div>
       )}
     </ContentArea>

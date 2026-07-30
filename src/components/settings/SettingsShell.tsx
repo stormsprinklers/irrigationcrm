@@ -1,11 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
+import {
+  useHolidayLightingFeatures,
+  useIrrigationFeatures,
+} from "@/components/layout/CompanyBrandProvider";
+import type { NavItem, NavSection } from "@/config/navigation";
+import { HOLIDAY_LIGHTING_NAV_HREFS, IRRIGATION_SETTINGS_HREFS } from "@/lib/company/features";
 import { settingsRootSections } from "@/lib/settings/nav";
+
+function filterFeatureNavItems(
+  items: NavItem[],
+  irrigationEnabled: boolean,
+  holidayEnabled: boolean
+): NavItem[] {
+  return items
+    .filter((item) => {
+      if (!irrigationEnabled && IRRIGATION_SETTINGS_HREFS.has(item.href)) return false;
+      if (!holidayEnabled && HOLIDAY_LIGHTING_NAV_HREFS.has(item.href)) return false;
+      return true;
+    })
+    .map((item) => ({
+      ...item,
+      children: item.children
+        ? filterFeatureNavItems(item.children, irrigationEnabled, holidayEnabled)
+        : undefined,
+    }));
+}
+
+function filterFeatureNav(
+  sections: NavSection[],
+  irrigationEnabled: boolean,
+  holidayEnabled: boolean
+): NavSection[] {
+  return sections.map((section) => ({
+    ...section,
+    items: filterFeatureNavItems(section.items, irrigationEnabled, holidayEnabled),
+  }));
+}
 
 /**
  * Single expandable Settings sidebar — nested section layouts no longer add a
@@ -14,7 +50,12 @@ import { settingsRootSections } from "@/lib/settings/nav";
 export function SettingsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const rootSections = settingsRootSections();
+  const { enabled: irrigationEnabled } = useIrrigationFeatures();
+  const { enabled: holidayEnabled } = useHolidayLightingFeatures();
+  const rootSections = useMemo(
+    () => filterFeatureNav(settingsRootSections(), irrigationEnabled, holidayEnabled),
+    [irrigationEnabled, holidayEnabled]
+  );
 
   useEffect(() => {
     setOpen(false);

@@ -61,11 +61,13 @@ export async function GET() {
         estimates: portalFeatureEnabled(ctx.company, "estimates"),
         maintenance: portalFeatureEnabled(ctx.company, "maintenance"),
         checklists: portalFeatureEnabled(ctx.company, "checklists"),
+        irrigation: portalFeatureEnabled(ctx.company, "irrigation"),
         rachio: portalFeatureEnabled(ctx.company, "rachio"),
         offers: portalFeatureEnabled(ctx.company, "offers"),
         referrals: portalFeatureEnabled(ctx.company, "referrals"),
         allowSchedule: ctx.company.portalAllowSchedule,
-        rachioAllowRun: ctx.company.portalRachioAllowRun,
+        rachioAllowRun:
+          portalFeatureEnabled(ctx.company, "rachio") && ctx.company.portalRachioAllowRun,
       },
     },
   });

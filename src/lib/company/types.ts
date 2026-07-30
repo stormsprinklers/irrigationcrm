@@ -13,9 +13,15 @@ export const companySettingsSelect = {
   privacyPolicyUrl: true,
   legalName: true,
   industry: true,
+  irrigationFeaturesEnabled: true,
+  holidayLightingFeaturesEnabled: true,
+  holidayLightingCatalog: true,
   description: true,
   emailSenderName: true,
   emailLogoUrl: true,
+  bimiLogoUrl: true,
+  bimiCertificateUrl: true,
+  sendgridFrom: true,
   brandLogoUrl: true,
   brandPrimaryColor: true,
   brandSecondaryColor: true,
@@ -90,9 +96,15 @@ export type CompanySettingsDTO = {
   privacyPolicyUrl: string | null;
   legalName: string | null;
   industry: string | null;
+  irrigationFeaturesEnabled: boolean;
+  holidayLightingFeaturesEnabled: boolean;
+  holidayLightingCatalog: unknown;
   description: string | null;
   emailSenderName: string | null;
   emailLogoUrl: string | null;
+  bimiLogoUrl: string | null;
+  bimiCertificateUrl: string | null;
+  sendgridFrom: string | null;
   brandLogoUrl: string | null;
   brandPrimaryColor: string | null;
   brandSecondaryColor: string | null;

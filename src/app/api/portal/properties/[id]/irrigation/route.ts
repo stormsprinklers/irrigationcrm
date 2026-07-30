@@ -5,12 +5,16 @@ import {
   portalNotFoundResponse,
   portalUnauthorizedResponse,
 } from "@/lib/portal/auth";
+import { portalFeatureEnabled } from "@/lib/portal/permissions";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Params) {
   const ctx = await requirePortalCustomer();
   if (!ctx) return portalUnauthorizedResponse();
+  if (!portalFeatureEnabled(ctx.company, "irrigation")) {
+    return NextResponse.json({ error: "Irrigation features are disabled" }, { status: 403 });
+  }
 
   const { id: propertyId } = await params;
   const property = await prisma.customerProperty.findFirst({

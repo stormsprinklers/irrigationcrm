@@ -16,6 +16,8 @@ export async function GET() {
         brandSecondaryColor: true,
         brandPalette: true,
         emailLogoUrl: true,
+        irrigationFeaturesEnabled: true,
+        holidayLightingFeaturesEnabled: true,
       },
     });
     if (!company) {

@@ -1,8 +1,18 @@
 import type { PortalCompany } from "./company";
+import { irrigationFeaturesEnabled } from "@/lib/company/features";
 
 export function portalFeatureEnabled(
   company: PortalCompany,
-  feature: "jobs" | "invoices" | "estimates" | "maintenance" | "checklists" | "rachio" | "offers" | "referrals"
+  feature:
+    | "jobs"
+    | "invoices"
+    | "estimates"
+    | "maintenance"
+    | "checklists"
+    | "rachio"
+    | "offers"
+    | "referrals"
+    | "irrigation"
 ) {
   switch (feature) {
     case "jobs":
@@ -15,8 +25,10 @@ export function portalFeatureEnabled(
       return company.portalShowMaintenance;
     case "checklists":
       return company.portalShowChecklists;
+    case "irrigation":
+      return irrigationFeaturesEnabled(company);
     case "rachio":
-      return company.portalShowRachio;
+      return irrigationFeaturesEnabled(company) && company.portalShowRachio;
     case "offers":
       return company.portalShowOffers;
     case "referrals":

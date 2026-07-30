@@ -914,6 +914,8 @@ async function main() {
       phone: "385-999-6887",
       website: "https://utah.christmas",
       industry: "Christmas Light Installation",
+      irrigationFeaturesEnabled: false,
+      holidayLightingFeaturesEnabled: true,
       description:
         "Chestnut & Cheer installs temporary and permanent Christmas lighting for homes and businesses across Utah County and Salt Lake County.",
       leadSources: ["Website", "Referral", "Google", "Returning customer"],
@@ -935,6 +937,8 @@ async function main() {
       phone: "385-999-6887",
       website: "https://utah.christmas",
       industry: "Christmas Light Installation",
+      irrigationFeaturesEnabled: false,
+      holidayLightingFeaturesEnabled: true,
       description:
         "Chestnut & Cheer installs temporary and permanent Christmas lighting for homes and businesses across Utah County and Salt Lake County.",
       sendgridFrom: "hello@utah.christmas",
@@ -984,9 +988,25 @@ async function main() {
         { name: "Year 1 package (starts at)", unitPrice: 699, sku: "CC-Y1" },
         { name: "Year 2+ reinstall (starts at)", unitPrice: 299, sku: "CC-Y2" },
         { name: "Roofline lighting (per linear ft)", unitPrice: 12, sku: "CC-ROOF-FT" },
+        { name: "Roofline parts (per linear ft)", unitPrice: 5, sku: "CC-ROOF-PARTS-FT" },
+        { name: "Roofline install (per linear ft)", unitPrice: 7, sku: "CC-ROOF-INSTALL-FT" },
+        { name: "Roofline lease (per linear ft)", unitPrice: 9, sku: "CC-ROOF-LEASE-FT" },
+        { name: "C9 Multicolor parts (per ft)", unitPrice: 5.5, sku: "CC-ROOF-MC-PARTS-FT" },
+        { name: "C9 Multicolor install (per ft)", unitPrice: 7, sku: "CC-ROOF-MC-INSTALL-FT" },
+        { name: "C9 Multicolor lease (per ft)", unitPrice: 9.5, sku: "CC-ROOF-MC-LEASE-FT" },
+        { name: "C9 Cool White parts (per ft)", unitPrice: 5, sku: "CC-ROOF-CW-PARTS-FT" },
+        { name: "C9 Cool White install (per ft)", unitPrice: 7, sku: "CC-ROOF-CW-INSTALL-FT" },
+        { name: "C9 Cool White lease (per ft)", unitPrice: 9, sku: "CC-ROOF-CW-LEASE-FT" },
         { name: "Peak / dormer accent", unitPrice: 175, sku: "CC-PEAK" },
+        { name: "Peak / dormer accent (lease)", unitPrice: 125, sku: "CC-PEAK-LEASE" },
+        { name: "Tree wrap — small", unitPrice: 250, sku: "CC-TREE-S" },
+        { name: "Tree wrap — small (lease)", unitPrice: 175, sku: "CC-TREE-S-LEASE" },
         { name: "Tree wrap — medium", unitPrice: 450, sku: "CC-TREE-M" },
+        { name: "Tree wrap — medium (lease)", unitPrice: 315, sku: "CC-TREE-M-LEASE" },
         { name: "Tree wrap — large", unitPrice: 850, sku: "CC-TREE-L" },
+        { name: "Tree wrap — large (lease)", unitPrice: 595, sku: "CC-TREE-L-LEASE" },
+        { name: "Bush / shrub wrap", unitPrice: 125, sku: "CC-BUSH" },
+        { name: "Bush / shrub wrap (lease)", unitPrice: 90, sku: "CC-BUSH-LEASE" },
         { name: "Wreath / garland package", unitPrice: 225, sku: "CC-WREATH" },
         { name: "Design consultation (credited)", unitPrice: 0, sku: "CC-CONSULT" },
         { name: "Service call / mid-season adjust", unitPrice: 125, sku: "CC-SERVICE" },
@@ -1001,6 +1021,12 @@ async function main() {
       ],
     },
   ];
+
+  const { DEFAULT_HOLIDAY_CATALOG } = await import("../src/lib/holiday-lighting/types");
+  await prisma.company.update({
+    where: { id: ccCompany.id },
+    data: { holidayLightingCatalog: DEFAULT_HOLIDAY_CATALOG },
+  });
 
   for (let i = 0; i < CC_PRICE_BOOK.length; i++) {
     const cat = CC_PRICE_BOOK[i];
@@ -1018,7 +1044,10 @@ async function main() {
     for (let j = 0; j < cat.items.length; j++) {
       const item = cat.items[j];
       const existing = await prisma.priceBookItem.findFirst({
-        where: { categoryId: category.id, name: item.name },
+        where: {
+          categoryId: category.id,
+          OR: [{ sku: item.sku }, { name: item.name }],
+        },
       });
       if (!existing) {
         await prisma.priceBookItem.create({
@@ -1029,6 +1058,16 @@ async function main() {
             sku: item.sku,
             unitPrice: item.unitPrice,
             pricingMode: "MANUAL",
+            sortOrder: j,
+          },
+        });
+      } else {
+        await prisma.priceBookItem.update({
+          where: { id: existing.id },
+          data: {
+            name: item.name,
+            sku: item.sku,
+            unitPrice: item.unitPrice,
             sortOrder: j,
           },
         });

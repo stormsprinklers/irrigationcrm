@@ -208,6 +208,11 @@ enum EstimateStatus {
   CONVERTED
 }
 
+enum HolidayLightingQuoteStatus {
+  DRAFT
+  ESTIMATE_CREATED
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -488,12 +493,22 @@ model Company {
   privacyPolicyUrl         String?
   legalName                String?
   industry                 String?
+  /// When false, hide irrigation-specific tools (Rachio, maps, programming, parts suppliers, portal irrigation).
+  irrigationFeaturesEnabled Boolean @default(true)
+  /// When true, show holiday lighting quoting tools (maps measure, catalog, AI preview).
+  holidayLightingFeaturesEnabled Boolean @default(false)
+  /// Holiday lighting catalog mapping (light types → price book SKUs, lease rates, etc.).
+  holidayLightingCatalog   Json?
   description              String?
   twilioPhone              String?
   sendgridFrom             String?
   sendgridInboundDomain    String?
   emailSenderName          String?
   emailLogoUrl             String?
+  /// BIMI SVG Tiny PS logo URL (inbox avatar in Gmail/Yahoo/Apple when DNS + DMARC are set).
+  bimiLogoUrl              String?
+  /// Optional BIMI VMC/CMC PEM certificate URL (`a=` tag in the BIMI DNS record).
+  bimiCertificateUrl       String?
   /// CRM app logo shown in the staff dashboard nav (per company).
   brandLogoUrl             String?
   /// Hex primary brand color for CRM chrome (e.g. #4C9BC8).
@@ -691,6 +706,7 @@ model Company {
   pricingForms           PricingForm[]
   leads                  Lead[]
   estimates              Estimate[]
+  holidayLightingQuotes  HolidayLightingQuote[]
   invoices               Invoice[]
   maintenancePlans       MaintenancePlanTemplate[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
@@ -931,6 +947,7 @@ model User {
   reviewedSocialPosts    SocialPostSubmission[] @relation("SocialSubmissionReviewer")
   socialPostReviewComments SocialPostReviewComment[]
   appNotifications         AppNotification[]
+  holidayLightingQuotes    HolidayLightingQuote[]
   hiringRoleAssignments    HiringRoleAssignment[] @relation("HiringRoleManager")
   hiringManagerAvailability HiringManagerAvailability?
   hiringScreenBookings     HiringScreenBooking[]  @relation("HiringScreenManager")
@@ -1109,6 +1126,7 @@ model Customer {
   properties           CustomerProperty[]
   visits               Visit[]
   estimates            Estimate[]
+  holidayLightingQuotes HolidayLightingQuote[]
   invoices             Invoice[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
   convertedFromLead      Lead?
@@ -1347,6 +1365,7 @@ model CustomerProperty {
   customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   visits           Visit[]
   estimates        Estimate[]
+  holidayLightingQuotes HolidayLightingQuote[]
   maintenancePlans MaintenancePlanEnrollment[]
   smartControllers PropertySmartController[]
   irrigationZones  PropertyIrrigationZone[]
@@ -2734,6 +2753,7 @@ model Estimate {
   discounts   Discount[]        @relation("EstimateDiscounts")
   invoices    Invoice[]
   notificationJobs NotificationJob[]
+  holidayLightingQuote HolidayLightingQuote?
 
   @@unique([companyId, estimateNumber])
   @@index([companyId, status])
@@ -2741,6 +2761,40 @@ model Estimate {
   @@index([customerId])
   @@index([visitId])
   @@index([selectedOptionId])
+}
+
+model HolidayLightingQuote {
+  id               String                     @id @default(cuid())
+  companyId        String
+  customerId       String?
+  propertyId       String?
+  estimateId       String?                    @unique
+  createdById      String?
+  address          String?
+  city             String?
+  state            String?
+  zip              String?
+  lat              Float?
+  lng              Float?
+  /// Named polyline segments + tree/bush placements.
+  measurements     Json
+  /// Light type/color choices, marginPct, includeLease, etc.
+  selections       Json
+  previewImageUrl  String?
+  sourcePhotoUrl   String?
+  status           HolidayLightingQuoteStatus @default(DRAFT)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer  Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  property  CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  estimate  Estimate?          @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  createdBy User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([propertyId])
 }
 
 /// A priced package within an estimate (EST-1012, EST-1012A, EST-1012B, …).
