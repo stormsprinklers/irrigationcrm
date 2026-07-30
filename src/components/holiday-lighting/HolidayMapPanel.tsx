@@ -1,12 +1,20 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { pathLengthFeet } from "@/lib/holiday-lighting/geo";
 import { loadGoogleMaps } from "@/lib/holiday-lighting/load-maps";
+import {
+  pruneStrands,
+  strandOfSegment,
+  treeShrubRadiusMeters,
+  treeShrubSizeLabel,
+} from "@/lib/holiday-lighting/strands";
 import type {
   HolidayLatLng,
+  HolidayMeasurementPlacement,
   HolidayMeasurementSegment,
   HolidayMeasurements,
+  HolidayTreeSize,
 } from "@/lib/holiday-lighting/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +25,13 @@ type Props = {
   measurements: HolidayMeasurements;
   onChange: (next: HolidayMeasurements) => void;
   defaultLightStyleKey: string;
+  /** Controlled selection — keeps satellite highlight in sync with pitch-match list. */
+  selectedSegmentId?: string | null;
   onSelectSegment?: (id: string | null) => void;
+  /** Highlight all members of this strand on the map. */
+  selectedStrandId?: string | null;
+  /** When false, hide the live Street View panorama (keep mounted for recapture). */
+  showStreetView?: boolean;
 };
 
 export type StreetViewCapturePose = {
@@ -33,8 +47,9 @@ export type HolidayMapPanelHandle = {
   getStreetViewPose: () => StreetViewCapturePose | null;
 };
 
-/** Roofline-only for now; tree/bush placement tools come back later. */
-type DrawMode = "select" | "roofline";
+type DrawMode = "select" | "roofline" | "treeShrub";
+
+const TREE_SIZES: HolidayTreeSize[] = ["small", "medium", "large", "xl"];
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -50,7 +65,16 @@ function streetViewZoomToFov(zoom: number) {
 
 export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
   function HolidayMapPanel(
-    { center, measurements, onChange, defaultLightStyleKey, onSelectSegment },
+    {
+      center,
+      measurements,
+      onChange,
+      defaultLightStyleKey,
+      selectedSegmentId,
+      onSelectSegment,
+      selectedStrandId = null,
+      showStreetView = true,
+    },
     ref
   ) {
     const mapRef = useRef<HTMLDivElement>(null);
@@ -58,19 +82,51 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const mapObj = useRef<google.maps.Map | null>(null);
     const panoObj = useRef<google.maps.StreetViewPanorama | null>(null);
     const polylines = useRef<google.maps.Polyline[]>([]);
-    const markers = useRef<google.maps.Marker[]>([]);
+    const circles = useRef<google.maps.Circle[]>([]);
     const draftPath = useRef<HolidayLatLng[]>([]);
     const draftLine = useRef<google.maps.Polyline | null>(null);
 
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mode, setMode] = useState<DrawMode>("roofline");
-    const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+    const [treeSize, setTreeSize] = useState<HolidayTreeSize>("medium");
+    const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
+      selectedSegmentId ?? null
+    );
+    const [activePlacementId, setActivePlacementId] = useState<string | null>(null);
     const modeRef = useRef(mode);
     modeRef.current = mode;
+    const treeSizeRef = useRef(treeSize);
+    treeSizeRef.current = treeSize;
+    const measurementsRef = useRef(measurements);
+    measurementsRef.current = measurements;
+
+    const highlightSegmentIds = useMemo(() => {
+      const ids = new Set<string>();
+      if (selectedStrandId) {
+        const strand = (measurements.strands ?? []).find((s) => s.id === selectedStrandId);
+        for (const id of strand?.segmentIds ?? []) ids.add(id);
+      }
+      const focus = selectedSegmentId ?? activeSegmentId;
+      if (focus) {
+        const strand = strandOfSegment(measurements, focus);
+        if (strand) {
+          for (const id of strand.segmentIds) ids.add(id);
+        } else {
+          ids.add(focus);
+        }
+      }
+      return ids;
+    }, [measurements, selectedStrandId, selectedSegmentId, activeSegmentId]);
+
+    useEffect(() => {
+      if (selectedSegmentId === undefined) return;
+      setActiveSegmentId(selectedSegmentId);
+    }, [selectedSegmentId]);
 
     function selectSegment(id: string | null) {
       setActiveSegmentId(id);
+      setActivePlacementId(null);
       onSelectSegment?.(id);
     }
 
@@ -143,10 +199,31 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     useEffect(() => {
       redrawOverlays();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [measurements, ready, activeSegmentId]);
+    }, [measurements, ready, activeSegmentId, activePlacementId, highlightSegmentIds]);
 
     function handleMapClick(latLng: HolidayLatLng) {
-      if (modeRef.current === "select") return;
+      const currentMode = modeRef.current;
+      if (currentMode === "select") return;
+
+      if (currentMode === "treeShrub") {
+        const size = treeSizeRef.current;
+        const count =
+          measurementsRef.current.placements.filter((p) => p.kind === "tree").length + 1;
+        const placement: HolidayMeasurementPlacement = {
+          id: newId(),
+          kind: "tree",
+          size,
+          label: `Tree/Shrub ${count}`,
+          latLng,
+        };
+        onChange({
+          ...measurementsRef.current,
+          placements: [...measurementsRef.current.placements, placement],
+        });
+        setActivePlacementId(placement.id);
+        return;
+      }
+
       draftPath.current = [...draftPath.current, latLng];
       updateDraftLine();
     }
@@ -201,15 +278,17 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       if (!g || !map) return;
 
       for (const line of polylines.current) line.setMap(null);
-      for (const marker of markers.current) marker.setMap(null);
+      for (const circle of circles.current) circle.setMap(null);
       polylines.current = [];
-      markers.current = [];
+      circles.current = [];
 
       for (const segment of measurements.segments) {
+        const highlighted = highlightSegmentIds.has(segment.id);
+        const active = segment.id === activeSegmentId;
         const line = new g.maps.Polyline({
           path: segment.path,
-          strokeColor: segment.id === activeSegmentId ? "#F17388" : "#4C9BC8",
-          strokeWeight: segment.id === activeSegmentId ? 4 : 3,
+          strokeColor: highlighted || active ? "#F17388" : "#4C9BC8",
+          strokeWeight: highlighted || active ? 5 : 3,
           map,
         });
         line.addListener("click", () => selectSegment(segment.id));
@@ -217,24 +296,35 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       }
 
       for (const placement of measurements.placements) {
-        const marker = new g.maps.Marker({
-          position: placement.latLng,
+        const active = placement.id === activePlacementId;
+        const circle = new g.maps.Circle({
+          center: placement.latLng,
+          radius: treeShrubRadiusMeters(placement.size),
           map,
-          label: placement.kind === "bush" ? "B" : "T",
-          title: placement.label,
+          fillColor: active ? "#2F6B4F" : "#3D8B6E",
+          fillOpacity: active ? 0.45 : 0.28,
+          strokeColor: active ? "#1A3D2C" : "#2F6B4F",
+          strokeWeight: active ? 3 : 2,
+          clickable: true,
         });
-        markers.current.push(marker);
+        circle.addListener("click", () => {
+          setActivePlacementId(placement.id);
+          setActiveSegmentId(null);
+          onSelectSegment?.(null);
+        });
+        circles.current.push(circle);
       }
     }
 
     function removeSegment(id: string) {
-      onChange({
+      const next = pruneStrands({
         ...measurements,
         segments: measurements.segments.filter((s) => s.id !== id),
         streetTraces: (measurements.streetTraces ?? []).filter(
           (t) => t.satelliteSegmentId !== id
         ),
       });
+      onChange(next);
       if (activeSegmentId === id) selectSegment(null);
     }
 
@@ -246,11 +336,13 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     function clearAllMeasurements() {
       clearDraft();
       selectSegment(null);
+      setActivePlacementId(null);
       onChange({
         ...measurements,
         segments: [],
         placements: [],
         streetTraces: [],
+        strands: [],
       });
     }
 
@@ -274,6 +366,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           {(
             [
               ["roofline", "Draw roofline"],
+              ["treeShrub", "Tree/Shrub"],
               ["select", "Select"],
             ] as const
           ).map(([id, label]) => (
@@ -300,6 +393,23 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               </Button>
             </>
           ) : null}
+          {mode === "treeShrub" ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs text-muted-foreground">Size:</span>
+              {TREE_SIZES.map((size) => (
+                <Button
+                  key={size}
+                  type="button"
+                  size="sm"
+                  variant={treeSize === size ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setTreeSize(size)}
+                >
+                  {treeShrubSizeLabel(size)}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           {hasAny ? (
             <Button
               type="button"
@@ -308,7 +418,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               className="text-destructive hover:text-destructive"
               onClick={clearAllMeasurements}
             >
-              Clear all strands
+              Clear all
             </Button>
           ) : null}
         </div>
@@ -319,7 +429,12 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           </p>
         ) : null}
 
-        <div className="relative z-0 grid min-h-0 flex-1 gap-2 lg:grid-cols-2">
+        <div
+          className={cn(
+            "relative z-0 grid min-h-0 flex-1 gap-2",
+            showStreetView ? "lg:grid-cols-2" : "grid-cols-1"
+          )}
+        >
           <div
             ref={mapRef}
             className={cn(
@@ -331,26 +446,33 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             ref={panoRef}
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
-              !ready && "animate-pulse"
+              !ready && "animate-pulse",
+              !showStreetView && "hidden"
             )}
+            aria-hidden={!showStreetView}
           />
         </div>
 
         <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-white p-2 text-sm">
           <p className="text-xs font-medium text-muted-foreground">
             Rooflines ({measurements.segments.filter((s) => s.kind === "roofline").length})
+            {measurements.placements.length > 0
+              ? ` · Trees/shrubs (${measurements.placements.length})`
+              : ""}
           </p>
-          {measurements.segments.length === 0 ? (
+          {measurements.segments.length === 0 && measurements.placements.length === 0 ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">
-              No rooflines yet — click along the roof edge, then Finish segment.
+              Draw a roofline or place a Tree/Shrub on the satellite map.
             </p>
-          ) : (
-            measurements.segments.map((s) => (
+          ) : null}
+          {measurements.segments.map((s) => {
+            const strand = strandOfSegment(measurements, s.id);
+            return (
               <div
                 key={s.id}
                 className={cn(
                   "flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted",
-                  s.id === activeSegmentId && "bg-muted"
+                  (s.id === activeSegmentId || highlightSegmentIds.has(s.id)) && "bg-muted"
                 )}
               >
                 <button
@@ -359,6 +481,9 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   onClick={() => selectSegment(s.id)}
                 >
                   <span>{s.label}</span>
+                  {strand ? (
+                    <span className="ml-1 text-xs text-muted-foreground">({strand.label})</span>
+                  ) : null}
                   <span className="ml-2 font-mono text-xs text-muted-foreground">
                     {s.lengthFt.toFixed(1)} ft
                   </span>
@@ -376,8 +501,48 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   Delete
                 </Button>
               </div>
-            ))
-          )}
+            );
+          })}
+          {measurements.placements.map((p) => (
+            <div
+              key={p.id}
+              className={cn(
+                "flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted",
+                p.id === activePlacementId && "bg-muted"
+              )}
+            >
+              <button
+                type="button"
+                className="min-w-0 flex-1 truncate px-1 py-1 text-left"
+                onClick={() => {
+                  setActivePlacementId(p.id);
+                  setActiveSegmentId(null);
+                  onSelectSegment?.(null);
+                }}
+              >
+                <span>{p.label}</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {treeShrubSizeLabel(p.size)}
+                </span>
+              </button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 shrink-0 px-2 text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange({
+                    ...measurements,
+                    placements: measurements.placements.filter((x) => x.id !== p.id),
+                  });
+                  if (activePlacementId === p.id) setActivePlacementId(null);
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          ))}
           {active ? (
             <div className="flex flex-wrap items-center gap-2 border-t pt-2">
               <Input
@@ -392,28 +557,8 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                 className="text-destructive hover:text-destructive"
                 onClick={removeActiveSegment}
               >
-                Delete strand
+                Delete segment
               </Button>
-            </div>
-          ) : null}
-          {measurements.placements.length > 0 ? (
-            <div className="flex flex-wrap gap-2 border-t pt-2">
-              {measurements.placements.map((p) => (
-                <Button
-                  key={p.id}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    onChange({
-                      ...measurements,
-                      placements: measurements.placements.filter((x) => x.id !== p.id),
-                    })
-                  }
-                >
-                  {p.label} ({p.size}) ×
-                </Button>
-              ))}
             </div>
           ) : null}
         </div>

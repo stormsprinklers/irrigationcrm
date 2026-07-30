@@ -1,0 +1,224 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { billedSegmentLengthFt, segmentPitchResolved } from "@/lib/holiday-lighting/pitch-match";
+import {
+  addSegmentToStrand,
+  billedStrandLengthFt,
+  combineSegmentsIntoStrand,
+  dissolveStrand,
+  removeSegmentFromStrand,
+  renameStrand,
+  segmentIdsInAnyStrand,
+} from "@/lib/holiday-lighting/strands";
+import type { HolidayMeasurements } from "@/lib/holiday-lighting/types";
+import { cn } from "@/lib/utils";
+
+type Props = {
+  measurements: HolidayMeasurements;
+  onChange: (next: HolidayMeasurements) => void;
+  selectedStrandId: string | null;
+  onSelectStrand: (id: string | null) => void;
+};
+
+export function StrandBuilder({
+  measurements,
+  onChange,
+  selectedStrandId,
+  onSelectStrand,
+}: Props) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  const resolved = useMemo(
+    () =>
+      measurements.segments.filter(
+        (s) => s.kind === "roofline" && segmentPitchResolved(s)
+      ),
+    [measurements.segments]
+  );
+
+  const grouped = segmentIdsInAnyStrand(measurements);
+  const available = resolved.filter((s) => !grouped.has(s.id));
+  const strands = measurements.strands ?? [];
+
+  if (resolved.length < 1) {
+    return (
+      <div className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        Finalize pitch (or mark flat) on rooflines before combining them into strands.
+      </div>
+    );
+  }
+
+  function togglePick(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function combine() {
+    const ids = [...picked];
+    if (ids.length < 2) return;
+    const next = combineSegmentsIntoStrand(measurements, ids);
+    onChange(next);
+    const created = (next.strands ?? []).at(-1);
+    if (created) onSelectStrand(created.id);
+    setPicked(new Set());
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-white p-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-medium text-foreground">Strands</p>
+        <p className="text-muted-foreground">
+          Combine pitch-finalized segments into one quote line for installers.
+        </p>
+      </div>
+
+      {available.length > 0 ? (
+        <div className="space-y-1">
+          <p className="text-muted-foreground">Ungrouped (select 2+ to combine)</p>
+          <ul className="max-h-28 space-y-0.5 overflow-y-auto">
+            {available.map((seg) => {
+              const checked = picked.has(seg.id);
+              return (
+                <li key={seg.id}>
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-muted",
+                      checked && "bg-primary/10"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePick(seg.id)}
+                      className="rounded border-input"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{seg.label}</span>
+                    <span className="font-mono text-muted-foreground">
+                      {billedSegmentLengthFt(seg).toFixed(1)} ft
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+          <Button
+            type="button"
+            size="sm"
+            className="h-7"
+            disabled={picked.size < 2}
+            onClick={combine}
+          >
+            Combine into strand
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">All finalized segments are in a strand.</p>
+      )}
+
+      {strands.length > 0 ? (
+        <ul className="space-y-2 border-t pt-2">
+          {strands.map((strand) => {
+            const members = strand.segmentIds
+              .map((id) => measurements.segments.find((s) => s.id === id))
+              .filter(Boolean);
+            const selected = selectedStrandId === strand.id;
+            const total = billedStrandLengthFt(strand, measurements.segments);
+            return (
+              <li
+                key={strand.id}
+                className={cn(
+                  "rounded-md border px-2 py-1.5",
+                  selected ? "border-primary bg-primary/5" : "border-border"
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-left font-medium hover:underline"
+                    onClick={() => onSelectStrand(selected ? null : strand.id)}
+                  >
+                    {selected ? "Selected · " : ""}
+                    {strand.label}
+                  </button>
+                  <span className="font-mono text-muted-foreground">{total.toFixed(1)} ft</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-7 px-2 text-destructive hover:text-destructive"
+                    onClick={() => {
+                      onChange(dissolveStrand(measurements, strand.id));
+                      if (selectedStrandId === strand.id) onSelectStrand(null);
+                    }}
+                  >
+                    Dissolve
+                  </Button>
+                </div>
+                <Input
+                  className="mt-1 h-7 text-xs"
+                  value={strand.label}
+                  onChange={(e) => onChange(renameStrand(measurements, strand.id, e.target.value))}
+                  onFocus={() => onSelectStrand(strand.id)}
+                />
+                <ul className="mt-1 space-y-0.5">
+                  {members.map((seg) =>
+                    seg ? (
+                      <li
+                        key={seg.id}
+                        className="flex items-center justify-between gap-2 text-muted-foreground"
+                      >
+                        <span className="truncate">{seg.label}</span>
+                        <span className="flex items-center gap-1">
+                          <span className="font-mono">
+                            {billedSegmentLengthFt(seg).toFixed(1)} ft
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-1"
+                            onClick={() =>
+                              onChange(removeSegmentFromStrand(measurements, strand.id, seg.id))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </span>
+                      </li>
+                    ) : null
+                  )}
+                </ul>
+                {available.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {available.map((seg) => (
+                      <Button
+                        key={seg.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-1.5 text-[10px]"
+                        onClick={() => {
+                          onChange(addSegmentToStrand(measurements, strand.id, seg.id));
+                          onSelectStrand(strand.id);
+                        }}
+                      >
+                        + {seg.label}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}

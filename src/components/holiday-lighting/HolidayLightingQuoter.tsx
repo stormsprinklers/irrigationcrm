@@ -15,15 +15,18 @@ import {
   PaintCanvas,
   type PaintCanvasHandle,
 } from "@/components/holiday-lighting/PaintCanvas";
+import { Holiday3DPreview } from "@/components/holiday-lighting/Holiday3DPreview";
 import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetViewMeasureOverlay";
+import { StrandBuilder } from "@/components/holiday-lighting/StrandBuilder";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
-import { billedSegmentLengthFt, refreshPitchCorrections } from "@/lib/holiday-lighting/pitch-match";
+import { billedSegmentLengthFt, refreshPitchCorrections, segmentPitchResolved } from "@/lib/holiday-lighting/pitch-match";
 import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
+import { pruneStrands } from "@/lib/holiday-lighting/strands";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   DEFAULT_HOLIDAY_SELECTIONS,
@@ -117,8 +120,10 @@ export function HolidayLightingQuoter({
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoApproved, setPhotoApproved] = useState(false);
   const [estimate, setEstimate] = useState<QuoteRecord["estimate"]>(null);
   const [matchSegmentId, setMatchSegmentId] = useState<string | null>(null);
+  const [selectedStrandId, setSelectedStrandId] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
@@ -144,7 +149,11 @@ export function HolidayLightingQuoter({
       setMeasurements(parseHolidayMeasurements(q.measurements));
       setSelections(parseHolidaySelections(q.selections));
       setPreviewUrl(q.previewImageUrl);
-      setPhotoUrl(q.sourcePhotoUrl ? blobProxyUrl(q.sourcePhotoUrl) ?? q.sourcePhotoUrl : null);
+      const loadedPhoto = q.sourcePhotoUrl
+        ? blobProxyUrl(q.sourcePhotoUrl) ?? q.sourcePhotoUrl
+        : null;
+      setPhotoUrl(loadedPhoto);
+      setPhotoApproved(Boolean(loadedPhoto));
       setEstimate(q.estimate ?? null);
       if (data.catalog) setCatalog(data.catalog);
       if (data.pricing) setPricing(data.pricing);
@@ -288,7 +297,7 @@ export function HolidayLightingQuoter({
   }
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
-    const refreshed = refreshPitchCorrections(next);
+    const refreshed = pruneStrands(refreshPitchCorrections(next));
     setMeasurements(refreshed);
     void save({ measurements: refreshed }, { quiet });
   }
@@ -390,7 +399,8 @@ export function HolidayLightingQuoter({
 
   async function onPhotoSelected(file: File) {
     setPhotoUrl(URL.createObjectURL(file));
-    toast.success("Photo ready — match roof angles on this image");
+    setPhotoApproved(false);
+    toast.success("Review the photo, then approve it to continue");
   }
 
   async function captureStreetView() {
@@ -423,7 +433,8 @@ export function HolidayLightingQuoter({
         throw new Error("No Street View image for this view — try a different angle or upload a photo.");
       }
       setPhotoUrl(URL.createObjectURL(blob));
-      toast.success("Street View captured — match roof edges to satellite segments");
+      setPhotoApproved(false);
+      toast.success("Review the capture — approve it if the house looks right");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not capture Street View");
     } finally {
@@ -432,8 +443,8 @@ export function HolidayLightingQuoter({
   }
 
   async function goToStep2() {
-    if (!photoUrl) {
-      toast.error("Capture or upload a street photo first");
+    if (!photoUrl || !photoApproved) {
+      toast.error("Capture or upload a street photo and approve it first");
       return;
     }
     if (!measurements.segments.some((s) => s.kind === "roofline")) {
@@ -499,7 +510,9 @@ export function HolidayLightingQuoter({
   async function clearQuoteWork() {
     setMeasurements(EMPTY_HOLIDAY_MEASUREMENTS);
     setMatchSegmentId(null);
+    setSelectedStrandId(null);
     setPhotoUrl(null);
+    setPhotoApproved(false);
     setPreviewUrl(null);
     setPricing(null);
     setStep(1);
@@ -522,7 +535,9 @@ export function HolidayLightingQuoter({
   );
 
   const matchedCount = useMemo(
-    () => measurements.segments.filter((s) => s.kind === "roofline" && s.pitchDeg != null).length,
+    () =>
+      measurements.segments.filter((s) => s.kind === "roofline" && segmentPitchResolved(s))
+        .length,
     [measurements.segments]
   );
 
@@ -629,7 +644,11 @@ export function HolidayLightingQuoter({
               Locate
             </Button>
             <p className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">
-              {totalFt.toFixed(1)} ft · {matchedCount} pitched
+              {totalFt.toFixed(1)} ft · {matchedCount} resolved · {measurements.placements.length}{" "}
+              trees/shrubs
+              {(measurements.strands ?? []).length > 0
+                ? ` · ${(measurements.strands ?? []).length} strands`
+                : ""}
             </p>
           </div>
 
@@ -641,7 +660,13 @@ export function HolidayLightingQuoter({
                 center={center}
                 measurements={measurements}
                 defaultLightStyleKey={selections.defaultLightStyleKey}
-                onSelectSegment={setMatchSegmentId}
+                onSelectSegment={(id) => {
+                  setMatchSegmentId(id);
+                  if (id) setSelectedStrandId(null);
+                }}
+                selectedSegmentId={matchSegmentId}
+                selectedStrandId={selectedStrandId}
+                showStreetView={!photoApproved}
                 onChange={(next) => {
                   const segments = next.segments.map((seg) => {
                     const prev = measurements.segments.find((s) => s.id === seg.id);
@@ -670,29 +695,54 @@ export function HolidayLightingQuoter({
                   });
                 }}
               />
+              <StrandBuilder
+                measurements={measurements}
+                selectedStrandId={selectedStrandId}
+                onSelectStrand={(id) => {
+                  setSelectedStrandId(id);
+                  if (id) setMatchSegmentId(null);
+                }}
+                onChange={(next) => updateMeasurements(next)}
+              />
             </div>
 
             <div className="relative z-10 flex min-h-[420px] flex-col gap-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">Street View pitch match</h3>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={capturing}
-                    onClick={() => void captureStreetView()}
-                  >
-                    {capturing ? "Capturing…" : "Capture Street View"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    Upload photo
-                  </Button>
+                  {!photoApproved ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={capturing}
+                        onClick={() => void captureStreetView()}
+                      >
+                        {capturing ? "Capturing…" : photoUrl ? "Recapture" : "Capture Street View"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        Upload photo
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setPhotoApproved(false);
+                        toast.message("Street View is back — recapture or re-approve when ready");
+                      }}
+                    >
+                      Change photo
+                    </Button>
+                  )}
                   <input
                     ref={fileRef}
                     type="file"
@@ -701,11 +751,12 @@ export function HolidayLightingQuoter({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) void onPhotoSelected(file);
+                      e.target.value = "";
                     }}
                   />
                 </div>
               </div>
-              {photoUrl ? (
+              {photoUrl && photoApproved ? (
                 <StreetViewMeasureOverlay
                   imageUrl={photoUrl}
                   measurements={measurements}
@@ -713,10 +764,48 @@ export function HolidayLightingQuoter({
                   onSelectSegment={setMatchSegmentId}
                   onChange={(next) => updateMeasurements(next)}
                 />
+              ) : photoUrl && !photoApproved ? (
+                <div className="flex min-h-0 flex-1 flex-col gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Static captures can differ from the live Street View widget. Approve only if this
+                    photo shows the house clearly enough to match roof edges.
+                  </p>
+                  <div className="relative min-h-[240px] flex-1 overflow-hidden rounded-md border border-border bg-muted">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrl}
+                      alt="Street View capture preview"
+                      className="absolute inset-0 h-full w-full object-contain"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setPhotoApproved(true);
+                        toast.success("Photo approved — Street View closed; match pitch on the image");
+                      }}
+                    >
+                      Approve photo
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setPhotoUrl(null);
+                        setPhotoApproved(false);
+                      }}
+                    >
+                      Discard
+                    </Button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                  Aim the Street View panel on the map, then capture — or upload a house photo — to
-                  draw roof angles on top of the image.
+                  Aim the Street View panel on the map, then capture — or upload a house photo — and
+                  approve it before pitch matching.
                 </div>
               )}
             </div>
@@ -764,13 +853,25 @@ export function HolidayLightingQuoter({
                 />
               ) : null}
             </section>
+
+            <section className="space-y-3 rounded-lg border border-border bg-white p-4">
+              <h3 className="text-sm font-semibold">3D property view</h3>
+              <Holiday3DPreview
+                center={center}
+                measurements={measurements}
+                defaultLightStyleKey={selections.defaultLightStyleKey}
+              />
+            </section>
           </div>
 
           <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-[340px]">
             <section className="space-y-3 rounded-lg border border-border bg-white p-4">
               <h3 className="text-sm font-semibold">Quote builder</h3>
               <p className="text-xs text-muted-foreground">
-                {totalFt.toFixed(1)} ft measured
+                {totalFt.toFixed(1)} ft measured · {measurements.placements.length} trees/shrubs
+                {(measurements.strands ?? []).length > 0
+                  ? ` · ${(measurements.strands ?? []).length} strands`
+                  : ""}
               </p>
 
               <div>
@@ -879,7 +980,7 @@ export function HolidayLightingQuoter({
       <ConfirmDialog
         open={clearConfirmOpen}
         title="Clear this lighting quote?"
-        description="This removes all rooflines, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
+        description="This removes all rooflines, trees/shrubs, strands, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
         confirmLabel="Clear everything"
         confirmVariant="destructive"
         onConfirm={() => void clearQuoteWork()}

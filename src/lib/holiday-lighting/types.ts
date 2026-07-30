@@ -20,6 +20,8 @@ export type HolidayMeasurementSegment = {
   /** Gable: right-side pitch / length (lengthFt is left or total — see pitchedLengthFt). */
   pitchDegRight?: number;
   lengthFtRight?: number;
+  /** True when this span is flat (no pitch match needed; billed length = plan length). */
+  flat?: boolean;
 };
 
 export type StreetViewNormPoint = { x: number; y: number };
@@ -39,10 +41,21 @@ export type HolidayMeasurements = {
   segments: HolidayMeasurementSegment[];
   placements: HolidayMeasurementPlacement[];
   streetTraces?: StreetViewRoofTrace[];
+  /** Named groups of pitch-resolved segments — one quote line + installer label. */
+  strands?: HolidayStrand[];
+};
+
+/** Install + quote grouping of finalized roofline segments. */
+export type HolidayStrand = {
+  id: string;
+  label: string;
+  segmentIds: string[];
+  /** Optional light style override; else first member / quote default. */
+  lightStyleKey?: string;
 };
 
 export type HolidayPlacementKind = "tree" | "bush";
-export type HolidayTreeSize = "small" | "medium" | "large";
+export type HolidayTreeSize = "small" | "medium" | "large" | "xl";
 
 export type HolidayMeasurementPlacement = {
   id: string;
@@ -124,7 +137,7 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       key: "tree-small",
       kind: "tree",
       size: "small",
-      label: "Tree wrap — small",
+      label: "Tree/shrub wrap — small",
       sku: "CC-TREE-S",
       leaseSku: "CC-TREE-S-LEASE",
     },
@@ -132,7 +145,7 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       key: "tree-medium",
       kind: "tree",
       size: "medium",
-      label: "Tree wrap — medium",
+      label: "Tree/shrub wrap — medium",
       sku: "CC-TREE-M",
       leaseSku: "CC-TREE-M-LEASE",
     },
@@ -140,9 +153,17 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       key: "tree-large",
       kind: "tree",
       size: "large",
-      label: "Tree wrap — large",
+      label: "Tree/shrub wrap — large",
       sku: "CC-TREE-L",
       leaseSku: "CC-TREE-L-LEASE",
+    },
+    {
+      key: "tree-xl",
+      kind: "tree",
+      size: "xl",
+      label: "Tree/shrub wrap — extra large",
+      sku: "CC-TREE-XL",
+      leaseSku: "CC-TREE-XL-LEASE",
     },
     {
       key: "bush",
@@ -172,6 +193,7 @@ export const EMPTY_HOLIDAY_MEASUREMENTS: HolidayMeasurements = {
   segments: [],
   placements: [],
   streetTraces: [],
+  strands: [],
 };
 
 function parseQuoteDefaults(raw: unknown): HolidayQuoteDefaults {
@@ -225,10 +247,21 @@ export function holidaySelectionsFromCatalog(
 export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
   if (!raw || typeof raw !== "object") return EMPTY_HOLIDAY_MEASUREMENTS;
   const obj = raw as Partial<HolidayMeasurements>;
+  const strands = Array.isArray(obj.strands)
+    ? obj.strands.filter(
+        (s): s is HolidayStrand =>
+          !!s &&
+          typeof s === "object" &&
+          typeof (s as HolidayStrand).id === "string" &&
+          typeof (s as HolidayStrand).label === "string" &&
+          Array.isArray((s as HolidayStrand).segmentIds)
+      )
+    : [];
   return {
     segments: Array.isArray(obj.segments) ? obj.segments : [],
     placements: Array.isArray(obj.placements) ? obj.placements : [],
     streetTraces: Array.isArray(obj.streetTraces) ? obj.streetTraces : [],
+    strands,
   };
 }
 

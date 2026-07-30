@@ -10,8 +10,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  clearSegmentFlat,
+  markSegmentFlat,
   midpoint,
   previewSegmentFromPoints,
+  segmentPitchResolved,
   upsertStreetTrace,
 } from "@/lib/holiday-lighting/pitch-match";
 import type {
@@ -75,6 +78,7 @@ export function StreetViewMeasureOverlay({
 
   function onPointerDown(e: React.PointerEvent) {
     if (!selectedSegmentId || reviewing) return;
+    if (selectedSegment?.flat) return;
     const pt = toNorm(e.clientX, e.clientY);
     if (!pt) return;
     const next = [...draft, pt];
@@ -130,7 +134,8 @@ export function StreetViewMeasureOverlay({
     }
     const streetTraces = measurements.streetTraces ?? [];
     const firstUnmatched = matchable.find(
-      (seg) => !streetTraces.some((t) => t.satelliteSegmentId === seg.id)
+      (seg) =>
+        !seg.flat && !streetTraces.some((t) => t.satelliteSegmentId === seg.id)
     );
     const nextId = firstUnmatched?.id ?? matchable[0]?.id ?? null;
     if (nextId !== selectedSegmentId) onSelectSegment(nextId);
@@ -148,17 +153,19 @@ export function StreetViewMeasureOverlay({
 
   const draftHint = !selectedSegmentId
     ? "Select a satellite roofline above, then mark it on the photo."
-    : reviewing
-      ? "Review the constructed roof edges, then approve to update the billed length."
-      : drawMode === "single"
-        ? draft.length === 0
-          ? "1. Click one end of the roof edge."
-          : "2. Click the other end of the roof edge."
-        : draft.length === 0
-          ? "1. Click one end of the gable (eave)."
-          : draft.length === 1
-            ? "2. Click the other end of the gable (same span as the satellite segment)."
-            : "3. Click the peak tip — a rise line is drawn from the center of the eave span.";
+    : selectedSegment?.flat
+      ? "This segment is marked flat — billed at plan length. Undo flat to pitch-match."
+      : reviewing
+        ? "Review the constructed roof edges, then approve to update the billed length."
+        : drawMode === "single"
+          ? draft.length === 0
+            ? "1. Click one end of the roof edge."
+            : "2. Click the other end of the roof edge."
+          : draft.length === 0
+            ? "1. Click one end of the gable (eave)."
+            : draft.length === 1
+              ? "2. Click the other end of the gable (same span as the satellite segment)."
+              : "3. Click the peak tip — a rise line is drawn from the center of the eave span.";
 
   const horizontal = selectedSegment
     ? selectedSegment.horizontalLengthFt ?? selectedSegment.lengthFt
@@ -262,9 +269,14 @@ export function StreetViewMeasureOverlay({
           <li className="text-muted-foreground">Draw a roofline on the satellite map first.</li>
         ) : (
           matchableSegments.map((seg) => {
-            const matched = traces.some((t) => t.satelliteSegmentId === seg.id);
+            const matched = segmentPitchResolved(seg);
             const plan = seg.horizontalLengthFt ?? seg.lengthFt;
             const selected = selectedSegmentId === seg.id;
+            const statusLabel = seg.flat
+              ? "Flat"
+              : traces.some((t) => t.satelliteSegmentId === seg.id)
+                ? "Approved"
+                : "Needs pitch";
             return (
               <li key={seg.id}>
                 <div
@@ -296,21 +308,61 @@ export function StreetViewMeasureOverlay({
                         )}
                       >
                         {selected ? "Selected · " : ""}
-                        {matched ? "Approved" : "Needs pitch"}
+                        {statusLabel}
                       </span>
                     </span>
                     <span className="font-mono text-[11px] text-muted-foreground">
                       Plan {plan.toFixed(1)} ft
-                      {seg.pitchDeg != null ? ` · ${seg.pitchDeg}°` : ""}
-                      {seg.pitchDegRight != null ? ` / ${seg.pitchDegRight}°` : ""}
-                      {seg.riseFt != null ? ` · rise ${seg.riseFt.toFixed(1)} ft` : ""}
-                      {seg.pitchDeg != null
+                      {seg.flat
+                        ? " · billed as plan"
+                        : seg.pitchDeg != null
+                          ? ` · ${seg.pitchDeg}°`
+                          : ""}
+                      {!seg.flat && seg.pitchDegRight != null
+                        ? ` / ${seg.pitchDegRight}°`
+                        : ""}
+                      {!seg.flat && seg.riseFt != null
+                        ? ` · rise ${seg.riseFt.toFixed(1)} ft`
+                        : ""}
+                      {!seg.flat && seg.pitchDeg != null
                         ? seg.lengthFtRight != null
                           ? ` · true ${seg.lengthFt.toFixed(1)}+${seg.lengthFtRight.toFixed(1)} ft`
                           : ` · true ${seg.lengthFt.toFixed(1)} ft`
                         : ""}
                     </span>
                   </button>
+                  {!seg.flat && !traces.some((t) => t.satelliteSegmentId === seg.id) ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-0.5 h-7 shrink-0 px-2"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onChange(markSegmentFlat(measurements, seg.id));
+                        setDraft([]);
+                        setReviewing(false);
+                      }}
+                    >
+                      Flat
+                    </Button>
+                  ) : null}
+                  {seg.flat ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="mt-0.5 h-7 shrink-0 px-2"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onChange(clearSegmentFlat(measurements, seg.id));
+                      }}
+                    >
+                      Undo flat
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     size="sm"
@@ -341,7 +393,9 @@ export function StreetViewMeasureOverlay({
       <div
         className={cn(
           "relative z-0 w-full overflow-hidden rounded-md border border-border bg-muted",
-          selectedSegmentId && !reviewing ? "cursor-crosshair" : "cursor-default"
+          selectedSegmentId && !reviewing && !selectedSegment?.flat
+            ? "cursor-crosshair"
+            : "cursor-default"
         )}
         style={{ aspectRatio: `${aspect}` }}
         onPointerDown={onPointerDown}

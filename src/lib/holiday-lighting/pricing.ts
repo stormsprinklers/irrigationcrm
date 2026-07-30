@@ -1,9 +1,11 @@
 import type {
   HolidayLightingCatalog,
+  HolidayMeasurementSegment,
   HolidayMeasurements,
   HolidayQuoteSelections,
 } from "./types";
 import { billedSegmentLengthFt } from "./pitch-match";
+import { billedStrandLengthFt, segmentIdsInAnyStrand } from "./strands";
 
 export type PriceLookup = Map<string, { id: string; name: string; unitPrice: number }>;
 
@@ -36,6 +38,57 @@ function lookup(prices: PriceLookup, sku: string | undefined) {
   return prices.get(sku) ?? null;
 }
 
+function priceRooflineLength(params: {
+  catalog: HolidayLightingCatalog;
+  selections: HolidayQuoteSelections;
+  prices: PriceLookup;
+  styleKey: string;
+  lengthFt: number;
+  key: string;
+  name: string;
+  description: string;
+  staffDetail: string;
+}): HolidayPricedLine | null {
+  const { catalog, selections, prices, styleKey, lengthFt, key, name, description, staffDetail } =
+    params;
+  if (lengthFt <= 0) return null;
+  const style =
+    catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
+  if (!style) return null;
+
+  const parts = lookup(prices, style.partsSku);
+  const install = lookup(prices, style.installSku);
+  const leaseFt = lookup(prices, style.leaseSku);
+  const partsRate = parts?.unitPrice ?? 5;
+  const installRate = install?.unitPrice ?? 7;
+  const leaseRate = leaseFt?.unitPrice ?? partsRate + installRate * 0.65;
+  const purchase = lengthFt * (partsRate + installRate);
+  const lease = lengthFt * leaseRate;
+
+  return {
+    key,
+    name: `${style.label} ${name}`,
+    description,
+    staffDetail: `${staffDetail} × ($${partsRate.toFixed(2)} parts + $${installRate.toFixed(2)} install)`,
+    purchaseTotal: money(purchase),
+    leaseTotal: money(lease),
+    priceBookItemId: parts?.id ?? install?.id ?? null,
+  };
+}
+
+function segmentPitchNote(segment: HolidayMeasurementSegment, lengthFt: number): string {
+  if (segment.flat) return " · flat (plan length)";
+  if (segment.pitchDeg == null) return "";
+  if (segment.pitchDegRight != null) {
+    return ` · ${segment.pitchDeg}°/${segment.pitchDegRight}° from plan ${Number(
+      segment.horizontalLengthFt ?? lengthFt
+    ).toFixed(1)} ft`;
+  }
+  return ` · ${segment.pitchDeg}° from plan ${Number(
+    segment.horizontalLengthFt ?? lengthFt
+  ).toFixed(1)} ft`;
+}
+
 export function computeHolidayQuotePricing(params: {
   catalog: HolidayLightingCatalog;
   measurements: HolidayMeasurements;
@@ -44,17 +97,47 @@ export function computeHolidayQuotePricing(params: {
 }): HolidayPricingResult {
   const { catalog, measurements, selections, prices } = params;
   const lines: HolidayPricedLine[] = [];
+  const groupedIds = segmentIdsInAnyStrand(measurements);
+
+  for (const strand of measurements.strands ?? []) {
+    const members = strand.segmentIds
+      .map((id) => measurements.segments.find((s) => s.id === id))
+      .filter((s): s is HolidayMeasurementSegment => !!s);
+    if (!members.length) continue;
+
+    const lengthFt = billedStrandLengthFt(strand, measurements.segments);
+    const styleKey =
+      strand.lightStyleKey ??
+      members[0]?.lightStyleKey ??
+      selections.defaultLightStyleKey;
+    const memberDetail = members
+      .map((m) => `${m.label} ${billedSegmentLengthFt(m).toFixed(1)} ft`)
+      .join("; ");
+
+    const line = priceRooflineLength({
+      catalog,
+      selections,
+      prices,
+      styleKey,
+      lengthFt,
+      key: strand.id,
+      name: `strand — ${strand.label}`,
+      description: `Approx. ${Math.round(lengthFt)} linear ft (${members.length} segments)`,
+      staffDetail: `${lengthFt.toFixed(1)} ft strand [${memberDetail}]`,
+    });
+    if (line) lines.push(line);
+  }
 
   for (const segment of measurements.segments) {
-    const styleKey = segment.lightStyleKey ?? selections.defaultLightStyleKey;
-    const style =
-      catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
-    if (!style) continue;
+    if (groupedIds.has(segment.id)) continue;
 
+    const styleKey = segment.lightStyleKey ?? selections.defaultLightStyleKey;
     const lengthFt = billedSegmentLengthFt(segment);
-    if (lengthFt <= 0 && segment.kind !== "peak") continue;
 
     if (segment.kind === "peak") {
+      const style =
+        catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
+      if (!style) continue;
       const peak = lookup(prices, catalog.peakSku);
       const peakLease = lookup(prices, catalog.peakLeaseSku);
       const purchase = peak?.unitPrice ?? 175;
@@ -71,34 +154,19 @@ export function computeHolidayQuotePricing(params: {
       continue;
     }
 
-    const parts = lookup(prices, style.partsSku);
-    const install = lookup(prices, style.installSku);
-    const leaseFt = lookup(prices, style.leaseSku);
-    const partsRate = parts?.unitPrice ?? 5;
-    const installRate = install?.unitPrice ?? 7;
-    const leaseRate = leaseFt?.unitPrice ?? partsRate + installRate * 0.65;
-    const purchase = lengthFt * (partsRate + installRate);
-    const lease = lengthFt * leaseRate;
-    const pitchNote =
-      segment.pitchDeg != null
-        ? segment.pitchDegRight != null
-          ? ` · ${segment.pitchDeg}°/${segment.pitchDegRight}° from plan ${
-              Number(segment.horizontalLengthFt ?? lengthFt).toFixed(1)
-            } ft`
-          : ` · ${segment.pitchDeg}° from plan ${
-              Number(segment.horizontalLengthFt ?? lengthFt).toFixed(1)
-            } ft`
-        : "";
-
-    lines.push({
+    if (lengthFt <= 0) continue;
+    const line = priceRooflineLength({
+      catalog,
+      selections,
+      prices,
+      styleKey,
+      lengthFt,
       key: segment.id,
-      name: `${style.label} ${segment.kind} — ${segment.label}`,
+      name: `${segment.kind} — ${segment.label}`,
       description: `Approx. ${Math.round(lengthFt)} linear ft`,
-      staffDetail: `${lengthFt.toFixed(1)} ft × ($${partsRate.toFixed(2)} parts + $${installRate.toFixed(2)} install)${pitchNote}`,
-      purchaseTotal: money(purchase),
-      leaseTotal: money(lease),
-      priceBookItemId: parts?.id ?? install?.id ?? null,
+      staffDetail: `${lengthFt.toFixed(1)} ft${segmentPitchNote(segment, lengthFt)}`,
     });
+    if (line) lines.push(line);
   }
 
   for (const placement of measurements.placements) {
