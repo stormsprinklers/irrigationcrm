@@ -9,6 +9,7 @@ import {
   WEBSITE_FORM_SMS_PREFIX,
   WEBSITE_LEAD_THREAD_PREFIX,
 } from "@/lib/inbox/website-leads";
+import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { leadPhoneKey } from "@/lib/leads/contact-status";
 import { prisma } from "@/lib/prisma";
 
@@ -29,6 +30,10 @@ export type WebsiteLeadInboxItem = {
   leadPhone: string | null;
   leadEmail: string | null;
   convertedCustomerId: string | null;
+  leadAddress: string | null;
+  leadCity: string | null;
+  leadState: string | null;
+  leadZip: string | null;
 };
 
 type LeadRow = {
@@ -42,6 +47,8 @@ type LeadRow = {
   contactedAt: Date | null;
   createdAt: Date;
   convertedCustomerId: string | null;
+  notes: string | null;
+  metadata: unknown;
 };
 
 const leadSelect = {
@@ -55,6 +62,8 @@ const leadSelect = {
   contactedAt: true,
   createdAt: true,
   convertedCustomerId: true,
+  notes: true,
+  metadata: true,
 } as const;
 
 function isCareersLeadRow(lead: LeadRow | null | undefined) {
@@ -81,6 +90,7 @@ function withLead(
   },
   lead: LeadRow | null | undefined
 ): WebsiteLeadInboxItem {
+  const addr = parseLeadServiceAddress(lead?.notes, lead?.metadata, base.preview);
   return {
     id: base.id,
     channel: base.channel,
@@ -98,6 +108,10 @@ function withLead(
     leadPhone: lead?.phone ?? base.fallbackPhone ?? null,
     leadEmail: lead?.email ?? base.fallbackEmail ?? null,
     convertedCustomerId: lead?.convertedCustomerId ?? null,
+    leadAddress: addr.address,
+    leadCity: addr.city,
+    leadState: addr.state,
+    leadZip: addr.zip,
   };
 }
 

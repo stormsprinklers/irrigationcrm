@@ -13,7 +13,10 @@ import { SmartIrrigationPanel } from "@/components/maintenance-plans/SmartIrriga
 import { UnscheduledVisitsCard } from "@/components/maintenance-plans/UnscheduledVisitsCard";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
+import {
+  useIrrigationFeatures,
+  useMaintenancePlansFeatures,
+} from "@/components/layout/CompanyBrandProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,11 +30,16 @@ import type { DashboardDTO } from "@/lib/maintenance-plans/types";
 
 export default function MaintenancePlansPage() {
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
+  const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const [dashboard, setDashboard] = useState<DashboardDTO | null>(null);
   const [billingRows, setBillingRows] = useState<BillingRowDisplay[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!maintenanceEnabled) {
+      setLoading(false);
+      return;
+    }
     Promise.all([
       fetch("/api/maintenance-plans/dashboard"),
       fetch("/api/maintenance-plans/billing"),
@@ -65,7 +73,22 @@ export default function MaintenancePlansPage() {
       })
       .catch(() => toast.error("Failed to load maintenance plans"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [maintenanceEnabled]);
+
+  if (!maintenanceEnabled) {
+    return (
+      <ContentArea className="max-w-2xl">
+        <PageHeader title="Maintenance Plans" />
+        <p className="text-sm text-muted-foreground">
+          Enable maintenance plans under{" "}
+          <Link href="/settings" className="text-primary underline">
+            Settings → Company → Industry features
+          </Link>
+          .
+        </p>
+      </ContentArea>
+    );
+  }
 
   const monthName = format(new Date(), "MMMM");
   const revenueCollected = dashboard

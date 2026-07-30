@@ -7,9 +7,11 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   type HolidayLightingCatalog,
+  type HolidayQuoteDefaults,
 } from "@/lib/holiday-lighting/types";
 
 export default function HolidayLightingCatalogSettingsPage() {
@@ -17,6 +19,9 @@ export default function HolidayLightingCatalogSettingsPage() {
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const defaults: HolidayQuoteDefaults =
+    catalog.quoteDefaults ?? DEFAULT_HOLIDAY_CATALOG.quoteDefaults!;
 
   useEffect(() => {
     if (!enabled) {
@@ -33,6 +38,13 @@ export default function HolidayLightingCatalogSettingsPage() {
       .finally(() => setLoading(false));
   }, [enabled]);
 
+  function patchDefaults(patch: Partial<HolidayQuoteDefaults>) {
+    setCatalog({
+      ...catalog,
+      quoteDefaults: { ...defaults, ...patch },
+    });
+  }
+
   async function save() {
     setSaving(true);
     try {
@@ -44,7 +56,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       setCatalog(data.catalog);
-      toast.success("Catalog saved");
+      toast.success("Holiday lighting settings saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -55,7 +67,7 @@ export default function HolidayLightingCatalogSettingsPage() {
   if (!enabled) {
     return (
       <ContentArea className="max-w-2xl">
-        <PageHeader breadcrumb={["Settings", "Holiday lighting"]} title="Holiday lighting catalog" />
+        <PageHeader breadcrumb={["Settings", "Holiday lighting"]} title="Holiday lighting" />
         <p className="text-sm text-muted-foreground">
           Turn on holiday lighting tools under{" "}
           <Link href="/settings" className="text-primary underline">
@@ -71,8 +83,8 @@ export default function HolidayLightingCatalogSettingsPage() {
     <ContentArea className="max-w-3xl">
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
-        title="Holiday lighting catalog"
-        subtitle="Map light styles and tree sizes to price book SKUs (parts $/ft, install $/ft, lease)."
+        title="Holiday lighting"
+        subtitle="Company-wide quote defaults and price-book SKU mapping for the lighting quoter."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -83,6 +95,51 @@ export default function HolidayLightingCatalogSettingsPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <div className="space-y-4">
+          <section className="rounded-lg border border-border bg-white p-4">
+            <h3 className="text-sm font-semibold">Quote defaults</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Applied to every new holiday lighting quote. Staff can still change them per quote.
+            </p>
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground">Default light style</label>
+                <select
+                  className="mt-1 w-full max-w-sm rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={defaults.defaultLightStyleKey}
+                  onChange={(e) => patchDefaults({ defaultLightStyleKey: e.target.value })}
+                >
+                  {catalog.lightStyles.map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  Error margin ({defaults.marginPct}%)
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={25}
+                  value={defaults.marginPct}
+                  className="mt-1 w-full max-w-sm accent-primary"
+                  onChange={(e) => patchDefaults({ marginPct: Number(e.target.value) })}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={defaults.includeLease}
+                  onCheckedChange={(checked) =>
+                    patchDefaults({ includeLease: Boolean(checked) })
+                  }
+                />
+                Include lease option by default
+              </label>
+            </div>
+          </section>
+
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Light styles</h3>
             <ul className="mt-3 space-y-3 text-sm">

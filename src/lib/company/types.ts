@@ -15,6 +15,7 @@ export const companySettingsSelect = {
   industry: true,
   irrigationFeaturesEnabled: true,
   holidayLightingFeaturesEnabled: true,
+  maintenancePlansFeaturesEnabled: true,
   holidayLightingCatalog: true,
   description: true,
   emailSenderName: true,
@@ -98,6 +99,7 @@ export type CompanySettingsDTO = {
   industry: string | null;
   irrigationFeaturesEnabled: boolean;
   holidayLightingFeaturesEnabled: boolean;
+  maintenancePlansFeaturesEnabled: boolean;
   holidayLightingCatalog: unknown;
   description: string | null;
   emailSenderName: string | null;

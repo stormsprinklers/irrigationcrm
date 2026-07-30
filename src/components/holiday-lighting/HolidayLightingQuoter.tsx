@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
+import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
 import { HolidayMapPanel } from "@/components/holiday-lighting/HolidayMapPanel";
 import {
   PaintCanvas,
@@ -14,11 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
+import type { CustomerDTO } from "@/lib/customers/types";
 import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   DEFAULT_HOLIDAY_SELECTIONS,
   EMPTY_HOLIDAY_MEASUREMENTS,
+  holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
   type HolidayLatLng,
@@ -49,13 +54,26 @@ type QuoteRecord = {
 type Props = {
   quoteId?: string;
   initialCustomerId?: string | null;
+  initialCustomerName?: string | null;
+  initialAddress?: string | null;
+  initialCity?: string | null;
+  initialState?: string | null;
+  initialZip?: string | null;
 };
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
-export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }: Props) {
+export function HolidayLightingQuoter({
+  quoteId: initialId,
+  initialCustomerId,
+  initialCustomerName,
+  initialAddress,
+  initialCity,
+  initialState,
+  initialZip,
+}: Props) {
   const router = useRouter();
   const [quoteId, setQuoteId] = useState(initialId ?? "");
   const [loading, setLoading] = useState(Boolean(initialId));
@@ -63,11 +81,12 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
   const [creating, setCreating] = useState(false);
   const [visualizing, setVisualizing] = useState(false);
 
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("UT");
-  const [zip, setZip] = useState("");
+  const [address, setAddress] = useState(initialAddress ?? "");
+  const [city, setCity] = useState(initialCity ?? "");
+  const [state, setState] = useState(initialState ?? "UT");
+  const [zip, setZip] = useState(initialZip ?? "");
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
+  const [customerName, setCustomerName] = useState(initialCustomerName ?? "");
   const [center, setCenter] = useState<HolidayLatLng | null>(null);
   const [measurements, setMeasurements] = useState<HolidayMeasurements>(EMPTY_HOLIDAY_MEASUREMENTS);
   const [selections, setSelections] = useState<HolidayQuoteSelections>(DEFAULT_HOLIDAY_SELECTIONS);
@@ -93,6 +112,7 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
       setState(q.state ?? "UT");
       setZip(q.zip ?? "");
       setCustomerId(q.customerId ?? "");
+      setCustomerName(q.customer?.name ?? "");
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
       setMeasurements(parseHolidayMeasurements(q.measurements));
       setSelections(parseHolidaySelections(q.selections));
@@ -109,8 +129,40 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
   }, []);
 
   useEffect(() => {
-    if (initialId) void loadQuote(initialId);
-  }, [initialId, loadQuote]);
+    if (initialId) {
+      void loadQuote(initialId);
+      return;
+    }
+    // New quote: load catalog + company defaults
+    fetch("/api/settings/holiday-lighting")
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) return;
+        const nextCatalog = data.catalog as HolidayLightingCatalog;
+        setCatalog(nextCatalog);
+        setSelections(holidaySelectionsFromCatalog(nextCatalog));
+      })
+      .catch(() => {
+        /* keep defaults */
+      });
+
+    // Prefill customer name if we only have an id from deep-link
+    if (initialCustomerId && !initialCustomerName) {
+      fetch(`/api/customers/${initialCustomerId}`)
+        .then(async (r) => {
+          if (!r.ok) return;
+          const customer = (await r.json()) as CustomerDTO;
+          if (customer?.name) setCustomerName(customer.name);
+          if (!initialAddress && customer?.address) {
+            setAddress(customer.address ?? "");
+            setCity(customer.city ?? "");
+            setState(customer.state ?? "UT");
+            setZip(customer.zip ?? "");
+          }
+        })
+        .catch(() => {});
+    }
+  }, [initialId, loadQuote, initialCustomerId, initialCustomerName, initialAddress]);
 
   async function ensureQuote(): Promise<string> {
     if (quoteId) return quoteId;
@@ -189,9 +241,6 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Geocode failed");
       setCenter({ lat: data.lat, lng: data.lng });
-      if (data.formattedAddress) {
-        // Keep staff fields; center updates map
-      }
       toast.success("Map centered on address");
       await save({ lat: data.lat, lng: data.lng });
     } catch (err) {
@@ -199,15 +248,59 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
     }
   }
 
+  function applyResolvedAddress(resolved: ResolvedAddress) {
+    setAddress(resolved.address ?? address);
+    setCity(resolved.city ?? city);
+    setState(resolved.state ?? state);
+    setZip(resolved.zip ?? zip);
+    if (resolved.latitude != null && resolved.longitude != null) {
+      setCenter({ lat: resolved.latitude, lng: resolved.longitude });
+      void save({
+        address: resolved.address ?? address,
+        city: resolved.city ?? city,
+        state: resolved.state ?? state,
+        zip: resolved.zip ?? zip,
+        lat: resolved.latitude,
+        lng: resolved.longitude,
+      });
+    }
+  }
+
+  function onCustomerPicked(id: string, name: string) {
+    setCustomerId(id);
+    setCustomerName(name);
+    if (!id) void save({ customerId: null });
+  }
+
+  function onCustomerSelect(customer: CustomerDTO) {
+    setCustomerId(customer.id);
+    setCustomerName(customer.name);
+    const shouldPrefill = !address.trim() && Boolean(customer.address);
+    if (shouldPrefill) {
+      setAddress(customer.address ?? "");
+      setCity(customer.city ?? "");
+      setState(customer.state ?? "UT");
+      setZip(customer.zip ?? "");
+      void save({
+        customerId: customer.id,
+        address: customer.address ?? "",
+        city: customer.city ?? "",
+        state: customer.state ?? "UT",
+        zip: customer.zip ?? "",
+      });
+    } else {
+      void save({ customerId: customer.id });
+    }
+  }
+
   async function onPhotoSelected(file: File) {
     const url = URL.createObjectURL(file);
     setPhotoUrl(url);
-    // Capture street view static via Maps Static Street View if available
   }
 
   async function captureStreetView() {
     if (!center) {
-      toast.error("Geocode an address first");
+      toast.error("Search or locate an address first");
       return;
     }
     try {
@@ -292,13 +385,28 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-        <div className="grid gap-2 sm:grid-cols-4">
-          <Input
-            className="sm:col-span-2"
-            placeholder="Street address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
+        <div className="rounded-lg border border-border bg-white p-3">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Customer
+          </label>
+          <CustomerSearchPicker
+            value={customerId}
+            selectedName={customerName}
+            onValueChange={onCustomerPicked}
+            onCustomerSelect={onCustomerSelect}
+            placeholder="Search customers by name, phone, email…"
           />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-4">
+          <div className="sm:col-span-2">
+            <AddressAutocompleteInput
+              value={address}
+              onChange={setAddress}
+              onResolved={applyResolvedAddress}
+              placeholder="Search street address…"
+            />
+          </div>
           <Input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
           <div className="flex gap-2">
             <Input
@@ -317,12 +425,6 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
           <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>
             {saving ? "Saving…" : "Save draft"}
           </Button>
-          <Input
-            className="max-w-xs"
-            placeholder="Customer ID (optional)"
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          />
         </div>
         <div className="min-h-[420px] flex-1">
           <HolidayMapPanel
@@ -437,7 +539,7 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
             )}
           </Button>
           {!customerId ? (
-            <p className="text-xs text-amber-700">Paste a customer ID to create an estimate.</p>
+            <p className="text-xs text-amber-700">Select a customer to create an estimate.</p>
           ) : null}
           {estimate ? (
             <Button type="button" variant="outline" className="w-full" asChild>

@@ -7,7 +7,7 @@ import {
 import {
   assertHolidayLightingEnabled,
 } from "@/lib/holiday-lighting/catalog";
-import { DEFAULT_HOLIDAY_CATALOG, parseHolidayCatalog } from "@/lib/holiday-lighting/types";
+import { parseHolidayCatalog } from "@/lib/holiday-lighting/types";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -18,9 +18,10 @@ export async function GET() {
       select: { holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
     });
     assertHolidayLightingEnabled(company ?? {});
+    const catalog = parseHolidayCatalog(company?.holidayLightingCatalog);
     return NextResponse.json({
-      catalog: parseHolidayCatalog(company?.holidayLightingCatalog),
-      defaults: DEFAULT_HOLIDAY_CATALOG,
+      catalog,
+      defaults: catalog.quoteDefaults,
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {

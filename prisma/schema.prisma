@@ -497,6 +497,8 @@ model Company {
   irrigationFeaturesEnabled Boolean @default(true)
   /// When true, show holiday lighting quoting tools (maps measure, catalog, AI preview).
   holidayLightingFeaturesEnabled Boolean @default(false)
+  /// When false, hide maintenance plan tools (templates, enrollments, portal plans).
+  maintenancePlansFeaturesEnabled Boolean @default(true)
   /// Holiday lighting catalog mapping (light types → price book SKUs, lease rates, etc.).
   holidayLightingCatalog   Json?
   description              String?

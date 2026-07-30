@@ -145,7 +145,7 @@ export const companySettingsSidebar: NavSection[] = [
     items: [
       { label: "Company details", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
-      { label: "Holiday lighting catalog", href: "/settings/holiday-lighting" },
+      { label: "Holiday lighting", href: "/settings/holiday-lighting" },
       { label: "Company Expense Cards", href: "/settings/expense-cards" },
     ],
   },

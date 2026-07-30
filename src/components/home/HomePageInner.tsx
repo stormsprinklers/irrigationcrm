@@ -7,10 +7,12 @@ import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { KpiStrip } from "@/components/home/KpiStrip";
 import { MaintenancePlansHomeCard } from "@/components/home/MaintenancePlansHomeCard";
 import { SummaryCard } from "@/components/home/SummaryCard";
+import { useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { HomeDateRange, HomeKpi, HomeSummaryCard } from "@/lib/home/types";
 import { toast } from "sonner";
 
 export function HomePageInner() {
+  const { enabled: maintenancePlansEnabled } = useMaintenancePlansFeatures();
   const [greeting, setGreeting] = useState("");
   const [cards, setCards] = useState<HomeSummaryCard[]>([]);
   const [kpis, setKpis] = useState<HomeKpi[]>([]);
@@ -52,7 +54,7 @@ export function HomePageInner() {
             {cards.map((card) => (
               <SummaryCard key={card.title} data={card} />
             ))}
-            <MaintenancePlansHomeCard />
+            {maintenancePlansEnabled ? <MaintenancePlansHomeCard /> : null}
           </div>
           <KpiStrip metrics={kpis} range={range} onRangeChange={setRange} />
         </>

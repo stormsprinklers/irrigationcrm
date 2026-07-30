@@ -7,6 +7,7 @@ import type {
   UserRole,
 } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireCompanyMaintenancePlans } from "@/lib/maintenance-plans/feature";
 import { getTemplate, listTemplates } from "@/lib/maintenance-plans/queries";
 import { canManageTemplates, canViewMaintenancePlans } from "@/lib/maintenance-plans/permissions";
 import { syncTemplateToStripe } from "@/lib/maintenance-plans/stripe-sync";
@@ -26,10 +27,14 @@ export async function GET() {
   try {
     const user = await requireSessionUser();
     if (!canViewMaintenancePlans(user.role as UserRole)) return forbiddenResponse();
+    await requireCompanyMaintenancePlans(user.companyId);
 
     const templates = await listTemplates(user.companyId);
     return NextResponse.json({ templates, total: templates.length });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("disabled")) {
+      return forbiddenResponse(error.message);
+    }
     return unauthorizedResponse();
   }
 }
@@ -38,6 +43,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canManageTemplates(user.role as UserRole)) return forbiddenResponse();
+    await requireCompanyMaintenancePlans(user.companyId);
 
     const body = await request.json();
     if (!body.name) return badRequestResponse("name is required");
@@ -84,7 +90,10 @@ export async function POST(request: NextRequest) {
 
     const full = await getTemplate(user.companyId, template.id);
     return NextResponse.json(full, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("disabled")) {
+      return forbiddenResponse(error.message);
+    }
     return unauthorizedResponse();
   }
 }

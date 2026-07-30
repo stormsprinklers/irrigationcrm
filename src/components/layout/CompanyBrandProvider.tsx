@@ -11,6 +11,7 @@ import {
 } from "@/lib/brand-palette";
 import { irrigationFeaturesEnabled as resolveIrrigationFeatures } from "@/lib/company/features";
 import { holidayLightingFeaturesEnabled as resolveHolidayFeatures } from "@/lib/company/features";
+import { maintenancePlansFeaturesEnabled as resolveMaintenanceFeatures } from "@/lib/company/features";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 export type CompanyBrand = {
@@ -22,6 +23,7 @@ export type CompanyBrand = {
   palette: BrandPalette;
   irrigationFeaturesEnabled: boolean;
   holidayLightingFeaturesEnabled: boolean;
+  maintenancePlansFeaturesEnabled: boolean;
 };
 
 type CompanyBrandContextValue = {
@@ -68,6 +70,7 @@ const fallbackBrand: CompanyBrand = {
   palette: DEFAULT_BRAND_PALETTE,
   irrigationFeaturesEnabled: true,
   holidayLightingFeaturesEnabled: false,
+  maintenancePlansFeaturesEnabled: true,
 };
 
 export function CompanyBrandProvider({ children }: { children: React.ReactNode }) {
@@ -100,6 +103,7 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         palette,
         irrigationFeaturesEnabled: resolveIrrigationFeatures(data),
         holidayLightingFeaturesEnabled: resolveHolidayFeatures(data),
+        maintenancePlansFeaturesEnabled: resolveMaintenanceFeatures(data),
       });
       applyBrandCss(palette);
     } finally {
@@ -143,4 +147,10 @@ export function useIrrigationFeatures() {
 export function useHolidayLightingFeatures() {
   const { brand, loading } = useCompanyBrand();
   return { enabled: brand.holidayLightingFeaturesEnabled, loading };
+}
+
+/** Staff CRM: whether maintenance plan tools should show. */
+export function useMaintenancePlansFeatures() {
+  const { brand, loading } = useCompanyBrand();
+  return { enabled: brand.maintenancePlansFeaturesEnabled, loading };
 }

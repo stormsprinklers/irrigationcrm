@@ -12,6 +12,11 @@ function NewQuoteInner() {
   const { enabled } = useHolidayLightingFeatures();
   const searchParams = useSearchParams();
   const customerId = searchParams.get("customerId");
+  const customerName = searchParams.get("customerName");
+  const address = searchParams.get("address");
+  const city = searchParams.get("city");
+  const state = searchParams.get("state");
+  const zip = searchParams.get("zip");
 
   if (!enabled) {
     return (
@@ -34,7 +39,14 @@ function NewQuoteInner() {
         breadcrumb={["Holiday lighting", "New quote"]}
         title="New holiday lighting quote"
       />
-      <HolidayLightingQuoter initialCustomerId={customerId} />
+      <HolidayLightingQuoter
+        initialCustomerId={customerId}
+        initialCustomerName={customerName}
+        initialAddress={address}
+        initialCity={city}
+        initialState={state}
+        initialZip={zip}
+      />
     </ContentArea>
   );
 }

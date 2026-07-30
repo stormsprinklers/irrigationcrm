@@ -105,11 +105,13 @@ export async function createLeadFromIntegration(
   if (input.address) notesParts.push(`Address: ${input.address}`);
   if (input.city) notesParts.push(`City: ${input.city}`);
 
-  const metadata = {
+  const metadata: Record<string, unknown> = {
     ...((input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
       ? input.metadata
       : {}) as Record<string, unknown>),
     ...(enrichment?.metadataPatch ?? {}),
+    ...(input.address ? { address: input.address } : {}),
+    ...(input.city ? { city: input.city } : {}),
   };
 
   const lead = await prisma.lead.create({

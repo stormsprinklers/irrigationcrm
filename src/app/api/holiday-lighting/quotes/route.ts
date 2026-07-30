@@ -7,11 +7,12 @@ import {
 } from "@/lib/api-auth";
 import { assertHolidayLightingEnabled } from "@/lib/holiday-lighting/catalog";
 import {
-  DEFAULT_HOLIDAY_SELECTIONS,
   EMPTY_HOLIDAY_MEASUREMENTS,
+  holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "@/lib/holiday-lighting/types";
+import { loadHolidayCatalog } from "@/lib/holiday-lighting/catalog";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
     assertHolidayLightingEnabled(company ?? {});
 
     const body = await request.json().catch(() => ({}));
+    const catalog = await loadHolidayCatalog(user.companyId);
     const quote = await prisma.holidayLightingQuote.create({
       data: {
         companyId: user.companyId,
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
           : EMPTY_HOLIDAY_MEASUREMENTS,
         selections: body.selections
           ? parseHolidaySelections(body.selections)
-          : DEFAULT_HOLIDAY_SELECTIONS,
+          : holidaySelectionsFromCatalog(catalog),
       },
     });
     return NextResponse.json({ quote });

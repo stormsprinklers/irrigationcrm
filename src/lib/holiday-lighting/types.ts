@@ -56,11 +56,19 @@ export type HolidayPlacementCatalogItem = {
   leaseSku?: string;
 };
 
+export type HolidayQuoteDefaults = {
+  marginPct: number;
+  includeLease: boolean;
+  defaultLightStyleKey: string;
+};
+
 export type HolidayLightingCatalog = {
   lightStyles: HolidayLightStyle[];
   placements: HolidayPlacementCatalogItem[];
   peakSku?: string;
   peakLeaseSku?: string;
+  /** Company-wide defaults applied to new quotes. */
+  quoteDefaults?: HolidayQuoteDefaults;
 };
 
 export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
@@ -123,6 +131,11 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
   ],
   peakSku: "CC-PEAK",
   peakLeaseSku: "CC-PEAK-LEASE",
+  quoteDefaults: {
+    defaultLightStyleKey: "c9-warm-white",
+    marginPct: 10,
+    includeLease: true,
+  },
 };
 
 export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
@@ -135,6 +148,24 @@ export const EMPTY_HOLIDAY_MEASUREMENTS: HolidayMeasurements = {
   segments: [],
   placements: [],
 };
+
+function parseQuoteDefaults(raw: unknown): HolidayQuoteDefaults {
+  const fallback = DEFAULT_HOLIDAY_CATALOG.quoteDefaults!;
+  if (!raw || typeof raw !== "object") return { ...fallback };
+  const obj = raw as Partial<HolidayQuoteDefaults>;
+  const margin =
+    typeof obj.marginPct === "number" && Number.isFinite(obj.marginPct)
+      ? Math.min(50, Math.max(0, obj.marginPct))
+      : fallback.marginPct;
+  return {
+    marginPct: margin,
+    includeLease: obj.includeLease !== false,
+    defaultLightStyleKey:
+      typeof obj.defaultLightStyleKey === "string" && obj.defaultLightStyleKey
+        ? obj.defaultLightStyleKey
+        : fallback.defaultLightStyleKey,
+  };
+}
 
 export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   if (!raw || typeof raw !== "object") return DEFAULT_HOLIDAY_CATALOG;
@@ -150,6 +181,19 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
         : DEFAULT_HOLIDAY_CATALOG.placements,
     peakSku: obj.peakSku ?? DEFAULT_HOLIDAY_CATALOG.peakSku,
     peakLeaseSku: obj.peakLeaseSku ?? DEFAULT_HOLIDAY_CATALOG.peakLeaseSku,
+    quoteDefaults: parseQuoteDefaults(obj.quoteDefaults),
+  };
+}
+
+/** Selections for a brand-new quote, using company catalog defaults. */
+export function holidaySelectionsFromCatalog(
+  catalog: HolidayLightingCatalog
+): HolidayQuoteSelections {
+  const d = catalog.quoteDefaults ?? DEFAULT_HOLIDAY_CATALOG.quoteDefaults!;
+  return {
+    defaultLightStyleKey: d.defaultLightStyleKey,
+    marginPct: d.marginPct,
+    includeLease: d.includeLease,
   };
 }
 

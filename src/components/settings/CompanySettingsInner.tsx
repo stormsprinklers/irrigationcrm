@@ -8,7 +8,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   DEFAULT_BRAND_PALETTE,
   resolveBrandPalette,
@@ -88,6 +90,7 @@ export function CompanySettingsInner() {
   const { refresh: refreshBrand } = useCompanyBrand();
   const [tab, setTab] = useState<(typeof profileTabs)[number]>("Profile");
   const [company, setCompany] = useState<CompanySettingsDTO | null>(null);
+  const [activeMaintenanceEnrollmentCount, setActiveMaintenanceEnrollmentCount] = useState(0);
   const [hours, setHours] = useState<Record<string, BusinessHoursDay>>(DEFAULT_BUSINESS_HOURS);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -95,6 +98,15 @@ export function CompanySettingsInner() {
   const [uploadingBimiLogo, setUploadingBimiLogo] = useState(false);
   const [uploadingBimiCert, setUploadingBimiCert] = useState(false);
   const [copiedBimiField, setCopiedBimiField] = useState<"host" | "txt" | null>(null);
+  const [pendingFeatureToggle, setPendingFeatureToggle] = useState<{
+    key:
+      | "irrigationFeaturesEnabled"
+      | "holidayLightingFeaturesEnabled"
+      | "maintenancePlansFeaturesEnabled";
+    next: boolean;
+    title: string;
+    description: string;
+  } | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const brandLogoInputRef = useRef<HTMLInputElement>(null);
   const bimiLogoInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +117,11 @@ export function CompanySettingsInner() {
       .then((r) => r.json())
       .then((data) => {
         setCompany(data);
+        setActiveMaintenanceEnrollmentCount(
+          typeof data.activeMaintenanceEnrollmentCount === "number"
+            ? data.activeMaintenanceEnrollmentCount
+            : 0
+        );
         if (data.businessHours && typeof data.businessHours === "object") {
           setHours({ ...DEFAULT_BUSINESS_HOURS, ...(data.businessHours as Record<string, BusinessHoursDay>) });
         }
@@ -153,15 +170,56 @@ export function CompanySettingsInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Save failed");
-      setCompany(await res.json());
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Save failed"
+        );
+      }
+      if (typeof data.activeMaintenanceEnrollmentCount === "number") {
+        setActiveMaintenanceEnrollmentCount(data.activeMaintenanceEnrollmentCount);
+      }
+      setCompany(data);
       await refreshBrand();
       toast.success("Company settings saved");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
       setSaving(false);
     }
+  }
+
+  function requestFeatureToggle(
+    key:
+      | "irrigationFeaturesEnabled"
+      | "holidayLightingFeaturesEnabled"
+      | "maintenancePlansFeaturesEnabled",
+    next: boolean,
+    title: string,
+    description: string
+  ) {
+    if (
+      key === "maintenancePlansFeaturesEnabled" &&
+      next === false &&
+      activeMaintenanceEnrollmentCount > 0
+    ) {
+      toast.error(
+        `Cannot disable maintenance plans while ${activeMaintenanceEnrollmentCount} customer${
+          activeMaintenanceEnrollmentCount === 1 ? " is" : "s are"
+        } actively enrolled.`
+      );
+      return;
+    }
+    setPendingFeatureToggle({ key, next, title, description });
+  }
+
+  function confirmFeatureToggle() {
+    if (!company || !pendingFeatureToggle) return;
+    setCompany({
+      ...company,
+      [pendingFeatureToggle.key]: pendingFeatureToggle.next,
+    });
+    setPendingFeatureToggle(null);
   }
 
   async function uploadLogo(file: File) {
@@ -363,45 +421,86 @@ export function CompanySettingsInner() {
           <section className="rounded-lg border border-border bg-white p-6">
             <h3 className="mb-1 text-lg font-semibold">Industry features</h3>
             <p className="mb-4 text-sm text-muted-foreground">
-              Turn off irrigation-only tools for companies that don&apos;t need them (for example
-              Christmas lights). This hides Rachio, irrigation maps and programming, parts suppliers,
-              visit Parts Run, and portal watering/smart irrigation.
+              Enable only the tools this company needs. Changes apply after you save.
             </p>
-            <label className="flex items-start gap-3 text-sm">
-              <Checkbox
-                className="mt-0.5"
-                checked={company.irrigationFeaturesEnabled !== false}
-                onCheckedChange={(checked) =>
-                  setCompany({ ...company, irrigationFeaturesEnabled: Boolean(checked) })
-                }
-              />
-              <span>
-                <span className="font-medium">Irrigation tools</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Rachio, property irrigation maps, sprinkler programming guides, parts suppliers,
-                  and related portal features.
-                </span>
-              </span>
-            </label>
-            <label className="mt-4 flex items-start gap-3 text-sm">
-              <Checkbox
-                className="mt-0.5"
-                checked={company.holidayLightingFeaturesEnabled === true}
-                onCheckedChange={(checked) =>
-                  setCompany({
-                    ...company,
-                    holidayLightingFeaturesEnabled: Boolean(checked),
-                  })
-                }
-              />
-              <span>
-                <span className="font-medium">Holiday lighting tools</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Satellite / Street View quoting, light catalog, AI lighting previews, and holiday
-                  estimate builder.
-                </span>
-              </span>
-            </label>
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Irrigation tools</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Rachio, property irrigation maps, sprinkler programming guides, parts suppliers,
+                    and related portal features.
+                  </p>
+                </div>
+                <Switch
+                  checked={company.irrigationFeaturesEnabled !== false}
+                  onCheckedChange={(checked) =>
+                    requestFeatureToggle(
+                      "irrigationFeaturesEnabled",
+                      checked,
+                      checked ? "Enable irrigation tools?" : "Disable irrigation tools?",
+                      checked
+                        ? "This will show Rachio, irrigation maps, programming, parts suppliers, and related portal features after you save."
+                        : "This will hide Rachio, irrigation maps, programming, parts suppliers, and related portal features after you save."
+                    )
+                  }
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Holiday lighting tools</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Satellite / Street View quoting, light catalog, AI lighting previews, and holiday
+                    estimate builder.
+                  </p>
+                </div>
+                <Switch
+                  checked={company.holidayLightingFeaturesEnabled === true}
+                  onCheckedChange={(checked) =>
+                    requestFeatureToggle(
+                      "holidayLightingFeaturesEnabled",
+                      checked,
+                      checked
+                        ? "Enable holiday lighting tools?"
+                        : "Disable holiday lighting tools?",
+                      checked
+                        ? "This will show the holiday lighting quoter and catalog after you save."
+                        : "This will hide the holiday lighting quoter and catalog after you save."
+                    )
+                  }
+                />
+              </div>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Maintenance plans</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Plan templates, enrollments, recurring billing, and portal maintenance plans.
+                    {activeMaintenanceEnrollmentCount > 0
+                      ? ` ${activeMaintenanceEnrollmentCount} active enrollment${
+                          activeMaintenanceEnrollmentCount === 1 ? "" : "s"
+                        } — cannot disable until those end.`
+                      : ""}
+                  </p>
+                </div>
+                <Switch
+                  checked={company.maintenancePlansFeaturesEnabled !== false}
+                  disabled={
+                    company.maintenancePlansFeaturesEnabled !== false &&
+                    activeMaintenanceEnrollmentCount > 0
+                  }
+                  onCheckedChange={(checked) =>
+                    requestFeatureToggle(
+                      "maintenancePlansFeaturesEnabled",
+                      checked,
+                      checked ? "Enable maintenance plans?" : "Disable maintenance plans?",
+                      checked
+                        ? "This will show maintenance plan tools in the CRM and portal after you save."
+                        : "This will hide maintenance plan tools after you save. You can only disable this when no customers are actively enrolled."
+                    )
+                  }
+                />
+              </div>
+            </div>
           </section>
           <section className="rounded-lg border border-border bg-white p-6">
             <h3 className="mb-4 text-lg font-semibold">Company Description</h3>
@@ -1066,6 +1165,15 @@ export function CompanySettingsInner() {
           </div>
         </section>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingFeatureToggle)}
+        title={pendingFeatureToggle?.title ?? ""}
+        description={pendingFeatureToggle?.description ?? ""}
+        confirmLabel={pendingFeatureToggle?.next ? "Enable" : "Disable"}
+        confirmVariant={pendingFeatureToggle?.next ? "default" : "destructive"}
+        onConfirm={confirmFeatureToggle}
+        onCancel={() => setPendingFeatureToggle(null)}
+      />
     </ContentArea>
   );
 }

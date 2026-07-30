@@ -36,7 +36,7 @@ import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection"
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
-import { useIrrigationFeatures, useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
+import { useIrrigationFeatures, useHolidayLightingFeatures, useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
@@ -138,6 +138,7 @@ export function CustomerProfile({ customerId }: Props) {
   const { data: session } = useSession();
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: holidayEnabled } = useHolidayLightingFeatures();
+  const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const validTabs = new Set([
     "profile",
     "properties",
@@ -145,7 +146,7 @@ export function CustomerProfile({ customerId }: Props) {
     "calls",
     "estimates",
     "invoices",
-    "maintenance",
+    ...(maintenanceEnabled ? (["maintenance"] as const) : []),
   ]);
   const tabFromUrl = searchParams.get("tab");
   const propertyIdFromUrl = searchParams.get("propertyId");
@@ -726,7 +727,9 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="calls">Calls</TabsTrigger>
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           {canViewInvoices ? <TabsTrigger value="invoices">Invoices</TabsTrigger> : null}
-          <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
+          {maintenanceEnabled ? (
+            <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="profile" className="space-y-4">
@@ -1408,6 +1411,7 @@ export function CustomerProfile({ customerId }: Props) {
         </TabsContent>
         ) : null}
 
+        {maintenanceEnabled ? (
         <TabsContent value="maintenance" className="space-y-4">
           {(() => {
             const lateEnrollments = enrollments.filter(enrollmentHasLatePayment);
@@ -1492,6 +1496,7 @@ export function CustomerProfile({ customerId }: Props) {
           </Card>
 
         </TabsContent>
+        ) : null}
       </Tabs>
 
       <CreateCustomerVisitModal

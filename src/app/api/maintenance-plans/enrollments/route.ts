@@ -3,6 +3,7 @@ import type { BillingFrequency, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { requireCardOnFileOrSetupUrl } from "@/lib/customers/stripe";
+import { requireCompanyMaintenancePlans } from "@/lib/maintenance-plans/feature";
 import { getEnrollment, listEnrollments } from "@/lib/maintenance-plans/queries";
 import { canManageEnrollments, canViewMaintenancePlans } from "@/lib/maintenance-plans/permissions";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canViewMaintenancePlans(user.role as UserRole)) return forbiddenResponse();
+    await requireCompanyMaintenancePlans(user.companyId);
 
     const { searchParams } = request.nextUrl;
     const enrollments = await listEnrollments(user.companyId, {
@@ -20,7 +22,10 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ enrollments, total: enrollments.length });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("disabled")) {
+      return forbiddenResponse(error.message);
+    }
     return unauthorizedResponse();
   }
 }
@@ -29,6 +34,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     if (!canManageEnrollments(user.role as UserRole)) return forbiddenResponse();
+    await requireCompanyMaintenancePlans(user.companyId);
 
     const body = await request.json();
     if (!body.customerId) return badRequestResponse("customerId is required");
@@ -109,7 +115,10 @@ export async function POST(request: NextRequest) {
 
     const full = await getEnrollment(user.companyId, enrollment.id);
     return NextResponse.json(full, { status: 201 });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("disabled")) {
+      return forbiddenResponse(error.message);
+    }
     return unauthorizedResponse();
   }
 }

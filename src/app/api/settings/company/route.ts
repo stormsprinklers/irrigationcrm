@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { sanitizeBrandPalette, type BrandPalette } from "@/lib/brand-palette";
+import {
+  ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES,
+} from "@/lib/company/features";
 import { companySettingsSelect } from "@/lib/company/types";
+import { countActiveMaintenanceEnrollments } from "@/lib/maintenance-plans/feature";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -12,7 +16,10 @@ export async function GET() {
       select: companySettingsSelect,
     });
     if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    return NextResponse.json(company);
+    const activeMaintenanceEnrollmentCount = await countActiveMaintenanceEnrollments(
+      user.companyId
+    );
+    return NextResponse.json({ ...company, activeMaintenanceEnrollmentCount });
   } catch {
     return unauthorizedResponse();
   }
@@ -54,13 +61,32 @@ export async function PATCH(request: NextRequest) {
       data.brandSecondaryColor = palette.secondary;
     }
 
+    if (data.maintenancePlansFeaturesEnabled === false) {
+      const activeCount = await countActiveMaintenanceEnrollments(user.companyId);
+      if (activeCount > 0) {
+        return NextResponse.json(
+          {
+            error: `Cannot disable maintenance plans while ${activeCount} customer${
+              activeCount === 1 ? " is" : "s are"
+            } actively enrolled (${ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES.join(", ")}).`,
+            activeMaintenanceEnrollmentCount: activeCount,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data,
       select: companySettingsSelect,
     });
 
-    return NextResponse.json(company);
+    const activeMaintenanceEnrollmentCount = await countActiveMaintenanceEnrollments(
+      user.companyId
+    );
+
+    return NextResponse.json({ ...company, activeMaintenanceEnrollmentCount });
   } catch {
     return unauthorizedResponse();
   }

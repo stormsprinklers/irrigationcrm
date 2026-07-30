@@ -80,6 +80,9 @@ export function TopNav() {
     if (item.href === "/holiday-lighting/quote") {
       return brand.holidayLightingFeaturesEnabled;
     }
+    if (item.href === "/maintenance-plans") {
+      return brand.maintenancePlansFeaturesEnabled;
+    }
     return true;
   });
   const otherItems = filterOtherNav(otherNav, role);

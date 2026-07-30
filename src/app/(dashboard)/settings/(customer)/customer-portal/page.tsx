@@ -28,7 +28,9 @@ export default function SettingsCustomerPortalPage() {
     { key: "portalShowJobs" as const, label: "Show visits" },
     { key: "portalShowEstimates" as const, label: "Show estimates" },
     { key: "portalShowInvoices" as const, label: "Show invoices" },
-    { key: "portalShowMaintenance" as const, label: "Show maintenance plans" },
+    ...(company.maintenancePlansFeaturesEnabled !== false
+      ? [{ key: "portalShowMaintenance" as const, label: "Show maintenance plans" }]
+      : []),
     { key: "portalShowChecklists" as const, label: "Show completed checklists" },
     ...(company.irrigationFeaturesEnabled !== false
       ? [

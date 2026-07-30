@@ -3,15 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink, Mail, MessageSquare, Phone, Trash2 } from "lucide-react";
+import { ExternalLink, Mail, MessageSquare, Phone, Trash2, UserPlus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InboxListDetailShell } from "@/components/inbox/InboxListDetailShell";
+import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { sanitizeEmailHtml } from "@/lib/inbox/attachments";
+import { leadAddressQueryParams, parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +36,10 @@ type WebsiteLeadInboxItem = {
   leadPhone: string | null;
   leadEmail: string | null;
   convertedCustomerId: string | null;
+  leadAddress?: string | null;
+  leadCity?: string | null;
+  leadState?: string | null;
+  leadZip?: string | null;
 };
 
 type EmailDetail = {
@@ -179,6 +185,7 @@ function tabForLeadStatus(status: string | null): LeadFilterTab {
 export function WebsiteLeadsInbox() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { enabled: holidayLightingEnabled } = useHolidayLightingFeatures();
   const [items, setItems] = useState<WebsiteLeadInboxItem[]>([]);
   const [filterTab, setFilterTab] = useState<LeadFilterTab>("to_contact");
   const [selected, setSelected] = useState<WebsiteLeadInboxItem | null>(null);
@@ -186,6 +193,7 @@ export function WebsiteLeadsInbox() {
   const [smsBody, setSmsBody] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [convertBusy, setConvertBusy] = useState(false);
   /** Tracks which deep-link query we've already applied so list refreshes don't fight clicks. */
   const appliedDeepLinkRef = useRef<string | null>(null);
 
@@ -382,12 +390,115 @@ export function WebsiteLeadsInbox() {
   function patchLocalLeadStatus(
     leadId: string,
     status: string,
-    contactedAt: string | null
+    contactedAt: string | null,
+    convertedCustomerId?: string | null
   ) {
     const apply = (item: WebsiteLeadInboxItem): WebsiteLeadInboxItem =>
-      item.leadId === leadId ? { ...item, leadStatus: status, contactedAt } : item;
+      item.leadId === leadId
+        ? {
+            ...item,
+            leadStatus: status,
+            contactedAt,
+            ...(convertedCustomerId !== undefined
+              ? { convertedCustomerId }
+              : {}),
+          }
+        : item;
     setItems((current) => current.map(apply));
     setSelected((current) => (current ? apply(current) : current));
+  }
+
+  async function ensureCustomerFromLead(): Promise<{
+    customerId: string;
+    customerName: string;
+  } | null> {
+    if (!selected?.leadId) {
+      toast.error("No linked lead record for this submission");
+      return null;
+    }
+    if (selected.convertedCustomerId) {
+      return { customerId: selected.convertedCustomerId, customerName: selected.name };
+    }
+    const res = await fetch(`/api/leads/${selected.leadId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "convert" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error ?? "Could not add customer");
+      return null;
+    }
+    const customerId = data.customer?.id as string | undefined;
+    const customerName = (data.customer?.name as string | undefined) ?? selected.name;
+    if (!customerId) {
+      toast.error("Customer was not created");
+      return null;
+    }
+    patchLocalLeadStatus(
+      selected.leadId,
+      data.lead?.status ?? "WON",
+      data.lead?.contactedAt ?? selected.contactedAt,
+      customerId
+    );
+    return { customerId, customerName };
+  }
+
+  async function addAsCustomer() {
+    if (!selected?.leadId) {
+      toast.error("No linked lead record for this submission");
+      return;
+    }
+    if (selected.convertedCustomerId) {
+      router.push(`/customers/${selected.convertedCustomerId}`);
+      return;
+    }
+    setConvertBusy(true);
+    try {
+      const result = await ensureCustomerFromLead();
+      if (!result) return;
+      toast.success("Customer added");
+      router.push(`/customers/${result.customerId}`);
+    } finally {
+      setConvertBusy(false);
+    }
+  }
+
+  async function startHolidayQuote() {
+    if (!selected?.leadId) {
+      toast.error("No linked lead record for this submission");
+      return;
+    }
+    setConvertBusy(true);
+    try {
+      const result = await ensureCustomerFromLead();
+      if (!result) return;
+      const fromFields = {
+        address: selected.leadAddress ?? null,
+        city: selected.leadCity ?? null,
+        state: selected.leadState ?? null,
+        zip: selected.leadZip ?? null,
+      };
+      const fromBody = parseLeadServiceAddress(
+        null,
+        null,
+        emailDetail?.bodyText ?? smsBody ?? selected.preview
+      );
+      const addr = {
+        address: fromFields.address ?? fromBody.address,
+        city: fromFields.city ?? fromBody.city,
+        state: fromFields.state ?? fromBody.state,
+        zip: fromFields.zip ?? fromBody.zip,
+      };
+      const params = new URLSearchParams({
+        customerId: result.customerId,
+        customerName: result.customerName,
+        ...leadAddressQueryParams(addr),
+      });
+      router.push(`/holiday-lighting/quote/new?${params.toString()}`);
+    } finally {
+      setConvertBusy(false);
+    }
   }
 
   async function updateLeadStatus(status: "CONTACTED" | "SPAM" | "NEW") {
@@ -706,6 +817,31 @@ export function WebsiteLeadsInbox() {
               onClick={() => void updateLeadStatus("NEW")}
             >
               Undo spam
+            </Button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={convertBusy || !selected.leadId}
+            onClick={() => void addAsCustomer()}
+          >
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+            {selected.convertedCustomerId ? "Open customer" : "Add as customer"}
+          </Button>
+          {holidayLightingEnabled ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={convertBusy || !selected.leadId}
+              onClick={() => void startHolidayQuote()}
+            >
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              Holiday lighting quote
             </Button>
           ) : null}
         </div>

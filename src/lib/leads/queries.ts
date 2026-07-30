@@ -1,5 +1,6 @@
 import { AttributionFirstTouchMethod, LeadStatus, Prisma } from "@prisma/client";
 import { copyLeadFirstTouchToCustomer, recordTouchEvent } from "@/lib/attribution";
+import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { prisma } from "@/lib/prisma";
 
 export const leadInclude = {
@@ -68,6 +69,8 @@ export async function convertLeadToCustomer(companyId: string, leadId: string) {
     return prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
   }
 
+  const serviceAddress = parseLeadServiceAddress(lead.notes, lead.metadata);
+
   const customer = await prisma.$transaction(async (tx) => {
     const created = await tx.customer.create({
       data: {
@@ -76,8 +79,26 @@ export async function convertLeadToCustomer(companyId: string, leadId: string) {
         phone: lead.phone,
         email: lead.email,
         leadSource: lead.source,
+        address: serviceAddress.address,
+        city: serviceAddress.city,
+        state: serviceAddress.state,
+        zip: serviceAddress.zip,
       },
     });
+    if (serviceAddress.address) {
+      await tx.customerProperty.create({
+        data: {
+          companyId,
+          customerId: created.id,
+          name: "Primary",
+          address: serviceAddress.address,
+          city: serviceAddress.city,
+          state: serviceAddress.state,
+          zip: serviceAddress.zip,
+          isPrimary: true,
+        },
+      });
+    }
     await tx.lead.update({
       where: { id: leadId },
       data: { convertedCustomerId: created.id, status: LeadStatus.WON },

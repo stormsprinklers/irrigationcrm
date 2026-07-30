@@ -1,5 +1,8 @@
 import type { PortalCompany } from "./company";
-import { irrigationFeaturesEnabled } from "@/lib/company/features";
+import {
+  irrigationFeaturesEnabled,
+  maintenancePlansFeaturesEnabled,
+} from "@/lib/company/features";
 
 export function portalFeatureEnabled(
   company: PortalCompany,
@@ -22,7 +25,9 @@ export function portalFeatureEnabled(
     case "estimates":
       return company.portalShowEstimates;
     case "maintenance":
-      return company.portalShowMaintenance;
+      return (
+        maintenancePlansFeaturesEnabled(company) && company.portalShowMaintenance
+      );
     case "checklists":
       return company.portalShowChecklists;
     case "irrigation":
