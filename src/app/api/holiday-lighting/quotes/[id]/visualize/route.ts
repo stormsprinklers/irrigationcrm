@@ -13,13 +13,22 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 8 * 1024 * 1024;
 
-const PROMPT = `Photorealistic preview of this exact house with professional Christmas light installation.
+const PROMPT = `You are given TWO images of the same residential property:
 
-Add warm-white commercial-grade C9-style LED Christmas lights ONLY in the masked/transparent regions (typically rooflines, gables, eaves, trees, and bushes). Lights should look evenly spaced, neatly clipped, and glowing softly at dusk/evening.
+IMAGE 1 — PROPERTY (clean): the unmodified photo of the house. Use this as the base for the final photorealistic output. Preserve architecture, camera angle, windows, driveway, landscaping, and all unmarked surfaces exactly.
 
-Keep the house architecture, windows, driveway, landscaping layout, and camera angle unchanged. Do not add people, cars, text, logos, or watermarks. Do not redecorate areas outside the mask. High-end residential holiday lighting look.`;
+IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights painted on top (typically warm translucent gold/amber strokes). Those painted brushstrokes are the ONLY regions that should receive holiday lighting.
+
+Instructions:
+- Add professional warm-white commercial-grade C9-style LED Christmas lights strictly inside the brush-marked regions from IMAGE 2 (rooflines, gables, eaves, trees, bushes, etc. where marked).
+- Do NOT add lights, glow, or decorations anywhere that is not marked in IMAGE 2.
+- Replace the brushstroke paint itself with realistic installed lights (evenly spaced, neatly clipped, soft dusk/evening glow). The paint marks are placement guides only — they must not remain visible in the final image.
+- Keep unmarked parts of the house identical to IMAGE 1.
+- Do not add people, cars, text, logos, or watermarks.
+
+Output one photorealistic night/dusk preview of this exact property with lights only where marked.`;
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -46,21 +55,34 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     const form = await request.formData();
-    const image = form.get("image");
-    const mask = form.get("mask");
-    if (!(image instanceof File) || !(mask instanceof File)) {
-      return badRequestResponse("Both image and mask files are required");
+    // Prefer new clean + marked pair; fall back to legacy image/mask if needed.
+    const clean = form.get("clean") ?? form.get("image");
+    const marked = form.get("marked") ?? form.get("overlay");
+    if (!(clean instanceof File) || !(marked instanceof File)) {
+      return badRequestResponse(
+        "Both a clean property image and a brush-marked overlay image are required"
+      );
     }
-    if (image.size > MAX_BYTES || mask.size > MAX_BYTES) {
-      return badRequestResponse("Image files must be under 4MB each");
+    if (clean.size > MAX_BYTES || marked.size > MAX_BYTES) {
+      return badRequestResponse("Image files must be under 8MB each");
     }
 
     const outbound = new FormData();
     outbound.append("model", "gpt-image-1");
     outbound.append("prompt", PROMPT);
     outbound.append("size", "1024x1024");
-    outbound.append("image", new Blob([await image.arrayBuffer()], { type: "image/png" }), "house.png");
-    outbound.append("mask", new Blob([await mask.arrayBuffer()], { type: "image/png" }), "mask.png");
+    outbound.append("input_fidelity", "high");
+    // First image = clean property (high-fidelity base). Second = brush-marked guide.
+    outbound.append(
+      "image[]",
+      new Blob([await clean.arrayBuffer()], { type: "image/png" }),
+      "property.png"
+    );
+    outbound.append(
+      "image[]",
+      new Blob([await marked.arrayBuffer()], { type: "image/png" }),
+      "property-marked.png"
+    );
 
     const res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",

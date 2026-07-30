@@ -383,8 +383,8 @@ export function HolidayLightingQuoter({
       const exported = await paintRef.current.exportForApi();
       if (!exported) throw new Error("Could not export paint mask");
       const form = new FormData();
-      form.set("image", exported.imageBlob, "house.png");
-      form.set("mask", exported.maskBlob, "mask.png");
+      form.set("clean", exported.cleanBlob, "property.png");
+      form.set("marked", exported.markedBlob, "property-marked.png");
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
         method: "POST",
         body: form,

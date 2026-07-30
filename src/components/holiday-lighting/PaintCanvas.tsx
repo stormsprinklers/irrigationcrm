@@ -18,7 +18,7 @@ type PaintCanvasProps = {
 };
 
 export type PaintCanvasHandle = {
-  exportForApi: () => Promise<{ imageBlob: Blob; maskBlob: Blob } | null>;
+  exportForApi: () => Promise<{ cleanBlob: Blob; markedBlob: Blob } | null>;
   hasPaint: () => boolean;
 };
 
@@ -226,8 +226,8 @@ export function PaintCanvas({
   };
 
   const exportForApi = useCallback(async (): Promise<{
-    imageBlob: Blob;
-    maskBlob: Blob;
+    cleanBlob: Blob;
+    markedBlob: Blob;
   } | null> => {
     const img = imageRef.current;
     const paintCanvas = paintCanvasRef.current;
@@ -237,55 +237,30 @@ export function PaintCanvas({
     const w = Math.max(1, Math.round(img.naturalWidth * scale));
     const h = Math.max(1, Math.round(img.naturalHeight * scale));
 
-    const imageCanvas = document.createElement("canvas");
-    imageCanvas.width = w;
-    imageCanvas.height = h;
-    const imageCtx = imageCanvas.getContext("2d");
-    if (!imageCtx) return null;
-    imageCtx.drawImage(img, 0, 0, w, h);
+    const cleanCanvas = document.createElement("canvas");
+    cleanCanvas.width = w;
+    cleanCanvas.height = h;
+    const cleanCtx = cleanCanvas.getContext("2d");
+    if (!cleanCtx) return null;
+    cleanCtx.drawImage(img, 0, 0, w, h);
 
-    const maskCanvas = document.createElement("canvas");
-    maskCanvas.width = w;
-    maskCanvas.height = h;
-    const maskCtx = maskCanvas.getContext("2d");
-    if (!maskCtx) return null;
+    const markedCanvas = document.createElement("canvas");
+    markedCanvas.width = w;
+    markedCanvas.height = h;
+    const markedCtx = markedCanvas.getContext("2d");
+    if (!markedCtx) return null;
+    markedCtx.drawImage(img, 0, 0, w, h);
+    markedCtx.drawImage(paintCanvas, 0, 0, w, h);
 
-    // Opaque everywhere by default (do not edit)
-    maskCtx.fillStyle = "#000000";
-    maskCtx.fillRect(0, 0, w, h);
-
-    // Sample paint layer: painted pixels become transparent (edit zone)
-    const paintScaled = document.createElement("canvas");
-    paintScaled.width = w;
-    paintScaled.height = h;
-    const paintScaledCtx = paintScaled.getContext("2d");
-    if (!paintScaledCtx) return null;
-    paintScaledCtx.drawImage(paintCanvas, 0, 0, w, h);
-    const paintData = paintScaledCtx.getImageData(0, 0, w, h);
-    const maskImage = maskCtx.getImageData(0, 0, w, h);
-
-    for (let i = 0; i < paintData.data.length; i += 4) {
-      if (paintData.data[i + 3] > 20) {
-        // Transparent = editable for OpenAI
-        maskImage.data[i + 3] = 0;
-      } else {
-        maskImage.data[i] = 0;
-        maskImage.data[i + 1] = 0;
-        maskImage.data[i + 2] = 0;
-        maskImage.data[i + 3] = 255;
-      }
-    }
-    maskCtx.putImageData(maskImage, 0, 0);
-
-    const imageBlob = await new Promise<Blob | null>((resolve) =>
-      imageCanvas.toBlob((b) => resolve(b), "image/png"),
+    const cleanBlob = await new Promise<Blob | null>((resolve) =>
+      cleanCanvas.toBlob((b) => resolve(b), "image/png")
     );
-    const maskBlob = await new Promise<Blob | null>((resolve) =>
-      maskCanvas.toBlob((b) => resolve(b), "image/png"),
+    const markedBlob = await new Promise<Blob | null>((resolve) =>
+      markedCanvas.toBlob((b) => resolve(b), "image/png")
     );
 
-    if (!imageBlob || !maskBlob) return null;
-    return { imageBlob, maskBlob };
+    if (!cleanBlob || !markedBlob) return null;
+    return { cleanBlob, markedBlob };
   }, []);
 
   useEffect(() => {
