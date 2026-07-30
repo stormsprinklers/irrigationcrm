@@ -30,15 +30,14 @@ async function resolveMapsApiKey(): Promise<string> {
   return data.key;
 }
 
-/**
- * Load Maps JS API once with async loading so `google.maps.importLibrary` works
- * (required for maps3d / Photorealistic 3D).
- */
+/** Load Maps JS API once (Map + Street View + Geometry). */
 export function loadGoogleMaps(): Promise<typeof google> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Maps can only load in the browser"));
   }
-  if (window.google?.maps) return Promise.resolve(window.google);
+  if (typeof window.google?.maps?.Map === "function") {
+    return Promise.resolve(window.google);
+  }
   if (window.__gmapsPromise) return window.__gmapsPromise;
 
   window.__gmapsPromise = (async () => {
@@ -48,7 +47,7 @@ export function loadGoogleMaps(): Promise<typeof google> {
         'script[data-holiday-maps="1"]'
       );
       if (existing) {
-        if (window.google?.maps) {
+        if (typeof window.google?.maps?.Map === "function") {
           resolve();
           return;
         }
@@ -60,42 +59,22 @@ export function loadGoogleMaps(): Promise<typeof google> {
       }
       const script = document.createElement("script");
       script.dataset.holidayMaps = "1";
+      // Do not use loading=async — that breaks `google.maps.Map` for the 2D measure panel.
       script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
         key
-      )}&v=weekly&loading=async`;
+      )}&libraries=geometry&v=weekly`;
       script.async = true;
       script.onload = () => resolve();
       script.onerror = () => reject(new Error("Google Maps script error"));
       document.head.appendChild(script);
     });
-    if (!window.google?.maps) throw new Error("Google Maps failed to load");
-    // Ensure core libraries used by the 2D measure panel are available.
-    if (typeof window.google.maps.importLibrary === "function") {
-      await window.google.maps.importLibrary("maps");
-      try {
-        await window.google.maps.importLibrary("geometry");
-      } catch {
-        /* optional */
-      }
-      try {
-        await window.google.maps.importLibrary("streetView");
-      } catch {
-        /* optional — Street View still works via Map constructor in many builds */
-      }
+    if (typeof window.google?.maps?.Map !== "function") {
+      throw new Error("Google Maps failed to load");
     }
     return window.google;
   })();
 
   return window.__gmapsPromise;
-}
-
-/** Load Photorealistic 3D Maps (`maps3d`) after the base Maps JS API is ready. */
-export async function loadMaps3d(): Promise<google.maps.Maps3DLibrary> {
-  const g = await loadGoogleMaps();
-  if (typeof g.maps.importLibrary !== "function") {
-    throw new Error("This Maps API build does not support importLibrary / 3D Maps");
-  }
-  return g.maps.importLibrary("maps3d");
 }
 
 /** True if a Maps key is available via public env or will be fetched from the API. */

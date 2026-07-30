@@ -15,7 +15,6 @@ import {
   PaintCanvas,
   type PaintCanvasHandle,
 } from "@/components/holiday-lighting/PaintCanvas";
-import { Holiday3DPreview } from "@/components/holiday-lighting/Holiday3DPreview";
 import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetViewMeasureOverlay";
 import { StrandBuilder } from "@/components/holiday-lighting/StrandBuilder";
 import { Button } from "@/components/ui/button";
@@ -852,15 +851,6 @@ export function HolidayLightingQuoter({
                   className="w-full rounded-md border border-border"
                 />
               ) : null}
-            </section>
-
-            <section className="space-y-3 rounded-lg border border-border bg-white p-4">
-              <h3 className="text-sm font-semibold">3D property view</h3>
-              <Holiday3DPreview
-                center={center}
-                measurements={measurements}
-                defaultLightStyleKey={selections.defaultLightStyleKey}
-              />
             </section>
           </div>
 

@@ -25,29 +25,3 @@ function haversineFeet(
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
-
-/**
- * Insert intermediate points so 3D mesh-relative polylines hug roof geometry better.
- * @param maxStepFt maximum spacing between points (default ~4 ft)
- */
-export function densifyPath(
-  path: Array<{ lat: number; lng: number }>,
-  maxStepFt = 4
-): Array<{ lat: number; lng: number }> {
-  if (path.length < 2) return [...path];
-  const out: Array<{ lat: number; lng: number }> = [path[0]!];
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1]!;
-    const b = path[i]!;
-    const dist = haversineFeet(a, b);
-    const steps = Math.max(1, Math.ceil(dist / Math.max(1, maxStepFt)));
-    for (let s = 1; s <= steps; s++) {
-      const t = s / steps;
-      out.push({
-        lat: a.lat + (b.lat - a.lat) * t,
-        lng: a.lng + (b.lng - a.lng) * t,
-      });
-    }
-  }
-  return out;
-}
