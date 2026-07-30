@@ -3,6 +3,7 @@ import type {
   HolidayMeasurements,
   HolidayQuoteSelections,
 } from "./types";
+import { billedSegmentLengthFt } from "./pitch-match";
 
 export type PriceLookup = Map<string, { id: string; name: string; unitPrice: number }>;
 
@@ -50,7 +51,7 @@ export function computeHolidayQuotePricing(params: {
       catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
     if (!style) continue;
 
-    const lengthFt = Math.max(0, Number(segment.lengthFt) || 0);
+    const lengthFt = billedSegmentLengthFt(segment);
     if (lengthFt <= 0 && segment.kind !== "peak") continue;
 
     if (segment.kind === "peak") {
@@ -78,12 +79,22 @@ export function computeHolidayQuotePricing(params: {
     const leaseRate = leaseFt?.unitPrice ?? partsRate + installRate * 0.65;
     const purchase = lengthFt * (partsRate + installRate);
     const lease = lengthFt * leaseRate;
+    const pitchNote =
+      segment.pitchDeg != null
+        ? segment.pitchDegRight != null
+          ? ` · ${segment.pitchDeg}°/${segment.pitchDegRight}° from plan ${
+              Number(segment.horizontalLengthFt ?? lengthFt).toFixed(1)
+            } ft`
+          : ` · ${segment.pitchDeg}° from plan ${
+              Number(segment.horizontalLengthFt ?? lengthFt).toFixed(1)
+            } ft`
+        : "";
 
     lines.push({
       key: segment.id,
       name: `${style.label} ${segment.kind} — ${segment.label}`,
       description: `Approx. ${Math.round(lengthFt)} linear ft`,
-      staffDetail: `${lengthFt.toFixed(1)} ft × ($${partsRate.toFixed(2)} parts + $${installRate.toFixed(2)} install)`,
+      staffDetail: `${lengthFt.toFixed(1)} ft × ($${partsRate.toFixed(2)} parts + $${installRate.toFixed(2)} install)${pitchNote}`,
       purchaseTotal: money(purchase),
       leaseTotal: money(lease),
       priceBookItemId: parts?.id ?? install?.id ?? null,

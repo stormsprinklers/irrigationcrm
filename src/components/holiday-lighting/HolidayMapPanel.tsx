@@ -187,19 +187,20 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
         kind === "peak" && draftPath.current.length === 1
           ? [draftPath.current[0]!, draftPath.current[0]!]
           : draftPath.current;
-      const segment: HolidayMeasurementSegment = {
-        id: newId(),
-        label:
-          kind === "roofline"
-            ? `Roofline ${measurements.segments.length + 1}`
-            : kind === "peak"
-              ? `Peak ${measurements.segments.length + 1}`
-              : `Garland ${measurements.segments.length + 1}`,
-        kind: kind as HolidaySegmentKind,
-        path,
-        lengthFt: pathLengthFeet(path),
-        lightStyleKey: defaultLightStyleKey,
-      };
+    const segment: HolidayMeasurementSegment = {
+      id: newId(),
+      label:
+        kind === "roofline"
+          ? `Roofline ${measurements.segments.length + 1}`
+          : kind === "peak"
+            ? `Peak ${measurements.segments.length + 1}`
+            : `Garland ${measurements.segments.length + 1}`,
+      kind: kind as HolidaySegmentKind,
+      path,
+      lengthFt: pathLengthFeet(path),
+      horizontalLengthFt: pathLengthFeet(path),
+      lightStyleKey: defaultLightStyleKey,
+    };
       onChange({
         ...measurements,
         segments: [...measurements.segments, segment],

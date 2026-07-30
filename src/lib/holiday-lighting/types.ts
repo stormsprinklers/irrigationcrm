@@ -7,9 +7,35 @@ export type HolidayMeasurementSegment = {
   label: string;
   kind: HolidaySegmentKind;
   path: HolidayLatLng[];
+  /** Billable / true roof length (after pitch correction when available). */
   lengthFt: number;
   /** Catalog light style key (e.g. c9-warm-white). */
   lightStyleKey?: string;
+  /** Satellite plan length (horizontal run) before pitch correction. */
+  horizontalLengthFt?: number;
+  /** Pitch from street-view match (degrees from horizontal). */
+  pitchDeg?: number;
+  /** Estimated vertical rise over the horizontal run. */
+  riseFt?: number;
+  /** Gable: right-side pitch / length (lengthFt is left or total — see pitchedLengthFt). */
+  pitchDegRight?: number;
+  lengthFtRight?: number;
+};
+
+export type StreetViewNormPoint = { x: number; y: number };
+
+/** Line(s) drawn on the captured street-view photo, linked to a satellite segment. */
+export type StreetViewRoofTrace = {
+  id: string;
+  satelliteSegmentId: string;
+  /** 2 points = single slope; 3 points = gable (left eave → peak → right eave). */
+  points: StreetViewNormPoint[];
+};
+
+export type HolidayMeasurements = {
+  segments: HolidayMeasurementSegment[];
+  placements: HolidayMeasurementPlacement[];
+  streetTraces?: StreetViewRoofTrace[];
 };
 
 export type HolidayPlacementKind = "tree" | "bush";
@@ -21,11 +47,6 @@ export type HolidayMeasurementPlacement = {
   size: HolidayTreeSize;
   label: string;
   latLng: HolidayLatLng;
-};
-
-export type HolidayMeasurements = {
-  segments: HolidayMeasurementSegment[];
-  placements: HolidayMeasurementPlacement[];
 };
 
 export type HolidayQuoteSelections = {
@@ -147,6 +168,7 @@ export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
 export const EMPTY_HOLIDAY_MEASUREMENTS: HolidayMeasurements = {
   segments: [],
   placements: [],
+  streetTraces: [],
 };
 
 function parseQuoteDefaults(raw: unknown): HolidayQuoteDefaults {
@@ -203,6 +225,7 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
   return {
     segments: Array.isArray(obj.segments) ? obj.segments : [],
     placements: Array.isArray(obj.placements) ? obj.placements : [],
+    streetTraces: Array.isArray(obj.streetTraces) ? obj.streetTraces : [],
   };
 }
 
