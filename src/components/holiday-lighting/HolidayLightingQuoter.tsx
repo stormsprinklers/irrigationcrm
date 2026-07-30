@@ -18,6 +18,7 @@ import {
 import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetViewMeasureOverlay";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
@@ -106,6 +107,7 @@ export function HolidayLightingQuoter({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<QuoteRecord["estimate"]>(null);
   const [matchSegmentId, setMatchSegmentId] = useState<string | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
@@ -208,6 +210,7 @@ export function HolidayLightingQuoter({
       lng: number | null;
       customerId: string | null;
       sourcePhotoUrl: string | null;
+      previewImageUrl: string | null;
     }>,
     opts?: { quiet?: boolean }
   ) {
@@ -424,6 +427,25 @@ export function HolidayLightingQuoter({
     }
   }
 
+  async function clearQuoteWork() {
+    setMeasurements(EMPTY_HOLIDAY_MEASUREMENTS);
+    setMatchSegmentId(null);
+    setPhotoUrl(null);
+    setPreviewUrl(null);
+    setPricing(null);
+    setStep(1);
+    setClearConfirmOpen(false);
+    await save(
+      {
+        measurements: EMPTY_HOLIDAY_MEASUREMENTS,
+        sourcePhotoUrl: null,
+        previewImageUrl: null,
+      },
+      { quiet: true }
+    );
+    toast.success("Quote measurements cleared");
+  }
+
   const totalFt = useMemo(
     () =>
       measurements.segments.reduce((s, seg) => s + billedSegmentLengthFt(seg), 0),
@@ -466,6 +488,14 @@ export function HolidayLightingQuoter({
           </span>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setClearConfirmOpen(true)}
+          >
+            Clear quote
+          </Button>
           <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>
             {saving ? "Saving…" : "Save draft"}
           </Button>
@@ -779,6 +809,15 @@ export function HolidayLightingQuoter({
           </aside>
         </div>
       )}
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        title="Clear this lighting quote?"
+        description="This removes all strands, trees/bushes, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
+        confirmLabel="Clear everything"
+        confirmVariant="destructive"
+        onConfirm={() => void clearQuoteWork()}
+        onCancel={() => setClearConfirmOpen(false)}
+      />
     </div>
   );
 }

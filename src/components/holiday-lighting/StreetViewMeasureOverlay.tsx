@@ -210,34 +210,56 @@ export function StreetViewMeasureOverlay({
               const horizontal = seg.horizontalLengthFt ?? seg.lengthFt;
               return (
                 <li key={seg.id}>
-                  <button
-                    type="button"
+                  <div
                     className={cn(
-                      "flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left hover:bg-muted",
+                      "flex items-start gap-1 rounded px-1 py-0.5 hover:bg-muted",
                       selectedSegmentId === seg.id && "bg-muted"
                     )}
-                    onClick={() =>
-                      onSelectSegment(selectedSegmentId === seg.id ? null : seg.id)
-                    }
                   >
-                    <span className="flex justify-between gap-2 font-medium">
-                      <span>{seg.label}</span>
-                      <span className="text-muted-foreground">
-                        {matched ? "Matched" : "Needs pitch"}
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 flex-col gap-0.5 px-1 py-1 text-left"
+                      onClick={() =>
+                        onSelectSegment(selectedSegmentId === seg.id ? null : seg.id)
+                      }
+                    >
+                      <span className="flex justify-between gap-2 font-medium">
+                        <span className="truncate">{seg.label}</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {matched ? "Matched" : "Needs pitch"}
+                        </span>
                       </span>
-                    </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      Plan {horizontal.toFixed(1)} ft
-                      {seg.pitchDeg != null ? ` · ${seg.pitchDeg}°` : ""}
-                      {seg.pitchDegRight != null ? ` / ${seg.pitchDegRight}°` : ""}
-                      {seg.riseFt != null ? ` · rise ${seg.riseFt.toFixed(1)} ft` : ""}
-                      {seg.pitchDeg != null
-                        ? seg.lengthFtRight != null
-                          ? ` · true ${seg.lengthFt.toFixed(1)}+${seg.lengthFtRight.toFixed(1)} ft`
-                          : ` · true ${seg.lengthFt.toFixed(1)} ft`
-                        : ""}
-                    </span>
-                  </button>
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        Plan {horizontal.toFixed(1)} ft
+                        {seg.pitchDeg != null ? ` · ${seg.pitchDeg}°` : ""}
+                        {seg.pitchDegRight != null ? ` / ${seg.pitchDegRight}°` : ""}
+                        {seg.riseFt != null ? ` · rise ${seg.riseFt.toFixed(1)} ft` : ""}
+                        {seg.pitchDeg != null
+                          ? seg.lengthFtRight != null
+                            ? ` · true ${seg.lengthFt.toFixed(1)}+${seg.lengthFtRight.toFixed(1)} ft`
+                            : ` · true ${seg.lengthFt.toFixed(1)} ft`
+                          : ""}
+                      </span>
+                    </button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="mt-0.5 h-7 shrink-0 px-2 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        onChange({
+                          ...measurements,
+                          segments: measurements.segments.filter((s) => s.id !== seg.id),
+                          streetTraces: (measurements.streetTraces ?? []).filter(
+                            (t) => t.satelliteSegmentId !== seg.id
+                          ),
+                        });
+                        if (selectedSegmentId === seg.id) onSelectSegment(null);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </li>
               );
             })
