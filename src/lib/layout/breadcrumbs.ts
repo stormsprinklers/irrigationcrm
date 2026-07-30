@@ -199,13 +199,13 @@ export function resolveBreadcrumbs(items: BreadcrumbInput[]): ResolvedBreadcrumb
       const href = item.href ?? null;
       resolved.push({ label, href: href || null });
       // Keep walking if this label exists in the tree (for following crumbs).
-      const child = level?.[normKey(label)];
+      const child: BreadcrumbNode | undefined = level?.[normKey(label)];
       level = child?.children;
       continue;
     }
 
     const label = item;
-    const child = level?.[normKey(label)];
+    const child: BreadcrumbNode | undefined = level?.[normKey(label)];
     resolved.push({
       label,
       href: child?.href ?? null,
