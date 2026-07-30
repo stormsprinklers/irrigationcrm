@@ -82,7 +82,8 @@ export default function HolidayLightingQuoteListPage() {
               >
                 <span>
                   <span className="font-medium">
-                    {q.customer?.name ?? [q.address, q.city].filter(Boolean).join(", ") || "Untitled"}
+                    {q.customer?.name ??
+                      ([q.address, q.city].filter(Boolean).join(", ") || "Untitled")}
                   </span>
                   <span className="mt-0.5 block text-xs text-muted-foreground">
                     {q.status}
