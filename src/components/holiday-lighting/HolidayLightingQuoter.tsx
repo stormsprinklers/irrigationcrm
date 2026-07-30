@@ -324,8 +324,6 @@ export function HolidayLightingQuoter({ quoteId: initialId, initialCustomerId }:
             onChange={(e) => setCustomerId(e.target.value)}
           />
         </div>
-        {!mapsKeyConfigured ? null : null}
-        {!mapsKeyConfigured ? null : null}
         <div className="min-h-[420px] flex-1">
           <HolidayMapPanel
             center={center}
