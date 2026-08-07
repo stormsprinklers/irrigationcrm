@@ -244,6 +244,22 @@ export function holidaySelectionsFromCatalog(
   };
 }
 
+/**
+ * Lock company policy fields (error margin + lease) from settings onto a quote.
+ * Light style and notes stay per-quote.
+ */
+export function applyHolidayCatalogPolicy(
+  selections: HolidayQuoteSelections,
+  catalog: HolidayLightingCatalog
+): HolidayQuoteSelections {
+  const d = catalog.quoteDefaults ?? DEFAULT_HOLIDAY_CATALOG.quoteDefaults!;
+  return {
+    ...selections,
+    marginPct: d.marginPct,
+    includeLease: d.includeLease,
+  };
+}
+
 export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
   if (!raw || typeof raw !== "object") return EMPTY_HOLIDAY_MEASUREMENTS;
   const obj = raw as Partial<HolidayMeasurements>;

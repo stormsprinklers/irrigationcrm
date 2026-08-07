@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { loadHolidayPriceLookup } from "./catalog";
 import { applyMarginToLines, computeHolidayQuotePricing } from "./pricing";
+import { buildHolidayStrandMap } from "./strand-map";
 import {
+  applyHolidayCatalogPolicy,
   parseHolidayCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
@@ -27,7 +29,10 @@ export async function createEstimateFromHolidayQuote(params: {
 
   const catalog = parseHolidayCatalog(company.holidayLightingCatalog);
   const measurements = parseHolidayMeasurements(quote.measurements);
-  const selections = parseHolidaySelections(quote.selections);
+  const selections = applyHolidayCatalogPolicy(
+    parseHolidaySelections(quote.selections),
+    catalog
+  );
   const prices = await loadHolidayPriceLookup(params.companyId);
   const priced = computeHolidayQuotePricing({
     catalog,
@@ -42,6 +47,17 @@ export async function createEstimateFromHolidayQuote(params: {
 
   const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
   const estimateNumber = await allocateEstimateNumber(params.companyId);
+
+  const address = [quote.address, quote.city, quote.state, quote.zip]
+    .filter(Boolean)
+    .join(", ");
+  const strandMap = buildHolidayStrandMap({
+    measurements,
+    selections,
+    catalog,
+    pricedLines: priced.lines,
+    address,
+  });
 
   const estimate = await prisma.estimate.create({
     data: {
@@ -58,7 +74,9 @@ export async function createEstimateFromHolidayQuote(params: {
         source: "holiday-lighting-quote",
         quoteId: quote.id,
         previewImageUrl: quote.previewImageUrl,
-        address: [quote.address, quote.city, quote.state, quote.zip].filter(Boolean).join(", "),
+        address,
+        marginPct: selections.marginPct,
+        strandMap,
       },
     },
   });

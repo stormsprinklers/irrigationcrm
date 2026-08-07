@@ -1,14 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 import { buildNotificationContext } from "./context";
-import { sendOperationalNotification } from "./send";
+import { sendOperationalNotification, type SendResult } from "./send";
 
-export async function notifyEstimateViaTemplates(estimateId: string, companyId: string) {
+export type EstimateSendChannel = "email" | "sms";
+
+export async function notifyEstimateViaTemplates(
+  estimateId: string,
+  companyId: string,
+  channel?: EstimateSendChannel
+): Promise<SendResult> {
   const estimate = await prisma.estimate.findFirst({
     where: { id: estimateId, companyId },
     include: { customer: true, company: true, lineItems: { orderBy: { sortOrder: "asc" } } },
   });
-  if (!estimate?.customer) return { emailSent: false, smsSent: false, skipped: ["no customer"] };
+  if (!estimate?.customer) {
+    return { emailSent: false, smsSent: false, skipped: ["no customer"], deliveryIds: [] };
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const portalSlug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
@@ -42,6 +50,26 @@ export async function notifyEstimateViaTemplates(estimateId: string, companyId: 
     options: {
       estimateId: estimate.id,
       linkPlaceholders: { estimate: estimateUrl },
+      ...(channel === "email" ? { emailOnly: true } : {}),
+      ...(channel === "sms" ? { smsOnly: true } : {}),
     },
   });
+}
+
+/** Staff-facing portal path for the customer estimate page. */
+export async function getEstimateCustomerPortalPath(
+  companyId: string,
+  estimateId: string
+): Promise<string | null> {
+  const estimate = await prisma.estimate.findFirst({
+    where: { id: estimateId, companyId },
+    select: {
+      publicToken: true,
+      company: { select: { portalSlug: true, bookingSlug: true } },
+    },
+  });
+  if (!estimate) return null;
+  const slug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
+  if (!slug) return null;
+  return `/portal/${slug}/estimates/${estimate.publicToken}`;
 }

@@ -37,6 +37,8 @@ export type SendOptions = {
   technicianUserId?: string;
   /** Only send SMS (skip email). */
   smsOnly?: boolean;
+  /** Only send email (skip SMS). */
+  emailOnly?: boolean;
   /** Only send SMS if email fails or customer has no email. */
   smsBackupOnly?: boolean;
   /** Raw link placeholders to replace with tracked URLs. */
@@ -191,6 +193,7 @@ export async function sendOperationalNotification(params: {
 
   for (const rule of rules) {
     if (options.smsOnly && rule.template.channel === Channel.EMAIL) continue;
+    if (options.emailOnly && rule.template.channel === Channel.SMS) continue;
     if (options.smsBackupOnly && rule.template.channel === Channel.SMS) continue;
 
     const delivery = await prisma.notificationDelivery.create({
@@ -245,6 +248,7 @@ export async function sendOperationalNotification(params: {
     }
 
     if (rule.template.channel === Channel.SMS) {
+      if (options.emailOnly) continue;
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone || !process.env.TWILIO_ACCOUNT_SID) continue;
       if (options.smsBackupOnly && !emailFailed && emailAttempted && result.emailSent) continue;

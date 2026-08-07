@@ -13,6 +13,7 @@ import {
 import { createEstimateFromHolidayQuote } from "@/lib/holiday-lighting/create-estimate";
 import { computeHolidayQuotePricing } from "@/lib/holiday-lighting/pricing";
 import {
+  applyHolidayCatalogPolicy,
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "@/lib/holiday-lighting/types";
@@ -45,10 +46,14 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
     const catalog = await loadHolidayCatalog(user.companyId);
     const prices = await loadHolidayPriceLookup(user.companyId);
+    const selections = applyHolidayCatalogPolicy(
+      parseHolidaySelections(quote.selections),
+      catalog
+    );
     const pricing = computeHolidayQuotePricing({
       catalog,
       measurements: parseHolidayMeasurements(quote.measurements),
-      selections: parseHolidaySelections(quote.selections),
+      selections,
       prices,
     });
 
@@ -75,6 +80,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+    const catalog = await loadHolidayCatalog(user.companyId);
     const data: Record<string, unknown> = {};
     for (const key of [
       "customerId",
@@ -91,7 +97,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (key in body) data[key] = body[key];
     }
     if ("measurements" in body) data.measurements = parseHolidayMeasurements(body.measurements);
-    if ("selections" in body) data.selections = parseHolidaySelections(body.selections);
+    if ("selections" in body) {
+      data.selections = applyHolidayCatalogPolicy(
+        parseHolidaySelections(body.selections),
+        catalog
+      );
+    }
 
     const quote = await prisma.holidayLightingQuote.update({
       where: { id },
@@ -102,12 +113,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
-    const catalog = await loadHolidayCatalog(user.companyId);
     const prices = await loadHolidayPriceLookup(user.companyId);
     const pricing = computeHolidayQuotePricing({
       catalog,
       measurements: parseHolidayMeasurements(quote.measurements),
-      selections: parseHolidaySelections(quote.selections),
+      selections: applyHolidayCatalogPolicy(
+        parseHolidaySelections(quote.selections),
+        catalog
+      ),
       prices,
     });
 

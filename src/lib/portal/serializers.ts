@@ -1,4 +1,5 @@
 import type { VisitStatus } from "@prisma/client";
+import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { toNumber } from "@/lib/visits/totals";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
@@ -105,6 +106,7 @@ export function serializePortalEstimate(estimate: {
   depositType?: string | null;
   depositAmount?: { toNumber?: () => number } | number | null;
   designProjectId?: string | null;
+  designExportMetadata?: unknown;
   premiumOptionTotal?: { toNumber?: () => number } | number | null;
   selectedQuoteTier?: string | null;
   options?: Array<{
@@ -143,6 +145,14 @@ export function serializePortalEstimate(estimate: {
   company?: { estimateWarrantyText?: string | null } | null;
 }) {
   const hasDesign = Boolean(estimate.designProjectId);
+  const meta =
+    estimate.designExportMetadata && typeof estimate.designExportMetadata === "object"
+      ? (estimate.designExportMetadata as Record<string, unknown>)
+      : null;
+  const holidayStrandMap = holidayStrandMapFromMetadata(meta);
+  const holidayPreviewImageUrl =
+    typeof meta?.previewImageUrl === "string" ? meta.previewImageUrl : null;
+  const hasHolidayLighting = Boolean(holidayStrandMap || holidayPreviewImageUrl);
   const optionCount = estimate.options?.length ?? 0;
   const options = (estimate.options ?? []).map((option) => {
     const letter = option.letter;
@@ -213,6 +223,9 @@ export function serializePortalEstimate(estimate: {
     depositAmount:
       estimate.depositAmount != null ? toNumber(estimate.depositAmount as never) : null,
     hasDesign,
+    hasHolidayLighting,
+    holidayStrandMap,
+    holidayPreviewImageUrl,
     designProjectId: estimate.designProjectId ?? null,
     premiumOptionTotal:
       estimate.premiumOptionTotal != null

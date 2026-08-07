@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { isFieldRole } from "@/lib/employees";
 import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
 import { EstimatePostApprovalDialog } from "@/components/estimates/EstimatePostApprovalDialog";
+import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
+import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Badge } from "@/components/ui/badge";
@@ -228,6 +230,7 @@ export function EstimateDetail({ estimateId }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
     "choose"
   );
@@ -370,21 +373,6 @@ export function EstimateDetail({ estimateId }: Props) {
       return;
     }
     await load();
-  }
-
-  async function sendEstimate() {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/estimates/${estimateId}/send`, { method: "POST" });
-      if (!res.ok) {
-        toast.error("Failed to send estimate");
-        return;
-      }
-      setEstimate(await res.json());
-      toast.success("Estimate sent");
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function saveSignature(dataUrl: string) {
@@ -549,7 +537,7 @@ export function EstimateDetail({ estimateId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={sendEstimate} disabled={saving}>
+          <Button variant="outline" size="sm" onClick={() => setSendDialogOpen(true)} disabled={saving}>
             <Send className="h-4 w-4" />
             Send
           </Button>
@@ -640,9 +628,13 @@ export function EstimateDetail({ estimateId }: Props) {
                           : "hover:bg-muted/60"
                       }`}
                     >
-                      <div className="font-semibold">{option.displayNumber}</div>
+                      <div
+                        className={`font-semibold ${selected ? "text-primary" : ""}`}
+                      >
+                        {option.label}
+                      </div>
                       <div className="text-xs text-muted-foreground">
-                        {option.label} · {formatCurrency(option.total)}
+                        {option.displayNumber} · {formatCurrency(option.total)}
                       </div>
                     </button>
                   );
@@ -680,6 +672,22 @@ export function EstimateDetail({ estimateId }: Props) {
                   .then((data) => setEstimate(data))
                   .catch(() => {});
               }}
+            />
+          ) : null}
+
+          {estimate.designExportMetadata &&
+          (estimate.designExportMetadata as Record<string, unknown>).source ===
+            "holiday-lighting-quote" ? (
+            <HolidayLightingPlanSection
+              designExportMetadata={estimate.designExportMetadata as Record<string, unknown>}
+              mode="installer"
+              priceField={
+                activeOption?.label?.toLowerCase().includes("lease")
+                  ? "leaseTotal"
+                  : "purchaseTotal"
+              }
+              title="Holiday lighting layout"
+              description="Color-coded strands with label, cost, and linear feet including error margin (same map installers see)."
             />
           ) : null}
 
@@ -962,6 +970,15 @@ export function EstimateDetail({ estimateId }: Props) {
         initialMode={postApprovalMode}
         onClose={() => setPostApprovalOpen(false)}
         onConverted={() => {
+          void load();
+        }}
+      />
+
+      <EstimateSendDialog
+        open={sendDialogOpen}
+        estimateId={estimateId}
+        onClose={() => setSendDialogOpen(false)}
+        onSent={() => {
           void load();
         }}
       />

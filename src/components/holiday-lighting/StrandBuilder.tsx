@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { billedSegmentLengthFt, segmentPitchResolved } from "@/lib/holiday-lighting/pitch-match";
@@ -30,6 +31,7 @@ export function StrandBuilder({
   onSelectStrand,
 }: Props) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const resolved = useMemo(
     () =>
@@ -60,13 +62,25 @@ export function StrandBuilder({
     });
   }
 
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function combine() {
     const ids = [...picked];
     if (ids.length < 2) return;
     const next = combineSegmentsIntoStrand(measurements, ids);
     onChange(next);
     const created = (next.strands ?? []).at(-1);
-    if (created) onSelectStrand(created.id);
+    if (created) {
+      onSelectStrand(created.id);
+      setExpandedIds((prev) => new Set(prev).add(created.id));
+    }
     setPicked(new Set());
   }
 
@@ -129,6 +143,7 @@ export function StrandBuilder({
               .map((id) => measurements.segments.find((s) => s.id === id))
               .filter(Boolean);
             const selected = selectedStrandId === strand.id;
+            const expanded = expandedIds.has(strand.id) || selected;
             const total = billedStrandLengthFt(strand, measurements.segments);
             return (
               <li
@@ -141,77 +156,108 @@ export function StrandBuilder({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="text-left font-medium hover:underline"
-                    onClick={() => onSelectStrand(selected ? null : strand.id)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left font-medium hover:underline"
+                    onClick={() => {
+                      toggleExpanded(strand.id);
+                      onSelectStrand(selected && expanded ? null : strand.id);
+                    }}
+                    aria-expanded={expanded}
                   >
-                    {selected ? "Selected · " : ""}
-                    {strand.label}
+                    {expanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate">
+                      {selected ? "Selected · " : ""}
+                      {strand.label}
+                    </span>
+                    <span className="shrink-0 font-mono font-normal text-muted-foreground">
+                      {total.toFixed(1)} ft
+                    </span>
+                    <span className="shrink-0 text-[10px] font-normal text-muted-foreground">
+                      · {members.length} segment{members.length === 1 ? "" : "s"}
+                    </span>
                   </button>
-                  <span className="font-mono text-muted-foreground">{total.toFixed(1)} ft</span>
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
-                    className="ml-auto h-7 px-2 text-destructive hover:text-destructive"
+                    className="h-7 px-2 text-destructive hover:text-destructive"
                     onClick={() => {
                       onChange(dissolveStrand(measurements, strand.id));
                       if (selectedStrandId === strand.id) onSelectStrand(null);
+                      setExpandedIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(strand.id);
+                        return next;
+                      });
                     }}
                   >
                     Dissolve
                   </Button>
                 </div>
-                <Input
-                  className="mt-1 h-7 text-xs"
-                  value={strand.label}
-                  onChange={(e) => onChange(renameStrand(measurements, strand.id, e.target.value))}
-                  onFocus={() => onSelectStrand(strand.id)}
-                />
-                <ul className="mt-1 space-y-0.5">
-                  {members.map((seg) =>
-                    seg ? (
-                      <li
-                        key={seg.id}
-                        className="flex items-center justify-between gap-2 text-muted-foreground"
-                      >
-                        <span className="truncate">{seg.label}</span>
-                        <span className="flex items-center gap-1">
-                          <span className="font-mono">
-                            {billedSegmentLengthFt(seg).toFixed(1)} ft
-                          </span>
+
+                {expanded ? (
+                  <div className="mt-1.5 space-y-1 border-t border-border/60 pt-1.5">
+                    <Input
+                      className="h-7 text-xs"
+                      value={strand.label}
+                      onChange={(e) =>
+                        onChange(renameStrand(measurements, strand.id, e.target.value))
+                      }
+                      onFocus={() => onSelectStrand(strand.id)}
+                    />
+                    <ul className="space-y-0.5">
+                      {members.map((seg) =>
+                        seg ? (
+                          <li
+                            key={seg.id}
+                            className="flex items-center justify-between gap-2 text-muted-foreground"
+                          >
+                            <span className="truncate">{seg.label}</span>
+                            <span className="flex items-center gap-1">
+                              <span className="font-mono">
+                                {billedSegmentLengthFt(seg).toFixed(1)} ft
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1"
+                                onClick={() =>
+                                  onChange(
+                                    removeSegmentFromStrand(measurements, strand.id, seg.id)
+                                  )
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </span>
+                          </li>
+                        ) : null
+                      )}
+                    </ul>
+                    {available.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {available.map((seg) => (
                           <Button
+                            key={seg.id}
                             type="button"
                             size="sm"
-                            variant="ghost"
-                            className="h-6 px-1"
-                            onClick={() =>
-                              onChange(removeSegmentFromStrand(measurements, strand.id, seg.id))
-                            }
+                            variant="outline"
+                            className="h-6 px-1.5 text-[10px]"
+                            onClick={() => {
+                              onChange(addSegmentToStrand(measurements, strand.id, seg.id));
+                              onSelectStrand(strand.id);
+                              setExpandedIds((prev) => new Set(prev).add(strand.id));
+                            }}
                           >
-                            Remove
+                            + {seg.label}
                           </Button>
-                        </span>
-                      </li>
-                    ) : null
-                  )}
-                </ul>
-                {available.length > 0 ? (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {available.map((seg) => (
-                      <Button
-                        key={seg.id}
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-6 px-1.5 text-[10px]"
-                        onClick={() => {
-                          onChange(addSegmentToStrand(measurements, strand.id, seg.id));
-                          onSelectStrand(strand.id);
-                        }}
-                      >
-                        + {seg.label}
-                      </Button>
-                    ))}
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </li>

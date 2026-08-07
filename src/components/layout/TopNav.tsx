@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { NewMenu } from "@/components/layout/NewMenu";
 import { UserAccountMenu } from "@/components/layout/UserAccountMenu";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { GlobalSearchButton } from "@/components/layout/GlobalSearch";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,6 +171,7 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+          <GlobalSearchButton />
           <NewMenu />
 
           <NotificationBell />

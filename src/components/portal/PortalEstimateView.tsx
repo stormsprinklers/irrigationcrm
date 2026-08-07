@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { PortalShell } from "./PortalShell";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
+import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
+import type { HolidayStrandMap } from "@/lib/holiday-lighting/strand-map";
 
 type LineItem = {
   optionId?: string | null;
@@ -40,6 +42,9 @@ type Estimate = {
   signedAt: string | null;
   depositRequired: boolean;
   hasDesign: boolean;
+  hasHolidayLighting?: boolean;
+  holidayStrandMap?: HolidayStrandMap | null;
+  holidayPreviewImageUrl?: string | null;
   premiumOptionTotal: number | null;
   warrantyText?: string | null;
   options: Array<{
@@ -378,6 +383,39 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
           </section>
         ) : null}
 
+        {estimate.hasHolidayLighting ? (
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-sm font-medium">Holiday lighting layout</h2>
+              <p className="text-xs text-muted-foreground">
+                Color-coded strands match the estimate options below.
+              </p>
+            </div>
+            {estimate.holidayPreviewImageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={
+                  blobProxyUrl(estimate.holidayPreviewImageUrl) ??
+                  estimate.holidayPreviewImageUrl
+                }
+                alt="Lighting preview"
+                className="w-full rounded-lg border border-border object-cover"
+              />
+            ) : null}
+            {estimate.holidayStrandMap ? (
+              <HolidayStrandMapViewer
+                map={estimate.holidayStrandMap}
+                mode="customer"
+                priceField={
+                  activeOption?.label?.toLowerCase().includes("lease")
+                    ? "leaseTotal"
+                    : "purchaseTotal"
+                }
+              />
+            ) : null}
+          </section>
+        ) : null}
+
         {canSign && (estimate.options?.length ?? 0) > 1 ? (
           <section className="grid gap-3 sm:grid-cols-2">
             {estimate.options.map((option) => (
@@ -389,8 +427,14 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
                 }`}
                 onClick={() => setSelectedOptionId(option.id)}
               >
-                <p className="font-medium">{option.displayNumber}</p>
-                <p className="text-sm text-muted-foreground">{option.label}</p>
+                <p
+                  className={`font-semibold ${
+                    selectedOptionId === option.id ? "text-primary" : ""
+                  }`}
+                >
+                  {option.label}
+                </p>
+                <p className="text-sm text-muted-foreground">{option.displayNumber}</p>
                 <p className="mt-2 font-semibold">{formatCurrency(option.total)}</p>
               </button>
             ))}

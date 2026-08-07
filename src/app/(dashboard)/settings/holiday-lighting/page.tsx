@@ -98,7 +98,8 @@ export default function HolidayLightingCatalogSettingsPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Quote defaults</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Applied to every new holiday lighting quote. Staff can still change them per quote.
+              Company-wide for holiday lighting quotes. Error margin and lease are set here only —
+              staff pick light style on each quote.
             </p>
             <div className="mt-4 space-y-4">
               <div>
@@ -135,7 +136,7 @@ export default function HolidayLightingCatalogSettingsPage() {
                     patchDefaults({ includeLease: Boolean(checked) })
                   }
                 />
-                Include lease option by default
+                Include lease option
               </label>
             </div>
           </section>

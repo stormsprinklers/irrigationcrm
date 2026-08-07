@@ -40,7 +40,11 @@ async function attachNoteAuthors(
   }));
 }
 
-export function serializeEstimate(estimate: EstimatePayload, notes?: EstimateDTO["notes"]): EstimateDTO {
+export function serializeEstimate(
+  estimate: EstimatePayload,
+  notes?: EstimateDTO["notes"],
+  portalPath: string | null = null
+): EstimateDTO {
   const optionCount = estimate.options?.length ?? 0;
   const options = (estimate.options ?? []).map((option) => ({
     id: option.id,
@@ -56,6 +60,8 @@ export function serializeEstimate(estimate: EstimatePayload, notes?: EstimateDTO
   return {
     id: estimate.id,
     estimateNumber: estimate.estimateNumber ?? null,
+    publicToken: estimate.publicToken,
+    portalPath,
     status: estimate.status,
     expiresAt: estimate.expiresAt?.toISOString() ?? null,
     depositRequired: estimate.depositRequired,
@@ -236,7 +242,13 @@ export async function getEstimateForCompany(companyId: string, estimateId: strin
   if (!refreshed) return null;
 
   const notes = await attachNoteAuthors(refreshed.notes);
-  return serializeEstimate(refreshed, notes);
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { portalSlug: true, bookingSlug: true },
+  });
+  const slug = company?.portalSlug ?? company?.bookingSlug ?? null;
+  const portalPath = slug ? `/portal/${slug}/estimates/${refreshed.publicToken}` : null;
+  return serializeEstimate(refreshed, notes, portalPath);
 }
 
 export async function listEstimates(

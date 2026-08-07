@@ -12,6 +12,9 @@ export type EstimateOptionDTO = {
 export type EstimateDTO = {
   id: string;
   estimateNumber: string | null;
+  publicToken: string;
+  /** Relative customer portal path when company has a portal/booking slug. */
+  portalPath: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;

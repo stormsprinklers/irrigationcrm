@@ -20,6 +20,7 @@ import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
 import { VisitIrrigationSection } from "@/components/visits/VisitIrrigationSection";
 import { VisitInstallPlanSection } from "@/components/visits/VisitInstallPlanSection";
+import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { VisitScheduleSection } from "@/components/visits/VisitScheduleSection";
 import { VisitNotesSection, type VisitNoteItem } from "@/components/visits/VisitNotesSection";
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
@@ -413,6 +414,15 @@ export function VisitDetail({ visitId }: Props) {
           installDurationDays={visit.installDurationDays ?? 4}
           visitId={visit.id}
           onDurationUpdated={load}
+        />
+      ) : null}
+
+      {visit.designExportMetadata &&
+      (visit.designExportMetadata as Record<string, unknown>).source ===
+        "holiday-lighting-quote" ? (
+        <HolidayLightingPlanSection
+          designExportMetadata={visit.designExportMetadata as Record<string, unknown>}
+          mode="installer"
         />
       ) : null}
 

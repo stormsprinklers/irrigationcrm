@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
-import { notifyEstimateViaTemplates } from "@/lib/notifications/estimate-notify";
+import {
+  getEstimateCustomerPortalPath,
+  notifyEstimateViaTemplates,
+  type EstimateSendChannel,
+} from "@/lib/notifications/estimate-notify";
 import { onEstimateSent } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
@@ -19,11 +23,28 @@ export async function POST(_request: NextRequest, { params }: Params) {
     });
 
     if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!estimate.customer.email && !estimate.customer.phone) {
+
+    let channel: EstimateSendChannel | undefined;
+    try {
+      const body = (await request.json().catch(() => ({}))) as { channel?: string };
+      if (body.channel === "email" || body.channel === "sms") {
+        channel = body.channel;
+      }
+    } catch {
+      /* empty body is fine — send both channels */
+    }
+
+    if (channel === "email" && !estimate.customer.email) {
+      return badRequestResponse("Customer has no email address");
+    }
+    if (channel === "sms" && !estimate.customer.phone) {
+      return badRequestResponse("Customer has no phone number");
+    }
+    if (!channel && !estimate.customer.email && !estimate.customer.phone) {
       return badRequestResponse("Customer must have an email or phone to send estimate");
     }
 
-    const result = await notifyEstimateViaTemplates(id, user.companyId);
+    const result = await notifyEstimateViaTemplates(id, user.companyId, channel);
     if (!result.emailSent && !result.smsSent) {
       return NextResponse.json(
         { error: "Failed to send estimate notification", skipped: result.skipped },
@@ -41,7 +62,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     );
 
     const updated = await getEstimateForCompany(user.companyId, id);
-    return NextResponse.json(updated);
+    const portalPath = await getEstimateCustomerPortalPath(user.companyId, id);
+    return NextResponse.json({ ...updated, portalPath, sendResult: result });
   } catch {
     return unauthorizedResponse();
   }

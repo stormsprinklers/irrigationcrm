@@ -8,6 +8,7 @@ import {
 import { assertHolidayLightingEnabled } from "@/lib/holiday-lighting/catalog";
 import {
   EMPTY_HOLIDAY_MEASUREMENTS,
+  applyHolidayCatalogPolicy,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
           ? parseHolidayMeasurements(body.measurements)
           : EMPTY_HOLIDAY_MEASUREMENTS,
         selections: body.selections
-          ? parseHolidaySelections(body.selections)
+          ? applyHolidayCatalogPolicy(parseHolidaySelections(body.selections), catalog)
           : holidaySelectionsFromCatalog(catalog),
       },
     });

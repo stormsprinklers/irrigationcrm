@@ -17,8 +17,8 @@ import {
 } from "@/components/holiday-lighting/PaintCanvas";
 import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetViewMeasureOverlay";
 import { StrandBuilder } from "@/components/holiday-lighting/StrandBuilder";
+import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
@@ -30,6 +30,7 @@ import {
   DEFAULT_HOLIDAY_CATALOG,
   DEFAULT_HOLIDAY_SELECTIONS,
   EMPTY_HOLIDAY_MEASUREMENTS,
+  applyHolidayCatalogPolicy,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
@@ -124,6 +125,7 @@ export function HolidayLightingQuoter({
   const [matchSegmentId, setMatchSegmentId] = useState<string | null>(null);
   const [selectedStrandId, setSelectedStrandId] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
@@ -146,7 +148,11 @@ export function HolidayLightingQuoter({
       setPropertyId(q.propertyId ?? "");
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
       setMeasurements(parseHolidayMeasurements(q.measurements));
-      setSelections(parseHolidaySelections(q.selections));
+      const nextCatalog = (data.catalog as HolidayLightingCatalog | undefined) ?? DEFAULT_HOLIDAY_CATALOG;
+      setCatalog(nextCatalog);
+      setSelections(
+        applyHolidayCatalogPolicy(parseHolidaySelections(q.selections), nextCatalog)
+      );
       setPreviewUrl(q.previewImageUrl);
       const loadedPhoto = q.sourcePhotoUrl
         ? blobProxyUrl(q.sourcePhotoUrl) ?? q.sourcePhotoUrl
@@ -154,7 +160,6 @@ export function HolidayLightingQuoter({
       setPhotoUrl(loadedPhoto);
       setPhotoApproved(Boolean(loadedPhoto));
       setEstimate(q.estimate ?? null);
-      if (data.catalog) setCatalog(data.catalog);
       if (data.pricing) setPricing(data.pricing);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Load failed");
@@ -498,7 +503,7 @@ export function HolidayLightingQuoter({
         status: data.estimate.status,
       });
       toast.success("Estimate created");
-      router.push(`/customers/estimates/${data.estimate.id}`);
+      setSendDialogOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create estimate failed");
     } finally {
@@ -870,7 +875,10 @@ export function HolidayLightingQuoter({
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={selections.defaultLightStyleKey}
                   onChange={(e) => {
-                    const next = { ...selections, defaultLightStyleKey: e.target.value };
+                    const next = applyHolidayCatalogPolicy(
+                      { ...selections, defaultLightStyleKey: e.target.value },
+                      catalog
+                    );
                     setSelections(next);
                     void save({ selections: next }, { quiet: true });
                   }}
@@ -882,37 +890,6 @@ export function HolidayLightingQuoter({
                   ))}
                 </select>
               </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Error margin ({selections.marginPct}%)
-                </label>
-                <input
-                  type="range"
-                  min={0}
-                  max={25}
-                  value={selections.marginPct}
-                  className="mt-1 w-full accent-primary"
-                  onChange={(e) => {
-                    const next = { ...selections, marginPct: Number(e.target.value) };
-                    setSelections(next);
-                  }}
-                  onMouseUp={() => void save({ selections }, { quiet: true })}
-                  onTouchEnd={() => void save({ selections }, { quiet: true })}
-                />
-              </div>
-
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={selections.includeLease}
-                  onCheckedChange={(checked) => {
-                    const next = { ...selections, includeLease: Boolean(checked) };
-                    setSelections(next);
-                    void save({ selections: next }, { quiet: true });
-                  }}
-                />
-                Include lease option
-              </label>
 
               {pricing ? (
                 <div className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
@@ -957,11 +934,21 @@ export function HolidayLightingQuoter({
                 <p className="text-xs text-amber-700">Select a customer to create an estimate.</p>
               ) : null}
               {estimate ? (
-                <Button type="button" variant="outline" className="w-full" asChild>
-                  <Link href={`/customers/estimates/${estimate.id}`}>
-                    Open {estimate.estimateNumber ?? "estimate"}
-                  </Link>
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setSendDialogOpen(true)}
+                  >
+                    Preview &amp; send estimate
+                  </Button>
+                  <Button type="button" variant="outline" className="w-full" asChild>
+                    <Link href={`/estimates/${estimate.id}`}>
+                      Open {estimate.estimateNumber ?? "estimate"}
+                    </Link>
+                  </Button>
+                </div>
               ) : null}
             </section>
           </aside>
@@ -975,6 +962,16 @@ export function HolidayLightingQuoter({
         confirmVariant="destructive"
         onConfirm={() => void clearQuoteWork()}
         onCancel={() => setClearConfirmOpen(false)}
+      />
+      <EstimateSendDialog
+        open={sendDialogOpen}
+        estimateId={estimate?.id ?? null}
+        onClose={() => setSendDialogOpen(false)}
+        onSent={() => {
+          if (estimate) {
+            setEstimate({ ...estimate, status: "SENT" });
+          }
+        }}
       />
     </div>
   );

@@ -17,18 +17,26 @@ const MAX_BYTES = 8 * 1024 * 1024;
 
 const PROMPT = `You are given TWO images of the same residential property:
 
-IMAGE 1 — PROPERTY (clean): the unmodified photo of the house. Use this as the base for the final photorealistic output. Preserve architecture, camera angle, windows, driveway, landscaping, and all unmarked surfaces exactly.
+IMAGE 1 — PROPERTY (clean): usually a Google Street View / Maps capture of the house. Use this as the geometric base for the final image — same architecture, camera angle, windows, driveway, landscaping, and layout.
 
-IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights painted on top (typically warm translucent gold/amber strokes). Those painted brushstrokes are the ONLY regions that should receive holiday lighting.
+IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights painted on top (typically warm translucent gold/amber strokes). Those painted brushstrokes are the ONLY places that should receive *holiday / Christmas* lighting.
 
-Instructions:
+Instructions — holiday lights:
 - Add professional warm-white commercial-grade C9-style LED Christmas lights strictly inside the brush-marked regions from IMAGE 2 (rooflines, gables, eaves, trees, bushes, etc. where marked).
-- Do NOT add lights, glow, or decorations anywhere that is not marked in IMAGE 2.
-- Replace the brushstroke paint itself with realistic installed lights (evenly spaced, neatly clipped, soft dusk/evening glow). The paint marks are placement guides only — they must not remain visible in the final image.
-- Keep unmarked parts of the house identical to IMAGE 1.
+- Do NOT invent extra holiday lighting, Christmas decorations, lit garlands, or C9 strands anywhere that is not marked in IMAGE 2.
+- Replace the brushstroke paint itself with realistic installed lights (evenly spaced, neatly clipped, soft evening glow). The paint marks are placement guides only — they must not remain visible in the final image.
+
+Instructions — normal property lighting (allowed / encouraged):
+- A realistic nighttime home may have ordinary lights on: porch / entry lights, garage coach lights, path or landscape accent lights, and warm interior lights visible through windows.
+- Keep or tastefully add those everyday lights where they would naturally belong on this house. They are not holiday lighting.
+- Do not turn the whole house into a dark silhouette; the scene should feel lived-in and inviting at dusk/night.
+
+Instructions — image quality:
+- Beautify IMAGE 1 from a grainy / compressed Maps photo into a clean professional real-estate night photograph: reduce grain and compression artifacts, refine sharpness and color, and improve night exposure and contrast.
+- Preserve the real house, viewpoint, and proportions — do not redesign the architecture, invent buildings, or change the property identity.
 - Do not add people, cars, text, logos, or watermarks.
 
-Output one photorealistic night/dusk preview of this exact property with lights only where marked.`;
+Output one photorealistic dusk/night preview of this exact property: holiday lights only where marked, everyday house lights welcome, and a polished professional photo look.`;
 
 type Params = { params: Promise<{ id: string }> };
 
