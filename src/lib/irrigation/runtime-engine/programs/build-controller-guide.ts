@@ -5,6 +5,7 @@ import type {
   DayOfWeekCode,
   ProgramId,
   ProgramZoneEntry,
+  ScheduleMode,
   ZoneRuntimeInput,
   ZoneRuntimeResult,
 } from "../types";
@@ -12,6 +13,13 @@ import type { VegetationType } from "../../types";
 import { DEFAULT_DAYS_BY_VEGETATION, DROUGHT_DAYS } from "../coefficients/landscape-k";
 import { effectiveRainForLandscape } from "../eto/effective-rain";
 import { calculateAllZoneRuntimes } from "../engine/calculate-zone-runtime";
+import {
+  lookupCityWateringRule,
+  pickDaysFromAssigned,
+  resolveCityAddressSchedule,
+  scheduleModeLabel,
+  type ResolvedCitySchedule,
+} from "../restrictions/city-watering-rules";
 
 export const WATERING_WINDOW = {
   earliestStartMinutes: 5 * 60,
@@ -70,16 +78,80 @@ function daysLabel(days: DayOfWeekCode[]): string {
   return days.map((d) => labels[d]).join(" / ");
 }
 
+export function formatScheduleDaysLabel(
+  mode: ScheduleMode,
+  days: DayOfWeekCode[],
+  citySchedule?: ResolvedCitySchedule | null
+): string {
+  if (mode === "odd_calendar_dates" || mode === "even_calendar_dates") {
+    return scheduleModeLabel(mode, citySchedule?.parity ?? "odd");
+  }
+  return daysLabel(days);
+}
+
+type ResolvedZoneSchedule = {
+  daysOfWeek: DayOfWeekCode[];
+  scheduleMode: ScheduleMode;
+  /** Days used for start-time overlap detection (calendar-date modes act as all days). */
+  overlapDays: DayOfWeekCode[];
+};
+
 function resolveZoneDaysOfWeek(
   zone: ZoneRuntimeInput,
   result: ZoneRuntimeResult,
-  droughtMode: boolean
-): DayOfWeekCode[] {
-  if (result.establishmentOverride) return ALL_DAYS;
-  if (droughtMode) return [...DROUGHT_DAYS];
+  droughtMode: boolean,
+  citySchedule: ResolvedCitySchedule | null
+): ResolvedZoneSchedule {
+  if (result.establishmentOverride) {
+    return {
+      daysOfWeek: ALL_DAYS,
+      scheduleMode: "days_of_week",
+      overlapDays: ALL_DAYS,
+    };
+  }
+
+  if (citySchedule) {
+    if (
+      citySchedule.mode === "odd_calendar_dates" ||
+      citySchedule.mode === "even_calendar_dates"
+    ) {
+      return {
+        daysOfWeek: [],
+        scheduleMode: citySchedule.mode,
+        // Same property parity shares the same calendar dates — stagger programs.
+        overlapDays: ALL_DAYS,
+      };
+    }
+
+    const daysNeeded = droughtMode
+      ? Math.min(2, result.daysPerWeek)
+      : result.daysPerWeek;
+    const daysOfWeek = pickDaysFromAssigned(citySchedule.daysOfWeek, daysNeeded);
+    return {
+      daysOfWeek,
+      scheduleMode: "days_of_week",
+      overlapDays: daysOfWeek,
+    };
+  }
+
+  if (droughtMode) {
+    return {
+      daysOfWeek: [...DROUGHT_DAYS],
+      scheduleMode: "days_of_week",
+      overlapDays: [...DROUGHT_DAYS],
+    };
+  }
 
   const vegetationType = (zone.vegetationType ?? "grass") as VegetationType;
-  return DEFAULT_DAYS_BY_VEGETATION[vegetationType].slice(0, result.daysPerWeek);
+  const daysOfWeek = DEFAULT_DAYS_BY_VEGETATION[vegetationType].slice(
+    0,
+    result.daysPerWeek
+  );
+  return {
+    daysOfWeek,
+    scheduleMode: "days_of_week",
+    overlapDays: daysOfWeek,
+  };
 }
 
 function programCycleCount(result: ZoneRuntimeResult): number {
@@ -87,15 +159,21 @@ function programCycleCount(result: ZoneRuntimeResult): number {
 }
 
 function scheduleGroupKey(
-  days: DayOfWeekCode[],
+  schedule: ResolvedZoneSchedule,
   result: ZoneRuntimeResult
 ): string {
-  return `${days.join(",")}|${result.establishmentOverride ? "est" : "norm"}|c${programCycleCount(result)}`;
+  const dayKey =
+    schedule.scheduleMode === "days_of_week"
+      ? schedule.daysOfWeek.join(",")
+      : schedule.scheduleMode;
+  return `${dayKey}|${result.establishmentOverride ? "est" : "norm"}|c${programCycleCount(result)}`;
 }
 
 type ProgramDraft = {
   key: string;
   daysOfWeek: DayOfWeekCode[];
+  overlapDays: DayOfWeekCode[];
+  scheduleMode: ScheduleMode;
   isEstablishment: boolean;
   cycleCount: number;
   items: { zone: ZoneRuntimeInput; result: ZoneRuntimeResult }[];
@@ -108,7 +186,8 @@ type ProgramDraft = {
 function clusterZonesIntoPrograms(
   zoneResults: ZoneRuntimeResult[],
   zones: ZoneRuntimeInput[],
-  droughtMode: boolean
+  droughtMode: boolean,
+  citySchedule: ResolvedCitySchedule | null
 ): ProgramDraft[] {
   const groups = new Map<string, ProgramDraft>();
 
@@ -116,14 +195,16 @@ function clusterZonesIntoPrograms(
     const zone = zones.find((z) => z.id === result.zoneId);
     if (!zone) continue;
 
-    const daysOfWeek = resolveZoneDaysOfWeek(zone, result, droughtMode);
-    const key = scheduleGroupKey(daysOfWeek, result);
+    const schedule = resolveZoneDaysOfWeek(zone, result, droughtMode, citySchedule);
+    const key = scheduleGroupKey(schedule, result);
     const cycleCount = programCycleCount(result);
 
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        daysOfWeek,
+        daysOfWeek: schedule.daysOfWeek,
+        overlapDays: schedule.overlapDays,
+        scheduleMode: schedule.scheduleMode,
         isEstablishment: result.establishmentOverride,
         cycleCount,
         items: [],
@@ -218,14 +299,14 @@ export function buildProgramTimeline(
 }
 
 function assignNonOverlappingSchedules(drafts: ProgramDraft[]): void {
-  const scheduled: { daysOfWeek: DayOfWeekCode[]; endMinutes: number }[] = [];
+  const scheduled: { overlapDays: DayOfWeekCode[]; endMinutes: number }[] = [];
 
   for (const draft of drafts) {
     draft.items.sort((a, b) => a.result.stationNumber - b.result.stationNumber);
 
     let baseStart = roundUpToTenMinutes(WATERING_WINDOW.earliestStartMinutes);
     for (const previous of scheduled) {
-      if (daysOverlap(previous.daysOfWeek, draft.daysOfWeek)) {
+      if (daysOverlap(previous.overlapDays, draft.overlapDays)) {
         baseStart = Math.max(baseStart, roundUpToTenMinutes(previous.endMinutes));
       }
     }
@@ -239,7 +320,7 @@ function assignNonOverlappingSchedules(drafts: ProgramDraft[]): void {
     draft.totalGallonsPerWeek = draft.zones.reduce((sum, zone) => sum + zone.gallonsPerWeek, 0);
 
     scheduled.push({
-      daysOfWeek: draft.daysOfWeek,
+      overlapDays: draft.overlapDays,
       endMinutes: timeline.endMinutes,
     });
   }
@@ -247,13 +328,26 @@ function assignNonOverlappingSchedules(drafts: ProgramDraft[]): void {
 
 function programLabel(
   programId: ProgramId,
-  daysOfWeek: DayOfWeekCode[],
+  daysLabelText: string,
   isEstablishment: boolean
 ): string {
   if (isEstablishment) {
     return `Program ${programId} — Establishment (temporary)`;
   }
-  return `Program ${programId} — ${daysLabel(daysOfWeek)}`;
+  return `Program ${programId} — ${daysLabelText}`;
+}
+
+function buildAddressRestrictionNotes(citySchedule: ResolvedCitySchedule): string[] {
+  const parityLabel = citySchedule.parity === "odd" ? "odd" : "even";
+  const scheduleText =
+    citySchedule.mode === "days_of_week"
+      ? daysLabel(citySchedule.daysOfWeek)
+      : scheduleModeLabel(citySchedule.mode, citySchedule.parity);
+
+  return [
+    `${citySchedule.city} ${parityLabel}-address schedule: ${scheduleText}.`,
+    ...citySchedule.notes,
+  ];
 }
 
 export function buildControllerGuide(
@@ -280,23 +374,43 @@ export function buildControllerGuide(
     landscapeET
   );
 
+  const citySchedule = resolveCityAddressSchedule({
+    city: params.location?.city,
+    address: params.location?.address,
+  });
+
   const drafts = clusterZonesIntoPrograms(
     zoneResults,
     params.zones,
-    params.settings.droughtRestrictionsActive
+    params.settings.droughtRestrictionsActive,
+    citySchedule
   );
   assignNonOverlappingSchedules(drafts);
 
   const programs: ControllerProgram[] = [];
   const notes: string[] = [];
 
+  if (citySchedule) {
+    notes.push(...buildAddressRestrictionNotes(citySchedule));
+  } else if (params.location?.city && lookupCityWateringRule(params.location.city)) {
+    notes.push(
+      `${params.location.city} has odd/even watering rules, but the street number could not be read from the property address. Verify the watering days manually.`
+    );
+  }
+
   drafts.slice(0, PROGRAM_IDS.length).forEach((draft, index) => {
     const programId = PROGRAM_IDS[index];
+    const labelDays = formatScheduleDaysLabel(
+      draft.scheduleMode,
+      draft.daysOfWeek,
+      citySchedule
+    );
     programs.push({
       id: programId,
-      label: programLabel(programId, draft.daysOfWeek, draft.isEstablishment),
+      label: programLabel(programId, labelDays, draft.isEstablishment),
       daysOfWeek: draft.daysOfWeek,
-      daysLabel: daysLabel(draft.daysOfWeek),
+      daysLabel: labelDays,
+      scheduleMode: draft.scheduleMode,
       startTimes: draft.startTimes,
       zones: draft.zones,
       totalWallClockMinutes: draft.totalWallClockMinutes,
@@ -311,6 +425,22 @@ export function buildControllerGuide(
     );
   }
 
+  const addressRestriction = citySchedule
+    ? {
+        city: citySchedule.city,
+        parity: citySchedule.parity,
+        scheduleMode: citySchedule.mode,
+        daysOfWeek: citySchedule.daysOfWeek,
+        daysLabel: formatScheduleDaysLabel(
+          citySchedule.mode,
+          citySchedule.daysOfWeek,
+          citySchedule
+        ),
+        sundayPolicy: citySchedule.sundayPolicy,
+        notes: citySchedule.notes,
+      }
+    : null;
+
   return {
     generatedAt: new Date().toISOString(),
     propertyId: params.propertyId,
@@ -324,5 +454,6 @@ export function buildControllerGuide(
     programs,
     totalGallonsPerWeek: zoneResults.reduce((s, z) => s + z.gallonsPerWeek, 0),
     notes,
+    addressRestriction,
   };
 }
