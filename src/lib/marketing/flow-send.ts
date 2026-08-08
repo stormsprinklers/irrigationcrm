@@ -1,5 +1,4 @@
 import { CampaignChannel } from "@prisma/client";
-import { getDefaultFromEmail } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
@@ -8,6 +7,10 @@ import {
   appendMarketingUnsubscribeFooter,
   marketingUnsubscribeUrl,
 } from "@/lib/marketing/unsubscribe";
+import {
+  resolveMarketingEmailFrom,
+  resolveMarketingSmsFrom,
+} from "@/lib/marketing/sender";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { prisma } from "@/lib/prisma";
 
@@ -20,7 +23,9 @@ export async function sendCampaignMessage(params: {
     subject: string | null;
     company: {
       sendgridFrom: string | null;
+      marketingSendgridFrom?: string | null;
       twilioPhone: string | null;
+      marketingTwilioPhone?: string | null;
       name: string;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
@@ -66,7 +71,7 @@ export async function sendCampaignMessage(params: {
 
   try {
     if (channel === CampaignChannel.SMS) {
-      const fromPhone = campaign.company.twilioPhone;
+      const fromPhone = resolveMarketingSmsFrom(campaign.company);
       if (!customer.phone || !fromPhone) {
         await prisma.campaignRecipient.update({
           where: { id: recipient.id },
@@ -91,7 +96,7 @@ export async function sendCampaignMessage(params: {
       return true;
     }
 
-    const fromEmail = campaign.company.sendgridFrom ?? getDefaultFromEmail();
+    const fromEmail = resolveMarketingEmailFrom(campaign.company);
     if (!customer.email || !fromEmail) {
       await prisma.campaignRecipient.update({
         where: { id: recipient.id },
@@ -110,7 +115,7 @@ export async function sendCampaignMessage(params: {
     const response = await sendCompanyEmail(
       {
         companyName: campaign.company.name,
-        sendgridFrom: campaign.company.sendgridFrom,
+        sendgridFrom: fromEmail,
         emailSenderName: campaign.company.emailSenderName,
         emailLogoUrl: campaign.company.emailLogoUrl,
       },

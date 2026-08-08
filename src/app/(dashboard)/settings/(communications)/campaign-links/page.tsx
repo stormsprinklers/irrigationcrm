@@ -10,6 +10,14 @@ import { Input } from "@/components/ui/input";
 
 type CustomLink = { id: string; label: string; url: string };
 
+type PhoneOption = {
+  id: string;
+  e164: string;
+  friendlyName: string | null;
+  isPrimary: boolean;
+  smsEnabled: boolean | null;
+};
+
 type CampaignLinksResponse = {
   bookingUrl: string;
   bookingSlug: string | null;
@@ -17,6 +25,11 @@ type CampaignLinksResponse = {
   termsOfServiceUrl: string;
   custom: CustomLink[];
   allowedLinks: Array<{ key: string; label: string; url: string }>;
+  marketingTwilioPhone: string;
+  marketingSendgridFrom: string;
+  fallbackTwilioPhone: string | null;
+  fallbackSendgridFrom: string | null;
+  phoneNumbers: PhoneOption[];
 };
 
 function newCustomId() {
@@ -29,6 +42,11 @@ export default function CampaignLinksSettingsPage() {
   const [termsOfServiceUrl, setTermsOfServiceUrl] = useState("");
   const [custom, setCustom] = useState<CustomLink[]>([]);
   const [bookingSlug, setBookingSlug] = useState<string | null>(null);
+  const [marketingTwilioPhone, setMarketingTwilioPhone] = useState("");
+  const [marketingSendgridFrom, setMarketingSendgridFrom] = useState("");
+  const [fallbackTwilioPhone, setFallbackTwilioPhone] = useState<string | null>(null);
+  const [fallbackSendgridFrom, setFallbackSendgridFrom] = useState<string | null>(null);
+  const [phoneNumbers, setPhoneNumbers] = useState<PhoneOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -41,8 +59,13 @@ export default function CampaignLinksSettingsPage() {
         setTermsOfServiceUrl(data.termsOfServiceUrl ?? "");
         setCustom(data.custom ?? []);
         setBookingSlug(data.bookingSlug ?? null);
+        setMarketingTwilioPhone(data.marketingTwilioPhone ?? "");
+        setMarketingSendgridFrom(data.marketingSendgridFrom ?? "");
+        setFallbackTwilioPhone(data.fallbackTwilioPhone ?? null);
+        setFallbackSendgridFrom(data.fallbackSendgridFrom ?? null);
+        setPhoneNumbers(data.phoneNumbers ?? []);
       })
-      .catch(() => toast.error("Failed to load campaign links"))
+      .catch(() => toast.error("Failed to load campaign settings"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,6 +81,8 @@ export default function CampaignLinksSettingsPage() {
           privacyPolicyUrl,
           termsOfServiceUrl,
           custom,
+          marketingTwilioPhone: marketingTwilioPhone.trim() || null,
+          marketingSendgridFrom: marketingSendgridFrom.trim() || null,
         }),
       });
       const data = await res.json();
@@ -66,7 +91,12 @@ export default function CampaignLinksSettingsPage() {
       setPrivacyPolicyUrl(data.privacyPolicyUrl ?? "");
       setTermsOfServiceUrl(data.termsOfServiceUrl ?? "");
       setCustom(data.custom ?? []);
-      toast.success("Campaign links saved");
+      setMarketingTwilioPhone(data.marketingTwilioPhone ?? "");
+      setMarketingSendgridFrom(data.marketingSendgridFrom ?? "");
+      setFallbackTwilioPhone(data.fallbackTwilioPhone ?? null);
+      setFallbackSendgridFrom(data.fallbackSendgridFrom ?? null);
+      setPhoneNumbers(data.phoneNumbers ?? []);
+      toast.success("Campaign settings saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -78,14 +108,63 @@ export default function CampaignLinksSettingsPage() {
     <ContentArea>
       <PageHeader
         breadcrumb={["Settings", "Communications", "Campaign links"]}
-        title="Campaign links"
-        subtitle="URLs the email AI may use for buttons and footer links. The AI cannot invent links."
+        title="Campaign settings"
+        subtitle="Marketing sender identity and CTA links the email AI may use."
       />
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <form onSubmit={(e) => void save(e)} className="max-w-2xl space-y-6">
+          <section className="space-y-4 rounded-lg border bg-white p-4">
+            <h2 className="text-sm font-semibold">Marketing sender</h2>
+            <p className="text-xs text-muted-foreground">
+              Dedicated from-number and from-address for marketing campaigns. Leave blank to use
+              your inbox defaults.
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Marketing SMS number</label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={marketingTwilioPhone}
+                onChange={(e) => setMarketingTwilioPhone(e.target.value)}
+              >
+                <option value="">
+                  Default
+                  {fallbackTwilioPhone ? ` (${fallbackTwilioPhone})` : " — set inbox Twilio phone"}
+                </option>
+                {phoneNumbers.map((n) => (
+                  <option key={n.id} value={n.e164}>
+                    {(n.friendlyName ? `${n.friendlyName} · ` : "") + n.e164}
+                    {n.smsEnabled === false ? " (SMS off)" : ""}
+                    {n.isPrimary ? " · primary" : ""}
+                  </option>
+                ))}
+              </select>
+              {phoneNumbers.length === 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add numbers under Settings → Phone numbers first.
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Marketing from email</label>
+              <Input
+                value={marketingSendgridFrom}
+                onChange={(e) => setMarketingSendgridFrom(e.target.value)}
+                placeholder={
+                  fallbackSendgridFrom
+                    ? `Leave blank to use ${fallbackSendgridFrom}`
+                    : "marketing@yourcompany.com"
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Must be a verified SendGrid sender / domain. Shown as the From address on campaign
+                emails.
+              </p>
+            </div>
+          </section>
+
           <section className="space-y-4 rounded-lg border bg-white p-4">
             <h2 className="text-sm font-semibold">Built-in links</h2>
             <div>
@@ -182,7 +261,7 @@ export default function CampaignLinksSettingsPage() {
           </section>
 
           <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save campaign links"}
+            {saving ? "Saving…" : "Save campaign settings"}
           </Button>
         </form>
       )}

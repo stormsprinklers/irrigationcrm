@@ -504,6 +504,10 @@ model Company {
   description              String?
   twilioPhone              String?
   sendgridFrom             String?
+  /// From number for marketing SMS campaigns (E.164). Falls back to twilioPhone when unset.
+  marketingTwilioPhone     String?
+  /// From address for marketing email campaigns. Falls back to sendgridFrom when unset.
+  marketingSendgridFrom    String?
   sendgridInboundDomain    String?
   emailSenderName          String?
   emailLogoUrl             String?

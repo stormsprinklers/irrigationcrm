@@ -10,6 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { vanityLettersToDigits } from "@/lib/twilio/vanity";
 
 type PhoneNumberRow = {
@@ -726,171 +734,191 @@ export default function VoiceNumbersPage() {
           </ul>
         </div>
       ) : (
-        <>
-          <form onSubmit={addNumber} className="mb-8 space-y-4 rounded-lg border border-border bg-white p-6">
-            <h3 className="font-semibold">Add number manually</h3>
-            <Input placeholder="+18015550100" value={e164} onChange={(e) => setE164(e.target.value)} />
-            <Input
-              placeholder="Title (e.g. PPC Repair tracking)"
-              value={friendlyName}
-              onChange={(e) => setFriendlyName(e.target.value)}
-            />
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={numberType}
-              onChange={(e) => {
-                const next = e.target.value;
-                setNumberType(next);
-                if (next === "PRIMARY") setIsPrimary(true);
-              }}
-            >
-              {NUMBER_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            {numberType === "TRACKING" && (
-              <Input
-                placeholder="Tracking source (e.g. Google Ads)"
-                value={trackingSource}
-                onChange={(e) => setTrackingSource(e.target.value)}
-              />
-            )}
-            {numberType === "AGENT_DIRECT" && (
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={assignedUserId}
-                onChange={(e) => setAssignedUserId(e.target.value)}
-              >
-                <option value="">Select employee</option>
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={callFlowId}
-              onChange={(e) => setCallFlowId(e.target.value)}
-            >
-              <option value="">Default flow (ring agents)</option>
-              {flows.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={isPrimary || numberType === "PRIMARY"}
-                onCheckedChange={(c) => {
-                  const on = Boolean(c);
-                  setIsPrimary(on);
-                  if (on) setNumberType("PRIMARY");
-                  else if (numberType === "PRIMARY") setNumberType("TRACKING");
-                }}
-              />
-              Set as primary (only one allowed)
-            </label>
-            <Button type="submit">Add number</Button>
-          </form>
+        <div className="space-y-8">
+          <section className="space-y-3">
+            <div>
+              <h3 className="font-semibold">Your numbers</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Edit title, type, and call flow inline. Primary is the default outbound caller ID.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="min-w-[140px]">Phone number</TableHead>
+                    <TableHead className="min-w-[160px]">Title</TableHead>
+                    <TableHead className="min-w-[140px]">Type</TableHead>
+                    <TableHead>SMS</TableHead>
+                    <TableHead className="min-w-[150px]">Call flow</TableHead>
+                    <TableHead className="min-w-[140px]">Source / agent</TableHead>
+                    <TableHead>Linked</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {numbers.map((n) => (
+                    <TableRow key={n.id}>
+                      <TableCell>
+                        <span className="font-medium tabular-nums">{n.e164}</span>
+                        {n.isPrimary ? (
+                          <Badge variant="secondary" className="ml-2 align-middle">
+                            Primary
+                          </Badge>
+                        ) : null}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          placeholder="e.g. PPC Repair"
+                          className="h-9"
+                          defaultValue={n.friendlyName ?? ""}
+                          key={`${n.id}-${n.friendlyName ?? ""}`}
+                          onBlur={(e) => {
+                            const next = e.target.value.trim() || null;
+                            if (next === (n.friendlyName ?? null) || (!next && !n.friendlyName)) {
+                              return;
+                            }
+                            void updateNumber(n.id, { friendlyName: next });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="h-9 w-full min-w-[130px] rounded-md border border-input bg-background px-2 text-sm"
+                          value={n.isPrimary ? "PRIMARY" : n.numberType}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next === "PRIMARY") {
+                              void updateNumber(n.id, {
+                                isPrimary: true,
+                                numberType: "PRIMARY",
+                              });
+                            } else {
+                              void updateNumber(n.id, {
+                                numberType: next,
+                                ...(n.isPrimary ? { isPrimary: false } : {}),
+                              });
+                            }
+                          }}
+                        >
+                          {NUMBER_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                      <TableCell>
+                        {n.smsEnabled === true ? (
+                          <Badge variant="outline" className="border-green-300 text-green-800">
+                            Enabled
+                          </Badge>
+                        ) : n.smsEnabled === false ? (
+                          <Badge variant="outline" className="text-muted-foreground">
+                            Off
+                          </Badge>
+                        ) : n.twilioSid ? (
+                          <span className="text-xs text-muted-foreground">Unknown</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="h-9 w-full min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
+                          value={n.callFlowId ?? ""}
+                          onChange={(e) =>
+                            void updateNumber(n.id, { callFlowId: e.target.value || null })
+                          }
+                        >
+                          <option value="">Default flow</option>
+                          {flows.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {n.numberType === "AGENT_DIRECT" || n.assignedUser
+                          ? (n.assignedUser?.name ?? "—")
+                          : n.trackingSource || "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {n.twilioSid ? "Twilio" : "Manual"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!n.isPrimary ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void updateNumber(n.id, {
+                                isPrimary: true,
+                                numberType: "PRIMARY",
+                              })
+                            }
+                          >
+                            Set primary
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Outbound caller ID</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!numbers.length ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        No phone numbers yet. Add one below or buy from Twilio.
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </div>
+          </section>
 
-          <ul className="divide-y divide-border rounded-lg border border-border bg-white">
-            {numbers.map((n) => (
-              <li key={n.id} className="space-y-3 p-4 text-sm">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium tabular-nums">{n.e164}</p>
-                      {n.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
-                      {n.smsEnabled === true ? (
-                        <Badge variant="outline" className="border-green-300 text-green-800">
-                          SMS
-                        </Badge>
-                      ) : n.smsEnabled === false ? (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          No SMS
-                        </Badge>
-                      ) : n.twilioSid ? (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          SMS unknown
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="text-muted-foreground">
-                      {n.numberType}
-                      {n.trackingSource ? ` · ${n.trackingSource}` : ""}
-                      {" · "}
-                      Flow: {n.callFlow?.name ?? "Default"}
-                      {n.assignedUser ? ` · Agent: ${n.assignedUser.name}` : ""}
-                      {n.twilioSid ? " · Twilio linked" : " · Manual entry"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {!n.isPrimary ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          void updateNumber(n.id, {
-                            isPrimary: true,
-                            numberType: "PRIMARY",
-                          })
-                        }
-                      >
-                        Set primary
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground self-center">
-                        Primary caller ID
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-3">
+          <section>
+            <form
+              onSubmit={addNumber}
+              className="space-y-4 rounded-lg border border-border bg-white p-6"
+            >
+              <div>
+                <h3 className="font-semibold">Add number manually</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enter an existing number you already own (not purchased through Twilio here).
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Phone number</label>
                   <Input
-                    placeholder="Title"
-                    defaultValue={n.friendlyName ?? ""}
-                    key={`${n.id}-${n.friendlyName ?? ""}`}
-                    onBlur={(e) => {
-                      const next = e.target.value.trim() || null;
-                      if (next === (n.friendlyName ?? null) || (!next && !n.friendlyName)) return;
-                      void updateNumber(n.id, { friendlyName: next });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                    }}
+                    placeholder="+18015550100"
+                    value={e164}
+                    onChange={(e) => setE164(e.target.value)}
                   />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Title</label>
+                  <Input
+                    placeholder="e.g. PPC Repair tracking"
+                    value={friendlyName}
+                    onChange={(e) => setFriendlyName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Type</label>
                   <select
-                    className="h-9 rounded-md border border-input px-2 text-sm"
-                    value={n.callFlowId ?? ""}
-                    onChange={(e) =>
-                      void updateNumber(n.id, { callFlowId: e.target.value || null })
-                    }
-                  >
-                    <option value="">Default flow</option>
-                    {flows.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="h-9 rounded-md border border-input px-2 text-sm"
-                    value={n.isPrimary ? "PRIMARY" : n.numberType}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={numberType}
                     onChange={(e) => {
                       const next = e.target.value;
-                      if (next === "PRIMARY") {
-                        void updateNumber(n.id, { isPrimary: true, numberType: "PRIMARY" });
-                      } else {
-                        void updateNumber(n.id, {
-                          numberType: next,
-                          ...(n.isPrimary ? { isPrimary: false } : {}),
-                        });
-                      }
+                      setNumberType(next);
+                      if (next === "PRIMARY") setIsPrimary(true);
                     }}
                   >
                     {NUMBER_TYPES.map((t) => (
@@ -900,13 +928,65 @@ export default function VoiceNumbersPage() {
                     ))}
                   </select>
                 </div>
-              </li>
-            ))}
-            {!numbers.length && (
-              <li className="p-4 text-muted-foreground">No phone numbers yet.</li>
-            )}
-          </ul>
-        </>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Call flow</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={callFlowId}
+                    onChange={(e) => setCallFlowId(e.target.value)}
+                  >
+                    <option value="">Default flow (ring agents)</option>
+                    {flows.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {numberType === "TRACKING" ? (
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-sm font-medium">Tracking source</label>
+                    <Input
+                      placeholder="e.g. Google Ads"
+                      value={trackingSource}
+                      onChange={(e) => setTrackingSource(e.target.value)}
+                    />
+                  </div>
+                ) : null}
+                {numberType === "AGENT_DIRECT" ? (
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-sm font-medium">Assign to employee</label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={assignedUserId}
+                      onChange={(e) => setAssignedUserId(e.target.value)}
+                    >
+                      <option value="">Select employee</option>
+                      {employees.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={isPrimary || numberType === "PRIMARY"}
+                  onCheckedChange={(c) => {
+                    const on = Boolean(c);
+                    setIsPrimary(on);
+                    if (on) setNumberType("PRIMARY");
+                    else if (numberType === "PRIMARY") setNumberType("TRACKING");
+                  }}
+                />
+                Set as primary (only one allowed)
+              </label>
+              <Button type="submit">Add number</Button>
+            </form>
+          </section>
+        </div>
       )}
     </ContentArea>
   );

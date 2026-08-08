@@ -4,7 +4,6 @@ import {
   CampaignStatus,
   CampaignType,
 } from "@prisma/client";
-import { getDefaultFromEmail } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
@@ -18,6 +17,10 @@ import {
   appendMarketingUnsubscribeFooter,
   marketingUnsubscribeUrl,
 } from "@/lib/marketing/unsubscribe";
+import {
+  resolveMarketingEmailFrom,
+  resolveMarketingSmsFrom,
+} from "@/lib/marketing/sender";
 import { prisma } from "@/lib/prisma";
 
 const BATCH_SIZE = 50;
@@ -123,7 +126,9 @@ async function sendToRecipient(
     bodyHtml: string | null;
     company: {
       sendgridFrom: string | null;
+      marketingSendgridFrom?: string | null;
       twilioPhone: string | null;
+      marketingTwilioPhone?: string | null;
       name: string;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
@@ -146,14 +151,14 @@ async function sendToRecipient(
   const subject = content?.subject ?? campaign.subject ?? campaign.name;
   const bodyText = content?.bodyText ?? campaign.bodyText;
   const bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
-  const fromEmail = campaign.company.sendgridFrom ?? getDefaultFromEmail();
+  const fromEmail = resolveMarketingEmailFrom(campaign.company);
   const branding = {
     companyName: campaign.company.name,
-    sendgridFrom: campaign.company.sendgridFrom,
+    sendgridFrom: fromEmail,
     emailSenderName: campaign.company.emailSenderName,
     emailLogoUrl: campaign.company.emailLogoUrl,
   };
-  const fromPhone = campaign.company.twilioPhone;
+  const fromPhone = resolveMarketingSmsFrom(campaign.company);
 
   if (recipient.customerId && channel === CampaignChannel.EMAIL) {
     const customer = await prisma.customer.findFirst({

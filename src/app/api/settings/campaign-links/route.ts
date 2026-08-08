@@ -9,42 +9,69 @@ import {
   resolveCampaignAllowedLinks,
   sanitizeCampaignCtaLinksInput,
 } from "@/lib/marketing/campaign-links";
+import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
-  try {
-    const user = await requireSessionUser();
-    const company = await prisma.company.findUnique({
-      where: { id: user.companyId },
+async function buildResponse(companyId: string) {
+  const [company, phoneNumbers] = await Promise.all([
+    prisma.company.findUnique({
+      where: { id: companyId },
       select: {
         bookingSlug: true,
         websiteBaseUrl: true,
         privacyPolicyUrl: true,
         termsOfServiceUrl: true,
         campaignCtaLinks: true,
+        twilioPhone: true,
+        sendgridFrom: true,
+        marketingTwilioPhone: true,
+        marketingSendgridFrom: true,
       },
-    });
-    if (!company) {
-      return NextResponse.json({ error: "Company not found" }, { status: 404 });
-    }
+    }),
+    prisma.phoneNumber.findMany({
+      where: { companyId },
+      select: {
+        id: true,
+        e164: true,
+        friendlyName: true,
+        isPrimary: true,
+        smsEnabled: true,
+      },
+      orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
+    }),
+  ]);
+  if (!company) return null;
 
-    const stored = parseCampaignCtaLinks(company.campaignCtaLinks);
-    const allowedLinks = resolveCampaignAllowedLinks({
+  const stored = parseCampaignCtaLinks(company.campaignCtaLinks);
+  return {
+    bookingUrl: stored.bookingUrl ?? "",
+    bookingSlug: company.bookingSlug,
+    privacyPolicyUrl: company.privacyPolicyUrl ?? "",
+    termsOfServiceUrl: company.termsOfServiceUrl ?? "",
+    custom: stored.custom ?? [],
+    allowedLinks: resolveCampaignAllowedLinks({
       campaignCtaLinks: company.campaignCtaLinks,
       bookingSlug: company.bookingSlug,
       websiteBaseUrl: company.websiteBaseUrl,
       privacyPolicyUrl: company.privacyPolicyUrl,
       termsOfServiceUrl: company.termsOfServiceUrl,
-    });
+    }),
+    marketingTwilioPhone: company.marketingTwilioPhone ?? "",
+    marketingSendgridFrom: company.marketingSendgridFrom ?? "",
+    fallbackTwilioPhone: company.twilioPhone,
+    fallbackSendgridFrom: company.sendgridFrom,
+    phoneNumbers,
+  };
+}
 
-    return NextResponse.json({
-      bookingUrl: stored.bookingUrl ?? "",
-      bookingSlug: company.bookingSlug,
-      privacyPolicyUrl: company.privacyPolicyUrl ?? "",
-      termsOfServiceUrl: company.termsOfServiceUrl ?? "",
-      custom: stored.custom ?? [],
-      allowedLinks,
-    });
+export async function GET() {
+  try {
+    const user = await requireSessionUser();
+    const payload = await buildResponse(user.companyId);
+    if (!payload) {
+      return NextResponse.json({ error: "Company not found" }, { status: 404 });
+    }
+    return NextResponse.json(payload);
   } catch (err) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return unauthorizedResponse();
@@ -62,6 +89,8 @@ export async function PATCH(request: NextRequest) {
       privacyPolicyUrl?: string | null;
       termsOfServiceUrl?: string | null;
       custom?: Array<{ id?: string; label?: string; url?: string }>;
+      marketingTwilioPhone?: string | null;
+      marketingSendgridFrom?: string | null;
     };
 
     const stored = sanitizeCampaignCtaLinksInput({
@@ -108,37 +137,54 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const company = await prisma.company.update({
+    let marketingTwilioPhone: string | null | undefined;
+    if (body.marketingTwilioPhone !== undefined) {
+      const raw = typeof body.marketingTwilioPhone === "string" ? body.marketingTwilioPhone.trim() : "";
+      if (!raw) {
+        marketingTwilioPhone = null;
+      } else {
+        const e164 = normalizePhone(raw);
+        const owned = await prisma.phoneNumber.findFirst({
+          where: { companyId: user.companyId, e164 },
+          select: { id: true },
+        });
+        if (!owned) {
+          return badRequestResponse("Select a phone number from your company phone list");
+        }
+        marketingTwilioPhone = e164;
+      }
+    }
+
+    let marketingSendgridFrom: string | null | undefined;
+    if (body.marketingSendgridFrom !== undefined) {
+      const raw =
+        typeof body.marketingSendgridFrom === "string" ? body.marketingSendgridFrom.trim() : "";
+      if (!raw) {
+        marketingSendgridFrom = null;
+      } else {
+        // Allow plain email or "Display Name <email@domain>"
+        const angle = raw.match(/<([^>]+)>/);
+        const email = (angle?.[1] ?? raw).trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return badRequestResponse("Invalid marketing from email");
+        }
+        marketingSendgridFrom = raw;
+      }
+    }
+
+    await prisma.company.update({
       where: { id: user.companyId },
       data: {
         campaignCtaLinks: stored,
         ...(privacy !== undefined ? { privacyPolicyUrl: privacy || null } : {}),
         ...(terms !== undefined ? { termsOfServiceUrl: terms || null } : {}),
-      },
-      select: {
-        bookingSlug: true,
-        websiteBaseUrl: true,
-        privacyPolicyUrl: true,
-        termsOfServiceUrl: true,
-        campaignCtaLinks: true,
+        ...(marketingTwilioPhone !== undefined ? { marketingTwilioPhone } : {}),
+        ...(marketingSendgridFrom !== undefined ? { marketingSendgridFrom } : {}),
       },
     });
 
-    const parsed = parseCampaignCtaLinks(company.campaignCtaLinks);
-    return NextResponse.json({
-      bookingUrl: parsed.bookingUrl ?? "",
-      bookingSlug: company.bookingSlug,
-      privacyPolicyUrl: company.privacyPolicyUrl ?? "",
-      termsOfServiceUrl: company.termsOfServiceUrl ?? "",
-      custom: parsed.custom ?? [],
-      allowedLinks: resolveCampaignAllowedLinks({
-        campaignCtaLinks: company.campaignCtaLinks,
-        bookingSlug: company.bookingSlug,
-        websiteBaseUrl: company.websiteBaseUrl,
-        privacyPolicyUrl: company.privacyPolicyUrl,
-        termsOfServiceUrl: company.termsOfServiceUrl,
-      }),
-    });
+    const payload = await buildResponse(user.companyId);
+    return NextResponse.json(payload);
   } catch (err) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return unauthorizedResponse();
