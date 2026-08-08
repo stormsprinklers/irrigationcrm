@@ -89,11 +89,11 @@ export function CustomerPropertyMap({ title = "Property location", location }: P
             embed.
           </p>
         ) : embeds.placeEmbed ? (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="aspect-square w-full max-w-[200px] overflow-hidden rounded-lg border">
             <iframe
               title="Property map"
               src={embeds.placeEmbed}
-              className="h-56 w-full border-0"
+              className="h-full w-full border-0"
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               allowFullScreen

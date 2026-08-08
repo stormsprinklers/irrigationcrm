@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
       select: {
         name: true,
         emailLogoUrl: true,
+        phone: true,
+        supportEmail: true,
+        website: true,
         bookingSlug: true,
         websiteBaseUrl: true,
         privacyPolicyUrl: true,
@@ -54,6 +57,9 @@ export async function POST(request: NextRequest) {
       allowedLinks,
       imageUrls: images,
       logoUrl,
+      companyPhone: company.phone,
+      companyEmail: company.supportEmail,
+      companyWebsite: company.website,
       brandPalette:
         brandPalette && typeof brandPalette === "object"
           ? {

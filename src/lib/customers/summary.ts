@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isBillingPeriodLate } from "@/lib/maintenance-plans/late-payment";
 import { computeVisitProfit } from "@/lib/visits/profit";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -9,6 +10,24 @@ export type CustomerSummary = {
   lifetimeGrossProfit: number;
   outstandingBalance: number;
 };
+
+function isUnpaidMaintenancePeriod(period: {
+  status: string;
+  dueDate: Date;
+  paidAt: Date | null;
+  amount: unknown;
+}) {
+  if (toNumber(period.amount as never) <= 0) return false;
+  if (period.status === "DUE" || period.status === "FAILED") return true;
+  if (period.status === "PENDING") {
+    return isBillingPeriodLate({
+      status: period.status,
+      dueDate: period.dueDate,
+      paidAt: period.paidAt,
+    });
+  }
+  return false;
+}
 
 export async function getCustomerSummary(
   companyId: string,
@@ -33,6 +52,7 @@ export async function getCustomerSummary(
 
   let lifetimeValue = 0;
   let outstandingBalance = 0;
+  const openInvoiceIds = new Set<string>();
 
   for (const invoice of invoices) {
     const total = toNumber(invoice.total);
@@ -43,8 +63,38 @@ export async function getCustomerSummary(
     lifetimeValue += paid;
 
     if (invoice.status !== "PAID" && invoice.status !== "REFUNDED") {
-      outstandingBalance += Math.max(0, total - paid);
+      const due = Math.max(0, total - paid);
+      if (due > 0) {
+        outstandingBalance += due;
+        openInvoiceIds.add(invoice.id);
+      }
     }
+  }
+
+  // Unpaid maintenance billing periods not already covered by an open invoice.
+  const maintenancePeriods = await prisma.maintenancePlanBillingPeriod.findMany({
+    where: {
+      enrollment: {
+        companyId,
+        customerId,
+        status: { in: ["ACTIVE", "PENDING_RENEWAL", "EXPIRING_SOON", "SENT"] },
+      },
+      status: { in: ["PENDING", "DUE", "FAILED"] },
+      amount: { gt: 0 },
+    },
+    select: {
+      amount: true,
+      status: true,
+      dueDate: true,
+      paidAt: true,
+      invoiceId: true,
+    },
+  });
+
+  for (const period of maintenancePeriods) {
+    if (!isUnpaidMaintenancePeriod(period)) continue;
+    if (period.invoiceId && openInvoiceIds.has(period.invoiceId)) continue;
+    outstandingBalance += toNumber(period.amount);
   }
 
   const completedVisits = await prisma.visit.findMany({

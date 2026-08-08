@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -21,10 +21,13 @@ import {
   MediaLibraryPicker,
   type MediaLibraryItem,
 } from "@/components/media/MediaLibraryPicker";
+import { EditableEmailPreview } from "@/components/marketing/EditableEmailPreview";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
 import {
   EMAIL_TEMPLATES,
+  renderEmailTemplatePreview,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
@@ -50,20 +53,19 @@ type PaletteState = {
   extras: string[];
 };
 
+type CompanyContact = {
+  phone: string | null;
+  supportEmail: string | null;
+  website: string | null;
+  emailLogoUrl: string | null;
+};
+
 function normalizeHex(value: string, fallback: string) {
   const raw = value.trim();
   if (!raw) return fallback;
   const withHash = raw.startsWith("#") ? raw : `#${raw}`;
   if (!/^#[0-9a-fA-F]{6}$/i.test(withHash)) return fallback;
   return withHash.toUpperCase();
-}
-
-function wrapPreviewShell(html: string): string {
-  if (!html.trim()) {
-    return `<div style="padding:24px;color:#6b7280;font-family:Arial,sans-serif">Paste your email HTML to preview it here…</div>`;
-  }
-  if (/<html[\s>]/i.test(html) || /<body[\s>]/i.test(html)) return html;
-  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111827;max-width:640px;margin:0 auto;padding:16px">${html}</div>`;
 }
 
 function EmailCampaignEditorInner({
@@ -97,6 +99,13 @@ function EmailCampaignEditorInner({
   const [templateId, setTemplateId] = useState<EmailTemplateId>("announcement");
   const [selectedImages, setSelectedImages] = useState<MediaLibraryItem[]>([]);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [companyContact, setCompanyContact] = useState<CompanyContact>({
+    phone: null,
+    supportEmail: null,
+    website: null,
+    emailLogoUrl: null,
+  });
+  const [templateSeeded, setTemplateSeeded] = useState(false);
 
   useEffect(() => {
     setHtmlDraft(bodyHtml);
@@ -109,10 +118,70 @@ function EmailCampaignEditorInner({
     setPaletteSeeded(true);
   }, [brand.companyId, brand.primaryColor, defaultPalette, paletteSeeded]);
 
+  useEffect(() => {
+    fetch("/api/settings/company/branding")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setCompanyContact({
+          phone: data.phone ?? null,
+          supportEmail: data.supportEmail ?? null,
+          website: data.website ?? null,
+          emailLogoUrl: data.emailLogoUrl ?? null,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   function applyHtml(next: string) {
     setHtmlDraft(next);
     onBodyChange(next, htmlToPlainText(next));
   }
+
+  const applyTemplate = useCallback(
+    (id: EmailTemplateId, nextPalette?: PaletteState) => {
+      const p = nextPalette ?? palette;
+      const logoUrl =
+        absolutePublicBlobUrl(companyContact.emailLogoUrl) ||
+        brand.logoUrl ||
+        null;
+      const html = renderEmailTemplatePreview({
+        templateId: id,
+        company: {
+          companyName: brand.companyName,
+          logoUrl,
+          phone: companyContact.phone,
+          email: companyContact.supportEmail,
+          website: companyContact.website,
+        },
+        palette: {
+          primary: p.primary,
+          secondary: p.secondary,
+          soft: p.soft,
+          panel: p.panel,
+          accent: p.accent,
+          extras: p.extras,
+        },
+        heroImageUrl: selectedImages[0]?.publicUrl ?? null,
+      });
+      setTemplateId(id);
+      applyHtml(html);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyHtml is stable enough via setState
+    [brand.companyName, brand.logoUrl, companyContact, palette, selectedImages]
+  );
+
+  // Seed announcement template into an empty editor once branding/contact is ready.
+  useEffect(() => {
+    if (templateSeeded) return;
+    if (bodyHtml.trim()) {
+      setTemplateSeeded(true);
+      return;
+    }
+    if (!brand.companyId && brand.companyName === "Company") return;
+    applyTemplate("announcement");
+    setTemplateSeeded(true);
+  }, [applyTemplate, bodyHtml, brand.companyId, brand.companyName, templateSeeded]);
 
   function insertImageIntoHtml(url: string, alt: string) {
     const img = `<img src="${url}" alt="${alt.replace(/"/g, "&quot;")}" width="600" style="width:100%;max-width:600px;height:auto;display:block;margin:16px auto;" />`;
@@ -149,7 +218,7 @@ function EmailCampaignEditorInner({
             accent: palette.accent,
             extras: palette.extras,
           },
-          templateId: htmlDraft.trim() ? undefined : templateId,
+          templateId,
           imageUrls: selectedImages.map((img) => img.publicUrl),
         }),
       });
@@ -209,31 +278,29 @@ function EmailCampaignEditorInner({
         <div className="space-y-3 rounded-lg border bg-white p-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
           <h3 className="text-sm font-semibold">AI assistant</h3>
 
-          {!hasExistingHtml ? (
-            <div>
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Template</p>
-              <div className="space-y-2">
-                {EMAIL_TEMPLATES.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => setTemplateId(tpl.id)}
-                    className={cn(
-                      "w-full rounded-md border px-3 py-2 text-left text-sm transition",
-                      templateId === tpl.id
-                        ? "border-storm-sky bg-sky-50"
-                        : "hover:border-slate-300"
-                    )}
-                  >
-                    <span className="font-medium">{tpl.name}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {tpl.description}
-                    </span>
-                  </button>
-                ))}
-              </div>
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Template</p>
+            <div className="space-y-2">
+              {EMAIL_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => applyTemplate(tpl.id)}
+                  className={cn(
+                    "w-full rounded-md border px-3 py-2 text-left text-sm transition",
+                    templateId === tpl.id
+                      ? "border-storm-sky bg-sky-50"
+                      : "hover:border-slate-300"
+                  )}
+                >
+                  <span className="font-medium">{tpl.name}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {tpl.description}
+                  </span>
+                </button>
+              ))}
             </div>
-          ) : null}
+          </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -287,7 +354,7 @@ function EmailCampaignEditorInner({
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                {hasExistingHtml ? "Edit with AI" : "Generate email"}
+                  {hasExistingHtml ? "Fill / edit with AI" : "Generate email"}
               </>
             )}
           </Button>
@@ -395,7 +462,7 @@ function EmailCampaignEditorInner({
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col rounded-lg border bg-white">
+          <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col overflow-hidden rounded-lg border bg-white">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <div>
                 <h3 className="text-sm font-semibold">Live preview</h3>
@@ -424,22 +491,11 @@ function EmailCampaignEditorInner({
                 </Button>
               </div>
             </div>
-            <div className="flex flex-1 items-start justify-center overflow-auto bg-slate-100 p-4 sm:p-6">
-              <div
-                className={cn(
-                  "overflow-hidden rounded-lg border bg-white shadow-md transition-[width,max-width] duration-200",
-                  mobilePreview
-                    ? "w-full max-w-[375px]"
-                    : "w-full max-w-[640px]"
-                )}
-              >
-                <iframe
-                  title="Email preview"
-                  className="block h-[min(65vh,680px)] w-full bg-white"
-                  srcDoc={wrapPreviewShell(htmlDraft)}
-                />
-              </div>
-            </div>
+            <EditableEmailPreview
+              html={htmlDraft}
+              mobilePreview={mobilePreview}
+              onHtmlChange={applyHtml}
+            />
           </div>
 
           <div className="flex flex-col rounded-lg border bg-white">

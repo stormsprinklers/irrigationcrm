@@ -63,6 +63,9 @@ export async function generateCampaignEmail(params: {
   allowedLinks?: CampaignAllowedLink[];
   imageUrls?: string[];
   logoUrl?: string | null;
+  companyPhone?: string | null;
+  companyEmail?: string | null;
+  companyWebsite?: string | null;
 }) {
   const apiKey = requireOpenAIApiKey();
   const existing = params.existingHtml?.trim() ?? "";
@@ -107,6 +110,14 @@ ${formatAllowedLinks(allowedLinks)}
           logoUrl: params.logoUrl,
           palette: { primary, secondary, soft, panel, accent, extras },
           heroImageUrl: imageUrls[0] ?? null,
+          mode: "ai",
+          company: {
+            companyName: params.companyName,
+            logoUrl: params.logoUrl,
+            phone: params.companyPhone,
+            email: params.companyEmail,
+            website: params.companyWebsite,
+          },
         })
       : null;
 
@@ -130,7 +141,7 @@ bodyHtml must be a complete responsive marketing email using table-based layout 
 Style CTA buttons with primary ${primary}. Use secondary ${secondary} for headers.
 ${
   skeleton
-    ? `A TEMPLATE SKELETON is provided. Replace placeholders like {{HEADLINE}}, {{INTRO}}, {{BODY}}, {{OFFER}}, {{BULLET_1}}, {{CTA}}, {{FINE_PRINT}} with real content. Keep the overall layout and brand colors. For {{CTA}}, output a centered table-based button using ONLY an allowed link URL.`
+    ? `A TEMPLATE SKELETON is provided. Replace placeholders like {{HEADLINE}}, {{INTRO}}, {{BODY}}, {{BODY_2}}, {{OFFER}}, {{GREETING}}, {{CLOSING}}, {{CTA}}, {{FINE_PRINT}} with real content. Keep the overall layout and brand colors. For letter templates, keep the signature block (logo/company/contact) unchanged and write plain letter prose. For {{CTA}}, output a centered table-based button using ONLY an allowed link URL (omit CTA entirely for letter templates).`
     : `Include: compelling headline, short paragraphs, one clear call-to-action button, and a brief footer.`
 }
 ${linkRules}
