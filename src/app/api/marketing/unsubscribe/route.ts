@@ -1,40 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyMarketingUnsubscribeToken } from "@/lib/marketing/unsubscribe";
+import { resolvePortalSlug } from "@/lib/portal/company";
+import { verifyMessagingPreferencesToken } from "@/lib/marketing/unsubscribe";
+import { getAppBaseUrl } from "@/lib/app-url";
 
+/** Legacy marketing unsubscribe URL — redirect to portal preferences. */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
-  const verified = verifyMarketingUnsubscribeToken(token);
+  const verified = verifyMessagingPreferencesToken(token);
   if (!verified) {
     return new NextResponse(
       `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center">
         <h1>Invalid or expired link</h1>
-        <p>This unsubscribe link is not valid. Contact us if you need help.</p>
+        <p>This preferences link is not valid. Contact us if you need help.</p>
       </body></html>`,
       { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } }
     );
   }
 
-  await prisma.customer.updateMany({
-    where: { id: verified.customerId, companyId: verified.companyId },
-    data: { marketingEmailOptOut: true },
+  const company = await prisma.company.findUnique({
+    where: { id: verified.companyId },
+    select: { portalSlug: true, bookingSlug: true },
   });
+  const slug = company ? resolvePortalSlug(company) : null;
+  if (!slug) {
+    return new NextResponse(
+      `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;padding:40px;text-align:center">
+        <h1>Preferences unavailable</h1>
+        <p>Please contact the company to update your messaging preferences.</p>
+      </body></html>`,
+      { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } }
+    );
+  }
 
-  // Exit active drip enrollments so they stop receiving marketing sequences.
-  await prisma.campaignEnrollment.updateMany({
-    where: {
-      customerId: verified.customerId,
-      status: "ACTIVE",
-      campaign: { companyId: verified.companyId, type: "DRIP" },
-    },
-    data: { status: "CANCELLED" },
-  });
-
-  return new NextResponse(
-    `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:480px;margin:40px auto;padding:24px;text-align:center">
-      <h1 style="color:#102341">Unsubscribed from marketing</h1>
-      <p style="color:#374151;line-height:1.5">You will no longer receive marketing emails. You will still get messages about appointments, invoices, and service updates.</p>
-    </body></html>`,
-    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } }
-  );
+  const url = `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+  return NextResponse.redirect(url);
 }

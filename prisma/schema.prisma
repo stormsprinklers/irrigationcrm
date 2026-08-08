@@ -519,6 +519,8 @@ model Company {
   brandSecondaryColor      String?
   /// Full brand palette JSON: primary, secondary, soft, panel, accent, extras[].
   brandPalette             Json?
+  /// Campaign CTA links: { bookingUrl?, custom: [{ id, label, url }] }. Privacy/terms use company URL fields.
+  campaignCtaLinks         Json?
   recordCalls              Boolean  @default(true)
   transcribeCalls          Boolean  @default(true)
   /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.
@@ -691,6 +693,7 @@ model Company {
   users                  User[]
   customers              Customer[]
   customerPhones         CustomerPhone[]
+  mediaAssets            CompanyMediaAsset[]
   blockedContacts        BlockedContact[]
   callLogs               CallLog[]
   callConversions        CallConversion[]
@@ -924,6 +927,7 @@ model User {
   visitAttachments   VisitAttachment[]
   customerNotes      CustomerNote[]
   customerAttachments CustomerAttachment[]
+  mediaAssets        CompanyMediaAsset[]
   agentPresence      AgentPresence?
   agentGroupMembers  AgentGroupMember[]
   assignedCallSessions CallSession[] @relation("AssignedCallSessions")
@@ -1110,6 +1114,12 @@ model Customer {
   doNotService     Boolean        @default(false)
   /// Opt out of marketing email only — appointment/invoice/portal mail still allowed.
   marketingEmailOptOut Boolean    @default(false)
+  /// Opt out of marketing SMS (campaigns / offers).
+  marketingSmsOptOut Boolean      @default(false)
+  /// Opt out of appointment reminder emails (visit scheduled/updated/en-route/etc.).
+  appointmentReminderEmailOptOut Boolean @default(false)
+  /// Opt out of appointment reminder SMS.
+  appointmentReminderSmsOptOut Boolean @default(false)
   tags             String[]       @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -1192,6 +1202,25 @@ model CustomerAttachment {
   uploadedBy User     @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
 
   @@index([customerId])
+}
+
+/// Shared company media library (email campaigns, GBP posts, future SMS/MMS).
+model CompanyMediaAsset {
+  id          String   @id @default(cuid())
+  companyId   String
+  createdById String?
+  blobUrl     String
+  pathname    String
+  fileName    String
+  mimeType    String
+  alt         String?
+  byteSize    Int?
+  createdAt   DateTime @default(now())
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
 }
 
 model Lead {

@@ -5,6 +5,12 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 import { getOutboundCommsState, DEFAULT_OUTBOUND_FREEZE_REASON } from "@/lib/communications/outbound-guard";
+import { resolvePortalSlug } from "@/lib/portal/company";
+import {
+  appendMessagingPreferencesFooter,
+  isAppointmentReminderEvent,
+  messagingPreferencesUrlWithSlug,
+} from "@/lib/marketing/unsubscribe";
 import { assertCustomerCanReceiveNotifications } from "./guard";
 import { technicianPhotoMediaUrl } from "./technician-photo";
 import {
@@ -113,6 +119,20 @@ export async function sendOperationalNotification(params: {
     return result;
   }
 
+  let messagingPrefs: {
+    appointmentReminderEmailOptOut: boolean;
+    appointmentReminderSmsOptOut: boolean;
+  } | null = null;
+  if (params.recipient.customerId) {
+    messagingPrefs = await prisma.customer.findFirst({
+      where: { id: params.recipient.customerId, companyId: params.companyId },
+      select: {
+        appointmentReminderEmailOptOut: true,
+        appointmentReminderSmsOptOut: true,
+      },
+    });
+  }
+
   const company = await prisma.company.findUnique({
     where: { id: params.companyId },
     select: {
@@ -123,6 +143,8 @@ export async function sendOperationalNotification(params: {
       emailLogoUrl: true,
       termsOfServiceUrl: true,
       privacyPolicyUrl: true,
+      portalSlug: true,
+      bookingSlug: true,
       notifyVisitScheduled: true,
       notifyVisitTimeUpdated: true,
       notifyVisitCancelled: true,
@@ -215,6 +237,13 @@ export async function sendOperationalNotification(params: {
     body = injectTrackedUrlsInText(body, urlMap);
 
     if (rule.template.channel === Channel.EMAIL && !options.smsOnly) {
+      if (
+        isAppointmentReminderEvent(params.event) &&
+        messagingPrefs?.appointmentReminderEmailOptOut
+      ) {
+        result.skipped.push("appointment reminder email opt-out");
+        continue;
+      }
       const to = params.recipient.email;
       if (!to || !isEmailConfigured()) {
         emailFailed = true;
@@ -226,12 +255,27 @@ export async function sendOperationalNotification(params: {
           rule.template.subject ?? `${company.name} notification`,
           renderContext
         );
+        let html = body
+          .split("\n")
+          .map((line) => `<p>${line}</p>`)
+          .join("");
+        const portalSlug = resolvePortalSlug(company);
+        if (params.recipient.customerId && portalSlug) {
+          html = appendMessagingPreferencesFooter(
+            html,
+            messagingPreferencesUrlWithSlug(
+              params.recipient.customerId,
+              params.companyId,
+              portalSlug
+            )
+          );
+        }
         await sendCompanyEmail(branding, {
           companyId: params.companyId,
           to: [to],
           subject: injectTrackedUrlsInText(subject, urlMap),
           text: body,
-          html: body.split("\n").map((line) => `<p>${line}</p>`).join(""),
+          html,
         });
         await prisma.notificationDelivery.update({
           where: { id: delivery.id },
@@ -249,6 +293,13 @@ export async function sendOperationalNotification(params: {
 
     if (rule.template.channel === Channel.SMS) {
       if (options.emailOnly) continue;
+      if (
+        isAppointmentReminderEvent(params.event) &&
+        messagingPrefs?.appointmentReminderSmsOptOut
+      ) {
+        result.skipped.push("appointment reminder SMS opt-out");
+        continue;
+      }
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone || !process.env.TWILIO_ACCOUNT_SID) continue;
       if (options.smsBackupOnly && !emailFailed && emailAttempted && result.emailSent) continue;

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
+  ImagePlus,
   Loader2,
   Maximize2,
   Minimize2,
@@ -15,9 +17,16 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  MediaLibraryPicker,
+  type MediaLibraryItem,
+} from "@/components/media/MediaLibraryPicker";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
-import { brandPaletteToEmailSwatches } from "@/lib/brand-palette";
 import { stormBrand } from "@/lib/branding";
+import {
+  EMAIL_TEMPLATES,
+  type EmailTemplateId,
+} from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +94,9 @@ function EmailCampaignEditorInner({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [palette, setPalette] = useState<PaletteState>(defaultPalette);
   const [paletteSeeded, setPaletteSeeded] = useState(false);
+  const [templateId, setTemplateId] = useState<EmailTemplateId>("announcement");
+  const [selectedImages, setSelectedImages] = useState<MediaLibraryItem[]>([]);
+  const [mediaOpen, setMediaOpen] = useState(false);
 
   useEffect(() => {
     setHtmlDraft(bodyHtml);
@@ -102,6 +114,19 @@ function EmailCampaignEditorInner({
     onBodyChange(next, htmlToPlainText(next));
   }
 
+  function insertImageIntoHtml(url: string, alt: string) {
+    const img = `<img src="${url}" alt="${alt.replace(/"/g, "&quot;")}" width="600" style="width:100%;max-width:600px;height:auto;display:block;margin:16px auto;" />`;
+    if (!htmlDraft.trim()) {
+      applyHtml(img);
+      return;
+    }
+    if (/<\/body>/i.test(htmlDraft)) {
+      applyHtml(htmlDraft.replace(/<\/body>/i, `${img}</body>`));
+      return;
+    }
+    applyHtml(`${htmlDraft}\n${img}`);
+  }
+
   async function runAi() {
     if (!aiPrompt.trim()) {
       toast.error("Enter a prompt first");
@@ -109,14 +134,6 @@ function EmailCampaignEditorInner({
     }
     setGenerating(true);
     try {
-      const brandPalette = brandPaletteToEmailSwatches({
-        primary: palette.primary,
-        secondary: palette.secondary,
-        soft: palette.soft,
-        panel: palette.panel,
-        accent: palette.accent,
-        extras: palette.extras,
-      });
       const res = await fetch("/api/marketing/campaigns/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,7 +141,16 @@ function EmailCampaignEditorInner({
           prompt: aiPrompt,
           subject,
           existingHtml: htmlDraft.trim() || undefined,
-          brandPalette,
+          brandPalette: {
+            primary: palette.primary,
+            secondary: palette.secondary,
+            soft: palette.soft,
+            panel: palette.panel,
+            accent: palette.accent,
+            extras: palette.extras,
+          },
+          templateId: htmlDraft.trim() ? undefined : templateId,
+          imageUrls: selectedImages.map((img) => img.publicUrl),
         }),
       });
       const data = await res.json();
@@ -150,10 +176,13 @@ function EmailCampaignEditorInner({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Email HTML</h3>
+          <h3 className="text-sm font-semibold">Email builder</h3>
           <p className="text-xs text-muted-foreground">
-            Paste your email HTML on the left. Preview updates live. Use AI to generate a new
-            email or edit the HTML you already have.
+            Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
+            <Link href="/settings/campaign-links" className="underline">
+              Campaign links
+            </Link>
+            .
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
@@ -174,11 +203,71 @@ function EmailCampaignEditorInner({
       <div
         className={cn(
           "grid gap-4",
-          expanded ? "lg:grid-cols-[260px_1fr_360px]" : "lg:grid-cols-[240px_1fr_300px]"
+          expanded ? "lg:grid-cols-[280px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"
         )}
       >
-        <div className="space-y-3 rounded-lg border bg-white p-4">
+        <div className="space-y-3 rounded-lg border bg-white p-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
           <h3 className="text-sm font-semibold">AI assistant</h3>
+
+          {!hasExistingHtml ? (
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Template</p>
+              <div className="space-y-2">
+                {EMAIL_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => setTemplateId(tpl.id)}
+                    className={cn(
+                      "w-full rounded-md border px-3 py-2 text-left text-sm transition",
+                      templateId === tpl.id
+                        ? "border-storm-sky bg-sky-50"
+                        : "hover:border-slate-300"
+                    )}
+                  >
+                    <span className="font-medium">{tpl.name}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {tpl.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Photos</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => setMediaOpen(true)}>
+                <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                Library
+              </Button>
+            </div>
+            {selectedImages.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Optional — AI can place selected library photos in the layout.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {selectedImages.map((img) => (
+                  <div key={img.id} className="relative h-14 w-14 overflow-hidden rounded border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      className="absolute right-0 top-0 bg-black/60 p-0.5 text-white"
+                      onClick={() =>
+                        setSelectedImages((prev) => prev.filter((x) => x.id !== img.id))
+                      }
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <textarea
             className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             value={aiPrompt}
@@ -186,7 +275,7 @@ function EmailCampaignEditorInner({
             placeholder={
               hasExistingHtml
                 ? "Describe edits: make the CTA use primary, shorten the intro…"
-                : "Describe your campaign: offer, tone, CTA…"
+                : "Describe your campaign: offer, tone, what the CTA should say…"
             }
           />
           <Button type="button" className="w-full" onClick={runAi} disabled={generating}>
@@ -305,67 +394,95 @@ function EmailCampaignEditorInner({
           </div>
         </div>
 
-        <div className="flex min-h-[520px] flex-col rounded-lg border bg-white">
-          <div className="flex items-center justify-between border-b px-3 py-2">
-            <h3 className="text-sm font-semibold">HTML source</h3>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={!htmlDraft}
-              onClick={() => applyHtml("")}
-            >
-              Clear
-            </Button>
-          </div>
-          <textarea
-            className="min-h-[480px] flex-1 resize-y rounded-b-lg bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
-            value={htmlDraft}
-            onChange={(e) => applyHtml(e.target.value)}
-            spellCheck={false}
-            placeholder="Paste a full email HTML document here…"
-          />
-        </div>
-
-        <div className="space-y-3 rounded-lg border bg-white p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Live preview</h3>
-            <div className="flex gap-1">
-              <Button
-                type="button"
-                size="icon"
-                variant={mobilePreview ? "ghost" : "secondary"}
-                onClick={() => setMobilePreview(false)}
+        <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col rounded-lg border bg-white">
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <div>
+                <h3 className="text-sm font-semibold">Live preview</h3>
+                <p className="text-xs text-muted-foreground">
+                  {mobilePreview ? "Mobile · 375px wide" : "Desktop · up to 640px wide"}
+                </p>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={mobilePreview ? "ghost" : "secondary"}
+                  onClick={() => setMobilePreview(false)}
+                >
+                  <Monitor className="mr-1.5 h-4 w-4" />
+                  Desktop
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={mobilePreview ? "secondary" : "ghost"}
+                  onClick={() => setMobilePreview(true)}
+                >
+                  <Smartphone className="mr-1.5 h-4 w-4" />
+                  Mobile
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-1 items-start justify-center overflow-auto bg-slate-100 p-4 sm:p-6">
+              <div
+                className={cn(
+                  "overflow-hidden rounded-lg border bg-white shadow-md transition-[width,max-width] duration-200",
+                  mobilePreview
+                    ? "w-full max-w-[375px]"
+                    : "w-full max-w-[640px]"
+                )}
               >
-                <Monitor className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant={mobilePreview ? "secondary" : "ghost"}
-                onClick={() => setMobilePreview(true)}
-              >
-                <Smartphone className="h-4 w-4" />
-              </Button>
+                <iframe
+                  title="Email preview"
+                  className="block h-[min(65vh,680px)] w-full bg-white"
+                  srcDoc={wrapPreviewShell(htmlDraft)}
+                />
+              </div>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Shows the HTML that will be sent (desktop / mobile width).
-          </p>
-          <div className="overflow-hidden rounded border bg-slate-50">
-            <iframe
-              title="Email preview"
-              className="h-[min(70vh,640px)] w-full bg-white"
-              style={{
-                maxWidth: mobilePreview ? 375 : "100%",
-                margin: mobilePreview ? "0 auto" : undefined,
-                display: "block",
-              }}
-              srcDoc={wrapPreviewShell(htmlDraft)}
+
+          <div className="flex flex-col rounded-lg border bg-white">
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <h3 className="text-sm font-semibold">HTML source</h3>
+              <div className="flex gap-1">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMediaOpen(true)}>
+                  Insert image
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!htmlDraft}
+                  onClick={() => applyHtml("")}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+            <textarea
+              className="min-h-[160px] max-h-[240px] resize-y bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
+              value={htmlDraft}
+              onChange={(e) => applyHtml(e.target.value)}
+              spellCheck={false}
+              placeholder="Paste a full email HTML document here…"
             />
           </div>
         </div>
       </div>
+
+      <MediaLibraryPicker
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        onSelect={(asset) => {
+          setSelectedImages((prev) =>
+            prev.some((p) => p.id === asset.id) ? prev : [...prev, asset].slice(0, 4)
+          );
+          if (hasExistingHtml) {
+            insertImageIntoHtml(asset.publicUrl, asset.alt ?? asset.fileName);
+          }
+        }}
+      />
     </div>
   );
 }

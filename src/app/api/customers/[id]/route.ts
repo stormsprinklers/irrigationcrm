@@ -65,6 +65,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
         ...(body.leadSource !== undefined ? { leadSource: body.leadSource ?? null } : {}),
         ...(body.doNotService !== undefined ? { doNotService: Boolean(body.doNotService) } : {}),
+        ...(body.marketingEmailOptOut !== undefined
+          ? { marketingEmailOptOut: Boolean(body.marketingEmailOptOut) }
+          : {}),
+        ...(body.marketingSmsOptOut !== undefined
+          ? { marketingSmsOptOut: Boolean(body.marketingSmsOptOut) }
+          : {}),
+        ...(body.appointmentReminderEmailOptOut !== undefined
+          ? { appointmentReminderEmailOptOut: Boolean(body.appointmentReminderEmailOptOut) }
+          : {}),
+        ...(body.appointmentReminderSmsOptOut !== undefined
+          ? { appointmentReminderSmsOptOut: Boolean(body.appointmentReminderSmsOptOut) }
+          : {}),
         ...(body.tags !== undefined
           ? {
               tags: Array.isArray(body.tags)

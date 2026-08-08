@@ -1,10 +1,17 @@
+import { CircleHelp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type MarketingMetric = {
   label: string;
   value?: string | number;
   hint?: string;
+  tooltip?: string;
 };
 
 type Props = {
@@ -43,7 +50,23 @@ export function MarketingMetricGrid({
               </Badge>
             ) : null}
           </div>
-          <p className="text-sm text-muted-foreground">{metric.label}</p>
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            <span>{metric.label}</span>
+            {metric.tooltip ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex text-muted-foreground/80 hover:text-foreground"
+                    aria-label={`About ${metric.label}`}
+                  >
+                    <CircleHelp className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{metric.tooltip}</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </p>
           {metric.hint ? (
             <p className="mt-1 text-xs text-muted-foreground/80">{metric.hint}</p>
           ) : null}

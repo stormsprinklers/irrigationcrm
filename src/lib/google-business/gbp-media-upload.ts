@@ -31,6 +31,20 @@ function imageExtensionForMime(mimeType: string) {
 }
 
 async function fetchPickablePhotoBytes(params: PickablePhotoParams) {
+  if (params.photoId.startsWith("media:")) {
+    const mediaId = params.photoId.slice("media:".length);
+    const asset = await prisma.companyMediaAsset.findFirst({
+      where: { id: mediaId, companyId: params.companyId },
+      select: { blobUrl: true, mimeType: true },
+    });
+    if (!asset) throw new Error("Media library photo not found");
+    const { buffer, mimeType } = await fetchBlobBytes(asset.blobUrl);
+    return {
+      buffer,
+      mimeType: normalizeImageMimeType(mimeType || asset.mimeType),
+    };
+  }
+
   const parsed = parsePickablePhotoId(params.photoId);
 
   if (parsed.source === "visit") {

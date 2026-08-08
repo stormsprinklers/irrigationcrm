@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { MediaLibraryPicker, type MediaLibraryItem } from "@/components/media/MediaLibraryPicker";
 import type {
   GbpJobPhotoDto,
   GbpLocalPostDto,
@@ -302,6 +303,8 @@ function PostsTab({
   const [brief, setBrief] = useState("");
   const [postText, setPostText] = useState("");
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
+  const [libraryPhoto, setLibraryPhoto] = useState<MediaLibraryItem | null>(null);
+  const [mediaOpen, setMediaOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [posting, setPosting] = useState(false);
 
@@ -355,14 +358,18 @@ function PostsTab({
     setPosting(true);
     try {
       const selectedPhoto = jobPhotos.find((item) => item.id === selectedPhotoId);
+      const photoId = libraryPhoto
+        ? `media:${libraryPhoto.id}`
+        : selectedPhotoId;
+      const previewUrl = libraryPhoto?.publicUrl ?? selectedPhoto?.previewUrl;
       const res = await fetch("/api/marketing/google-business/local-posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           summary: postText.trim(),
-          attachmentId: selectedPhotoId,
-          photoId: selectedPhotoId,
-          previewUrl: selectedPhoto?.previewUrl,
+          attachmentId: photoId,
+          photoId,
+          previewUrl,
         }),
       });
       const data = await res.json();
@@ -371,6 +378,7 @@ function PostsTab({
       setBrief("");
       setPostText("");
       setSelectedPhotoId(null);
+      setLibraryPhoto(null);
       await loadPosts();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to publish post");
@@ -410,16 +418,48 @@ function PostsTab({
         <JobPhotoPicker
           photos={jobPhotos}
           loading={loadingPhotos}
-          selectedId={selectedPhotoId}
-          onSelect={setSelectedPhotoId}
+          selectedId={libraryPhoto ? null : selectedPhotoId}
+          onSelect={(id) => {
+            setLibraryPhoto(null);
+            setSelectedPhotoId(id);
+          }}
           onReload={onReloadPhotos}
           label="Optional photo from recent visits or social (last 14 days)"
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => setMediaOpen(true)}>
+            Choose from media library
+          </Button>
+          {libraryPhoto ? (
+            <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={libraryPhoto.previewUrl} alt="" className="h-8 w-8 rounded object-cover" />
+              {libraryPhoto.fileName}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setLibraryPhoto(null)}
+              >
+                Clear
+              </button>
+            </span>
+          ) : null}
+        </div>
         <Button type="button" disabled={posting} onClick={() => void publishPost()}>
           {posting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
           Publish post
         </Button>
       </div>
+
+      <MediaLibraryPicker
+        open={mediaOpen}
+        onOpenChange={setMediaOpen}
+        title="Choose photo for Google post"
+        onSelect={(asset) => {
+          setLibraryPhoto(asset);
+          setSelectedPhotoId(null);
+        }}
+      />
 
       <div className="space-y-3">
         <p className="text-sm font-medium">Recent posts</p>

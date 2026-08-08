@@ -178,6 +178,8 @@ export const communicationsSettingsSidebar: NavSection[] = [
   {
     items: [
       { label: "Notifications", href: "/settings/notifications" },
+      { label: "Campaign links", href: "/settings/campaign-links" },
+      { label: "Media library", href: "/settings/media-library" },
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice overview", href: "/settings/voice", exact: true },
       { label: "Phone numbers", href: "/settings/voice/numbers" },

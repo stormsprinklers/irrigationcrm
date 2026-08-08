@@ -1,12 +1,21 @@
 import { stormBrand } from "@/lib/branding";
 import { requireOpenAIApiKey } from "@/lib/openai/client";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import {
+  isEmailTemplateId,
+  renderEmailTemplateSkeleton,
+  type EmailTemplateId,
+} from "@/lib/marketing/email-templates";
+import type { CampaignAllowedLink } from "@/lib/marketing/campaign-links";
 
 export type EmailBrandPalette = {
   /** Main CTA / accent */
   primary: string;
   /** Headers / dark text backgrounds */
   secondary: string;
+  soft?: string;
+  panel?: string;
+  accent?: string | null;
   /** Optional extra swatches (accent, light bg, white, etc.) */
   extras?: string[];
 };
@@ -19,6 +28,29 @@ function normalizeHex(value: string | undefined, fallback: string) {
   return withHash.toUpperCase();
 }
 
+function formatAllowedLinks(links: CampaignAllowedLink[]) {
+  if (!links.length) {
+    return "NONE CONFIGURED — do not invent URLs. Omit CTA buttons or use plain text without href.";
+  }
+  return links.map((l) => `- ${l.label}: ${l.url}`).join("\n");
+}
+
+function stripDisallowedHrefs(html: string, allowedUrls: Set<string>) {
+  return html.replace(/\bhref\s*=\s*(["'])(.*?)\1/gi, (full, quote: string, href: string) => {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:")) {
+      return full;
+    }
+    if (allowedUrls.has(trimmed)) return full;
+    // Normalize trailing slash mismatch
+    const withoutSlash = trimmed.replace(/\/$/, "");
+    for (const allowed of allowedUrls) {
+      if (allowed.replace(/\/$/, "") === withoutSlash) return full;
+    }
+    return `href=${quote}#${quote}`;
+  });
+}
+
 export async function generateCampaignEmail(params: {
   prompt: string;
   subject?: string;
@@ -27,43 +59,86 @@ export async function generateCampaignEmail(params: {
   /** When set, AI revises this HTML instead of generating from scratch. */
   existingHtml?: string;
   brandPalette?: EmailBrandPalette;
+  templateId?: EmailTemplateId | string | null;
+  allowedLinks?: CampaignAllowedLink[];
+  imageUrls?: string[];
+  logoUrl?: string | null;
 }) {
   const apiKey = requireOpenAIApiKey();
   const existing = params.existingHtml?.trim() ?? "";
   const isEdit = Boolean(existing);
+  const templateId = isEmailTemplateId(params.templateId) ? params.templateId : null;
+  const allowedLinks = params.allowedLinks ?? [];
+  const imageUrls = (params.imageUrls ?? []).filter(Boolean);
+  const allowedUrlSet = new Set<string>([
+    ...allowedLinks.map((l) => l.url),
+    ...imageUrls,
+    ...(params.logoUrl ? [params.logoUrl] : []),
+  ]);
 
   const primary = normalizeHex(params.brandPalette?.primary, stormBrand.sky);
   const secondary = normalizeHex(params.brandPalette?.secondary, stormBrand.navy);
+  const soft = normalizeHex(params.brandPalette?.soft, stormBrand.ice);
+  const panel = normalizeHex(params.brandPalette?.panel, "#E8F4FA");
+  const accent = normalizeHex(params.brandPalette?.accent ?? undefined, stormBrand.coral);
   const extras = (params.brandPalette?.extras ?? [])
     .map((c) => normalizeHex(c, ""))
     .filter(Boolean);
-  const paletteList = [primary, secondary, ...extras, "#FFFFFF"]
+  const paletteList = [primary, secondary, soft, panel, accent, ...extras, "#FFFFFF"]
     .filter((v, i, arr) => arr.indexOf(v) === i)
     .join(", ");
+
+  const linkRules = `CRITICAL LINK RULES:
+- You MUST NOT invent, guess, or fabricate any URLs.
+- You may ONLY use these allowed links for <a href>:
+${formatAllowedLinks(allowedLinks)}
+- If no suitable link exists for a CTA, omit the button or use non-clickable text (no href).
+- Image src attributes may ONLY use provided image/logo URLs: ${
+    imageUrls.length || params.logoUrl
+      ? [params.logoUrl, ...imageUrls].filter(Boolean).join(", ")
+      : "none — do not add <img> tags with external URLs"
+  }.`;
+
+  const skeleton =
+    !isEdit && templateId
+      ? renderEmailTemplateSkeleton({
+          templateId,
+          companyName: params.companyName,
+          logoUrl: params.logoUrl,
+          palette: { primary, secondary, soft, panel, accent, extras },
+          heroImageUrl: imageUrls[0] ?? null,
+        })
+      : null;
 
   const system = isEdit
     ? `You are an expert email marketer and HTML email developer for ${params.companyName}.
 Brand voice: friendly, upbeat, and professional.
-Brand colors (use these hex values): primary ${primary}, secondary ${secondary}${extras.length ? `, extras ${extras.join(", ")}` : ""}. Full palette: ${paletteList}.
+Brand colors (use these hex values): primary ${primary}, secondary ${secondary}, soft ${soft}, panel ${panel}, accent ${accent}. Full palette: ${paletteList}.
 You will receive EXISTING email HTML and an edit request.
 Return ONLY valid JSON with keys: subject, bodyHtml.
 bodyHtml must be the FULL updated email HTML (table-based, INLINE CSS only, email-client safe).
 Apply the user's requested changes carefully. Preserve structure, tracking-friendly links, and branding unless the user asks otherwise.
 When changing colors, prefer the brand palette above.
+${linkRules}
 Do not strip the document to a fragment if the input is a full HTML email — return a complete document.
 Do not include markdown fences or extra commentary.`
     : `You are an expert email marketer for ${params.companyName}.
 Brand voice: friendly, upbeat, and professional.
-Brand colors (use these hex values): primary ${primary}, secondary ${secondary}${extras.length ? `, extras ${extras.join(", ")}` : ""}. Full palette: ${paletteList}.
+Brand colors (use these hex values): primary ${primary}, secondary ${secondary}, soft ${soft}, panel ${panel}, accent ${accent}. Full palette: ${paletteList}.
 Return ONLY valid JSON with keys: subject, bodyHtml.
 bodyHtml must be a complete responsive marketing email using table-based layout and INLINE CSS only (email-client safe).
-Include: compelling headline, short paragraphs, one clear call-to-action button styled with primary ${primary}, and a brief footer using secondary ${secondary}.
+Style CTA buttons with primary ${primary}. Use secondary ${secondary} for headers.
+${
+  skeleton
+    ? `A TEMPLATE SKELETON is provided. Replace placeholders like {{HEADLINE}}, {{INTRO}}, {{BODY}}, {{OFFER}}, {{BULLET_1}}, {{CTA}}, {{FINE_PRINT}} with real content. Keep the overall layout and brand colors. For {{CTA}}, output a centered table-based button using ONLY an allowed link URL.`
+    : `Include: compelling headline, short paragraphs, one clear call-to-action button, and a brief footer.`
+}
+${linkRules}
 Do not include markdown fences or extra commentary.`;
 
   const user = isEdit
     ? `Edit this marketing email for ${params.companyName}.
 ${params.subject ? `Current subject: ${params.subject}` : ""}
-${params.ctaUrl ? `Preferred CTA link if needed: ${params.ctaUrl}` : ""}
 
 Edit request:
 ${params.prompt}
@@ -73,10 +148,12 @@ ${existing}`
     : `Write a marketing email campaign.
 Company: ${params.companyName}
 ${params.subject ? `Suggested subject: ${params.subject}` : ""}
-${params.ctaUrl ? `Primary CTA link: ${params.ctaUrl}` : ""}
+Template: ${templateId ?? "freeform"}
 
 Campaign brief:
-${params.prompt}`;
+${params.prompt}
+
+${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -91,7 +168,7 @@ ${params.prompt}`;
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-      max_tokens: isEdit ? 4000 : 2500,
+      max_tokens: isEdit ? 4000 : 3500,
     }),
   });
 
@@ -110,7 +187,9 @@ ${params.prompt}`;
   let bodyHtml = (parsed.bodyHtml ?? "").trim();
   if (!bodyHtml) throw new Error("AI returned empty HTML");
 
-  if (!isEdit && !looksLikeFullEmail(bodyHtml)) {
+  bodyHtml = stripDisallowedHrefs(bodyHtml, allowedUrlSet);
+
+  if (!isEdit && !looksLikeFullEmail(bodyHtml) && !skeleton) {
     bodyHtml = wrapBrandedEmail(bodyHtml, params.companyName, { primary, secondary });
   }
 

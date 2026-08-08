@@ -1,15 +1,17 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { getAuthSecret } from "@/lib/auth-secret";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { prisma } from "@/lib/prisma";
+import { resolvePortalSlug } from "@/lib/portal/company";
 
 function secret() {
   const value = getAuthSecret();
-  if (!value) throw new Error("AUTH_SECRET is required for marketing unsubscribe tokens");
+  if (!value) throw new Error("AUTH_SECRET is required for messaging preference tokens");
   return value;
 }
 
 /** Signed token: customerId.companyId.exp.sig */
-export function createMarketingUnsubscribeToken(
+export function createMessagingPreferencesToken(
   customerId: string,
   companyId: string,
   ttlDays = 365
@@ -20,7 +22,7 @@ export function createMarketingUnsubscribeToken(
   return `${payload}.${sig}`;
 }
 
-export function verifyMarketingUnsubscribeToken(token: string): {
+export function verifyMessagingPreferencesToken(token: string): {
   customerId: string;
   companyId: string;
 } | null {
@@ -42,23 +44,99 @@ export function verifyMarketingUnsubscribeToken(token: string): {
   return { customerId, companyId };
 }
 
+/** @deprecated Use createMessagingPreferencesToken — same token format. */
+export const createMarketingUnsubscribeToken = createMessagingPreferencesToken;
+/** @deprecated Use verifyMessagingPreferencesToken */
+export const verifyMarketingUnsubscribeToken = verifyMessagingPreferencesToken;
+
+export async function messagingPreferencesUrl(customerId: string, companyId: string) {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { portalSlug: true, bookingSlug: true },
+  });
+  const slug = company ? resolvePortalSlug(company) : null;
+  const token = createMessagingPreferencesToken(customerId, companyId);
+  if (!slug) {
+    return `${getAppBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+  }
+  return `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+}
+
+/** Sync helper when slug is already known. */
+export function messagingPreferencesUrlWithSlug(
+  customerId: string,
+  companyId: string,
+  slug: string
+) {
+  const token = createMessagingPreferencesToken(customerId, companyId);
+  return `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+}
+
 export function marketingUnsubscribeUrl(customerId: string, companyId: string) {
-  const token = createMarketingUnsubscribeToken(customerId, companyId);
+  const token = createMessagingPreferencesToken(customerId, companyId);
   return `${getAppBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
-/** Append a marketing-only unsubscribe footer to campaign HTML. */
+/** Append a preferences footer to marketing campaign HTML. */
 export function appendMarketingUnsubscribeFooter(
   html: string,
-  unsubscribeUrl: string
+  preferencesUrl: string
 ): string {
   const footer = `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280">
   <p style="margin:0 0 8px">You received this email because you are a customer. This is a marketing message.</p>
-  <p style="margin:0"><a href="${unsubscribeUrl}" style="color:#4C9BC8">Unsubscribe from marketing emails</a> — you will still receive appointment and invoice messages.</p>
+  <p style="margin:0"><a href="${preferencesUrl}" style="color:#4C9BC8">Manage email preferences</a> — choose which messages you want to receive.</p>
 </div>`;
 
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${footer}</body>`);
   }
   return `${html}${footer}`;
+}
+
+export function appendMessagingPreferencesFooter(
+  html: string,
+  preferencesUrl: string
+): string {
+  const footer = `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280">
+  <p style="margin:0"><a href="${preferencesUrl}" style="color:#4C9BC8">Manage messaging preferences</a></p>
+</div>`;
+
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${footer}</body>`);
+  }
+  return `${html}${footer}`;
+}
+
+export type CustomerMessagingPrefs = {
+  marketingEmailOptOut: boolean;
+  marketingSmsOptOut: boolean;
+  appointmentReminderEmailOptOut: boolean;
+  appointmentReminderSmsOptOut: boolean;
+  doNotService: boolean;
+};
+
+export function prefsAllOptedOut(prefs: {
+  marketingEmailOptOut: boolean;
+  marketingSmsOptOut: boolean;
+  appointmentReminderEmailOptOut: boolean;
+  appointmentReminderSmsOptOut: boolean;
+}) {
+  return (
+    prefs.marketingEmailOptOut &&
+    prefs.marketingSmsOptOut &&
+    prefs.appointmentReminderEmailOptOut &&
+    prefs.appointmentReminderSmsOptOut
+  );
+}
+
+const APPOINTMENT_EVENTS = new Set([
+  "VISIT_SCHEDULED",
+  "VISIT_TIME_UPDATED",
+  "VISIT_CANCELLED",
+  "VISIT_COMPLETED",
+  "VISIT_EN_ROUTE",
+]);
+
+export function isAppointmentReminderEvent(event: string) {
+  return APPOINTMENT_EVENTS.has(event);
 }

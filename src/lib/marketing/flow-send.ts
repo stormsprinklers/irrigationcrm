@@ -31,6 +31,8 @@ export async function sendCampaignMessage(params: {
     email: string | null;
     phone: string | null;
     marketingEmailOptOut?: boolean;
+    marketingSmsOptOut?: boolean;
+    doNotService?: boolean;
   };
   channel: CampaignChannel;
   subject: string;
@@ -39,7 +41,13 @@ export async function sendCampaignMessage(params: {
 }) {
   const { campaign, customer, channel, subject, bodyText, bodyHtml } = params;
 
+  if (customer.doNotService) {
+    return false;
+  }
   if (channel === CampaignChannel.EMAIL && customer.marketingEmailOptOut) {
+    return false;
+  }
+  if (channel === CampaignChannel.SMS && customer.marketingSmsOptOut) {
     return false;
   }
 

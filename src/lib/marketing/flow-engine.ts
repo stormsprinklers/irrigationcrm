@@ -437,6 +437,7 @@ export async function processCampaignTriggers(companyId?: string) {
           status: "ACTIVE",
           doNotService: false,
           marketingEmailOptOut: campaign.channel === "EMAIL" ? false : undefined,
+          marketingSmsOptOut: campaign.channel === "SMS" ? false : undefined,
           OR: [
             { city: { in: cities, mode: "insensitive" } },
             { properties: { some: { city: { in: cities, mode: "insensitive" } } } },

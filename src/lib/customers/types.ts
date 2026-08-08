@@ -16,6 +16,10 @@ export type CustomerDTO = {
   firstTouchMethod: string | null;
   status: "ACTIVE" | "ARCHIVED";
   doNotService: boolean;
+  marketingEmailOptOut: boolean;
+  marketingSmsOptOut: boolean;
+  appointmentReminderEmailOptOut: boolean;
+  appointmentReminderSmsOptOut: boolean;
   tags: string[];
   createdAt: string;
   updatedAt: string;

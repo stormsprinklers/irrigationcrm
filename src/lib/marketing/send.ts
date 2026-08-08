@@ -158,12 +158,32 @@ async function sendToRecipient(
   if (recipient.customerId && channel === CampaignChannel.EMAIL) {
     const customer = await prisma.customer.findFirst({
       where: { id: recipient.customerId, companyId: campaign.companyId },
-      select: { marketingEmailOptOut: true },
+      select: { marketingEmailOptOut: true, doNotService: true },
     });
-    if (customer?.marketingEmailOptOut) {
+    if (customer?.doNotService || customer?.marketingEmailOptOut) {
       await prisma.campaignRecipient.update({
         where: { id: recipient.id },
-        data: { status: "opt_out", error: "Marketing email opt-out" },
+        data: {
+          status: "opt_out",
+          error: customer.doNotService ? "Do not service" : "Marketing email opt-out",
+        },
+      });
+      return false;
+    }
+  }
+
+  if (recipient.customerId && channel === CampaignChannel.SMS) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: recipient.customerId, companyId: campaign.companyId },
+      select: { marketingSmsOptOut: true, doNotService: true },
+    });
+    if (customer?.doNotService || customer?.marketingSmsOptOut) {
+      await prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: {
+          status: "opt_out",
+          error: customer.doNotService ? "Do not service" : "Marketing SMS opt-out",
+        },
       });
       return false;
     }

@@ -808,6 +808,26 @@ export function CustomerProfile({ customerId }: Props) {
                       <Badge variant="destructive">Do not service</Badge>
                     </div>
                   ) : null}
+                  <div className="sm:col-span-2 rounded-md border p-3 text-sm">
+                    <p className="mb-2 font-medium">Messaging preferences</p>
+                    <ul className="grid gap-1 text-muted-foreground sm:grid-cols-2">
+                      <li>
+                        Marketing email:{" "}
+                        {customer.marketingEmailOptOut ? "Off" : "On"}
+                      </li>
+                      <li>
+                        Marketing SMS: {customer.marketingSmsOptOut ? "Off" : "On"}
+                      </li>
+                      <li>
+                        Appointment email:{" "}
+                        {customer.appointmentReminderEmailOptOut ? "Off" : "On"}
+                      </li>
+                      <li>
+                        Appointment SMS:{" "}
+                        {customer.appointmentReminderSmsOptOut ? "Off" : "On"}
+                      </li>
+                    </ul>
+                  </div>
                 </dl>
               ) : profileCustomer ? (
                 <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-2">
@@ -901,6 +921,62 @@ export function CustomerProfile({ customerId }: Props) {
                       </label>
                     </div>
                   )}
+                  <div className="sm:col-span-2 rounded-md border p-3">
+                    <p className="mb-2 text-sm font-medium">Messaging preferences</p>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Checked means the customer wants to receive that message type.
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={!profileCustomer.marketingEmailOptOut}
+                          onCheckedChange={(checked) =>
+                            setDraftCustomer({
+                              ...profileCustomer,
+                              marketingEmailOptOut: !Boolean(checked),
+                            })
+                          }
+                        />
+                        Marketing email
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={!profileCustomer.marketingSmsOptOut}
+                          onCheckedChange={(checked) =>
+                            setDraftCustomer({
+                              ...profileCustomer,
+                              marketingSmsOptOut: !Boolean(checked),
+                            })
+                          }
+                        />
+                        Marketing SMS
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={!profileCustomer.appointmentReminderEmailOptOut}
+                          onCheckedChange={(checked) =>
+                            setDraftCustomer({
+                              ...profileCustomer,
+                              appointmentReminderEmailOptOut: !Boolean(checked),
+                            })
+                          }
+                        />
+                        Appointment reminder email
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={!profileCustomer.appointmentReminderSmsOptOut}
+                          onCheckedChange={(checked) =>
+                            setDraftCustomer({
+                              ...profileCustomer,
+                              appointmentReminderSmsOptOut: !Boolean(checked),
+                            })
+                          }
+                        />
+                        Appointment reminder SMS
+                      </label>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2 sm:col-span-2">
                     <Button type="submit" disabled={saving}>
                       {saving ? "Saving..." : "Save changes"}

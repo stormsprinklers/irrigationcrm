@@ -42,6 +42,8 @@ const SETTINGS_SECTIONS: Array<{
     title: "Communications",
     match: (pathname) =>
       pathname.startsWith("/settings/notifications") ||
+      pathname.startsWith("/settings/campaign-links") ||
+      pathname.startsWith("/settings/media-library") ||
       pathname.startsWith("/settings/inbox") ||
       pathname.startsWith("/settings/voice"),
     sections: communicationsSettingsSidebar,

@@ -86,6 +86,9 @@ export async function queryAudienceCustomers(
   if (channel === "EMAIL") {
     where.marketingEmailOptOut = false;
   }
+  if (channel === "SMS") {
+    where.marketingSmsOptOut = false;
+  }
 
   const customers = await prisma.customer.findMany({
     where,
@@ -97,6 +100,7 @@ export async function queryAudienceCustomers(
       city: true,
       tags: true,
       marketingEmailOptOut: true,
+      marketingSmsOptOut: true,
     },
     orderBy: { name: "asc" },
     ...(take ? { take } : {}),
@@ -118,6 +122,7 @@ export async function queryAudienceCustomers(
     if (excludeIds.has(c.id)) return false;
     if (blockedCustomerIds.has(c.id)) return false;
     if (channel === "EMAIL" && c.marketingEmailOptOut) return false;
+    if (channel === "SMS" && c.marketingSmsOptOut) return false;
     if (channel === "EMAIL" && c.email && blockedEmails.has(c.email.toLowerCase())) return false;
     if (channel === "SMS" && c.phone && blockedPhones.has(c.phone)) return false;
     return true;
