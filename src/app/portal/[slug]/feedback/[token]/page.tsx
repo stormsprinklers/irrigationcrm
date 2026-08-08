@@ -52,62 +52,72 @@ export default function FeedbackSurveyPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-md p-8 text-center text-muted-foreground">Loading…</div>
+      <div className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+        <div className="mx-auto max-w-md p-8 text-center text-[#1e293b]">Loading…</div>
+      </div>
     );
   }
 
   if (error && !companyName) {
     return (
-      <div className="mx-auto max-w-md p-8 text-center text-destructive">{error}</div>
+      <div className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+        <div className="mx-auto max-w-md p-8 text-center text-destructive">{error}</div>
+      </div>
     );
   }
 
   if (done) {
     return (
-      <div className="mx-auto max-w-md space-y-4 p-8 text-center">
-        <h1 className="text-xl font-semibold">Thank you!</h1>
-        <p className="text-muted-foreground">Your feedback helps {companyName} improve.</p>
+      <div className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+        <div className="mx-auto max-w-md space-y-4 p-8 text-center">
+          <h1 className="text-xl font-semibold text-[#102341]">Thank you!</h1>
+          <p className="text-[#1e293b]">Your feedback helps {companyName} improve.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-6 p-8">
-      <div className="text-center">
-        <h1 className="text-xl font-semibold">How was your visit?</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {visitTitle} — {companyName}
-        </p>
+    <div className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+      <div className="mx-auto max-w-md space-y-6 p-8">
+        <div className="text-center">
+          <h1 className="text-xl font-semibold text-[#102341]">How was your visit?</h1>
+          <p className="mt-1 text-sm text-[#1e293b]">
+            {visitTitle} — {companyName}
+          </p>
+        </div>
+
+        <div className="flex justify-center gap-2">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setRating(n)}
+              className={`h-12 w-12 rounded-full border text-lg font-medium ${
+                rating >= n
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-slate-300 bg-white text-[#102341]"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-[#102341]"
+          placeholder="Optional comments…"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={4}
+        />
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+        <Button className="w-full" onClick={submit} disabled={submitting || rating < 1}>
+          {submitting ? "Submitting…" : "Submit feedback"}
+        </Button>
       </div>
-
-      <div className="flex justify-center gap-2">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            onClick={() => setRating(n)}
-            className={`h-12 w-12 rounded-full border text-lg font-medium ${
-              rating >= n ? "bg-primary text-primary-foreground border-primary" : "bg-background"
-            }`}
-          >
-            {n}
-          </button>
-        ))}
-      </div>
-
-      <textarea
-        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-        placeholder="Optional comments…"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        rows={4}
-      />
-
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-      <Button className="w-full" onClick={submit} disabled={submitting || rating < 1}>
-        {submitting ? "Submitting…" : "Submit feedback"}
-      </Button>
     </div>
   );
 }

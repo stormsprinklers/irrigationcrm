@@ -214,7 +214,9 @@ export async function startStaffMfaChallenge(
         body:
           purpose === "EXPENSE_CARD_ADMIN"
             ? `Storm Sprinklers expense card verification code: ${code}. Expires in 10 minutes.`
-            : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
+            : purpose === "PHONE_NUMBER_RELEASE"
+              ? `Storm Sprinklers phone number release code: ${code}. Expires in 10 minutes.`
+              : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
         bypassCommsFreeze: true,
       });
     } catch (err) {

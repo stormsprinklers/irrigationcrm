@@ -38,16 +38,23 @@ export function PortalDashboard({ slug }: { slug: string }) {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [upcoming, setUpcoming] = useState<Visit[]>([]);
   const [offers, setOffers] = useState<PortalOfferCardData[]>([]);
+  const [balanceDue, setBalanceDue] = useState(0);
+  const [overdueTotal, setOverdueTotal] = useState(0);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/portal/me").then((r) => r.json()),
       fetch("/api/portal/visits").then((r) => (r.ok ? r.json() : { upcoming: [] })),
       fetch("/api/portal/offers").then((r) => (r.ok ? r.json() : { offers: [] })),
-    ]).then(([meData, visitsData, offersData]) => {
+      fetch("/api/portal/billing-summary").then((r) => (r.ok ? r.json() : null)),
+    ]).then(([meData, visitsData, offersData, billing]) => {
       setMe(meData);
       setUpcoming(visitsData.upcoming?.slice(0, 3) ?? []);
       setOffers(offersData.offers?.slice(0, 2) ?? []);
+      if (billing) {
+        setBalanceDue(Number(billing.totalBalanceDue) || 0);
+        setOverdueTotal(Number(billing.overdueTotal) || 0);
+      }
     });
   }, []);
 
@@ -56,10 +63,33 @@ export function PortalDashboard({ slug }: { slug: string }) {
   }
 
   const singleProperty = me.properties.length === 1 ? me.properties[0] : null;
+  const bannerAmount = overdueTotal > 0 ? overdueTotal : balanceDue;
+  const bannerLabel = overdueTotal > 0 ? "overdue" : "due";
 
   return (
     <PortalShell slug={slug} companyName={me.company.name} emailLogoUrl={me.company.emailLogoUrl} features={me.company.features as never}>
       <div className="space-y-6">
+        {bannerAmount > 0 ? (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-amber-950">
+                You have{" "}
+                {bannerAmount.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: "USD",
+                })}{" "}
+                {bannerLabel}
+              </p>
+              <p className="mt-1 text-sm text-amber-900/80">
+                From open invoices and maintenance billing.
+              </p>
+            </div>
+            <Button asChild className="shrink-0 bg-storm-coral hover:bg-storm-coral/90">
+              <Link href={`/portal/${slug}/pay`}>Pay your balance</Link>
+            </Button>
+          </div>
+        ) : null}
+
         <div>
           <h1 className="font-display text-2xl uppercase tracking-wide text-storm-navy">
             Welcome, {me.customer.name.split(" ")[0]}

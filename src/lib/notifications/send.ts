@@ -342,6 +342,21 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
       where: { companyId, slug: tpl.slug, channel: tpl.channel },
     });
 
+    // Upgrade stock on-my-way SMS to include live track link when still on the old default.
+    if (
+      existing &&
+      tpl.slug === "visit_en_route" &&
+      tpl.channel === "SMS" &&
+      !existing.body.includes("{track_link}") &&
+      existing.body.includes("{technician_eta}") &&
+      existing.body.includes("is on the way")
+    ) {
+      await prisma.notificationTemplate.update({
+        where: { id: existing.id },
+        data: { body: tpl.body },
+      });
+    }
+
     const template =
       existing ??
       (await prisma.notificationTemplate.create({

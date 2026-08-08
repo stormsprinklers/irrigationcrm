@@ -11,23 +11,57 @@ export async function GET(request: NextRequest) {
   if (!ctx) return portalUnauthorizedResponse();
 
   const attachmentId = request.nextUrl.searchParams.get("attachmentId");
-  if (!attachmentId) return badRequestResponse("attachmentId is required");
+  const visitAttachmentId = request.nextUrl.searchParams.get("visitAttachmentId");
+  if (!attachmentId && !visitAttachmentId) {
+    return badRequestResponse("attachmentId or visitAttachmentId is required");
+  }
 
-  const attachment = await prisma.customerAttachment.findFirst({
-    where: {
-      id: attachmentId,
-      customerId: ctx.customerId,
-      customer: { companyId: ctx.companyId },
-    },
-    select: { blobUrl: true, mimeType: true, fileName: true },
-  });
-  if (!attachment) return forbiddenResponse();
+  let blobUrl: string;
+  let mimeType: string;
+  let fileName: string;
 
-  const pathname = isBlobStorageUrl(attachment.blobUrl)
-    ? blobPathnameFromUrl(attachment.blobUrl)
-    : null;
+  if (visitAttachmentId) {
+    const attachment = await prisma.visitAttachment.findFirst({
+      where: {
+        id: visitAttachmentId,
+        visit: {
+          companyId: ctx.companyId,
+          customerId: ctx.customerId,
+        },
+      },
+      select: { blobUrl: true, mimeType: true, fileName: true },
+    });
+    if (!attachment) return forbiddenResponse();
+    blobUrl = attachment.blobUrl;
+    mimeType = attachment.mimeType;
+    fileName = attachment.fileName;
+  } else {
+    const attachment = await prisma.customerAttachment.findFirst({
+      where: {
+        id: attachmentId!,
+        customerId: ctx.customerId,
+        customer: { companyId: ctx.companyId },
+      },
+      select: { blobUrl: true, mimeType: true, fileName: true },
+    });
+    if (!attachment) return forbiddenResponse();
+    blobUrl = attachment.blobUrl;
+    mimeType = attachment.mimeType;
+    fileName = attachment.fileName;
 
-  if (!pathname?.startsWith(`customers/${ctx.companyId}/${ctx.customerId}/`)) {
+    const pathname = isBlobStorageUrl(blobUrl) ? blobPathnameFromUrl(blobUrl) : null;
+    if (!pathname?.startsWith(`customers/${ctx.companyId}/${ctx.customerId}/`)) {
+      return forbiddenResponse();
+    }
+  }
+
+  const pathname = isBlobStorageUrl(blobUrl) ? blobPathnameFromUrl(blobUrl) : null;
+  if (!pathname) {
+    // External / non-blob URL — redirect
+    return NextResponse.redirect(blobUrl);
+  }
+
+  if (visitAttachmentId && !pathname.startsWith(`visits/${ctx.companyId}/`)) {
     return forbiddenResponse();
   }
 
@@ -43,8 +77,8 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(result.stream, {
     headers: {
-      "Content-Type": result.blob.contentType ?? attachment.mimeType,
-      "Content-Disposition": `inline; filename="${attachment.fileName.replace(/"/g, "")}"`,
+      "Content-Type": result.blob.contentType ?? mimeType,
+      "Content-Disposition": `inline; filename="${fileName.replace(/"/g, "")}"`,
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     },

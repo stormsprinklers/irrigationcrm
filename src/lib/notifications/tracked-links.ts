@@ -10,7 +10,8 @@ export type TrackedLinkKind =
   | "review"
   | "survey"
   | "technician"
-  | "estimate";
+  | "estimate"
+  | "track";
 
 export const TRACKED_LINK_CONTEXT_KEYS: Record<TrackedLinkKind, string> = {
   portal: "portal_link",
@@ -19,6 +20,7 @@ export const TRACKED_LINK_CONTEXT_KEYS: Record<TrackedLinkKind, string> = {
   survey: "survey_link",
   technician: "about_technician_link",
   estimate: "estimate_link",
+  track: "track_link",
 };
 
 export function templateContextWithTrackedPlaceholders(

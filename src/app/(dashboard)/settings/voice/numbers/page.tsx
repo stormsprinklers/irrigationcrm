@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { vanityLettersToDigits } from "@/lib/twilio/vanity";
 
 type PhoneNumberRow = {
   id: string;
@@ -16,6 +18,8 @@ type PhoneNumberRow = {
   friendlyName: string | null;
   numberType: string;
   isPrimary: boolean;
+  smsEnabled: boolean | null;
+  voiceEnabled: boolean | null;
   trackingSource: string | null;
   callFlowId: string | null;
   assignedUserId: string | null;
@@ -26,6 +30,19 @@ type PhoneNumberRow = {
 
 type CallFlowOption = { id: string; name: string };
 type EmployeeOption = { id: string; name: string };
+type AvailableNumber = {
+  e164: string;
+  locality?: string | null;
+  region?: string | null;
+  areaCode?: string | null;
+};
+
+type A2pStatus = {
+  configured: boolean;
+  messagingServiceSid: string | null;
+  companies: Array<{ id: string; name: string; phoneNumberCount: number }>;
+  twilioLinkedCount: number;
+};
 
 const NUMBER_TYPES = [
   { value: "PRIMARY", label: "Primary" },
@@ -33,8 +50,12 @@ const NUMBER_TYPES = [
   { value: "AGENT_DIRECT", label: "Agent direct line" },
 ];
 
+const DEFAULT_AREA_CODES = ["801"];
+
 export default function VoiceNumbersPage() {
-  const [tab, setTab] = useState<"list" | "buy" | "port">("list");
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+  const [tab, setTab] = useState<"list" | "buy" | "port" | "a2p" | "release">("list");
   const [numbers, setNumbers] = useState<PhoneNumberRow[]>([]);
   const [flows, setFlows] = useState<CallFlowOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -45,9 +66,30 @@ export default function VoiceNumbersPage() {
   const [assignedUserId, setAssignedUserId] = useState("");
   const [trackingSource, setTrackingSource] = useState("");
   const [isPrimary, setIsPrimary] = useState(false);
-  const [areaCode, setAreaCode] = useState("801");
-  const [searchResults, setSearchResults] = useState<Array<{ e164: string; locality?: string }>>([]);
+  const [areaCodes, setAreaCodes] = useState<string[]>(DEFAULT_AREA_CODES);
+  const [areaCodeDraft, setAreaCodeDraft] = useState("");
+  const [containsPattern, setContainsPattern] = useState("");
+  const [searchResults, setSearchResults] = useState<AvailableNumber[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [purchasing, setPurchasing] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [a2pStatus, setA2pStatus] = useState<A2pStatus | null>(null);
+  const [a2pSyncing, setA2pSyncing] = useState(false);
+  const [releaseToken, setReleaseToken] = useState<string | null>(null);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaPhone, setMfaPhone] = useState("");
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+
+  const digitPreview = useMemo(
+    () => vanityLettersToDigits(containsPattern),
+    [containsPattern]
+  );
+  const hasLetters = /[A-Za-z]/.test(containsPattern);
+  const twilioNumbers = useMemo(
+    () => numbers.filter((n) => Boolean(n.twilioSid)),
+    [numbers]
+  );
 
   function load() {
     Promise.all([
@@ -72,8 +114,103 @@ export default function VoiceNumbersPage() {
     load();
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("tab") === "port") setTab("port");
+    const t = params.get("tab");
+    if (t === "port" || t === "buy" || t === "a2p" || t === "release") setTab(t);
   }, []);
+
+  useEffect(() => {
+    if (tab !== "a2p") return;
+    fetch("/api/settings/voice/numbers/a2p")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) {
+          toast.error(data.error);
+          return;
+        }
+        setA2pStatus(data);
+      })
+      .catch(() => toast.error("Failed to load A2P status"));
+  }, [tab]);
+
+  async function syncA2p() {
+    setA2pSyncing(true);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/a2p", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "A2P sync failed");
+        return;
+      }
+      toast.success(
+        `A2P sync: ${data.attached} attached, ${data.alreadyAttached} already on campaign` +
+          (data.failed?.length ? `, ${data.failed.length} failed` : "")
+      );
+      const statusRes = await fetch("/api/settings/voice/numbers/a2p");
+      if (statusRes.ok) setA2pStatus(await statusRes.json());
+    } finally {
+      setA2pSyncing(false);
+    }
+  }
+
+  async function startReleaseMfa() {
+    const res = await fetch("/api/settings/voice/numbers/release-mfa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "start" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to start MFA");
+      return;
+    }
+    setMfaChallengeId(data.challengeId);
+    setMfaPhone(data.phoneMasked ?? "");
+    setMfaCode(data.debugCode ?? "");
+    toast.success(`Verification code sent to ${data.phoneMasked}`);
+  }
+
+  async function verifyReleaseMfa() {
+    if (!mfaChallengeId || !mfaCode.trim()) {
+      toast.error("Enter the verification code");
+      return;
+    }
+    const res = await fetch("/api/settings/voice/numbers/release-mfa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "verify",
+        challengeId: mfaChallengeId,
+        code: mfaCode.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Invalid code");
+      return;
+    }
+    setReleaseToken(data.actionToken);
+    setMfaChallengeId(null);
+    setMfaCode("");
+    toast.success("Verified — you can release numbers for 10 minutes");
+  }
+
+  function addAreaCode() {
+    const code = areaCodeDraft.replace(/\D/g, "").slice(0, 3);
+    if (code.length !== 3) {
+      toast.error("Area codes must be 3 digits");
+      return;
+    }
+    if (areaCodes.includes(code)) {
+      setAreaCodeDraft("");
+      return;
+    }
+    setAreaCodes((prev) => [...prev, code]);
+    setAreaCodeDraft("");
+  }
+
+  function removeAreaCode(code: string) {
+    setAreaCodes((prev) => prev.filter((c) => c !== code));
+  }
 
   async function addNumber(e: React.FormEvent) {
     e.preventDefault();
@@ -117,37 +254,69 @@ export default function VoiceNumbersPage() {
   }
 
   async function searchNumbers() {
-    const res = await fetch(
-      `/api/settings/voice/numbers/search?areaCode=${encodeURIComponent(areaCode)}`
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      toast.error(data.error ?? "Search failed");
+    const pendingCode = areaCodeDraft.replace(/\D/g, "").slice(0, 3);
+    const codes =
+      pendingCode.length === 3 && !areaCodes.includes(pendingCode)
+        ? [...areaCodes, pendingCode]
+        : areaCodes;
+    if (pendingCode.length === 3 && !areaCodes.includes(pendingCode)) {
+      setAreaCodes(codes);
+      setAreaCodeDraft("");
+    }
+
+    if (!codes.length && !containsPattern.trim()) {
+      toast.error("Add an area code and/or a digit or vanity pattern");
       return;
     }
-    setSearchResults(data.numbers ?? []);
+
+    setSearching(true);
+    try {
+      const params = new URLSearchParams();
+      if (codes.length) params.set("areaCodes", codes.join(","));
+      if (containsPattern.trim()) params.set("contains", containsPattern.trim());
+      const res = await fetch(`/api/settings/voice/numbers/search?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Search failed");
+        setSearchResults([]);
+        return;
+      }
+      setSearchResults(data.numbers ?? []);
+      if (!(data.numbers ?? []).length) {
+        toast.message("No matching numbers found — try another pattern or area code");
+      }
+    } finally {
+      setSearching(false);
+    }
   }
 
   async function purchaseNumber(phone: string) {
-    const res = await fetch("/api/settings/voice/numbers/purchase", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        e164: phone,
-        friendlyName,
-        numberType,
-        callFlowId: callFlowId || null,
-        trackingSource: trackingSource || null,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Purchase failed");
-      return;
+    setPurchasing(phone);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          e164: phone,
+          friendlyName,
+          numberType,
+          isPrimary: numberType === "PRIMARY",
+          callFlowId: callFlowId || null,
+          assignedUserId: assignedUserId || null,
+          trackingSource: trackingSource || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error ?? "Purchase failed");
+        return;
+      }
+      toast.success("Number purchased");
+      setTab("list");
+      load();
+    } finally {
+      setPurchasing(null);
     }
-    toast.success("Number purchased");
-    setTab("list");
-    load();
   }
 
   async function updateNumber(id: string, patch: Partial<PhoneNumberRow>) {
@@ -163,17 +332,44 @@ export default function VoiceNumbersPage() {
     load();
   }
 
-  async function deleteNumber(id: string, releaseTwilio: boolean) {
-    const res = await fetch(
-      `/api/settings/voice/numbers/${id}?releaseTwilio=${releaseTwilio}`,
-      { method: "DELETE" }
-    );
-    if (!res.ok) {
-      toast.error("Delete failed");
+  async function releaseNumberWithMfa(id: string) {
+    if (!releaseToken) {
+      toast.error("Complete admin MFA before releasing a number");
+      await startReleaseMfa();
       return;
     }
-    toast.success(releaseTwilio ? "Number released from Twilio" : "Number removed");
-    load();
+    if (
+      !window.confirm(
+        "Permanently release this number from Twilio? This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setReleasingId(id);
+    try {
+      const res = await fetch(
+        `/api/settings/voice/numbers/${id}?releaseTwilio=true`,
+        {
+          method: "DELETE",
+          headers: { "x-phone-release-mfa": releaseToken },
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          setReleaseToken(null);
+          toast.error(data.error ?? "MFA expired — verify again");
+          await startReleaseMfa();
+        } else {
+          toast.error(data.error ?? "Release failed");
+        }
+        return;
+      }
+      toast.success("Number released from Twilio");
+      load();
+    } finally {
+      setReleasingId(null);
+    }
   }
 
   return (
@@ -194,6 +390,17 @@ export default function VoiceNumbersPage() {
         <Button variant={tab === "port" ? "default" : "outline"} onClick={() => setTab("port")}>
           Port a number
         </Button>
+        <Button variant={tab === "a2p" ? "default" : "outline"} onClick={() => setTab("a2p")}>
+          A2P campaign
+        </Button>
+        {isAdmin ? (
+          <Button
+            variant={tab === "release" ? "default" : "outline"}
+            onClick={() => setTab("release")}
+          >
+            Release numbers
+          </Button>
+        ) : null}
         <Button variant="outline" onClick={syncFromTwilio} disabled={syncing}>
           {syncing ? "Syncing..." : "Import from Twilio"}
         </Button>
@@ -201,34 +408,320 @@ export default function VoiceNumbersPage() {
 
       {tab === "port" ? (
         <PortNumberWizard onImported={load} />
-      ) : tab === "buy" ? (
+      ) : tab === "a2p" ? (
         <div className="space-y-4 rounded-lg border border-border bg-white p-6">
-          <h3 className="font-semibold">Search available numbers</h3>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Area code"
-              value={areaCode}
-              onChange={(e) => setAreaCode(e.target.value)}
-              className="max-w-[120px]"
-            />
-            <Button type="button" onClick={searchNumbers}>
-              Search
-            </Button>
+          <div>
+            <h3 className="font-semibold">Shared A2P / 10DLC campaign</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              One Messaging Service covers every phone number across businesses you operate
+              (for example Storm Sprinklers and Chestnut &amp; Cheer). New purchases and ports
+              attach automatically when <span className="font-mono">TWILIO_MESSAGING_SERVICE_SID</span>{" "}
+              is set.
+            </p>
           </div>
-          <ul className="divide-y divide-border">
+          {!a2pStatus ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <>
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                <p>
+                  Status:{" "}
+                  {a2pStatus.configured ? (
+                    <span className="font-medium text-green-700">Configured</span>
+                  ) : (
+                    <span className="font-medium text-amber-700">Not configured</span>
+                  )}
+                </p>
+                {a2pStatus.messagingServiceSid ? (
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {a2pStatus.messagingServiceSid}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Set TWILIO_MESSAGING_SERVICE_SID in Vercel to your approved A2P Messaging Service.
+                  </p>
+                )}
+                <p className="mt-2 text-muted-foreground">
+                  {a2pStatus.twilioLinkedCount} Twilio-linked number
+                  {a2pStatus.twilioLinkedCount === 1 ? "" : "s"} across your businesses
+                </p>
+              </div>
+              <ul className="space-y-1 text-sm">
+                {a2pStatus.companies.map((c) => (
+                  <li key={c.id} className="flex justify-between gap-2 border-b border-border/60 py-2">
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-muted-foreground">
+                      {c.phoneNumberCount} number{c.phoneNumberCount === 1 ? "" : "s"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {isAdmin ? (
+                <Button
+                  type="button"
+                  onClick={() => void syncA2p()}
+                  disabled={!a2pStatus.configured || a2pSyncing}
+                >
+                  {a2pSyncing
+                    ? "Syncing…"
+                    : "Attach all my businesses’ numbers to A2P"}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Only admins can run A2P sync.</p>
+              )}
+            </>
+          )}
+        </div>
+      ) : tab === "release" && isAdmin ? (
+        <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50/40 p-6">
+          <div>
+            <h3 className="font-semibold text-amber-950">Release numbers (admin only)</h3>
+            <p className="mt-1 text-sm text-amber-900/80">
+              Releasing removes the number from Twilio permanently. Verify with SMS 2FA first.
+              This tab is separate from day-to-day number management on purpose.
+            </p>
+          </div>
+
+          {!releaseToken ? (
+            <div className="space-y-3 rounded-md border border-border bg-white p-4">
+              <p className="text-sm font-medium">Admin verification (MFA)</p>
+              {!mfaChallengeId ? (
+                <Button type="button" onClick={() => void startReleaseMfa()}>
+                  Send verification code
+                </Button>
+              ) : (
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium">
+                      Code sent to {mfaPhone}
+                    </label>
+                    <Input
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value)}
+                      className="w-40"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <Button type="button" onClick={() => void verifyReleaseMfa()}>
+                    Verify
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => void startReleaseMfa()}>
+                    Resend
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              MFA verified — release available for about 10 minutes.
+            </p>
+          )}
+
+          <ul className="divide-y divide-border rounded-md border border-border bg-white">
+            {twilioNumbers.map((n) => (
+              <li
+                key={n.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{n.friendlyName ?? n.e164}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {n.e164} · {n.numberType}
+                    {n.trackingSource ? ` · ${n.trackingSource}` : ""}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={!releaseToken || releasingId === n.id}
+                  onClick={() => void releaseNumberWithMfa(n.id)}
+                >
+                  {releasingId === n.id ? "Releasing…" : "Release from Twilio"}
+                </Button>
+              </li>
+            ))}
+            {!twilioNumbers.length ? (
+              <li className="px-3 py-4 text-muted-foreground">
+                No Twilio-linked numbers to release.
+              </li>
+            ) : null}
+          </ul>
+        </div>
+      ) : tab === "buy" ? (
+        <div className="space-y-5 rounded-lg border border-border bg-white p-6">
+          <div>
+            <h3 className="font-semibold">Search available numbers</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pick one or more area codes, then optionally match a digit sequence or vanity letters
+              (e.g. <span className="font-medium text-foreground">STORM</span> → 78676). Use{" "}
+              <span className="font-mono text-foreground">*</span> as a single-digit wildcard.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Area codes</label>
+            <div className="flex flex-wrap items-center gap-2">
+              {areaCodes.map((code) => (
+                <Badge key={code} variant="secondary" className="gap-1 px-2 py-1 text-sm">
+                  {code}
+                  <button
+                    type="button"
+                    className="ml-1 text-muted-foreground hover:text-foreground"
+                    aria-label={`Remove area code ${code}`}
+                    onClick={() => removeAreaCode(code)}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+              <Input
+                placeholder="Add e.g. 385"
+                value={areaCodeDraft}
+                onChange={(e) => setAreaCodeDraft(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addAreaCode();
+                  }
+                }}
+                className="max-w-[120px]"
+                inputMode="numeric"
+              />
+              <Button type="button" variant="outline" onClick={addAreaCode}>
+                Add
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Contains digits or vanity letters</label>
+            <Input
+              placeholder="e.g. 8500, STORM, or *786*"
+              value={containsPattern}
+              onChange={(e) => setContainsPattern(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void searchNumbers();
+                }
+              }}
+            />
+            {containsPattern.trim() ? (
+              <p className="text-xs text-muted-foreground">
+                Twilio match pattern:{" "}
+                <span className="font-mono text-foreground">{containsPattern.trim().toUpperCase()}</span>
+                {hasLetters && digitPreview ? (
+                  <>
+                    {" "}
+                    · keypad digits:{" "}
+                    <span className="font-mono text-foreground">{digitPreview}</span>
+                  </>
+                ) : null}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Leave blank to browse any available numbers in the selected area codes.
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Number type (on purchase)</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={numberType}
+                onChange={(e) => setNumberType(e.target.value)}
+              >
+                {NUMBER_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Call flow</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={callFlowId}
+                onChange={(e) => setCallFlowId(e.target.value)}
+              >
+                <option value="">Default flow (ring agents)</option>
+                {flows.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {numberType === "TRACKING" ? (
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-sm font-medium">Tracking source</label>
+                <Input
+                  placeholder="e.g. Google Ads PPC Repair"
+                  value={trackingSource}
+                  onChange={(e) => setTrackingSource(e.target.value)}
+                />
+              </div>
+            ) : null}
+            {numberType === "AGENT_DIRECT" ? (
+              <div className="space-y-1 sm:col-span-2">
+                <label className="text-sm font-medium">Assign to employee</label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={assignedUserId}
+                  onChange={(e) => setAssignedUserId(e.target.value)}
+                >
+                  <option value="">Select employee</option>
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-sm font-medium">Title (optional)</label>
+              <Input
+                placeholder="e.g. PPC Repair tracking"
+                value={friendlyName}
+                onChange={(e) => setFriendlyName(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <Button type="button" onClick={() => void searchNumbers()} disabled={searching}>
+            {searching ? "Searching…" : "Search numbers"}
+          </Button>
+
+          <ul className="divide-y divide-border rounded-md border border-border">
             {searchResults.map((n) => (
-              <li key={n.e164} className="flex items-center justify-between py-3 text-sm">
-                <span>
-                  {n.e164}
-                  {n.locality ? ` · ${n.locality}` : ""}
-                </span>
-                <Button size="sm" onClick={() => purchaseNumber(n.e164)}>
-                  Buy
+              <li key={n.e164} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
+                <div>
+                  <p className="font-medium">{n.e164}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[n.locality, n.region, n.areaCode ? `(${n.areaCode})` : null]
+                      .filter(Boolean)
+                      .join(" · ") || "Available local number"}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => void purchaseNumber(n.e164)}
+                  disabled={purchasing === n.e164}
+                >
+                  {purchasing === n.e164 ? "Buying…" : "Buy"}
                 </Button>
               </li>
             ))}
             {!searchResults.length && (
-              <li className="py-3 text-muted-foreground">Search to see available numbers.</li>
+              <li className="px-3 py-4 text-muted-foreground">
+                {searching
+                  ? "Searching Twilio inventory…"
+                  : "Search to see available numbers matching your filters."}
+              </li>
             )}
           </ul>
         </div>
@@ -238,14 +731,18 @@ export default function VoiceNumbersPage() {
             <h3 className="font-semibold">Add number manually</h3>
             <Input placeholder="+18015550100" value={e164} onChange={(e) => setE164(e.target.value)} />
             <Input
-              placeholder="Friendly name"
+              placeholder="Title (e.g. PPC Repair tracking)"
               value={friendlyName}
               onChange={(e) => setFriendlyName(e.target.value)}
             />
             <select
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={numberType}
-              onChange={(e) => setNumberType(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setNumberType(next);
+                if (next === "PRIMARY") setIsPrimary(true);
+              }}
             >
               {NUMBER_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>
@@ -287,8 +784,16 @@ export default function VoiceNumbersPage() {
               ))}
             </select>
             <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={isPrimary} onCheckedChange={(c) => setIsPrimary(Boolean(c))} />
-              Primary caller ID
+              <Checkbox
+                checked={isPrimary || numberType === "PRIMARY"}
+                onCheckedChange={(c) => {
+                  const on = Boolean(c);
+                  setIsPrimary(on);
+                  if (on) setNumberType("PRIMARY");
+                  else if (numberType === "PRIMARY") setNumberType("TRACKING");
+                }}
+              />
+              Set as primary (only one allowed)
             </label>
             <Button type="submit">Add number</Button>
           </form>
@@ -297,20 +802,28 @@ export default function VoiceNumbersPage() {
             {numbers.map((n) => (
               <li key={n.id} className="space-y-3 p-4 text-sm">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">
-                      {n.friendlyName ?? n.e164}
-                      {n.isPrimary ? (
-                        <Badge className="ml-2" variant="secondary">
-                          Primary
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium tabular-nums">{n.e164}</p>
+                      {n.isPrimary ? <Badge variant="secondary">Primary</Badge> : null}
+                      {n.smsEnabled === true ? (
+                        <Badge variant="outline" className="border-green-300 text-green-800">
+                          SMS
+                        </Badge>
+                      ) : n.smsEnabled === false ? (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          No SMS
+                        </Badge>
+                      ) : n.twilioSid ? (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          SMS unknown
                         </Badge>
                       ) : null}
-                    </p>
+                    </div>
                     <p className="text-muted-foreground">
-                      {n.e164} · {n.numberType}
+                      {n.numberType}
                       {n.trackingSource ? ` · ${n.trackingSource}` : ""}
-                    </p>
-                    <p className="text-muted-foreground">
+                      {" · "}
                       Flow: {n.callFlow?.name ?? "Default"}
                       {n.assignedUser ? ` · Agent: ${n.assignedUser.name}` : ""}
                       {n.twilioSid ? " · Twilio linked" : " · Manual entry"}
@@ -321,28 +834,41 @@ export default function VoiceNumbersPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => updateNumber(n.id, { isPrimary: true } as Partial<PhoneNumberRow>)}
+                        onClick={() =>
+                          void updateNumber(n.id, {
+                            isPrimary: true,
+                            numberType: "PRIMARY",
+                          })
+                        }
                       >
                         Set primary
                       </Button>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        deleteNumber(n.id, Boolean(n.twilioSid))
-                      }
-                    >
-                      {n.twilioSid ? "Release" : "Delete"}
-                    </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground self-center">
+                        Primary caller ID
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <Input
+                    placeholder="Title"
+                    defaultValue={n.friendlyName ?? ""}
+                    key={`${n.id}-${n.friendlyName ?? ""}`}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() || null;
+                      if (next === (n.friendlyName ?? null) || (!next && !n.friendlyName)) return;
+                      void updateNumber(n.id, { friendlyName: next });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                  />
                   <select
                     className="h-9 rounded-md border border-input px-2 text-sm"
                     value={n.callFlowId ?? ""}
                     onChange={(e) =>
-                      updateNumber(n.id, { callFlowId: e.target.value || null } as Partial<PhoneNumberRow>)
+                      void updateNumber(n.id, { callFlowId: e.target.value || null })
                     }
                   >
                     <option value="">Default flow</option>
@@ -354,8 +880,18 @@ export default function VoiceNumbersPage() {
                   </select>
                   <select
                     className="h-9 rounded-md border border-input px-2 text-sm"
-                    value={n.numberType}
-                    onChange={(e) => updateNumber(n.id, { numberType: e.target.value } as Partial<PhoneNumberRow>)}
+                    value={n.isPrimary ? "PRIMARY" : n.numberType}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === "PRIMARY") {
+                        void updateNumber(n.id, { isPrimary: true, numberType: "PRIMARY" });
+                      } else {
+                        void updateNumber(n.id, {
+                          numberType: next,
+                          ...(n.isPrimary ? { isPrimary: false } : {}),
+                        });
+                      }
+                    }}
                   >
                     {NUMBER_TYPES.map((t) => (
                       <option key={t.value} value={t.value}>

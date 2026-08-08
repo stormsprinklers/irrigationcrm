@@ -36,6 +36,7 @@ export const MERGE_FIELD_HINTS = [
   "{review_link}",
   "{technician_eta}",
   "{portal_link}",
+  "{track_link}",
   "{invoice_link}",
   "{about_technician_link}",
   "{estimate_link}",
@@ -127,7 +128,7 @@ export const DEFAULT_TEMPLATES: Array<{
     name: "Technician on the way",
     channel: "SMS",
     event: "VISIT_EN_ROUTE",
-    body: "Hi {customer_first_name}, {technician_first_name} is on the way. {technician_eta}. — {company_name}",
+    body: "Hi {customer_first_name}, {technician_first_name} is on the way. {technician_eta}. Track live: {track_link} — {company_name}",
   },
   {
     slug: "review_request",

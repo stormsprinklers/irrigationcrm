@@ -25,9 +25,5 @@ export async function GET(_request: Request, { params }: Params) {
   // Internal visit notes are never exposed to portal customers (see serializePortalVisit).
   return NextResponse.json({
     visit: serializePortalVisit(visit),
-    policies: {
-      rescheduleLeadHours: ctx.company.portalRescheduleLeadHours,
-      cancelLeadHours: ctx.company.portalCancelLeadHours,
-    },
   });
 }

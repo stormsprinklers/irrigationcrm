@@ -140,15 +140,114 @@
 
 .portal-card {
   @apply rounded-lg border-2 border-storm-ice bg-white p-5;
+  background-color: #ffffff;
+  border-color: #c2e4f0;
+  color: #102341;
 }
 
 .portal-section-title {
   font-family: var(--font-display);
   @apply text-base font-bold uppercase tracking-wide text-storm-navy;
+  color: #102341;
 }
 
 .portal-shell .font-display {
   font-family: var(--font-display);
+}
+
+/*
+ * Customer portal is always a light, high-contrast surface.
+ * System Dark Mode / Night Mode must not remapped tokens (light grey
+ * muted text on white) — that becomes unreadable under Night Shift.
+ */
+.portal-root,
+.portal-shell {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #102341;
+  --card: #ffffff;
+  --card-foreground: #102341;
+  --popover: #ffffff;
+  --popover-foreground: #102341;
+  --primary: #4c9bc8;
+  --primary-foreground: #ffffff;
+  --secondary: #c2e4f0;
+  --secondary-foreground: #102341;
+  --muted: #e8eef4;
+  --muted-foreground: #1e293b;
+  --accent: #c2e4f0;
+  --accent-foreground: #102341;
+  --destructive: #dc2626;
+  --border: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #4c9bc8;
+  --highlight: #c2e4f0;
+  --highlight-panel: #eef7fb;
+  --page: #f1f5f9;
+}
+
+.portal-shell {
+  background-color: #f1f5f9;
+  color: #102341;
+}
+
+.portal-shell .bg-white,
+.dark .portal-shell .bg-white {
+  background-color: #ffffff !important;
+}
+
+.portal-shell .text-storm-navy,
+.dark .portal-shell .text-storm-navy {
+  color: #102341 !important;
+}
+
+.portal-shell .text-muted-foreground,
+.dark .portal-shell .text-muted-foreground {
+  color: #1e293b !important;
+}
+
+.portal-shell .text-slate-500,
+.dark .portal-shell .text-slate-500 {
+  color: #334155 !important;
+}
+
+.portal-shell .text-slate-600,
+.dark .portal-shell .text-slate-600 {
+  color: #1e293b !important;
+}
+
+.portal-shell .text-slate-700,
+.dark .portal-shell .text-slate-700 {
+  color: #0f172a !important;
+}
+
+.portal-shell .border-border,
+.dark .portal-shell .border-border {
+  border-color: #cbd5e1 !important;
+}
+
+.portal-shell .bg-muted,
+.dark .portal-shell .bg-muted {
+  background-color: #e8eef4 !important;
+}
+
+.portal-shell .bg-slate-50,
+.dark .portal-shell .bg-slate-50 {
+  background-color: #f8fafc !important;
+}
+
+.portal-shell select {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #102341;
+}
+
+.portal-shell a.text-storm-sky {
+  color: #1d7aab;
+}
+
+.portal-shell a.text-storm-sky:hover {
+  color: #e85a74;
 }
 
 .gbp-rank-marker-icon {
@@ -236,4 +335,12 @@
   color: #0f172a;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Sonner toast dismiss control — top-right instead of default top-left */
+[data-sonner-toaster][dir="ltr"],
+html[dir="ltr"] {
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0;
+  --toast-close-button-transform: translate(35%, -35%);
 }

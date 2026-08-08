@@ -95,7 +95,7 @@ const STEP_META: Record<
   IVR: { label: "Phone menu", icon: Hash, blurb: "Let callers press a key to choose" },
   DIAL_USER: { label: "Ring a person", icon: User, blurb: "Ring one teammate's app" },
   DIAL_GROUP: { label: "Ring a team", icon: Users, blurb: "Ring a group of agents" },
-  FORWARD: { label: "Forward to a number", icon: PhoneForwarded, blurb: "Send the call to a phone number" },
+  FORWARD: { label: "Forward to a number", icon: PhoneForwarded, blurb: "Send the call to a phone number (still recorded/transcribed when enabled)" },
   VOICEMAIL: { label: "Send to voicemail", icon: Voicemail, blurb: "Play a greeting and record a message" },
   QUEUE: {
     label: "Put caller in queue",
@@ -754,13 +754,19 @@ function StepEditor({
 
   if (node.type === "FORWARD") {
     return (
-      <div>
-        <label className="mb-1 block text-sm font-medium">Forward to number</label>
-        <Input
-          value={String(config.forwardTo ?? "")}
-          onChange={(e) => onConfigChange({ ...config, forwardTo: e.target.value })}
-          placeholder="+1 385 555 1234"
-        />
+      <div className="space-y-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium">Forward to number</label>
+          <Input
+            value={String(config.forwardTo ?? "")}
+            onChange={(e) => onConfigChange({ ...config, forwardTo: e.target.value })}
+            placeholder="+1 385 555 1234"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          When company call recording is on, forwarded calls are recorded, transcribed, and AI-summarized
+          like other inbound calls. The forwarded phone sees the original caller ID.
+        </p>
       </div>
     );
   }

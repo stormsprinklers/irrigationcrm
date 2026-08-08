@@ -3,13 +3,14 @@ import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map"
 import { toNumber } from "@/lib/visits/totals";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
-/** Portal visit payload — internal visit notes are intentionally excluded. */
+/** Portal visit detail — only customer-safe fields (no internal notes). */
 export function serializePortalVisit(visit: {
   id: string;
   title: string;
   status: VisitStatus;
   startAt: Date | null;
   endAt: Date | null;
+  workSummary?: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -23,6 +24,20 @@ export function serializePortalVisit(visit: {
     state: string | null;
     zip: string | null;
   } | null;
+  lineItems?: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    quantity: { toNumber?: () => number } | number;
+    unitPrice: { toNumber?: () => number } | number;
+    total: { toNumber?: () => number } | number;
+  }>;
+  attachments?: Array<{
+    id: string;
+    fileName: string;
+    mimeType: string;
+    createdAt: Date;
+  }>;
 }) {
   return {
     id: visit.id,
@@ -30,10 +45,7 @@ export function serializePortalVisit(visit: {
     status: visit.status,
     startAt: visit.startAt?.toISOString() ?? null,
     endAt: visit.endAt?.toISOString() ?? null,
-    address: visit.address,
-    city: visit.city,
-    state: visit.state,
-    zip: visit.zip,
+    workSummary: visit.workSummary?.trim() || null,
     technician: visit.assignedUser
       ? {
           name: visit.assignedUser.name,
@@ -41,16 +53,22 @@ export function serializePortalVisit(visit: {
           title: visit.assignedUser.title,
         }
       : null,
-    property: visit.property
-      ? {
-          id: visit.property.id,
-          name: visit.property.name,
-          address: visit.property.address,
-          city: visit.property.city,
-          state: visit.property.state,
-          zip: visit.property.zip,
-        }
-      : null,
+    lineItems: (visit.lineItems ?? []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      quantity: typeof item.quantity === "number" ? item.quantity : toNumber(item.quantity as never),
+      unitPrice: typeof item.unitPrice === "number" ? item.unitPrice : toNumber(item.unitPrice as never),
+      total: typeof item.total === "number" ? item.total : toNumber(item.total as never),
+    })),
+    attachments: (visit.attachments ?? []).map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      createdAt: a.createdAt.toISOString(),
+      url: `/api/portal/blob?visitAttachmentId=${encodeURIComponent(a.id)}`,
+      isImage: a.mimeType.startsWith("image/"),
+    })),
   };
 }
 

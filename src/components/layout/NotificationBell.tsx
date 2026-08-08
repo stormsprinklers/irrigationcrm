@@ -25,7 +25,8 @@ type AppNotification = {
     | "HIRING_APPLICANT"
     | "HIRING_SCREEN_BOOKED"
     | "VEHICLE_REMINDER"
-    | "GOOGLE_REVIEW";
+    | "GOOGLE_REVIEW"
+    | "PORTAL_CONTACT";
   title: string;
   body?: string | null;
   href?: string | null;
@@ -48,6 +49,8 @@ function notificationIcon(type: AppNotification["type"]) {
       return Car;
     case "GOOGLE_REVIEW":
       return Star;
+    case "PORTAL_CONTACT":
+      return Phone;
     default:
       return Mail;
   }

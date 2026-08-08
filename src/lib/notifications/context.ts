@@ -72,6 +72,7 @@ export function buildNotificationContext(params: {
   surveyUrl?: string | null;
   portalUrl?: string | null;
   estimateUrl?: string | null;
+  trackUrl?: string | null;
 }): TemplateContext {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const websiteBase =
@@ -134,6 +135,7 @@ export function buildNotificationContext(params: {
     review_link: params.company.googleReviewUrl ?? "",
     technician_eta: technicianEta,
     portal_link: params.portalUrl ?? portalHome,
+    track_link: params.trackUrl ?? "",
     invoice_link: invoiceLink,
     about_technician_link: aboutTechnician,
     estimate_link: estimateLink,
@@ -191,6 +193,7 @@ export function buildEnRouteContext(params: {
   etaAt?: Date | null;
   visitAddress?: string | null;
   timezone?: string | null;
+  trackUrl?: string | null;
 }): TemplateContext {
   return buildNotificationContext({
     company: { name: params.companyName, timezone: params.timezone },
@@ -203,5 +206,6 @@ export function buildEnRouteContext(params: {
     technician: { name: params.technicianName },
     etaSeconds: params.etaSeconds ?? null,
     etaAt: params.etaAt ?? null,
+    trackUrl: params.trackUrl ?? null,
   });
 }

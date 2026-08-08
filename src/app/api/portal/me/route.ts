@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePortalCustomer, portalUnauthorizedResponse } from "@/lib/portal/auth";
 import { serializePortalProperty } from "@/lib/portal/serializers";
 import { portalFeatureEnabled } from "@/lib/portal/permissions";
+import { listPortalOffersForCustomer } from "@/lib/portal/offers";
 
 export async function GET() {
   const ctx = await requirePortalCustomer();
@@ -38,6 +39,24 @@ export async function GET() {
 
   if (!customer) return portalUnauthorizedResponse();
 
+  const [availableOffers, referralSettings] = await Promise.all([
+    portalFeatureEnabled(ctx.company, "offers")
+      ? listPortalOffersForCustomer(ctx.companyId, {
+          tags: customer.tags,
+          zip: customer.zip,
+        })
+      : Promise.resolve([]),
+    portalFeatureEnabled(ctx.company, "referrals")
+      ? prisma.referralProgramSettings.findUnique({
+          where: { companyId: ctx.companyId },
+          select: { enabled: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const showOffers = availableOffers.length > 0;
+  const showReferrals = Boolean(referralSettings?.enabled);
+
   return NextResponse.json({
     customer: {
       id: customer.id,
@@ -63,8 +82,8 @@ export async function GET() {
         checklists: portalFeatureEnabled(ctx.company, "checklists"),
         irrigation: portalFeatureEnabled(ctx.company, "irrigation"),
         rachio: portalFeatureEnabled(ctx.company, "rachio"),
-        offers: portalFeatureEnabled(ctx.company, "offers"),
-        referrals: portalFeatureEnabled(ctx.company, "referrals"),
+        offers: showOffers,
+        referrals: showReferrals,
         allowSchedule: ctx.company.portalAllowSchedule,
         rachioAllowRun:
           portalFeatureEnabled(ctx.company, "rachio") && ctx.company.portalRachioAllowRun,

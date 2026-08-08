@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { purchaseNumber } from "@/lib/twilio/numbers";
+import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
+import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,13 +16,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Phone number required" }, { status: 400 });
     }
 
+    const wantPrimary = Boolean(body.isPrimary) || body.numberType === "PRIMARY";
+
     const number = await purchaseNumber(user.companyId, String(body.e164), {
       friendlyName: body.friendlyName,
-      numberType: body.numberType,
+      numberType: wantPrimary ? "PRIMARY" : body.numberType,
       callFlowId: body.callFlowId,
       assignedUserId: body.assignedUserId,
       trackingSource: body.trackingSource,
     });
+
+    if (wantPrimary) {
+      await setExclusivePrimaryNumber({ companyId: user.companyId, numberId: number.id });
+      await syncCompanyTwilioPhone(user.companyId, number.e164);
+    }
 
     return NextResponse.json(number, { status: 201 });
   } catch (error) {

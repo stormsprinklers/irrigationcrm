@@ -10,6 +10,10 @@ export function ThemeToaster() {
     <Toaster
       position="bottom-center"
       theme={resolvedTheme === "dark" ? "dark" : "light"}
+      closeButton
+      toastOptions={{
+        closeButtonAriaLabel: "Dismiss notification",
+      }}
     />
   );
 }

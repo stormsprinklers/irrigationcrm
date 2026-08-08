@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   PRESET_RANGE_LABELS,
+  REPORTING_KPI_PRESETS,
   type ReportPresetRange,
   type ReportRangeInput,
 } from "@/lib/reporting/date-range";
@@ -21,11 +22,19 @@ type ReportDateRangeControlProps = {
   value: ReportRangeInput;
   onChange: (next: ReportRangeInput) => void;
   label: string;
+  /** Which presets to show. Defaults to classic reporting presets. */
+  presets?: ReportPresetRange[];
+  /** Show custom date range picker. Defaults to true. */
+  allowCustom?: boolean;
 };
 
-const PRESETS = Object.keys(PRESET_RANGE_LABELS) as ReportPresetRange[];
-
-export function ReportDateRangeControl({ value, onChange, label }: ReportDateRangeControlProps) {
+export function ReportDateRangeControl({
+  value,
+  onChange,
+  label,
+  presets = REPORTING_KPI_PRESETS,
+  allowCustom = true,
+}: ReportDateRangeControlProps) {
   const [open, setOpen] = useState(false);
   const [draftStart, setDraftStart] = useState(
     value.preset === "custom" ? value.start : ""
@@ -72,47 +81,51 @@ export function ReportDateRangeControl({ value, onChange, label }: ReportDateRan
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
-        {PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <DropdownMenuItem key={preset} onClick={() => selectPreset(preset)}>
             {PRESET_RANGE_LABELS[preset]}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <div
-          className="space-y-3 p-3"
-          onPointerDown={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <p className="text-sm font-medium">Custom range</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">From</label>
-              <Input
-                type="date"
-                value={draftStart}
-                onChange={(event) => {
-                  setDraftStart(event.target.value);
-                  setCustomError(null);
-                }}
-              />
+        {allowCustom ? (
+          <>
+            <DropdownMenuSeparator />
+            <div
+              className="space-y-3 p-3"
+              onPointerDown={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <p className="text-sm font-medium">Custom range</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">From</label>
+                  <Input
+                    type="date"
+                    value={draftStart}
+                    onChange={(event) => {
+                      setDraftStart(event.target.value);
+                      setCustomError(null);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">To</label>
+                  <Input
+                    type="date"
+                    value={draftEnd}
+                    onChange={(event) => {
+                      setDraftEnd(event.target.value);
+                      setCustomError(null);
+                    }}
+                  />
+                </div>
+              </div>
+              {customError ? <p className="text-xs text-destructive">{customError}</p> : null}
+              <Button type="button" size="sm" className="w-full" onClick={applyCustomRange}>
+                Apply range
+              </Button>
             </div>
-            <div>
-              <label className="mb-1 block text-xs text-muted-foreground">To</label>
-              <Input
-                type="date"
-                value={draftEnd}
-                onChange={(event) => {
-                  setDraftEnd(event.target.value);
-                  setCustomError(null);
-                }}
-              />
-            </div>
-          </div>
-          {customError ? <p className="text-xs text-destructive">{customError}</p> : null}
-          <Button type="button" size="sm" className="w-full" onClick={applyCustomRange}>
-            Apply range
-          </Button>
-        </div>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

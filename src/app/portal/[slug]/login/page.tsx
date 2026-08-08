@@ -16,22 +16,22 @@ export default async function PortalLoginPage({ params, searchParams }: Props) {
   const logoUrl = resolvePortalLogoUrl(company.emailLogoUrl);
 
   return (
-    <main className="portal-shell min-h-screen bg-[#f8fafc]">
-      <header className="border-b border-black/5 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+    <main className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+      <header className="border-b border-slate-200 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
         <div className="portal-container py-4">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt={company.name} className="h-14 w-auto max-w-[220px] object-contain" />
           ) : (
-            <span className="font-display text-lg uppercase tracking-wide text-storm-navy">{company.name}</span>
+            <span className="font-display text-lg uppercase tracking-wide text-[#102341]">{company.name}</span>
           )}
         </div>
       </header>
       <div className="portal-container py-12">
         <div className="mx-auto max-w-md">
           <div className="mb-6 text-center">
-            <h1 className="font-display text-xl uppercase tracking-wide text-storm-navy">Customer portal</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Sign in with your email</p>
+            <h1 className="font-display text-xl uppercase tracking-wide text-[#102341]">Customer portal</h1>
+            <p className="mt-1 text-sm text-[#1e293b]">Sign in with your email</p>
           </div>
           <PortalLoginForm slug={slug} error={error ?? null} />
         </div>

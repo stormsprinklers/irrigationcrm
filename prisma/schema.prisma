@@ -989,6 +989,7 @@ enum AuthMfaPurpose {
   MOBILE_LOGIN
   LMS_LOGIN
   EXPENSE_CARD_ADMIN
+  PHONE_NUMBER_RELEASE
 }
 
 enum ExpenseCardStatus {
@@ -1495,9 +1496,14 @@ model PhoneNumber {
   id             String          @id @default(cuid())
   companyId      String
   e164           String
+  /// Display title shown in the CRM (e.g. "PPC Repair tracking").
   friendlyName   String?
   numberType     PhoneNumberType @default(TRACKING)
   isPrimary      Boolean         @default(false)
+  /// Whether Twilio reports SMS capability for this number (null = unknown / not synced).
+  smsEnabled     Boolean?
+  /// Whether Twilio reports voice capability for this number.
+  voiceEnabled   Boolean?
   callFlowId     String?
   assignedUserId String?
   trackingSource String?
@@ -1607,6 +1613,7 @@ enum AppNotificationType {
   VISIT_INCOMPLETE
   SYNC_FAILED
   EXPENSE_CARD_FUNDING
+  PORTAL_CONTACT
 }
 
 model NotificationTemplate {
@@ -2321,6 +2328,12 @@ model Visit {
   enRouteCalculatedAt   DateTime?
   enRouteOriginLat      Decimal?  @db.Decimal(10, 7)
   enRouteOriginLng      Decimal?  @db.Decimal(10, 7)
+  /// Public token for customer live-tracking page (SMS link).
+  liveTrackToken        String?   @unique
+  liveLat               Decimal?  @db.Decimal(10, 7)
+  liveLng               Decimal?  @db.Decimal(10, 7)
+  liveLocationAt        DateTime?
+  liveTrackingActive    Boolean   @default(false)
   maintenancePlanVisitId String?     @unique
   callSessionId          String?
   designProjectId        String?

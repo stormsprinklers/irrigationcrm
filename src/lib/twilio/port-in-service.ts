@@ -4,6 +4,7 @@ import { normalizePhone } from "@/lib/inbox/contacts";
 import { notifyStaffInApp } from "@/lib/notifications/in-app";
 import { prisma } from "@/lib/prisma";
 import { configureNumberWebhooks, listAccountNumbers } from "@/lib/twilio/numbers";
+import { attachNumberToA2pMessagingService } from "@/lib/twilio/a2p";
 import {
   getPortInRequest,
   isTerminalPortStatus,
@@ -142,6 +143,15 @@ export async function importCompletedPortNumber(portInId: string) {
     await configureNumberWebhooks(match.sid);
   } catch (err) {
     console.error("[porting] webhook config failed", match.sid, err);
+  }
+
+  try {
+    const a2p = await attachNumberToA2pMessagingService(match.sid);
+    if (!a2p.ok) {
+      console.warn("[porting] A2P attach failed", match.sid, a2p.error);
+    }
+  } catch (err) {
+    console.error("[porting] A2P attach error", match.sid, err);
   }
 
   const existing = await prisma.phoneNumber.findFirst({

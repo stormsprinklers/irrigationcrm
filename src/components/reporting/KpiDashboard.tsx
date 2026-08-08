@@ -8,13 +8,28 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
 import { blobProxyUrl } from "@/lib/blob/urls";
-import { buildReportRangeQuery, PRESET_RANGE_LABELS, type ReportRangeInput } from "@/lib/reporting/date-range";
+import {
+  ADMIN_HOME_KPI_PRESETS,
+  PRESET_RANGE_LABELS,
+  REPORTING_KPI_PRESETS,
+  buildReportRangeQuery,
+  type ReportPresetRange,
+  type ReportRangeInput,
+} from "@/lib/reporting/date-range";
 import type {
   KpiCrewCard,
   KpiDashboardReport,
   KpiPersonCard,
 } from "@/lib/reporting/kpi-dashboard";
 import { cn } from "@/lib/utils";
+
+type KpiDashboardProps = {
+  /** Admin home uses "home"; reporting module uses "reporting" (default). */
+  variant?: "home" | "reporting";
+  defaultPreset?: ReportPresetRange;
+  presets?: ReportPresetRange[];
+  allowCustom?: boolean;
+};
 
 function getInitials(name: string) {
   return name
@@ -143,8 +158,13 @@ function Section({
   );
 }
 
-export function KpiDashboard() {
-  const [rangeInput, setRangeInput] = useState<ReportRangeInput>({ preset: "ytd" });
+export function KpiDashboard({
+  variant = "reporting",
+  defaultPreset = variant === "home" ? "today" : "ytd",
+  presets = variant === "home" ? ADMIN_HOME_KPI_PRESETS : REPORTING_KPI_PRESETS,
+  allowCustom = variant !== "home",
+}: KpiDashboardProps) {
+  const [rangeInput, setRangeInput] = useState<ReportRangeInput>({ preset: defaultPreset });
   const [data, setData] = useState<KpiDashboardReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -173,17 +193,21 @@ export function KpiDashboard() {
       ? `${rangeInput.start} – ${rangeInput.end}`
       : PRESET_RANGE_LABELS[rangeInput.preset]);
 
+  const isHome = variant === "home";
+
   return (
     <ContentArea className="max-w-[1400px]">
       <PageHeader
-        breadcrumb={["Reporting", "KPI Dashboard"]}
-        title="KPI Dashboard"
+        breadcrumb={isHome ? ["Dashboard"] : ["Reporting", "KPI Dashboard"]}
+        title={isHome ? "Dashboard" : "KPI Dashboard"}
         subtitle="Team performance across technicians, CSRs, crews, and sales"
         actions={
           <ReportDateRangeControl
             value={rangeInput}
             label={rangeLabel}
             onChange={setRangeInput}
+            presets={presets}
+            allowCustom={allowCustom}
           />
         }
       />

@@ -352,7 +352,17 @@ export async function renderIvrNode(
 
     case CallFlowNodeType.FORWARD:
       if (config.forwardTo) {
-        response.dial({}, normalizePhone(config.forwardTo));
+        // Same Dial recording path as CSR ring: recording webhook → Whisper → AI summary.
+        response.dial(
+          inboundDialAttributes(ctx.recordCalls, {
+            timeout: 45,
+            action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${ctx.companyId}`,
+            method: "POST",
+            // Show the original caller ID on the forwarded phone.
+            callerId: ctx.from,
+          }),
+          normalizePhone(config.forwardTo)
+        );
       } else {
         response.say("Forward destination not configured.");
       }

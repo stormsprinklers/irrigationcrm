@@ -57,6 +57,26 @@ export async function getCustomerVisit(
     include: {
       assignedUser: { select: { id: true, name: true, photoUrl: true, title: true } },
       property: { select: { id: true, name: true, address: true, city: true, state: true, zip: true } },
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          quantity: true,
+          unitPrice: true,
+          total: true,
+        },
+      },
+      attachments: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          fileName: true,
+          mimeType: true,
+          createdAt: true,
+        },
+      },
     },
   });
 }

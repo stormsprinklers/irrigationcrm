@@ -13,6 +13,11 @@ import { ensureDefaultNotificationTemplates, sendOperationalNotification } from 
 import { onVisitCompleted } from "@/lib/notifications/visit-events";
 import { completeMaintenancePlanVisit } from "@/lib/maintenance-plans/discounts";
 import { prisma } from "@/lib/prisma";
+import {
+  activateLiveTracking,
+  buildLiveTrackUrl,
+  stopLiveTracking,
+} from "@/lib/visits/live-tracking";
 import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
 
 type Params = { params: Promise<{ id: string }> };
@@ -28,6 +33,11 @@ const STATUS_MAP: Partial<Record<TimeEventType, VisitStatus>> = {
 const CLEAR_ETA_TYPES = new Set<TimeEventType>([
   TimeEventType.START,
   TimeEventType.RESUME,
+  TimeEventType.FINISH,
+]);
+
+const STOP_TRACKING_TYPES = new Set<TimeEventType>([
+  TimeEventType.START,
   TimeEventType.FINISH,
 ]);
 
@@ -60,7 +70,14 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
         property: { select: { address: true, city: true, state: true, zip: true } },
         assignedUser: { select: { id: true, name: true } },
-        company: { select: { name: true, timezone: true } },
+        company: {
+          select: {
+            name: true,
+            timezone: true,
+            portalSlug: true,
+            bookingSlug: true,
+          },
+        },
       },
     });
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -138,6 +155,25 @@ export async function POST(request: NextRequest, { params }: Params) {
       data: visitUpdate,
     });
 
+    let trackUrl: string | null = null;
+    if (type === TimeEventType.EN_ROUTE) {
+      const origin = parseOrigin(body);
+      const activated = await activateLiveTracking({
+        visitId: id,
+        lat: origin?.lat ?? null,
+        lng: origin?.lng ?? null,
+      });
+      if (activated.liveTrackToken) {
+        trackUrl = buildLiveTrackUrl({
+          portalSlug: visit.company.portalSlug,
+          bookingSlug: visit.company.bookingSlug,
+          token: activated.liveTrackToken,
+        });
+      }
+    } else if (STOP_TRACKING_TYPES.has(type)) {
+      await stopLiveTracking(id);
+    }
+
     if (visitUpdate.status === VisitStatus.COMPLETED) {
       await completeMaintenancePlanVisit(id);
       void onVisitCompleted(id, user.companyId).catch((err) =>
@@ -170,10 +206,12 @@ export async function POST(request: NextRequest, { params }: Params) {
           etaAt: updated.enRouteEtaAt,
           visitAddress: destination,
           timezone: visit.company.timezone,
+          trackUrl,
         }),
         options: {
           visitId: id,
           technicianUserId: updated.assignedUser?.id ?? user.id,
+          linkPlaceholders: trackUrl ? { track: trackUrl } : undefined,
         },
       }).catch((err) => console.error("VISIT_EN_ROUTE notification error:", err));
     }

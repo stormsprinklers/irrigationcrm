@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, FileText, Home, LogOut, Percent, Users, Wrench } from "lucide-react";
+import { Calendar, FileText, Home, LogOut, Percent, Phone, Users, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolvePortalLogoUrl } from "@/lib/portal/branding";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,7 @@ export function PortalShell({
     { href: `${base}/maintenance`, label: "Maintenance", icon: Wrench, show: features.maintenance },
     { href: `${base}/offers`, label: "Offers", icon: Percent, show: features.offers },
     { href: `${base}/referrals`, label: "Referrals", icon: Users, show: features.referrals },
+    { href: `${base}/contact`, label: "Contact", icon: Phone, show: true },
   ].filter((n) => n.show);
 
   async function logout() {
@@ -57,8 +58,8 @@ export function PortalShell({
   }
 
   return (
-    <div className="portal-shell min-h-screen bg-[#f8fafc]">
-      <header className="sticky top-0 z-50 border-b border-black/5 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.06)]">
+    <div className="portal-shell light min-h-screen bg-[#f1f5f9] text-[#102341]">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.08)]">
         <div className="portal-container flex items-center justify-between gap-4 py-3">
           <Link href={guest ? "#" : base} className="flex shrink-0 items-center" onClick={guest ? (e) => e.preventDefault() : undefined}>
             {logoUrl ? (
@@ -66,17 +67,17 @@ export function PortalShell({
               <img
                 src={logoUrl}
                 alt={`${companyName} home`}
-                className="h-14 w-auto max-w-[220px] object-contain sm:h-16"
+                className="h-14 w-auto max-w-[220px] object-contain"
               />
             ) : (
-              <span className="font-display text-lg uppercase tracking-wide text-storm-navy">{companyName}</span>
+              <span className="font-display text-lg uppercase tracking-wide text-[#102341]">{companyName}</span>
             )}
           </Link>
           {!guest ? (
             <Button
               variant="ghost"
               size="sm"
-              className="text-storm-navy hover:text-storm-coral"
+              className="text-[#102341] hover:text-storm-coral"
               onClick={() => void logout()}
             >
               <LogOut className="mr-1 h-4 w-4" />
@@ -101,7 +102,7 @@ export function PortalShell({
                     "inline-flex min-h-11 items-center gap-1.5 rounded px-3 py-2 text-sm font-semibold transition-colors",
                     active
                       ? "bg-storm-coral text-white"
-                      : "border border-storm-ice bg-white text-storm-navy hover:bg-storm-ice/60"
+                      : "border border-[#c2e4f0] bg-white text-[#102341] hover:bg-[#c2e4f0]/60"
                   )}
                 >
                   <Icon className="h-4 w-4" />
