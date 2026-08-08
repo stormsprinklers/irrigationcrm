@@ -1,6 +1,15 @@
 import { addDays, addHours } from "date-fns";
+import { clampToAutomatedSendWindow } from "@/lib/communications/send-window";
 import { prisma } from "@/lib/prisma";
 import type { NotificationEvent } from "./templates";
+
+async function companyTimezone(companyId: string): Promise<string | null> {
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { timezone: true },
+  });
+  return company?.timezone ?? null;
+}
 
 export async function scheduleNotificationJob(params: {
   companyId: string;
@@ -10,7 +19,8 @@ export async function scheduleNotificationJob(params: {
 }) {
   if (params.delayHours <= 0) return null;
 
-  const runAt = addHours(new Date(), params.delayHours);
+  const tz = await companyTimezone(params.companyId);
+  const runAt = clampToAutomatedSendWindow(addHours(new Date(), params.delayHours), tz);
 
   const existing = await prisma.notificationJob.findFirst({
     where: {
@@ -50,7 +60,8 @@ export async function scheduleEstimateFollowUpJob(params: {
 }) {
   if (params.delayDays <= 0) return null;
 
-  const runAt = addDays(new Date(), params.delayDays);
+  const tz = await companyTimezone(params.companyId);
+  const runAt = clampToAutomatedSendWindow(addDays(new Date(), params.delayDays), tz);
 
   const existing = await prisma.notificationJob.findFirst({
     where: {

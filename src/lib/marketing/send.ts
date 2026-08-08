@@ -9,6 +9,10 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { assertOutboundCommsEnabled, getOutboundCommsState } from "@/lib/communications/outbound-guard";
+import {
+  clampToAutomatedSendWindow,
+  isWithinAutomatedSendWindow,
+} from "@/lib/communications/send-window";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { buildCampaignStats } from "@/lib/marketing/stats";
@@ -411,6 +415,14 @@ export async function processDripSends() {
       freezeByCompany.set(campaign.companyId, frozen);
     }
     if (frozen) continue;
+    const companyTz = campaign.company.timezone;
+    if (!isWithinAutomatedSendWindow(now, companyTz)) {
+      await prisma.campaignEnrollment.update({
+        where: { id: enrollment.id },
+        data: { nextSendAt: clampToAutomatedSendWindow(now, companyTz) },
+      });
+      continue;
+    }
     const dripSettings = (campaign.dripSettings ?? {}) as DripSettings;
     const emailsPerDay = dripSettings.emailsPerDay ?? 50;
     const smsPerDay = dripSettings.smsPerDay ?? 50;
@@ -493,8 +505,14 @@ export async function processDripSends() {
         data: { status: CampaignEnrollmentStatus.COMPLETED },
       });
     } else {
-      const nextSendAt = new Date(now);
-      nextSendAt.setDate(nextSendAt.getDate() + (nextStep.delayDays ?? 0));
+      const nextSendAt = clampToAutomatedSendWindow(
+        (() => {
+          const d = new Date(now);
+          d.setDate(d.getDate() + (nextStep.delayDays ?? 0));
+          return d;
+        })(),
+        companyTz
+      );
       await prisma.campaignEnrollment.update({
         where: { id: enrollment.id },
         data: {

@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  clampToAutomatedSendWindow,
+  isWithinAutomatedSendWindow,
+} from "@/lib/communications/send-window";
 import { prisma } from "@/lib/prisma";
 import { processEstimateFollowUpJob } from "@/lib/notifications/estimate-followup";
 import { notifyVisitEvent } from "@/lib/notifications/visit-events";
@@ -17,9 +21,33 @@ export async function GET(request: Request) {
     take: 50,
   });
 
+  const timezoneByCompany = new Map<string, string | null>();
+
+  async function timezoneFor(companyId: string) {
+    if (timezoneByCompany.has(companyId)) return timezoneByCompany.get(companyId) ?? null;
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { timezone: true },
+    });
+    const tz = company?.timezone ?? null;
+    timezoneByCompany.set(companyId, tz);
+    return tz;
+  }
+
   let processed = 0;
+  let deferred = 0;
   for (const job of jobs) {
     try {
+      const tz = await timezoneFor(job.companyId);
+      if (!isWithinAutomatedSendWindow(now, tz)) {
+        await prisma.notificationJob.update({
+          where: { id: job.id },
+          data: { runAt: clampToAutomatedSendWindow(now, tz) },
+        });
+        deferred++;
+        continue;
+      }
+
       if (job.estimateId && job.event === "ESTIMATE_FOLLOW_UP") {
         await processEstimateFollowUpJob({
           jobId: job.id,
@@ -49,5 +77,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ processed, total: jobs.length });
+  return NextResponse.json({ processed, deferred, total: jobs.length });
 }

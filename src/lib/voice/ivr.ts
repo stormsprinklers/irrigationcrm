@@ -30,6 +30,21 @@ export type IvrNodeConfig = {
   options?: Array<{ digit: string; nextNodeId?: string; label?: string }>;
   timeoutNodeId?: string;
   invalidNodeId?: string;
+  /**
+   * How many times to play/speak the menu prompt inside one gather (1–5).
+   * Helps callers who miss the first pass without holding the line open forever.
+   */
+  promptRepeats?: number;
+  /**
+   * Seconds to wait for a digit after the prompt finishes (3–30).
+   * Short timeouts hang up on silent bots faster.
+   */
+  gatherTimeoutSec?: number;
+  /**
+   * How many times to re-offer the menu after no input (1–5).
+   * After the last failed attempt the call is hung up (or routed to timeoutNodeId).
+   */
+  maxNoInputAttempts?: number;
   /** PLAY step: audio clip to play, with typed text as a text-to-speech fallback. */
   clipId?: string;
   text?: string;
@@ -58,6 +73,28 @@ export type IvrNodeConfig = {
   }>;
   defaultNextNodeId?: string;
 };
+
+export const IVR_DEFAULT_PROMPT_REPEATS = 1;
+export const IVR_DEFAULT_GATHER_TIMEOUT_SEC = 5;
+export const IVR_DEFAULT_MAX_NO_INPUT_ATTEMPTS = 2;
+
+export function clampIvrPromptRepeats(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return IVR_DEFAULT_PROMPT_REPEATS;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
+
+export function clampIvrGatherTimeoutSec(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return IVR_DEFAULT_GATHER_TIMEOUT_SEC;
+  return Math.min(30, Math.max(3, Math.round(n)));
+}
+
+export function clampIvrMaxNoInputAttempts(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return IVR_DEFAULT_MAX_NO_INPUT_ATTEMPTS;
+  return Math.min(5, Math.max(1, Math.round(n)));
+}
 
 function flowNodeBranch(config: unknown): "open" | "closed" {
   const branch = (config as { branch?: string } | null)?.branch;
@@ -190,35 +227,69 @@ export async function appendIvrPrompt(
   config: IvrNodeConfig,
   companyId: string
 ) {
+  const repeats = clampIvrPromptRepeats(config.promptRepeats);
+  const sayText = config.promptText ?? config.prompt ?? "Please make a selection.";
+
   if (config.promptClipId) {
     const playUrl = await resolveVoiceClipPlayUrl(config.promptClipId, companyId);
     if (playUrl) {
-      gather.play(playUrl);
+      gather.play({ loop: repeats }, playUrl);
       return;
     }
   }
-  gather.say(config.promptText ?? config.prompt ?? "Please make a selection.");
+
+  for (let i = 0; i < repeats; i++) {
+    gather.say(sayText);
+  }
 }
 
-export function ivrGatherAction(flowId: string, nodeId: string) {
-  return `${appBaseUrl()}/api/twilio/voice/ivr?flowId=${flowId}&nodeId=${nodeId}`;
+export function ivrGatherAction(flowId: string, nodeId: string, attempt = 0) {
+  const params = new URLSearchParams({
+    flowId,
+    nodeId,
+    attempt: String(Math.max(0, Math.floor(attempt))),
+  });
+  return `${appBaseUrl()}/api/twilio/voice/ivr?${params.toString()}`;
 }
 
 /** Build TwiML for an IVR gather step (entry or nested IVR node). */
 export async function renderIvrGather(
   response: twilio.twiml.VoiceResponse,
   node: CallFlowNode,
-  ctx: FlowContext
+  ctx: FlowContext,
+  attempt = 0
 ) {
   const config = (node.config ?? {}) as IvrNodeConfig;
+  const timeout = clampIvrGatherTimeoutSec(config.gatherTimeoutSec);
   const gather = response.gather({
     numDigits: 1,
-    action: ivrGatherAction(ctx.flowId, node.id),
+    action: ivrGatherAction(ctx.flowId, node.id, attempt),
     method: "POST",
-    timeout: 10,
+    timeout,
   });
   await appendIvrPrompt(gather, config, ctx.companyId);
+  // Reached only if Gather has no action (should not happen). Keep a hard stop for bots.
   response.say("We did not receive your input. Goodbye.");
+  response.hangup();
+}
+
+/** Hang up after no selection (or route to timeoutNodeId when configured). */
+export async function renderIvrNoInputHangup(
+  response: twilio.twiml.VoiceResponse,
+  node: CallFlowNode,
+  nodes: CallFlowNode[],
+  ctx: FlowContext
+): Promise<string | null> {
+  const config = (node.config ?? {}) as IvrNodeConfig;
+  if (config.timeoutNodeId) {
+    const fallback = nodes.find((n) => n.id === config.timeoutNodeId);
+    if (fallback) {
+      return renderIvrNode(fallback, nodes, ctx);
+    }
+  }
+  response.say("We did not receive your input. Goodbye.");
+  response.hangup();
+  return null;
 }
 
 /** Build TwiML for any call-flow node type. */

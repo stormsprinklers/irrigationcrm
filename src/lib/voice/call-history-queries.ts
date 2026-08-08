@@ -12,9 +12,11 @@ const callLogInclude = {
   customer: { select: { id: true, name: true, phone: true } },
   user: { select: { id: true, name: true } },
   handledBy: { select: { id: true, name: true } },
+  phoneNumber: { select: { id: true, friendlyName: true, trackingSource: true, e164: true } },
   session: {
     select: {
       assignedUser: { select: { id: true, name: true } },
+      phoneNumber: { select: { id: true, friendlyName: true, trackingSource: true, e164: true } },
       participants: {
         orderBy: { joinedAt: "asc" as const },
         select: {
@@ -150,6 +152,16 @@ function toDetail(
   const participants = mapParticipants(row);
   const base = mapCallLog(row, aiByCallLogId, aiByCallSid);
   const employee = resolveEmployee(row, base.isAiAgent);
+  const line = row.phoneNumber ?? row.session?.phoneNumber ?? null;
+  const trackingSource =
+    row.trackingSource?.trim() ||
+    line?.trackingSource?.trim() ||
+    null;
+  const inboundLineTitle = line?.friendlyName?.trim() || null;
+  const inboundLineE164 =
+    row.direction === "INBOUND"
+      ? line?.e164?.trim() || row.toNumber || null
+      : null;
   return {
     ...base,
     employee: employee ? { id: employee.id, name: employee.name } : base.employee,
@@ -157,6 +169,9 @@ function toDetail(
     transcript: row.transcript,
     aiSummary: row.aiSummary,
     visitId: row.visitId,
+    trackingSource: row.direction === "INBOUND" ? trackingSource : null,
+    inboundLineTitle: row.direction === "INBOUND" ? inboundLineTitle : null,
+    inboundLineE164,
     participants,
     handledBy: employee,
   };

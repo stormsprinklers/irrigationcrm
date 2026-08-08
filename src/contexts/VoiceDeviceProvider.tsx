@@ -15,6 +15,7 @@ import { Device, Call } from "@twilio/voice-sdk";
 import { toast } from "sonner";
 import { CallWrapUpModal } from "@/components/voice/CallWrapUpModal";
 import { normalizePhone } from "@/lib/inbox/contacts";
+import type { InboundLineInfo } from "@/components/voice/InboundLineCard";
 import type { CallerInfo } from "@/lib/voice/caller-info";
 
 export type { CallerInfo };
@@ -25,6 +26,8 @@ export type ActiveCallState = {
   remoteNumber: string;
   callerInfo: CallerInfo | null;
   sessionId: string | null;
+  /** Company line the caller dialed (inbound only). */
+  inboundLine: InboundLineInfo | null;
   muted: boolean;
   onHold: boolean;
   /** Warm/consult transfer in progress — hangup leaves conference running. */
@@ -82,14 +85,32 @@ async function lookupCaller(phone: string): Promise<CallerInfo> {
 async function resolveSessionId(
   callSid: string,
   parentCallSid?: string | null
-): Promise<string | null> {
+): Promise<{
+  id: string;
+  inboundLine: InboundLineInfo | null;
+} | null> {
   try {
     const qs = new URLSearchParams({ callSid });
     if (parentCallSid) qs.set("parentCallSid", parentCallSid);
     const res = await fetch(`/api/voice/sessions/by-call?${qs.toString()}`);
     if (!res.ok) return null;
-    const data = await res.json();
-    return data.id ?? null;
+    const data = (await res.json()) as {
+      id?: string;
+      inboundLineTitle?: string | null;
+      trackingSource?: string | null;
+      inboundLineE164?: string | null;
+      direction?: string;
+    };
+    if (!data.id) return null;
+    const inboundLine =
+      data.direction === "INBOUND"
+        ? {
+            title: data.inboundLineTitle ?? null,
+            trackingSource: data.trackingSource ?? null,
+            e164: data.inboundLineE164 ?? null,
+          }
+        : null;
+    return { id: data.id, inboundLine };
   } catch {
     return null;
   }
@@ -155,18 +176,24 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         (call.parameters as Record<string, string>).ParentCallSid ??
         (call.parameters as Record<string, string>).parentCallSid ??
         null;
-      let sessionId = callSid ? await resolveSessionId(callSid, parentCallSid) : null;
+      let session = callSid ? await resolveSessionId(callSid, parentCallSid) : null;
 
-      void recordAnswered(callSid, sessionId, parentCallSid);
+      void recordAnswered(callSid, session?.id ?? null, parentCallSid);
 
-      if (!sessionId && callSid) {
+      if (!session && callSid) {
         window.setTimeout(() => {
-          void resolveSessionId(callSid, parentCallSid).then((id) => {
-            if (!id) return;
+          void resolveSessionId(callSid, parentCallSid).then((resolved) => {
+            if (!resolved) return;
             setActiveCall((prev) =>
-              prev && prev.call === call ? { ...prev, sessionId: id } : prev
+              prev && prev.call === call
+                ? {
+                    ...prev,
+                    sessionId: resolved.id,
+                    inboundLine: resolved.inboundLine ?? prev.inboundLine,
+                  }
+                : prev
             );
-            void recordAnswered(callSid, id, parentCallSid);
+            void recordAnswered(callSid, resolved.id, parentCallSid);
           });
         }, 1500);
       }
@@ -176,7 +203,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         direction,
         remoteNumber,
         callerInfo,
-        sessionId,
+        sessionId: session?.id ?? null,
+        inboundLine: session?.inboundLine ?? null,
         muted: false,
         onHold: false,
         transferring: false,

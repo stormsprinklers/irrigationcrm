@@ -6,6 +6,7 @@ import { Calendar, Phone, User } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
+import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -315,6 +316,9 @@ export function CsrDeskPanel({
               }
             />
             <p className="text-muted-foreground">{callerPhone}</p>
+            {activeCall.direction === "inbound" ? (
+              <InboundLineCard info={activeCall.inboundLine} />
+            ) : null}
             {customer?.email ? <p>{customer.email}</p> : null}
             {customer?.propertyAddress ? (
               <p className="text-xs text-muted-foreground">{customer.propertyAddress}</p>

@@ -28,6 +28,12 @@ export type CallHistoryDetail = CallHistoryListItem & {
   transcript: string | null;
   aiSummary: string | null;
   visitId: string | null;
+  /** Tracking / lead source from the dialed company number (inbound). */
+  trackingSource: string | null;
+  /** Friendly title of the company PhoneNumber dialed (inbound). */
+  inboundLineTitle: string | null;
+  /** Company number dialed on inbound (or our caller ID on outbound). */
+  inboundLineE164: string | null;
   /** All employees who joined (answer + transfers). */
   participants: Array<{
     id: string;

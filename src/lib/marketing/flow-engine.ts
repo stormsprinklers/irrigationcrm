@@ -6,6 +6,11 @@ import {
   CampaignType,
   Prisma,
 } from "@prisma/client";
+import {
+  clampToAutomatedSendWindow,
+  isWithinAutomatedSendWindow,
+  nextLocalMorningAtHour,
+} from "@/lib/communications/send-window";
 import { prisma } from "@/lib/prisma";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import type { AudienceFilters, CampaignFlowNodeInput, DripSettings } from "@/lib/marketing/types";
@@ -134,7 +139,10 @@ export async function activateFlowCampaign(campaignId: string) {
     );
   }
 
-  const startAt = dripSettings.startAt ? new Date(dripSettings.startAt) : new Date();
+  const startAt = clampToAutomatedSendWindow(
+    dripSettings.startAt ? new Date(dripSettings.startAt) : new Date(),
+    campaign.company.timezone
+  );
   const entryNode =
     flowNodes.find((n) => n.type !== CampaignFlowNodeType.TRIGGER) ?? flowNodes[0];
 
@@ -219,6 +227,8 @@ export async function processFlowEnrollments(limit = 40) {
     }));
     if (nodes.length === 0) continue;
 
+    const companyTz = enrollment.campaign.company.timezone;
+
     // Daily rate limits
     const settings = (enrollment.campaign.dripSettings ?? {}) as DripSettings;
     const startOfDay = new Date();
@@ -256,6 +266,7 @@ export async function processFlowEnrollments(limit = 40) {
           const hours = Number(node.config.delayHours ?? 0);
           when = new Date(Date.now() + hours * 60 * 60 * 1000);
         }
+        when = clampToAutomatedSendWindow(when, companyTz);
         await logEvent(enrollment.id, node.id, "wait_started", { when: when.toISOString() });
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
@@ -275,7 +286,10 @@ export async function processFlowEnrollments(limit = 40) {
       } else {
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
-          data: { currentNodeId: next.id, nextSendAt: new Date() },
+          data: {
+            currentNodeId: next.id,
+            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+          },
         });
       }
       processed++;
@@ -296,16 +310,22 @@ export async function processFlowEnrollments(limit = 40) {
       node.type === CampaignFlowNodeType.SEND_EMAIL ||
       node.type === CampaignFlowNodeType.SEND_SMS
     ) {
+      if (!isWithinAutomatedSendWindow(new Date(), companyTz)) {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: {
+            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+          },
+        });
+        continue;
+      }
+
       const isSms = node.type === CampaignFlowNodeType.SEND_SMS;
       const cap = isSms ? settings.smsPerDay ?? 50 : settings.emailsPerDay ?? 50;
       if (sentToday >= cap) {
-        // Push to tomorrow
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(8, 0, 0, 0);
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
-          data: { nextSendAt: tomorrow },
+          data: { nextSendAt: nextLocalMorningAtHour(new Date(), 8, companyTz) },
         });
         continue;
       }
@@ -332,7 +352,7 @@ export async function processFlowEnrollments(limit = 40) {
           where: { id: enrollment.id },
           data: {
             currentNodeId: next.id,
-            nextSendAt: new Date(),
+            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
           },
         });
       }
@@ -391,7 +411,10 @@ export async function processFlowEnrollments(limit = 40) {
       } else {
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
-          data: { currentNodeId: target.id, nextSendAt: new Date() },
+          data: {
+            currentNodeId: target.id,
+            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+          },
         });
       }
       processed++;
@@ -409,7 +432,10 @@ export async function processCampaignTriggers(companyId?: string) {
       type: CampaignType.DRIP,
       ...(companyId ? { companyId } : {}),
     },
-    include: { flowNodes: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      flowNodes: { orderBy: { sortOrder: "asc" } },
+      company: { select: { timezone: true } },
+    },
   });
 
   let enrolled = 0;
@@ -517,7 +543,7 @@ export async function processCampaignTriggers(companyId?: string) {
           campaignId: campaign.id,
           customerId,
           currentNodeId: entry.id,
-          nextSendAt: new Date(),
+          nextSendAt: clampToAutomatedSendWindow(new Date(), campaign.company.timezone),
           status: CampaignEnrollmentStatus.ACTIVE,
         },
       });

@@ -4,9 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { buildInboundTwiml } from "@/lib/voice/routing";
 import {
+  clampIvrMaxNoInputAttempts,
   findNextIvrNode,
+  renderIvrGather,
+  renderIvrNoInputHangup,
   renderIvrNode,
   type FlowContext,
+  type IvrNodeConfig,
 } from "@/lib/voice/ivr";
 
 export async function POST(request: NextRequest) {
@@ -16,6 +20,8 @@ export async function POST(request: NextRequest) {
   const flowId = request.nextUrl.searchParams.get("flowId");
   const nodeId = request.nextUrl.searchParams.get("nodeId");
   const goto = request.nextUrl.searchParams.get("goto");
+  const attemptRaw = Number(request.nextUrl.searchParams.get("attempt") ?? "0");
+  const attempt = Number.isFinite(attemptRaw) ? Math.max(0, Math.floor(attemptRaw)) : 0;
   const digits = params.Digits;
 
   if (!flowId || (!nodeId && !goto)) {
@@ -31,6 +37,7 @@ export async function POST(request: NextRequest) {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const response = new VoiceResponse();
     response.say("Call flow not found. Goodbye.");
+    response.hangup();
     return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
   }
 
@@ -64,6 +71,7 @@ export async function POST(request: NextRequest) {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const response = new VoiceResponse();
     response.say("Invalid menu. Goodbye.");
+    response.hangup();
     return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
   }
 
@@ -82,27 +90,43 @@ export async function POST(request: NextRequest) {
     transcribeCalls: company?.transcribeCalls ?? true,
   };
 
-  const reason = digits ? "digit" : "timeout";
-  const nextNode = findNextIvrNode(current, flow.nodes, digits, reason);
+  const config = (current.config ?? {}) as IvrNodeConfig;
+  const maxAttempts = clampIvrMaxNoInputAttempts(config.maxNoInputAttempts);
+
+  // No digit pressed within gather timeout — re-prompt or boot.
+  if (!digits) {
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    const nextAttempt = attempt + 1;
+    if (nextAttempt < maxAttempts) {
+      await renderIvrGather(response, current, ctx, nextAttempt);
+      return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+    }
+    const hangupTwiml = await renderIvrNoInputHangup(response, current, flow.nodes, ctx);
+    return new NextResponse(hangupTwiml ?? response.toString(), {
+      headers: { "Content-Type": "text/xml" },
+    });
+  }
+
+  const nextNode = findNextIvrNode(current, flow.nodes, digits, "digit");
 
   if (!nextNode) {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const response = new VoiceResponse();
-    if (!digits) {
-      const fallback = findNextIvrNode(current, flow.nodes, undefined, "timeout");
-      if (fallback) {
-        const twiml = await renderIvrNode(fallback, flow.nodes, ctx);
-        return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
-      }
-      response.say("We did not receive your input. Goodbye.");
-    } else {
-      const invalidFallback = findNextIvrNode(current, flow.nodes, digits, "invalid");
-      if (invalidFallback) {
-        const twiml = await renderIvrNode(invalidFallback, flow.nodes, ctx);
-        return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
-      }
-      response.say("Invalid option. Goodbye.");
+    const invalidFallback = findNextIvrNode(current, flow.nodes, digits, "invalid");
+    if (invalidFallback) {
+      const twiml = await renderIvrNode(invalidFallback, flow.nodes, ctx);
+      return new NextResponse(twiml, { headers: { "Content-Type": "text/xml" } });
     }
+    // Invalid digit: retry within the same attempt budget, then hang up.
+    const nextAttempt = attempt + 1;
+    if (nextAttempt < maxAttempts) {
+      response.say("Invalid option.");
+      await renderIvrGather(response, current, ctx, nextAttempt);
+      return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
+    }
+    response.say("Invalid option. Goodbye.");
+    response.hangup();
     return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
   }
 

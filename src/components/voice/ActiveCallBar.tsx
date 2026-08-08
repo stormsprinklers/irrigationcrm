@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
+import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointmentModal";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
@@ -102,6 +103,9 @@ export function ActiveCallBar() {
             callerInfo={activeCall.callerInfo}
             className="truncate text-xs text-muted-foreground"
           />
+          {activeCall.direction === "inbound" ? (
+            <InboundLineCard info={activeCall.inboundLine} className="mt-2" />
+          ) : null}
           <p className="text-xs text-muted-foreground">
             {formatDuration(seconds)}
             {activeCall.onHold ? " · On hold" : ""}

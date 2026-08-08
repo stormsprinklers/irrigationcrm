@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
 import { CallTranscriptPanel } from "@/components/voice/CallTranscriptPanel";
+import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import {
@@ -255,12 +256,22 @@ export function CallDetailView({
           </dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Phone</dt>
+          <dt className="text-muted-foreground">Caller phone</dt>
           <dd className="font-medium">
             {detail.direction === "INBOUND" ? detail.fromNumber : detail.toNumber}
           </dd>
         </div>
       </dl>
+
+      {detail.direction === "INBOUND" ? (
+        <InboundLineCard
+          info={{
+            title: detail.inboundLineTitle,
+            trackingSource: detail.trackingSource,
+            e164: detail.inboundLineE164,
+          }}
+        />
+      ) : null}
 
       <div>
         <div className="mb-2 flex items-center justify-between gap-2">
