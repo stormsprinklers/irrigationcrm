@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MIGRATION_STEP_ORDER, STEP_LABELS } from "@/lib/housecall-pro/constants";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ type Migration = {
   status: HousecallProMigrationStatus;
   currentStep: HousecallProMigrationStepType;
   previewJson: Record<string, unknown> | null;
+  optionsJson?: { debugMode?: boolean } | null;
   steps: MigrationStep[];
 };
 
@@ -79,6 +81,7 @@ export function HousecallProMigrationPanel() {
   const [runningBatch, setRunningBatch] = useState(false);
   const [rollbackConfirm, setRollbackConfirm] = useState("");
   const [rollingBack, setRollingBack] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const autoContinueRef = useRef(false);
   const currentStepCardRef = useRef<HTMLDivElement>(null);
 
@@ -166,10 +169,18 @@ export function HousecallProMigrationPanel() {
 
   async function handleStart() {
     try {
-      const res = await fetch("/api/migrations/housecall-pro/start", { method: "POST" });
+      const res = await fetch("/api/migrations/housecall-pro/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ debugMode }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to start");
-      toast.success("Migration started");
+      toast.success(
+        debugMode
+          ? "Debug migration started — each step imports 1 record"
+          : "Migration started"
+      );
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start");
@@ -336,6 +347,7 @@ export function HousecallProMigrationPanel() {
   const stepComplete =
     activeStep?.status === HousecallProMigrationStepStatus.COMPLETED ||
     activeStep?.status === HousecallProMigrationStepStatus.SKIPPED;
+  const migrationDebugMode = Boolean(migration?.optionsJson?.debugMode);
 
   return (
     <div className="space-y-6">
@@ -350,6 +362,9 @@ export function HousecallProMigrationPanel() {
             </Badge>
             {preview.companyName ? (
               <span className="text-sm text-muted-foreground">{String(preview.companyName)}</span>
+            ) : null}
+            {migrationDebugMode ? (
+              <Badge variant="secondary">Debug mode — 1 per step</Badge>
             ) : null}
           </div>
 
@@ -371,13 +386,32 @@ export function HousecallProMigrationPanel() {
             </div>
           ) : null}
 
+          {!isActive ? (
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={debugMode}
+                onCheckedChange={(checked) => setDebugMode(Boolean(checked))}
+              />
+              <span>
+                <span className="font-medium">Debug mode</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Import only 1 of each entity type so you can smoke-test every step without a full
+                  pull.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           <div className="flex flex-wrap gap-2">
             {!isActive ? (
               <Button onClick={handleStart} disabled={!data?.configured || runningBatch}>
                 <Play className="mr-2 h-4 w-4" />
                 {migration?.status === HousecallProMigrationStatus.FAILED
                   ? "Resume migration"
-                  : "Start migration"}
+                  : debugMode
+                    ? "Start debug migration"
+                    : "Start migration"}
               </Button>
             ) : null}
             {migration?.status === HousecallProMigrationStatus.IN_PROGRESS ? (

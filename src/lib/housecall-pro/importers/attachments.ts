@@ -1,7 +1,6 @@
 import { createHash } from "crypto";
 import { HcpEntityType } from "@prisma/client";
 import {
-  ATTACHMENT_BATCH_SIZE,
   HCP_ATTACHMENT_PATHS,
   HCP_PARENT_DETAIL_PATHS,
 } from "@/lib/housecall-pro/constants";
@@ -171,7 +170,7 @@ async function importParentAttachmentsBatch(params: {
     params.ctx.companyId,
     params.parentEntityType,
     offset,
-    ATTACHMENT_BATCH_SIZE
+    params.ctx.batchSize
   );
 
   if (!params.ctx.cursor) {

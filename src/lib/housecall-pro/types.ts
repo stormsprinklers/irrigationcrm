@@ -7,6 +7,11 @@ export type MigrationOptions = {
   throttleMs?: number;
   /** HCP org / CRM company names — never copy onto Customer.companyName */
   excludeCompanyNames?: string[];
+  /**
+   * When true, each step imports a single record then completes.
+   * Used to smoke-test the full migration pipeline without pulling production volume.
+   */
+  debugMode?: boolean;
 };
 
 export type BatchCounters = {

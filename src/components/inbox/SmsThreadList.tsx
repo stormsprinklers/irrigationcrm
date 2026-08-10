@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AlertCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -14,8 +15,18 @@ type Conversation = {
   participantPhone?: string | null;
   title?: string | null;
   customer?: { name: string; phone?: string | null; doNotService?: boolean } | null;
-  messages: { body: string; sentAt: string }[];
+  messages: {
+    body: string;
+    sentAt: string;
+    direction?: "INBOUND" | "OUTBOUND";
+    deliveryStatus?: string | null;
+  }[];
 };
+
+function isSmsNotDelivered(status: string | null | undefined) {
+  const normalized = status?.toLowerCase();
+  return normalized === "failed" || normalized === "undelivered";
+}
 
 export function SmsThreadList({
   scope,
@@ -69,6 +80,9 @@ export function SmsThreadList({
             "Conversation";
           const snippet = thread.messages[0]?.body ?? "";
           const initials = label.slice(0, 2).toUpperCase();
+          const latest = thread.messages[0];
+          const latestNotDelivered =
+            latest?.direction === "OUTBOUND" && isSmsNotDelivered(latest.deliveryStatus);
 
           return (
             <li key={thread.id}>
@@ -98,11 +112,23 @@ export function SmsThreadList({
                         <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
                       ) : null}
                       <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                      {latestNotDelivered ? (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
+                          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                          Not delivered
+                        </p>
+                      ) : null}
                     </>
                   ) : (
                     <>
                       <p className="truncate text-sm font-semibold">{label}</p>
                       <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                      {latestNotDelivered ? (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
+                          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                          Not delivered
+                        </p>
+                      ) : null}
                     </>
                   )}
                 </div>

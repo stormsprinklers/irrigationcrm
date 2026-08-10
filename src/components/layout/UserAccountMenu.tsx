@@ -9,7 +9,6 @@ import {
   Check,
   Loader2,
   LogOut,
-  UserPlus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { trueRoleOf } from "@/lib/role-preview";
 
 type AccountOption = {
   userId: string;
@@ -93,9 +91,6 @@ export function UserAccountMenu() {
   const userName = session?.user?.name ?? current?.name ?? "User";
   const userEmail = session?.user?.email ?? current?.email ?? "";
   const companyName = current?.companyName ?? "Company";
-  const isAdmin =
-    (session?.user ? trueRoleOf(session.user) === "ADMIN" : false) ||
-    current?.role === "ADMIN";
 
   return (
     <DropdownMenu>
@@ -166,19 +161,10 @@ export function UserAccountMenu() {
 
         <DropdownMenuSeparator />
 
-        {isAdmin ? (
-          <DropdownMenuItem asChild>
-            <Link href="/settings/integrations/create-company">
-              <Building2 className="mr-2 h-4 w-4" />
-              Create company
-            </Link>
-          </DropdownMenuItem>
-        ) : null}
-
         <DropdownMenuItem asChild>
-          <Link href="/settings/integrations/account-links">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add account
+          <Link href="/settings/integrations/create-company">
+            <Building2 className="mr-2 h-4 w-4" />
+            Company accounts
           </Link>
         </DropdownMenuItem>
 

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   badRequestResponse,
   forbiddenResponse,
@@ -11,7 +11,7 @@ import {
   startMigration,
 } from "@/lib/housecall-pro/orchestrator";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     requireAdmin(user.role);
@@ -19,7 +19,10 @@ export async function POST() {
       return badRequestResponse("HOUSECALL_PRO_API_KEY is not configured");
     }
 
-    const migration = await startMigration(user.companyId);
+    const body = await request.json().catch(() => ({}));
+    const debugMode = Boolean(body?.debugMode);
+
+    const migration = await startMigration(user.companyId, { debugMode });
     return NextResponse.json({ migration });
   } catch (err) {
     if (err instanceof Error && err.message === "Admin access required") {

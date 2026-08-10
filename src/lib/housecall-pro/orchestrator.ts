@@ -59,7 +59,10 @@ export async function getOrCreateMigration(companyId: string) {
   return getLatestMigration(companyId);
 }
 
-export async function startMigration(companyId: string) {
+export async function startMigration(
+  companyId: string,
+  opts?: { debugMode?: boolean }
+) {
   const client = createHousecallProClient();
   const preview = await fetchPreviewCounts(client);
   const migration = await getLatestMigration(companyId);
@@ -73,10 +76,16 @@ export async function startMigration(companyId: string) {
   ].filter((n): n is string => Boolean(n?.trim()));
 
   const existingOptions = (migration.optionsJson as MigrationOptions | null) ?? {};
+  const debugMode = Boolean(opts?.debugMode);
   const optionsJson: MigrationOptions = {
     ...existingOptions,
     excludeCompanyNames,
+    debugMode,
+    ...(debugMode ? { batchSize: 1 } : {}),
   };
+  if (!debugMode) {
+    delete optionsJson.batchSize;
+  }
 
   if (migration.status === HousecallProMigrationStatus.COMPLETED) {
     throw new Error("Migration already completed. Reset a step to run it again.");
@@ -436,6 +445,8 @@ export async function processMigrationBatch(params: {
 
   const options = (migration.optionsJson as MigrationOptions | null) ?? {};
   const client = createHousecallProClient();
+  const debugMode = Boolean(options.debugMode);
+  const batchSize = debugMode ? 1 : (options.batchSize ?? defaultBatchSize(params.step));
 
   await prisma.housecallProMigrationStep.update({
     where: { id: stepRow.id },
@@ -452,11 +463,18 @@ export async function processMigrationBatch(params: {
       migrationId: migration.id,
       step: params.step,
       cursor: stepRow.cursor,
-      batchSize: options.batchSize ?? defaultBatchSize(params.step),
+      batchSize,
       options,
       client,
       adminUserId: params.adminUserId,
     });
+    if (debugMode) {
+      batchResult = {
+        ...batchResult,
+        done: true,
+        cursor: null,
+      };
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Batch failed";
     await prisma.housecallProMigrationStep.update({

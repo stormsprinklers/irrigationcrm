@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Send } from "lucide-react";
+import { Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -25,11 +25,17 @@ type Message = {
   body: string;
   direction: "INBOUND" | "OUTBOUND";
   sentAt: string;
+  deliveryStatus?: string | null;
   sender?: { name: string } | null;
   media?: MessageMediaItem[];
   contactInfoDetected?: boolean;
   contactInfoAppliedAt?: string | null;
 };
+
+function isSmsNotDelivered(status: string | null | undefined) {
+  const normalized = status?.toLowerCase();
+  return normalized === "failed" || normalized === "undelivered";
+}
 
 type Conversation = {
   id: string;
@@ -314,6 +320,15 @@ export function SmsMessagePane({
                         <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
                       </p>
                     </div>
+
+                    {msg.direction === "OUTBOUND" && isSmsNotDelivered(msg.deliveryStatus) ? (
+                      <p className="flex items-center gap-1 px-1 text-[11px] font-medium text-destructive">
+                        <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                        {msg.deliveryStatus?.toLowerCase() === "undelivered"
+                          ? "Not delivered"
+                          : "Failed to send"}
+                      </p>
+                    ) : null}
 
                     {scope === "customers" &&
                     msg.direction === "INBOUND" &&
