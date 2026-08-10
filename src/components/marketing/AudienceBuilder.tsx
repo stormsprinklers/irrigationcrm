@@ -9,6 +9,7 @@ import { ItemPicker } from "@/components/price-book/ItemPicker";
 import type { AudienceFilters, AudiencePreviewCustomer } from "@/lib/marketing/types";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
 import { cn } from "@/lib/utils";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Props = {
   channel: "EMAIL" | "SMS";
@@ -369,7 +370,9 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium">{c.name}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {[c.email, c.phone, c.city].filter(Boolean).join(" · ")}
+                      {[c.email, c.phone ? formatPhoneDisplay(c.phone) : null, c.city]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </span>
                 </button>

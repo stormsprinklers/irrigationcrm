@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 const STATUSES = ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST", "SPAM"];
 
@@ -153,7 +154,9 @@ export default function CustomerLeadsPage() {
                 <TableRow key={lead.id}>
                   <TableCell className="font-medium">{lead.name}</TableCell>
                   <TableCell>
-                    <div className="text-sm">{lead.phone ?? "—"}</div>
+                    <div className="text-sm">
+                      {lead.phone ? formatPhoneDisplay(lead.phone) : "—"}
+                    </div>
                     <div className="text-xs text-muted-foreground">{lead.email ?? ""}</div>
                   </TableCell>
                   <TableCell>{lead.source ?? "—"}</TableCell>

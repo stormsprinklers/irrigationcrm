@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type CampaignDetail = {
   id: string;
@@ -361,7 +362,9 @@ export default function MarketingCampaignDetailPage() {
             ) : (
               campaign.recipients.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell>{r.email ?? r.phone ?? "—"}</TableCell>
+                  <TableCell>
+                    {r.email ?? (r.phone ? formatPhoneDisplay(r.phone) : null) ?? "—"}
+                  </TableCell>
                   <TableCell>{r.status}</TableCell>
                   <TableCell>
                     {r.sentAt ? format(new Date(r.sentAt), "MMM d h:mm a") : "—"}

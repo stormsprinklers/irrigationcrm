@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { CustomerDTO } from "@/lib/customers/types";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Props = {
   value: string;
@@ -169,7 +170,9 @@ export function CustomerSearchPicker({
                     </span>
                     {(customer.phone || customer.email) && (
                       <span className="text-xs text-muted-foreground">
-                        {[customer.phone, customer.email].filter(Boolean).join(" · ")}
+                        {[customer.phone ? formatPhoneDisplay(customer.phone) : null, customer.email]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </span>
                     )}
                   </button>
@@ -232,7 +235,9 @@ export function CustomerSearchPicker({
                   </span>
                   {(customer.phone || customer.email) && (
                     <span className="text-xs text-muted-foreground">
-                      {[customer.phone, customer.email].filter(Boolean).join(" · ")}
+                      {[customer.phone ? formatPhoneDisplay(customer.phone) : null, customer.email]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   )}
                 </button>

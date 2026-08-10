@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Props = {
   customerId: string;
@@ -25,6 +26,7 @@ export function CustomerPhoneActions({
 
   if (!phone) return null;
 
+  const displayPhone = formatPhoneDisplay(phone);
   const linkParams = { customerId, phone, name };
 
   async function handleCall() {
@@ -54,13 +56,13 @@ export function CustomerPhoneActions({
         variant="ghost"
         size={buttonSize}
         className="h-8 w-8 shrink-0 text-primary"
-        aria-label={`Call ${phone}`}
+        aria-label={`Call ${displayPhone}`}
         onClick={() => void handleCall()}
       >
         <Phone className={iconClass} />
       </Button>
       <Button variant="ghost" size={buttonSize} className="h-8 w-8 shrink-0 text-primary" asChild>
-        <Link href={buildInboxCustomerUrl("sms", linkParams)} aria-label={`Text ${phone}`}>
+        <Link href={buildInboxCustomerUrl("sms", linkParams)} aria-label={`Text ${displayPhone}`}>
           <MessageSquare className={iconClass} />
         </Link>
       </Button>

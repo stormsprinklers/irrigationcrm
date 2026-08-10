@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
 
@@ -867,7 +868,9 @@ export function EstimateDetail({ estimateId }: Props) {
                   doNotService={estimate.customer.doNotService}
                 />
               </Link>
-              {estimate.customer.phone && <p>{estimate.customer.phone}</p>}
+              {estimate.customer.phone && (
+                <p>{formatPhoneDisplay(estimate.customer.phone)}</p>
+              )}
               {estimate.customer.email && <p>{estimate.customer.email}</p>}
               {estimate.property && (
                 <p className="text-muted-foreground">

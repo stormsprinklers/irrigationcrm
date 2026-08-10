@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PartsSupplierRecord, PlaceSearchResult } from "@/lib/parts-suppliers/types";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export function PartsSuppliersManager() {
   const [suppliers, setSuppliers] = useState<PartsSupplierRecord[]>([]);
@@ -139,7 +140,9 @@ export function PartsSuppliersManager() {
                     <p className="font-medium">{result.name}</p>
                     <p className="text-sm text-muted-foreground">{result.formattedAddress}</p>
                     {result.phone ? (
-                      <p className="text-sm text-muted-foreground">{result.phone}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {result.phone ? formatPhoneDisplay(result.phone) : null}
+                      </p>
                     ) : null}
                     {result.weekdayHours[0] ? (
                       <p className="text-xs text-muted-foreground">{result.weekdayHours[0]}</p>
@@ -191,7 +194,9 @@ export function PartsSuppliersManager() {
                       .join(", ")}
                   </p>
                   {supplier.phone ? (
-                    <p className="text-sm text-muted-foreground">{supplier.phone}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {supplier.phone ? formatPhoneDisplay(supplier.phone) : null}
+                    </p>
                   ) : null}
                   {supplier.weekdayHours.length > 0 ? (
                     <ul className="mt-1 text-xs text-muted-foreground">

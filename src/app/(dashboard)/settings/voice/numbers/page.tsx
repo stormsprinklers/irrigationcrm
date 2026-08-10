@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { vanityLettersToDigits } from "@/lib/twilio/vanity";
 
 type PhoneNumberRow = {
@@ -532,9 +533,9 @@ export default function VoiceNumbersPage() {
                 className="flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm"
               >
                 <div>
-                  <p className="font-medium">{n.friendlyName ?? n.e164}</p>
+                  <p className="font-medium">{n.friendlyName ?? formatPhoneDisplay(n.e164)}</p>
                   <p className="text-xs text-muted-foreground">
-                    {n.e164} · {n.numberType}
+                    {formatPhoneDisplay(n.e164)} · {n.numberType}
                     {n.trackingSource ? ` · ${n.trackingSource}` : ""}
                   </p>
                 </div>
@@ -708,7 +709,7 @@ export default function VoiceNumbersPage() {
             {searchResults.map((n) => (
               <li key={n.e164} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
                 <div>
-                  <p className="font-medium">{n.e164}</p>
+                  <p className="font-medium">{formatPhoneDisplay(n.e164)}</p>
                   <p className="text-xs text-muted-foreground">
                     {[n.locality, n.region, n.areaCode ? `(${n.areaCode})` : null]
                       .filter(Boolean)
@@ -760,7 +761,9 @@ export default function VoiceNumbersPage() {
                   {numbers.map((n) => (
                     <TableRow key={n.id}>
                       <TableCell>
-                        <span className="font-medium tabular-nums">{n.e164}</span>
+                        <span className="font-medium tabular-nums">
+                          {formatPhoneDisplay(n.e164)}
+                        </span>
                         {n.isPrimary ? (
                           <Badge variant="secondary" className="ml-2 align-middle">
                             Primary

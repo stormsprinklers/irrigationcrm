@@ -17,6 +17,7 @@ import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointment
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 import { cn } from "@/lib/utils";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -80,8 +81,8 @@ export function ActiveCallBar() {
   const label =
     activeCall.callerInfo?.customerId && activeCall.callerInfo?.name
       ? activeCall.callerInfo.name
-      : (activeCall.remoteNumber ??
-        (activeCall.direction === "inbound" ? "Incoming" : "Outbound"));
+      : formatPhoneDisplay(activeCall.remoteNumber) ||
+        (activeCall.direction === "inbound" ? "Incoming" : "Outbound");
 
   return (
     <>

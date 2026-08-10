@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RequiredClipPicker } from "@/components/voice/RequiredClipPicker";
 import type { VoiceClip } from "@/components/voice/AudioSourcePicker";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type VoiceOverview = {
   twilioPhone: string | null;
@@ -148,7 +149,10 @@ export default function SettingsVoicePage() {
           Twilio SDK: {data.twilioConfigured ? "Configured" : "Missing env vars"}
         </p>
         <p className="text-sm text-muted-foreground">
-          Primary caller ID: {data.twilioPhone ?? "Not set — mark a number as primary under Phone numbers"}
+          Primary caller ID:{" "}
+          {data.twilioPhone
+            ? formatPhoneDisplay(data.twilioPhone)
+            : "Not set — mark a number as primary under Phone numbers"}
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link href="/settings/voice/numbers" className="text-primary underline">

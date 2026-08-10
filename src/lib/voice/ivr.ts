@@ -40,11 +40,6 @@ export type IvrNodeConfig = {
    * Short timeouts hang up on silent bots faster.
    */
   gatherTimeoutSec?: number;
-  /**
-   * How many times to re-offer the menu after no input (1–5).
-   * After the last failed attempt the call is hung up (or routed to timeoutNodeId).
-   */
-  maxNoInputAttempts?: number;
   /** PLAY step: audio clip to play, with typed text as a text-to-speech fallback. */
   clipId?: string;
   text?: string;
@@ -76,7 +71,6 @@ export type IvrNodeConfig = {
 
 export const IVR_DEFAULT_PROMPT_REPEATS = 1;
 export const IVR_DEFAULT_GATHER_TIMEOUT_SEC = 5;
-export const IVR_DEFAULT_MAX_NO_INPUT_ATTEMPTS = 2;
 
 export function clampIvrPromptRepeats(value: unknown): number {
   const n = Number(value);
@@ -88,12 +82,6 @@ export function clampIvrGatherTimeoutSec(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return IVR_DEFAULT_GATHER_TIMEOUT_SEC;
   return Math.min(30, Math.max(3, Math.round(n)));
-}
-
-export function clampIvrMaxNoInputAttempts(value: unknown): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return IVR_DEFAULT_MAX_NO_INPUT_ATTEMPTS;
-  return Math.min(5, Math.max(1, Math.round(n)));
 }
 
 function flowNodeBranch(config: unknown): "open" | "closed" {
@@ -243,11 +231,10 @@ export async function appendIvrPrompt(
   }
 }
 
-export function ivrGatherAction(flowId: string, nodeId: string, attempt = 0) {
+export function ivrGatherAction(flowId: string, nodeId: string) {
   const params = new URLSearchParams({
     flowId,
     nodeId,
-    attempt: String(Math.max(0, Math.floor(attempt))),
   });
   return `${appBaseUrl()}/api/twilio/voice/ivr?${params.toString()}`;
 }
@@ -256,14 +243,13 @@ export function ivrGatherAction(flowId: string, nodeId: string, attempt = 0) {
 export async function renderIvrGather(
   response: twilio.twiml.VoiceResponse,
   node: CallFlowNode,
-  ctx: FlowContext,
-  attempt = 0
+  ctx: FlowContext
 ) {
   const config = (node.config ?? {}) as IvrNodeConfig;
   const timeout = clampIvrGatherTimeoutSec(config.gatherTimeoutSec);
   const gather = response.gather({
     numDigits: 1,
-    action: ivrGatherAction(ctx.flowId, node.id, attempt),
+    action: ivrGatherAction(ctx.flowId, node.id),
     method: "POST",
     timeout,
   });

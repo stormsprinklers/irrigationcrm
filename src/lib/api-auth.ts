@@ -9,7 +9,10 @@ export type SessionUser = {
   email: string;
   name: string;
   companyId: string;
+  /** Effective role (preview role when role preview is active). */
   role: string;
+  /** Real DB role while previewing; omitted when not previewing. */
+  trueRole?: string;
 };
 
 function bearerFromAuthHeader(authHeader: string | null): string | null {
@@ -64,6 +67,7 @@ export async function getSessionUser(request?: Request): Promise<SessionUser | n
       name: session.user.name,
       companyId: session.user.companyId,
       role: session.user.role,
+      ...(session.user.trueRole ? { trueRole: session.user.trueRole } : {}),
     };
   }
 

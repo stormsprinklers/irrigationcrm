@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Calendar, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type QueueItem = {
   id: string;
@@ -85,7 +86,9 @@ export default function NeedsSchedulingPage() {
                       ? ` · Approved ${format(new Date(est.approvedAt), "MMM d, yyyy")}`
                       : ""}
                   </p>
-                  {est.customer.phone ? <p>{est.customer.phone}</p> : null}
+                  {est.customer.phone ? (
+                    <p>{formatPhoneDisplay(est.customer.phone)}</p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" asChild>

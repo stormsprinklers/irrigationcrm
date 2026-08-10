@@ -13,6 +13,7 @@ import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { formatCallerVisitDate } from "@/lib/voice/caller-info";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Employee = {
   id: string;
@@ -177,7 +178,8 @@ export function VoicePanel({
                   <div>
                     <p className="font-medium">{emp.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {emp.title ?? emp.role} · {emp.phone ?? "No phone"}
+                      {emp.title ?? emp.role} ·{" "}
+                      {emp.phone ? formatPhoneDisplay(emp.phone) : "No phone"}
                     </p>
                   </div>
                 </div>
@@ -210,7 +212,9 @@ export function VoicePanel({
             {queue.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-3 text-sm">
                 <div className="min-w-0">
-                  <p className="font-medium">{entry.customer?.name ?? entry.fromNumber}</p>
+                  <p className="font-medium">
+                    {entry.customer?.name ?? formatPhoneDisplay(entry.fromNumber)}
+                  </p>
                   {entry.customer ? (
                     <p className="truncate text-xs text-muted-foreground">
                       {[entry.customer.city, entry.customer.mostRecentVisitAt

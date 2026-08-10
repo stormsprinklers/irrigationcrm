@@ -7,6 +7,7 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type CustomLink = { id: string; label: string; url: string };
 
@@ -131,11 +132,13 @@ export default function CampaignLinksSettingsPage() {
               >
                 <option value="">
                   Default
-                  {fallbackTwilioPhone ? ` (${fallbackTwilioPhone})` : " — set inbox Twilio phone"}
+                  {fallbackTwilioPhone
+                    ? ` (${formatPhoneDisplay(fallbackTwilioPhone)})`
+                    : " — set inbox Twilio phone"}
                 </option>
                 {phoneNumbers.map((n) => (
                   <option key={n.id} value={n.e164}>
-                    {(n.friendlyName ? `${n.friendlyName} · ` : "") + n.e164}
+                    {(n.friendlyName ? `${n.friendlyName} · ` : "") + formatPhoneDisplay(n.e164)}
                     {n.smsEnabled === false ? " (SMS off)" : ""}
                     {n.isPrimary ? " · primary" : ""}
                   </option>

@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { trueRoleOf } from "@/lib/role-preview";
 
 type AccountOption = {
   userId: string;
@@ -80,6 +81,7 @@ export function UserAccountMenu() {
           name: data.session.name,
           companyId: data.session.companyId,
           role: data.session.role,
+          trueRole: null,
         },
       });
       window.location.href = "/home";
@@ -92,7 +94,8 @@ export function UserAccountMenu() {
   const userEmail = session?.user?.email ?? current?.email ?? "";
   const companyName = current?.companyName ?? "Company";
   const isAdmin =
-    session?.user?.role === "ADMIN" || current?.role === "ADMIN";
+    (session?.user ? trueRoleOf(session.user) === "ADMIN" : false) ||
+    current?.role === "ADMIN";
 
   return (
     <DropdownMenu>

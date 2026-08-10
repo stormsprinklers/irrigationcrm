@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Employee = { id: string; name: string; email: string; role: string };
 type Customer = {
@@ -161,7 +162,7 @@ export default function CompanyImportPage() {
         description="Copies contact info, phones, and properties."
         items={customers.map((c) => ({
           id: c.id,
-          label: `${c.name}${c.city ? ` · ${c.city}` : ""}${c.phone ? ` · ${c.phone}` : ""}`,
+          label: `${c.name}${c.city ? ` · ${c.city}` : ""}${c.phone ? ` · ${formatPhoneDisplay(c.phone)}` : ""}`,
         }))}
         selected={selected.customers}
         onToggle={(id) => toggle("customers", id)}

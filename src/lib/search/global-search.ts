@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { phoneDigitsKey, phoneLookupVariants } from "@/lib/inbox/phone";
+import { formatPhoneDisplay, phoneDigitsKey, phoneLookupVariants } from "@/lib/inbox/phone";
 import { searchCrmPages, type CrmPageHit } from "@/lib/search/crm-pages";
 
 export type GlobalSearchCustomerHit = {
@@ -201,7 +201,11 @@ export async function globalSearch(
         type: "customer" as const,
         title: c.name,
         href: `/customers/${c.id}`,
-        subtitle: joinMeta([c.companyName, c.phone, c.email]),
+        subtitle: joinMeta([
+          c.companyName,
+          c.phone ? formatPhoneDisplay(c.phone) : null,
+          c.email,
+        ]),
         meta: address,
       };
     }),
@@ -216,7 +220,7 @@ export async function globalSearch(
         title: displayName,
         href: `/settings/employees`,
         subtitle: joinMeta([e.title, String(e.role).replaceAll("_", " "), e.status]),
-        meta: joinMeta([e.email, e.phone]),
+        meta: joinMeta([e.email, e.phone ? formatPhoneDisplay(e.phone) : null]),
       };
     }),
     priceBook: priceBookItems.map((item) => ({

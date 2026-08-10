@@ -37,13 +37,19 @@ export function phoneLookupVariants(phone: string): string[] {
   return [...variants].filter(Boolean);
 }
 
-export function formatPhoneDisplay(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+/**
+ * Display US numbers as `+1 (555) 111-1234`.
+ * Non-NANP / incomplete values are returned trimmed as-is.
+ */
+export function formatPhoneDisplay(phone: string | null | undefined): string {
+  if (phone == null) return "";
+  const trimmed = phone.trim();
+  if (!trimmed) return "";
+  const digits = trimmed.replace(/\D/g, "");
+  const last10 =
+    digits.length >= 10 ? digits.slice(-10) : digits.length === 10 ? digits : null;
+  if (last10 && last10.length === 10) {
+    return `+1 (${last10.slice(0, 3)}) ${last10.slice(3, 6)}-${last10.slice(6)}`;
   }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return phone;
+  return trimmed;
 }

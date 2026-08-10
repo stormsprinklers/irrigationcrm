@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CustomerDTO } from "@/lib/customers/types";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 const DIAL_PAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
@@ -222,7 +223,9 @@ export function VoiceDialer({
                         doNotService={customer.doNotService}
                         nameClassName="text-sm font-medium"
                       />
-                      <p className="truncate text-xs text-muted-foreground">{customer.phone}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatPhoneDisplay(customer.phone)}
+                      </p>
                     </div>
                     <Button
                       type="button"

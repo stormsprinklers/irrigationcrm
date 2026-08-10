@@ -4,6 +4,7 @@ import { Phone, PhoneOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export function IncomingCallModal() {
   const { incomingCall, acceptIncoming, rejectIncoming } = useVoiceDevice();
@@ -14,7 +15,7 @@ export function IncomingCallModal() {
   const isKnownCustomer = Boolean(callerInfo?.customerId && callerInfo?.name);
   const displayName = isKnownCustomer
     ? callerInfo!.name!
-    : (callerInfo?.phone ?? "Unknown caller");
+    : formatPhoneDisplay(callerInfo?.phone) || "Unknown caller";
 
   return (
     <div
@@ -34,7 +35,9 @@ export function IncomingCallModal() {
           {isKnownCustomer ? (
             <CallerIdDetails callerInfo={callerInfo} className="truncate text-xs text-muted-foreground" />
           ) : null}
-          <p className="truncate text-xs text-muted-foreground">{callerInfo?.phone}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {formatPhoneDisplay(callerInfo?.phone)}
+          </p>
         </div>
       </div>
       <div className="flex gap-2">

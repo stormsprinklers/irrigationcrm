@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useCompanySettings } from "@/components/settings/useCompanySettings";
 import type { CompanySettingsDTO } from "@/lib/company/types";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type PhoneNumberRow = {
   id: string;
@@ -20,17 +21,6 @@ type PhoneNumberRow = {
   isPrimary: boolean;
   trackingSource: string | null;
 };
-
-function formatPhone(e164: string) {
-  const digits = e164.replace(/\D/g, "");
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  return e164;
-}
 
 export default function SettingsLeadSourcesPage() {
   const { company, setCompany, loading, saving, save } = useCompanySettings();
@@ -278,50 +268,58 @@ export default function SettingsLeadSourcesPage() {
                       No phone numbers yet. Add them under Communications → Phone numbers.
                     </p>
                   ) : (
-                    <ul className="space-y-2">
-                      {trackingNumbers.map((number) => {
-                        const checked = number.trackingSource?.trim() === source;
-                        const otherSource =
-                          number.trackingSource?.trim() &&
-                          number.trackingSource.trim() !== source
-                            ? number.trackingSource.trim()
-                            : null;
+                    (() => {
+                      const available = trackingNumbers.filter((number) => {
+                        const assignedTo = number.trackingSource?.trim() || null;
+                        return !assignedTo || assignedTo === source;
+                      });
+                      if (available.length === 0) {
                         return (
-                          <li key={number.id}>
-                            <label className="flex cursor-pointer items-start gap-2 text-sm">
-                              <Checkbox
-                                className="mt-0.5"
-                                checked={checked}
-                                disabled={assigningId === number.id}
-                                onCheckedChange={(value) =>
-                                  void toggleNumberForSource(source, number, value === true)
-                                }
-                              />
-                              <span className="min-w-0">
-                                <span className="font-medium">
-                                  {number.friendlyName || formatPhone(number.e164)}
-                                </span>
-                                <span className="text-muted-foreground">
-                                  {" "}
-                                  · {formatPhone(number.e164)}
-                                </span>
-                                {number.isPrimary ? (
-                                  <Badge variant="outline" className="ml-2 text-[10px]">
-                                    Primary
-                                  </Badge>
-                                ) : null}
-                                {otherSource ? (
-                                  <span className="mt-0.5 block text-xs text-amber-700">
-                                    Currently assigned to “{otherSource}” — checking this will
-                                    move it here.
-                                  </span>
-                                ) : null}
-                              </span>
-                            </label>
-                          </li>
+                          <p className="text-sm text-muted-foreground">
+                            No unassigned tracking numbers available.
+                          </p>
                         );
-                      })}
-                    </ul>
+                      }
+                      return (
+                        <ul className="space-y-2">
+                          {available.map((number) => {
+                            const checked = number.trackingSource?.trim() === source;
+                            return (
+                              <li key={number.id}>
+                                <label className="flex cursor-pointer items-start gap-2 text-sm">
+                                  <Checkbox
+                                    className="mt-0.5"
+                                    checked={checked}
+                                    disabled={assigningId === number.id}
+                                    onCheckedChange={(value) =>
+                                      void toggleNumberForSource(
+                                        source,
+                                        number,
+                                        value === true
+                                      )
+                                    }
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="font-medium">
+                                      {number.friendlyName || formatPhoneDisplay(number.e164)}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      · {formatPhoneDisplay(number.e164)}
+                                    </span>
+                                    {number.isPrimary ? (
+                                      <Badge variant="outline" className="ml-2 text-[10px]">
+                                        Primary
+                                      </Badge>
+                                    ) : null}
+                                  </span>
+                                </label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      );
+                    })()
                   )}
                 </div>
               </div>

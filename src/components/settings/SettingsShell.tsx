@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
@@ -11,23 +12,31 @@ import {
 } from "@/components/layout/CompanyBrandProvider";
 import type { NavItem, NavSection } from "@/config/navigation";
 import { HOLIDAY_LIGHTING_NAV_HREFS, IRRIGATION_SETTINGS_HREFS } from "@/lib/company/features";
+import { canUseRolePreview } from "@/lib/role-preview";
 import { settingsRootSections } from "@/lib/settings/nav";
 
 function filterFeatureNavItems(
   items: NavItem[],
   irrigationEnabled: boolean,
-  holidayEnabled: boolean
+  holidayEnabled: boolean,
+  showRolePreview: boolean
 ): NavItem[] {
   return items
     .filter((item) => {
       if (!irrigationEnabled && IRRIGATION_SETTINGS_HREFS.has(item.href)) return false;
       if (!holidayEnabled && HOLIDAY_LIGHTING_NAV_HREFS.has(item.href)) return false;
+      if (!showRolePreview && item.href === "/settings/role-preview") return false;
       return true;
     })
     .map((item) => ({
       ...item,
       children: item.children
-        ? filterFeatureNavItems(item.children, irrigationEnabled, holidayEnabled)
+        ? filterFeatureNavItems(
+            item.children,
+            irrigationEnabled,
+            holidayEnabled,
+            showRolePreview
+          )
         : undefined,
     }));
 }
@@ -35,11 +44,17 @@ function filterFeatureNavItems(
 function filterFeatureNav(
   sections: NavSection[],
   irrigationEnabled: boolean,
-  holidayEnabled: boolean
+  holidayEnabled: boolean,
+  showRolePreview: boolean
 ): NavSection[] {
   return sections.map((section) => ({
     ...section,
-    items: filterFeatureNavItems(section.items, irrigationEnabled, holidayEnabled),
+    items: filterFeatureNavItems(
+      section.items,
+      irrigationEnabled,
+      holidayEnabled,
+      showRolePreview
+    ),
   }));
 }
 
@@ -49,12 +64,20 @@ function filterFeatureNav(
  */
 export function SettingsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: holidayEnabled } = useHolidayLightingFeatures();
+  const showRolePreview = Boolean(session?.user && canUseRolePreview(session.user));
   const rootSections = useMemo(
-    () => filterFeatureNav(settingsRootSections(), irrigationEnabled, holidayEnabled),
-    [irrigationEnabled, holidayEnabled]
+    () =>
+      filterFeatureNav(
+        settingsRootSections(),
+        irrigationEnabled,
+        holidayEnabled,
+        showRolePreview
+      ),
+    [irrigationEnabled, holidayEnabled, showRolePreview]
   );
 
   useEffect(() => {

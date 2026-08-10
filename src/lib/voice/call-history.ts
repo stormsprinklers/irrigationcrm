@@ -1,3 +1,5 @@
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
+
 export type CallHistoryListItem = {
   id: string;
   direction: "INBOUND" | "OUTBOUND";
@@ -98,5 +100,5 @@ export function remotePartyLabel(
   customerName?: string | null
 ): string {
   if (customerName) return customerName;
-  return remotePartyNumber(direction, fromNumber, toNumber);
+  return formatPhoneDisplay(remotePartyNumber(direction, fromNumber, toNumber));
 }

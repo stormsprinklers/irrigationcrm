@@ -1,5 +1,7 @@
 "use client";
 
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
+
 export type InboundLineInfo = {
   /** PhoneNumber.friendlyName — e.g. "PPC Repair tracking". */
   title: string | null;
@@ -31,6 +33,7 @@ export function InboundLineCard({
   const title = info.title?.trim() || null;
   const source = info.trackingSource?.trim() || null;
   const e164 = info.e164?.trim() || null;
+  const e164Display = e164 ? formatPhoneDisplay(e164) : null;
 
   return (
     <div
@@ -54,14 +57,14 @@ export function InboundLineCard({
             <dd className="font-medium leading-snug">{source}</dd>
           </div>
         ) : null}
-        {e164 && !title ? (
+        {e164Display && !title ? (
           <div>
             <dt className="text-xs text-sky-800/70">Number</dt>
-            <dd className="font-medium tabular-nums leading-snug">{e164}</dd>
+            <dd className="font-medium tabular-nums leading-snug">{e164Display}</dd>
           </div>
         ) : null}
-        {e164 && title ? (
-          <p className="text-xs tabular-nums text-sky-800/70">{e164}</p>
+        {e164Display && title ? (
+          <p className="text-xs tabular-nums text-sky-800/70">{e164Display}</p>
         ) : null}
       </dl>
     </div>

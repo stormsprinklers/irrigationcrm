@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type {
   AdsCampaignRow,
   AdsDashboard,
@@ -261,9 +262,13 @@ function LsaLeadsTable({ lsa }: { lsa: AdsLsaBlock }) {
               </td>
               <td className="px-3 py-2">{lead.categoryLabel}</td>
               <td className="px-3 py-2">
-                {lead.consumerName || lead.phoneNumber || "—"}
+                {lead.consumerName ||
+                  (lead.phoneNumber ? formatPhoneDisplay(lead.phoneNumber) : null) ||
+                  "—"}
                 {lead.consumerName && lead.phoneNumber ? (
-                  <span className="block text-xs text-muted-foreground">{lead.phoneNumber}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {formatPhoneDisplay(lead.phoneNumber)}
+                  </span>
                 ) : null}
               </td>
               <td className="px-3 py-2">{lead.leadCharged ? "Yes" : "No"}</td>

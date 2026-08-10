@@ -147,6 +147,7 @@ export const companySettingsSidebar: NavSection[] = [
       { label: "Appearance", href: "/settings/appearance" },
       { label: "Holiday lighting", href: "/settings/holiday-lighting" },
       { label: "Company Expense Cards", href: "/settings/expense-cards" },
+      { label: "Role preview", href: "/settings/role-preview" },
     ],
   },
 ];
@@ -250,7 +251,12 @@ export const settingsSidebar: NavSection[] = [
         label: "Company",
         href: "/settings",
         exact: true,
-        activePrefixes: ["/settings/appearance", "/settings/expense-cards", "/settings/holiday-lighting"],
+        activePrefixes: [
+          "/settings/appearance",
+          "/settings/expense-cards",
+          "/settings/holiday-lighting",
+          "/settings/role-preview",
+        ],
         children: companySettingsSidebar[0]!.items,
       },
       {

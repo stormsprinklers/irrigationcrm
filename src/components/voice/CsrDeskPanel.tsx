@@ -10,6 +10,8 @@ import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { PhoneText } from "@/components/ui/PhoneText";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
@@ -263,7 +265,9 @@ export function CsrDeskPanel({
           <ul className="space-y-2 text-sm">
             {queue.map((entry) => (
               <li key={entry.id} className="rounded border border-border p-2">
-                <p className="font-medium">{entry.customer?.name ?? entry.fromNumber}</p>
+                <p className="font-medium">
+                  {entry.customer?.name ?? formatPhoneDisplay(entry.fromNumber)}
+                </p>
                 {entry.customer ? (
                   <p className="text-xs text-muted-foreground">
                     {[entry.customer.city, entry.customer.mostRecentVisitAt
@@ -273,7 +277,9 @@ export function CsrDeskPanel({
                       .join(" · ")}
                   </p>
                 ) : null}
-                <p className="text-xs text-muted-foreground">{entry.fromNumber}</p>
+                <p className="text-xs text-muted-foreground">
+                  <PhoneText phone={entry.fromNumber} empty="" />
+                </p>
               </li>
             ))}
             {!queue.length && (
@@ -315,7 +321,9 @@ export function CsrDeskPanel({
                   : null)
               }
             />
-            <p className="text-muted-foreground">{callerPhone}</p>
+            <p className="text-muted-foreground">
+              <PhoneText phone={callerPhone} empty="" />
+            </p>
             {activeCall.direction === "inbound" ? (
               <InboundLineCard info={activeCall.inboundLine} />
             ) : null}

@@ -16,7 +16,10 @@ declare module "next-auth" {
       email: string;
       name: string;
       companyId: string;
+      /** Effective role (preview role when role preview is active). */
       role: string;
+      /** Real DB role while previewing; omitted when not previewing. */
+      trueRole?: string;
     };
   }
 
@@ -31,6 +34,7 @@ declare module "@auth/core/jwt" {
     id: string;
     companyId: string;
     role: string;
+    trueRole?: string;
   }
 }
 
@@ -107,6 +111,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.companyId = user.companyId;
         token.role = user.role;
+        delete token.trueRole;
         if (user.email) token.email = user.email;
         if (user.name) token.name = user.name;
       }
@@ -117,12 +122,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role?: string;
           email?: string;
           name?: string;
+          trueRole?: string | null;
         };
+        const switchingUser = Boolean(next.id && next.id !== token.id);
         if (next.id) token.id = next.id;
         if (next.companyId) token.companyId = next.companyId;
         if (next.role) token.role = next.role;
         if (next.email) token.email = next.email;
         if (next.name) token.name = next.name;
+        if (switchingUser) {
+          delete token.trueRole;
+        } else if ("trueRole" in next) {
+          if (next.trueRole) token.trueRole = next.trueRole;
+          else delete token.trueRole;
+        }
       }
       return token;
     },
@@ -130,6 +143,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       session.user.id = token.id as string;
       session.user.companyId = token.companyId as string;
       session.user.role = token.role as string;
+      if (token.trueRole) session.user.trueRole = token.trueRole;
+      else delete session.user.trueRole;
       if (token.email) session.user.email = token.email as string;
       if (token.name) session.user.name = token.name as string;
       return session;

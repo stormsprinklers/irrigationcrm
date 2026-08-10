@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type EstimatePreview = {
   id: string;
@@ -344,7 +345,9 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                 <MessageSquare className="h-4 w-4" />
                 Text
                 {estimate?.customer.phone ? (
-                  <span className="ml-1 font-normal opacity-80">{estimate.customer.phone}</span>
+                  <span className="ml-1 font-normal opacity-80">
+                    {formatPhoneDisplay(estimate.customer.phone)}
+                  </span>
                 ) : (
                   <span className="ml-1 font-normal opacity-70">No phone on file</span>
                 )}

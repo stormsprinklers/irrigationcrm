@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export function CustomerTable({
   data,
@@ -125,7 +126,7 @@ export function CustomerTable({
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
-        cell: ({ row }) => row.original.phone ?? "—",
+        cell: ({ row }) => formatPhoneDisplay(row.original.phone) || "—",
       },
       {
         accessorKey: "email",

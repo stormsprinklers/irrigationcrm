@@ -9,7 +9,9 @@ import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
 import { CallTranscriptPanel } from "@/components/voice/CallTranscriptPanel";
 import { InboundLineCard } from "@/components/voice/InboundLineCard";
+import { PhoneText } from "@/components/ui/PhoneText";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import {
   formatCallDateTime,
@@ -195,7 +197,7 @@ export function CallDetailView({
                 size="icon"
                 className="h-8 w-8 shrink-0 text-primary"
                 aria-label={`Call ${displayName}`}
-                title={`Call ${callBackNumber}`}
+                title={`Call ${formatPhoneDisplay(callBackNumber)}`}
                 onClick={() => void callCustomer()}
               >
                 <Phone className="h-4 w-4" />
@@ -240,7 +242,7 @@ export function CallDetailView({
                             : p.role === "EXTERNAL_TRANSFER"
                               ? "phone transfer"
                               : "transferred"}
-                          {p.phoneE164 ? ` · ${p.phoneE164}` : ""}
+                          {p.phoneE164 ? ` · ${formatPhoneDisplay(p.phoneE164)}` : ""}
                         </span>
                       ) : null}
                     </span>
@@ -258,7 +260,11 @@ export function CallDetailView({
         <div>
           <dt className="text-muted-foreground">Caller phone</dt>
           <dd className="font-medium">
-            {detail.direction === "INBOUND" ? detail.fromNumber : detail.toNumber}
+            <PhoneText
+              phone={
+                detail.direction === "INBOUND" ? detail.fromNumber : detail.toNumber
+              }
+            />
           </dd>
         </div>
       </dl>

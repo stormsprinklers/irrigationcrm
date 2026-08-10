@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -749,7 +750,7 @@ export function CustomerProfile({ customerId }: Props) {
                   <ProfileDetail label="Company" value={customer.companyName} />
                   <ProfileDetail
                     label="Phone"
-                    value={customer.phone}
+                    value={formatPhoneDisplay(customer.phone) || null}
                     actions={
                       <CustomerPhoneActions
                         customerId={customer.id}
@@ -1003,7 +1004,7 @@ export function CustomerProfile({ customerId }: Props) {
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1">
-                            <p className="font-medium">{phone.phone}</p>
+                            <p className="font-medium">{formatPhoneDisplay(phone.phone)}</p>
                             {!editMode && customer ? (
                               <CustomerPhoneActions
                                 customerId={customer.id}
@@ -1637,7 +1638,7 @@ export function CustomerProfile({ customerId }: Props) {
                     >
                       {candidate.name}
                       {candidate.email ? ` · ${candidate.email}` : ""}
-                      {candidate.phone ? ` · ${candidate.phone}` : ""}
+                      {candidate.phone ? ` · ${formatPhoneDisplay(candidate.phone)}` : ""}
                     </button>
                   ))
                 )}

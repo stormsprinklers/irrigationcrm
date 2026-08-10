@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export type PortInRow = {
   id: string;
@@ -349,7 +350,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         <div className="space-y-3 rounded-lg border border-border bg-white p-6 text-sm">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-lg font-semibold">{selected.e164}</p>
+              <p className="text-lg font-semibold">{formatPhoneDisplay(selected.e164)}</p>
               <p className="text-muted-foreground">
                 Twilio SID: {selected.twilioPortInRequestSid}
               </p>
@@ -378,7 +379,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
             <p>
               Imported into CRM as{" "}
               <a className="underline" href="/settings/voice/numbers">
-                {selected.phoneNumber?.e164 ?? selected.e164}
+                {formatPhoneDisplay(selected.phoneNumber?.e164 ?? selected.e164)}
               </a>
               {selected.phoneNumber?.isPrimary ? " (primary)" : ""}.
             </p>
@@ -694,7 +695,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           <div className="space-y-2 text-sm">
             <h3 className="font-semibold">Review & submit</h3>
             <ul className="space-y-1 text-muted-foreground">
-              <li>Number: {portability?.e164}</li>
+              <li>Number: {portability?.e164 ? formatPhoneDisplay(portability.e164) : ""}</li>
               <li>Document: {documentSid}</li>
               <li>
                 Customer: {customerName} ({customerType})
@@ -771,7 +772,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
                 className="text-left"
                 onClick={() => setSelectedId(p.id)}
               >
-                <span className="font-medium">{p.e164}</span>
+                <span className="font-medium">{formatPhoneDisplay(p.e164)}</span>
                 <span className="ml-2 text-muted-foreground">{p.status}</span>
                 {p.phoneNumberId ? (
                   <Badge className="ml-2" variant="secondary">

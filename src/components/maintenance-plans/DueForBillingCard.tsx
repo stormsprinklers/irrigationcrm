@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 export function DueForBillingCard({ rows }: { rows: BillingRowDisplay[] }) {
   const lateRows = rows.filter((row) =>
@@ -88,7 +89,7 @@ export function DueForBillingCard({ rows }: { rows: BillingRowDisplay[] }) {
                         ) : null}
                       </div>
                     </TableCell>
-                    <TableCell>{row.phone ?? "—"}</TableCell>
+                    <TableCell>{row.phone ? formatPhoneDisplay(row.phone) : "—"}</TableCell>
                     <TableCell>{format(new Date(row.dueDate), "MMM d, yyyy")}</TableCell>
                     <TableCell className={late ? "font-medium text-red-700" : "text-primary"}>
                       {late && row.status === "FAILED"

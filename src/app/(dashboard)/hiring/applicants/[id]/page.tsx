@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { stageLabel } from "@/lib/hiring/permissions";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Applicant = {
   id: string;
@@ -149,7 +150,8 @@ export default function HiringApplicantDetailPage() {
           <span className="text-muted-foreground">Email:</span> {applicant.email}
         </p>
         <p>
-          <span className="text-muted-foreground">Phone:</span> {applicant.phone ?? "—"}
+          <span className="text-muted-foreground">Phone:</span>{" "}
+          {applicant.phone ? formatPhoneDisplay(applicant.phone) : "—"}
         </p>
         <p>
           <span className="text-muted-foreground">Applied:</span>{" "}

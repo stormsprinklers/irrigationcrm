@@ -147,7 +147,6 @@ function defaultConfig(type: NodeType, branch: Branch = "open"): Record<string, 
           options: [{ digit: "1", label: "Service", nextNodeId: "" }],
           promptRepeats: 1,
           gatherTimeoutSec: 5,
-          maxNoInputAttempts: 2,
         };
       case "FORWARD":
         return { forwardTo: "" };
@@ -237,8 +236,7 @@ function stepSummary(
     case "IVR": {
       const count = ((config.options as IvrOption[]) ?? []).length;
       const timeout = Number(config.gatherTimeoutSec ?? 5);
-      const attempts = Number(config.maxNoInputAttempts ?? 2);
-      return `${count} option${count === 1 ? "" : "s"} · ${timeout}s · ${attempts}x`;
+      return `${count} option${count === 1 ? "" : "s"} · ${timeout}s`;
     }
     case "DIAL_USER": {
       const u = ctx.users.find((x) => x.id === config.userId);
@@ -903,7 +901,7 @@ function StepEditor({
           onClipsChange={onClipsChange}
           textPlaceholder="e.g. Press 1 for service, press 2 for billing."
         />
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium">Prompt repeats</label>
             <Input
@@ -937,25 +935,7 @@ function StepEditor({
               }
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Seconds of silence after the prompt before treating it as no selection.
-            </p>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Tries before hang-up</label>
-            <Input
-              type="number"
-              min={1}
-              max={5}
-              value={Number(config.maxNoInputAttempts ?? 2)}
-              onChange={(e) =>
-                onConfigChange({
-                  ...config,
-                  maxNoInputAttempts: Math.min(5, Math.max(1, Number(e.target.value) || 2)),
-                })
-              }
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Re-offer the menu this many times, then hang up (cuts bot waste).
+              Seconds of silence after the prompt before hanging up (cuts bot waste).
             </p>
           </div>
         </div>
