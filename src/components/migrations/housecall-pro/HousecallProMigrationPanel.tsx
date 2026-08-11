@@ -28,7 +28,19 @@ type MigrationStep = {
   failed: number;
   totalEstimate: number | null;
   lastError: string | null;
-  statsJson: { recentErrors?: string[] } | null;
+  statsJson: {
+    recentErrors?: string[];
+    debugSamples?: MigrationDebugSample[];
+  } | null;
+};
+
+type MigrationDebugSample = {
+  at: string;
+  action: "pulled" | "created" | "updated" | "skipped" | "failed" | "info";
+  label: string;
+  hcpId?: string | null;
+  detail?: Record<string, unknown> | string | null;
+  error?: string | null;
 };
 
 type Migration = {
@@ -82,6 +94,8 @@ export function HousecallProMigrationPanel() {
   const [rollbackConfirm, setRollbackConfirm] = useState("");
   const [rollingBack, setRollingBack] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const [lastBatchDebug, setLastBatchDebug] = useState<MigrationDebugSample[]>([]);
+  const [lastBatchErrors, setLastBatchErrors] = useState<string[]>([]);
   const autoContinueRef = useRef(false);
   const currentStepCardRef = useRef<HTMLDivElement>(null);
 
@@ -123,11 +137,19 @@ export function HousecallProMigrationPanel() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Batch failed");
+      if (Array.isArray(body.debugSamples)) {
+        setLastBatchDebug(body.debugSamples as MigrationDebugSample[]);
+      }
+      if (Array.isArray(body.errors)) {
+        setLastBatchErrors(body.errors as string[]);
+      }
       await refresh();
       if (body.errors?.length) {
         toast.message(`Batch finished with ${body.errors.length} error(s)`);
+      } else if (body.debugSamples?.length) {
+        toast.success(`Debug batch logged ${body.debugSamples.length} detail line(s)`);
       }
-      return body as { done: boolean };
+      return body as { done: boolean; debugSamples?: MigrationDebugSample[]; errors?: string[] };
     } finally {
       setRunningBatch(false);
     }
@@ -178,9 +200,11 @@ export function HousecallProMigrationPanel() {
       if (!res.ok) throw new Error(body.error ?? "Failed to start");
       toast.success(
         debugMode
-          ? "Debug migration started — each step imports 1 record"
+          ? "Debug migration started — each step imports 1 record and logs what was pulled"
           : "Migration started"
       );
+      setLastBatchDebug([]);
+      setLastBatchErrors([]);
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to start");
@@ -396,8 +420,8 @@ export function HousecallProMigrationPanel() {
               <span>
                 <span className="font-medium">Debug mode</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Import only 1 of each entity type so you can smoke-test every step without a full
-                  pull.
+                  Import only 1 of each entity type and show the pulled HCP data, attachments, and
+                  any errors so you can verify the pipeline.
                 </span>
               </span>
             </label>
@@ -466,6 +490,86 @@ export function HousecallProMigrationPanel() {
                       <li key={error}>{error}</li>
                     ))}
                   </ul>
+                ) : null}
+                {migrationDebugMode ? (
+                  <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
+                    <div className="text-sm font-medium text-amber-950">
+                      Debug log — what this step pulled / imported
+                    </div>
+                    <p className="text-xs text-amber-900/80">
+                      Shows HCP payloads, attachment fetch attempts, create/update outcomes, and
+                      errors for the 1-record smoke test.
+                    </p>
+                    {(lastBatchErrors.length
+                      ? lastBatchErrors
+                      : activeStep.statsJson?.recentErrors ?? []
+                    ).length ? (
+                      <div className="space-y-1">
+                        <div className="text-xs font-medium text-destructive">Errors</div>
+                        <ul className="max-h-28 overflow-auto rounded border border-destructive/20 bg-white p-2 text-xs text-destructive">
+                          {(lastBatchErrors.length
+                            ? lastBatchErrors
+                            : activeStep.statsJson?.recentErrors ?? []
+                          ).map((error, i) => (
+                            <li key={`${i}-${error}`}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {(() => {
+                      const samples =
+                        lastBatchDebug.length > 0
+                          ? lastBatchDebug
+                          : activeStep.statsJson?.debugSamples ?? [];
+                      if (!samples.length) {
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Run next batch to capture pulled records and attachment details.
+                          </p>
+                        );
+                      }
+                      return (
+                        <ul className="max-h-80 space-y-2 overflow-auto rounded border bg-white p-2 text-xs">
+                          {samples.map((sample, i) => (
+                            <li
+                              key={`${sample.at}-${i}-${sample.label}`}
+                              className="rounded border border-border/70 px-2 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge
+                                  variant={
+                                    sample.action === "failed"
+                                      ? "destructive"
+                                      : sample.action === "created"
+                                        ? "default"
+                                        : "secondary"
+                                  }
+                                >
+                                  {sample.action}
+                                </Badge>
+                                <span className="font-medium">{sample.label}</span>
+                                {sample.hcpId ? (
+                                  <span className="font-mono text-[10px] text-muted-foreground">
+                                    {sample.hcpId}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {sample.error ? (
+                                <p className="mt-1 text-destructive">{sample.error}</p>
+                              ) : null}
+                              {sample.detail ? (
+                                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-1.5 text-[10px] text-muted-foreground">
+                                  {typeof sample.detail === "string"
+                                    ? sample.detail
+                                    : JSON.stringify(sample.detail, null, 2)}
+                                </pre>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
+                  </div>
                 ) : null}
               </>
             ) : null}

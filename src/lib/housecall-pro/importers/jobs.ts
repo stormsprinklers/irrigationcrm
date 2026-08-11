@@ -1,6 +1,11 @@
 import { Division, HcpEntityType } from "@prisma/client";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import {
+  emptyBatchResult,
+  pushDebug,
+  summarizeHcpRecord,
+} from "@/lib/housecall-pro/debug";
+import {
   HCP_JOB_LINE_ITEMS_PATHS,
   HCP_PARENT_DETAIL_PATHS,
 } from "@/lib/housecall-pro/constants";
@@ -129,16 +134,8 @@ function jobLineItems(record: HcpRecord): HcpRecord[] {
 }
 
 export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const defaultDivision = ctx.options.defaultDivision ?? Division.SERVICE;
 
@@ -147,6 +144,20 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
     pageSize: ctx.batchSize,
     arrayKeys: ["jobs"],
   });
+
+  pushDebug(
+    result,
+    {
+      action: "pulled",
+      label: `HCP returned ${page.items.length} job(s)`,
+      detail: {
+        nextCursor: page.nextCursor,
+        totalEstimate: page.totalEstimate ?? null,
+        sample: page.items.slice(0, 3).map((r) => summarizeHcpRecord(r as HcpRecord)),
+      },
+    },
+    { enabled: debugEnabled }
+  );
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({

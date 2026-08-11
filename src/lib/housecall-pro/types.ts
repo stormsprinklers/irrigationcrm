@@ -22,10 +22,22 @@ export type BatchCounters = {
   failed: number;
 };
 
+/** One pulled/imported item captured for debug-mode UI. */
+export type MigrationDebugSample = {
+  at: string;
+  action: "pulled" | "created" | "updated" | "skipped" | "failed" | "info";
+  label: string;
+  hcpId?: string | null;
+  detail?: Record<string, unknown> | string | null;
+  error?: string | null;
+};
+
 export type BatchResult = BatchCounters & {
   done: boolean;
   cursor: string | null;
   errors: string[];
+  /** Present when options.debugMode — samples of what HCP returned / how import went. */
+  debugSamples?: MigrationDebugSample[];
 };
 
 export type ImportContext = {

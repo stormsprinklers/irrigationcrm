@@ -5,6 +5,12 @@ import {
   HCP_PARENT_DETAIL_PATHS,
 } from "@/lib/housecall-pro/constants";
 import {
+  emptyBatchResult,
+  debugLabelForRecord,
+  pushDebug,
+  summarizeHcpRecord,
+} from "@/lib/housecall-pro/debug";
+import {
   attachmentFileUrl,
   attachmentMimeType,
   collectAttachmentsFromResponse,
@@ -49,19 +55,37 @@ function stableAttachmentId(attachment: HcpRecord, fileUrl: string): string {
 async function fetchAttachments(
   ctx: ImportContext,
   parentType: HcpAttachmentParentType,
-  parentHcpId: string
+  parentHcpId: string,
+  debug?: { result: BatchResult; enabled: boolean }
 ): Promise<HcpRecord[]> {
   const items: HcpRecord[] = [];
   const detailParams = [{ ...HCP_EXPAND_ATTACHMENTS }, {}];
+  const attempts: string[] = [];
 
   for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
     for (const params of detailParams) {
       try {
         const data = await ctx.client.get<HcpRecord>(path, { params });
-        items.push(...collectAttachmentsFromResponse(data, parentType));
-        if (items.length) return dedupeAttachments(items);
-      } catch {
-        // try next path / param set
+        const found = collectAttachmentsFromResponse(data, parentType);
+        attempts.push(
+          `${path}${params["expand[]"] ? "?expand=attachments" : ""} → ${found.length} attachment(s)`
+        );
+        items.push(...found);
+        if (items.length) {
+          if (debug?.enabled) {
+            pushDebug(debug.result, {
+              action: "info",
+              label: `Fetched attachments via detail ${path}`,
+              hcpId: parentHcpId,
+              detail: { attempts, count: items.length },
+            });
+          }
+          return dedupeAttachments(items);
+        }
+      } catch (err) {
+        attempts.push(
+          `${path} failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
   }
@@ -69,10 +93,25 @@ async function fetchAttachments(
   for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
     try {
       const data = await ctx.client.get<HcpRecord>(path);
-      items.push(...collectAttachmentsFromResponse(data, parentType));
-    } catch {
-      // try next path shape
+      const found = collectAttachmentsFromResponse(data, parentType);
+      attempts.push(`${path} → ${found.length} attachment(s)`);
+      items.push(...found);
+    } catch (err) {
+      attempts.push(
+        `${path} failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
+  }
+
+  if (debug?.enabled) {
+    pushDebug(debug.result, {
+      action: items.length ? "pulled" : "info",
+      label: items.length
+        ? `Pulled ${items.length} attachment(s) for ${parentType} ${parentHcpId}`
+        : `No attachments found for ${parentType} ${parentHcpId}`,
+      hcpId: parentHcpId,
+      detail: { attempts, sample: items.slice(0, 3).map((a) => summarizeHcpRecord(a)) },
+    });
   }
 
   return dedupeAttachments(items);
@@ -92,10 +131,23 @@ async function importAttachmentFile(params: {
     mimeType: string;
   }) => Promise<void>;
   result: BatchResult;
+  debugEnabled: boolean;
 }) {
   const fileUrl = attachmentFileUrl(params.attachment);
+  const label = debugLabelForRecord(params.attachment, "Attachment");
   if (!fileUrl) {
     params.result.skipped++;
+    pushDebug(
+      params.result,
+      {
+        action: "skipped",
+        label,
+        hcpId: hcpId(params.attachment),
+        detail: summarizeHcpRecord(params.attachment),
+        error: "No downloadable URL on attachment payload",
+      },
+      { enabled: params.debugEnabled }
+    );
     return;
   }
 
@@ -119,6 +171,16 @@ async function importAttachmentFile(params: {
   });
   if (existing) {
     params.result.updated++;
+    pushDebug(
+      params.result,
+      {
+        action: "updated",
+        label: `${fileName} (already imported)`,
+        hcpId: attachmentId,
+        detail: { fileUrl, mappingKey },
+      },
+      { enabled: params.debugEnabled }
+    );
     return;
   }
 
@@ -142,6 +204,22 @@ async function importAttachmentFile(params: {
     metadataJson: { parentLocalId: params.parentLocalId },
   });
   params.result.created++;
+  pushDebug(
+    params.result,
+    {
+      action: "created",
+      label: fileName,
+      hcpId: attachmentId,
+      detail: {
+        fileUrl,
+        mimeType,
+        bytes: buffer.byteLength,
+        blobUrl: blob.url,
+        parentHcpId: params.parentHcpId,
+      },
+    },
+    { enabled: params.debugEnabled }
+  );
 }
 
 async function importParentAttachmentsBatch(params: {
@@ -154,16 +232,8 @@ async function importParentAttachmentsBatch(params: {
     data: { blobUrl: string; fileName: string; mimeType: string }
   ) => Promise<void>;
 }): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: params.ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(params.ctx.options.debugMode);
+  const result = emptyBatchResult(params.ctx.cursor);
 
   const offset = parseAttachmentCursor(params.ctx.cursor);
   const mappedParents = await listMappedParents(
@@ -181,22 +251,59 @@ async function importParentAttachmentsBatch(params: {
     });
   }
 
-  let loggedEmptySample = false;
+  pushDebug(
+    result,
+    {
+      action: "info",
+      label: `Scanning ${mappedParents.length} mapped ${params.parentType} (offset ${offset})`,
+      detail: {
+        parentIds: mappedParents.map((p) => p.hcpId),
+        batchSize: params.ctx.batchSize,
+      },
+    },
+    { enabled: debugEnabled }
+  );
 
   for (const parent of mappedParents) {
     result.processed++;
     try {
-      const attachments = await fetchAttachments(params.ctx, params.parentType, parent.hcpId);
+      const attachments = await fetchAttachments(params.ctx, params.parentType, parent.hcpId, {
+        result,
+        enabled: debugEnabled,
+      });
       if (!attachments.length) {
         result.skipped++;
-        if (!loggedEmptySample) {
-          loggedEmptySample = true;
-          result.errors.push(
-            `No attachments from HCP for ${params.parentType} ${parent.hcpId} (detail + /attachments endpoints)`
-          );
-        }
+        const message = `No attachments from HCP for ${params.parentType} ${parent.hcpId} (detail + /attachments endpoints)`;
+        result.errors.push(message);
+        pushDebug(
+          result,
+          {
+            action: "skipped",
+            label: `Parent ${parent.hcpId}`,
+            hcpId: parent.hcpId,
+            error: message,
+          },
+          { enabled: debugEnabled }
+        );
         continue;
       }
+
+      pushDebug(
+        result,
+        {
+          action: "pulled",
+          label: `${attachments.length} attachment(s) on ${params.parentType} ${parent.hcpId}`,
+          hcpId: parent.hcpId,
+          detail: {
+            files: attachments.map((a) => ({
+              label: debugLabelForRecord(a, "Attachment"),
+              ...summarizeHcpRecord(a),
+              hasUrl: Boolean(attachmentFileUrl(a)),
+            })),
+          },
+        },
+        { enabled: debugEnabled }
+      );
 
       let filesWithoutUrl = 0;
       for (const attachment of attachments) {
@@ -212,11 +319,24 @@ async function importParentAttachmentsBatch(params: {
             blobPrefix: params.blobPrefix.replace("{id}", parent.localId),
             createRecord: async (data) => params.createRecord(parent.localId, data),
             result,
+            debugEnabled,
           });
           if (result.skipped > beforeSkipped) filesWithoutUrl++;
         } catch (err) {
+          const message = err instanceof Error ? err.message : "Attachment file failed";
           result.failed++;
-          result.errors.push(err instanceof Error ? err.message : "Attachment file failed");
+          result.errors.push(message);
+          pushDebug(
+            result,
+            {
+              action: "failed",
+              label: debugLabelForRecord(attachment, "Attachment"),
+              hcpId: hcpId(attachment),
+              detail: summarizeHcpRecord(attachment),
+              error: message,
+            },
+            { enabled: debugEnabled }
+          );
         }
       }
 
@@ -226,8 +346,19 @@ async function importParentAttachmentsBatch(params: {
         );
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Attachment batch failed";
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Attachment batch failed");
+      result.errors.push(message);
+      pushDebug(
+        result,
+        {
+          action: "failed",
+          label: `Parent ${parent.hcpId}`,
+          hcpId: parent.hcpId,
+          error: message,
+        },
+        { enabled: debugEnabled }
+      );
     }
   }
 

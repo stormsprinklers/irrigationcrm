@@ -477,11 +477,30 @@ export async function processMigrationBatch(params: {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Batch failed";
+    const previousStats = (stepRow.statsJson as {
+      recentErrors?: string[];
+      debugSamples?: unknown[];
+    } | null) ?? {};
+    const previousSamples = Array.isArray(previousStats.debugSamples)
+      ? previousStats.debugSamples
+      : [];
     await prisma.housecallProMigrationStep.update({
       where: { id: stepRow.id },
       data: {
         status: HousecallProMigrationStepStatus.FAILED,
         lastError: message,
+        statsJson: {
+          recentErrors: [message],
+          debugSamples: [
+            ...previousSamples,
+            {
+              at: new Date().toISOString(),
+              action: "failed",
+              label: "Batch threw before completion",
+              error: message,
+            },
+          ].slice(-80),
+        },
       },
     });
     throw err;
@@ -492,6 +511,18 @@ export async function processMigrationBatch(params: {
     : HousecallProMigrationStepStatus.RUNNING;
 
   const recentErrors = batchResult.errors.slice(0, 20);
+  const previousStats = (stepRow.statsJson as {
+    recentErrors?: string[];
+    debugSamples?: unknown[];
+  } | null) ?? {};
+  const previousSamples = Array.isArray(previousStats.debugSamples)
+    ? previousStats.debugSamples
+    : [];
+  const nextSamples = [
+    ...previousSamples,
+    ...(batchResult.debugSamples ?? []),
+  ].slice(-80);
+
   await prisma.housecallProMigrationStep.update({
     where: { id: stepRow.id },
     data: {
@@ -504,7 +535,12 @@ export async function processMigrationBatch(params: {
       failed: { increment: batchResult.failed },
       completedAt: batchResult.done ? new Date() : null,
       lastError: recentErrors[0] ?? null,
-      statsJson: { recentErrors },
+      statsJson: {
+        recentErrors,
+        ...(debugMode || nextSamples.length
+          ? { debugSamples: nextSamples }
+          : {}),
+      },
     },
   });
 

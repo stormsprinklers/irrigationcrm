@@ -1,4 +1,10 @@
 import { CustomerStatus, HcpEntityType } from "@prisma/client";
+import {
+  debugLabelForRecord,
+  emptyBatchResult,
+  pushDebug,
+  summarizeHcpRecord,
+} from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
@@ -57,22 +63,28 @@ async function enrichCustomerRecord(
 }
 
 export async function importCustomersBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const page = await ctx.client.getPaginated("/customers", {
     cursor: ctx.cursor,
     pageSize: ctx.batchSize,
     arrayKeys: ["customers"],
   });
+
+  pushDebug(
+    result,
+    {
+      action: "pulled",
+      label: `HCP returned ${page.items.length} customer(s)`,
+      detail: {
+        nextCursor: page.nextCursor,
+        totalEstimate: page.totalEstimate ?? null,
+        sample: page.items.slice(0, 3).map((r) => summarizeHcpRecord(r as HcpRecord)),
+      },
+    },
+    { enabled: debugEnabled }
+  );
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
@@ -126,6 +138,16 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         });
         customerId = mapping.localId;
         result.updated++;
+        pushDebug(
+          result,
+          {
+            action: "updated",
+            label: debugLabelForRecord(record, "Customer"),
+            hcpId: id,
+            detail: summarizeHcpRecord(record),
+          },
+          { enabled: debugEnabled }
+        );
       } else {
         const customer = await prisma.customer.create({
           data: { companyId: ctx.companyId, ...customerData },
@@ -139,6 +161,16 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
           localId: customerId,
         });
         result.created++;
+        pushDebug(
+          result,
+          {
+            action: "created",
+            label: debugLabelForRecord(record, "Customer"),
+            hcpId: id,
+            detail: { localId: customerId, ...summarizeHcpRecord(record) },
+          },
+          { enabled: debugEnabled }
+        );
       }
 
       const phones = Array.isArray(record.phone_numbers)
@@ -206,7 +238,19 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
 
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Customer import failed");
+      const message = err instanceof Error ? err.message : "Customer import failed";
+      result.errors.push(message);
+      pushDebug(
+        result,
+        {
+          action: "failed",
+          label: debugLabelForRecord(record, "Customer"),
+          hcpId: id,
+          detail: summarizeHcpRecord(record),
+          error: message,
+        },
+        { enabled: debugEnabled }
+      );
     }
   }
 

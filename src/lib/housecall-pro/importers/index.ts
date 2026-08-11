@@ -48,7 +48,31 @@ export async function runStepBatch(ctx: ImportContext): Promise<BatchResult> {
       skipped: 0,
       failed: 0,
       errors: [],
+      debugSamples: ctx.options.debugMode
+        ? [
+            {
+              at: new Date().toISOString(),
+              action: "info",
+              label: `No importer registered for step ${ctx.step}`,
+            },
+          ]
+        : [],
     };
   }
-  return importer(ctx);
+  const result = await importer(ctx);
+  if (ctx.options.debugMode && !result.debugSamples?.length) {
+    result.debugSamples = [
+      {
+        at: new Date().toISOString(),
+        action: "info",
+        label: `Batch finished — processed ${result.processed}, created ${result.created}, updated ${result.updated}, skipped ${result.skipped}, failed ${result.failed}`,
+        detail: {
+          errors: result.errors.slice(0, 10),
+          cursor: result.cursor,
+          done: result.done,
+        },
+      },
+    ];
+  }
+  return result;
 }
