@@ -1593,6 +1593,18 @@ model TwilioPortInRequest {
   @@map("twilio_port_in_requests")
 }
 
+/// App-wide Twilio settings for this CRM deployment (shared across all companies).
+/// Messaging Service SID is chosen in Settings → Phone numbers → A2P campaign.
+model TwilioPlatformSettings {
+  id                  String   @id @default("default")
+  /// Shared A2P / 10DLC Messaging Service (MG…) used for every brand on this Twilio account.
+  messagingServiceSid String?
+  updatedAt           DateTime @updatedAt
+  updatedByUserId     String?
+
+  @@map("twilio_platform_settings")
+}
+
 model VoiceClip {
   id          String   @id @default(cuid())
   companyId   String

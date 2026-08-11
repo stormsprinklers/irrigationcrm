@@ -43,13 +43,18 @@ type PortDefaults = {
 type Portability = {
   e164: string;
   portable: boolean;
+  /** Carrier port OR Twilio internal import/transfer. */
+  allowedInWizard: boolean;
+  alreadyOnTwilio: boolean;
+  canImport: boolean;
   pinRequired: boolean;
   numberType: string | null;
   blockedReason: string | null;
   notPortableReason: string | null;
+  message: string | null;
 };
 
-const STEPS = [
+const PORT_STEPS = [
   "Checklist",
   "Numbers",
   "Utility bill",
@@ -57,6 +62,8 @@ const STEPS = [
   "Port date",
   "Review",
 ] as const;
+
+const TRANSFER_STEPS = ["Checklist", "Numbers", "Review"] as const;
 
 function defaultTargetDate() {
   const d = new Date();
@@ -148,7 +155,15 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
     () => numbers.some((n) => n.portable && n.pinRequired),
     [numbers]
   );
+  const isInternalTransfer =
+    numbers.length > 0 && numbers.every((n) => n.canImport || n.alreadyOnTwilio);
   const allPortable = numbers.length > 0 && numbers.every((n) => n.portable);
+  const allAllowed =
+    numbers.length > 0 &&
+    numbers.every((n) => n.allowedInWizard) &&
+    (allPortable || isInternalTransfer);
+  const steps = isInternalTransfer ? TRANSFER_STEPS : PORT_STEPS;
+  const reviewStepIndex = steps.length - 1;
 
   async function addNumber() {
     setBusy(true);
@@ -163,32 +178,59 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         toast.error(data.error ?? "Portability check failed");
         return;
       }
-      if (!data.portable) {
-        toast.error(data.blockedReason ?? "Number is not portable");
+      if (!data.allowedInWizard && !data.portable && !data.canImport) {
+        toast.error(data.blockedReason ?? data.message ?? "Number is not portable");
+        return;
+      }
+      if (!data.allowedInWizard) {
+        toast.error(data.blockedReason ?? data.message ?? "Number cannot be added");
         return;
       }
       const e164 = String(data.e164);
       if (numbers.some((n) => n.e164 === e164)) {
-        toast.error("That number is already on this port request");
+        toast.error("That number is already on this request");
         return;
       }
-      setNumbers((prev) => [
-        ...prev,
-        {
-          e164,
-          portable: Boolean(data.portable),
-          pinRequired: Boolean(data.pinRequired),
-          numberType: data.numberType ?? null,
-          blockedReason: data.blockedReason ?? null,
-          notPortableReason: data.notPortableReason ?? null,
-        },
-      ]);
+      const next: Portability = {
+        e164,
+        portable: Boolean(data.portable),
+        allowedInWizard: Boolean(data.allowedInWizard),
+        alreadyOnTwilio: Boolean(data.alreadyOnTwilio),
+        canImport: Boolean(data.canImport),
+        pinRequired: Boolean(data.pinRequired),
+        numberType: data.numberType ?? null,
+        blockedReason: data.blockedReason ?? null,
+        notPortableReason: data.notPortableReason ?? null,
+        message: data.message ?? null,
+      };
+      // Carrier ports and Twilio-owned numbers cannot share one request.
+      if (numbers.length) {
+        const existingTransfer = numbers.every((n) => n.canImport || n.alreadyOnTwilio);
+        const existingPort = numbers.every((n) => n.portable);
+        if (existingTransfer && next.portable && !next.canImport) {
+          toast.error(
+            "This list is Twilio transfers. Start a separate request to port a carrier number."
+          );
+          return;
+        }
+        if (existingPort && (next.canImport || next.alreadyOnTwilio) && !next.portable) {
+          toast.error(
+            "This list is a carrier port. Start a separate request to import a Twilio number."
+          );
+          return;
+        }
+      }
+      setNumbers((prev) => [...prev, next]);
       setE164Input("");
-      toast.success(
-        data.pinRequired
-          ? `${formatPhoneDisplay(e164)} added · PIN required from carrier`
-          : `${formatPhoneDisplay(e164)} added`
-      );
+      if (next.canImport || next.alreadyOnTwilio) {
+        toast.success(
+          `${formatPhoneDisplay(e164)} detected on Twilio — will import/transfer (no LOA)`
+        );
+      } else if (next.pinRequired) {
+        toast.success(`${formatPhoneDisplay(e164)} added · PIN required from carrier`);
+      } else {
+        toast.success(`${formatPhoneDisplay(e164)} added`);
+      }
     } finally {
       setBusy(false);
     }
@@ -220,7 +262,48 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
     }
   }
 
+  async function submitInternalTransfer() {
+    if (!isInternalTransfer) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/port/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ e164s: numbers.map((n) => n.e164) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Twilio transfer/import failed");
+        return;
+      }
+      const ok = Array.isArray(data.imported) ? data.imported.length : 0;
+      const fail = Array.isArray(data.failed) ? data.failed.length : 0;
+      if (ok) {
+        toast.success(
+          fail
+            ? `Imported ${ok} number${ok === 1 ? "" : "s"} from Twilio (${fail} failed)`
+            : `Imported ${ok} number${ok === 1 ? "" : "s"} from Twilio`
+        );
+        onImported?.();
+      }
+      if (fail && Array.isArray(data.failed)) {
+        for (const row of data.failed.slice(0, 3)) {
+          toast.error(`${formatPhoneDisplay(row.e164)}: ${row.error}`);
+        }
+      }
+      setStep(0);
+      setNumbers([]);
+      setChecklistOk(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitPort() {
+    if (isInternalTransfer) {
+      await submitInternalTransfer();
+      return;
+    }
     if (!allPortable || !documentSid) return;
     setBusy(true);
     try {
@@ -318,7 +401,11 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
 
   function canNext(): boolean {
     if (step === 0) return checklistOk;
-    if (step === 1) return allPortable;
+    if (step === 1) return allAllowed;
+    if (isInternalTransfer) {
+      // Transfer flow: Checklist → Numbers → Review
+      return allAllowed;
+    }
     if (step === 2) return Boolean(documentSid);
     if (step === 3) {
       const base =
@@ -337,6 +424,24 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
     }
     if (step === 4) return Boolean(targetPortInDate);
     return true;
+  }
+
+  function goNext() {
+    if (isInternalTransfer) {
+      if (step === 0) setStep(1);
+      else if (step === 1) setStep(reviewStepIndex);
+      return;
+    }
+    setStep((s) => Math.min(PORT_STEPS.length - 1, s + 1));
+  }
+
+  function goBack() {
+    if (isInternalTransfer) {
+      if (step === reviewStepIndex) setStep(1);
+      else if (step === 1) setStep(0);
+      return;
+    }
+    setStep((s) => Math.max(0, s - 1));
   }
 
   function startNew() {
@@ -460,8 +565,18 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
   return (
     <div className="space-y-6">
       <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-        Do not cancel your current carrier until the port completes. Twilio Porting API is Public
-        Beta (no SLA) — status updates arrive via webhook.
+        {isInternalTransfer ? (
+          <>
+            These numbers are already on Twilio. This wizard will import (or move) them into this
+            company — no carrier port, utility bill, or e-LOA.
+          </>
+        ) : (
+          <>
+            Do not cancel your current carrier until the port completes. Twilio Porting API is Public
+            Beta (no SLA) — status updates arrive via webhook. Numbers already on Twilio are
+            auto-detected when you add them.
+          </>
+        )}
       </div>
 
       {submittedId ? (
@@ -480,19 +595,19 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
 
       <div className="rounded-lg border border-border bg-white p-6">
         <div className="mb-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
-          {STEPS.map((label, i) => (
+          {steps.map((label, i) => (
             <span
               key={label}
               className={
-                i === step
+                i === step || (isInternalTransfer && i === 2 && step === reviewStepIndex)
                   ? "font-semibold text-foreground"
-                  : i < step
+                  : i < step || (isInternalTransfer && step === reviewStepIndex && i < 2)
                     ? "text-foreground/70"
                     : undefined
               }
             >
               {i + 1}. {label}
-              {i < STEPS.length - 1 ? " ·" : ""}
+              {i < steps.length - 1 ? " ·" : ""}
             </span>
           ))}
         </div>
@@ -500,41 +615,64 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         {step === 0 && (
           <div className="space-y-3 text-sm">
             <h3 className="font-semibold">Before you start</h3>
-            <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-              <li>Keep your current phone service active until the port completes.</li>
-              <li>
-                You can port several numbers from the same carrier in one request (shared account
-                number and PIN).
-              </li>
-              <li>Have a recent utility bill (PDF/JPG/PNG, ≤10MB, dated within 30 days).</li>
-              <li>Name and billing address must match your losing carrier exactly.</li>
-              <li>
-                Get the port / account PIN from your losing carrier (required for most mobile
-                numbers; many landline carriers require one too).
-              </li>
-              <li>Expect 5–15+ days; Twilio or the carrier may adjust the port date.</li>
-              <li>
-                An authorized representative must be able to open email and sign Twilio&apos;s
-                electronic LOA.
-              </li>
-              <li>US landline/mobile only — not toll-free (use Twilio Console for those).</li>
-            </ul>
+            {isInternalTransfer ? (
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>
+                  Add numbers that already live on your Twilio account (or a subaccount). We detect
+                  that automatically.
+                </li>
+                <li>No utility bill, PIN, or e-LOA — this is an internal Twilio transfer/import.</li>
+                <li>
+                  If a number is linked to another CRM company, it will be moved to this company.
+                </li>
+                <li>Webhooks and your shared A2P campaign are configured after import.</li>
+              </ul>
+            ) : (
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>Keep your current phone service active until the port completes.</li>
+                <li>
+                  You can port several numbers from the same carrier in one request (shared account
+                  number and PIN).
+                </li>
+                <li>
+                  If the losing carrier is Twilio, just add the numbers — we&apos;ll switch to an
+                  internal transfer automatically.
+                </li>
+                <li>Have a recent utility bill (PDF/JPG/PNG, ≤10MB, dated within 30 days).</li>
+                <li>Name and billing address must match your losing carrier exactly.</li>
+                <li>
+                  Get the port / account PIN from your losing carrier (required for most mobile
+                  numbers; many landline carriers require one too).
+                </li>
+                <li>Expect 5–15+ days; Twilio or the carrier may adjust the port date.</li>
+                <li>
+                  An authorized representative must be able to open email and sign Twilio&apos;s
+                  electronic LOA.
+                </li>
+                <li>US landline/mobile only — not toll-free (use Twilio Console for those).</li>
+              </ul>
+            )}
             <label className="flex items-center gap-2 pt-2">
               <Checkbox
                 checked={checklistOk}
                 onCheckedChange={(c) => setChecklistOk(Boolean(c))}
               />
-              I understand and have the documents ready
+              {isInternalTransfer
+                ? "I understand — import these Twilio numbers into this company"
+                : "I understand and have the documents ready"}
             </label>
           </div>
         )}
 
         {step === 1 && (
           <div className="space-y-3">
-            <h3 className="font-semibold">Numbers to port</h3>
+            <h3 className="font-semibold">
+              {isInternalTransfer ? "Numbers to import from Twilio" : "Numbers to port"}
+            </h3>
             <p className="text-sm text-muted-foreground">
-              Add every number on this losing-carrier account. They share one account number and
-              PIN in the next steps.
+              {isInternalTransfer
+                ? "These were detected as already on Twilio. Confirm the list, then review and import."
+                : "Add every number on this losing-carrier account. They share one account number and PIN in the next steps. Twilio-owned numbers are detected automatically."}
             </p>
             <div className="flex flex-wrap gap-2">
               <Input
@@ -567,9 +705,19 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
                     <div>
                       <span className="font-medium">{formatPhoneDisplay(n.e164)}</span>
                       <span className="ml-2 text-muted-foreground">
-                        {n.numberType ?? "unknown"}
-                        {n.pinRequired ? " · PIN required" : ""}
+                        {n.canImport || n.alreadyOnTwilio
+                          ? "Twilio transfer"
+                          : n.numberType ?? "unknown"}
+                        {n.portable && n.pinRequired ? " · PIN required" : ""}
                       </span>
+                      {n.canImport || n.alreadyOnTwilio ? (
+                        <Badge className="ml-2" variant="secondary">
+                          On Twilio
+                        </Badge>
+                      ) : null}
+                      {n.message ? (
+                        <p className="mt-1 text-xs text-muted-foreground">{n.message}</p>
+                      ) : null}
                     </div>
                     <Button
                       type="button"
@@ -585,7 +733,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
             ) : (
               <p className="text-sm text-muted-foreground">No numbers added yet.</p>
             )}
-            {pinRequired ? (
+            {pinRequired && !isInternalTransfer ? (
               <p className="text-xs text-muted-foreground">
                 At least one number requires a carrier PIN — you&apos;ll enter it once for all
                 numbers.
@@ -594,7 +742,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           </div>
         )}
 
-        {step === 2 && (
+        {!isInternalTransfer && step === 2 && (
           <div className="space-y-3 text-sm">
             <h3 className="font-semibold">Utility bill</h3>
             <p className="text-muted-foreground">
@@ -618,7 +766,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           </div>
         )}
 
-        {step === 3 && (
+        {!isInternalTransfer && step === 3 && (
           <div className="grid gap-3 sm:grid-cols-2">
             <h3 className="font-semibold sm:col-span-2">Losing carrier & authorized rep</h3>
             <label className="text-sm sm:col-span-2">
@@ -727,7 +875,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           </div>
         )}
 
-        {step === 4 && (
+        {!isInternalTransfer && step === 4 && (
           <div className="space-y-3 text-sm">
             <h3 className="font-semibold">Desired port date</h3>
             <p className="text-muted-foreground">
@@ -762,38 +910,59 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           </div>
         )}
 
-        {step === 5 && (
+        {(isInternalTransfer ? step === reviewStepIndex : step === 5) && (
           <div className="space-y-2 text-sm">
-            <h3 className="font-semibold">Review & submit</h3>
-            <ul className="space-y-1 text-muted-foreground">
-              <li>
-                Numbers ({numbers.length}):{" "}
-                {numbers.map((n) => formatPhoneDisplay(n.e164)).join(", ")}
-              </li>
-              <li>Document: {documentSid}</li>
-              <li>
-                Customer: {customerName} ({customerType})
-              </li>
-              <li>Account #: {accountNumber}</li>
-              <li>
-                Port PIN:{" "}
-                {pin.trim()
-                  ? `provided (${pin.trim().length} characters) · shared across all numbers`
-                  : pinRequired
-                    ? "missing (required)"
-                    : "not provided"}
-              </li>
-              <li>
-                Address: {street}, {city}, {state} {zip}
-              </li>
-              <li>
-                LOA: {authorizedRepresentative} &lt;{authorizedRepresentativeEmail}&gt;
-              </li>
-              <li>Target date: {targetPortInDate}</li>
-            </ul>
-            <p className="pt-2 text-amber-900">
-              After submit, Twilio emails the e-LOA. Leave current service active until Completed.
-            </p>
+            <h3 className="font-semibold">
+              {isInternalTransfer ? "Review & import from Twilio" : "Review & submit"}
+            </h3>
+            {isInternalTransfer ? (
+              <>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>
+                    Numbers ({numbers.length}):{" "}
+                    {numbers.map((n) => formatPhoneDisplay(n.e164)).join(", ")}
+                  </li>
+                  <li>Source: Twilio account (internal transfer / import)</li>
+                  <li>No utility bill, PIN, or e-LOA required</li>
+                </ul>
+                <p className="pt-2 text-muted-foreground">
+                  Numbers will be linked to this company, webhooks configured, and attached to your
+                  shared A2P Messaging Service when possible.
+                </p>
+              </>
+            ) : (
+              <>
+                <ul className="space-y-1 text-muted-foreground">
+                  <li>
+                    Numbers ({numbers.length}):{" "}
+                    {numbers.map((n) => formatPhoneDisplay(n.e164)).join(", ")}
+                  </li>
+                  <li>Document: {documentSid}</li>
+                  <li>
+                    Customer: {customerName} ({customerType})
+                  </li>
+                  <li>Account #: {accountNumber}</li>
+                  <li>
+                    Port PIN:{" "}
+                    {pin.trim()
+                      ? `provided (${pin.trim().length} characters) · shared across all numbers`
+                      : pinRequired
+                        ? "missing (required)"
+                        : "not provided"}
+                  </li>
+                  <li>
+                    Address: {street}, {city}, {state} {zip}
+                  </li>
+                  <li>
+                    LOA: {authorizedRepresentative} &lt;{authorizedRepresentativeEmail}&gt;
+                  </li>
+                  <li>Target date: {targetPortInDate}</li>
+                </ul>
+                <p className="pt-2 text-amber-900">
+                  After submit, Twilio emails the e-LOA. Leave current service active until Completed.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -802,21 +971,23 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
             type="button"
             variant="outline"
             disabled={step === 0 || busy}
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            onClick={goBack}
           >
             Back
           </Button>
-          {step < STEPS.length - 1 ? (
-            <Button
-              type="button"
-              disabled={!canNext() || busy}
-              onClick={() => setStep((s) => s + 1)}
-            >
+          {step < (isInternalTransfer ? reviewStepIndex : PORT_STEPS.length - 1) ? (
+            <Button type="button" disabled={!canNext() || busy} onClick={goNext}>
               Continue
             </Button>
           ) : (
             <Button type="button" disabled={!canNext() || busy} onClick={() => void submitPort()}>
-              {busy ? "Submitting…" : "Submit port-in request"}
+              {busy
+                ? isInternalTransfer
+                  ? "Importing…"
+                  : "Submitting…"
+                : isInternalTransfer
+                  ? "Import from Twilio"
+                  : "Submit port-in request"}
             </Button>
           )}
         </div>

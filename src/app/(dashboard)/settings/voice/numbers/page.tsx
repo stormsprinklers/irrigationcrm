@@ -59,6 +59,16 @@ type A2pNumberStatus = {
 type A2pStatus = {
   configured: boolean;
   messagingServiceSid: string | null;
+  messagingServiceName?: string | null;
+  sidSource?: "app" | "env" | null;
+  availableServices?: Array<{
+    sid: string;
+    friendlyName: string | null;
+    inboundRequestUrl: string | null;
+  }>;
+  servicesError?: string | null;
+  messagingServiceNumberCount?: number;
+  listError?: string | null;
   companies: Array<{
     id: string;
     name: string;
@@ -104,6 +114,8 @@ export default function VoiceNumbersPage() {
   const [syncing, setSyncing] = useState(false);
   const [a2pStatus, setA2pStatus] = useState<A2pStatus | null>(null);
   const [a2pSyncing, setA2pSyncing] = useState(false);
+  const [a2pServiceDraft, setA2pServiceDraft] = useState("");
+  const [a2pSavingService, setA2pSavingService] = useState(false);
   const [releaseToken, setReleaseToken] = useState<string | null>(null);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -157,9 +169,37 @@ export default function VoiceNumbersPage() {
           return;
         }
         setA2pStatus(data);
+        setA2pServiceDraft(data.messagingServiceSid ?? "");
       })
       .catch(() => toast.error("Failed to load A2P status"));
   }, [tab]);
+
+  async function saveA2pMessagingService() {
+    setA2pSavingService(true);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/a2p", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messagingServiceSid: a2pServiceDraft.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to save Messaging Service");
+        return;
+      }
+      setA2pStatus(data);
+      setA2pServiceDraft(data.messagingServiceSid ?? "");
+      toast.success(
+        data.messagingServiceSid
+          ? "Messaging Service saved — attach numbers next"
+          : "Messaging Service cleared"
+      );
+    } finally {
+      setA2pSavingService(false);
+    }
+  }
 
   async function syncA2p() {
     setA2pSyncing(true);
@@ -170,12 +210,25 @@ export default function VoiceNumbersPage() {
         toast.error(data.error ?? "A2P sync failed");
         return;
       }
+      const failCount = Array.isArray(data.failed) ? data.failed.length : 0;
       toast.success(
         `A2P sync: ${data.attached} attached, ${data.alreadyAttached} already on campaign` +
-          (data.failed?.length ? `, ${data.failed.length} failed` : "")
+          (failCount ? `, ${failCount} failed` : "")
       );
+      if (failCount) {
+        for (const row of data.failed.slice(0, 4)) {
+          toast.error(
+            `${formatPhoneDisplay(row.e164)}: ${row.error}`,
+            { duration: 8000 }
+          );
+        }
+      }
       const statusRes = await fetch("/api/settings/voice/numbers/a2p");
-      if (statusRes.ok) setA2pStatus(await statusRes.json());
+      if (statusRes.ok) {
+        const status = await statusRes.json();
+        setA2pStatus(status);
+        setA2pServiceDraft(status.messagingServiceSid ?? "");
+      }
     } finally {
       setA2pSyncing(false);
     }
@@ -442,17 +495,63 @@ export default function VoiceNumbersPage() {
           <div>
             <h3 className="font-semibold">Shared A2P / 10DLC campaign</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              One Messaging Service covers every phone number across businesses you operate
-              (for example Storm Sprinklers and Chestnut &amp; Cheer). New purchases and ports
-              attach automatically when <span className="font-mono">TWILIO_MESSAGING_SERVICE_SID</span>{" "}
-              is set.
+              Choose the Twilio Messaging Service that holds your approved A2P campaign. One service
+              covers every phone number across businesses you operate (for example Storm Sprinklers
+              and Chestnut &amp; Cheer). New purchases, ports, and transfers attach to this service
+              automatically.
             </p>
           </div>
           {!a2pStatus ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
             <>
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="space-y-3 rounded-md border border-border bg-muted/30 px-3 py-3 text-sm">
+                <div>
+                  <label className="mb-1 block text-xs font-medium">Messaging Service</label>
+                  {a2pStatus.servicesError ? (
+                    <p className="text-amber-800">
+                      Could not list Twilio Messaging Services: {a2pStatus.servicesError}
+                    </p>
+                  ) : (
+                    <select
+                      className="flex h-10 w-full max-w-xl rounded-md border border-input bg-background px-3 text-sm"
+                      value={a2pServiceDraft}
+                      onChange={(e) => setA2pServiceDraft(e.target.value)}
+                      disabled={!canManageA2p || a2pSavingService}
+                    >
+                      <option value="">Select a Messaging Service…</option>
+                      {(a2pStatus.availableServices ?? []).map((s) => (
+                        <option key={s.sid} value={s.sid}>
+                          {(s.friendlyName || "Untitled service") + ` (${s.sid})`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {a2pStatus.sidSource === "env" ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Currently using a legacy env value. Save a selection here to manage it in the
+                      app instead.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Pick the service tied to your approved US A2P 10DLC campaign in Twilio, then
+                      save.
+                    </p>
+                  )}
+                </div>
+                {canManageA2p ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void saveA2pMessagingService()}
+                    disabled={
+                      a2pSavingService ||
+                      a2pServiceDraft === (a2pStatus.messagingServiceSid ?? "")
+                    }
+                  >
+                    {a2pSavingService ? "Saving…" : "Save Messaging Service"}
+                  </Button>
+                ) : null}
                 <p>
                   Status:{" "}
                   {a2pStatus.configured ? (
@@ -460,19 +559,28 @@ export default function VoiceNumbersPage() {
                   ) : (
                     <span className="font-medium text-amber-700">Not configured</span>
                   )}
+                  {a2pStatus.messagingServiceName
+                    ? ` · ${a2pStatus.messagingServiceName}`
+                    : null}
                 </p>
                 {a2pStatus.messagingServiceSid ? (
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  <p className="font-mono text-xs text-muted-foreground">
                     {a2pStatus.messagingServiceSid}
                   </p>
                 ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Set TWILIO_MESSAGING_SERVICE_SID in Vercel to your approved A2P Messaging Service.
+                  <p className="text-xs text-muted-foreground">
+                    No Messaging Service selected yet — choose one above.
                   </p>
                 )}
-                <p className="mt-2 text-muted-foreground">
+                <p className="text-muted-foreground">
                   {a2pStatus.twilioLinkedCount} Twilio-linked number
                   {a2pStatus.twilioLinkedCount === 1 ? "" : "s"} across your businesses
+                  {typeof a2pStatus.messagingServiceNumberCount === "number" ? (
+                    <>
+                      {" · "}
+                      {a2pStatus.messagingServiceNumberCount} currently in Sender Pool
+                    </>
+                  ) : null}
                   {a2pStatus.missingOnServiceCount > 0 ? (
                     <>
                       {" · "}
@@ -491,10 +599,29 @@ export default function VoiceNumbersPage() {
                   ) : null}
                 </p>
               </div>
+              {a2pStatus.listError ? (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
+                  Could not read the Messaging Service Sender Pool: {a2pStatus.listError}. Confirm
+                  the selected service is correct in Twilio.
+                </div>
+              ) : null}
               {a2pStatus.missingPrimaryCount > 0 ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                  A Primary number is missing from the shared Messaging Service. That causes US A2P
-                  10DLC send failures for that company. Click attach below.
+                <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                  <p>
+                    A Primary number is missing from the shared Messaging Service. That causes US
+                    A2P 10DLC send failures for that company.
+                  </p>
+                  {canManageA2p ? (
+                    <Button
+                      type="button"
+                      onClick={() => void syncA2p()}
+                      disabled={!a2pStatus.configured || a2pSyncing || Boolean(a2pStatus.listError)}
+                    >
+                      {a2pSyncing
+                        ? "Attaching…"
+                        : "Attach all my businesses’ numbers to A2P"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
               <ul className="space-y-1 text-sm">
@@ -550,17 +677,24 @@ export default function VoiceNumbersPage() {
                 <Button
                   type="button"
                   onClick={() => void syncA2p()}
-                  disabled={!a2pStatus.configured || a2pSyncing}
+                  disabled={!a2pStatus.configured || a2pSyncing || Boolean(a2pStatus.listError)}
                 >
                   {a2pSyncing
                     ? "Syncing…"
-                    : "Attach all my businesses’ numbers to A2P"}
+                    : a2pStatus.missingOnServiceCount > 0
+                      ? "Attach all my businesses’ numbers to A2P"
+                      : "Re-sync A2P attachments"}
                 </Button>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   Only admins and managers can run A2P sync.
                 </p>
               )}
+              <p className="text-xs text-muted-foreground">
+                A number can only sit in one Messaging Service Sender Pool. If attach fails because
+                it&apos;s on another service, sync will try to move it to this shared campaign
+                automatically.
+              </p>
             </>
           )}
         </div>

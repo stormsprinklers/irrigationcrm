@@ -130,7 +130,7 @@ export async function sendSms(params: {
     await assertOutboundCommsEnabled(params.companyId, "sms");
   }
   const client = getTwilioClient();
-  const messagingServiceSid = getSharedMessagingServiceSid();
+  const messagingServiceSid = await getSharedMessagingServiceSid();
   // Prefer Messaging Service when configured (US A2P / 10DLC). Keep From so the
   // brand number is used; that number must be on the shared Messaging Service.
   if (messagingServiceSid) {

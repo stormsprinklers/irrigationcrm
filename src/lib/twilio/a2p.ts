@@ -2,14 +2,75 @@ import { getTwilioClient } from "@/lib/inbox/twilio";
 import { normalizePhone, phoneDigitsKey } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
-/** Shared A2P / 10DLC Messaging Service SID (covers all brands on this Twilio account). */
-export function getSharedMessagingServiceSid(): string | null {
-  const sid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
-  return sid || null;
+const PLATFORM_SETTINGS_ID = "default";
+
+export type TwilioMessagingServiceOption = {
+  sid: string;
+  friendlyName: string | null;
+  inboundRequestUrl: string | null;
+};
+
+/** List Messaging Services on the Twilio account for in-app A2P selection. */
+export async function listTwilioMessagingServices(): Promise<TwilioMessagingServiceOption[]> {
+  const client = getTwilioClient();
+  const rows = await client.messaging.v1.services.list({ limit: 100 });
+  return rows.map((s) => ({
+    sid: s.sid,
+    friendlyName: s.friendlyName ?? null,
+    inboundRequestUrl: s.inboundRequestUrl ?? null,
+  }));
 }
 
-export function isA2pMessagingConfigured(): boolean {
-  return Boolean(getSharedMessagingServiceSid());
+/**
+ * Shared A2P / 10DLC Messaging Service SID for every brand on this Twilio account.
+ * Prefer in-app setting (Settings → A2P campaign); env is optional legacy fallback.
+ */
+export async function getSharedMessagingServiceSid(): Promise<string | null> {
+  try {
+    const row = await prisma.twilioPlatformSettings.findUnique({
+      where: { id: PLATFORM_SETTINGS_ID },
+      select: { messagingServiceSid: true },
+    });
+    const fromDb = row?.messagingServiceSid?.trim();
+    if (fromDb) return fromDb;
+  } catch (err) {
+    // Table may not exist until db push — fall through to env / auto-detect.
+    console.warn("[a2p] read platform settings failed", err);
+  }
+
+  const fromEnv = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  if (fromEnv) return fromEnv;
+
+  return null;
+}
+
+export async function isA2pMessagingConfigured(): Promise<boolean> {
+  return Boolean(await getSharedMessagingServiceSid());
+}
+
+export async function saveSharedMessagingServiceSid(params: {
+  messagingServiceSid: string | null;
+  updatedByUserId?: string | null;
+}): Promise<string | null> {
+  const sid = params.messagingServiceSid?.trim() || null;
+  if (sid && !/^MG[0-9a-fA-F]{32}$/i.test(sid)) {
+    throw new Error("Messaging Service SID must look like MGxxxxxxxx…");
+  }
+
+  await prisma.twilioPlatformSettings.upsert({
+    where: { id: PLATFORM_SETTINGS_ID },
+    create: {
+      id: PLATFORM_SETTINGS_ID,
+      messagingServiceSid: sid,
+      updatedByUserId: params.updatedByUserId ?? null,
+    },
+    update: {
+      messagingServiceSid: sid,
+      updatedByUserId: params.updatedByUserId ?? null,
+    },
+  });
+
+  return sid;
 }
 
 /**
@@ -61,46 +122,84 @@ export async function listUserOperatedCompanyIds(
   return [...ids];
 }
 
-/** IncomingPhoneNumber SIDs currently on the shared Messaging Service. */
-export async function listMessagingServiceIncomingSids(
+/** IncomingPhoneNumber SIDs + E.164s currently on the shared Messaging Service. */
+export async function listMessagingServiceNumbers(
   serviceSid?: string | null
-): Promise<Set<string>> {
-  const sid = serviceSid ?? getSharedMessagingServiceSid();
-  const attached = new Set<string>();
-  if (!sid) return attached;
+): Promise<{
+  sids: Set<string>;
+  e164s: Set<string>;
+  count: number;
+  error: string | null;
+}> {
+  const sid = serviceSid ?? (await getSharedMessagingServiceSid());
+  const sids = new Set<string>();
+  const e164s = new Set<string>();
+  if (!sid) {
+    return {
+      sids,
+      e164s,
+      count: 0,
+      error: "No Messaging Service selected. Choose one on the A2P campaign tab.",
+    };
+  }
 
   const client = getTwilioClient();
   try {
-    // Auto-paginate so we don't miss numbers beyond the first page.
     const rows = await client.messaging.v1.services(sid).phoneNumbers.list({
       limit: 1000,
     });
     for (const row of rows) {
+      // Messaging Service PhoneNumber.sid is the IncomingPhoneNumber PN… SID.
       const phoneNumberSid =
         (row as { phoneNumberSid?: string }).phoneNumberSid || row.sid;
-      if (phoneNumberSid) attached.add(phoneNumberSid);
-      if (row.sid) attached.add(row.sid);
+      if (phoneNumberSid) sids.add(phoneNumberSid);
+      if (row.sid) sids.add(row.sid);
+      const e164 = (row as { phoneNumber?: string }).phoneNumber;
+      if (e164) {
+        e164s.add(normalizePhone(e164));
+        const key = phoneDigitsKey(e164);
+        if (key) e164s.add(key);
+      }
     }
+    return { sids, e164s, count: rows.length, error: null };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("[a2p] list messaging service numbers failed", err);
+    return { sids, e164s, count: 0, error: message };
   }
-  return attached;
+}
+
+/** IncomingPhoneNumber SIDs currently on the shared Messaging Service. */
+export async function listMessagingServiceIncomingSids(
+  serviceSid?: string | null
+): Promise<Set<string>> {
+  const listed = await listMessagingServiceNumbers(serviceSid);
+  return listed.sids;
 }
 
 /** Attach a Twilio IncomingPhoneNumber SID to the shared Messaging Service (idempotent). */
 export async function attachNumberToA2pMessagingService(
   twilioPhoneSid: string
-): Promise<{ ok: true; alreadyAttached?: boolean } | { ok: false; error: string }> {
-  const serviceSid = getSharedMessagingServiceSid();
+): Promise<{ ok: true; alreadyAttached?: boolean; movedFromServiceSid?: string } | { ok: false; error: string }> {
+  const serviceSid = await getSharedMessagingServiceSid();
   if (!serviceSid) {
-    return { ok: false, error: "TWILIO_MESSAGING_SERVICE_SID is not configured" };
+    return {
+      ok: false,
+      error: "No Messaging Service selected. Open Settings → Phone numbers → A2P campaign and choose one.",
+    };
   }
   if (!twilioPhoneSid?.startsWith("PN")) {
     return { ok: false, error: "Invalid Twilio phone SID" };
   }
 
-  const attached = await listMessagingServiceIncomingSids(serviceSid);
-  if (attached.has(twilioPhoneSid)) {
+  const listed = await listMessagingServiceNumbers(serviceSid);
+  if (listed.error) {
+    return {
+      ok: false,
+      error: `Cannot read Messaging Service ${serviceSid}: ${listed.error}. Pick a different service on the A2P tab.`,
+    };
+  }
+  if (listed.sids.has(twilioPhoneSid)) {
     return { ok: true, alreadyAttached: true };
   }
 
@@ -112,11 +211,81 @@ export async function attachNumberToA2pMessagingService(
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Twilio often returns a clear error if already in the service.
-    if (/already|exist|duplicate/i.test(message)) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? Number((err as { code?: unknown }).code)
+        : null;
+
+    // Already on this service (race / duplicate).
+    if (code === 21710 || /already|exist|duplicate/i.test(message)) {
       return { ok: true, alreadyAttached: true };
     }
+
+    // On a different Messaging Service — move to the shared A2P service.
+    if (
+      code === 21712 ||
+      /another Messaging Service|associated with another/i.test(message)
+    ) {
+      const moved = await movePhoneNumberToMessagingService(twilioPhoneSid, serviceSid);
+      if (moved.ok) return moved;
+      return {
+        ok: false,
+        error:
+          moved.error ||
+          "Number is on a different Messaging Service. Remove it from that Sender Pool in Twilio Console, then attach again.",
+      };
+    }
+
     console.error("[a2p] attach number failed", twilioPhoneSid, err);
+    return { ok: false, error: message };
+  }
+}
+
+/** Remove PN from any other Messaging Service, then add to the target service. */
+async function movePhoneNumberToMessagingService(
+  twilioPhoneSid: string,
+  targetServiceSid: string
+): Promise<
+  | { ok: true; alreadyAttached?: boolean; movedFromServiceSid?: string }
+  | { ok: false; error: string }
+> {
+  const client = getTwilioClient();
+  let movedFrom: string | null = null;
+
+  try {
+    const services = await client.messaging.v1.services.list({ limit: 100 });
+    for (const service of services) {
+      if (service.sid === targetServiceSid) continue;
+      try {
+        const onService = await client.messaging.v1
+          .services(service.sid)
+          .phoneNumbers.list({ limit: 1000 });
+        const match = onService.find(
+          (row) =>
+            row.sid === twilioPhoneSid ||
+            (row as { phoneNumberSid?: string }).phoneNumberSid === twilioPhoneSid
+        );
+        if (!match) continue;
+        await client.messaging.v1
+          .services(service.sid)
+          .phoneNumbers(match.sid)
+          .remove();
+        movedFrom = service.sid;
+      } catch (err) {
+        console.warn("[a2p] scan/remove from other messaging service failed", service.sid, err);
+      }
+    }
+
+    await client.messaging.v1.services(targetServiceSid).phoneNumbers.create({
+      phoneNumberSid: twilioPhoneSid,
+    });
+    return {
+      ok: true,
+      movedFromServiceSid: movedFrom ?? undefined,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[a2p] move number to messaging service failed", twilioPhoneSid, err);
     return { ok: false, error: message };
   }
 }
@@ -132,8 +301,11 @@ export async function ensureCompanyFromNumberOnA2p(
   | { ok: true; twilioSid: string; alreadyAttached: boolean }
   | { ok: false; error: string }
 > {
-  if (!isA2pMessagingConfigured()) {
-    return { ok: false, error: "TWILIO_MESSAGING_SERVICE_SID is not configured" };
+  if (!(await isA2pMessagingConfigured())) {
+    return {
+      ok: false,
+      error: "No Messaging Service selected. Open Settings → Phone numbers → A2P campaign and choose one.",
+    };
   }
 
   const normalized = normalizePhone(fromE164);
@@ -218,9 +390,11 @@ export type A2pSyncResult = {
 export async function syncCompaniesNumbersToA2p(
   companyIds: string[]
 ): Promise<A2pSyncResult> {
-  const messagingServiceSid = getSharedMessagingServiceSid();
+  const messagingServiceSid = await getSharedMessagingServiceSid();
   if (!messagingServiceSid) {
-    throw new Error("TWILIO_MESSAGING_SERVICE_SID is not configured");
+    throw new Error(
+      "No Messaging Service selected. Open Settings → Phone numbers → A2P campaign and choose one."
+    );
   }
 
   const numbers = await prisma.phoneNumber.findMany({
@@ -293,7 +467,32 @@ export async function syncCompaniesNumbersToA2p(
 
 /** Status snapshot for the A2P settings UI across operated companies. */
 export async function getA2pStatusForCompanies(companyIds: string[]) {
-  const messagingServiceSid = getSharedMessagingServiceSid();
+  const messagingServiceSid = await getSharedMessagingServiceSid();
+  let availableServices: TwilioMessagingServiceOption[] = [];
+  let servicesError: string | null = null;
+  try {
+    availableServices = await listTwilioMessagingServices();
+  } catch (err) {
+    servicesError = err instanceof Error ? err.message : String(err);
+  }
+
+  // Source of the currently resolved SID (for UI clarity).
+  let sidSource: "app" | "env" | null = null;
+  try {
+    const row = await prisma.twilioPlatformSettings.findUnique({
+      where: { id: PLATFORM_SETTINGS_ID },
+      select: { messagingServiceSid: true },
+    });
+    if (row?.messagingServiceSid?.trim()) sidSource = "app";
+    else if (process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() && messagingServiceSid) {
+      sidSource = "env";
+    }
+  } catch {
+    if (process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() && messagingServiceSid) {
+      sidSource = "env";
+    }
+  }
+
   const companies = await prisma.company.findMany({
     where: { id: { in: companyIds } },
     select: {
@@ -313,13 +512,25 @@ export async function getA2pStatusForCompanies(companyIds: string[]) {
     orderBy: { name: "asc" },
   });
 
-  const attached = messagingServiceSid
-    ? await listMessagingServiceIncomingSids(messagingServiceSid)
-    : new Set<string>();
+  const listed = messagingServiceSid
+    ? await listMessagingServiceNumbers(messagingServiceSid)
+    : {
+        sids: new Set<string>(),
+        e164s: new Set<string>(),
+        count: 0,
+        error: null as string | null,
+      };
 
   const numbers: A2pNumberStatus[] = [];
   for (const company of companies) {
     for (const n of company.phoneNumbers) {
+      const normalized = normalizePhone(n.e164);
+      const digitKey = phoneDigitsKey(n.e164);
+      const onMessagingService = Boolean(
+        (n.twilioSid && listed.sids.has(n.twilioSid)) ||
+          listed.e164s.has(normalized) ||
+          (digitKey && listed.e164s.has(digitKey))
+      );
       numbers.push({
         id: n.id,
         e164: n.e164,
@@ -327,17 +538,25 @@ export async function getA2pStatusForCompanies(companyIds: string[]) {
         companyName: company.name,
         isPrimary: n.isPrimary || company.twilioPhone === n.e164,
         twilioSid: n.twilioSid,
-        onMessagingService: Boolean(n.twilioSid && attached.has(n.twilioSid)),
+        onMessagingService,
       });
     }
   }
 
   const missing = numbers.filter((n) => n.twilioSid && !n.onMessagingService);
   const missingPrimary = missing.filter((n) => n.isPrimary);
+  const selectedService =
+    availableServices.find((s) => s.sid === messagingServiceSid) ?? null;
 
   return {
     configured: Boolean(messagingServiceSid),
     messagingServiceSid,
+    messagingServiceName: selectedService?.friendlyName ?? null,
+    sidSource,
+    availableServices,
+    servicesError,
+    messagingServiceNumberCount: listed.count,
+    listError: listed.error,
     companies: companies.map((c) => ({
       id: c.id,
       name: c.name,
