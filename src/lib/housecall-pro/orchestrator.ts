@@ -14,7 +14,7 @@ import {
 import { createHousecallProClient } from "@/lib/housecall-pro/client";
 import { runStepBatch } from "@/lib/housecall-pro/importers";
 import { fetchPreviewCounts } from "@/lib/housecall-pro/preview";
-import type { MigrationOptions } from "@/lib/housecall-pro/types";
+import type { MigrationDebugSample, MigrationOptions } from "@/lib/housecall-pro/types";
 import { prisma } from "@/lib/prisma";
 
 function attachmentStep(step: HousecallProMigrationStepType) {
@@ -479,28 +479,29 @@ export async function processMigrationBatch(params: {
     const message = err instanceof Error ? err.message : "Batch failed";
     const previousStats = (stepRow.statsJson as {
       recentErrors?: string[];
-      debugSamples?: unknown[];
+      debugSamples?: MigrationDebugSample[];
     } | null) ?? {};
     const previousSamples = Array.isArray(previousStats.debugSamples)
       ? previousStats.debugSamples
       : [];
+    const failedStats = {
+      recentErrors: [message],
+      debugSamples: [
+        ...previousSamples,
+        {
+          at: new Date().toISOString(),
+          action: "failed" as const,
+          label: "Batch threw before completion",
+          error: message,
+        },
+      ].slice(-80),
+    };
     await prisma.housecallProMigrationStep.update({
       where: { id: stepRow.id },
       data: {
         status: HousecallProMigrationStepStatus.FAILED,
         lastError: message,
-        statsJson: {
-          recentErrors: [message],
-          debugSamples: [
-            ...previousSamples,
-            {
-              at: new Date().toISOString(),
-              action: "failed",
-              label: "Batch threw before completion",
-              error: message,
-            },
-          ].slice(-80),
-        },
+        statsJson: failedStats as Prisma.InputJsonValue,
       },
     });
     throw err;
@@ -513,7 +514,7 @@ export async function processMigrationBatch(params: {
   const recentErrors = batchResult.errors.slice(0, 20);
   const previousStats = (stepRow.statsJson as {
     recentErrors?: string[];
-    debugSamples?: unknown[];
+    debugSamples?: MigrationDebugSample[];
   } | null) ?? {};
   const previousSamples = Array.isArray(previousStats.debugSamples)
     ? previousStats.debugSamples
@@ -522,6 +523,11 @@ export async function processMigrationBatch(params: {
     ...previousSamples,
     ...(batchResult.debugSamples ?? []),
   ].slice(-80);
+
+  const nextStats = {
+    recentErrors,
+    ...(debugMode || nextSamples.length ? { debugSamples: nextSamples } : {}),
+  };
 
   await prisma.housecallProMigrationStep.update({
     where: { id: stepRow.id },
@@ -535,12 +541,7 @@ export async function processMigrationBatch(params: {
       failed: { increment: batchResult.failed },
       completedAt: batchResult.done ? new Date() : null,
       lastError: recentErrors[0] ?? null,
-      statsJson: {
-        recentErrors,
-        ...(debugMode || nextSamples.length
-          ? { debugSamples: nextSamples }
-          : {}),
-      },
+      statsJson: nextStats as Prisma.InputJsonValue,
     },
   });
 
