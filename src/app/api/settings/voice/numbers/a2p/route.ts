@@ -6,6 +6,7 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import {
+  getA2pStatusForCompanies,
   isA2pMessagingConfigured,
   listUserOperatedCompanyIds,
   syncCompaniesNumbersToA2p,
@@ -30,30 +31,8 @@ export async function GET() {
       sessionUser.email,
       user.companyId
     );
-    const companies = await prisma.company.findMany({
-      where: { id: { in: companyIds } },
-      select: {
-        id: true,
-        name: true,
-        _count: { select: { phoneNumbers: true } },
-      },
-      orderBy: { name: "asc" },
-    });
-
-    const linkedNumbers = await prisma.phoneNumber.count({
-      where: { companyId: { in: companyIds }, twilioSid: { not: null } },
-    });
-
-    return NextResponse.json({
-      configured: isA2pMessagingConfigured(),
-      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() || null,
-      companies: companies.map((c) => ({
-        id: c.id,
-        name: c.name,
-        phoneNumberCount: c._count.phoneNumbers,
-      })),
-      twilioLinkedCount: linkedNumbers,
-    });
+    const status = await getA2pStatusForCompanies(companyIds);
+    return NextResponse.json(status);
   } catch {
     return unauthorizedResponse();
   }
@@ -66,7 +45,7 @@ export async function GET() {
 export async function POST() {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN") {
+    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
       return forbiddenResponse();
     }
     if (!isA2pMessagingConfigured()) {

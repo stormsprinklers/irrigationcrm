@@ -49,6 +49,15 @@ export async function PATCH(
         },
       });
       await syncCompanyTwilioPhone(user.companyId, number.e164);
+      try {
+        const { ensureCompanyFromNumberOnA2p } = await import("@/lib/twilio/a2p");
+        const a2p = await ensureCompanyFromNumberOnA2p(user.companyId, number.e164);
+        if (!a2p.ok) {
+          console.warn("[numbers] primary set but A2P attach failed", number.e164, a2p.error);
+        }
+      } catch (err) {
+        console.warn("[numbers] primary A2P ensure threw", number.e164, err);
+      }
       return NextResponse.json(number);
     }
 

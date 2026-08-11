@@ -2,7 +2,7 @@ import twilio from "twilio";
 import type { NextRequest } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
-import { getSharedMessagingServiceSid } from "@/lib/twilio/a2p";
+import { getSharedMessagingServiceSid, ensureCompanyFromNumberOnA2p } from "@/lib/twilio/a2p";
 
 function firstHeaderValue(value: string | null) {
   if (!value) return null;
@@ -132,7 +132,15 @@ export async function sendSms(params: {
   const client = getTwilioClient();
   const messagingServiceSid = getSharedMessagingServiceSid();
   // Prefer Messaging Service when configured (US A2P / 10DLC). Keep From so the
-  // customer's brand number is used; Twilio requires that number be on the service.
+  // brand number is used; that number must be on the shared Messaging Service.
+  if (messagingServiceSid) {
+    const ensure = await ensureCompanyFromNumberOnA2p(params.companyId, params.from);
+    if (!ensure.ok) {
+      throw new Error(
+        `${ensure.error} Open Settings → Phone numbers → A2P campaign and attach numbers for this company.`
+      );
+    }
+  }
   return client.messages.create({
     to: params.to,
     body: params.body || undefined,

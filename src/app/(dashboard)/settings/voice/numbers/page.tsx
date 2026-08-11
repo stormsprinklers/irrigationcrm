@@ -46,11 +46,29 @@ type AvailableNumber = {
   areaCode?: string | null;
 };
 
+type A2pNumberStatus = {
+  id: string;
+  e164: string;
+  companyId: string;
+  companyName: string;
+  isPrimary: boolean;
+  twilioSid: string | null;
+  onMessagingService: boolean;
+};
+
 type A2pStatus = {
   configured: boolean;
   messagingServiceSid: string | null;
-  companies: Array<{ id: string; name: string; phoneNumberCount: number }>;
+  companies: Array<{
+    id: string;
+    name: string;
+    phoneNumberCount: number;
+    twilioPhone: string | null;
+  }>;
+  numbers: A2pNumberStatus[];
   twilioLinkedCount: number;
+  missingOnServiceCount: number;
+  missingPrimaryCount: number;
 };
 
 const NUMBER_TYPES = [
@@ -64,6 +82,8 @@ const DEFAULT_AREA_CODES = ["801"];
 export default function VoiceNumbersPage() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN";
+  const canManageA2p =
+    session?.user?.role === "ADMIN" || session?.user?.role === "MANAGER";
   const [tab, setTab] = useState<"list" | "buy" | "port" | "a2p" | "release">("list");
   const [numbers, setNumbers] = useState<PhoneNumberRow[]>([]);
   const [flows, setFlows] = useState<CallFlowOption[]>([]);
@@ -453,19 +473,80 @@ export default function VoiceNumbersPage() {
                 <p className="mt-2 text-muted-foreground">
                   {a2pStatus.twilioLinkedCount} Twilio-linked number
                   {a2pStatus.twilioLinkedCount === 1 ? "" : "s"} across your businesses
+                  {a2pStatus.missingOnServiceCount > 0 ? (
+                    <>
+                      {" · "}
+                      <span className="font-medium text-amber-800">
+                        {a2pStatus.missingOnServiceCount} not on campaign
+                        {a2pStatus.missingPrimaryCount > 0
+                          ? ` (${a2pStatus.missingPrimaryCount} Primary)`
+                          : ""}
+                      </span>
+                    </>
+                  ) : a2pStatus.configured && a2pStatus.twilioLinkedCount > 0 ? (
+                    <>
+                      {" · "}
+                      <span className="font-medium text-green-700">All on campaign</span>
+                    </>
+                  ) : null}
                 </p>
               </div>
+              {a2pStatus.missingPrimaryCount > 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  A Primary number is missing from the shared Messaging Service. That causes US A2P
+                  10DLC send failures for that company. Click attach below.
+                </div>
+              ) : null}
               <ul className="space-y-1 text-sm">
                 {a2pStatus.companies.map((c) => (
                   <li key={c.id} className="flex justify-between gap-2 border-b border-border/60 py-2">
                     <span className="font-medium">{c.name}</span>
                     <span className="text-muted-foreground">
                       {c.phoneNumberCount} number{c.phoneNumberCount === 1 ? "" : "s"}
+                      {c.twilioPhone ? ` · Primary ${formatPhoneDisplay(c.twilioPhone)}` : ""}
                     </span>
                   </li>
                 ))}
               </ul>
-              {isAdmin ? (
+              {Array.isArray(a2pStatus.numbers) && a2pStatus.numbers.length > 0 ? (
+                <div className="overflow-x-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Business</TableHead>
+                        <TableHead>Number</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>On campaign</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {a2pStatus.numbers.map((n) => (
+                        <TableRow key={n.id}>
+                          <TableCell className="font-medium">{n.companyName}</TableCell>
+                          <TableCell>{formatPhoneDisplay(n.e164)}</TableCell>
+                          <TableCell>
+                            {n.isPrimary ? (
+                              <Badge variant="secondary">Primary</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {!n.twilioSid ? (
+                              <span className="text-amber-800">No Twilio SID</span>
+                            ) : n.onMessagingService ? (
+                              <span className="text-green-700">Yes</span>
+                            ) : (
+                              <span className="font-medium text-amber-800">No</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+              {canManageA2p ? (
                 <Button
                   type="button"
                   onClick={() => void syncA2p()}
@@ -476,7 +557,9 @@ export default function VoiceNumbersPage() {
                     : "Attach all my businesses’ numbers to A2P"}
                 </Button>
               ) : (
-                <p className="text-xs text-muted-foreground">Only admins can run A2P sync.</p>
+                <p className="text-xs text-muted-foreground">
+                  Only admins and managers can run A2P sync.
+                </p>
               )}
             </>
           )}
