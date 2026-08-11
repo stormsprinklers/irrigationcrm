@@ -2,6 +2,7 @@ import twilio from "twilio";
 import type { NextRequest } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
+import { getSharedMessagingServiceSid } from "@/lib/twilio/a2p";
 
 function firstHeaderValue(value: string | null) {
   if (!value) return null;
@@ -129,12 +130,17 @@ export async function sendSms(params: {
     await assertOutboundCommsEnabled(params.companyId, "sms");
   }
   const client = getTwilioClient();
+  const messagingServiceSid = getSharedMessagingServiceSid();
+  // Prefer Messaging Service when configured (US A2P / 10DLC). Keep From so the
+  // customer's brand number is used; Twilio requires that number be on the service.
   return client.messages.create({
-    from: params.from,
     to: params.to,
     body: params.body || undefined,
     mediaUrl: params.mediaUrl?.length ? params.mediaUrl : undefined,
     statusCallback: params.statusCallback,
+    ...(messagingServiceSid
+      ? { messagingServiceSid, from: params.from }
+      : { from: params.from }),
   });
 }
 

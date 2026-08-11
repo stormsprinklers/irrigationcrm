@@ -51,7 +51,7 @@ type Portability = {
 
 const STEPS = [
   "Checklist",
-  "Number",
+  "Numbers",
   "Utility bill",
   "Account & LOA",
   "Port date",
@@ -78,7 +78,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
 
   const [checklistOk, setChecklistOk] = useState(false);
   const [e164Input, setE164Input] = useState("");
-  const [portability, setPortability] = useState<Portability | null>(null);
+  const [numbers, setNumbers] = useState<Portability[]>([]);
   const [documentSid, setDocumentSid] = useState<string | null>(null);
   const [billFileName, setBillFileName] = useState<string | null>(null);
   const [customerType, setCustomerType] = useState<"Business" | "Individual">("Business");
@@ -144,9 +144,14 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
     if (id) setSelectedId(id);
   }, []);
 
-  async function checkPortability() {
+  const pinRequired = useMemo(
+    () => numbers.some((n) => n.portable && n.pinRequired),
+    [numbers]
+  );
+  const allPortable = numbers.length > 0 && numbers.every((n) => n.portable);
+
+  async function addNumber() {
     setBusy(true);
-    setPortability(null);
     try {
       const res = await fetch("/api/settings/voice/numbers/port/check", {
         method: "POST",
@@ -158,15 +163,39 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         toast.error(data.error ?? "Portability check failed");
         return;
       }
-      setPortability(data);
       if (!data.portable) {
         toast.error(data.blockedReason ?? "Number is not portable");
-      } else {
-        toast.success("Number is portable");
+        return;
       }
+      const e164 = String(data.e164);
+      if (numbers.some((n) => n.e164 === e164)) {
+        toast.error("That number is already on this port request");
+        return;
+      }
+      setNumbers((prev) => [
+        ...prev,
+        {
+          e164,
+          portable: Boolean(data.portable),
+          pinRequired: Boolean(data.pinRequired),
+          numberType: data.numberType ?? null,
+          blockedReason: data.blockedReason ?? null,
+          notPortableReason: data.notPortableReason ?? null,
+        },
+      ]);
+      setE164Input("");
+      toast.success(
+        data.pinRequired
+          ? `${formatPhoneDisplay(e164)} added · PIN required from carrier`
+          : `${formatPhoneDisplay(e164)} added`
+      );
     } finally {
       setBusy(false);
     }
+  }
+
+  function removeNumber(e164: string) {
+    setNumbers((prev) => prev.filter((n) => n.e164 !== e164));
   }
 
   async function uploadBill(file: File) {
@@ -192,14 +221,14 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
   }
 
   async function submitPort() {
-    if (!portability?.portable || !documentSid) return;
+    if (!allPortable || !documentSid) return;
     setBusy(true);
     try {
       const res = await fetch("/api/settings/voice/numbers/port", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          e164: portability.e164,
+          e164s: numbers.map((n) => n.e164),
           documentSid,
           pin: pin || null,
           customerType,
@@ -227,11 +256,19 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         toast.error(data.error ?? "Failed to create port-in request");
         return;
       }
-      toast.success("Port-in request created — check email to sign the LOA");
-      setSubmittedId(data.id);
-      setSelectedId(data.id);
+      const count = Array.isArray(data.ports) ? data.ports.length : 1;
+      toast.success(
+        count > 1
+          ? `Port-in created for ${count} numbers — check email to sign the LOA`
+          : "Port-in request created — check email to sign the LOA"
+      );
+      const firstId =
+        (Array.isArray(data.ports) && data.ports[0]?.id) || data.id || null;
+      setSubmittedId(firstId);
+      setSelectedId(firstId);
       await loadPorts();
       setStep(0);
+      setNumbers([]);
     } finally {
       setBusy(false);
     }
@@ -281,7 +318,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
 
   function canNext(): boolean {
     if (step === 0) return checklistOk;
-    if (step === 1) return Boolean(portability?.portable);
+    if (step === 1) return allPortable;
     if (step === 2) return Boolean(documentSid);
     if (step === 3) {
       const base =
@@ -295,7 +332,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
         authorizedRepresentative &&
         authorizedRepresentativeEmail.includes("@");
       if (!base) return false;
-      if (portability?.pinRequired && !pin.trim()) return false;
+      if (pinRequired && !pin.trim()) return false;
       return true;
     }
     if (step === 4) return Boolean(targetPortInDate);
@@ -308,7 +345,7 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
     setStep(0);
     setChecklistOk(false);
     setE164Input("");
-    setPortability(null);
+    setNumbers([]);
     setDocumentSid(null);
     setBillFileName(null);
     setPin("");
@@ -465,6 +502,10 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
             <h3 className="font-semibold">Before you start</h3>
             <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
               <li>Keep your current phone service active until the port completes.</li>
+              <li>
+                You can port several numbers from the same carrier in one request (shared account
+                number and PIN).
+              </li>
               <li>Have a recent utility bill (PDF/JPG/PNG, ≤10MB, dated within 30 days).</li>
               <li>Name and billing address must match your losing carrier exactly.</li>
               <li>
@@ -490,33 +531,65 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
 
         {step === 1 && (
           <div className="space-y-3">
-            <h3 className="font-semibold">Number to port</h3>
-            <Input
-              placeholder="+18015551212"
-              value={e164Input}
-              onChange={(e) => {
-                setE164Input(e.target.value);
-                setPortability(null);
-              }}
-            />
-            <Button type="button" onClick={checkPortability} disabled={busy || !e164Input.trim()}>
-              Check portability
-            </Button>
-            {portability ? (
-              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
-                {portability.portable ? (
-                  <p>
-                    Portable · type {portability.numberType ?? "unknown"}
-                    {portability.pinRequired ? " · PIN required from losing carrier" : ""}
-                  </p>
-                ) : (
-                  <p className="text-destructive">
-                    {portability.blockedReason ??
-                      portability.notPortableReason ??
-                      "Not portable"}
-                  </p>
-                )}
-              </div>
+            <h3 className="font-semibold">Numbers to port</h3>
+            <p className="text-sm text-muted-foreground">
+              Add every number on this losing-carrier account. They share one account number and
+              PIN in the next steps.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="min-w-[12rem] flex-1"
+                placeholder="+18015551212"
+                value={e164Input}
+                onChange={(e) => setE164Input(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (e164Input.trim() && !busy) void addNumber();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={() => void addNumber()}
+                disabled={busy || !e164Input.trim()}
+              >
+                {busy ? "Checking…" : "Add number"}
+              </Button>
+            </div>
+            {numbers.length ? (
+              <ul className="divide-y divide-border rounded-md border border-border">
+                {numbers.map((n) => (
+                  <li
+                    key={n.e164}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <div>
+                      <span className="font-medium">{formatPhoneDisplay(n.e164)}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {n.numberType ?? "unknown"}
+                        {n.pinRequired ? " · PIN required" : ""}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => removeNumber(n.e164)}
+                    >
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No numbers added yet.</p>
+            )}
+            {pinRequired ? (
+              <p className="text-xs text-muted-foreground">
+                At least one number requires a carrier PIN — you&apos;ll enter it once for all
+                numbers.
+              </p>
             ) : null}
           </div>
         )}
@@ -587,21 +660,19 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
             </label>
             <label className="text-sm sm:col-span-2">
               Port / account PIN
-              {portability?.pinRequired ? (
-                <span className="text-destructive"> *</span>
-              ) : null}
+              {pinRequired ? <span className="text-destructive"> *</span> : null}
               <Input
                 className="mt-1"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 autoComplete="off"
-                placeholder="From your losing carrier"
-                required={Boolean(portability?.pinRequired)}
+                placeholder="Same PIN for all numbers on this account"
+                required={pinRequired}
               />
               <span className="mt-1 block text-xs text-muted-foreground">
-                {portability?.pinRequired
-                  ? "Required for this number. Ask your current carrier for the porting PIN (sometimes called account PIN or transfer PIN)."
-                  : "Recommended. Many carriers require a PIN to authorize the port — enter it if your carrier provided one."}
+                {pinRequired
+                  ? "Required for one or more numbers. Ask your current carrier for the porting PIN (sometimes called account PIN or transfer PIN). One PIN applies to every number in this request."
+                  : "Recommended. Many carriers require a PIN to authorize the port — enter it once for all numbers if your carrier provided one."}
               </span>
             </label>
             <label className="text-sm sm:col-span-2">
@@ -695,7 +766,10 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
           <div className="space-y-2 text-sm">
             <h3 className="font-semibold">Review & submit</h3>
             <ul className="space-y-1 text-muted-foreground">
-              <li>Number: {portability?.e164 ? formatPhoneDisplay(portability.e164) : ""}</li>
+              <li>
+                Numbers ({numbers.length}):{" "}
+                {numbers.map((n) => formatPhoneDisplay(n.e164)).join(", ")}
+              </li>
               <li>Document: {documentSid}</li>
               <li>
                 Customer: {customerName} ({customerType})
@@ -704,8 +778,8 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
               <li>
                 Port PIN:{" "}
                 {pin.trim()
-                  ? `provided (${pin.trim().length} characters)`
-                  : portability?.pinRequired
+                  ? `provided (${pin.trim().length} characters) · shared across all numbers`
+                  : pinRequired
                     ? "missing (required)"
                     : "not provided"}
               </li>
@@ -774,6 +848,9 @@ export function PortNumberWizard({ onImported }: { onImported?: () => void }) {
               >
                 <span className="font-medium">{formatPhoneDisplay(p.e164)}</span>
                 <span className="ml-2 text-muted-foreground">{p.status}</span>
+                <span className="ml-2 text-[10px] text-muted-foreground">
+                  {p.twilioPortInRequestSid.slice(-8)}
+                </span>
                 {p.phoneNumberId ? (
                   <Badge className="ml-2" variant="secondary">
                     Imported

@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
         direction: "OUTBOUND",
         body: messageBody.trim() || (mediaUrls.length ? "[Media message]" : ""),
         twilioMessageSid: twilioMessage.sid,
+        deliveryStatus: "queued",
         ...(media.length
           ? {
               media: {

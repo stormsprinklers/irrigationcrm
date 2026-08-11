@@ -8,10 +8,10 @@ import {
   checkPortability,
   createPortInRequest,
   ensurePortingWebhookConfigured,
+  findPhoneNumberInPortRequest,
   isTollFreeNumberType,
   isUsLocalE164,
   normalizePortStatus,
-  pickPrimaryPhoneNumber,
   pinRequiredForPort,
   type LosingCarrierInformation,
 } from "@/lib/twilio/porting";
@@ -20,6 +20,30 @@ function requireString(value: unknown, label: string) {
   const s = String(value ?? "").trim();
   if (!s) throw new Error(`${label} is required`);
   return s;
+}
+
+function parseE164List(body: {
+  e164?: unknown;
+  phoneNumber?: unknown;
+  e164s?: unknown;
+  phoneNumbers?: unknown;
+}): string[] {
+  const rawList: unknown[] = Array.isArray(body.e164s)
+    ? body.e164s
+    : Array.isArray(body.phoneNumbers)
+      ? body.phoneNumbers
+      : body.e164 || body.phoneNumber
+        ? [body.e164 ?? body.phoneNumber]
+        : [];
+
+  const normalized = [
+    ...new Set(
+      rawList
+        .map((v) => normalizePhone(String(v ?? "").trim()))
+        .filter(Boolean)
+    ),
+  ];
+  return normalized;
 }
 
 export async function GET() {
@@ -90,12 +114,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const e164 = normalizePhone(requireString(body.e164 ?? body.phoneNumber, "Phone number"));
-    if (!isUsLocalE164(e164)) {
+    const e164s = parseE164List(body);
+    if (!e164s.length) {
+      return NextResponse.json({ error: "At least one phone number is required" }, { status: 400 });
+    }
+    if (e164s.length > 50) {
       return NextResponse.json(
-        { error: "Only US local/mobile numbers are supported in this wizard" },
+        { error: "Port at most 50 numbers per request in this wizard" },
         { status: 400 }
       );
+    }
+
+    for (const e164 of e164s) {
+      if (!isUsLocalE164(e164)) {
+        return NextResponse.json(
+          {
+            error: `Only US local/mobile numbers are supported (${e164})`,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const documentSid = requireString(body.documentSid, "Utility bill document");
@@ -167,37 +205,51 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    const portability = await checkPortability(e164);
-    if (isTollFreeNumberType(portability.numberType)) {
-      return NextResponse.json(
-        {
-          error:
-            "Toll-free numbers cannot be ported through this wizard. Use Twilio Console or Support.",
-        },
-        { status: 400 }
-      );
-    }
-    if (!portability.portable) {
-      return NextResponse.json(
-        {
-          error:
-            portability.notPortableReason ||
-            "This number is not portable via the automated Porting API",
-          notPortableReason: portability.notPortableReason,
-        },
-        { status: 400 }
-      );
+    const portabilityByE164 = new Map<
+      string,
+      Awaited<ReturnType<typeof checkPortability>>
+    >();
+    let anyPinRequired = false;
+
+    for (const e164 of e164s) {
+      const portability = await checkPortability(e164);
+      portabilityByE164.set(e164, portability);
+
+      if (isTollFreeNumberType(portability.numberType)) {
+        return NextResponse.json(
+          {
+            error: `${e164}: Toll-free numbers cannot be ported through this wizard. Use Twilio Console or Support.`,
+          },
+          { status: 400 }
+        );
+      }
+      if (!portability.portable) {
+        return NextResponse.json(
+          {
+            error:
+              portability.notPortableReason ||
+              `${e164} is not portable via the automated Porting API`,
+            e164,
+            notPortableReason: portability.notPortableReason,
+          },
+          { status: 400 }
+        );
+      }
+      if (
+        pinRequiredForPort(
+          portability.pinAndAccountNumberRequired,
+          portability.numberType
+        )
+      ) {
+        anyPinRequired = true;
+      }
     }
 
-    const pinRequired = pinRequiredForPort(
-      portability.pinAndAccountNumberRequired,
-      portability.numberType
-    );
-    if (pinRequired && !pin) {
+    if (anyPinRequired && !pin) {
       return NextResponse.json(
         {
           error:
-            "A PIN from your losing carrier is required for this mobile/number type",
+            "A PIN from your losing carrier is required for one or more of these numbers",
         },
         { status: 400 }
       );
@@ -206,8 +258,7 @@ export async function POST(request: NextRequest) {
     await ensurePortingWebhookConfigured();
 
     const created = await createPortInRequest({
-      phoneNumber: e164,
-      pin,
+      phoneNumbers: e164s.map((phoneNumber) => ({ phoneNumber, pin })),
       documentSid,
       losingCarrier,
       notificationEmails,
@@ -220,39 +271,54 @@ export async function POST(request: NextRequest) {
         : null,
     });
 
-    const pn = pickPrimaryPhoneNumber(created);
-    const status =
-      normalizePortStatus(pn?.port_in_phone_number_status) !== "Unknown"
-        ? normalizePortStatus(pn?.port_in_phone_number_status)
-        : normalizePortStatus(created.port_in_request_status);
+    const rows = [];
+    for (const e164 of e164s) {
+      const pn = findPhoneNumberInPortRequest(created, e164);
+      const portability = portabilityByE164.get(e164);
+      const status =
+        normalizePortStatus(pn?.port_in_phone_number_status) !== "Unknown"
+          ? normalizePortStatus(pn?.port_in_phone_number_status)
+          : normalizePortStatus(created.port_in_request_status);
 
-    const row = await prisma.twilioPortInRequest.create({
-      data: {
-        companyId: user.companyId,
-        createdByUserId: user.id,
-        e164,
+      const row = await prisma.twilioPortInRequest.create({
+        data: {
+          companyId: user.companyId,
+          createdByUserId: user.id,
+          e164,
+          twilioPortInRequestSid: created.port_in_request_sid,
+          twilioPortInPhoneNumberSid: pn?.port_in_phone_number_sid ?? null,
+          twilioDocumentSid: documentSid,
+          status,
+          portable: pn?.portable ?? portability?.portable ?? null,
+          losingCarrierJson: losingCarrier as unknown as Prisma.InputJsonValue,
+          notificationEmails,
+          targetPortInDate: target,
+          targetPortInTimeRangeStart: body.targetPortInTimeRangeStart
+            ? String(body.targetPortInTimeRangeStart)
+            : null,
+          targetPortInTimeRangeEnd: body.targetPortInTimeRangeEnd
+            ? String(body.targetPortInTimeRangeEnd)
+            : null,
+        },
+        include: {
+          phoneNumber: { select: { id: true, e164: true, isPrimary: true } },
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+      rows.push(row);
+    }
+
+    const ports = rows.map(serializePortIn);
+    return NextResponse.json(
+      {
+        ports,
+        // Back-compat for single-number clients
+        ...ports[0],
+        count: ports.length,
         twilioPortInRequestSid: created.port_in_request_sid,
-        twilioPortInPhoneNumberSid: pn?.port_in_phone_number_sid ?? null,
-        twilioDocumentSid: documentSid,
-        status,
-        portable: pn?.portable ?? portability.portable,
-        losingCarrierJson: losingCarrier as unknown as Prisma.InputJsonValue,
-        notificationEmails,
-        targetPortInDate: target,
-        targetPortInTimeRangeStart: body.targetPortInTimeRangeStart
-          ? String(body.targetPortInTimeRangeStart)
-          : null,
-        targetPortInTimeRangeEnd: body.targetPortInTimeRangeEnd
-          ? String(body.targetPortInTimeRangeEnd)
-          : null,
       },
-      include: {
-        phoneNumber: { select: { id: true, e164: true, isPrimary: true } },
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    return NextResponse.json(serializePortIn(row), { status: 201 });
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

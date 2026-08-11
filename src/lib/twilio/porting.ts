@@ -148,8 +148,8 @@ export type LosingCarrierInformation = {
 };
 
 export type CreatePortInParams = {
-  phoneNumber: string;
-  pin?: string | null;
+  /** One or more numbers on the same losing-carrier account (shared LOA / account / PIN). */
+  phoneNumbers: { phoneNumber: string; pin?: string | null }[];
   documentSid: string;
   losingCarrier: LosingCarrierInformation;
   notificationEmails: string[];
@@ -185,21 +185,28 @@ export type PortInRequest = {
 };
 
 export async function createPortInRequest(params: CreatePortInParams): Promise<PortInRequest> {
-  // Only include pin when set — null/empty can confuse carriers that treat it as provided.
-  const phoneEntry: Record<string, string> = {
-    phone_number: params.phoneNumber,
-  };
-  const trimmedPin = params.pin?.trim();
-  if (trimmedPin) {
-    phoneEntry.pin = trimmedPin;
+  if (!params.phoneNumbers.length) {
+    throw new Error("At least one phone number is required");
   }
+
+  const phoneEntries = params.phoneNumbers.map((entry) => {
+    const phoneEntry: Record<string, string> = {
+      phone_number: entry.phoneNumber,
+    };
+    // Only include pin when set — null/empty can confuse carriers that treat it as provided.
+    const trimmedPin = entry.pin?.trim();
+    if (trimmedPin) {
+      phoneEntry.pin = trimmedPin;
+    }
+    return phoneEntry;
+  });
 
   const payload: Record<string, unknown> = {
     account_sid: accountSid(),
     target_port_in_date: params.targetPortInDate,
     notification_emails: params.notificationEmails,
     losing_carrier_information: params.losingCarrier,
-    phone_numbers: [phoneEntry],
+    phone_numbers: phoneEntries,
     documents: [params.documentSid],
   };
   if (params.targetPortInTimeRangeStart) {
@@ -330,4 +337,19 @@ export function isTerminalPortStatus(status: string) {
 
 export function pickPrimaryPhoneNumber(request: PortInRequest): PortInPhoneNumber | null {
   return request.phone_numbers?.[0] ?? null;
+}
+
+/** Match a Twilio Port-In phone entry by E.164 (digits-insensitive). */
+export function findPhoneNumberInPortRequest(
+  request: PortInRequest,
+  e164: string
+): PortInPhoneNumber | null {
+  const want = e164.replace(/\D/g, "");
+  if (!want) return null;
+  return (
+    request.phone_numbers?.find((pn) => {
+      const got = String(pn.phone_number ?? "").replace(/\D/g, "");
+      return got === want || got.endsWith(want.slice(-10)) || want.endsWith(got.slice(-10));
+    }) ?? null
+  );
 }

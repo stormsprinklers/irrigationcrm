@@ -6,10 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { configureNumberWebhooks, listAccountNumbers } from "@/lib/twilio/numbers";
 import { attachNumberToA2pMessagingService } from "@/lib/twilio/a2p";
 import {
+  findPhoneNumberInPortRequest,
   getPortInRequest,
   isTerminalPortStatus,
   normalizePortStatus,
   pickPrimaryPhoneNumber,
+  type PortInPhoneNumber,
   type PortInRequest,
 } from "@/lib/twilio/porting";
 import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
@@ -65,8 +67,10 @@ export function serializePortIn(row: {
   };
 }
 
-export function applyTwilioPortInToRow(request: PortInRequest) {
-  const pn = pickPrimaryPhoneNumber(request);
+function patchFromPhoneNumber(
+  request: PortInRequest,
+  pn: PortInPhoneNumber | null
+) {
   const status =
     normalizePortStatus(pn?.port_in_phone_number_status) !== "Unknown"
       ? normalizePortStatus(pn?.port_in_phone_number_status)
@@ -86,6 +90,13 @@ export function applyTwilioPortInToRow(request: PortInRequest) {
   };
 }
 
+export function applyTwilioPortInToRow(request: PortInRequest, e164?: string) {
+  const pn = e164
+    ? findPhoneNumberInPortRequest(request, e164)
+    : pickPrimaryPhoneNumber(request);
+  return patchFromPhoneNumber(request, pn);
+}
+
 export async function refreshPortInFromTwilio(companyId: string, id: string) {
   const row = await prisma.twilioPortInRequest.findFirst({
     where: { id, companyId },
@@ -97,7 +108,7 @@ export async function refreshPortInFromTwilio(companyId: string, id: string) {
   if (!row) return null;
 
   const remote = await getPortInRequest(row.twilioPortInRequestSid);
-  const patch = applyTwilioPortInToRow(remote);
+  const patch = applyTwilioPortInToRow(remote, row.e164);
   const updated = await prisma.twilioPortInRequest.update({
     where: { id: row.id },
     data: patch,
@@ -233,12 +244,42 @@ export async function handlePortingWebhookPayload(body: {
   const sid = body.port_in_request_sid;
   if (!sid) return { ok: false as const, reason: "missing sid" };
 
-  const row = await prisma.twilioPortInRequest.findFirst({
-    where: { twilioPortInRequestSid: sid },
-  });
+  const phoneSid = body.port_in_phone_number_sid?.trim() || null;
+  const phoneE164 = body.phone_number ? normalizePhone(String(body.phone_number)) : null;
+
+  let row =
+    (phoneSid
+      ? await prisma.twilioPortInRequest.findFirst({
+          where: { twilioPortInRequestSid: sid, twilioPortInPhoneNumberSid: phoneSid },
+        })
+      : null) ??
+    (phoneE164
+      ? await prisma.twilioPortInRequest.findFirst({
+          where: { twilioPortInRequestSid: sid, e164: phoneE164 },
+        })
+      : null) ??
+    (await prisma.twilioPortInRequest.findFirst({
+      where: { twilioPortInRequestSid: sid },
+    }));
+
+  // When several numbers share one request SID and the webhook has no phone match,
+  // refresh every sibling from Twilio instead of updating an arbitrary first row.
   if (!row) {
     console.warn("[porting] webhook for unknown PortIn SID", sid);
     return { ok: false as const, reason: "not found" };
+  }
+
+  if (!phoneSid && !phoneE164) {
+    const siblings = await prisma.twilioPortInRequest.findMany({
+      where: { twilioPortInRequestSid: sid },
+      select: { id: true, companyId: true },
+    });
+    if (siblings.length > 1) {
+      for (const sibling of siblings) {
+        await refreshPortInFromTwilio(sibling.companyId, sibling.id);
+      }
+      return { ok: true as const };
+    }
   }
 
   const status = normalizePortStatus(body.status ?? row.status);

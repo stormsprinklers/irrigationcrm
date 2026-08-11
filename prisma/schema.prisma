@@ -1562,7 +1562,8 @@ model TwilioPortInRequest {
   companyId                   String
   createdByUserId             String?
   e164                        String
-  twilioPortInRequestSid      String    @unique
+  /// Shared across numbers submitted in the same Twilio Port-In request.
+  twilioPortInRequestSid      String
   twilioPortInPhoneNumberSid  String?
   twilioDocumentSid           String?
   /// Mirror of Twilio port-in request / phone-number status.
@@ -1584,9 +1585,11 @@ model TwilioPortInRequest {
   createdBy   User?        @relation("PortInCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
 
+  @@unique([twilioPortInRequestSid, e164])
   @@index([companyId, createdAt])
   @@index([companyId, e164])
   @@index([twilioPortInRequestSid])
+  @@index([twilioPortInPhoneNumberSid])
   @@map("twilio_port_in_requests")
 }
 
@@ -2146,6 +2149,10 @@ model Message {
   twilioMessageSid String?          @unique
   metaMessageId    String?          @unique
   deliveryStatus   String?
+  /// Twilio ErrorCode from status callback (e.g. "30007").
+  deliveryErrorCode String?
+  /// Twilio ErrorMessage or friendly explanation.
+  deliveryError     String?
   sentAt           DateTime         @default(now())
   readAt           DateTime?
   contactInfoDetected Boolean       @default(false)

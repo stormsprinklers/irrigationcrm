@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
+import { formatSmsDeliveryFailure } from "@/lib/inbox/sms-delivery";
 
 const STATUS_MAP: Record<string, string> = {
   queued: "queued",
@@ -25,10 +26,27 @@ export async function POST(request: NextRequest) {
   }
 
   const deliveryStatus = STATUS_MAP[messageStatus] ?? messageStatus;
+  const errorCode = params.ErrorCode?.trim() || null;
+  const errorMessage = params.ErrorMessage?.trim() || null;
+  const terminalFailure =
+    messageStatus === "failed" || messageStatus === "undelivered";
 
   await prisma.message.updateMany({
     where: { twilioMessageSid: messageSid },
-    data: { deliveryStatus },
+    data: {
+      deliveryStatus,
+      ...(terminalFailure
+        ? {
+            deliveryErrorCode: errorCode,
+            deliveryError: errorMessage,
+          }
+        : messageStatus === "delivered"
+          ? {
+              deliveryErrorCode: null,
+              deliveryError: null,
+            }
+          : {}),
+    },
   });
 
   if (messageStatus === "delivered" || messageStatus === "failed" || messageStatus === "undelivered") {
@@ -37,13 +55,22 @@ export async function POST(request: NextRequest) {
       where: { twilioMessageSid: messageSid },
     });
     if (recipient) {
+      const failure = formatSmsDeliveryFailure({
+        deliveryStatus,
+        deliveryErrorCode: errorCode,
+        deliveryError: errorMessage,
+      });
       await prisma.campaignRecipient.update({
         where: { id: recipient.id },
         data: {
           status: recipientStatus,
           ...(messageStatus === "delivered" ? { deliveredAt: new Date() } : {}),
           ...(messageStatus !== "delivered"
-            ? { error: messageStatus === "undelivered" ? "Undelivered" : "Failed" }
+            ? {
+                error: failure.hint
+                  ? `${failure.detail}. ${failure.hint}`
+                  : failure.detail,
+              }
             : {}),
         },
       });

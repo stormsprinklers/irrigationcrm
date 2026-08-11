@@ -54,6 +54,17 @@ export async function POST(_request: NextRequest, context: Ctx) {
       }
     }
 
+    // If the whole Twilio request was canceled (no per-number SID), mark siblings too.
+    if (!row.twilioPortInPhoneNumberSid) {
+      await prisma.twilioPortInRequest.updateMany({
+        where: {
+          companyId: user.companyId,
+          twilioPortInRequestSid: row.twilioPortInRequestSid,
+        },
+        data: { status: "Canceled" },
+      });
+    }
+
     const updated = await prisma.twilioPortInRequest.update({
       where: { id: row.id },
       data: { status: "Canceled" },

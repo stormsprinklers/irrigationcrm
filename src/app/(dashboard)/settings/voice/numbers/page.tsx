@@ -740,7 +740,10 @@ export default function VoiceNumbersPage() {
             <div>
               <h3 className="font-semibold">Your numbers</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Edit title, type, and call flow inline. Primary is the default outbound caller ID.
+                Edit title, type, and call flow inline. Primary is the default outbound caller ID and
+                the number used for outbound inbox SMS. “SMS Capable” means Twilio allows SMS on that
+                line — for US delivery it must also be on your A2P Messaging Service (see the A2P
+                campaign tab).
               </p>
             </div>
             <div className="rounded-lg border border-border bg-white">
@@ -750,7 +753,9 @@ export default function VoiceNumbersPage() {
                     <TableHead className="min-w-[140px]">Phone number</TableHead>
                     <TableHead className="min-w-[160px]">Title</TableHead>
                     <TableHead className="min-w-[140px]">Type</TableHead>
-                    <TableHead>SMS</TableHead>
+                    <TableHead title="Twilio SMS capability — not the same as A2P approval. Outbound CRM texts use the Primary number.">
+                      SMS
+                    </TableHead>
                     <TableHead className="min-w-[150px]">Call flow</TableHead>
                     <TableHead className="min-w-[140px]">Source / agent</TableHead>
                     <TableHead>Linked</TableHead>
@@ -816,9 +821,16 @@ export default function VoiceNumbersPage() {
                       </TableCell>
                       <TableCell>
                         {n.smsEnabled === true ? (
-                          <Badge variant="outline" className="border-green-300 text-green-800">
-                            Enabled
-                          </Badge>
+                          <div className="space-y-0.5">
+                            <Badge variant="outline" className="border-green-300 text-green-800">
+                              Capable
+                            </Badge>
+                            {n.isPrimary ? (
+                              <p className="text-[10px] leading-snug text-muted-foreground">
+                                Used for outbound CRM texts
+                              </p>
+                            ) : null}
+                          </div>
                         ) : n.smsEnabled === false ? (
                           <Badge variant="outline" className="text-muted-foreground">
                             Off

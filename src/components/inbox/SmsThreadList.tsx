@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { isSmsNotDelivered } from "@/lib/inbox/sms-delivery";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Conversation = {
@@ -22,11 +23,6 @@ type Conversation = {
     deliveryStatus?: string | null;
   }[];
 };
-
-function isSmsNotDelivered(status: string | null | undefined) {
-  const normalized = status?.toLowerCase();
-  return normalized === "failed" || normalized === "undelivered";
-}
 
 export function SmsThreadList({
   scope,

@@ -98,6 +98,7 @@ async function sendSmsMessage(params: {
       direction: "OUTBOUND",
       body: params.messageBody.trim() || (mediaUrls.length ? "[Media message]" : ""),
       twilioMessageSid: twilioMessage.sid,
+      deliveryStatus: "queued",
       ...(params.media.length
         ? {
             media: {

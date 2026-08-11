@@ -16,6 +16,10 @@ import { InboxAttachmentPicker } from "@/components/inbox/InboxAttachmentPicker"
 import { MessageMediaGallery, type MessageMediaItem } from "@/components/inbox/MessageMediaGallery";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { formatSmsMessageTime } from "@/lib/inbox/message-time";
+import {
+  formatSmsDeliveryFailure,
+  isSmsNotDelivered,
+} from "@/lib/inbox/sms-delivery";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
@@ -26,16 +30,13 @@ type Message = {
   direction: "INBOUND" | "OUTBOUND";
   sentAt: string;
   deliveryStatus?: string | null;
+  deliveryErrorCode?: string | null;
+  deliveryError?: string | null;
   sender?: { name: string } | null;
   media?: MessageMediaItem[];
   contactInfoDetected?: boolean;
   contactInfoAppliedAt?: string | null;
 };
-
-function isSmsNotDelivered(status: string | null | undefined) {
-  const normalized = status?.toLowerCase();
-  return normalized === "failed" || normalized === "undelivered";
-}
 
 type Conversation = {
   id: string;
@@ -126,6 +127,8 @@ export function SmsMessagePane({
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [contactInfoMessageId, setContactInfoMessageId] = useState<string | null>(null);
+  const [deliveryDetailMsg, setDeliveryDetailMsg] = useState<Message | null>(null);
+  const [resending, setResending] = useState(false);
 
   const isCompose = !conversationId;
 
@@ -322,12 +325,17 @@ export function SmsMessagePane({
                     </div>
 
                     {msg.direction === "OUTBOUND" && isSmsNotDelivered(msg.deliveryStatus) ? (
-                      <p className="flex items-center gap-1 px-1 text-[11px] font-medium text-destructive">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 px-1 text-[11px] font-medium text-destructive underline-offset-2 hover:underline"
+                        onClick={() => setDeliveryDetailMsg(msg)}
+                      >
                         <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
                         {msg.deliveryStatus?.toLowerCase() === "undelivered"
                           ? "Not delivered"
                           : "Failed to send"}
-                      </p>
+                        <span className="font-normal no-underline opacity-80">· Why?</span>
+                      </button>
                     ) : null}
 
                     {scope === "customers" &&
@@ -400,6 +408,93 @@ export function SmsMessagePane({
           }}
         />
       ) : null}
+
+      {deliveryDetailMsg ? (
+        <DeliveryFailureDialog
+          message={deliveryDetailMsg}
+          busy={resending}
+          onClose={() => setDeliveryDetailMsg(null)}
+          onResend={async () => {
+            setResending(true);
+            try {
+              const res = await fetch(
+                `/api/inbox/sms/messages/${deliveryDetailMsg.id}/resend`,
+                { method: "POST" }
+              );
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                toast.error(typeof data.error === "string" ? data.error : "Resend failed");
+                return;
+              }
+              toast.success("Message sent again");
+              setDeliveryDetailMsg(null);
+              if (conversationId) {
+                const refresh = await fetch(
+                  `/api/inbox/sms/conversations/${conversationId}/messages`
+                );
+                if (refresh.ok) {
+                  const payload = await refresh.json();
+                  setMessages(payload.messages ?? []);
+                }
+              }
+              if (data.message?.conversationId) {
+                onSent?.(data.message.conversationId);
+              } else if (conversationId) {
+                onSent?.(conversationId);
+              }
+            } finally {
+              setResending(false);
+            }
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DeliveryFailureDialog({
+  message,
+  busy,
+  onClose,
+  onResend,
+}: {
+  message: Message;
+  busy: boolean;
+  onClose: () => void;
+  onResend: () => void;
+}) {
+  const failure = formatSmsDeliveryFailure(message);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sms-delivery-title"
+        className="w-full max-w-md rounded-lg border border-border bg-white p-5 shadow-lg"
+      >
+        <h2 id="sms-delivery-title" className="flex items-center gap-2 text-base font-semibold">
+          <AlertCircle className="h-4 w-4 text-destructive" aria-hidden />
+          {failure.title}
+        </h2>
+        <p className="mt-3 text-sm text-foreground">{failure.detail}</p>
+        {failure.hint ? (
+          <p className="mt-2 text-sm text-muted-foreground">{failure.hint}</p>
+        ) : null}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Outbound inbox texts send from this company&apos;s Primary phone number. “SMS enabled” on
+          a number only means Twilio lists SMS capability — the number also needs to be on your A2P
+          Messaging Service for US delivery.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+            Close
+          </Button>
+          <Button type="button" disabled={busy} onClick={onResend}>
+            {busy ? "Sending…" : "Try sending again"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
