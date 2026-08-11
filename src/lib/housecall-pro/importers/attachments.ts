@@ -59,7 +59,10 @@ async function fetchAttachments(
   debug?: { result: BatchResult; enabled: boolean }
 ): Promise<HcpRecord[]> {
   const items: HcpRecord[] = [];
-  const detailParams = [{ ...HCP_EXPAND_ATTACHMENTS }, {}];
+  const detailParams: Array<Record<string, string>> = [
+    { ...HCP_EXPAND_ATTACHMENTS },
+    {},
+  ];
   const attempts: string[] = [];
 
   for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
