@@ -1,5 +1,11 @@
 import { HcpEntityType } from "@prisma/client";
-import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
+import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
+import {
+  debugLabelForRecord,
+  emptyBatchResult,
+  pushDebug,
+  summarizeHcpRecord,
+} from "@/lib/housecall-pro/debug";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
   FALLBACK_SERVICE_AREA_NAME,
@@ -7,7 +13,6 @@ import {
 } from "@/lib/housecall-pro/constants";
 import { hcpId, hcpString, uniqueSlug } from "@/lib/housecall-pro/utils";
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/price-book/queries";
 
 export async function ensureFallbackServiceArea(companyId: string, migrationId: string) {
   const existing = await prisma.serviceArea.findFirst({
@@ -22,6 +27,24 @@ export async function ensureFallbackServiceArea(companyId: string, migrationId: 
       localId: existing.id,
     });
     return existing.id;
+  }
+
+  // Stale mapping may point at a deleted ServiceArea — replace it.
+  const stale = await prisma.hcpEntityMapping.findUnique({
+    where: {
+      companyId_entityType_hcpId: {
+        companyId,
+        entityType: HcpEntityType.SERVICE_ZONE,
+        hcpId: "__fallback__",
+      },
+    },
+  });
+  if (stale) {
+    const stillThere = await prisma.serviceArea.findUnique({
+      where: { id: stale.localId },
+      select: { id: true },
+    });
+    if (stillThere) return stillThere.id;
   }
 
   const area = await prisma.serviceArea.create({
@@ -59,7 +82,13 @@ export async function resolveServiceAreaForMigration(
         },
       },
     });
-    if (mapped) return mapped.localId;
+    if (mapped) {
+      const area = await prisma.serviceArea.findUnique({
+        where: { id: mapped.localId },
+        select: { id: true },
+      });
+      if (area) return area.id;
+    }
   }
 
   if (zip) {
@@ -79,22 +108,39 @@ export async function resolveServiceAreaForMigration(
       },
     },
   });
-  if (fallback) return fallback.localId;
+  if (fallback) {
+    const area = await prisma.serviceArea.findUnique({
+      where: { id: fallback.localId },
+      select: { id: true },
+    });
+    if (area) return area.id;
+  }
 
   return ensureFallbackServiceArea(companyId, migrationId);
 }
 
+function zipCodesFromRecord(record: HcpRecord): string[] {
+  if (Array.isArray(record.zip_codes)) {
+    return (record.zip_codes as unknown[]).map((z) => String(z).trim()).filter(Boolean);
+  }
+  if (Array.isArray(record.zips)) {
+    return (record.zips as unknown[]).map((z) => String(z).trim()).filter(Boolean);
+  }
+  return [];
+}
+
+async function syncZips(serviceAreaId: string, zipCodes: string[]) {
+  if (!zipCodes.length) return;
+  await prisma.serviceAreaZip.deleteMany({ where: { serviceAreaId } });
+  await prisma.serviceAreaZip.createMany({
+    data: zipCodes.map((zipCode) => ({ serviceAreaId, zipCode })),
+    skipDuplicates: true,
+  });
+}
+
 export async function importServiceZonesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   if (!ctx.cursor) {
     await ensureFallbackServiceArea(ctx.companyId, ctx.migrationId);
@@ -105,6 +151,20 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
     pageSize: ctx.batchSize,
     arrayKeys: ["service_zones", "zones"],
   });
+
+  pushDebug(
+    result,
+    {
+      action: "pulled",
+      label: `HCP returned ${page.items.length} service zone(s)`,
+      detail: {
+        nextCursor: page.nextCursor,
+        totalEstimate: page.totalEstimate ?? null,
+        sample: page.items.slice(0, 3).map((r) => summarizeHcpRecord(r as HcpRecord)),
+      },
+    },
+    { enabled: debugEnabled }
+  );
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
@@ -128,6 +188,15 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
     const name = hcpString(record.name) ?? hcpString(record.title);
     if (!id || !name) {
       result.skipped++;
+      pushDebug(
+        result,
+        {
+          action: "skipped",
+          label: "Service zone missing id or name",
+          detail: summarizeHcpRecord(record),
+        },
+        { enabled: debugEnabled }
+      );
       continue;
     }
 
@@ -142,57 +211,94 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
         },
       });
 
-      const slug = uniqueSlug(name, existingSlugs);
-      const zipCodes = Array.isArray(record.zip_codes)
-        ? (record.zip_codes as unknown[]).map((z) => String(z).trim()).filter(Boolean)
-        : Array.isArray(record.zips)
-          ? (record.zips as unknown[]).map((z) => String(z).trim()).filter(Boolean)
-          : [];
+      const zipCodes = zipCodesFromRecord(record);
+      const color =
+        hcpString(record.color) ?? hcpString(record.color_hex) ?? undefined;
 
-      if (mapping) {
+      const existingArea = mapping
+        ? await prisma.serviceArea.findUnique({ where: { id: mapping.localId } })
+        : null;
+
+      if (mapping && existingArea) {
         await prisma.serviceArea.update({
-          where: { id: mapping.localId },
+          where: { id: existingArea.id },
           data: {
             name,
-            slug: slugify(name) || slug,
-            color: hcpString(record.color) ?? hcpString(record.color_hex) ?? undefined,
+            // Keep the existing slug to avoid unique collisions on rename.
+            color: color ?? existingArea.color,
           },
         });
-        if (zipCodes.length) {
-          await prisma.serviceAreaZip.deleteMany({ where: { serviceAreaId: mapping.localId } });
-          await prisma.serviceAreaZip.createMany({
-            data: zipCodes.map((zipCode) => ({
-              serviceAreaId: mapping.localId,
-              zipCode,
-            })),
-            skipDuplicates: true,
-          });
-        }
+        await syncZips(existingArea.id, zipCodes);
         result.updated++;
-      } else {
-        const area = await prisma.serviceArea.create({
-          data: {
-            companyId: ctx.companyId,
-            name,
-            slug,
-            color: hcpString(record.color) ?? hcpString(record.color_hex) ?? "#2563EB",
-            zips: zipCodes.length
-              ? { create: zipCodes.map((zipCode) => ({ zipCode })) }
-              : undefined,
+        pushDebug(
+          result,
+          {
+            action: "updated",
+            label: debugLabelForRecord(record, "Service zone"),
+            hcpId: id,
+            detail: { localId: existingArea.id, zipCodes, ...summarizeHcpRecord(record) },
           },
-        });
-        await upsertMapping({
-          companyId: ctx.companyId,
-          migrationId: ctx.migrationId,
-          entityType: HcpEntityType.SERVICE_ZONE,
-          hcpId: id,
-          localId: area.id,
-        });
-        result.created++;
+          { enabled: debugEnabled }
+        );
+        continue;
       }
+
+      // No mapping, or mapping points at a deleted ServiceArea (stale after rollback).
+      const slug = uniqueSlug(name, existingSlugs);
+      existingSlugs.add(slug);
+      const area = await prisma.serviceArea.create({
+        data: {
+          companyId: ctx.companyId,
+          name,
+          slug,
+          color: color ?? "#2563EB",
+          zips: zipCodes.length
+            ? { create: zipCodes.map((zipCode) => ({ zipCode })) }
+            : undefined,
+        },
+      });
+      await upsertMapping({
+        companyId: ctx.companyId,
+        migrationId: ctx.migrationId,
+        entityType: HcpEntityType.SERVICE_ZONE,
+        hcpId: id,
+        localId: area.id,
+      });
+      result.created++;
+      pushDebug(
+        result,
+        {
+          action: "created",
+          label:
+            mapping && !existingArea
+              ? `${debugLabelForRecord(record, "Service zone")} (recreated after stale mapping)`
+              : debugLabelForRecord(record, "Service zone"),
+          hcpId: id,
+          detail: {
+            localId: area.id,
+            slug,
+            zipCodes,
+            recreatedFromStaleMapping: Boolean(mapping && !existingArea),
+            ...summarizeHcpRecord(record),
+          },
+        },
+        { enabled: debugEnabled }
+      );
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Service zone import failed";
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Service zone import failed");
+      result.errors.push(message);
+      pushDebug(
+        result,
+        {
+          action: "failed",
+          label: debugLabelForRecord(record, "Service zone"),
+          hcpId: id,
+          detail: summarizeHcpRecord(record),
+          error: message,
+        },
+        { enabled: debugEnabled }
+      );
     }
   }
 
