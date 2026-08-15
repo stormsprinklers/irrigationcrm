@@ -69,6 +69,8 @@ type VoiceContextValue = {
   notifyVisitBooked: (visitId: string) => void;
 };
 
+const VoiceContext = createContext<VoiceContextValue | null>(null);
+
 function inviteStillRinging(call: Call) {
   const status = call.status();
   return status === "pending" || status === "ringing";
