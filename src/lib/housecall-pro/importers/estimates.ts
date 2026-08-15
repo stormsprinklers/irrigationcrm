@@ -1,4 +1,8 @@
 import { EstimateStatus, HcpEntityType } from "@prisma/client";
+import {
+  emptyBatchResult,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { resolvePriceBookItemId } from "@/lib/housecall-pro/importers/services";
@@ -15,16 +19,8 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const page = await ctx.client.getPaginated("/estimates", {
     cursor: ctx.cursor,
@@ -44,10 +40,19 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
     const id = hcpId(record);
     if (!id) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Estimate",
+        record,
+        fields: { reason: "Missing id" },
+      });
       continue;
     }
 
     try {
+      const estimateNumber =
+        hcpString(record.estimate_number) ?? hcpString(record.number) ?? id;
       const customerHcpId =
         hcpString(record.customer_id) ??
         hcpString((record.customer as HcpRecord | undefined)?.id);
@@ -64,6 +69,17 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
         : null;
       if (!customerMapping) {
         result.skipped++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "skipped",
+          kind: "Estimate",
+          record,
+          fields: {
+            estimateNumber,
+            reason: "Customer not mapped",
+            customerHcpId: customerHcpId ?? null,
+          },
+        });
         continue;
       }
 
@@ -90,6 +106,14 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
       if (!subtotal) subtotal = hcpMoney(option?.total_amount ?? record.total_amount);
 
       const estimateStatus = mapEstimateStatus(record, Boolean(visitMapping));
+      const debugFields = {
+        estimateNumber,
+        status: estimateStatus,
+        customerHcpId: customerHcpId ?? null,
+        customerId: customerMapping.localId,
+        total: subtotal,
+      };
+
       const estimateData = {
         companyId: ctx.companyId,
         customerId: customerMapping.localId,
@@ -124,6 +148,13 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
         estimateId = mapping.localId;
         await prisma.estimateLineItem.deleteMany({ where: { estimateId } });
         result.updated++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Estimate",
+          record,
+          fields: debugFields,
+        });
       } else {
         const estimate = await prisma.estimate.create({ data: estimateData });
         estimateId = estimate.id;
@@ -135,6 +166,13 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
           localId: estimateId,
         });
         result.created++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "Estimate",
+          record,
+          fields: debugFields,
+        });
       }
 
       for (let i = 0; i < lineItems.length; i++) {
@@ -164,7 +202,19 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
       }
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Estimate import failed");
+      const message = err instanceof Error ? err.message : "Estimate import failed";
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Estimate",
+        record,
+        fields: {
+          estimateNumber:
+            hcpString(record.estimate_number) ?? hcpString(record.number) ?? hcpId(record),
+        },
+        error: message,
+      });
     }
   }
 

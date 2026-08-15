@@ -1,4 +1,8 @@
 import { HcpEntityType, PriceBookItemType } from "@prisma/client";
+import {
+  emptyBatchResult,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
@@ -25,12 +29,20 @@ async function importCategoryRecord(
   record: HcpRecord,
   existingSlugs: Set<string>,
   result: BatchResult,
-  newChildParents: string[]
+  newChildParents: string[],
+  debugEnabled: boolean
 ) {
   const id = hcpId(record);
   const name = hcpString(record.name);
   if (!id || !name) {
     result.skipped++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "skipped",
+      kind: "MaterialCategory",
+      record,
+      fields: { reason: "Missing id or name", name },
+    });
     return;
   }
 
@@ -78,6 +90,13 @@ async function importCategoryRecord(
       data: { name, parentId: parentLocalId },
     });
     result.updated++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "updated",
+      kind: "MaterialCategory",
+      record,
+      fields: { name, parent: parentHcpId ?? null, parentId: parentLocalId },
+    });
   } else {
     const slug = materialCategorySlug(name, parentSlug, existingSlugs);
     try {
@@ -98,6 +117,13 @@ async function importCategoryRecord(
         localId: category.id,
       });
       result.created++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "created",
+        kind: "MaterialCategory",
+        record,
+        fields: { name, parent: parentHcpId ?? null, slug },
+      });
     } catch (err) {
       const isSlugConflict =
         err &&
@@ -123,6 +149,13 @@ async function importCategoryRecord(
           localId: category.id,
         });
         result.created++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "MaterialCategory",
+          record,
+          fields: { name, parent: parentHcpId ?? null, slug: fallbackSlug },
+        });
       } else {
         throw err;
       }
@@ -131,16 +164,8 @@ async function importCategoryRecord(
 }
 
 export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   let state = parseMaterialCategoryCursor(ctx.cursor);
   const newChildParents: string[] = [];
@@ -185,7 +210,7 @@ export async function importMaterialCategoriesBatch(ctx: ImportContext): Promise
   for (const record of pageResult.items) {
     result.processed++;
     try {
-      await importCategoryRecord(ctx, record, existingSlugs, result, newChildParents);
+      await importCategoryRecord(ctx, record, existingSlugs, result, newChildParents, debugEnabled);
     } catch (err) {
       result.failed++;
       result.errors.push(err instanceof Error ? err.message : "Material category import failed");

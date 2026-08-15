@@ -1,5 +1,9 @@
 import { HcpEntityType, InvoiceStatus, PaymentMethod } from "@prisma/client";
 import { HCP_PATHS } from "@/lib/housecall-pro/constants";
+import {
+  emptyBatchResult,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import { hcpRelatedId } from "@/lib/housecall-pro/expand";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
@@ -25,11 +29,19 @@ function paymentMethodFromHcp(value: unknown): PaymentMethod {
 async function importSingleInvoice(
   ctx: ImportContext,
   record: HcpRecord,
-  result: BatchResult
+  result: BatchResult,
+  debugEnabled: boolean
 ) {
   const id = hcpId(record);
   if (!id) {
     result.skipped++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "skipped",
+      kind: "Invoice",
+      record,
+      fields: { reason: "Missing id" },
+    });
     return;
   }
 
@@ -75,6 +87,18 @@ async function importSingleInvoice(
 
   if (!customerLocalId) {
     result.skipped++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "skipped",
+      kind: "Invoice",
+      record,
+      fields: {
+        invoiceNumber:
+          hcpString(record.invoice_number) ?? hcpString(record.number) ?? null,
+        reason: "Customer not mapped",
+        customerHcpId: customerHcpId ?? null,
+      },
+    });
     return;
   }
 
@@ -130,6 +154,14 @@ async function importSingleInvoice(
     createdAt: hcpDate(record.created_at) ?? undefined,
   };
 
+  const debugFields = {
+    invoiceNumber,
+    status,
+    total,
+    customerHcpId: customerHcpId ?? null,
+    customerId: customerLocalId,
+  };
+
   let invoiceId: string;
   if (mapping) {
     await prisma.invoice.update({
@@ -140,6 +172,13 @@ async function importSingleInvoice(
     await prisma.invoiceLineItem.deleteMany({ where: { invoiceId } });
     await prisma.payment.deleteMany({ where: { invoiceId } });
     result.updated++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "updated",
+      kind: "Invoice",
+      record,
+      fields: debugFields,
+    });
   } else {
     const existingNumber = await prisma.invoice.findFirst({
       where: { companyId: ctx.companyId, invoiceNumber },
@@ -159,6 +198,13 @@ async function importSingleInvoice(
       localId: invoiceId,
     });
     result.created++;
+    pushEntityDebug(result, {
+      enabled: debugEnabled,
+      action: "created",
+      kind: "Invoice",
+      record,
+      fields: { ...debugFields, invoiceNumber },
+    });
   }
 
   for (let i = 0; i < lineItems.length; i++) {
@@ -205,16 +251,8 @@ async function importSingleInvoice(
 }
 
 export async function importInvoicesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const cursorParts = (ctx.cursor ?? "invoices:1").split(":");
   const source = cursorParts[0] === "job_invoices" ? "job_invoices" : "invoices";
@@ -240,10 +278,22 @@ export async function importInvoicesBatch(ctx: ImportContext): Promise<BatchResu
   for (const record of page.items) {
     result.processed++;
     try {
-      await importSingleInvoice(ctx, record, result);
+      await importSingleInvoice(ctx, record, result, debugEnabled);
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Invoice import failed");
+      const message = err instanceof Error ? err.message : "Invoice import failed";
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Invoice",
+        record,
+        fields: {
+          invoiceNumber:
+            hcpString(record.invoice_number) ?? hcpString(record.number) ?? hcpId(record),
+        },
+        error: message,
+      });
     }
   }
 

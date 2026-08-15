@@ -1,8 +1,8 @@
 import { CustomerStatus, HcpEntityType } from "@prisma/client";
 import {
-  debugLabelForRecord,
   emptyBatchResult,
   pushDebug,
+  pushEntityDebug,
   summarizeHcpRecord,
 } from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
@@ -98,6 +98,13 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
     const id = hcpId(listRecord);
     if (!id) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Customer",
+        record: listRecord,
+        fields: { reason: "Missing id" },
+      });
       continue;
     }
     const record = await enrichCustomerRecord(ctx, listRecord, id);
@@ -130,6 +137,16 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         },
       });
 
+      const customerDebugFields = {
+        name,
+        email: customerData.email,
+        phone: customerData.phone,
+        street: primary?.address ?? null,
+        city: primary?.city ?? null,
+        state: primary?.state ?? null,
+        zip: primary?.zip ?? null,
+      };
+
       let customerId: string;
       if (mapping) {
         await prisma.customer.update({
@@ -138,16 +155,13 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
         });
         customerId = mapping.localId;
         result.updated++;
-        pushDebug(
-          result,
-          {
-            action: "updated",
-            label: debugLabelForRecord(record, "Customer"),
-            hcpId: id,
-            detail: summarizeHcpRecord(record),
-          },
-          { enabled: debugEnabled }
-        );
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Customer",
+          record,
+          fields: customerDebugFields,
+        });
       } else {
         const customer = await prisma.customer.create({
           data: { companyId: ctx.companyId, ...customerData },
@@ -161,16 +175,13 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
           localId: customerId,
         });
         result.created++;
-        pushDebug(
-          result,
-          {
-            action: "created",
-            label: debugLabelForRecord(record, "Customer"),
-            hcpId: id,
-            detail: { localId: customerId, ...summarizeHcpRecord(record) },
-          },
-          { enabled: debugEnabled }
-        );
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "Customer",
+          record,
+          fields: { ...customerDebugFields, localId: customerId },
+        });
       }
 
       const phones = Array.isArray(record.phone_numbers)
@@ -240,17 +251,18 @@ export async function importCustomersBatch(ctx: ImportContext): Promise<BatchRes
       result.failed++;
       const message = err instanceof Error ? err.message : "Customer import failed";
       result.errors.push(message);
-      pushDebug(
-        result,
-        {
-          action: "failed",
-          label: debugLabelForRecord(record, "Customer"),
-          hcpId: id,
-          detail: summarizeHcpRecord(record),
-          error: message,
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Customer",
+        record,
+        fields: {
+          name,
+          email: hcpString(record.email),
+          phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
         },
-        { enabled: debugEnabled }
-      );
+        error: message,
+      });
     }
   }
 

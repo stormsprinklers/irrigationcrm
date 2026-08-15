@@ -1,5 +1,5 @@
 import type { BatchResult, HcpRecord, MigrationDebugSample } from "@/lib/housecall-pro/types";
-import { hcpId, hcpString } from "@/lib/housecall-pro/utils";
+import { hcpId, hcpMoney, hcpString } from "@/lib/housecall-pro/utils";
 
 export function emptyBatchResult(cursor: string | null): BatchResult {
   return {
@@ -31,6 +31,39 @@ export function pushDebug(
   }
 }
 
+/** Record a human-readable import outcome for the debug UI. */
+export function pushEntityDebug(
+  result: BatchResult,
+  opts: {
+    enabled: boolean;
+    action: MigrationDebugSample["action"];
+    kind: string;
+    record: HcpRecord;
+    /** Extra fields shown prominently in the UI (name, zips, price, etc.). */
+    fields?: Record<string, unknown>;
+    previewUrl?: string | null;
+    previewMimeType?: string | null;
+    error?: string | null;
+  }
+) {
+  pushDebug(
+    result,
+    {
+      action: opts.action,
+      label: debugLabelForRecord(opts.record, opts.kind),
+      hcpId: hcpId(opts.record),
+      detail: {
+        ...(opts.fields ?? {}),
+        ...summarizeHcpRecord(opts.record, 18),
+      },
+      previewUrl: opts.previewUrl ?? null,
+      previewMimeType: opts.previewMimeType ?? null,
+      error: opts.error ?? null,
+    },
+    { enabled: opts.enabled }
+  );
+}
+
 const PREFERRED_KEYS = [
   "id",
   "uuid",
@@ -41,11 +74,23 @@ const PREFERRED_KEYS = [
   "email",
   "phone",
   "mobile_number",
+  "role",
   "status",
   "work_status",
   "number",
   "invoice_number",
   "estimate_number",
+  "description",
+  "sku",
+  "part_number",
+  "unit",
+  "price",
+  "unit_price",
+  "amount",
+  "cost",
+  "unit_cost",
+  "labor_rate",
+  "labor_hours",
   "file_name",
   "filename",
   "fileName",
@@ -57,34 +102,49 @@ const PREFERRED_KEYS = [
   "content_type",
   "contentType",
   "street",
+  "street_line_1",
   "city",
   "state",
   "zip",
+  "zip_code",
+  "zip_codes",
+  "zips",
+  "color",
+  "color_hex",
   "scheduled_start",
   "schedule_start",
   "customer_id",
   "job_id",
   "company",
   "tags",
+  "category",
+  "category_name",
+  "industry",
 ] as const;
 
 function summarizeValue(value: unknown, depth = 0): unknown {
   if (value == null) return value;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return typeof value === "string" && value.length > 200 ? `${value.slice(0, 200)}…` : value;
+    return typeof value === "string" && value.length > 240 ? `${value.slice(0, 240)}…` : value;
   }
   if (Array.isArray(value)) {
+    if (
+      value.length <= 20 &&
+      value.every((v) => typeof v === "string" || typeof v === "number")
+    ) {
+      return value.map(String);
+    }
     return `[${value.length} items]`;
   }
   if (typeof value === "object" && depth < 1) {
-    return summarizeHcpRecord(value as HcpRecord, 6, depth + 1);
+    return summarizeHcpRecord(value as HcpRecord, 8, depth + 1);
   }
   return "[object]";
 }
 
 export function summarizeHcpRecord(
   record: HcpRecord,
-  maxKeys = 14,
+  maxKeys = 18,
   depth = 0
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -121,4 +181,20 @@ export function debugLabelForRecord(record: HcpRecord, fallback = "Record"): str
   if (name) return name;
   if (id) return `${fallback} ${id}`;
   return fallback;
+}
+
+export function priceFields(record: HcpRecord): Record<string, unknown> {
+  return {
+    price: hcpMoney(record.price ?? record.unit_price ?? record.amount),
+    cost: hcpMoney(record.cost ?? record.unit_cost) || null,
+    unit: hcpString(record.unit) ?? null,
+    sku: hcpString(record.sku) ?? hcpString(record.part_number) ?? null,
+    description: hcpString(record.description) ?? null,
+  };
+}
+
+export function isLikelyImageMime(mime: string | null | undefined, url?: string | null) {
+  if (mime && /^image\//i.test(mime)) return true;
+  if (url && /\.(png|jpe?g|gif|webp|bmp|heic)(\?|$)/i.test(url)) return true;
+  return false;
 }

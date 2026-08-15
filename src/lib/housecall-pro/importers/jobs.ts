@@ -3,6 +3,7 @@ import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/
 import {
   emptyBatchResult,
   pushDebug,
+  pushEntityDebug,
   summarizeHcpRecord,
 } from "@/lib/housecall-pro/debug";
 import {
@@ -171,6 +172,13 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
     const id = hcpId(listRecord);
     if (!id) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Job",
+        record: listRecord,
+        fields: { reason: "Missing id" },
+      });
       continue;
     }
 
@@ -231,6 +239,18 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
         : null;
 
       const { startAt, endAt } = jobSchedule(record);
+      const visitStatus = mapVisitStatus(record.work_status ?? record.status);
+      const jobDebugFields = {
+        customer: customerName,
+        customerHcpId: customerHcpId ?? null,
+        customerId: customerMapping?.localId ?? null,
+        status: visitStatus,
+        street: addr.address,
+        city: addr.city,
+        state: addr.state,
+        zip: addr.zip,
+      };
+
       const visitData = {
         companyId: ctx.companyId,
         customerId: customerMapping?.localId ?? null,
@@ -240,7 +260,7 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
         division: mapDivision(record.business_unit ?? record.division, defaultDivision),
         serviceAreaId,
         assignedUserId: employeeMapping?.localId ?? null,
-        status: mapVisitStatus(record.work_status ?? record.status),
+        status: visitStatus,
         tags: hcpTags(record),
         address: addr.address,
         city: addr.city,
@@ -267,6 +287,13 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
         visitId = mapping.localId;
         await prisma.visitLineItem.deleteMany({ where: { visitId } });
         result.updated++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Job",
+          record,
+          fields: jobDebugFields,
+        });
       } else {
         const visit = await prisma.visit.create({ data: visitData });
         visitId = visit.id;
@@ -278,6 +305,13 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
           localId: visitId,
         });
         result.created++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "Job",
+          record,
+          fields: jobDebugFields,
+        });
       }
 
       const lineItems = jobLineItems(record);
@@ -334,7 +368,15 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
       }
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Visit import failed");
+      const message = err instanceof Error ? err.message : "Visit import failed";
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Job",
+        record: listRecord,
+        error: message,
+      });
     }
   }
 

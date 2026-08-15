@@ -30,6 +30,9 @@ export type MigrationDebugSample = {
   hcpId?: string | null;
   detail?: Record<string, unknown> | string | null;
   error?: string | null;
+  /** Public/download URL for attachment preview in the debug UI. */
+  previewUrl?: string | null;
+  previewMimeType?: string | null;
 };
 
 export type BatchResult = BatchCounters & {

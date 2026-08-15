@@ -234,9 +234,9 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
           result,
           {
             action: "updated",
-            label: debugLabelForRecord(record, "Service zone"),
+            label: name,
             hcpId: id,
-            detail: { localId: existingArea.id, zipCodes, ...summarizeHcpRecord(record) },
+            detail: { name, zipCodes, color: color ?? existingArea.color },
           },
           { enabled: debugEnabled }
         );
@@ -269,17 +269,14 @@ export async function importServiceZonesBatch(ctx: ImportContext): Promise<Batch
         result,
         {
           action: "created",
-          label:
-            mapping && !existingArea
-              ? `${debugLabelForRecord(record, "Service zone")} (recreated after stale mapping)`
-              : debugLabelForRecord(record, "Service zone"),
+          label: name,
           hcpId: id,
           detail: {
-            localId: area.id,
+            name,
             slug,
             zipCodes,
+            color: color ?? "#2563EB",
             recreatedFromStaleMapping: Boolean(mapping && !existingArea),
-            ...summarizeHcpRecord(record),
           },
         },
         { enabled: debugEnabled }

@@ -41,7 +41,32 @@ type MigrationDebugSample = {
   hcpId?: string | null;
   detail?: Record<string, unknown> | string | null;
   error?: string | null;
+  previewUrl?: string | null;
+  previewMimeType?: string | null;
 };
+
+function isImagePreview(sample: MigrationDebugSample) {
+  const mime = sample.previewMimeType ?? "";
+  const url = sample.previewUrl ?? "";
+  return /^image\//i.test(mime) || /\.(png|jpe?g|gif|webp|bmp|heic)(\?|$)/i.test(url);
+}
+
+function formatDetailValue(value: unknown): string {
+  if (value == null) return "—";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => (v == null ? "" : String(v))).filter(Boolean).join(", ");
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+const HIDDEN_DETAIL_KEYS = new Set(["id", "uuid", "localId"]);
 
 type Migration = {
   id: string;
@@ -497,8 +522,8 @@ export function HousecallProMigrationPanel() {
                       Debug log — what this step pulled / imported
                     </div>
                     <p className="text-xs text-amber-900/80">
-                      Shows HCP payloads, attachment fetch attempts, create/update outcomes, and
-                      errors for the 1-record smoke test.
+                      Each imported record shows its name and fields (phones, zips, prices, etc.).
+                      Attachments include a visual preview when HCP provides an image URL.
                     </p>
                     {(lastBatchErrors.length
                       ? lastBatchErrors
@@ -557,12 +582,52 @@ export function HousecallProMigrationPanel() {
                               {sample.error ? (
                                 <p className="mt-1 text-destructive">{sample.error}</p>
                               ) : null}
+                              {sample.previewUrl ? (
+                                <div className="mt-2">
+                                  {isImagePreview(sample) ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={sample.previewUrl}
+                                      alt={sample.label}
+                                      className="max-h-48 max-w-full rounded border bg-white object-contain"
+                                    />
+                                  ) : (
+                                    <a
+                                      href={sample.previewUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs underline"
+                                    >
+                                      Open attachment
+                                      {sample.previewMimeType ? ` (${sample.previewMimeType})` : ""}
+                                    </a>
+                                  )}
+                                </div>
+                              ) : null}
                               {sample.detail ? (
-                                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-1.5 text-[10px] text-muted-foreground">
-                                  {typeof sample.detail === "string"
-                                    ? sample.detail
-                                    : JSON.stringify(sample.detail, null, 2)}
-                                </pre>
+                                typeof sample.detail === "string" ? (
+                                  <p className="mt-1 text-muted-foreground">{sample.detail}</p>
+                                ) : (
+                                  <dl className="mt-2 grid gap-1 sm:grid-cols-2">
+                                    {Object.entries(sample.detail)
+                                      .filter(
+                                        ([key, value]) =>
+                                          !HIDDEN_DETAIL_KEYS.has(key) &&
+                                          value != null &&
+                                          value !== ""
+                                      )
+                                      .map(([key, value]) => (
+                                        <div key={key} className="min-w-0">
+                                          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                            {key.replace(/_/g, " ")}
+                                          </dt>
+                                          <dd className="break-words font-medium">
+                                            {formatDetailValue(value)}
+                                          </dd>
+                                        </div>
+                                      ))}
+                                  </dl>
+                                )
                               ) : null}
                             </li>
                           ))}

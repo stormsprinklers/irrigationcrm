@@ -1,7 +1,12 @@
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 import { HcpEntityType } from "@prisma/client";
-import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
+import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
+import {
+  emptyBatchResult,
+  pushDebug,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { formatEmployeeName, resolveEmployeeDivision, splitFullName } from "@/lib/employees";
 import {
@@ -14,22 +19,24 @@ import {
 import { prisma } from "@/lib/prisma";
 
 export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const page = await ctx.client.getPaginated("/employees", {
     cursor: ctx.cursor,
     pageSize: ctx.batchSize,
     arrayKeys: ["employees"],
   });
+
+  pushDebug(
+    result,
+    {
+      action: "pulled",
+      label: `HCP returned ${page.items.length} employee(s)`,
+      detail: { nextCursor: page.nextCursor, totalEstimate: page.totalEstimate ?? null },
+    },
+    { enabled: debugEnabled }
+  );
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
@@ -47,6 +54,13 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
     const email = hcpString(record.email)?.toLowerCase();
     if (!id || !name || !email) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Employee",
+        record,
+        fields: { reason: "Missing id, name, or email", name, email },
+      });
       continue;
     }
 
@@ -66,16 +80,28 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
         hcpString(record.first_name) ?? splitFullName(name).firstName;
       const lastName =
         hcpString(record.last_name) ?? splitFullName(name).lastName;
+      const phone = hcpString(record.phone) ?? hcpString(record.mobile_number);
+      const tags = hcpTags(record);
       const userData = {
         firstName,
         lastName,
         name: formatEmployeeName(firstName, lastName),
-        phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
+        phone,
         role,
         division: resolveEmployeeDivision(role, null),
         status: mapEmployeeStatus(record),
-        tags: hcpTags(record),
+        tags,
         color: hcpString(record.color_hex) ?? "#2563EB",
+      };
+
+      const fields = {
+        name: userData.name,
+        email,
+        phone,
+        role: String(role),
+        division: String(userData.division),
+        status: String(userData.status),
+        tags,
       };
 
       if (mapping) {
@@ -84,6 +110,13 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
           data: userData,
         });
         result.updated++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Employee",
+          record,
+          fields: { ...fields, localId: mapping.localId },
+        });
       } else {
         const existingUser = await prisma.user.findFirst({
           where: { companyId: ctx.companyId, email },
@@ -101,6 +134,13 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
             localId: existingUser.id,
           });
           result.updated++;
+          pushEntityDebug(result, {
+            enabled: debugEnabled,
+            action: "updated",
+            kind: "Employee",
+            record,
+            fields: { ...fields, localId: existingUser.id, matchedBy: "email" },
+          });
         } else {
           const passwordHash = await bcrypt.hash(randomBytes(24).toString("hex"), 10);
           const user = await prisma.user.create({
@@ -119,11 +159,27 @@ export async function importEmployeesBatch(ctx: ImportContext): Promise<BatchRes
             localId: user.id,
           });
           result.created++;
+          pushEntityDebug(result, {
+            enabled: debugEnabled,
+            action: "created",
+            kind: "Employee",
+            record,
+            fields: { ...fields, localId: user.id },
+          });
         }
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Employee import failed";
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Employee import failed");
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Employee",
+        record,
+        fields: { name, email },
+        error: message,
+      });
     }
   }
 

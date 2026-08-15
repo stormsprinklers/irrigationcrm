@@ -1,3 +1,7 @@
+import {
+  emptyBatchResult,
+  pushDebug,
+} from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { DEFAULT_BUSINESS_HOURS, type BusinessHoursDay } from "@/lib/company/types";
 import { prisma } from "@/lib/prisma";
@@ -34,16 +38,9 @@ function mapScheduleWindows(records: HcpRecord[]): Record<string, BusinessHoursD
 }
 
 export async function importScheduleWindowsBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: true,
-    cursor: null,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
+  result.done = true;
 
   if (ctx.cursor) {
     return result;
@@ -61,6 +58,16 @@ export async function importScheduleWindowsBatch(ctx: ImportContext): Promise<Ba
 
     result.processed = windows.length;
     const businessHours = mapScheduleWindows(windows);
+
+    pushDebug(
+      result,
+      {
+        action: "info",
+        label: `Mapped ${windows.length} schedule window(s) to business hours`,
+        detail: { businessHours, windowCount: windows.length },
+      },
+      { enabled: debugEnabled }
+    );
 
     await prisma.company.update({
       where: { id: ctx.companyId },

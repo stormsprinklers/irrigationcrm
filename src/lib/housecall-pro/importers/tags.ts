@@ -1,24 +1,36 @@
-import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
+import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
+import {
+  emptyBatchResult,
+  pushDebug,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import { prisma } from "@/lib/prisma";
 import { hcpId, hcpString, hcpTags } from "@/lib/housecall-pro/utils";
 
 export async function importTagsBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const page = await ctx.client.getPaginated("/tags", {
     cursor: ctx.cursor,
     pageSize: ctx.batchSize,
     arrayKeys: ["tags"],
   });
+
+  pushDebug(
+    result,
+    {
+      action: "pulled",
+      label: `HCP returned ${page.items.length} tag(s)`,
+      detail: {
+        nextCursor: page.nextCursor,
+        names: page.items
+          .map((r) => hcpString((r as HcpRecord).name) ?? hcpString((r as HcpRecord).label))
+          .filter(Boolean),
+      },
+    },
+    { enabled: debugEnabled }
+  );
 
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
@@ -34,6 +46,13 @@ export async function importTagsBatch(ctx: ImportContext): Promise<BatchResult> 
     const name = hcpString(record.name) ?? hcpString(record.label);
     if (!id || !name) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Tag",
+        record,
+        fields: { reason: "Missing id or name" },
+      });
       continue;
     }
     tagNames.add(name);
@@ -49,6 +68,13 @@ export async function importTagsBatch(ctx: ImportContext): Promise<BatchResult> 
       });
       if (existing) {
         result.updated++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Tag",
+          record,
+          fields: { name, color: hcpString(record.color) ?? hcpString(record.color_hex) },
+        });
       } else {
         await prisma.hcpEntityMapping.create({
           data: {
@@ -61,10 +87,26 @@ export async function importTagsBatch(ctx: ImportContext): Promise<BatchResult> 
           },
         });
         result.created++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "Tag",
+          record,
+          fields: { name, color: hcpString(record.color) ?? hcpString(record.color_hex) },
+        });
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Tag import failed";
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Tag import failed");
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Tag",
+        record,
+        fields: { name },
+        error: message,
+      });
     }
   }
 

@@ -1,5 +1,10 @@
 import { HcpEntityType, PriceBookItemType } from "@prisma/client";
 import { HCP_PATHS } from "@/lib/housecall-pro/constants";
+import {
+  emptyBatchResult,
+  priceFields,
+  pushEntityDebug,
+} from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import { hcpId, hcpMoney, hcpQuantity, hcpString } from "@/lib/housecall-pro/utils";
@@ -19,16 +24,8 @@ function serviceCategoryPath(record: Record<string, unknown>): string[] {
 }
 
 export async function importServicesBatch(ctx: ImportContext): Promise<BatchResult> {
-  const result: BatchResult = {
-    done: false,
-    cursor: ctx.cursor,
-    processed: 0,
-    created: 0,
-    updated: 0,
-    skipped: 0,
-    failed: 0,
-    errors: [],
-  };
+  const debugEnabled = Boolean(ctx.options.debugMode);
+  const result = emptyBatchResult(ctx.cursor);
 
   const page = await ctx.client.getPaginatedFirst(HCP_PATHS.services, {
     cursor: ctx.cursor,
@@ -49,14 +46,22 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
     const name = hcpString(record.name);
     if (!id || !name) {
       result.skipped++;
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "skipped",
+        kind: "Service",
+        record,
+        fields: { reason: "Missing id or name", name },
+      });
       continue;
     }
 
     try {
+      const categoryPath = serviceCategoryPath(record);
       const categoryId = await ensureCategoryPath(
         ctx.companyId,
         PriceBookItemType.SERVICE,
-        serviceCategoryPath(record)
+        categoryPath
       );
 
       const unitPrice = hcpMoney(record.price ?? record.unit_price ?? record.amount);
@@ -85,12 +90,28 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
         },
       });
 
+      const debugFields = {
+        name,
+        ...priceFields(record),
+        laborRate: laborRate || null,
+        laborHours: laborHours || null,
+        categoryPath: categoryPath.join(" > "),
+        categoryId,
+      };
+
       if (mapping) {
         await prisma.priceBookItem.update({
           where: { id: mapping.localId },
           data: itemData,
         });
         result.updated++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "updated",
+          kind: "Service",
+          record,
+          fields: debugFields,
+        });
       } else {
         const item = await prisma.priceBookItem.create({ data: itemData });
         await upsertMapping({
@@ -101,10 +122,26 @@ export async function importServicesBatch(ctx: ImportContext): Promise<BatchResu
           localId: item.id,
         });
         result.created++;
+        pushEntityDebug(result, {
+          enabled: debugEnabled,
+          action: "created",
+          kind: "Service",
+          record,
+          fields: debugFields,
+        });
       }
     } catch (err) {
       result.failed++;
-      result.errors.push(err instanceof Error ? err.message : "Service import failed");
+      const message = err instanceof Error ? err.message : "Service import failed";
+      result.errors.push(message);
+      pushEntityDebug(result, {
+        enabled: debugEnabled,
+        action: "failed",
+        kind: "Service",
+        record,
+        fields: { name, ...priceFields(record) },
+        error: message,
+      });
     }
   }
 

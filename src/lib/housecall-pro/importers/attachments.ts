@@ -113,7 +113,16 @@ async function fetchAttachments(
         ? `Pulled ${items.length} attachment(s) for ${parentType} ${parentHcpId}`
         : `No attachments found for ${parentType} ${parentHcpId}`,
       hcpId: parentHcpId,
-      detail: { attempts, sample: items.slice(0, 3).map((a) => summarizeHcpRecord(a)) },
+      detail: {
+        attempts,
+        sample: items.slice(0, 3).map((a) => ({
+          ...summarizeHcpRecord(a),
+          previewUrl: attachmentFileUrl(a),
+          previewMimeType: attachmentMimeType(a, "application/octet-stream"),
+        })),
+      },
+      previewUrl: items[0] ? attachmentFileUrl(items[0]) : null,
+      previewMimeType: items[0] ? attachmentMimeType(items[0], "application/octet-stream") : null,
     });
   }
 
@@ -181,6 +190,8 @@ async function importAttachmentFile(params: {
         label: `${fileName} (already imported)`,
         hcpId: attachmentId,
         detail: { fileUrl, mappingKey },
+        previewUrl: fileUrl,
+        previewMimeType: attachmentMimeType(params.attachment, "application/octet-stream"),
       },
       { enabled: params.debugEnabled }
     );
@@ -220,6 +231,8 @@ async function importAttachmentFile(params: {
         blobUrl: blob.url,
         parentHcpId: params.parentHcpId,
       },
+      previewUrl: fileUrl,
+      previewMimeType: mimeType,
     },
     { enabled: params.debugEnabled }
   );
@@ -302,8 +315,14 @@ async function importParentAttachmentsBatch(params: {
               label: debugLabelForRecord(a, "Attachment"),
               ...summarizeHcpRecord(a),
               hasUrl: Boolean(attachmentFileUrl(a)),
+              previewUrl: attachmentFileUrl(a),
+              previewMimeType: attachmentMimeType(a, "application/octet-stream"),
             })),
           },
+          previewUrl: attachments[0] ? attachmentFileUrl(attachments[0]) : null,
+          previewMimeType: attachments[0]
+            ? attachmentMimeType(attachments[0], "application/octet-stream")
+            : null,
         },
         { enabled: debugEnabled }
       );
