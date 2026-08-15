@@ -80,6 +80,8 @@ export const companySettingsSelect = {
   hydrawiseApiKey: true,
   defaultLeadAssigneeId: true,
   notifyLeadCreated: true,
+  showStormAiFab: true,
+  monthlyRevenueTarget: true,
 } as const;
 
 export type CompanySettingsDTO = {
@@ -164,7 +166,28 @@ export type CompanySettingsDTO = {
   hydrawiseApiKey: string | null;
   defaultLeadAssigneeId: string | null;
   notifyLeadCreated: boolean;
+  showStormAiFab: boolean;
+  monthlyRevenueTarget: number | null;
 };
+
+export function serializeCompanySettings(
+  company: Record<string, unknown> & {
+    monthlyRevenueTarget?: unknown;
+    showStormAiFab?: unknown;
+  }
+) {
+  const target = company.monthlyRevenueTarget;
+  let monthlyRevenueTarget: number | null = null;
+  if (target != null && target !== "") {
+    const n = typeof target === "number" ? target : Number(String(target));
+    monthlyRevenueTarget = Number.isFinite(n) ? n : null;
+  }
+  return {
+    ...company,
+    showStormAiFab: company.showStormAiFab !== false,
+    monthlyRevenueTarget,
+  };
+}
 
 export type BusinessHoursDay = {
   open: boolean;

@@ -4,7 +4,7 @@ import { sanitizeBrandPalette, type BrandPalette } from "@/lib/brand-palette";
 import {
   ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES,
 } from "@/lib/company/features";
-import { companySettingsSelect } from "@/lib/company/types";
+import { companySettingsSelect, serializeCompanySettings } from "@/lib/company/types";
 import { countActiveMaintenanceEnrollments } from "@/lib/maintenance-plans/feature";
 import { prisma } from "@/lib/prisma";
 
@@ -19,7 +19,10 @@ export async function GET() {
     const activeMaintenanceEnrollmentCount = await countActiveMaintenanceEnrollments(
       user.companyId
     );
-    return NextResponse.json({ ...company, activeMaintenanceEnrollmentCount });
+    return NextResponse.json({
+      ...serializeCompanySettings(company),
+      activeMaintenanceEnrollmentCount,
+    });
   } catch {
     return unauthorizedResponse();
   }
@@ -76,6 +79,20 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    if ("monthlyRevenueTarget" in data) {
+      const raw = data.monthlyRevenueTarget;
+      if (raw === null || raw === "" || raw === undefined) {
+        data.monthlyRevenueTarget = null;
+      } else {
+        const n = typeof raw === "number" ? raw : Number(raw);
+        data.monthlyRevenueTarget = Number.isFinite(n) ? n : null;
+      }
+    }
+
+    if ("showStormAiFab" in data) {
+      data.showStormAiFab = Boolean(data.showStormAiFab);
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data,
@@ -86,7 +103,10 @@ export async function PATCH(request: NextRequest) {
       user.companyId
     );
 
-    return NextResponse.json({ ...company, activeMaintenanceEnrollmentCount });
+    return NextResponse.json({
+      ...serializeCompanySettings(company),
+      activeMaintenanceEnrollmentCount,
+    });
   } catch {
     return unauthorizedResponse();
   }
