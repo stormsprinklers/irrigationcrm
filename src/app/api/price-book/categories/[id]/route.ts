@@ -36,6 +36,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data: {
         ...(body.name !== undefined ? { name: String(body.name) } : {}),
         ...(body.sortOrder !== undefined ? { sortOrder: Number(body.sortOrder) } : {}),
+        ...(body.imageUrl !== undefined ? { imageUrl: body.imageUrl ? String(body.imageUrl) : null } : {}),
       },
       include: { _count: { select: { items: true, children: true } } },
     });

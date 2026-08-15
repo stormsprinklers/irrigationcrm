@@ -15,6 +15,13 @@ import { Device, Call } from "@twilio/voice-sdk";
 import { toast } from "sonner";
 import { CallWrapUpModal } from "@/components/voice/CallWrapUpModal";
 import { normalizePhone } from "@/lib/inbox/contacts";
+import {
+  closeIncomingCallBrowserNotification,
+  ensureNotificationPermission,
+  showIncomingCallBrowserNotification,
+  showMissedCallBrowserNotification,
+} from "@/lib/pwa/browser-notify";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { InboundLineInfo } from "@/components/voice/InboundLineCard";
 import type { CallerInfo } from "@/lib/voice/caller-info";
 
@@ -62,7 +69,10 @@ type VoiceContextValue = {
   notifyVisitBooked: (visitId: string) => void;
 };
 
-const VoiceContext = createContext<VoiceContextValue | null>(null);
+function inviteStillRinging(call: Call) {
+  const status = call.status();
+  return status === "pending" || status === "ringing";
+}
 
 async function lookupCaller(phone: string): Promise<CallerInfo> {
   try {
@@ -156,6 +166,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const deviceRef = useRef<Device | null>(null);
   const refreshingTokenRef = useRef<Promise<boolean> | null>(null);
   const recoveringTransportRef = useRef<Promise<boolean> | null>(null);
+  const ringingInvitesRef = useRef(new Set<Call>());
+  const settleInviteRef = useRef(new WeakMap<Call, (missed: boolean) => void>());
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
@@ -211,7 +223,9 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       };
 
       setActiveCall(state);
+      settleInviteRef.current.get(call)?.(false);
       setIncomingCall(null);
+      void closeIncomingCallBrowserNotification();
       void patchPresence("ON_CALL");
 
       call.on("disconnect", () => {
@@ -232,10 +246,12 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
       call.on("cancel", () => {
         setIncomingCall(null);
+        void closeIncomingCallBrowserNotification();
       });
 
       call.on("reject", () => {
         setIncomingCall(null);
+        void closeIncomingCallBrowserNotification();
       });
     },
     []
@@ -376,6 +392,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
           setReady(true);
           setError(null);
           void patchPresence("AVAILABLE");
+          void ensureNotificationPermission();
         });
 
         device.on("unregistered", () => {
@@ -421,10 +438,58 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
           }
         });
 
-        device.on("incoming", async (call) => {
+        device.on("incoming", (call) => {
           const from = call.parameters.From ?? "Unknown";
-          const callerInfo = await lookupCaller(from);
-          setIncomingCall({ call, callerInfo });
+          ringingInvitesRef.current.add(call);
+          let callerLabel = formatPhoneDisplay(from) || from;
+
+          const endRinging = (missed: boolean) => {
+            if (!ringingInvitesRef.current.has(call)) return;
+            ringingInvitesRef.current.delete(call);
+            settleInviteRef.current.delete(call);
+            window.clearInterval(watch);
+            setIncomingCall((prev) => (prev?.call === call ? null : prev));
+            void closeIncomingCallBrowserNotification();
+            if (missed) {
+              toast("Missed call", { description: callerLabel, duration: 8000 });
+              void showMissedCallBrowserNotification({
+                title: "Missed call",
+                body: callerLabel,
+              });
+            }
+          };
+
+          settleInviteRef.current.set(call, endRinging);
+
+          const watch = window.setInterval(() => {
+            if (!inviteStillRinging(call)) endRinging(true);
+          }, 400);
+
+          call.on("cancel", () => endRinging(true));
+          call.on("disconnect", () => {
+            if (ringingInvitesRef.current.has(call)) endRinging(true);
+          });
+          call.on("error", () => endRinging(true));
+
+          if (!inviteStillRinging(call)) {
+            endRinging(true);
+            return;
+          }
+
+          void lookupCaller(from).then((callerInfo) => {
+            if (!ringingInvitesRef.current.has(call) || !inviteStillRinging(call)) {
+              endRinging(true);
+              return;
+            }
+            if (callerInfo.name?.trim()) {
+              callerLabel = `${callerInfo.name.trim()} · ${formatPhoneDisplay(from) || from}`;
+            }
+            setIncomingCall({ call, callerInfo });
+            void showIncomingCallBrowserNotification({
+              title: "Incoming call",
+              body: callerLabel,
+            });
+          });
         });
 
         device.on("tokenWillExpire", () => {
@@ -500,14 +565,20 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
   const acceptIncoming = useCallback(() => {
     if (!incomingCall) return;
+    if (!inviteStillRinging(incomingCall.call)) {
+      settleInviteRef.current.get(incomingCall.call)?.(true);
+      return;
+    }
+    settleInviteRef.current.get(incomingCall.call)?.(false);
     incomingCall.call.accept();
     const from = incomingCall.call.parameters.From ?? "Unknown";
     void bindCall(incomingCall.call, "inbound", from);
   }, [bindCall, incomingCall]);
 
   const rejectIncoming = useCallback(() => {
-    incomingCall?.call.reject();
-    setIncomingCall(null);
+    if (!incomingCall) return;
+    settleInviteRef.current.get(incomingCall.call)?.(false);
+    incomingCall.call.reject();
   }, [incomingCall]);
 
   const disconnect = useCallback(() => {

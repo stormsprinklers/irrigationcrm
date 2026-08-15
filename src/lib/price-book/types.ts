@@ -4,6 +4,7 @@ export type PriceBookCategoryDTO = {
   name: string;
   slug: string;
   parentId: string | null;
+  imageUrl: string | null;
   sortOrder: number;
   _count?: { items: number; children: number };
   parent?: { id: string; name: string; slug: string } | null;

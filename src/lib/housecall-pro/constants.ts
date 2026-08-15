@@ -4,18 +4,18 @@ export const HCP_BASE_URL = "https://api.housecallpro.com";
 
 export const HCP_ATTACHMENT_PATHS = {
   customers: (id: string) => [
-    `/api/customers/${id}/attachments`,
     `/customers/${id}/attachments`,
+    `/api/customers/${id}/attachments`,
     `/customer/${id}/attachments`,
   ],
   jobs: (id: string) => [
-    `/api/jobs/${id}/attachments`,
     `/jobs/${id}/attachments`,
+    `/api/jobs/${id}/attachments`,
     `/job/${id}/attachments`,
   ],
   estimates: (id: string) => [
-    `/api/estimates/${id}/attachments`,
     `/estimates/${id}/attachments`,
+    `/api/estimates/${id}/attachments`,
     `/estimate/${id}/attachments`,
   ],
 } as const;
@@ -28,14 +28,14 @@ export const HCP_JOB_LINE_ITEMS_PATHS = (id: string) => [
 
 export const HCP_PARENT_DETAIL_PATHS = {
   customers: (id: string) => [
-    `/api/customers/${id}`,
     `/customers/${id}`,
+    `/api/customers/${id}`,
     `/customer/${id}`,
   ],
-  jobs: (id: string) => [`/api/jobs/${id}`, `/jobs/${id}`, `/job/${id}`],
+  jobs: (id: string) => [`/jobs/${id}`, `/api/jobs/${id}`, `/job/${id}`],
   estimates: (id: string) => [
-    `/api/estimates/${id}`,
     `/estimates/${id}`,
+    `/api/estimates/${id}`,
     `/estimate/${id}`,
   ],
 } as const;
@@ -72,7 +72,6 @@ export const MIGRATION_STEP_ORDER: HousecallProMigrationStepType[] = [
   HousecallProMigrationStepType.ESTIMATES,
   HousecallProMigrationStepType.ESTIMATE_ATTACHMENTS,
   HousecallProMigrationStepType.INVOICES,
-  HousecallProMigrationStepType.SCHEDULE_WINDOWS,
 ];
 
 export const STEP_LABELS: Record<HousecallProMigrationStepType, string> = {
@@ -90,7 +89,8 @@ export const STEP_LABELS: Record<HousecallProMigrationStepType, string> = {
   ESTIMATES: "Estimates",
   ESTIMATE_ATTACHMENTS: "Estimate attachments",
   INVOICES: "Invoices",
-  SCHEDULE_WINDOWS: "Schedule windows",
+  /** @deprecated Not imported. Kept for existing migration rows. */
+  SCHEDULE_WINDOWS: "Schedule windows (deprecated)",
 };
 
 export function nextStep(

@@ -147,6 +147,7 @@ enum HousecallProMigrationStepType {
   ESTIMATES
   ESTIMATE_ATTACHMENTS
   INVOICES
+  /// Deprecated: no longer part of the HCP migration pipeline.
   SCHEDULE_WINDOWS
 }
 
@@ -2673,6 +2674,7 @@ model PriceBookCategory {
   name      String
   slug      String
   parentId  String?
+  imageUrl  String?
   sortOrder Int               @default(0)
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt

@@ -71,6 +71,31 @@ export function unwrapHcpEntityResponse(
   return data;
 }
 
+export function hcpImageUrl(record: HcpRecord): string | null {
+  const direct =
+    hcpString(record.image_url) ??
+    hcpString(record.imageUrl) ??
+    hcpString(record.thumbnail_url) ??
+    hcpString(record.thumbnail) ??
+    hcpString(record.photo_url) ??
+    hcpString(record.picture_url);
+
+  if (direct && /^https?:\/\//i.test(direct)) return direct;
+
+  if (typeof record.image === "string" && /^https?:\/\//i.test(record.image.trim())) {
+    return record.image.trim();
+  }
+
+  if (isHcpRecord(record.image)) {
+    const nested = hcpImageUrl(record.image) ?? attachmentFileUrl(record.image);
+    if (nested) return nested;
+  }
+
+  const fileUrl = attachmentFileUrl(record);
+  if (fileUrl && /^https?:\/\//i.test(fileUrl)) return fileUrl;
+  return null;
+}
+
 export function attachmentFileUrl(attachment: HcpRecord): string | null {
   const direct =
     hcpString(attachment.url) ??

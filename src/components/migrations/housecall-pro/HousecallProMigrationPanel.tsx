@@ -446,7 +446,8 @@ export function HousecallProMigrationPanel() {
                 <span className="font-medium">Debug mode</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   Import only 1 of each entity type and show the pulled HCP data, attachments, and
-                  any errors so you can verify the pipeline.
+                  any errors so you can verify the pipeline. Visits prefer a completed HCP job so
+                  you can check Summary of Work (description/notes).
                 </span>
               </span>
             </label>

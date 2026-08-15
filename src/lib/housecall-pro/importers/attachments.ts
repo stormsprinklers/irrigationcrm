@@ -52,57 +52,101 @@ function stableAttachmentId(attachment: HcpRecord, fileUrl: string): string {
   return createHash("sha256").update(fileUrl).digest("hex").slice(0, 16);
 }
 
+type AttachmentPathCache = {
+  detailPathIndex: number | null;
+  attachmentsPathIndex: number | null;
+  /** After expand returns 200 with 0 files, skip /attachments on later parents. */
+  expandEmptyIsAuthoritative: boolean;
+};
+
+const attachmentPathCache = new Map<HcpAttachmentParentType, AttachmentPathCache>();
+
+function getAttachmentPathCache(parentType: HcpAttachmentParentType): AttachmentPathCache {
+  const existing = attachmentPathCache.get(parentType);
+  if (existing) return existing;
+  const created: AttachmentPathCache = {
+    detailPathIndex: null,
+    attachmentsPathIndex: null,
+    expandEmptyIsAuthoritative: false,
+  };
+  attachmentPathCache.set(parentType, created);
+  return created;
+}
+
+function orderedIndexes(length: number, preferred: number | null): number[] {
+  const indexes = Array.from({ length }, (_, i) => i);
+  if (preferred == null || preferred < 0 || preferred >= length) return indexes;
+  return [preferred, ...indexes.filter((i) => i !== preferred)];
+}
+
 async function fetchAttachments(
   ctx: ImportContext,
   parentType: HcpAttachmentParentType,
   parentHcpId: string,
   debug?: { result: BatchResult; enabled: boolean }
 ): Promise<HcpRecord[]> {
-  const items: HcpRecord[] = [];
-  const detailParams: Array<Record<string, string>> = [
-    { ...HCP_EXPAND_ATTACHMENTS },
-    {},
-  ];
+  const cache = getAttachmentPathCache(parentType);
   const attempts: string[] = [];
+  const detailPaths = HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId);
+  const attachmentPaths = HCP_ATTACHMENT_PATHS[parentType](parentHcpId);
 
-  for (const path of HCP_PARENT_DETAIL_PATHS[parentType](parentHcpId)) {
-    for (const params of detailParams) {
-      try {
-        const data = await ctx.client.get<HcpRecord>(path, { params });
-        const found = collectAttachmentsFromResponse(data, parentType);
-        attempts.push(
-          `${path}${params["expand[]"] ? "?expand=attachments" : ""} → ${found.length} attachment(s)`
-        );
-        items.push(...found);
-        if (items.length) {
-          if (debug?.enabled) {
-            pushDebug(debug.result, {
-              action: "info",
-              label: `Fetched attachments via detail ${path}`,
-              hcpId: parentHcpId,
-              detail: { attempts, count: items.length },
-            });
-          }
-          return dedupeAttachments(items);
+  let expandSucceeded = false;
+
+  for (const index of orderedIndexes(detailPaths.length, cache.detailPathIndex)) {
+    const path = detailPaths[index];
+    try {
+      const data = await ctx.client.get<HcpRecord>(path, { params: { ...HCP_EXPAND_ATTACHMENTS } });
+      const found = collectAttachmentsFromResponse(data, parentType);
+      attempts.push(`${path}?expand=attachments → ${found.length} attachment(s)`);
+      cache.detailPathIndex = index;
+      expandSucceeded = true;
+      if (found.length) {
+        if (debug?.enabled) {
+          pushDebug(debug.result, {
+            action: "info",
+            label: `Fetched attachments via detail ${path}`,
+            hcpId: parentHcpId,
+            detail: { attempts, count: found.length, cachedPath: path },
+          });
         }
-      } catch (err) {
-        attempts.push(
-          `${path} failed: ${err instanceof Error ? err.message : String(err)}`
-        );
+        return dedupeAttachments(found);
       }
+      break;
+    } catch (err) {
+      attempts.push(`${path} failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  for (const path of HCP_ATTACHMENT_PATHS[parentType](parentHcpId)) {
-    try {
-      const data = await ctx.client.get<HcpRecord>(path);
-      const found = collectAttachmentsFromResponse(data, parentType);
-      attempts.push(`${path} → ${found.length} attachment(s)`);
-      items.push(...found);
-    } catch (err) {
-      attempts.push(
-        `${path} failed: ${err instanceof Error ? err.message : String(err)}`
-      );
+  if (expandSucceeded && cache.expandEmptyIsAuthoritative) {
+    if (debug?.enabled) {
+      pushDebug(debug.result, {
+        action: "info",
+        label: `No attachments for ${parentType} ${parentHcpId} (cached empty expand)`,
+        hcpId: parentHcpId,
+        detail: { attempts },
+      });
+    }
+    return [];
+  }
+
+  const items: HcpRecord[] = [];
+  if (!cache.expandEmptyIsAuthoritative) {
+    for (const index of orderedIndexes(attachmentPaths.length, cache.attachmentsPathIndex)) {
+      const path = attachmentPaths[index];
+      try {
+        const data = await ctx.client.get<HcpRecord>(path);
+        const found = collectAttachmentsFromResponse(data, parentType);
+        attempts.push(`${path} → ${found.length} attachment(s)`);
+        cache.attachmentsPathIndex = index;
+        items.push(...found);
+        if (found.length) break;
+        if (expandSucceeded) {
+          cache.expandEmptyIsAuthoritative = true;
+          break;
+        }
+      } catch (err) {
+        attempts.push(`${path} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
@@ -289,15 +333,13 @@ async function importParentAttachmentsBatch(params: {
       });
       if (!attachments.length) {
         result.skipped++;
-        const message = `No attachments from HCP for ${params.parentType} ${parent.hcpId} (detail + /attachments endpoints)`;
-        result.errors.push(message);
         pushDebug(
           result,
           {
             action: "skipped",
             label: `Parent ${parent.hcpId}`,
             hcpId: parent.hcpId,
-            error: message,
+            error: `No attachments from HCP for ${params.parentType} ${parent.hcpId}`,
           },
           { enabled: debugEnabled }
         );

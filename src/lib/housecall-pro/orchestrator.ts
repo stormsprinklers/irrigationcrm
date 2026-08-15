@@ -25,6 +25,20 @@ function attachmentStep(step: HousecallProMigrationStepType) {
   );
 }
 
+function skipDeprecatedMigrationSteps(migrationId: string) {
+  return prisma.housecallProMigrationStep.updateMany({
+    where: {
+      migrationId,
+      step: HousecallProMigrationStepType.SCHEDULE_WINDOWS,
+    },
+    data: {
+      status: HousecallProMigrationStepStatus.SKIPPED,
+      completedAt: new Date(),
+      lastError: "Deprecated — schedule windows are not imported",
+    },
+  });
+}
+
 function defaultBatchSize(step: HousecallProMigrationStepType) {
   if (attachmentStep(step)) return ATTACHMENT_BATCH_SIZE;
   return DEFAULT_BATCH_SIZE;
@@ -96,14 +110,19 @@ export async function startMigration(
     migration.status === HousecallProMigrationStatus.PAUSED ||
     migration.status === HousecallProMigrationStatus.FAILED
   ) {
+    await skipDeprecatedMigrationSteps(migration.id);
+    const shouldFinish = migration.currentStep === HousecallProMigrationStepType.SCHEDULE_WINDOWS;
     return prisma.housecallProMigration.update({
       where: { id: migration.id },
       data: {
-        status: HousecallProMigrationStatus.IN_PROGRESS,
+        status: shouldFinish
+          ? HousecallProMigrationStatus.COMPLETED
+          : HousecallProMigrationStatus.IN_PROGRESS,
         previewJson: preview,
         optionsJson,
         pausedAt: null,
         startedAt: migration.startedAt ?? new Date(),
+        ...(shouldFinish ? { completedAt: new Date() } : {}),
       },
       include: { steps: { orderBy: { step: "asc" } } },
     });
@@ -130,6 +149,8 @@ export async function startMigration(
     },
     include: { steps: { orderBy: { step: "asc" } } },
   });
+
+  await skipDeprecatedMigrationSteps(migration.id);
 
   return updated;
 }
@@ -422,6 +443,33 @@ export async function processMigrationBatch(params: {
   }
   if (params.step === HousecallProMigrationStepType.CONNECT) {
     throw new Error("Connect step is completed during start");
+  }
+  if (params.step === HousecallProMigrationStepType.SCHEDULE_WINDOWS) {
+    await prisma.housecallProMigrationStep.updateMany({
+      where: { migrationId: migration.id, step: params.step },
+      data: {
+        status: HousecallProMigrationStepStatus.SKIPPED,
+        completedAt: new Date(),
+        lastError: "Deprecated — schedule windows are not imported",
+      },
+    });
+    await prisma.housecallProMigration.update({
+      where: { id: migration.id },
+      data: {
+        status: HousecallProMigrationStatus.COMPLETED,
+        completedAt: new Date(),
+      },
+    });
+    return {
+      done: true,
+      cursor: null,
+      processed: 0,
+      created: 0,
+      updated: 0,
+      skipped: 1,
+      failed: 0,
+      errors: [],
+    };
   }
 
   const stepRow = migration.steps.find((s) => s.step === params.step);

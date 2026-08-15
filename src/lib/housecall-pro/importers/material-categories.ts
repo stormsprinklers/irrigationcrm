@@ -5,6 +5,7 @@ import {
 } from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
 import { upsertMapping } from "@/lib/housecall-pro/mapping";
+import { importHcpImage } from "@/lib/housecall-pro/image";
 import {
   fetchMaterialCategoriesPage,
   parseMaterialCategoryCursor,
@@ -84,10 +85,18 @@ async function importCategoryRecord(
     }
   }
 
+  const image = await importHcpImage(
+    ctx.client,
+    record,
+    `price-book/${ctx.companyId}/categories/${id}`
+  );
+  const imageUrl = image.storedUrl;
+  const imageData = imageUrl ? { imageUrl } : {};
+
   if (mapping) {
     await prisma.priceBookCategory.update({
       where: { id: mapping.localId },
-      data: { name, parentId: parentLocalId },
+      data: { name, parentId: parentLocalId, ...imageData },
     });
     result.updated++;
     pushEntityDebug(result, {
@@ -95,7 +104,15 @@ async function importCategoryRecord(
       action: "updated",
       kind: "MaterialCategory",
       record,
-      fields: { name, parent: parentHcpId ?? null, parentId: parentLocalId },
+      fields: {
+        name,
+        parent: parentHcpId ?? null,
+        parentId: parentLocalId,
+        imageUrl,
+        sourceImageUrl: image.sourceUrl,
+      },
+      previewUrl: image.sourceUrl ?? imageUrl,
+      previewMimeType: image.sourceUrl || imageUrl ? "image/*" : null,
     });
   } else {
     const slug = materialCategorySlug(name, parentSlug, existingSlugs);
@@ -107,6 +124,7 @@ async function importCategoryRecord(
           name,
           slug,
           parentId: parentLocalId,
+          ...imageData,
         },
       });
       await upsertMapping({
@@ -122,7 +140,15 @@ async function importCategoryRecord(
         action: "created",
         kind: "MaterialCategory",
         record,
-        fields: { name, parent: parentHcpId ?? null, slug },
+        fields: {
+          name,
+          parent: parentHcpId ?? null,
+          slug,
+          imageUrl,
+          sourceImageUrl: image.sourceUrl,
+        },
+        previewUrl: image.sourceUrl ?? imageUrl,
+        previewMimeType: image.sourceUrl || imageUrl ? "image/*" : null,
       });
     } catch (err) {
       const isSlugConflict =
@@ -139,6 +165,7 @@ async function importCategoryRecord(
             name,
             slug: fallbackSlug,
             parentId: parentLocalId,
+            ...imageData,
           },
         });
         await upsertMapping({
@@ -154,7 +181,15 @@ async function importCategoryRecord(
           action: "created",
           kind: "MaterialCategory",
           record,
-          fields: { name, parent: parentHcpId ?? null, slug: fallbackSlug },
+          fields: {
+            name,
+            parent: parentHcpId ?? null,
+            slug: fallbackSlug,
+            imageUrl,
+            sourceImageUrl: image.sourceUrl,
+          },
+          previewUrl: image.sourceUrl ?? imageUrl,
+          previewMimeType: image.sourceUrl || imageUrl ? "image/*" : null,
         });
       } else {
         throw err;

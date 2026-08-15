@@ -1,7 +1,11 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Pencil, Trash2 } from "lucide-react";
 import type { PriceBookCategoryDTO } from "@/lib/price-book/types";
 import { getCategoryIcon } from "@/lib/price-book/icons";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -16,6 +20,8 @@ export function CategoryCard({ category, href, onRename, onDelete }: Props) {
   const Icon = getCategoryIcon(category.slug);
   const itemCount = category._count?.items ?? 0;
   const childCount = category._count?.children ?? 0;
+  const imageSrc = blobProxyUrl(category.imageUrl);
+  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <Card className="group relative overflow-hidden transition-shadow hover:shadow-md">
@@ -57,8 +63,18 @@ export function CategoryCard({ category, href, onRename, onDelete }: Props) {
       )}
       <Link href={href} className="block">
         <CardContent className="p-0">
-          <div className="flex h-36 items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-            <Icon className="h-16 w-16 text-primary/70" strokeWidth={1.5} />
+          <div className="flex h-36 items-center justify-center overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100">
+            {imageSrc && !imageFailed ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageSrc}
+                alt=""
+                className="h-full w-full object-cover"
+                onError={() => setImageFailed(true)}
+              />
+            ) : (
+              <Icon className="h-16 w-16 text-primary/70" strokeWidth={1.5} />
+            )}
           </div>
           <div className="flex items-center justify-between p-3">
             <div>

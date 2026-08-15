@@ -86,19 +86,26 @@ async function enrichJobRecord(
   record: HcpRecord,
   id: string
 ): Promise<HcpRecord> {
-  if (lineItemsFromRecord(record).length) return record;
+  const needsDetail =
+    ctx.options.debugMode ||
+    !lineItemsFromRecord(record).length ||
+    !workSummaryFromHcpJob(record).text;
 
   let merged = { ...record };
-  for (const path of HCP_PARENT_DETAIL_PATHS.jobs(id)) {
-    try {
-      const detail = await ctx.client.get<HcpRecord>(path);
-      const job = ((detail.job as HcpRecord | undefined) ?? detail) as HcpRecord;
-      merged = { ...merged, ...job };
-      if (lineItemsFromRecord(merged).length) return merged;
-    } catch {
-      // try next path
+  if (needsDetail) {
+    for (const path of HCP_PARENT_DETAIL_PATHS.jobs(id)) {
+      try {
+        const detail = await ctx.client.get<HcpRecord>(path);
+        const job = ((detail.job as HcpRecord | undefined) ?? detail) as HcpRecord;
+        merged = { ...merged, ...job };
+        break;
+      } catch {
+        // try next path
+      }
     }
   }
+
+  if (lineItemsFromRecord(merged).length) return merged;
 
   for (const path of HCP_JOB_LINE_ITEMS_PATHS(id)) {
     try {
@@ -113,6 +120,146 @@ async function enrichJobRecord(
   }
 
   return merged;
+}
+
+function noteText(note: HcpRecord): string | null {
+  return hcpString(note.content) ?? hcpString(note.body) ?? hcpString(note.note) ?? hcpString(note.text);
+}
+
+function hcpNotesPreview(record: HcpRecord): unknown {
+  const notes = record.notes;
+  if (typeof notes === "string") return notes;
+  if (!Array.isArray(notes)) return notes ?? null;
+  return (notes as HcpRecord[])
+    .map((note) => noteText(note))
+    .filter(Boolean)
+    .slice(0, 5);
+}
+
+function workSummaryFromHcpJob(record: HcpRecord): { text: string | null; source: string | null } {
+  const dedicated =
+    hcpString(record.summary_of_work) ??
+    hcpString(record.work_summary) ??
+    hcpString(record.job_summary) ??
+    hcpString(record.summary);
+  if (dedicated) return { text: dedicated, source: "summary_field" };
+
+  if (typeof record.notes === "string") {
+    const notes = hcpString(record.notes);
+    if (notes) return { text: notes, source: "notes" };
+  }
+
+  const description = hcpString(record.description);
+  if (description && !isInternalHcpLabel(description)) {
+    return { text: description, source: "description" };
+  }
+
+  return { text: null, source: null };
+}
+
+function isCompletedHcpJob(record: HcpRecord): boolean {
+  return mapVisitStatus(record.work_status ?? record.status) === "COMPLETED";
+}
+
+async function fetchJobsPage(
+  ctx: ImportContext,
+  cursor: string | null,
+  pageSize: number,
+  params?: Record<string, string | number | undefined>
+) {
+  return ctx.client.getPaginated("/jobs", {
+    cursor,
+    pageSize,
+    arrayKeys: ["jobs"],
+    params,
+  });
+}
+
+async function findCompletedJobForDebug(ctx: ImportContext, result: BatchResult): Promise<HcpRecord | null> {
+  try {
+    const filtered = await fetchJobsPage(ctx, null, 50, { work_status: "complete" });
+    const filteredMatch = filtered.items.find((item) => isCompletedHcpJob(item as HcpRecord));
+    pushDebug(
+      result,
+      {
+        action: "info",
+        label: filteredMatch
+          ? "Debug: found a completed HCP job (work_status=complete)"
+          : `Debug: work_status=complete returned ${filtered.items.length} job(s), none completed — scanning list`,
+        detail: {
+          count: filtered.items.length,
+          statuses: filtered.items.slice(0, 8).map((item) => (item as HcpRecord).work_status ?? item.status),
+        },
+      },
+      { enabled: true }
+    );
+    if (filteredMatch) return filteredMatch as HcpRecord;
+  } catch (err) {
+    pushDebug(
+      result,
+      {
+        action: "info",
+        label: "Debug: work_status=complete filter failed — scanning unfiltered job list",
+        error: err instanceof Error ? err.message : String(err),
+      },
+      { enabled: true }
+    );
+  }
+
+  const maxPages = 8;
+  let cursor: string | null = null;
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    const page = await fetchJobsPage(ctx, cursor, 50);
+    const match = page.items.find((item) => isCompletedHcpJob(item as HcpRecord));
+    pushDebug(
+      result,
+      {
+        action: "info",
+        label: match
+          ? `Debug: found completed job on unfiltered page ${pageNum}`
+          : `Debug: scanned unfiltered page ${pageNum} (${page.items.length} jobs), none completed`,
+        detail: {
+          page: pageNum,
+          statuses: page.items.slice(0, 8).map((item) => (item as HcpRecord).work_status ?? item.status),
+        },
+      },
+      { enabled: true }
+    );
+    if (match) return match as HcpRecord;
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+
+  return null;
+}
+
+async function loadJobsForBatch(
+  ctx: ImportContext,
+  result: BatchResult
+): Promise<{ items: HcpRecord[]; nextCursor: string | null; totalEstimate?: number }> {
+  if (!ctx.options.debugMode) {
+    return fetchJobsPage(ctx, ctx.cursor, ctx.batchSize);
+  }
+
+  const completed = await findCompletedJobForDebug(ctx, result);
+  if (completed) {
+    return { items: [completed], nextCursor: null };
+  }
+
+  const fallback = await fetchJobsPage(ctx, ctx.cursor, 1);
+  pushDebug(
+    result,
+    {
+      action: "info",
+      label:
+        "Debug: no completed job found in filter/scan — importing the first listed job instead",
+      detail: {
+        sample: fallback.items.slice(0, 1).map((r) => summarizeHcpRecord(r as HcpRecord)),
+      },
+    },
+    { enabled: true }
+  );
+  return fallback;
 }
 
 function jobLineItems(record: HcpRecord): HcpRecord[] {
@@ -140,11 +287,7 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
 
   const defaultDivision = ctx.options.defaultDivision ?? Division.SERVICE;
 
-  const page = await ctx.client.getPaginated("/jobs", {
-    cursor: ctx.cursor,
-    pageSize: ctx.batchSize,
-    arrayKeys: ["jobs"],
-  });
+  const page = await loadJobsForBatch(ctx, result);
 
   pushDebug(
     result,
@@ -240,15 +383,24 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
 
       const { startAt, endAt } = jobSchedule(record);
       const visitStatus = mapVisitStatus(record.work_status ?? record.status);
+      const workSummary = workSummaryFromHcpJob(record);
       const jobDebugFields = {
         customer: customerName,
         customerHcpId: customerHcpId ?? null,
         customerId: customerMapping?.localId ?? null,
         status: visitStatus,
+        hcpWorkStatus: record.work_status ?? record.status ?? null,
         street: addr.address,
         city: addr.city,
         state: addr.state,
         zip: addr.zip,
+        workSummarySource: workSummary.source,
+        workSummary: workSummary.text,
+        description: hcpString(record.description),
+        notes: hcpNotesPreview(record),
+        summary_of_work: hcpString(record.summary_of_work),
+        work_summary: hcpString(record.work_summary),
+        summary: hcpString(record.summary),
       };
 
       const visitData = {
@@ -262,6 +414,7 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
         assignedUserId: employeeMapping?.localId ?? null,
         status: visitStatus,
         tags: hcpTags(record),
+        workSummary: workSummary.text,
         address: addr.address,
         city: addr.city,
         state: addr.state,
@@ -343,8 +496,9 @@ export async function importJobsBatch(ctx: ImportContext): Promise<BatchResult> 
 
       const notes = Array.isArray(record.notes) ? (record.notes as HcpRecord[]) : [];
       for (const note of notes) {
-        const body = hcpString(note.content) ?? hcpString(note.body);
+        const body = noteText(note);
         if (!body) continue;
+        if (workSummary.source === "notes" && body === workSummary.text) continue;
         const authorHcpId = hcpString(note.employee_id) ?? hcpString(note.author_id);
         const authorMapping = authorHcpId
           ? await prisma.hcpEntityMapping.findUnique({

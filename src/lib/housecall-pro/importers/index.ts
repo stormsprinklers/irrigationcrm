@@ -14,7 +14,6 @@ import {
 import { importJobsBatch } from "@/lib/housecall-pro/importers/jobs";
 import { importEstimatesBatch } from "@/lib/housecall-pro/importers/estimates";
 import { importInvoicesBatch } from "@/lib/housecall-pro/importers/invoices";
-import { importScheduleWindowsBatch } from "@/lib/housecall-pro/importers/schedule-windows";
 import { HousecallProMigrationStepType } from "@prisma/client";
 
 const IMPORTERS: Partial<
@@ -33,7 +32,6 @@ const IMPORTERS: Partial<
   [HousecallProMigrationStepType.ESTIMATES]: importEstimatesBatch,
   [HousecallProMigrationStepType.ESTIMATE_ATTACHMENTS]: importEstimateAttachmentsBatch,
   [HousecallProMigrationStepType.INVOICES]: importInvoicesBatch,
-  [HousecallProMigrationStepType.SCHEDULE_WINDOWS]: importScheduleWindowsBatch,
 };
 
 export async function runStepBatch(ctx: ImportContext): Promise<BatchResult> {

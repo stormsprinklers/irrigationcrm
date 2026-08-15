@@ -110,6 +110,7 @@ export function serializeCategory(
     name: category.name,
     slug: category.slug,
     parentId: category.parentId,
+    imageUrl: category.imageUrl,
     sortOrder: category.sortOrder,
     _count: category._count,
   };
