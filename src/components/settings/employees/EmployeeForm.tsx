@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
+import { trueRoleOf } from "@/lib/role-preview";
 import { EmployeeTrainingPanel } from "./EmployeeTrainingPanel";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
@@ -94,6 +95,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
+  const trueRole = session?.user ? trueRoleOf(session.user) : "";
+  const isAdmin = trueRole === "ADMIN";
+  const canEditReviewAliases = trueRole === "ADMIN" || trueRole === "MANAGER";
   const [generatingAliases, setGeneratingAliases] = useState(false);
 
   useEffect(() => {
@@ -372,9 +376,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
               value={form.reviewNameAliases}
               onChange={(e) => setForm((p) => ({ ...p, reviewNameAliases: e.target.value }))}
               placeholder="Tavern, Trevan, Trevor, Travis, Taven"
+              disabled={!canEditReviewAliases}
             />
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {employee ? (
+              {employee && canEditReviewAliases ? (
                 <Button
                   type="button"
                   size="sm"
@@ -407,9 +412,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
                   )}
                   Generate aliases
                 </Button>
-              ) : (
+              ) : !employee ? (
                 <p className="text-xs text-muted-foreground">Aliases are generated after you create the employee.</p>
-              )}
+              ) : null}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               Up to 5 misspellings of the first name used to match Google reviews. Must not match another technician.
