@@ -1,9 +1,15 @@
 import { TimeOffStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { defaultEmployeeWorkSchedule } from "@/lib/schedule/open-time-slots";
+import { defaultEmployeeWorkSchedule, toMinutes } from "@/lib/schedule/open-time-slots";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import { localTimeParts } from "@/lib/voice/hours-branch";
 
 export type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+
+export type AssignmentAvailability = {
+  error: string | null;
+  warning: string | null;
+};
 
 const OFFICE_ROLES = new Set(["ADMIN", "MANAGER", "CSR"]);
 
@@ -13,13 +19,6 @@ export function canManageTeamSchedule(role: string) {
 
 export function canReviewTimeOff(role: string) {
   return OFFICE_ROLES.has(role);
-}
-
-function parseTimeOnDate(baseDate: Date, time: string): Date {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date(baseDate);
-  d.setHours(h, m, 0, 0);
-  return d;
 }
 
 type TimeOffPayload = {
@@ -154,14 +153,20 @@ export async function assertEmployeeAvailableForAssignment(
   startAt: Date,
   endAt: Date,
   excludeVisitId?: string
-): Promise<string | null> {
-  if (endAt <= startAt) return "End time must be after start time";
+): Promise<AssignmentAvailability> {
+  if (endAt <= startAt) return { error: "End time must be after start time", warning: null };
 
-  const employee = await prisma.user.findFirst({
-    where: { id: userId, companyId, status: "ACTIVE" },
-    select: { id: true, name: true },
-  });
-  if (!employee) return "Employee not found";
+  const [employee, company] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: userId, companyId, status: "ACTIVE" },
+      select: { id: true, name: true },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { timezone: true },
+    }),
+  ]);
+  if (!employee) return { error: "Employee not found", warning: null };
 
   const approvedTimeOff = await prisma.timeOffRequest.findFirst({
     where: {
@@ -173,7 +178,10 @@ export async function assertEmployeeAvailableForAssignment(
     },
   });
   if (approvedTimeOff) {
-    return `${employee.name} has approved time off during this period`;
+    return {
+      error: `${employee.name} has approved time off during this period`,
+      warning: null,
+    };
   }
 
   const workDays = await prisma.employeeWorkSchedule.findMany({
@@ -190,37 +198,44 @@ export async function assertEmployeeAvailableForAssignment(
           endTime: day.endTime,
         }));
 
-  const dayOfWeek = startAt.getDay();
-  const daySchedule = schedule.find((row) => row.dayOfWeek === dayOfWeek);
+  const timezone = company?.timezone;
+  const startParts = localTimeParts(timezone, startAt);
+  const endParts = localTimeParts(timezone, endAt);
+  const daySchedule = schedule.find((row) => row.dayOfWeek === startParts.day);
+
+  let warning: string | null = null;
   if (daySchedule && !daySchedule.isWorking) {
-    return `${employee.name} is not scheduled to work this day`;
-  }
-  if (daySchedule?.isWorking && daySchedule.startTime && daySchedule.endTime) {
-    const windowStart = parseTimeOnDate(startAt, daySchedule.startTime);
-    const windowEnd = parseTimeOnDate(startAt, daySchedule.endTime);
-    if (startAt < windowStart || endAt > windowEnd) {
-      return `${employee.name} is only scheduled ${daySchedule.startTime}–${daySchedule.endTime} this day`;
+    warning = `${employee.name} is not scheduled to work this day`;
+  } else if (daySchedule?.isWorking && daySchedule.startTime && daySchedule.endTime) {
+    const windowStart = toMinutes(daySchedule.startTime);
+    const windowEnd = toMinutes(daySchedule.endTime);
+    const endsNextDay = endParts.day !== startParts.day;
+    const endMinutes = endsNextDay ? endParts.minutes + 24 * 60 : endParts.minutes;
+    if (startParts.minutes < windowStart || endMinutes > windowEnd) {
+      warning = `${employee.name} is only scheduled ${daySchedule.startTime}–${daySchedule.endTime} this day`;
     }
   }
 
-  if (excludeVisitId) {
-    const conflict = await prisma.visit.findFirst({
-      where: {
-        companyId,
-        assignedUserId: userId,
-        id: { not: excludeVisitId },
-        status: { not: "CANCELLED" },
-        startAt: { lt: endAt },
-        endAt: { gt: startAt },
-      },
-      select: { id: true, title: true },
-    });
-    if (conflict) {
-      return `${employee.name} is already assigned to "${conflict.title}" during this time`;
-    }
+  const conflictWhere = {
+    companyId,
+    assignedUserId: userId,
+    status: { not: "CANCELLED" as const },
+    startAt: { lt: endAt },
+    endAt: { gt: startAt },
+    ...(excludeVisitId ? { id: { not: excludeVisitId } } : {}),
+  };
+  const conflict = await prisma.visit.findFirst({
+    where: conflictWhere,
+    select: { id: true, title: true },
+  });
+  if (conflict) {
+    return {
+      error: `${employee.name} is already assigned to "${conflict.title}" during this time`,
+      warning,
+    };
   }
 
-  return null;
+  return { error: null, warning };
 }
 
 export async function validateAssignmentUpdate(
@@ -229,7 +244,7 @@ export async function validateAssignmentUpdate(
   startAt: Date,
   endAt: Date,
   excludeVisitId?: string
-) {
-  if (!assignedUserId) return null;
+): Promise<AssignmentAvailability> {
+  if (!assignedUserId) return { error: null, warning: null };
   return assertEmployeeAvailableForAssignment(companyId, assignedUserId, startAt, endAt, excludeVisitId);
 }

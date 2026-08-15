@@ -7,6 +7,7 @@ import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { resolveInboundCallAttribution } from "@/lib/voice/call-attribution";
 import { syncCallConversionFromLog } from "@/lib/voice/call-conversion";
+import { isVoicemailDisposition } from "@/lib/voice/call-history";
 
 export async function POST(request: NextRequest) {
   const params = await parseTwilioWebhook(request);
@@ -33,24 +34,30 @@ export async function POST(request: NextRequest) {
       customerId: true,
       assignedUserId: true,
       phoneNumberId: true,
+      queueEnteredAt: true,
     },
   });
 
   if (session) {
+    const stillQueued = Boolean(session.queueEnteredAt);
     const sessionStatus =
       callStatus === "completed"
         ? CallSessionStatus.COMPLETED
-        : callStatus === "in-progress"
-          ? CallSessionStatus.IN_PROGRESS
-          : callStatus === "ringing"
-            ? CallSessionStatus.RINGING
-            : undefined;
+        : stillQueued
+          ? CallSessionStatus.RINGING
+          : callStatus === "in-progress"
+            ? CallSessionStatus.IN_PROGRESS
+            : callStatus === "ringing"
+              ? CallSessionStatus.RINGING
+              : undefined;
 
     await prisma.callSession.update({
       where: { id: session.id },
       data: {
         ...(sessionStatus ? { status: sessionStatus } : {}),
-        ...(callStatus === "completed" ? { endedAt: new Date() } : {}),
+        ...(callStatus === "completed"
+          ? { endedAt: new Date(), queueEnteredAt: null }
+          : {}),
       },
     });
   }
@@ -87,21 +94,27 @@ export async function POST(request: NextRequest) {
       : null);
 
   if (existing) {
+    const keepAsVoicemail =
+      isVoicemailDisposition(existing.dispositionNote) ||
+      existing.status.toLowerCase() === "no-answer";
     await prisma.callLog.update({
       where: { id: existing.id },
       data: {
-        status: callStatus,
+        status: keepAsVoicemail ? "no-answer" : callStatus,
         durationSec: duration ?? existing.durationSec,
         endedAt: callStatus === "completed" ? new Date() : existing.endedAt,
+        ...(keepAsVoicemail && !existing.dispositionNote
+          ? { dispositionNote: "Voicemail" }
+          : {}),
         ...(session?.id && !existing.sessionId ? { sessionId: session.id } : {}),
-        ...(userId && !existing.userId ? { userId } : {}),
+        ...(!keepAsVoicemail && userId && !existing.userId ? { userId } : {}),
         ...(session?.phoneNumberId && !existing.phoneNumberId
           ? { phoneNumberId: session.phoneNumberId }
           : {}),
       },
     });
 
-    if (direction === CallDirection.INBOUND) {
+    if (direction === CallDirection.INBOUND && !keepAsVoicemail) {
       void syncCallConversionFromLog(existing.id, {
         answeredByUserId: userId,
       }).catch(() => {});

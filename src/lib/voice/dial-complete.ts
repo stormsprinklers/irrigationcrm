@@ -5,6 +5,10 @@ import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { conferenceJoinTwiml } from "@/lib/voice/conference";
 import { buildVoicemailTwiml, ensureVoicemailCallLog } from "@/lib/voice/voicemail";
 import { twimlHangup, twimlResponse } from "@/lib/voice/twiml-response";
+import {
+  companyHasAgentsOnCall,
+  enqueueCallerBecauseAgentsBusyTwiml,
+} from "@/lib/voice/call-queue";
 
 /**
  * Twilio requests the Dial `action` URL when a &lt;Dial&gt; finishes (including
@@ -79,6 +83,13 @@ export async function handleDialComplete(request: NextRequest) {
         session?.status === CallSessionStatus.TRANSFERRING;
 
       if (!alreadyAnswered) {
+        const overflowToQueue =
+          dialStatus === "busy" ||
+          (dialStatus === "no-answer" && (await companyHasAgentsOnCall(companyId)));
+        if (overflowToQueue) {
+          const twiml = await enqueueCallerBecauseAgentsBusyTwiml(companyId, callSid);
+          return twimlResponse(twiml);
+        }
         try {
           if (callSid) {
             await ensureVoicemailCallLog({

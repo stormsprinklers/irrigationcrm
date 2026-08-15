@@ -11,7 +11,8 @@ export async function GET() {
       where: {
         companyId: user.companyId,
         queueEnteredAt: { not: null },
-        status: CallSessionStatus.RINGING,
+        endedAt: null,
+        status: { in: [CallSessionStatus.RINGING, CallSessionStatus.IN_PROGRESS] },
       },
       orderBy: { queueEnteredAt: "asc" },
     });

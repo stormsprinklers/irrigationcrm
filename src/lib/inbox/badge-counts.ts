@@ -1,28 +1,29 @@
 import { Channel, MessageDirection, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { WEBSITE_FORM_SMS_PREFIX, WEBSITE_LEAD_THREAD_PREFIX } from "@/lib/inbox/website-leads";
-import { isCallAnswered } from "@/lib/voice/call-history";
+import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
+import { countLeadsToContact } from "@/lib/inbox/website-lead-items";
+import { isCallAnswered, isVoicemailDisposition, MISSED_CALL_LOOKBACK_MS } from "@/lib/voice/call-history";
 import type { InboxBadgeCounts } from "@/lib/inbox/badge-types";
 
 export type { InboxBadgeCounts };
 
-const MISSED_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
+const unreadCustomerSmsWhere = {
+  direction: MessageDirection.INBOUND,
+  readAt: null,
+  NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+} as const;
 
 export async function getInboxBadgeCounts(companyId: string): Promise<InboxBadgeCounts> {
-  const missedSince = new Date(Date.now() - MISSED_LOOKBACK_MS);
+  const missedSince = new Date(Date.now() - MISSED_CALL_LOOKBACK_MS);
 
-  const [sms, social, leadEmails, leadSms, missedLogs] = await Promise.all([
+  const [sms, social, leads, missedLogs] = await Promise.all([
     prisma.conversation.count({
       where: {
         companyId,
         channel: Channel.SMS,
         scope: Scope.EXTERNAL,
         messages: {
-          some: {
-            direction: MessageDirection.INBOUND,
-            readAt: null,
-            NOT: { body: { startsWith: WEBSITE_FORM_SMS_PREFIX } },
-          },
+          some: unreadCustomerSmsWhere,
         },
       },
     }),
@@ -38,46 +39,26 @@ export async function getInboxBadgeCounts(companyId: string): Promise<InboxBadge
         },
       },
     }),
-    prisma.emailMessage.count({
-      where: {
-        companyId,
-        isRead: false,
-        folder: { not: "TRASH" },
-        threadId: { startsWith: WEBSITE_LEAD_THREAD_PREFIX },
-        NOT: {
-          OR: [
-            { subject: { contains: "new job applicant", mode: "insensitive" } },
-            { subject: { contains: "careers", mode: "insensitive" } },
-          ],
-        },
-      },
-    }),
-    prisma.message.count({
-      where: {
-        direction: MessageDirection.INBOUND,
-        readAt: null,
-        body: { startsWith: WEBSITE_FORM_SMS_PREFIX },
-        NOT: { body: { contains: "careers", mode: "insensitive" } },
-        conversation: { companyId, scope: Scope.EXTERNAL },
-      },
-    }),
+    countLeadsToContact(companyId),
     prisma.callLog.findMany({
       where: {
         companyId,
         direction: "INBOUND",
         startedAt: { gte: missedSince },
       },
-      select: { status: true, durationSec: true },
+      select: { status: true, durationSec: true, dispositionNote: true },
       take: 200,
     }),
   ]);
 
   const missedCalls = missedLogs.filter((log) => {
+    if (isVoicemailDisposition(log.dispositionNote)) return true;
     const status = log.status.toLowerCase();
     if (["no-answer", "busy", "failed", "canceled", "cancelled"].includes(status)) return true;
-    return status === "completed" && !isCallAnswered(log.status, log.durationSec);
+    return status === "completed" && !isCallAnswered(log.status, log.durationSec, {
+      dispositionNote: log.dispositionNote,
+    });
   }).length;
-  const leads = leadEmails + leadSms;
   const total = sms + social + leads + missedCalls;
 
   return { sms, social, leads, missedCalls, total };

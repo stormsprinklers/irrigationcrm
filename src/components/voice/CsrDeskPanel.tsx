@@ -17,6 +17,7 @@ import { TransferDialog } from "@/components/voice/TransferDialog";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { CsrCallHistoryPanel } from "@/components/voice/CsrCallHistoryPanel";
 import { formatCallerVisitDate } from "@/lib/voice/caller-info";
+import { cn } from "@/lib/utils";
 
 type QueueEntry = {
   id: string;
@@ -124,6 +125,20 @@ export function CsrDeskPanel({
     return () => clearInterval(timer);
   }, []);
 
+  async function acceptQueue(id: string) {
+    if (activeCall) {
+      toast.error("Finish your current call before picking up the queue");
+      return;
+    }
+    const res = await fetch(`/api/voice/queue/${id}/accept`, { method: "POST" });
+    if (!res.ok) {
+      toast.error("Failed to pick up queued caller");
+      return;
+    }
+    toast.success("Connecting queued caller…");
+    setQueue((q) => q.filter((e) => e.id !== id));
+  }
+
   useEffect(() => {
     if (!callerPhone) {
       setCustomer(null);
@@ -221,6 +236,7 @@ export function CsrDeskPanel({
         throw new Error(data.error ?? "Failed to book");
       }
       const visit = await res.json();
+      if (visit.warning) toast.warning(visit.warning);
       toast.success("Appointment booked");
       setBookOpen(false);
       notifyVisitBooked(visit.id);
@@ -257,9 +273,14 @@ export function CsrDeskPanel({
         </section>
       ) : null}
       <div className="grid shrink-0 gap-3 lg:grid-cols-2 xl:grid-cols-4">
-      <section className="rounded-lg border border-border bg-white p-3">
+      <section className={cn("rounded-lg border bg-white p-3", queue.length ? "border-amber-300" : "border-border")}>
         <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Phone className="h-4 w-4" /> Queue ({queue.length})
+          {queue.length > 0 ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+              Waiting
+            </span>
+          ) : null}
         </h3>
         <ScrollArea className="h-24">
           <ul className="space-y-2 text-sm">
@@ -280,6 +301,14 @@ export function CsrDeskPanel({
                 <p className="text-xs text-muted-foreground">
                   <PhoneText phone={entry.fromNumber} empty="" />
                 </p>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={Boolean(activeCall)}
+                  onClick={() => void acceptQueue(entry.id)}
+                >
+                  {activeCall ? "Finish current call first" : "Pick up"}
+                </Button>
               </li>
             ))}
             {!queue.length && (

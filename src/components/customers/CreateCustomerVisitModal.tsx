@@ -146,6 +146,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
         return;
       }
       const visit = await res.json();
+      if (visit.warning) toast.warning(visit.warning);
       onClose();
       router.push(`/visits/${visit.id}`);
     } finally {

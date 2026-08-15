@@ -13,6 +13,7 @@ export type CallHistoryListItem = {
   hasRecording: boolean;
   hasTranscript: boolean;
   hasSummary: boolean;
+  hasVoicemail: boolean;
   /** True when the AI receptionist handled (or started) this call. */
   isAiAgent: boolean;
   customer: { id: string; name: string; phone: string | null } | null;
@@ -21,6 +22,20 @@ export type CallHistoryListItem = {
 
 /** Max calls returned to CSR desk history UI. All CallLog rows remain stored indefinitely. */
 export const CALL_HISTORY_UI_LIMIT = 250;
+
+/** Sidebar CSR Desk badge: inbound missed calls in this window. */
+export const MISSED_CALL_LOOKBACK_MS = 2 * 24 * 60 * 60 * 1000;
+
+export function isRecentMissedInboundCall(call: {
+  direction: "INBOUND" | "OUTBOUND";
+  answered: boolean;
+  startedAt: string;
+  now?: number;
+}) {
+  if (call.direction !== "INBOUND" || call.answered) return false;
+  const now = call.now ?? Date.now();
+  return now - new Date(call.startedAt).getTime() <= MISSED_CALL_LOOKBACK_MS;
+}
 
 /** Scroll after ~20 rows (~3.65rem each). */
 export const CALL_HISTORY_LIST_MAX_HEIGHT_CLASS = "max-h-[calc(20*3.65rem)]";
@@ -48,7 +63,16 @@ export type CallHistoryDetail = CallHistoryListItem & {
   handledBy: { id: string; name: string } | null;
 };
 
-export function isCallAnswered(status: string, durationSec: number | null | undefined): boolean {
+export function isVoicemailDisposition(dispositionNote: string | null | undefined) {
+  return (dispositionNote ?? "").toLowerCase().includes("voicemail");
+}
+
+export function isCallAnswered(
+  status: string,
+  durationSec: number | null | undefined,
+  options?: { dispositionNote?: string | null }
+): boolean {
+  if (isVoicemailDisposition(options?.dispositionNote)) return false;
   const normalized = status.toLowerCase();
   if (["no-answer", "busy", "failed", "canceled", "cancelled"].includes(normalized)) {
     return false;

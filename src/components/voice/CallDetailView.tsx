@@ -190,6 +190,16 @@ export function CallDetailView({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="font-semibold">{displayName}</p>
+            {!detail.answered && detail.direction === "INBOUND" ? (
+              <span className="rounded-full bg-[#FF3B30] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                Missed
+              </span>
+            ) : null}
+            {detail.hasVoicemail ? (
+              <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Voicemail
+              </span>
+            ) : null}
             {callBackNumber ? (
               <Button
                 type="button"

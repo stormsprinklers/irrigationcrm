@@ -5,6 +5,7 @@ import {
   type CallHistoryListItem,
   CALL_HISTORY_UI_LIMIT,
   isCallAnswered,
+  isVoicemailDisposition,
 } from "@/lib/voice/call-history";
 import { callRecordingPlaybackPath } from "@/lib/voice/recording";
 
@@ -125,6 +126,14 @@ function mapCallLog(
 ): CallHistoryListItem {
   const isAiAgent = isAiReceptionistRow(row, aiByCallLogId, aiByCallSid);
   const employee = resolveEmployee(row, isAiAgent);
+  const hasVoicemail =
+    isVoicemailDisposition(row.dispositionNote) ||
+    (row.direction === "INBOUND" &&
+      !isAiAgent &&
+      !resolveHumanEmployee(row) &&
+      Boolean(row.recordingUrl) &&
+      row.status.toLowerCase() !== "in-progress" &&
+      row.status.toLowerCase() !== "ringing");
   return {
     id: row.id,
     direction: row.direction,
@@ -134,10 +143,14 @@ function mapCallLog(
     endedAt: row.endedAt?.toISOString() ?? null,
     fromNumber: row.fromNumber,
     toNumber: row.toNumber,
-    answered: isCallAnswered(row.status, row.durationSec) || isAiAgent,
+    answered: hasVoicemail
+      ? false
+      : isCallAnswered(row.status, row.durationSec, { dispositionNote: row.dispositionNote }) ||
+        isAiAgent,
     hasRecording: Boolean(row.recordingUrl),
     hasTranscript: Boolean(row.transcript?.trim()),
     hasSummary: Boolean(row.aiSummary?.trim()),
+    hasVoicemail,
     isAiAgent,
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,

@@ -181,6 +181,8 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const [wrapUpVisitId, setWrapUpVisitId] = useState<string | null>(null);
   const [wrapUpOpen, setWrapUpOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
+  const activeCallRef = useRef<ActiveCallState | null>(null);
+  activeCallRef.current = activeCall;
 
   const bindCall = useCallback(
     async (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
@@ -441,6 +443,15 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
         });
 
         device.on("incoming", (call) => {
+          if (activeCallRef.current) {
+            call.reject();
+            const from = call.parameters.From ?? "Unknown";
+            toast.message("Caller waiting in queue", {
+              description: `${formatPhoneDisplay(from) || from} will hold until you finish this call.`,
+              duration: 8000,
+            });
+            return;
+          }
           const from = call.parameters.From ?? "Unknown";
           ringingInvitesRef.current.add(call);
           let callerLabel = formatPhoneDisplay(from) || from;

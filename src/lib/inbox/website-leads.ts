@@ -1,5 +1,11 @@
 export const WEBSITE_LEAD_THREAD_PREFIX = "website-lead:";
 export const WEBSITE_FORM_SMS_PREFIX = "[Website form —";
+/** Matches both em-dash and hyphen prefixes used in stored website-form SMS. */
+export const WEBSITE_FORM_SMS_BODY_STARTS_WITH = "[Website form";
+
+export function isWebsiteFormSmsBody(body: string | null | undefined) {
+  return Boolean(body?.startsWith(WEBSITE_FORM_SMS_BODY_STARTS_WITH));
+}
 
 export function leadIdFromThreadId(threadId: string | null | undefined) {
   if (!threadId?.startsWith(WEBSITE_LEAD_THREAD_PREFIX)) return null;
@@ -35,7 +41,7 @@ export function parseWebsiteFormName(subject: string) {
 
 /** Parse SMS website-form prefix: `[Website form — source]` or `[Website form — source | lead:id]`. */
 export function parseWebsiteFormSmsPrefix(body: string) {
-  const match = body.match(/^\[Website form — ([^\|\]]+?)(?:\s*\|\s*lead:([^\]]+))?\]/);
+  const match = body.match(/^\[Website form [—-] ([^\|\]]+?)(?:\s*\|\s*lead:([^\]]+))?\]/);
   if (!match) return { source: null as string | null, leadId: null as string | null };
   return {
     source: match[1]?.trim() || null,

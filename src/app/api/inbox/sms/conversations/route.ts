@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Scope, Channel } from "@prisma/client";
+import { Scope, Channel, MessageDirection } from "@prisma/client";
 import {
   requireSessionUser,
   unauthorizedResponse,
@@ -16,6 +16,8 @@ import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { isBlobStorageUrl } from "@/lib/blob/urls";
 import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
+import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
+import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 
 type SendSmsBody = {
   to: string;
@@ -123,6 +125,8 @@ async function sendSmsMessage(params: {
     data: { lastMessageAt: new Date() },
   });
 
+  await markInboundConversationRead(params.user.companyId, conversation.id);
+
   return { conversation, message };
 }
 
@@ -137,6 +141,15 @@ export async function GET(request: NextRequest) {
         companyId: user.companyId,
         channel: Channel.SMS,
         scope,
+        ...(scope === Scope.EXTERNAL
+          ? {
+              messages: {
+                some: {
+                  NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+                },
+              },
+            }
+          : {}),
       },
       include: {
         customer: true,
@@ -145,11 +158,27 @@ export async function GET(request: NextRequest) {
           take: 1,
           include: { media: true },
         },
+        _count: {
+          select: {
+            messages: {
+              where: {
+                direction: MessageDirection.INBOUND,
+                readAt: null,
+                NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+              },
+            },
+          },
+        },
       },
       orderBy: { lastMessageAt: "desc" },
     });
 
-    return NextResponse.json(conversations);
+    return NextResponse.json(
+      conversations.map(({ _count, ...conversation }) => ({
+        ...conversation,
+        unreadCount: _count.messages,
+      }))
+    );
   } catch {
     return unauthorizedResponse();
   }

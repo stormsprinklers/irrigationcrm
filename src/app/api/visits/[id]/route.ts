@@ -81,15 +81,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
 
-    const availabilityError = await validateAssignmentUpdate(
+    const availability = await validateAssignmentUpdate(
       user.companyId,
       nextAssignedUserId,
       nextStart,
       nextEnd,
       id
     );
-    if (availabilityError) {
-      return NextResponse.json({ error: availabilityError }, { status: 400 });
+    if (availability.error) {
+      return NextResponse.json({ error: availability.error }, { status: 400 });
     }
 
     const assignmentError = validateScheduledVisitAssignment(
@@ -184,7 +184,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const visit = await getVisitForCompany(user.companyId, id);
-    return NextResponse.json(visit ? await serializeVisitDetail(visit) : { error: "Not found" });
+    if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({
+      ...(await serializeVisitDetail(visit)),
+      warning: availability.warning,
+    });
   } catch {
     return unauthorizedResponse();
   }

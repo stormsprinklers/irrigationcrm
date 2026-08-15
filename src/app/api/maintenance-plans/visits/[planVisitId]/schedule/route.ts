@@ -75,13 +75,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     const assignmentError = validateScheduledVisitAssignment(VisitStatus.SCHEDULED, assignedUserId);
     if (assignmentError) return badRequestResponse(assignmentError);
 
-    const availabilityError = await validateAssignmentUpdate(
+    const availability = await validateAssignmentUpdate(
       user.companyId,
       assignedUserId ?? null,
       startAt,
       endAt
     );
-    if (availabilityError) return badRequestResponse(availabilityError);
+    if (availability.error) return badRequestResponse(availability.error);
 
     const visit = await prisma.$transaction(async (tx) => {
       const created = await tx.visit.create({
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       isInitialSchedule: true,
     }).catch(() => {});
 
-    return NextResponse.json(visit, { status: 201 });
+    return NextResponse.json({ ...visit, warning: availability.warning }, { status: 201 });
   } catch {
     return unauthorizedResponse();
   }

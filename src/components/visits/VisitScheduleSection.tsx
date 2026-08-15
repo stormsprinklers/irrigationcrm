@@ -148,6 +148,7 @@ export function VisitScheduleSection({
         toast.error(data.error ?? "Failed to update schedule");
         return;
       }
+      if (data.warning) toast.warning(data.warning);
       toast.success("Schedule updated");
       await onUpdated();
     } finally {

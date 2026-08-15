@@ -45,14 +45,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
 
-    const availabilityError = await validateAssignmentUpdate(
+    const availability = await validateAssignmentUpdate(
       user.companyId,
       nextAssignedUserId,
       nextStart,
       nextEnd,
       id
     );
-    if (availabilityError) return badRequestResponse(availabilityError);
+    if (availability.error) return badRequestResponse(availability.error);
 
     const assignmentError = validateScheduledVisitAssignment(
       nextStatus,
@@ -100,7 +100,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
     }
 
-    return NextResponse.json(serializeJob(visit));
+    return NextResponse.json({ ...serializeJob(visit), warning: availability.warning });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
     return NextResponse.json({ error: "Failed to update visit" }, { status: 500 });

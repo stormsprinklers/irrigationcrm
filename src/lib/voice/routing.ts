@@ -17,6 +17,11 @@ import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { localTimeParts } from "./hours-branch";
 import { renderIvrGather, renderIvrNode, type FlowContext, type IvrNodeConfig } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
+import {
+  appendCompanyQueueEnqueue,
+  markCallSessionQueued,
+  shouldQueueBecauseAgentsBusy,
+} from "./call-queue";
 
 function flowNodeBranch(config: unknown): "open" | "closed" {
   const branch = (config as { branch?: string } | null)?.branch;
@@ -81,8 +86,22 @@ function resolvePostIvrDestination<
 async function dialAvailableAgents(
   response: InstanceType<typeof twilio.twiml.VoiceResponse>,
   company: { id: string; recordCalls: boolean },
-  from: string
+  from: string,
+  callSid?: string
 ) {
+  if (await shouldQueueBecauseAgentsBusy(company.id)) {
+    await markCallSessionQueued(company.id, callSid);
+    response.say("All agents are currently on another call. Please hold.");
+    appendCompanyQueueEnqueue(response, company.id);
+    return;
+  }
+
+  const identities = await getAvailableAgentIdentities(company.id);
+  if (!identities.length) {
+    response.say("No agents are available.");
+    return;
+  }
+
   const dial = response.dial(
     inboundDialAttributes(company, {
       timeout: 30,
@@ -91,13 +110,8 @@ async function dialAvailableAgents(
       callerId: from,
     })
   );
-  const identities = await getAvailableAgentIdentities(company.id);
-  if (identities.length) {
-    for (const identity of identities) {
-      dial.client({}, identity);
-    }
-  } else {
-    response.say("No agents are available.");
+  for (const identity of identities) {
+    dial.client({}, identity);
   }
 }
 
@@ -354,7 +368,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
       if (destination) {
         return renderIvrNode(destination, callFlow.nodes, ctx);
       }
-      await dialAvailableAgents(response, company, from);
+      await dialAvailableAgents(response, company, from, callSid);
       return response.toString();
     }
 
@@ -372,7 +386,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
     companyId: company.id,
     phoneNumberId: phoneRecord?.id ?? null,
   });
-  await dialAvailableAgents(response, company, from);
+  await dialAvailableAgents(response, company, from, callSid);
   return response.toString();
 }
 

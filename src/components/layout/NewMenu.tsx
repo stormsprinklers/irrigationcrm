@@ -235,6 +235,7 @@ export function NewMenu() {
         return;
       }
       const visit = await res.json();
+      if (visit.warning) toast.warning(visit.warning);
       closeModal();
       router.push(`/visits/${visit.id}`);
     } finally {

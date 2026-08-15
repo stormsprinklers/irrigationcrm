@@ -136,14 +136,16 @@ export async function POST(request: NextRequest) {
 
     const jobStart = new Date(startAt);
     const jobEnd = new Date(endAt);
+    let assignmentWarning: string | null = null;
     if (effectiveAssignee) {
-      const availabilityError = await validateAssignmentUpdate(
+      const availability = await validateAssignmentUpdate(
         user.companyId,
         effectiveAssignee,
         jobStart,
         jobEnd
       );
-      if (availabilityError) return badRequestResponse(availabilityError);
+      if (availability.error) return badRequestResponse(availability.error);
+      assignmentWarning = availability.warning;
     }
 
     const isCallback = Boolean(body.isCallback);
@@ -230,7 +232,10 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
-    return NextResponse.json(serializeJob(visit), { status: 201 });
+    return NextResponse.json(
+      { ...serializeJob(visit), warning: assignmentWarning },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
     return NextResponse.json({ error: "Failed to create visit" }, { status: 500 });

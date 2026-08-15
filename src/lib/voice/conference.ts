@@ -247,6 +247,41 @@ export async function endCallSession(companyId: string, sessionId: string) {
   return { ok: true as const };
 }
 
+/** If a hangup leaves 0–1 people in conference, end the call for the remaining party. */
+export async function endConferenceIfAlone(conferenceSid: string, departedCallSid?: string | null) {
+  const client = getTwilioClient();
+  const participants = await client.conferences(conferenceSid).participants.list();
+  const remaining = participants.filter((p) => p.callSid !== departedCallSid);
+  if (remaining.length > 1) {
+    if (remaining.length === 2) {
+      for (const p of remaining) {
+        try {
+          await client.conferences(conferenceSid).participants(p.callSid).update({
+            endConferenceOnExit: true,
+          });
+        } catch {
+          // participant may have already left
+        }
+      }
+    }
+    return false;
+  }
+
+  try {
+    await client.conferences(conferenceSid).update({ status: "completed" });
+  } catch (err) {
+    console.warn("Failed to complete conference with one remaining party:", err);
+    for (const p of remaining) {
+      try {
+        await client.calls(p.callSid).update({ status: "completed" });
+      } catch {
+        // already ended
+      }
+    }
+  }
+  return true;
+}
+
 export async function coldTransfer(
   companyId: string,
   sessionId: string,

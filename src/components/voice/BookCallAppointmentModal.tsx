@@ -98,6 +98,7 @@ export function BookCallAppointmentModal({
         throw new Error(data.error ?? "Failed to book");
       }
       const visit = await res.json();
+      if (visit.warning) toast.warning(visit.warning);
       toast.success("Appointment booked");
       notifyVisitBooked(visit.id);
       onOpenChange(false);

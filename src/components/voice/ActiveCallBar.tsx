@@ -17,6 +17,7 @@ import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointment
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { TransferDialog } from "@/components/voice/TransferDialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 function formatDuration(seconds: number) {
@@ -63,6 +64,9 @@ export function ActiveCallBar() {
   } = useVoiceDevice();
   const [seconds, setSeconds] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [waitingQueue, setWaitingQueue] = useState<
+    Array<{ id: string; fromNumber: string; customer?: { name: string | null } | null }>
+  >([]);
 
   useEffect(() => {
     if (!activeCall) {
@@ -73,6 +77,36 @@ export function ActiveCallBar() {
     const timer = setInterval(() => {
       setSeconds(Math.floor((Date.now() - start) / 1000));
     }, 1000);
+    return () => clearInterval(timer);
+  }, [activeCall]);
+
+  useEffect(() => {
+    if (!activeCall) {
+      setWaitingQueue([]);
+      return;
+    }
+    let previousCount = 0;
+    const load = () => {
+      fetch("/api/voice/queue")
+        .then((r) => r.json())
+        .then((data) => {
+          const next = (data.queue ?? []) as typeof waitingQueue;
+          if (next.length > previousCount) {
+            const newest = next[next.length - 1];
+            toast.message("Caller waiting in queue", {
+              description: newest?.customer?.name
+                ? `${newest.customer.name} is on hold.`
+                : "A caller is on hold until you finish this call.",
+              duration: 8000,
+            });
+          }
+          previousCount = next.length;
+          setWaitingQueue(next);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, 4000);
     return () => clearInterval(timer);
   }, [activeCall]);
 
@@ -112,6 +146,18 @@ export function ActiveCallBar() {
             {activeCall.onHold ? " · On hold" : ""}
             {activeCall.muted ? " · Muted" : ""}
           </p>
+          {waitingQueue.length > 0 ? (
+            <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-950">
+              <p className="font-semibold">
+                {waitingQueue.length === 1
+                  ? "1 caller waiting in queue"
+                  : `${waitingQueue.length} callers waiting in queue`}
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-900/80">
+                They are on hold. Pick them up from CSR Desk after this call.
+              </p>
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <CallActionButton

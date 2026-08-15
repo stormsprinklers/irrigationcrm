@@ -5,6 +5,7 @@ import { AlertCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
@@ -15,6 +16,7 @@ type Conversation = {
   id: string;
   participantPhone?: string | null;
   title?: string | null;
+  unreadCount?: number;
   customer?: { name: string; phone?: string | null; doNotService?: boolean } | null;
   messages: {
     body: string;
@@ -79,6 +81,7 @@ export function SmsThreadList({
           const latest = thread.messages[0];
           const latestNotDelivered =
             latest?.direction === "OUTBOUND" && isSmsNotDelivered(latest.deliveryStatus);
+          const unreadCount = thread.unreadCount ?? 0;
 
           return (
             <li key={thread.id}>
@@ -87,7 +90,8 @@ export function SmsThreadList({
                 onClick={() => onSelect(thread.id)}
                 className={cn(
                   "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
-                  selectedId === thread.id && "bg-highlight"
+                  selectedId === thread.id && "bg-highlight",
+                  unreadCount > 0 && selectedId !== thread.id && "bg-primary/5"
                 )}
               >
                 <Avatar className="h-10 w-10">
@@ -101,13 +105,15 @@ export function SmsThreadList({
                       <CustomerNameWithBadge
                         name={thread.customer.name}
                         doNotService={thread.customer.doNotService}
-                        nameClassName="truncate text-sm font-semibold"
+                        nameClassName={cn("truncate text-sm", unreadCount > 0 ? "font-bold" : "font-semibold")}
                         className="max-w-full"
                       />
                       {displayPhone ? (
                         <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
                       ) : null}
-                      <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
+                        {snippet}
+                      </p>
                       {latestNotDelivered ? (
                         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
                           <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
@@ -117,8 +123,12 @@ export function SmsThreadList({
                     </>
                   ) : (
                     <>
-                      <p className="truncate text-sm font-semibold">{label}</p>
-                      <p className="truncate text-sm text-muted-foreground">{snippet}</p>
+                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-bold" : "font-semibold")}>
+                        {label}
+                      </p>
+                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
+                        {snippet}
+                      </p>
                       {latestNotDelivered ? (
                         <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
                           <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
@@ -128,11 +138,14 @@ export function SmsThreadList({
                     </>
                   )}
                 </div>
-                {scope === "customers" && thread.participantPhone && (
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    SMS
-                  </Badge>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {unreadCount > 0 ? <InboxCountOrb count={unreadCount} tone="unread" /> : null}
+                  {scope === "customers" && thread.participantPhone && (
+                    <Badge variant="outline" className="text-[10px]">
+                      SMS
+                    </Badge>
+                  )}
+                </div>
               </button>
             </li>
           );

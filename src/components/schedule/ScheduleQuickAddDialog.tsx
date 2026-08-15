@@ -109,6 +109,7 @@ export function ScheduleQuickAddDialog({
         toast.error(data.error ?? "Failed to create visit");
         return;
       }
+      if (data.warning) toast.warning(data.warning);
       toast.success("Visit scheduled");
       onCreated(data.id);
       onClose();

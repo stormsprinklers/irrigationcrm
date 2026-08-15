@@ -16,6 +16,11 @@ import {
 import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
 import { resolveHoursBranchNextNodeId, type HoursBranchConfig } from "./hours-branch";
+import {
+  appendCompanyQueueEnqueue,
+  markCallSessionQueued,
+  shouldQueueBecauseAgentsBusy,
+} from "./call-queue";
 
 export type IvrNodeConfig = {
   prompt?: string;
@@ -300,6 +305,20 @@ export async function renderIvrNode(
           })
         : await prisma.agentGroup.findFirst({ where: { companyId: ctx.companyId } });
 
+      if (
+        await shouldQueueBecauseAgentsBusy(ctx.companyId, {
+          groupId: group?.id,
+        })
+      ) {
+        await markCallSessionQueued(ctx.companyId, ctx.callSid);
+        response.say("All agents are currently on another call. Please hold.");
+        appendCompanyQueueEnqueue(response, ctx.companyId, {
+          flowId: ctx.flowId,
+          nodeId: node.id,
+        });
+        break;
+      }
+
       const dial = response.dial(
         inboundDialAttributes(ctx.recordCalls, {
           timeout: group?.ringTimeoutSec ?? 30,
@@ -337,6 +356,16 @@ export async function renderIvrNode(
         break;
       }
 
+      if (await shouldQueueBecauseAgentsBusy(ctx.companyId, { userId: targetUser.id })) {
+        await markCallSessionQueued(ctx.companyId, ctx.callSid);
+        response.say("That person is currently on another call. Please hold.");
+        appendCompanyQueueEnqueue(response, ctx.companyId, {
+          flowId: ctx.flowId,
+          nodeId: node.id,
+        });
+        break;
+      }
+
       const dial = response.dial(
         inboundDialAttributes(ctx.recordCalls, {
           timeout: config.timeoutSec ?? 30,
@@ -353,6 +382,7 @@ export async function renderIvrNode(
     }
 
     case CallFlowNodeType.QUEUE: {
+      await markCallSessionQueued(ctx.companyId, ctx.callSid);
       const waitParams = new URLSearchParams({
         companyId: ctx.companyId,
         flowId: ctx.flowId,
