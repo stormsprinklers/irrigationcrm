@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -52,6 +53,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         });
       }
     }
+
+    await markInboundConversationRead(user.companyId, id);
 
     const messages = await prisma.message.findMany({
       where: { conversationId: id },

@@ -21,8 +21,10 @@ import { NewMenu } from "@/components/layout/NewMenu";
 import { UserAccountMenu } from "@/components/layout/UserAccountMenu";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { GlobalSearchButton } from "@/components/layout/GlobalSearch";
+import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { Button } from "@/components/ui/button";
+import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,11 +45,13 @@ function NavLink({
   pathname,
   onNavigate,
   className,
+  badgeCount = 0,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
   className?: string;
+  badgeCount?: number;
 }) {
   const active = getPrimaryNavActive(pathname, item.href);
   return (
@@ -61,7 +65,10 @@ function NavLink({
         className
       )}
     >
-      {item.label}
+      <span className="relative inline-flex items-center pr-1">
+        {item.label}
+        <InboxCountOrb count={badgeCount} className="absolute -right-3.5 -top-2" />
+      </span>
       {active ? (
         <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />
       ) : null}
@@ -73,6 +80,7 @@ export function TopNav() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { brand } = useCompanyBrand();
+  const inboxBadges = useInboxBadges();
   const [dialerOpen, setDialerOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileOtherOpen, setMobileOtherOpen] = useState(false);
@@ -118,7 +126,12 @@ export function TopNav() {
 
         <nav className="hidden items-center gap-1 xl:flex" aria-label="Primary">
           {navItems.map((item) => (
-            <NavLink key={item.href} item={item} pathname={pathname} />
+            <NavLink
+              key={item.href}
+              item={item}
+              pathname={pathname}
+              badgeCount={item.href === "/inbox" ? inboxBadges?.counts.total ?? 0 : 0}
+            />
           ))}
 
           {otherItems.length > 0 ? (
@@ -216,6 +229,7 @@ export function TopNav() {
         <div className="overflow-y-auto py-2">
           {navItems.map((item) => {
             const active = getPrimaryNavActive(pathname, item.href);
+            const inboxCount = item.href === "/inbox" ? inboxBadges?.counts.total ?? 0 : 0;
             return (
               <Link
                 key={item.href}
@@ -223,14 +237,15 @@ export function TopNav() {
                 aria-current={active ? "page" : undefined}
                 onClick={() => setMobileNavOpen(false)}
                 className={cn(
-                  "relative flex items-center px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60",
+                  "relative flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/60",
                   active ? "text-foreground" : "text-muted-foreground"
                 )}
               >
                 {active ? (
                   <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r bg-primary" />
                 ) : null}
-                {item.label}
+                <span>{item.label}</span>
+                <InboxCountOrb count={inboxCount} />
               </Link>
             );
           })}

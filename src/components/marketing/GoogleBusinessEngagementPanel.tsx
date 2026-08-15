@@ -115,6 +115,15 @@ function TabButton({
   );
 }
 
+type NeedsAssignmentReview = {
+  id: string;
+  reviewId: string;
+  reviewerName: string;
+  comment: string | null;
+  starRating: string;
+  createTime: string | null;
+};
+
 function ReviewsTab() {
   const [reviews, setReviews] = useState<GbpReviewDto[]>([]);
   const [allReviewsResponded, setAllReviewsResponded] = useState(false);
@@ -122,6 +131,20 @@ function ReviewsTab() {
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [postingId, setPostingId] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState<NeedsAssignmentReview[]>([]);
+  const [assignmentsByGoogleReviewId, setAssignmentsByGoogleReviewId] = useState<
+    Record<string, Array<{ userId: string; name: string; share: number }>>
+  >({});
+  const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([]);
+
+  const loadAssignments = useCallback(async () => {
+    const res = await fetch("/api/marketing/google-business/reviews/assignments");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Failed to load review assignments");
+    setNeedsReview(data.needsReview ?? []);
+    setAssignmentsByGoogleReviewId(data.assignmentsByGoogleReviewId ?? {});
+    setTechnicians(data.technicians ?? []);
+  }, []);
 
   const loadReviews = useCallback(async () => {
     setLoading(true);
@@ -142,6 +165,7 @@ function ReviewsTab() {
         }
         return next;
       });
+      await loadAssignments();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load reviews");
       setReviews([]);
@@ -149,7 +173,7 @@ function ReviewsTab() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAssignments]);
 
   useEffect(() => {
     void loadReviews();
@@ -211,19 +235,25 @@ function ReviewsTab() {
     );
   }
 
-  if (reviews.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        {allReviewsResponded
-          ? "You're all caught up — every review has a response."
-          : "No reviews returned from Google for this location yet."}
-      </p>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {reviews.map((review) => (
+    <div className="space-y-6">
+      <NeedsAssignmentList
+        reviews={needsReview}
+        technicians={technicians}
+        onAssigned={() => void loadAssignments()}
+      />
+
+      {reviews.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {allReviewsResponded
+            ? "You're all caught up — every review has a response."
+            : "No reviews returned from Google for this location yet."}
+        </p>
+      ) : (
+        <div className="space-y-4">
+          {reviews.map((review) => {
+            const assigned = assignmentsByGoogleReviewId[review.reviewId] ?? [];
+            return (
         <div key={review.name} className="rounded-lg border p-4 space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -236,6 +266,14 @@ function ReviewsTab() {
                   </span>
                 ) : null}
               </div>
+              {assigned.length > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Assigned:{" "}
+                  {assigned
+                    .map((row) => `${row.name} (${row.share.toFixed(2)})`)
+                    .join(", ")}
+                </p>
+              ) : null}
             </div>
           </div>
           {review.comment ? (
@@ -283,6 +321,115 @@ function ReviewsTab() {
               </Button>
             </div>
           </div>
+        </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NeedsAssignmentList({
+  reviews,
+  technicians,
+  onAssigned,
+}: {
+  reviews: NeedsAssignmentReview[];
+  technicians: Array<{ id: string; name: string }>;
+  onAssigned: () => void;
+}) {
+  const [selected, setSelected] = useState<Record<string, string[]>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  if (reviews.length === 0) return null;
+
+  async function assign(reviewId: string) {
+    const userIds = selected[reviewId] ?? [];
+    if (!userIds.length) {
+      toast.error("Select at least one technician");
+      return;
+    }
+    setSavingId(reviewId);
+    try {
+      const res = await fetch("/api/marketing/google-business/reviews/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId, userIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to assign review");
+      toast.success("Review assigned");
+      onAssigned();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign review");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function toggleTech(reviewId: string, userId: string) {
+    setSelected((current) => {
+      const list = current[reviewId] ?? [];
+      return {
+        ...current,
+        [reviewId]: list.includes(userId) ? list.filter((id) => id !== userId) : [...list, userId],
+      };
+    });
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div>
+        <p className="font-medium text-amber-950">Needs assignment</p>
+        <p className="text-sm text-amber-900/80">
+          These Google reviews could not be matched to a customer or technician. Assign credit
+          manually.
+        </p>
+      </div>
+      {reviews.map((review) => (
+        <div key={review.id} className="rounded-md border border-amber-200 bg-white p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium">{review.reviewerName}</p>
+            {review.createTime ? (
+              <span className="text-xs text-muted-foreground">
+                {format(new Date(review.createTime), "MMM d, yyyy")}
+              </span>
+            ) : null}
+          </div>
+          <Stars count={starCount(review.starRating)} />
+          {review.comment ? (
+            <p className="text-sm whitespace-pre-wrap">{review.comment}</p>
+          ) : (
+            <p className="text-sm italic text-muted-foreground">No written comment</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {technicians.map((tech) => {
+              const checked = (selected[review.id] ?? []).includes(tech.id);
+              return (
+                <label
+                  key={tech.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleTech(review.id, tech.id)}
+                  />
+                  {tech.name}
+                </label>
+              );
+            })}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={savingId === review.id}
+            onClick={() => void assign(review.id)}
+          >
+            {savingId === review.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Assign
+          </Button>
         </div>
       ))}
     </div>

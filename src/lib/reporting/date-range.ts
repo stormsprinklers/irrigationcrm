@@ -45,6 +45,7 @@ export const ADMIN_HOME_KPI_PRESETS: ReportPresetRange[] = [
   "today",
   "week",
   "month",
+  "ytd",
   "overall",
 ];
 

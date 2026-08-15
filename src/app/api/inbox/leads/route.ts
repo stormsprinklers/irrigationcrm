@@ -230,7 +230,7 @@ export async function GET() {
           subject: null,
           preview: row.body.replace(/^\[Website form[^\]]*\]\s*/, "").slice(0, 160),
           createdAt: row.sentAt.toISOString(),
-          isRead: false,
+          isRead: Boolean(row.readAt),
           leadId: lead?.id ?? parsed.leadId,
           conversationId: row.conversationId,
           fallbackPhone: row.conversation.participantPhone,

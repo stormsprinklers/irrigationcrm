@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
+import { StripePayoutsCard } from "@/components/reporting/StripePayoutsCard";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
   ADMIN_HOME_KPI_PRESETS,
@@ -162,7 +163,7 @@ export function KpiDashboard({
   variant = "reporting",
   defaultPreset = variant === "home" ? "today" : "ytd",
   presets = variant === "home" ? ADMIN_HOME_KPI_PRESETS : REPORTING_KPI_PRESETS,
-  allowCustom = variant !== "home",
+  allowCustom = true,
 }: KpiDashboardProps) {
   const [rangeInput, setRangeInput] = useState<ReportRangeInput>({ preset: defaultPreset });
   const [data, setData] = useState<KpiDashboardReport | null>(null);
@@ -211,6 +212,12 @@ export function KpiDashboard({
           />
         }
       />
+
+      {isHome ? (
+        <div className="mb-8">
+          <StripePayoutsCard />
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading dashboard…</p>

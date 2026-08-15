@@ -6,6 +6,7 @@ import {
   EstimateStatus,
   LeadStatus,
   VisitStatus,
+  GbpReviewAssignStatus,
 } from "@prisma/client";
 import { computeVisitWorkHours, visitRevenue } from "@/lib/compensation/commission";
 import {
@@ -115,6 +116,7 @@ export async function getKpiDashboardReport(
     enrollments,
     leads,
     activePlanCount,
+    googleReviewAssignments,
   ] = await Promise.all([
     prisma.user.findMany({
       where: { companyId, status: "ACTIVE" },
@@ -227,12 +229,31 @@ export async function getKpiDashboardReport(
         status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.RENEWED] },
       },
     }),
+    prisma.gbpReviewAssignment.findMany({
+      where: {
+        review: {
+          companyId,
+          status: GbpReviewAssignStatus.ASSIGNED,
+          createTime: { gte: start, lte: end },
+        },
+      },
+      select: { userId: true, share: true },
+    }),
   ]);
 
   const visitRevenues = visits.map((v) => ({
     visit: v,
     revenue: visitRevenue(v),
   }));
+
+  const googleReviewsByUser = new Map<string, number>();
+  for (const row of googleReviewAssignments) {
+    googleReviewsByUser.set(row.userId, (googleReviewsByUser.get(row.userId) ?? 0) + Number(row.share));
+  }
+
+  function formatGoogleReviews(userId: string) {
+    return (googleReviewsByUser.get(userId) ?? 0).toFixed(2);
+  }
 
   const totalRevenue = visitRevenues.reduce((sum, v) => sum + v.revenue, 0);
 
@@ -386,6 +407,7 @@ export async function getKpiDashboardReport(
             value: workerEstimates.length > 0 ? formatPercent(conversionRate) : "—",
           },
           { label: "5-star reviews", value: String(fiveStarReviews) },
+          { label: "Google reviews", value: formatGoogleReviews(worker.id) },
           ...(options.includeCallbackRate
             ? [
                 {
@@ -567,6 +589,12 @@ export async function getKpiDashboardReport(
           value: totalManHours > 0 ? formatCurrency(revenue / totalManHours) : "—",
         },
         { label: "5-star reviews", value: String(fiveStarReviews) },
+        {
+          label: "Google reviews",
+          value: crew.members
+            .reduce((sum, member) => sum + (googleReviewsByUser.get(member.userId) ?? 0), 0)
+            .toFixed(2),
+        },
         ...(crew.division === Division.INSTALL
           ? [
               {

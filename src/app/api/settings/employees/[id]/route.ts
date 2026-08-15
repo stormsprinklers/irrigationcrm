@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canDeleteEmployee, canManageEmployees, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision } from "@/lib/employees";
+import {
+  generateReviewNameAliases,
+  reservedReviewNameTokens,
+  REVIEW_ALIAS_ROLES,
+  sanitizeReviewAliases,
+} from "@/lib/google-business/review-aliases";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -66,6 +72,30 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         : null;
     if (nameFields && "error" in nameFields) return badRequestResponse(nameFields.error);
 
+    let nextAliases: string[] | undefined;
+    const nextFirstName = nameFields?.firstName ?? existing.firstName;
+    const nameChanged = Boolean(nameFields && nameFields.firstName !== existing.firstName);
+    const isFieldRole = REVIEW_ALIAS_ROLES.includes(nextRole);
+
+    if (fields.reviewNameAliases !== undefined) {
+      const reserved = await reservedReviewNameTokens(user.companyId, id);
+      const sanitized = sanitizeReviewAliases(fields.reviewNameAliases, reserved, nextFirstName);
+      if (sanitized.collisions.length) {
+        return badRequestResponse(
+          `These aliases overlap another technician: ${sanitized.collisions.join(", ")}`
+        );
+      }
+      nextAliases = sanitized.aliases;
+    } else if (isFieldRole && (nameChanged || existing.reviewNameAliases.length === 0)) {
+      nextAliases = await generateReviewNameAliases({
+        companyId: user.companyId,
+        userId: id,
+        firstName: nextFirstName,
+      });
+    } else if (!isFieldRole) {
+      nextAliases = [];
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id },
@@ -93,6 +123,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             ? { birthDate: fields.birthDate ? new Date(fields.birthDate) : null }
             : {}),
           ...(fields.tags !== undefined ? { tags: Array.isArray(fields.tags) ? fields.tags : [] } : {}),
+          ...(nextAliases !== undefined ? { reviewNameAliases: nextAliases } : {}),
           ...(fields.payType !== undefined
             ? { payType: fields.payType ? (fields.payType as PayType) : null }
             : {}),

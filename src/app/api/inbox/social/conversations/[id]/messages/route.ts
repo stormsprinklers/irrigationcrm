@@ -6,6 +6,7 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { channelToSocialPlatform, sendSocialDm } from "@/lib/meta/messaging";
+import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (!platform) {
       return NextResponse.json({ error: "Not a social conversation" }, { status: 400 });
     }
+
+    await markInboundConversationRead(user.companyId, id);
 
     const messages = await prisma.message.findMany({
       where: { conversationId: id },

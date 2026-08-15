@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,7 @@ export function SmsMessagePane({
   const [contactInfoMessageId, setContactInfoMessageId] = useState<string | null>(null);
   const [deliveryDetailMsg, setDeliveryDetailMsg] = useState<Message | null>(null);
   const [resending, setResending] = useState(false);
+  const badgesNotifiedFor = useRef<string | null>(null);
 
   const isCompose = !conversationId;
 
@@ -165,6 +167,10 @@ export function SmsMessagePane({
               : null,
           }))
         );
+        if (conversationId && badgesNotifiedFor.current !== conversationId) {
+          badgesNotifiedFor.current = conversationId;
+          notifyInboxBadgesChanged();
+        }
       }
     }
     load();

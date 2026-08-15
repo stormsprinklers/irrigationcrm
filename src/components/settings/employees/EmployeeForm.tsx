@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
+import { Loader2, Sparkles } from "lucide-react";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export type EmployeeRecord = {
   lmsUserId?: string | null;
   lmsSyncStatus?: string | null;
   lmsLastSyncedAt?: string | null;
+  reviewNameAliases?: string[];
   serviceAreas: { serviceArea: ServiceAreaOption }[];
 };
 
@@ -77,6 +79,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     commissionPercent: "",
     annualSalary: "",
     serviceAreaIds: [] as string[],
+    reviewNameAliases: "",
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -91,7 +94,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN";
+  const [generatingAliases, setGeneratingAliases] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/compensation")
@@ -141,6 +144,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         commissionPercent: "",
         annualSalary: "",
         serviceAreaIds: [],
+        reviewNameAliases: "",
       });
       setPassword("");
       setConfirmPassword("");
@@ -174,6 +178,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         employee.commissionPercent != null ? String(employee.commissionPercent) : "",
       annualSalary: employee.annualSalary != null ? String(employee.annualSalary) : "",
       serviceAreaIds: employee.serviceAreas.map((sa) => sa.serviceArea.id),
+      reviewNameAliases: (employee.reviewNameAliases ?? []).join(", "),
     });
     setPassword("");
     setConfirmPassword("");
@@ -272,6 +277,10 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         commissionPercent: form.commissionPercent ? Number(form.commissionPercent) : null,
         annualSalary: form.annualSalary ? Number(form.annualSalary) : null,
         serviceAreaIds: form.serviceAreaIds,
+        reviewNameAliases: form.reviewNameAliases
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
       };
 
       if (!employee && isAdmin && password) {
@@ -356,6 +365,57 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           <label className="text-sm font-medium">Last name</label>
           <Input value={form.lastName} onChange={(e) => setForm((p) => ({ ...p, lastName: e.target.value }))} />
         </div>
+        {form.role === "TECH" || form.role === "INSTALLER" ? (
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium">Google review name aliases</label>
+            <Input
+              value={form.reviewNameAliases}
+              onChange={(e) => setForm((p) => ({ ...p, reviewNameAliases: e.target.value }))}
+              placeholder="Tavern, Trevan, Trevor, Travis, Taven"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {employee ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={generatingAliases || !form.firstName.trim()}
+                  onClick={async () => {
+                    setGeneratingAliases(true);
+                    try {
+                      const res = await fetch(`/api/settings/employees/${employee.id}/review-aliases`, {
+                        method: "POST",
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error ?? "Failed to generate aliases");
+                      setForm((p) => ({
+                        ...p,
+                        reviewNameAliases: (data.reviewNameAliases ?? []).join(", "),
+                      }));
+                      toast.success("Generated review name aliases");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to generate aliases");
+                    } finally {
+                      setGeneratingAliases(false);
+                    }
+                  }}
+                >
+                  {generatingAliases ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1 h-4 w-4" />
+                  )}
+                  Generate aliases
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Aliases are generated after you create the employee.</p>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Up to 5 misspellings of the first name used to match Google reviews. Must not match another technician.
+            </p>
+          </div>
+        ) : null}
         <div>
           <label className="text-sm font-medium">Email</label>
           <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} required />

@@ -5,6 +5,7 @@ import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorized
 import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
 import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
+import { generateReviewNameAliases, REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -120,9 +121,28 @@ export async function POST(request: NextRequest) {
 
     const lmsSync = await pushEmployeeToLms(employee);
 
+    if (REVIEW_ALIAS_ROLES.includes(employee.role) && employee.firstName) {
+      const aliases = await generateReviewNameAliases({
+        companyId: user.companyId,
+        userId: employee.id,
+        firstName: employee.firstName,
+      });
+      if (aliases.length) {
+        await prisma.user.update({
+          where: { id: employee.id },
+          data: { reviewNameAliases: aliases },
+        });
+      }
+    }
+
+    const refreshed = await prisma.user.findUnique({
+      where: { id: employee.id },
+      select: employeeSelectFields(),
+    });
+
     return NextResponse.json(
       {
-        ...employee,
+        ...(refreshed ?? employee),
         lmsSyncStatus: lmsSync.ok ? "synced" : "error",
         lmsSyncError: lmsSync.ok ? undefined : lmsSync.error,
         tempPassword: plainPassword === "password123" ? "password123" : undefined,

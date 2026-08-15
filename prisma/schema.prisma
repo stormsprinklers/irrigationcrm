@@ -766,6 +766,7 @@ model Company {
   marketingEvents        MarketingEvent[]
   gbpReviewSlackDeliveries GbpReviewSlackDelivery[]
   gbpReviewStaffNotifies   GbpReviewStaffNotify[]
+  gbpReviews               GbpReview[]
   localSeoKeywords     LocalSeoKeyword[]
   localSeoTargetCities LocalSeoTargetCity[]
   localSeoSerpSearches LocalSeoSerpSearch[]
@@ -900,6 +901,8 @@ model User {
   zip          String?
   birthDate    DateTime?
   tags         String[]       @default([])
+  /// Alternate spellings of the first name for Google review matching.
+  reviewNameAliases String[]      @default([])
   /// When set (e.g. AI_RECEPTIONIST), this is a non-login system account for automated notes.
   systemKind   String?
   /// App Store review / Apple demo technician — no phone or MFA required; disable via Integrations.
@@ -974,6 +977,7 @@ model User {
   createdExpenseCards      ExpenseCard[] @relation("ExpenseCardCreator")
   accountLinksFrom         UserAccountLink[] @relation("AccountLinkFrom")
   accountLinksTo           UserAccountLink[] @relation("AccountLinkTo")
+  gbpReviewAssignments     GbpReviewAssignment[]
 
   @@unique([companyId, email])
   @@index([email])
@@ -1159,6 +1163,7 @@ model Customer {
   notificationDeliveries NotificationDelivery[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
   marketingTouchEvents   MarketingTouchEvent[]
+  gbpReviews             GbpReview[]
 
   @@index([referredByCustomerId])
   @@index([companyId, attributionChannel])
@@ -3779,6 +3784,47 @@ model GbpReviewStaffNotify {
 
   @@unique([companyId, reviewId])
   @@index([companyId, notifiedAt])
+}
+
+enum GbpReviewAssignStatus {
+  ASSIGNED
+  NEEDS_REVIEW
+}
+
+model GbpReview {
+  id               String                @id @default(cuid())
+  companyId        String
+  reviewId         String
+  reviewerName     String
+  comment          String?               @db.Text
+  starRating       String
+  createTime       DateTime?
+  status           GbpReviewAssignStatus @default(NEEDS_REVIEW)
+  customerId       String?
+  assignedManually Boolean               @default(false)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  company      Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignments  GbpReviewAssignment[]
+
+  @@unique([companyId, reviewId])
+  @@index([companyId, status])
+  @@index([companyId, createTime])
+}
+
+model GbpReviewAssignment {
+  id       String  @id @default(cuid())
+  reviewId String
+  userId   String
+  share    Decimal @db.Decimal(8, 4)
+
+  review GbpReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([reviewId, userId])
+  @@index([userId])
 }
 
 model ReferralProgramSettings {

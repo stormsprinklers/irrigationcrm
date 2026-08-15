@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import Link from "next/link";
 import { Facebook, Instagram, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -185,6 +186,7 @@ export function SocialDmMessagePane({
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [resolvedFromApi, setResolvedFromApi] = useState<SocialScope | null>(null);
+  const badgesNotifiedFor = useRef<string | null>(null);
 
   const resolvedPlatform: SocialScope =
     platform ?? resolvedFromApi ?? "facebook";
@@ -207,6 +209,10 @@ export function SocialDmMessagePane({
       setMessages(data.messages ?? []);
       if (data.platform === "facebook" || data.platform === "instagram") {
         setResolvedFromApi(data.platform);
+      }
+      if (conversationId && badgesNotifiedFor.current !== conversationId) {
+        badgesNotifiedFor.current = conversationId;
+        notifyInboxBadgesChanged();
       }
     }
 

@@ -16,6 +16,7 @@ import { sanitizeEmailHtml } from "@/lib/inbox/attachments";
 import { leadAddressQueryParams, parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 
 type LeadFilterTab = "to_contact" | "contacted" | "spam";
 
@@ -333,6 +334,7 @@ export function WebsiteLeadsInbox() {
               item.id === selected.id ? { ...item, isRead: true } : item
             );
           });
+          notifyInboxBadgesChanged();
         })
         .catch(() => {
           if (!cancelled) toast.error("Failed to load form submission");
@@ -363,6 +365,7 @@ export function WebsiteLeadsInbox() {
         setSmsBody(message?.body ?? preview);
         setEmailDetail(null);
         loadedDetailKeyRef.current = selectedDetailKey;
+        notifyInboxBadgesChanged();
       })
       .catch(() => {
         if (!cancelled) toast.error("Failed to load form submission");
