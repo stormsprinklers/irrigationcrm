@@ -419,25 +419,12 @@ export function CompanySettingsInner() {
             </div>
           </section>
           <section className="rounded-lg border border-border bg-white p-6">
-            <h3 className="mb-1 text-lg font-semibold">Storm AI</h3>
+            <h3 className="mb-1 text-lg font-semibold">Monthly revenue target</h3>
             <p className="mb-4 text-sm text-muted-foreground">
-              Floating assistant on authenticated CRM pages. It only reads CRM data through
-              permission-checked tools.
+              Used by Storm AI and reporting when staff ask about being on track for the month.
             </p>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Show Storm AI button</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Blue circle in the bottom-right corner. On by default.
-                </p>
-              </div>
-              <Switch
-                checked={company.showStormAiFab !== false}
-                onCheckedChange={(checked) => setCompany({ ...company, showStormAiFab: checked })}
-              />
-            </div>
-            <div className="mt-4">
-              <label className="text-sm text-muted-foreground">Monthly revenue target (USD)</label>
+            <div>
+              <label className="text-sm text-muted-foreground">Amount (USD)</label>
               <Input
                 className="mt-1"
                 type="number"

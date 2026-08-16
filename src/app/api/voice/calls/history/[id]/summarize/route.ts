@@ -37,6 +37,8 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       summary: result.summary ?? null,
+      objectionCategory: result.objectionCategory ?? null,
+      objectionReason: result.objectionReason ?? null,
       skipped: result.skipped ?? null,
     });
   } catch (err) {

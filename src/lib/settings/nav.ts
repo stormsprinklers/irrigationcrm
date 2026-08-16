@@ -8,6 +8,7 @@ import {
   jobSettingsSidebar,
   priceBookSettingsSidebar,
   settingsSidebar,
+  stormAiSettingsSidebar,
   teamSettingsSidebar,
 } from "@/config/navigation";
 
@@ -30,6 +31,11 @@ const SETTINGS_SECTIONS: Array<{
       pathname.startsWith("/settings/holiday-lighting") ||
       pathname.startsWith("/settings/role-preview"),
     sections: companySettingsSidebar,
+  },
+  {
+    title: "Storm AI",
+    match: (pathname) => pathname.startsWith("/settings/storm-ai"),
+    sections: stormAiSettingsSidebar,
   },
   {
     title: "Team",

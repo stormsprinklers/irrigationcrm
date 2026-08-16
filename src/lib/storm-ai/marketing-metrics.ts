@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import {
   ATTRIBUTION_CHANNELS,
   attributionChannelLabel,
+  isPaidChannel,
 } from "@/lib/attribution";
 import { visitRevenue } from "@/lib/compensation/commission";
 import { getAttributionKpis } from "@/lib/marketing/attribution-kpis";
@@ -60,6 +61,7 @@ function normalizeChannelFilter(raw?: string) {
 type Bucket = {
   channel: string;
   leads: number;
+  platformLeads: number;
   convertedLeads: number;
   bookedLeads: number;
   newCustomers: number;
@@ -73,6 +75,7 @@ function emptyBucket(channel: string): Bucket {
   return {
     channel,
     leads: 0,
+    platformLeads: 0,
     convertedLeads: 0,
     bookedLeads: 0,
     newCustomers: 0,
@@ -204,6 +207,10 @@ export async function getMarketingChannelMetrics(
     bucket(row.channel).spend += row.spend;
   }
 
+  bucket("google_ads").platformLeads = attribution.platformLeadVolume.google_ads;
+  bucket("google_lsa").platformLeads = attribution.platformLeadVolume.google_lsa;
+  bucket("meta_ads").platformLeads = attribution.platformLeadVolume.meta_ads;
+
   const wanted = normalizeChannelFilter(channelFilter);
 
   const channels = [...buckets.values()]
@@ -218,32 +225,34 @@ export async function getMarketingChannelMetrics(
       );
     })
     .map((row) => {
-      const cpl = ratio(row.spend, row.leads);
-      const cac = ratio(row.spend, row.newCustomers);
+      const paid = isPaidChannel(row.channel);
+      const cpl = paid ? ratio(row.spend, row.platformLeads) : null;
+      const cac = paid ? ratio(row.spend, row.newCustomers) : null;
       return {
         channel: row.channel,
         label: attributionChannelLabel(row.channel),
-        leads: row.leads,
+        crmLeads: row.leads,
+        adPlatformLeads: paid ? row.platformLeads : null,
         convertedLeads: row.convertedLeads,
-        conversionRate: ratio(row.convertedLeads, row.leads),
+        crmConversionRate: ratio(row.convertedLeads, row.leads),
         bookedLeads: row.bookedLeads,
         bookingRate: ratio(row.bookedLeads, row.leads),
         newCustomers: row.newCustomers,
-        adSpend: money(row.spend),
-        costPerLead: money(cpl),
-        cac: money(cac),
+        adSpend: paid ? money(row.spend) : 0,
+        costPerLead: paid ? money(cpl) : null,
+        cac: paid ? money(cac) : null,
         completedVisits: row.completedVisits,
         averageTicket: money(ratio(row.visitRevenue, row.completedVisits)),
         visitRevenue: money(row.visitRevenue),
         invoiceRevenue: money(row.invoiceRevenue),
-        roas: ratio(row.invoiceRevenue, row.spend),
+        roas: paid ? ratio(row.invoiceRevenue, row.spend) : null,
       };
     })
-    .sort((a, b) => (b.adSpend ?? 0) - (a.adSpend ?? 0) || b.leads - a.leads);
+    .sort((a, b) => (b.adSpend ?? 0) - (a.adSpend ?? 0) || b.crmLeads - a.crmLeads);
 
   const totals = channels.reduce(
     (acc, row) => {
-      acc.leads += row.leads;
+      acc.leads += row.crmLeads;
       acc.convertedLeads += row.convertedLeads;
       acc.bookedLeads += row.bookedLeads;
       acc.newCustomers += row.newCustomers;
@@ -269,7 +278,8 @@ export async function getMarketingChannelMetrics(
     range: attribution.dateRange,
     company: {
       adSpend: attribution.totalAdSpend,
-      leads: attribution.leadsInRange,
+      crmLeads: attribution.leadsInRange,
+      paidPlatformConversions: attribution.paidPlatformConversions,
       costPerLead: money(attribution.costPerLead),
       paidCostPerLead: money(attribution.paidCostPerLead),
       cac: money(ratio(attribution.totalAdSpend, totals.newCustomers)),
@@ -282,12 +292,15 @@ export async function getMarketingChannelMetrics(
     },
     channels,
     definitions: {
-      costPerLead: "Ad spend ÷ leads in range (first-touch).",
-      cac: "Ad spend ÷ new customers created in range with that first-touch channel.",
-      conversionRate: "Won / converted leads ÷ leads.",
-      bookingRate: "Converted leads that have a scheduled (non-cancelled) visit ÷ leads.",
+      costPerLead:
+        "Paid channels only: ad spend ÷ ad-platform conversions (Google Ads conversions, LSA charged leads, Meta conversions). Unpaid channels (organic, referral, GBP, direct) have no CPL.",
+      cac: "Ad spend ÷ new customers created in range with that first-touch channel. Paid channels only.",
+      crmLeads: "CRM first-touch leads attributed to the channel. Not the Google Ads conversion count.",
+      adPlatformLeads: "Google/Meta conversion or LSA lead count used for CPL.",
+      conversionRate: "CRM won/converted leads ÷ CRM leads. This is office/field, not Google Ads conversion rate.",
+      bookingRate: "Converted leads that have a scheduled (non-cancelled) visit ÷ CRM leads.",
       averageTicket: "Completed-job visit revenue ÷ completed visits in range.",
-      adSpend: "Paid channels only (Google Ads, LSA, Meta). Organic/referral spend is $0.",
+      adSpend: "Paid channels only (Google Ads, LSA, Meta).",
     },
   };
 }

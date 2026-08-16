@@ -10,6 +10,7 @@ import { parseAdsDateRange } from "@/lib/marketing/ads-date-range";
 import { buildAdsDashboard } from "@/lib/marketing/ads-dashboard";
 import { MetaAdsApiError, getMetaAdsConnectionStatus, getMetaAdsSummary } from "@/lib/meta/ads";
 import { getCrmCallConversionSummary } from "@/lib/voice/call-conversion-report";
+import { enrichLsaLeadsWithCrm } from "@/lib/marketing/lsa-lead-crm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -90,6 +91,11 @@ export async function GET(request: NextRequest) {
       metaReady: metaStatus.connected,
       metaError,
     });
+
+    dashboard.googleLsa.recentLeads = await enrichLsaLeadsWithCrm(
+      user.companyId,
+      dashboard.googleLsa.recentLeads
+    );
 
     return NextResponse.json(dashboard);
   } catch (error) {

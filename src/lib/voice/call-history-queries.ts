@@ -154,6 +154,8 @@ function mapCallLog(
     hasSummary: Boolean(row.aiSummary?.trim()),
     hasVoicemail,
     isAiAgent,
+    objectionCategory: row.objectionCategory ?? null,
+    objectionReason: row.objectionReason ?? null,
     missedReviewedAt: row.missedReviewedAt?.toISOString() ?? null,
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,

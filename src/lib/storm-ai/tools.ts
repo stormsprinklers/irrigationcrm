@@ -104,7 +104,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "get_technician_performance",
       description:
-        "Technician KPIs for a date range: average ticket, callback rate, 5-star review count, Google review share, jobs completed, and revenue. Look up by technicianId or name.",
+        "Technician KPIs for a date range: average ticket, callback rate, 5-star review count, Google review share, jobs completed, and revenue. Omit name (or pass name all) to rank every active technician. Pass technicianId or name for one person.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -175,7 +175,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "get_marketing_metrics",
       description:
-        "Marketing KPIs overall and per lead channel: ad spend, CPL, CAC, conversion rate, booking rate, average ticket, invoice revenue, ROAS. Optional channel filter (google_ads, google_lsa, meta_ads, organic, referral, gbp, direct).",
+        "Paid-channel marketing KPIs: ad spend, CPL (spend ÷ Google/Meta/LSA conversions, never unpaid channels), CAC, CRM conversion/booking rates, average ticket, ROAS. Optional channel filter.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -185,6 +185,37 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
             description: "Optional channel name such as Google LSA, Meta, organic, referral",
           },
           range: dateRangeProps,
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "analyze_inbound_calls",
+      description:
+        "Inbound call coaching: booking rates by employee and lead source, plus AI summaries and transcript excerpts. Use for why booking rate is low, how CSRs can improve, or what happened on calls. Optional filters: employee name, lead source, a single callId.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          range: dateRangeProps,
+          employeeName: {
+            type: "string",
+            description: "Filter to calls answered by this employee",
+          },
+          leadSource: {
+            type: "string",
+            description: "Filter such as Google LSA, Google Ads, PPC, primary",
+          },
+          callId: {
+            type: "string",
+            description: "Load one call's full summary and transcript",
+          },
+          includeTranscripts: {
+            type: "boolean",
+            description: "Include short transcript excerpts from unbooked answered calls (default true)",
+          },
         },
       },
     },
@@ -241,6 +272,60 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
           focus: {
             type: "string",
             enum: ["all", "needs_service", "open_issues"],
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "match_tech_issue",
+      description:
+        "Find technician diagnostic workflows that match a field problem (valve, solenoid, no water, zone, etc.). Returns short issue titles only — never a full procedure. Then call start_tech_assist with the best issueId.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["query"],
+        properties: {
+          query: {
+            type: "string",
+            description: "Technician's symptom or question",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "start_tech_assist",
+      description:
+        "Start a technician assistant session for one matched issue. Returns only the first diagnostic step. Never dump the rest of the workflow.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["issueId"],
+        properties: { issueId: { type: "string" } },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "continue_tech_assist",
+      description:
+        "Advance the current technician assistant session with the technician's measurement or answer. Returns only the next step or a final resolution.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sessionId"],
+        properties: {
+          sessionId: { type: "string" },
+          result: {
+            type: "string",
+            description:
+              "Numeric reading, yes/no, choice label, or short text for the current step",
           },
         },
       },

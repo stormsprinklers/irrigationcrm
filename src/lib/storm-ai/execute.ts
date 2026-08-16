@@ -22,8 +22,20 @@ import { getCustomerSummary } from "@/lib/customers/summary";
 import { getMaintenancePlanRevenueSummary } from "@/lib/maintenance-plans/queries";
 import { listItems } from "@/lib/price-book/queries";
 import { listVisits, serializeVisit, visitInclude } from "@/lib/visits/queries";
-import { getTechnicianKpis, resolveCompanyTechnician } from "./technician-kpis";
+import {
+  getTechnicianKpis,
+  getTechnicianLeaderboard,
+  resolveCompanyTechnician,
+  wantsTechnicianLeaderboard,
+} from "./technician-kpis";
 import { getMarketingChannelMetrics } from "./marketing-metrics";
+import { getInboundCallCoachingReport } from "./call-coaching";
+import { canUseStormAiTool, canUseTechAssist } from "./permissions";
+import {
+  continueTechAssistSession,
+  matchTechIssues,
+  startTechAssistSession,
+} from "./tech-assist";
 import { getStormAiVehicleReport } from "./vehicles";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 import type { StormAiToolResult } from "./types";
@@ -101,9 +113,13 @@ async function fieldVisitWhere(user: SessionUser) {
 export async function runStormAiTool(
   user: SessionUser,
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  ctx?: { conversationId?: string }
 ): Promise<StormAiToolResult> {
   try {
+    if (!canUseStormAiTool(user.role, name)) {
+      return fail("FORBIDDEN", "Your role cannot access that.");
+    }
     switch (name) {
       case "search_customers": {
         const query = typeof args.query === "string" ? args.query : "";
@@ -313,23 +329,14 @@ export async function runStormAiTool(
           });
         }
 
-        if (!requestedTech && !requestedName) {
-          if (user.role === "CSR") {
-            const kpi = await getKpiDashboardReport(user.companyId, range);
-            return ok({
-              range: kpi.rangeLabel,
-              company: kpi.company,
-              note: "Ask for a technician by name to see average ticket, callback rate, and 5-star reviews. Per-technician pay is not available for your role.",
-            });
-          }
-          if (!officeCanSeeOtherTechs(user.role) && user.role !== "SALES") {
+        if (wantsTechnicianLeaderboard({ technicianId: requestedTech, name: requestedName })) {
+          if (!officeCanSeeOtherTechs(user.role) && user.role !== "SALES" && user.role !== "CSR") {
             return fail("FORBIDDEN", "Your role cannot access that.");
           }
-          const kpi = await getKpiDashboardReport(user.companyId, range);
+          const board = await getTechnicianLeaderboard(user.companyId, range);
           return ok({
-            range: kpi.rangeLabel,
-            technicians: kpi.technicians,
-            note: "Solo technician KPI cards from the dashboard. For a specific person (including crew members), pass name or technicianId to get average ticket, callback rate, and 5-star reviews.",
+            ...board,
+            note: "Active technicians ranked by 5-star CRM survey reviews in this range. Pass a name or technicianId for one person.",
           });
         }
 
@@ -553,6 +560,75 @@ export async function runStormAiTool(
           }),
           note: "price is the customer sell price. Costs are omitted unless the user can view margins.",
         });
+      }
+      case "analyze_inbound_calls": {
+        if (isFieldRole(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const range =
+          args.range != null ? parseRange(args.range) : { preset: "last30" as const };
+        const employeeName =
+          typeof args.employeeName === "string" ? args.employeeName : undefined;
+        const leadSource = typeof args.leadSource === "string" ? args.leadSource : undefined;
+        const callId = typeof args.callId === "string" ? args.callId : undefined;
+        const includeTranscripts =
+          typeof args.includeTranscripts === "boolean" ? args.includeTranscripts : undefined;
+        const data = await getInboundCallCoachingReport(user.companyId, range, {
+          employeeName,
+          leadSource,
+          callId,
+          includeTranscripts,
+        });
+        if (callId && "call" in data && data.call == null) {
+          return fail("NOT_FOUND", "Call not found");
+        }
+        return ok(data);
+      }
+      case "match_tech_issue": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const query = typeof args.query === "string" ? args.query : "";
+        const issues = await matchTechIssues(user.companyId, query);
+        return ok({
+          issues,
+          note:
+            issues.length === 0
+              ? "No matching technician workflow. Do not invent a procedure."
+              : "Pick the best issueId and call start_tech_assist. Do not invent steps.",
+        });
+      }
+      case "start_tech_assist": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const issueId = typeof args.issueId === "string" ? args.issueId : "";
+        const conversationId = ctx?.conversationId;
+        if (!issueId) return fail("INVALID", "issueId is required");
+        if (!conversationId) return fail("INVALID", "Conversation is required");
+        const started = await startTechAssistSession({
+          companyId: user.companyId,
+          userId: user.id,
+          conversationId,
+          issueId,
+        });
+        if (!started.ok) return fail("NOT_FOUND", started.error);
+        return ok(started);
+      }
+      case "continue_tech_assist": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const sessionId = typeof args.sessionId === "string" ? args.sessionId : "";
+        if (!sessionId) return fail("INVALID", "sessionId is required");
+        const continued = await continueTechAssistSession({
+          companyId: user.companyId,
+          userId: user.id,
+          sessionId,
+          result: args.result,
+        });
+        if (!continued.ok) return fail("NOT_FOUND", continued.error);
+        return ok(continued);
       }
       case "get_vehicles": {
         if (!canViewVehicles(user.role)) {

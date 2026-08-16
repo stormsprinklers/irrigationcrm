@@ -39,7 +39,7 @@ const modules = [
   },
   {
     title: "Paid ads",
-    description: "Google PPC, Google LSA, and Meta — budgets, schedules, CPC, ROAS.",
+    description: "Google PPC, Google LSA, and Meta — spend, CPC, conversions, CPL, and ROAS.",
     href: "/marketing/ads",
     icon: Megaphone,
     cta: "View ads",

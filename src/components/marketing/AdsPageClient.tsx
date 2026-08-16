@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { Loader2, Plus, RefreshCw, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,6 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { formatCallDateTime, formatCallDuration } from "@/lib/voice/call-history";
+import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
+import { cn } from "@/lib/utils";
 import type {
   AdsCampaignRow,
   AdsDashboard,
@@ -68,7 +71,7 @@ function CampaignTable({
   if (rows.length === 0) {
     const columns =
       variant === "google"
-        ? ["Campaign", "Status", "Budget", "Spend", "Impressions", "Clicks", "CPC", "Conversions", "ROAS"]
+        ? ["Campaign", "Status", "Budget", "Spend", "Impressions", "Clicks", "CPC", "Conversions", "CPL", "ROAS"]
         : ["Campaign", "Objective", "Status", "Budget", "Spend", "Impressions", "Clicks", "CPL", "ROAS"];
     return <MarketingEmptyTable columns={columns} message={message} />;
   }
@@ -88,6 +91,7 @@ function CampaignTable({
                 <th className="px-3 py-2 font-medium">Clicks</th>
                 <th className="px-3 py-2 font-medium">CPC</th>
                 <th className="px-3 py-2 font-medium">Conversions</th>
+                <th className="px-3 py-2 font-medium">CPL</th>
                 <th className="px-3 py-2 font-medium">ROAS</th>
               </>
             ) : (
@@ -123,12 +127,13 @@ function CampaignTable({
                 <>
                   <td className="px-3 py-2">{formatCurrencyPrecise(row.cpc)}</td>
                   <td className="px-3 py-2">{formatCount(row.conversions)}</td>
+                  <td className="px-3 py-2">{formatCurrencyPrecise(row.cpl)}</td>
                   <td className="px-3 py-2">{formatRoas(row.roas)}</td>
                 </>
               ) : (
                 <>
                   <td className="px-3 py-2">
-                    {row.conversions > 0 ? formatCurrencyPrecise(row.spend / row.conversions) : "—"}
+                    {formatCurrencyPrecise(row.cpl)}
                   </td>
                   <td className="px-3 py-2">{formatRoas(row.roas)}</td>
                 </>
@@ -226,6 +231,8 @@ function LsaCategoryTable({ lsa }: { lsa: AdsLsaBlock }) {
 }
 
 function LsaLeadsTable({ lsa }: { lsa: AdsLsaBlock }) {
+  const [openLeadId, setOpenLeadId] = useState<string | null>(null);
+
   if (lsa.recentLeads.length === 0) {
     return (
       <MarketingEmptyTable
@@ -249,31 +256,100 @@ function LsaLeadsTable({ lsa }: { lsa: AdsLsaBlock }) {
           </tr>
         </thead>
         <tbody>
-          {lsa.recentLeads.map((lead) => (
-            <tr key={lead.id} className="border-b border-border/60">
-              <td className="px-3 py-2 text-muted-foreground">
-                {lead.creationDateTime ?? "—"}
-              </td>
-              <td className="px-3 py-2 capitalize">
-                {lead.leadType.replace(/_/g, " ").toLowerCase()}
-              </td>
-              <td className="px-3 py-2 capitalize text-muted-foreground">
-                {lead.leadStatus.replace(/_/g, " ").toLowerCase()}
-              </td>
-              <td className="px-3 py-2">{lead.categoryLabel}</td>
-              <td className="px-3 py-2">
-                {lead.consumerName ||
-                  (lead.phoneNumber ? formatPhoneDisplay(lead.phoneNumber) : null) ||
-                  "—"}
-                {lead.consumerName && lead.phoneNumber ? (
-                  <span className="block text-xs text-muted-foreground">
-                    {formatPhoneDisplay(lead.phoneNumber)}
-                  </span>
+          {lsa.recentLeads.map((lead) => {
+            const displayName = lead.customer?.name || lead.consumerName;
+            const phoneLabel = lead.phoneNumber ? formatPhoneDisplay(lead.phoneNumber) : null;
+            const open = openLeadId === lead.id;
+            const canExpand = Boolean(lead.phoneNumber || lead.calls.length);
+            return (
+              <Fragment key={lead.id}>
+                <tr className="border-b border-border/60">
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {lead.creationDateTime ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 capitalize">
+                    {lead.leadType.replace(/_/g, " ").toLowerCase()}
+                  </td>
+                  <td className="px-3 py-2 capitalize text-muted-foreground">
+                    {lead.leadStatus.replace(/_/g, " ").toLowerCase()}
+                  </td>
+                  <td className="px-3 py-2">{lead.categoryLabel}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-start gap-1">
+                      <div className="min-w-0">
+                        {lead.customer ? (
+                          <Link
+                            href={`/customers/${lead.customer.id}`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            {lead.customer.name}
+                          </Link>
+                        ) : displayName ? (
+                          <span className="font-medium">{displayName}</span>
+                        ) : phoneLabel ? (
+                          <span>{phoneLabel}</span>
+                        ) : (
+                          "—"
+                        )}
+                        {phoneLabel && (lead.customer || lead.consumerName) ? (
+                          <span className="block text-xs text-muted-foreground">{phoneLabel}</span>
+                        ) : null}
+                      </div>
+                      {canExpand ? (
+                        <button
+                          type="button"
+                          className="ml-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                          aria-expanded={open}
+                          aria-label={open ? "Hide call details" : "Show call details"}
+                          onClick={() => setOpenLeadId(open ? null : lead.id)}
+                        >
+                          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">{lead.leadCharged ? "Yes" : "No"}</td>
+                </tr>
+                {open ? (
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    <td colSpan={6} className="px-3 py-3">
+                      {!lead.calls.length ? (
+                        <p className="text-sm text-muted-foreground">
+                          No matching inbound call in the CRM for this number yet.
+                        </p>
+                      ) : (
+                        <ul className="space-y-3">
+                          {lead.calls.map((call) => (
+                            <li key={call.id} className="space-y-2">
+                              <p className="text-xs text-muted-foreground">
+                                {formatCallDateTime(call.startedAt)}
+                                {call.durationSec != null
+                                  ? ` · ${formatCallDuration(call.durationSec)}`
+                                  : ""}
+                              </p>
+                              {call.aiSummary ? (
+                                <p className="text-sm whitespace-pre-wrap">{call.aiSummary}</p>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No call summary yet.</p>
+                              )}
+                              {call.hasRecording && call.recordingPlaybackUrl ? (
+                                <CallRecordingPlayer
+                                  callId={call.id}
+                                  playbackUrl={call.recordingPlaybackUrl}
+                                />
+                              ) : (
+                                <p className="text-xs text-muted-foreground">No recording available.</p>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  </tr>
                 ) : null}
-              </td>
-              <td className="px-3 py-2">{lead.leadCharged ? "Yes" : "No"}</td>
-            </tr>
-          ))}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -496,7 +572,6 @@ export function AdsPageClient() {
           <TabsTrigger value="google-ppc">Google PPC</TabsTrigger>
           <TabsTrigger value="google-lsa">Google LSA</TabsTrigger>
           <TabsTrigger value="meta">Meta ads</TabsTrigger>
-          <TabsTrigger value="budgets">Budgets &amp; schedules</TabsTrigger>
         </TabsList>
 
         <TabsContent value="google-ppc">
@@ -694,30 +769,6 @@ export function AdsPageClient() {
               rows={dashboard?.meta.campaigns ?? []}
               variant="meta"
               message="Connect Meta Ads in Settings to manage and report on paid social campaigns."
-            />
-          </MarketingSectionCard>
-        </TabsContent>
-
-        <TabsContent value="budgets">
-          <MarketingSectionCard
-            title="Budgets &amp; schedules"
-            description="Campaign budgets pulled from linked Google Ads and Meta accounts."
-          >
-            <MarketingEmptyTable
-              columns={[
-                "Platform",
-                "Campaign",
-                "Budget type",
-                "Amount",
-                "Schedule",
-                "Pacing",
-                "Status",
-              ]}
-              message={
-                anyReady
-                  ? "Daily and lifetime budgets appear on each campaign row in the Google PPC and Meta tabs."
-                  : "Link ad accounts in Settings to view budget information."
-              }
             />
           </MarketingSectionCard>
         </TabsContent>

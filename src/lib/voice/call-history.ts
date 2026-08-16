@@ -14,6 +14,8 @@ export type CallHistoryListItem = {
   hasTranscript: boolean;
   hasSummary: boolean;
   hasVoicemail: boolean;
+  objectionCategory: string | null;
+  objectionReason: string | null;
   /** True when the AI receptionist handled (or started) this call. */
   isAiAgent: boolean;
   /** When set, missed inbound no longer counts toward the CSR Desk badge. */

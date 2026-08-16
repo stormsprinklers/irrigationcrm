@@ -2,8 +2,8 @@ import type { SessionUser } from "@/lib/api-auth";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
 import { runStormAiTool } from "./execute";
+import { stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
-import { STORM_AI_TOOLS } from "./tools";
 import type { StormAiPageContext } from "./types";
 
 const MAX_TOOL_ROUNDS = 8;
@@ -118,7 +118,7 @@ export async function runStormAiTurn(opts: {
         body: JSON.stringify({
           model: stormAiModel(),
           messages,
-          tools: STORM_AI_TOOLS,
+          tools: stormAiToolsForRole(opts.user.role),
           tool_choice: "auto",
         }),
       });
@@ -156,7 +156,9 @@ export async function runStormAiTurn(opts: {
             name: call.function.name,
             args: sanitizeToolPayload(parsed, 1500),
           });
-          const result = await runStormAiTool(opts.user, call.function.name, parsed);
+          const result = await runStormAiTool(opts.user, call.function.name, parsed, {
+            conversationId: conversation.id,
+          });
           const payload = sanitizeToolPayload(result, 8000);
           await prisma.stormAiMessage.create({
             data: {

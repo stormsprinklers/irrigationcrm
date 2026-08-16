@@ -36,6 +36,8 @@ export type AttributionInput = {
   leadSource?: string | null;
   formSource?: string | null;
   attributionMethod?: string | null;
+  conversionPage?: string | null;
+  landingPage?: string | null;
 };
 
 export type NormalizedAttribution = {
@@ -78,6 +80,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   const method = lower(input.attributionMethod);
   const tracking = lower(trackingSource);
   const leadSource = lower(input.leadSource ?? input.formSource);
+  const conversionPage = lower(input.conversionPage ?? input.landingPage);
 
   let channel: AttributionChannel = "unknown";
 
@@ -89,7 +92,16 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     leadSource === "google lsa"
   ) {
     channel = "google_lsa";
-  } else if (gclid || bucket === "google_ads" || tracking.includes("google ads") || tracking.includes("google ppc")) {
+  } else if (
+    gclid ||
+    bucket === "google_ads" ||
+    tracking.includes("google ads") ||
+    tracking.includes("google ppc") ||
+    leadSource.includes("ppc") ||
+    leadSource.includes("google-ppc") ||
+    leadSource.includes("google ads") ||
+    conversionPage.includes("ppc-sprinkler")
+  ) {
     channel = "google_ads";
   } else if (
     fbclid ||
@@ -265,5 +277,13 @@ export function parseAttributionFromMetadata(metadata: unknown): AttributionInpu
     fbclid: str("fbclid"),
     msclkid: str("msclkid"),
     trackingSource: str("trackingSource") ?? str("tracking_source"),
+    conversionPage:
+      str("conversionPage") ??
+      str("conversion_page") ??
+      (typeof meta.conversion_page === "string" ? meta.conversion_page : null),
+    landingPage:
+      str("landingPage") ??
+      str("landing_page") ??
+      (typeof nested.landingPage === "string" ? nested.landingPage : null),
   };
 }

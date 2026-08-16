@@ -417,6 +417,16 @@ enum CallDisposition {
   NON_OPPORTUNITY
 }
 
+/// Primary reason an inbound call did not book, from AI transcript summary.
+enum CallObjectionCategory {
+  NA
+  PRICE_SHOPPING
+  PRICE_FEE
+  AVAILABILITY_URGENCY
+  SCHEDULING_CONFLICT
+  OTHER
+}
+
 /// How an inbound call was attributed for marketing conversion tracking.
 enum CallAttributionMethod {
   DIALED_TRACKING_NUMBER
@@ -788,6 +798,8 @@ model Company {
   vehicles               Vehicle[]
   stormAiConversations   StormAiConversation[]
   stormAiAuditLogs       StormAiAuditLog[]
+  techAssistIssues       TechAssistIssue[]
+  techAssistSessions     TechAssistSession[]
 }
 
 model LocalSeoSerpSearch {
@@ -987,6 +999,7 @@ model User {
   stormAiConversations     StormAiConversation[]
   stormAiMessages          StormAiMessage[]
   stormAiAuditLogs         StormAiAuditLog[]
+  techAssistSessions       TechAssistSession[]
 
   @@unique([companyId, email])
   @@index([email])
@@ -1018,6 +1031,7 @@ model StormAiConversation {
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages StormAiMessage[]
   auditLogs StormAiAuditLog[]
+  techAssistSessions TechAssistSession[]
 
   @@index([userId, updatedAt])
   @@index([companyId, userId])
@@ -1061,6 +1075,77 @@ model StormAiAuditLog {
 
   @@index([companyId, createdAt])
   @@index([userId, createdAt])
+}
+
+enum TechAssistNodeType {
+  DIAGNOSTIC
+  BRANCH
+  RESOLUTION
+}
+
+enum TechAssistSessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model TechAssistIssue {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  trigger     String
+  keywords    Json     @default("[]")
+  description String?  @db.Text
+  entryNodeId String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  nodes    TechAssistNode[]
+  sessions TechAssistSession[]
+
+  @@index([companyId, active, sortOrder])
+}
+
+model TechAssistNode {
+  id        String             @id @default(cuid())
+  issueId   String
+  type      TechAssistNodeType
+  title     String
+  body      String             @db.Text
+  config    Json               @default("{}")
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  issue              TechAssistIssue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  sessionsAtNode     TechAssistSession[]
+
+  @@index([issueId, sortOrder])
+}
+
+model TechAssistSession {
+  id             String                   @id @default(cuid())
+  companyId      String
+  userId         String
+  conversationId String
+  issueId        String
+  currentNodeId  String?
+  status         TechAssistSessionStatus  @default(ACTIVE)
+  history        Json                     @default("[]")
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation StormAiConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  issue        TechAssistIssue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  currentNode  TechAssistNode?      @relation(fields: [currentNodeId], references: [id], onDelete: SetNull)
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, status])
+  @@index([userId, status])
 }
 
 enum AuthMfaPurpose {
@@ -1522,6 +1607,10 @@ model CallLog {
   transcript    String?
   /// One-paragraph AI summary generated from the transcript.
   aiSummary     String?
+  /// Parsed from the AI summary JSON. NA when the call booked.
+  objectionCategory CallObjectionCategory?
+  /// Why they did not book / where value was missed. Null when booked or N/A.
+  objectionReason   String?
   disposition   CallDisposition @default(NONE)
   dispositionNote String?
   visitId       String?

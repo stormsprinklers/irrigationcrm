@@ -104,7 +104,9 @@ export function MarketingAttributionKpiStrip() {
           {
             label: "Cost per lead",
             value: loading ? "…" : formatCurrency(kpis?.costPerLead ?? null),
-            hint: kpis ? `${kpis.leadsInRange} leads` : undefined,
+            hint: kpis
+              ? `${kpis.paidPlatformConversions} paid conversions (Ads/LSA/Meta)`
+              : undefined,
           },
           {
             label: "Average ROAS",

@@ -12,7 +12,21 @@ export type AttributionKpis = {
     isAllTime: boolean;
   };
   totalAdSpend: number;
+  /** CRM first-touch leads in range (all channels, including unpaid). */
   leadsInRange: number;
+  /** CRM first-touch leads on paid channels only. */
+  paidCrmLeadsInRange: number;
+  /**
+   * Paid-platform conversion volume used for CPL:
+   * Google Ads conversions + LSA charged leads + Meta conversions.
+   */
+  paidPlatformConversions: number;
+  platformLeadVolume: {
+    google_ads: number;
+    google_lsa: number;
+    meta_ads: number;
+  };
+  /** Paid ad spend ÷ paid platform conversions. Not computed for organic/referral/GBP. */
   costPerLead: number | null;
   paidCostPerLead: number | null;
   invoiceRevenueInRange: number;
@@ -30,11 +44,17 @@ export type AttributionKpis = {
   spendFromLiveApis?: boolean;
 };
 
-async function fetchLivePaidSpendByChannel(
+type PaidPlatformLive = {
+  spend: Map<string, number>;
+  conversions: Map<string, number>;
+};
+
+async function fetchLivePaidPlatformStats(
   companyId: string,
   range: AdsDateRange
-): Promise<Map<string, number>> {
+): Promise<PaidPlatformLive> {
   const spend = new Map<string, number>();
+  const conversions = new Map<string, number>();
   const [{ getGoogleAdsSummary, getGoogleLsaSummary }, { getMetaAdsSummary }] =
     await Promise.all([
       import("@/lib/google-ads/client"),
@@ -49,15 +69,22 @@ async function fetchLivePaidSpendByChannel(
 
   if (results[0].status === "fulfilled") {
     spend.set(MarketingSpendChannel.google_ads, results[0].value.spend ?? 0);
+    conversions.set(MarketingSpendChannel.google_ads, results[0].value.conversions ?? 0);
   }
   if (results[1].status === "fulfilled") {
-    spend.set(MarketingSpendChannel.google_lsa, results[1].value.spend ?? 0);
+    const lsa = results[1].value;
+    spend.set(MarketingSpendChannel.google_lsa, lsa.spend ?? 0);
+    conversions.set(
+      MarketingSpendChannel.google_lsa,
+      Math.max(lsa.chargedLeads ?? 0, lsa.leads ?? 0)
+    );
   }
   if (results[2].status === "fulfilled") {
     spend.set(MarketingSpendChannel.meta_ads, results[2].value.spend ?? 0);
+    conversions.set(MarketingSpendChannel.meta_ads, results[2].value.conversions ?? 0);
   }
 
-  return spend;
+  return { spend, conversions };
 }
 
 function utcStart(isoDate: string) {
@@ -138,12 +165,11 @@ export async function getAttributionKpis(
     spendByChannel.set(row.channel, (spendByChannel.get(row.channel) ?? 0) + spend);
   }
 
-  // MarketingSpendDaily is filled by cron; until that has history, fall back to
-  // the same live Google/Meta summaries the Ads page uses so overview KPIs match.
+  // Live ad APIs: conversion counts for CPL, and spend when daily snapshots are empty.
+  const live = await fetchLivePaidPlatformStats(companyId, range);
   let spendFromLiveApis = false;
   if (totalAdSpend <= 0) {
-    const live = await fetchLivePaidSpendByChannel(companyId, range);
-    for (const [channel, spend] of live) {
+    for (const [channel, spend] of live.spend) {
       if (spend > 0) {
         spendByChannel.set(channel, spend);
         totalAdSpend += spend;
@@ -189,23 +215,14 @@ export async function getAttributionKpis(
     0
   );
 
-  // LSA-only advertisers: CRM Lead rows can lag Google's charged-lead volume
-  // (and used to be further undercounted by Search pagination). Prefer the
-  // larger Google LSA charged/lead count for CPL so it tracks Google's CPL.
-  let leadsForCpl = leadsInRange;
-  let paidLeadsForCpl = paidLeadsInRange;
-  const lsaSpend = spendByChannel.get(MarketingSpendChannel.google_lsa) ?? 0;
-  if (lsaSpend > 0) {
-    try {
-      const { getGoogleLsaSummary } = await import("@/lib/google-ads/client");
-      const lsa = await getGoogleLsaSummary(companyId, range);
-      const googleLeadCount = Math.max(lsa.chargedLeads, lsa.leads);
-      if (googleLeadCount > leadsForCpl) leadsForCpl = googleLeadCount;
-      if (googleLeadCount > paidLeadsForCpl) paidLeadsForCpl = googleLeadCount;
-    } catch (err) {
-      console.error("Attribution KPIs: LSA lead volume lookup failed", err);
-    }
-  }
+  const platformLeadVolume = {
+    google_ads: live.conversions.get(MarketingSpendChannel.google_ads) ?? 0,
+    google_lsa: live.conversions.get(MarketingSpendChannel.google_lsa) ?? 0,
+    meta_ads: live.conversions.get(MarketingSpendChannel.meta_ads) ?? 0,
+  };
+  const paidPlatformConversions =
+    platformLeadVolume.google_ads + platformLeadVolume.google_lsa + platformLeadVolume.meta_ads;
+  const paidCpl = ratio(paidSpend, paidPlatformConversions);
 
   return {
     dateRange: {
@@ -215,9 +232,12 @@ export async function getAttributionKpis(
       isAllTime: range.isAllTime,
     },
     totalAdSpend: Math.round(totalAdSpend * 100) / 100,
-    leadsInRange: leadsForCpl,
-    costPerLead: ratio(totalAdSpend, leadsForCpl),
-    paidCostPerLead: ratio(paidSpend, paidLeadsForCpl),
+    leadsInRange,
+    paidCrmLeadsInRange: paidLeadsInRange,
+    paidPlatformConversions,
+    platformLeadVolume,
+    costPerLead: paidCpl,
+    paidCostPerLead: paidCpl,
     invoiceRevenueInRange: Math.round(invoiceRevenueInRange * 100) / 100,
     paidAttributedRevenue: Math.round(paidAttributedRevenue * 100) / 100,
     averageRoas: ratio(paidAttributedRevenue, paidSpend),

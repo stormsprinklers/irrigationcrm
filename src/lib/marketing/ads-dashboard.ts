@@ -15,6 +15,7 @@ export type AdsCampaignRow = {
   cpc: number | null;
   conversions: number;
   roas: number | null;
+  cpl: number | null;
 };
 
 export type AdsPlatformBlock = {
@@ -44,6 +45,15 @@ export type AdsLsaCategoryRow = {
   bookedLeads: number;
 };
 
+export type AdsLsaLeadCall = {
+  id: string;
+  startedAt: string;
+  durationSec: number | null;
+  aiSummary: string | null;
+  hasRecording: boolean;
+  recordingPlaybackUrl: string | null;
+};
+
 export type AdsLsaLeadRow = {
   id: string;
   leadType: string;
@@ -53,6 +63,8 @@ export type AdsLsaLeadRow = {
   leadCharged: boolean;
   consumerName: string | null;
   phoneNumber: string | null;
+  customer: { id: string; name: string } | null;
+  calls: AdsLsaLeadCall[];
 };
 
 export type AdsLsaBlock = {
@@ -161,6 +173,7 @@ function buildGoogleBlock(
       cpc: ratio(row.spend, row.clicks),
       conversions: row.conversions,
       roas: ratio(row.conversionsValue, row.spend),
+      cpl: ratio(row.spend, row.conversions),
     })),
   };
 }
@@ -199,6 +212,7 @@ function buildGoogleLsaBlock(
       cpc: ratio(row.spend, row.clicks),
       conversions: row.conversions,
       roas: null,
+      cpl: ratio(row.spend, row.conversions),
     })),
     categories: (summary?.categories ?? []).map((row) => ({
       categoryId: row.categoryId,
@@ -216,6 +230,8 @@ function buildGoogleLsaBlock(
       leadCharged: row.leadCharged,
       consumerName: row.consumerName,
       phoneNumber: row.phoneNumber,
+      customer: null,
+      calls: [],
     })),
     crm,
   };
@@ -261,6 +277,7 @@ function buildMetaBlock(
       cpc: ratio(row.spend, row.clicks),
       conversions: row.conversions,
       roas: null,
+      cpl: ratio(row.spend, row.conversions),
     })),
   };
 }

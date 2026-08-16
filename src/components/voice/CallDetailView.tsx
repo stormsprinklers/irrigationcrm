@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Phone, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
 import { CallTranscriptPanel } from "@/components/voice/CallTranscriptPanel";
@@ -13,6 +14,7 @@ import { PhoneText } from "@/components/ui/PhoneText";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
+import { CALL_OBJECTION_LABELS } from "@/lib/voice/summarize-call";
 import {
   formatCallDateTime,
   formatCallDuration,
@@ -107,7 +109,13 @@ export function CallDetailView({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Summary failed");
-      const next = { ...detail, aiSummary: data.summary ?? null, hasSummary: Boolean(data.summary) };
+      const next = {
+        ...detail,
+        aiSummary: data.summary ?? null,
+        hasSummary: Boolean(data.summary),
+        objectionCategory: data.objectionCategory ?? null,
+        objectionReason: data.objectionReason ?? null,
+      };
       setDetail(next);
       onUpdated?.(next);
     } catch (err) {
@@ -305,9 +313,22 @@ export function CallDetailView({
           ) : null}
         </div>
         {detail.aiSummary?.trim() ? (
-          <p className="rounded-md border border-border bg-muted/20 p-3 text-sm leading-relaxed text-foreground">
-            {detail.aiSummary}
-          </p>
+          <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+            {detail.objectionCategory && detail.objectionCategory !== "NA" ? (
+              <Badge variant="secondary">
+                {CALL_OBJECTION_LABELS[
+                  detail.objectionCategory as keyof typeof CALL_OBJECTION_LABELS
+                ] ?? detail.objectionCategory}
+              </Badge>
+            ) : null}
+            <p className="text-sm leading-relaxed text-foreground">{detail.aiSummary}</p>
+            {detail.objectionReason && detail.objectionCategory !== "NA" ? (
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Objection: </span>
+                {detail.objectionReason}
+              </p>
+            ) : null}
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             {detail.hasTranscript || detail.transcript?.trim()

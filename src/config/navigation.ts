@@ -140,6 +140,15 @@ export const marketingSidebar: NavSection[] = [
   },
 ];
 
+export const stormAiSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "General", href: "/settings/storm-ai", exact: true },
+      { label: "Technician Assistant", href: "/settings/storm-ai/technician-assistant" },
+    ],
+  },
+];
+
 export const companySettingsSidebar: NavSection[] = [
   {
     items: [
@@ -256,6 +265,12 @@ export const settingsSidebar: NavSection[] = [
           "/settings/role-preview",
         ],
         children: companySettingsSidebar[0]!.items,
+      },
+      {
+        label: "Storm AI",
+        href: "/settings/storm-ai",
+        activePrefixes: ["/settings/storm-ai"],
+        children: stormAiSettingsSidebar[0]!.items,
       },
       {
         label: "Team",
