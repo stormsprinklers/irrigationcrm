@@ -52,8 +52,8 @@ type Estimate = {
     id: string;
     label: string;
     displayNumber: string;
-    description?: string | null;
-    photoUrl?: string | null;
+    description: string | null;
+    photoUrl: string | null;
     declinedAt?: string | null;
     subtotal: number;
     discountTotal: number;
@@ -98,6 +98,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   const [drawing, setDrawing] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -437,7 +438,11 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         {(estimate.options?.length ?? 0) > 0 ? (
           <section className="space-y-3">
             <EstimateOptionPresentCards
-              options={estimate.options}
+              options={estimate.options.map((o) => ({
+                ...o,
+                description: o.description ?? null,
+                photoUrl: o.photoUrl ?? null,
+              }))}
               lineItems={estimate.lineItems}
               discounts={estimate.discounts ?? []}
               canDecide={canSign}

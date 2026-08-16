@@ -41,7 +41,7 @@ function serializePayout(payout: {
   };
 }
 
-function paymentIntentIdFromSource(source: Stripe.BalanceTransaction.Source | string | null) {
+function paymentIntentIdFromSource(source: Stripe.BalanceTransactionSource | string | null) {
   if (!source || typeof source === "string") return null;
   if (source.object === "charge") {
     const pi = source.payment_intent;
@@ -51,7 +51,7 @@ function paymentIntentIdFromSource(source: Stripe.BalanceTransaction.Source | st
   return null;
 }
 
-function chargeAmountAndCreated(source: Stripe.BalanceTransaction.Source | string | null) {
+function chargeAmountAndCreated(source: Stripe.BalanceTransactionSource | string | null) {
   if (!source || typeof source === "string") return null;
   if (source.object === "charge") {
     return {

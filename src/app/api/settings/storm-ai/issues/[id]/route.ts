@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TechAssistNodeType } from "@prisma/client";
+import { Prisma, TechAssistNodeType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
@@ -144,7 +144,9 @@ export async function PUT(
             body.description === undefined
               ? existing.description
               : body.description?.trim() || null,
-          keywords: Array.isArray(body.keywords) ? body.keywords : existing.keywords,
+          keywords: (Array.isArray(body.keywords)
+            ? body.keywords
+            : existing.keywords ?? []) as Prisma.InputJsonValue,
           entryNodeId: body.entryNodeId === undefined ? existing.entryNodeId : body.entryNodeId,
           ...("active" in body && typeof (body as { active?: unknown }).active === "boolean"
             ? { active: (body as { active: boolean }).active }
@@ -169,14 +171,14 @@ export async function PUT(
             type: node.type,
             title: node.title.trim() || node.type,
             body: node.body ?? "",
-            config: node.config ?? {},
+            config: (node.config ?? {}) as Prisma.InputJsonValue,
             sortOrder: node.sortOrder,
           },
           update: {
             type: node.type,
             title: node.title.trim() || node.type,
             body: node.body ?? "",
-            config: node.config ?? {},
+            config: (node.config ?? {}) as Prisma.InputJsonValue,
             sortOrder: node.sortOrder,
           },
         });

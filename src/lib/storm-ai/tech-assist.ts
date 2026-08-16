@@ -1,4 +1,4 @@
-import { TechAssistNodeType, TechAssistSessionStatus } from "@prisma/client";
+import { Prisma, TechAssistNodeType, TechAssistSessionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type DiagnosticInputType = "number" | "yes_no" | "choice" | "text";
@@ -76,10 +76,10 @@ export function publicStep(node: {
   };
 }
 
-function firstContentNode(
-  nodes: Array<{ id: string; type: TechAssistNodeType; sortOrder: number }>,
+function firstContentNode<T extends { id: string; type: TechAssistNodeType; sortOrder: number }>(
+  nodes: T[],
   entryNodeId: string | null
-) {
+): T | null {
   if (entryNodeId) {
     const entry = nodes.find((n) => n.id === entryNodeId);
     if (entry) return entry;
@@ -232,7 +232,7 @@ export async function startTechAssistSession(opts: {
       issueId: issue.id,
       currentNodeId: first.id,
       status: TechAssistSessionStatus.ACTIVE,
-      history: [],
+      history: [] as Prisma.InputJsonValue,
     },
   });
 
@@ -314,7 +314,7 @@ export async function continueTechAssistSession(opts: {
       data: {
         status: TechAssistSessionStatus.COMPLETED,
         currentNodeId: current.id,
-        history,
+        history: history as Prisma.InputJsonValue,
       },
     });
     return {
@@ -336,7 +336,7 @@ export async function continueTechAssistSession(opts: {
     data: {
       currentNodeId: next.id,
       status: done ? TechAssistSessionStatus.COMPLETED : TechAssistSessionStatus.ACTIVE,
-      history,
+      history: history as Prisma.InputJsonValue,
     },
   });
 

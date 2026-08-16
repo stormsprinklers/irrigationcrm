@@ -12,8 +12,8 @@ type EstimateLike = {
   options: Array<{
     id: string;
     label: string;
-    description?: string | null;
-    photoUrl?: string | null;
+    description: string | null;
+    photoUrl: string | null;
     total: number;
     declinedAt?: string | null;
   }>;
@@ -146,7 +146,11 @@ export function EstimatePresentMode({
           </div>
         ) : (
           <EstimateOptionPresentCards
-            options={estimate.options}
+            options={estimate.options.map((o) => ({
+              ...o,
+              description: o.description ?? null,
+              photoUrl: o.photoUrl ?? null,
+            }))}
             lineItems={estimate.lineItems}
             discounts={estimate.discounts}
             canDecide={estimate.status !== "APPROVED" && estimate.status !== "CONVERTED"}
