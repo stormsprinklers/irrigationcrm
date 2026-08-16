@@ -5,7 +5,9 @@ import {
   type CallHistoryListItem,
   CALL_HISTORY_UI_LIMIT,
   isCallAnswered,
+  isMissedInboundLog,
   isVoicemailDisposition,
+  MISSED_CALL_LOOKBACK_MS,
 } from "@/lib/voice/call-history";
 import { callRecordingPlaybackPath } from "@/lib/voice/recording";
 
@@ -152,6 +154,7 @@ function mapCallLog(
     hasSummary: Boolean(row.aiSummary?.trim()),
     hasVoicemail,
     isAiAgent,
+    missedReviewedAt: row.missedReviewedAt?.toISOString() ?? null,
     customer: row.customer,
     employee: employee ? { id: employee.id, name: employee.name } : null,
   };
@@ -250,4 +253,39 @@ export async function getCallHistoryDetail(
   if (!row) return null;
   const { aiByCallLogId, aiByCallSid } = await loadAiReceptionistIndexes([row]);
   return toDetail(row, aiByCallLogId, aiByCallSid);
+}
+
+export async function markMissedCallReviewed(companyId: string, callLogId: string) {
+  const row = await prisma.callLog.findFirst({
+    where: { id: callLogId, companyId, direction: "INBOUND" },
+    select: { id: true, missedReviewedAt: true },
+  });
+  if (!row) return false;
+  if (row.missedReviewedAt) return true;
+  await prisma.callLog.update({
+    where: { id: row.id },
+    data: { missedReviewedAt: new Date() },
+  });
+  return true;
+}
+
+export async function markRecentMissedCallsReviewed(companyId: string) {
+  const missedSince = new Date(Date.now() - MISSED_CALL_LOOKBACK_MS);
+  const logs = await prisma.callLog.findMany({
+    where: {
+      companyId,
+      direction: "INBOUND",
+      missedReviewedAt: null,
+      startedAt: { gte: missedSince },
+    },
+    select: { id: true, status: true, durationSec: true, dispositionNote: true },
+    take: 2000,
+  });
+  const ids = logs.filter((log) => isMissedInboundLog(log)).map((log) => log.id);
+  if (!ids.length) return 0;
+  await prisma.callLog.updateMany({
+    where: { companyId, id: { in: ids } },
+    data: { missedReviewedAt: new Date() },
+  });
+  return ids.length;
 }

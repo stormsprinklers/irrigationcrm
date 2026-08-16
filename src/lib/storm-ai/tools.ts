@@ -103,12 +103,14 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     type: "function",
     function: {
       name: "get_technician_performance",
-      description: "Technician KPI / performance cards for a date range.",
+      description:
+        "Technician KPIs for a date range: average ticket, callback rate, 5-star review count, Google review share, jobs completed, and revenue. Look up by technicianId or name.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           technicianId: { type: "string" },
+          name: { type: "string", description: "Technician display name if id is unknown" },
           range: dateRangeProps,
         },
       },
@@ -156,13 +158,90 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     type: "function",
     function: {
       name: "get_unpaid_invoices",
-      description: "List unpaid invoices. Only ADMIN and CSR roles can use this.",
+      description:
+        "Company or customer outstanding invoice balance. Returns totalOutstanding (full AR: draft + sent + partial remaining balances). Do not sum the invoices sample.",
       parameters: {
         type: "object",
         additionalProperties: false,
         properties: {
           customerId: { type: "string" },
           search: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_marketing_metrics",
+      description:
+        "Marketing KPIs overall and per lead channel: ad spend, CPL, CAC, conversion rate, booking rate, average ticket, invoice revenue, ROAS. Optional channel filter (google_ads, google_lsa, meta_ads, organic, referral, gbp, direct).",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          channel: {
+            type: "string",
+            description: "Optional channel name such as Google LSA, Meta, organic, referral",
+          },
+          range: dateRangeProps,
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_maintenance_plan_metrics",
+      description:
+        "Maintenance plan recurring revenue: MRR, ARR, number of accounts on a plan, enrollment count, and breakdown by plan template.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_price_book",
+      description:
+        "Search the company price book for services and materials. Returns name, category, unit, and sell price. Use this for 'what do we charge for X' questions.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["query"],
+        properties: {
+          query: { type: "string", description: "Service or material name, SKU, or category" },
+          type: {
+            type: "string",
+            enum: ["SERVICE", "MATERIAL"],
+            description: "Optional filter",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_vehicles",
+      description:
+        "Fleet vehicles: mileage, oil/service due, open problems, and service history. Filter with focus needs_service or open_issues, or look up one vehicle by name, plate, or vehicleId.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          query: {
+            type: "string",
+            description: "Make, model, plate, or VIN search",
+          },
+          vehicleId: { type: "string" },
+          focus: {
+            type: "string",
+            enum: ["all", "needs_service", "open_issues"],
+          },
         },
       },
     },

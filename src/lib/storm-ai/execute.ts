@@ -1,4 +1,4 @@
-import { InvoiceStatus, VisitStatus } from "@prisma/client";
+import { VisitStatus } from "@prisma/client";
 import { addDays, startOfDay } from "date-fns";
 import { z } from "zod";
 import type { SessionUser } from "@/lib/api-auth";
@@ -6,10 +6,10 @@ import { getAvailableSlots } from "@/lib/booking/availability";
 import { canViewProfitMargins, employeeSelectFields, isFieldRole } from "@/lib/employees";
 import { fieldVisitAssigneeWhere } from "@/lib/field/access";
 import { canAccessInvoices } from "@/lib/invoices/permissions";
-import { getInvoiceForCompany, listInvoices } from "@/lib/invoices/queries";
+import { getInvoiceForCompany, getOutstandingReceivables } from "@/lib/invoices/queries";
 import { prisma } from "@/lib/prisma";
 import { getKpiDashboardReport } from "@/lib/reporting/kpi-dashboard";
-import { getInsightsReport, getTechPerformanceReport } from "@/lib/reporting/queries";
+import { getInsightsReport } from "@/lib/reporting/queries";
 import type { ReportRangeInput } from "@/lib/reporting/date-range";
 import { resolveReportRange } from "@/lib/reporting/date-range";
 import { getEmployeeWorkSchedule } from "@/lib/schedule/time-off";
@@ -19,7 +19,13 @@ import {
   serializeCustomer,
 } from "@/lib/customers/queries";
 import { getCustomerSummary } from "@/lib/customers/summary";
+import { getMaintenancePlanRevenueSummary } from "@/lib/maintenance-plans/queries";
+import { listItems } from "@/lib/price-book/queries";
 import { listVisits, serializeVisit, visitInclude } from "@/lib/visits/queries";
+import { getTechnicianKpis, resolveCompanyTechnician } from "./technician-kpis";
+import { getMarketingChannelMetrics } from "./marketing-metrics";
+import { getStormAiVehicleReport } from "./vehicles";
+import { canViewVehicles } from "@/lib/vehicles/permissions";
 import type { StormAiToolResult } from "./types";
 
 const rangeSchema = z
@@ -291,45 +297,62 @@ export async function runStormAiTool(
         return ok({ technician: publicTech(tech) });
       }
       case "get_technician_performance": {
-        const range = parseRange(args.range);
-        const kpi = await getKpiDashboardReport(user.companyId, range);
+        const range = args.range != null ? parseRange(args.range) : { preset: "ytd" as const };
         const requestedTech =
           typeof args.technicianId === "string" ? args.technicianId : undefined;
+        const requestedName = typeof args.name === "string" ? args.name : undefined;
 
         if (isFieldRole(user.role)) {
-          const card = kpi.technicians.find((t) => t.id === user.id);
-          return ok({
-            range: kpi.rangeLabel,
-            technician: card ?? { id: user.id, name: user.name, metrics: [] },
-          });
-        }
-
-        if (user.role === "CSR") {
-          return ok({
-            range: kpi.rangeLabel,
-            company: kpi.company,
-            note: "Per-technician pay-like cards are not available for your role.",
-          });
-        }
-
-        if (!officeCanSeeOtherTechs(user.role)) {
-          return fail("FORBIDDEN", "Your role cannot access that.");
-        }
-
-        if (requestedTech) {
-          const card = kpi.technicians.find((t) => t.id === requestedTech);
-          if (!card) {
-            const report = await getTechPerformanceReport(user.companyId);
-            const row = report.rows?.find((r: { id: string }) => r.id === requestedTech);
-            if (!row) return fail("NOT_FOUND", "Technician performance not found");
-            return ok({ range: kpi.rangeLabel, technician: row });
+          if (requestedTech && requestedTech !== user.id) {
+            return fail("FORBIDDEN", "Your role cannot access that.");
           }
-          return ok({ range: kpi.rangeLabel, technician: card });
+          const kpis = await getTechnicianKpis(user.companyId, user.id, range);
+          return ok({
+            technician: { id: user.id, name: user.name },
+            ...kpis,
+          });
         }
 
+        if (!requestedTech && !requestedName) {
+          if (user.role === "CSR") {
+            const kpi = await getKpiDashboardReport(user.companyId, range);
+            return ok({
+              range: kpi.rangeLabel,
+              company: kpi.company,
+              note: "Ask for a technician by name to see average ticket, callback rate, and 5-star reviews. Per-technician pay is not available for your role.",
+            });
+          }
+          if (!officeCanSeeOtherTechs(user.role) && user.role !== "SALES") {
+            return fail("FORBIDDEN", "Your role cannot access that.");
+          }
+          const kpi = await getKpiDashboardReport(user.companyId, range);
+          return ok({
+            range: kpi.rangeLabel,
+            technicians: kpi.technicians,
+            note: "Solo technician KPI cards from the dashboard. For a specific person (including crew members), pass name or technicianId to get average ticket, callback rate, and 5-star reviews.",
+          });
+        }
+
+        const resolved = await resolveCompanyTechnician(user.companyId, {
+          technicianId: requestedTech,
+          name: requestedName,
+        });
+        if (!resolved.ok) {
+          if (resolved.matches.length > 1) {
+            return fail(
+              "NOT_FOUND",
+              `Multiple technicians matched. Ask which one: ${resolved.matches
+                .map((m) => `${m.name} (${m.id})`)
+                .join(", ")}`
+            );
+          }
+          return fail("NOT_FOUND", "Technician not found");
+        }
+
+        const kpis = await getTechnicianKpis(user.companyId, resolved.user.id, range);
         return ok({
-          range: kpi.rangeLabel,
-          technicians: kpi.technicians,
+          technician: resolved.user,
+          ...kpis,
         });
       }
       case "get_revenue_summary":
@@ -412,6 +435,10 @@ export async function runStormAiTool(
             ? kpi.technicians
             : undefined;
 
+        const outstanding = canAccessInvoices(user.role)
+          ? await getOutstandingReceivables(user.companyId)
+          : null;
+
         return ok({
           scope: "company",
           range: kpi.rangeLabel,
@@ -419,6 +446,13 @@ export async function runStormAiTool(
           schedule,
           insights,
           technicians,
+          outstandingInvoiceBalance: outstanding
+            ? {
+                totalOutstanding: outstanding.totalOutstanding,
+                invoiceCount: outstanding.invoiceCount,
+                note: "This is the full remaining balance on draft, sent, and partial invoices. Prefer this over any Open AR figure in insights.",
+              }
+            : undefined,
           ...mtdBehind,
         });
       }
@@ -438,20 +472,104 @@ export async function runStormAiTool(
         }
         const customerId =
           typeof args.customerId === "string" ? args.customerId : undefined;
-        const search = typeof args.search === "string" ? args.search : undefined;
-        const sent = await listInvoices(user.companyId, {
-          customerId,
-          status: InvoiceStatus.SENT,
-          search,
+        const data = await getOutstandingReceivables(user.companyId, { customerId });
+        return ok({
+          totalOutstanding: data.totalOutstanding,
+          invoiceCount: data.invoiceCount,
+          invoices: data.invoices,
+          note: "totalOutstanding is the full remaining balance on all unpaid invoices (draft, sent, and partial). The invoices array is only the largest balances — do not sum it.",
         });
-        const partial = await listInvoices(user.companyId, {
-          customerId,
-          status: InvoiceStatus.PARTIAL,
-          search,
+      }
+      case "get_marketing_metrics": {
+        if (isFieldRole(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const range =
+          args.range != null ? parseRange(args.range) : { preset: "last30" as const };
+        const channel = typeof args.channel === "string" ? args.channel : undefined;
+        const data = await getMarketingChannelMetrics(user.companyId, range, channel);
+        return ok(data);
+      }
+      case "get_maintenance_plan_metrics": {
+        if (isFieldRole(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const data = await getMaintenancePlanRevenueSummary(user.companyId);
+        return ok(data);
+      }
+      case "search_price_book": {
+        const query = typeof args.query === "string" ? args.query.trim() : "";
+        if (query.length < 2) {
+          return fail("INVALID", "Search query must be at least 2 characters");
+        }
+        const typeRaw = typeof args.type === "string" ? args.type.toUpperCase() : "";
+        const type =
+          typeRaw === "SERVICE" || typeRaw === "MATERIAL"
+            ? (typeRaw as "SERVICE" | "MATERIAL")
+            : undefined;
+        const showCost = canViewProfitMargins(user.role);
+        const items = await listItems({
+          companyId: user.companyId,
+          q: query,
+          type,
+          activeOnly: true,
+          take: 25,
         });
         return ok({
-          invoices: [...sent, ...partial].slice(0, 50).map(stripInvoice),
+          query,
+          count: items.length,
+          items: items.map((item) => {
+            const price =
+              item.pricingMode === "CALCULATED" && item.lastCalculatedPrice != null
+                ? item.lastCalculatedPrice
+                : item.unitPrice;
+            return {
+              id: item.id,
+              name: item.name,
+              type: item.type,
+              sku: item.sku,
+              description: item.description
+                ? item.description.slice(0, 280)
+                : null,
+              category: item.category?.name ?? null,
+              unit: item.unit,
+              price,
+              taxable: item.taxable,
+              pricingMode: item.pricingMode,
+              ...(showCost
+                ? {
+                    unitCost: item.unitCost,
+                    laborHours: item.laborHours,
+                    laborRate: item.laborRate,
+                  }
+                : {}),
+              materials: item.materials?.map((link) => ({
+                name: link.material.name,
+                quantity: link.quantity,
+                unit: link.material.unit,
+                ...(showCost ? { unitPrice: link.material.unitPrice } : {}),
+              })),
+            };
+          }),
+          note: "price is the customer sell price. Costs are omitted unless the user can view margins.",
         });
+      }
+      case "get_vehicles": {
+        if (!canViewVehicles(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const query = typeof args.query === "string" ? args.query.trim() : undefined;
+        const vehicleId = typeof args.vehicleId === "string" ? args.vehicleId : undefined;
+        const focus = typeof args.focus === "string" ? args.focus : undefined;
+        const data = await getStormAiVehicleReport(user.companyId, {
+          query: query || undefined,
+          vehicleId,
+          focus,
+        });
+        if (vehicleId && !data.detail && data.vehicles.length === 0) {
+          return fail("NOT_FOUND", "Vehicle not found");
+        }
+        return ok(data);
       }
       default:
         return fail("INVALID", `Unknown tool: ${name}`);

@@ -214,6 +214,7 @@ export async function listItems(params: {
   categoryId?: string;
   q?: string;
   activeOnly?: boolean;
+  take?: number;
 }) {
   const rows = await prisma.priceBookItem.findMany({
     where: {
@@ -227,12 +228,14 @@ export async function listItems(params: {
               { name: { contains: params.q, mode: "insensitive" } },
               { description: { contains: params.q, mode: "insensitive" } },
               { sku: { contains: params.q, mode: "insensitive" } },
+              { category: { name: { contains: params.q, mode: "insensitive" } } },
             ],
           }
         : {}),
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: itemInclude,
+    take: params.take,
   });
   return Promise.all(rows.map(serializeItem));
 }

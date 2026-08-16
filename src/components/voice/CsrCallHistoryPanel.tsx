@@ -5,7 +5,9 @@ import { FileText, History, Play } from "lucide-react";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallDetailView } from "@/components/voice/CallDetailView";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { cn } from "@/lib/utils";
 import type { CallHistoryDetail, CallHistoryListItem } from "@/lib/voice/call-history";
 import {
@@ -13,7 +15,7 @@ import {
   CALL_HISTORY_UI_LIMIT,
   formatCallDuration,
   formatCallTime,
-  isRecentMissedInboundCall,
+  isUnreviewedMissedInboundCall,
   remotePartyLabel,
 } from "@/lib/voice/call-history";
 
@@ -29,8 +31,10 @@ export function CsrCallHistoryPanel({ className }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const openedOnMissedRef = useRef(false);
 
+  const [clearing, setClearing] = useState(false);
+
   const missedCalls = useMemo(
-    () => calls.filter((call) => isRecentMissedInboundCall(call)),
+    () => calls.filter((call) => isUnreviewedMissedInboundCall(call)),
     [calls]
   );
   const visibleCalls = filter === "missed" ? missedCalls : calls;
@@ -47,6 +51,41 @@ export function CsrCallHistoryPanel({ className }: Props) {
       .then((data) => setCalls(data.calls ?? []))
       .catch(() => {});
   }, []);
+
+  async function markCallReviewed(id: string) {
+    const call = calls.find((c) => c.id === id);
+    if (!call || !isUnreviewedMissedInboundCall(call)) return;
+    const now = new Date().toISOString();
+    setCalls((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, missedReviewedAt: now } : c))
+    );
+    try {
+      const res = await fetch(`/api/voice/calls/history/${id}/review`, { method: "POST" });
+      if (!res.ok) throw new Error("review failed");
+      notifyInboxBadgesChanged();
+    } catch {
+      loadHistory();
+    }
+  }
+
+  async function clearAllMissed() {
+    if (clearing || missedCalls.length === 0) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/voice/calls/history/review-missed", { method: "POST" });
+      if (!res.ok) throw new Error("clear failed");
+      const now = new Date().toISOString();
+      setCalls((prev) =>
+        prev.map((c) =>
+          isUnreviewedMissedInboundCall(c) ? { ...c, missedReviewedAt: now } : c
+        )
+      );
+      notifyInboxBadgesChanged();
+    } finally {
+      setClearing(false);
+      loadHistory();
+    }
+  }
 
   useEffect(() => {
     loadHistory();
@@ -108,10 +147,23 @@ export function CsrCallHistoryPanel({ className }: Props) {
               Missed
               <InboxCountOrb count={missedCalls.length} />
             </button>
+            {missedCalls.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="ml-auto h-7 text-xs"
+                disabled={clearing}
+                onClick={() => void clearAllMissed()}
+              >
+                {clearing ? "Clearing…" : "Clear missed"}
+              </Button>
+            ) : null}
           </div>
           {missedCalls.length > 0 ? (
             <p className="text-[11px] text-muted-foreground">
-              The sidebar count is missed inbound calls from the last 48 hours.
+              The sidebar count is unreviewed missed inbound calls from the last 48 hours. Open a
+              call or use Clear missed to dismiss the badge.
             </p>
           ) : null}
         </div>
@@ -123,7 +175,9 @@ export function CsrCallHistoryPanel({ className }: Props) {
         >
           {!visibleCalls.length ? (
             <p className="p-4 text-sm text-muted-foreground">
-              {filter === "missed" ? "No missed inbound calls in the last 48 hours." : "No calls yet."}
+              {filter === "missed"
+                ? "No unreviewed missed inbound calls in the last 48 hours."
+                : "No calls yet."}
             </p>
           ) : (
             <ul>
@@ -134,12 +188,15 @@ export function CsrCallHistoryPanel({ className }: Props) {
                   call.toNumber,
                   call.customer?.name
                 );
-                const missed = isRecentMissedInboundCall(call);
+                const missed = isUnreviewedMissedInboundCall(call);
                 return (
                   <li key={call.id}>
                     <button
                       type="button"
-                      onClick={() => setSelectedId(call.id)}
+                      onClick={() => {
+                        setSelectedId(call.id);
+                        void markCallReviewed(call.id);
+                      }}
                       className={cn(
                         "flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/40",
                         selectedId === call.id && "bg-highlight-panel",

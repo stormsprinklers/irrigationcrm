@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { InvoiceStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 import type { InvoiceDTO, PublicInvoiceDTO } from "./types";
@@ -123,6 +123,61 @@ export async function listInvoices(
   });
 
   return invoices.map(serializeInvoice);
+}
+
+/** Open invoice AR: remaining balance on every non-paid, non-void invoice (including drafts). */
+export async function getOutstandingReceivables(
+  companyId: string,
+  filters?: { customerId?: string }
+) {
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      companyId,
+      status: { notIn: [InvoiceStatus.PAID, InvoiceStatus.REFUNDED, InvoiceStatus.VOID] },
+      ...(filters?.customerId ? { customerId: filters.customerId } : {}),
+    },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      status: true,
+      total: true,
+      createdAt: true,
+      customer: { select: { id: true, name: true } },
+      payments: { select: { amount: true, refundedAt: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const rows = invoices
+    .map((invoice) => {
+      const total = toNumber(invoice.total);
+      const amountPaid = invoice.payments.reduce((sum, payment) => {
+        if (payment.refundedAt) return sum;
+        return sum + toNumber(payment.amount);
+      }, 0);
+      const balanceDue = Math.max(0, Math.round((total - amountPaid) * 100) / 100);
+      return {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status,
+        customer: invoice.customer,
+        total,
+        amountPaid: Math.round(amountPaid * 100) / 100,
+        balanceDue,
+        createdAt: invoice.createdAt.toISOString(),
+      };
+    })
+    .filter((row) => row.balanceDue > 0);
+
+  const totalOutstanding =
+    Math.round(rows.reduce((sum, row) => sum + row.balanceDue, 0) * 100) / 100;
+  const largest = [...rows].sort((a, b) => b.balanceDue - a.balanceDue).slice(0, 25);
+
+  return {
+    totalOutstanding,
+    invoiceCount: rows.length,
+    invoices: largest,
+  };
 }
 
 export async function getInvoiceForCompany(companyId: string, invoiceId: string) {

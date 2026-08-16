@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,19 +10,33 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { pageContextFromLocation } from "@/lib/storm-ai/page-context";
 import { cn } from "@/lib/utils";
 
-type Conversation = { id: string; title: string | null; updatedAt: string };
 type ChatMessage = { id: string; role: string; content: string; createdAt: string };
+
+function ChatMarkdown({ text }: { text: string }) {
+  const segments = text.split(/(\*\*[^*]+?\*\*|__[^_]+?__)/g);
+  return (
+    <p className="whitespace-pre-wrap">
+      {segments.map((segment, i) => {
+        if (
+          (segment.startsWith("**") && segment.endsWith("**") && segment.length >= 4) ||
+          (segment.startsWith("__") && segment.endsWith("__") && segment.length >= 4)
+        ) {
+          return <strong key={i}>{segment.slice(2, -2)}</strong>;
+        }
+        return <Fragment key={i}>{segment}</Fragment>;
+      })}
+    </p>
+  );
+}
 
 export function StormAiWidget() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [enabled, setEnabled] = useState(true);
   const [open, setOpen] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -48,32 +62,6 @@ export function StormAiWidget() {
     };
   }, []);
 
-  const loadConversations = useCallback(async () => {
-    const res = await fetch("/api/storm-ai/conversations");
-    if (!res.ok) return;
-    const data = await res.json();
-    setConversations(data.conversations ?? []);
-  }, []);
-
-  const loadConversation = useCallback(async (id: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/storm-ai/conversations/${id}`);
-      if (!res.ok) throw new Error("Could not load chat");
-      const data = await res.json();
-      setActiveId(id);
-      setMessages(data.conversation?.messages ?? []);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not load chat");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (open) void loadConversations();
-  }, [open, loadConversations]);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
@@ -87,7 +75,6 @@ export function StormAiWidget() {
     const data = await res.json();
     setActiveId(data.conversation.id);
     setMessages([]);
-    await loadConversations();
   }
 
   async function send() {
@@ -125,7 +112,6 @@ export function StormAiWidget() {
       if (!res.ok) throw new Error(data.error ?? "Send failed");
       setMessages(data.messages ?? []);
       if (data.warning) toast.warning(data.warning);
-      await loadConversations();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
@@ -161,68 +147,47 @@ export function StormAiWidget() {
               </Button>
             </div>
           </header>
-          <div className="grid min-h-0 flex-1 grid-cols-[7.5rem_1fr]">
-            <ScrollArea className="border-r border-border">
-              <div className="space-y-0.5 p-1.5">
-                {conversations.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => void loadConversation(c.id)}
-                    className={cn(
-                      "w-full truncate rounded-md px-2 py-1.5 text-left text-xs",
-                      c.id === activeId ? "bg-accent font-medium" : "hover:bg-muted"
-                    )}
-                  >
-                    {c.title || "New chat"}
-                  </button>
-                ))}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="space-y-3 p-3 text-sm">
+                {messages.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    Ask about customers, the schedule, or performance. I only use CRM facts.
+                  </p>
+                ) : (
+                  messages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        "rounded-lg px-3 py-2",
+                        m.role === "user" ? "ml-6 bg-primary/10" : "mr-4 bg-muted"
+                      )}
+                    >
+                      <ChatMarkdown text={m.content} />
+                    </div>
+                  ))
+                )}
+                {sending ? <p className="text-xs text-muted-foreground">Thinking…</p> : null}
+                <div ref={bottomRef} />
               </div>
             </ScrollArea>
-            <div className="flex min-h-0 flex-col">
-              <ScrollArea className="min-h-0 flex-1">
-                <div className="space-y-3 p-3 text-sm">
-                  {loading ? (
-                    <p className="text-muted-foreground">Loading…</p>
-                  ) : messages.length === 0 ? (
-                    <p className="text-muted-foreground">
-                      Ask about customers, the schedule, or performance. I only use CRM facts.
-                    </p>
-                  ) : (
-                    messages.map((m) => (
-                      <div
-                        key={m.id}
-                        className={cn(
-                          "rounded-lg px-3 py-2",
-                          m.role === "user" ? "ml-6 bg-primary/10" : "mr-4 bg-muted"
-                        )}
-                      >
-                        <p className="whitespace-pre-wrap">{m.content}</p>
-                      </div>
-                    ))
-                  )}
-                  {sending ? <p className="text-xs text-muted-foreground">Thinking…</p> : null}
-                  <div ref={bottomRef} />
-                </div>
-              </ScrollArea>
-              <form
-                className="flex gap-2 border-t border-border p-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void send();
-                }}
-              >
-                <Input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Ask Storm AI…"
-                  disabled={sending}
-                />
-                <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
-                  Send
-                </Button>
-              </form>
-            </div>
+            <form
+              className="flex gap-2 border-t border-border p-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+            >
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Ask Storm AI…"
+                disabled={sending}
+              />
+              <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
+                Send
+              </Button>
+            </form>
           </div>
         </div>
       ) : null}

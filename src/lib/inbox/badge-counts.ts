@@ -2,7 +2,7 @@ import { Channel, MessageDirection, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import { countLeadsToContact } from "@/lib/inbox/website-lead-items";
-import { isCallAnswered, isVoicemailDisposition, MISSED_CALL_LOOKBACK_MS } from "@/lib/voice/call-history";
+import { isMissedInboundLog, MISSED_CALL_LOOKBACK_MS } from "@/lib/voice/call-history";
 import type { InboxBadgeCounts } from "@/lib/inbox/badge-types";
 
 export type { InboxBadgeCounts };
@@ -44,21 +44,16 @@ export async function getInboxBadgeCounts(companyId: string): Promise<InboxBadge
       where: {
         companyId,
         direction: "INBOUND",
+        missedReviewedAt: null,
         startedAt: { gte: missedSince },
       },
       select: { status: true, durationSec: true, dispositionNote: true },
-      take: 200,
+      orderBy: { startedAt: "desc" },
+      take: 2000,
     }),
   ]);
 
-  const missedCalls = missedLogs.filter((log) => {
-    if (isVoicemailDisposition(log.dispositionNote)) return true;
-    const status = log.status.toLowerCase();
-    if (["no-answer", "busy", "failed", "canceled", "cancelled"].includes(status)) return true;
-    return status === "completed" && !isCallAnswered(log.status, log.durationSec, {
-      dispositionNote: log.dispositionNote,
-    });
-  }).length;
+  const missedCalls = missedLogs.filter((log) => isMissedInboundLog(log)).length;
   const total = sms + social + leads + missedCalls;
 
   return { sms, social, leads, missedCalls, total };

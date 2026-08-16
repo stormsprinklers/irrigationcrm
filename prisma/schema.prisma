@@ -1536,6 +1536,8 @@ model CallLog {
   googleLsaLeadId String?
   startedAt     DateTime      @default(now())
   endedAt       DateTime?
+  /// When set, this missed inbound call no longer counts toward CSR Desk badges.
+  missedReviewedAt DateTime?
 
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)

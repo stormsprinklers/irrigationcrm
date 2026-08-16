@@ -16,6 +16,8 @@ export type CallHistoryListItem = {
   hasVoicemail: boolean;
   /** True when the AI receptionist handled (or started) this call. */
   isAiAgent: boolean;
+  /** When set, missed inbound no longer counts toward the CSR Desk badge. */
+  missedReviewedAt: string | null;
   customer: { id: string; name: string; phone: string | null } | null;
   employee: { id: string; name: string } | null;
 };
@@ -35,6 +37,17 @@ export function isRecentMissedInboundCall(call: {
   if (call.direction !== "INBOUND" || call.answered) return false;
   const now = call.now ?? Date.now();
   return now - new Date(call.startedAt).getTime() <= MISSED_CALL_LOOKBACK_MS;
+}
+
+export function isUnreviewedMissedInboundCall(call: {
+  direction: "INBOUND" | "OUTBOUND";
+  answered: boolean;
+  startedAt: string;
+  missedReviewedAt?: string | null;
+  now?: number;
+}) {
+  if (call.missedReviewedAt) return false;
+  return isRecentMissedInboundCall(call);
 }
 
 /** Scroll after ~20 rows (~3.65rem each). */
@@ -79,6 +92,16 @@ export function isCallAnswered(
   }
   if (normalized === "completed") return (durationSec ?? 0) > 0;
   return false;
+}
+
+export function isMissedInboundLog(log: {
+  status: string;
+  durationSec: number | null | undefined;
+  dispositionNote?: string | null;
+}) {
+  return !isCallAnswered(log.status, log.durationSec, {
+    dispositionNote: log.dispositionNote,
+  });
 }
 
 export function formatCallDuration(durationSec: number | null | undefined): string {

@@ -1,5 +1,6 @@
 import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES } from "@/lib/company/features";
 import { toNumber } from "@/lib/visits/totals";
 import {
   computeEnrollmentEndDate,
@@ -371,6 +372,90 @@ export async function getDashboard(companyId: string): Promise<DashboardDTO> {
       basePrice: toNumber(t.basePrice),
       active: t.active,
     })),
+  };
+}
+
+export async function getMaintenancePlanRevenueSummary(companyId: string) {
+  const enrollments = await prisma.maintenancePlanEnrollment.findMany({
+    where: {
+      companyId,
+      status: { in: [...ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES] as EnrollmentStatus[] },
+    },
+    select: {
+      id: true,
+      customerId: true,
+      billingFrequency: true,
+      selectedAddonIds: true,
+      status: true,
+      template: {
+        select: {
+          id: true,
+          name: true,
+          basePrice: true,
+          durationYears: true,
+          addons: { select: { id: true, price: true } },
+        },
+      },
+    },
+  });
+
+  const byTemplate = new Map<
+    string,
+    { templateId: string; templateName: string; enrollments: number; accounts: Set<string>; mrr: number }
+  >();
+
+  let mrr = 0;
+  const accountIds = new Set<string>();
+
+  for (const enrollment of enrollments) {
+    const addonTotal = enrollment.template.addons
+      .filter((addon) => enrollment.selectedAddonIds.includes(addon.id))
+      .reduce((sum, addon) => sum + toNumber(addon.price), 0);
+    const monthly = monthlyRecurringAmount(
+      toNumber(enrollment.template.basePrice) + addonTotal,
+      enrollment.billingFrequency,
+      enrollment.template.durationYears
+    );
+    mrr += monthly;
+    accountIds.add(enrollment.customerId);
+
+    const key = enrollment.template.id;
+    const row = byTemplate.get(key) ?? {
+      templateId: enrollment.template.id,
+      templateName: enrollment.template.name,
+      enrollments: 0,
+      accounts: new Set<string>(),
+      mrr: 0,
+    };
+    row.enrollments += 1;
+    row.accounts.add(enrollment.customerId);
+    row.mrr += monthly;
+    byTemplate.set(key, row);
+  }
+
+  const round = (value: number) => Math.round(value * 100) / 100;
+
+  return {
+    mrr: round(mrr),
+    arr: round(mrr * 12),
+    activeEnrollments: enrollments.length,
+    accountsOnPlan: accountIds.size,
+    byPlan: [...byTemplate.values()]
+      .map((row) => ({
+        templateId: row.templateId,
+        templateName: row.templateName,
+        enrollments: row.enrollments,
+        accounts: row.accounts.size,
+        mrr: round(row.mrr),
+        arr: round(row.mrr * 12),
+      }))
+      .sort((a, b) => b.mrr - a.mrr),
+    definitions: {
+      mrr: "Monthly recurring revenue from active, pending-renewal, renewed, and expiring-soon enrollments (plan price + selected addons, normalized to a monthly amount).",
+      arr: "MRR × 12.",
+      accountsOnPlan: "Distinct customers with at least one of those enrollments.",
+      activeEnrollments: "Count of plan enrollments in those statuses (a customer can have more than one).",
+    },
   };
 }
 
