@@ -146,7 +146,7 @@ export async function getMarketingChannelMetrics(
   ]);
 
   const buckets = new Map<string, Bucket>();
-  function bucket(channel: string) {
+  function bucket(channel: string | null | undefined) {
     const key = channelKey(channel);
     const existing = buckets.get(key);
     if (existing) return existing;
