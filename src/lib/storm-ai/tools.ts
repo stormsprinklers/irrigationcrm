@@ -282,7 +282,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "match_tech_issue",
       description:
-        "Find technician diagnostic workflows that match a field problem (valve, solenoid, no water, zone, etc.). Returns short issue titles only — never a full procedure. Then call start_tech_assist with the best issueId.",
+        "Search technician assistant issues by title and description for a field problem (valve, solenoid, no water, zone, wiring, pressure, etc.). Returns matching issue id/title/description pairs only — never a full procedure. Then call start_tech_assist with the best issueId.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -290,7 +290,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
         properties: {
           query: {
             type: "string",
-            description: "Technician's symptom or question",
+            description: "Technician's symptom or issue description",
           },
         },
       },
@@ -301,7 +301,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "start_tech_assist",
       description:
-        "Start a technician assistant session for one matched issue. Returns only the first diagnostic step. Never dump the rest of the workflow.",
+        "Start a technician assistant session for one matched issue. Returns only the first diagnostic (test, tips, options). Never dump the rest of the workflow.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -315,7 +315,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "continue_tech_assist",
       description:
-        "Advance the current technician assistant session with the technician's measurement or answer. Returns only the next step or a final resolution.",
+        "Advance the current technician assistant session with the technician's answer or measurement. Match their reply to one of the diagnostic options when provided. Returns only the next diagnostic or a final resolution.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -325,8 +325,44 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
           result: {
             type: "string",
             description:
-              "Numeric reading, yes/no, choice label, or short text for the current step",
+              "Technician answer: yes/no, number, or the option label that best matches their reply",
           },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_parts_info",
+      description:
+        "Search the technician parts knowledge base (sections of parts with visual/technical descriptions, photos, and manuals). Use when identifying a part from a photo or text, looking up a part number, wiring/specs, or finding a manual. After viewing a user photo, pass a detailed visual description as the query. Returns matching parts with short descriptions and photo URLs — never invent part data.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["query"],
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Part name, number, manufacturer, visual description from a photo (shape, ports, labels, colors), or the symptom/component the tech is holding",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_parts_info",
+      description:
+        "Load full details for one parts-info entry: visual description, technical description, photo URLs, and manual link. Call after search_parts_info when you need the complete write-up or manual.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["partId"],
+        properties: {
+          partId: { type: "string" },
         },
       },
     },

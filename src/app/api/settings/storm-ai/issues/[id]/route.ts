@@ -7,6 +7,27 @@ function forbid(role: string) {
   return role !== "ADMIN" && role !== "MANAGER";
 }
 
+function serializeIssue(issue: {
+  id: string;
+  name: string;
+  description: string | null;
+  entryNodeId: string | null;
+  active: boolean;
+  sortOrder: number;
+  nodes?: unknown;
+  [key: string]: unknown;
+}) {
+  return {
+    id: issue.id,
+    name: issue.name,
+    description: issue.description,
+    entryNodeId: issue.entryNodeId,
+    active: issue.active,
+    sortOrder: issue.sortOrder,
+    nodes: issue.nodes,
+  };
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -22,10 +43,7 @@ export async function GET(
       include: { nodes: { orderBy: { sortOrder: "asc" } } },
     });
     if (!issue) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({
-      ...issue,
-      keywords: Array.isArray(issue.keywords) ? issue.keywords : [],
-    });
+    return NextResponse.json(serializeIssue(issue));
   } catch {
     return unauthorizedResponse();
   }
@@ -48,12 +66,13 @@ export async function PATCH(
 
     const body = (await request.json()) as Record<string, unknown>;
     const data: Record<string, unknown> = {};
-    if (typeof body.name === "string") data.name = body.name.trim();
-    if (typeof body.trigger === "string") data.trigger = body.trigger.trim();
+    if (typeof body.name === "string") {
+      data.name = body.name.trim();
+      data.trigger = body.name.trim();
+    }
     if (typeof body.description === "string" || body.description === null) {
       data.description = typeof body.description === "string" ? body.description.trim() : null;
     }
-    if (Array.isArray(body.keywords)) data.keywords = body.keywords.map((k) => String(k));
     if (typeof body.active === "boolean") data.active = body.active;
     if (typeof body.sortOrder === "number") data.sortOrder = body.sortOrder;
     if (typeof body.entryNodeId === "string" || body.entryNodeId === null) {
@@ -65,10 +84,7 @@ export async function PATCH(
       data,
       include: { nodes: { orderBy: { sortOrder: "asc" } } },
     });
-    return NextResponse.json({
-      ...issue,
-      keywords: Array.isArray(issue.keywords) ? issue.keywords : [],
-    });
+    return NextResponse.json(serializeIssue(issue));
   } catch {
     return unauthorizedResponse();
   }
@@ -117,10 +133,9 @@ export async function PUT(
 
     const body = (await request.json()) as {
       name?: string;
-      trigger?: string;
       description?: string | null;
-      keywords?: string[];
       entryNodeId?: string | null;
+      active?: boolean;
       nodes?: Array<{
         id: string;
         type: TechAssistNodeType;
@@ -131,26 +146,23 @@ export async function PUT(
       }>;
     };
 
-    const incoming = body.nodes ?? [];
+    const incoming = (body.nodes ?? []).filter((n) => n.type !== "BRANCH");
     const keepIds = incoming.map((n) => n.id);
+    const name = body.name?.trim() || existing.name;
 
     await prisma.$transaction(async (tx) => {
       await tx.techAssistIssue.update({
         where: { id },
         data: {
-          name: body.name?.trim() || existing.name,
-          trigger: body.trigger?.trim() || existing.trigger,
+          name,
+          trigger: name,
           description:
             body.description === undefined
               ? existing.description
               : body.description?.trim() || null,
-          keywords: (Array.isArray(body.keywords)
-            ? body.keywords
-            : existing.keywords ?? []) as Prisma.InputJsonValue,
+          keywords: [] as Prisma.InputJsonValue,
           entryNodeId: body.entryNodeId === undefined ? existing.entryNodeId : body.entryNodeId,
-          ...("active" in body && typeof (body as { active?: unknown }).active === "boolean"
-            ? { active: (body as { active: boolean }).active }
-            : {}),
+          ...(typeof body.active === "boolean" ? { active: body.active } : {}),
         },
       });
 
@@ -168,14 +180,14 @@ export async function PUT(
           create: {
             id: node.id,
             issueId: id,
-            type: node.type,
+            type: node.type === "BRANCH" ? "DIAGNOSTIC" : node.type,
             title: node.title.trim() || node.type,
             body: node.body ?? "",
             config: (node.config ?? {}) as Prisma.InputJsonValue,
             sortOrder: node.sortOrder,
           },
           update: {
-            type: node.type,
+            type: node.type === "BRANCH" ? "DIAGNOSTIC" : node.type,
             title: node.title.trim() || node.type,
             body: node.body ?? "",
             config: (node.config ?? {}) as Prisma.InputJsonValue,
@@ -189,10 +201,7 @@ export async function PUT(
       where: { id },
       include: { nodes: { orderBy: { sortOrder: "asc" } } },
     });
-    return NextResponse.json({
-      ...issue,
-      keywords: Array.isArray(issue?.keywords) ? issue.keywords : [],
-    });
+    return NextResponse.json(serializeIssue(issue!));
   } catch {
     return unauthorizedResponse();
   }

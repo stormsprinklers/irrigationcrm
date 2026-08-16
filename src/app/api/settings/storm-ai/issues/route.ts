@@ -6,16 +6,6 @@ function forbid(role: string) {
   return role !== "ADMIN" && role !== "MANAGER";
 }
 
-function serializeIssue(issue: {
-  keywords: unknown;
-  [key: string]: unknown;
-}) {
-  return {
-    ...issue,
-    keywords: Array.isArray(issue.keywords) ? issue.keywords : [],
-  };
-}
-
 export async function GET() {
   try {
     const user = await requireSessionUser();
@@ -29,8 +19,11 @@ export async function GET() {
     });
     return NextResponse.json({
       issues: issues.map((issue) => ({
-        ...issue,
-        keywords: Array.isArray(issue.keywords) ? issue.keywords : [],
+        id: issue.id,
+        name: issue.name,
+        description: issue.description,
+        active: issue.active,
+        sortOrder: issue.sortOrder,
         nodeCount: issue._count.nodes,
       })),
     });
@@ -47,24 +40,32 @@ export async function POST(request: NextRequest) {
     }
     const body = (await request.json()) as {
       name?: string;
-      trigger?: string;
       description?: string;
-      keywords?: string[];
     };
     const name = body.name?.trim();
-    if (!name) return NextResponse.json({ error: "Name required" }, { status: 400 });
+    if (!name) return NextResponse.json({ error: "Title required" }, { status: 400 });
     const count = await prisma.techAssistIssue.count({ where: { companyId: user.companyId } });
     const issue = await prisma.techAssistIssue.create({
       data: {
         companyId: user.companyId,
         name,
-        trigger: body.trigger?.trim() || name,
+        // Kept for schema compatibility; matching uses title + description only.
+        trigger: name,
         description: body.description?.trim() || null,
-        keywords: Array.isArray(body.keywords) ? body.keywords : [],
+        keywords: [],
         sortOrder: count,
       },
     });
-    return NextResponse.json(serializeIssue(issue), { status: 201 });
+    return NextResponse.json(
+      {
+        id: issue.id,
+        name: issue.name,
+        description: issue.description,
+        active: issue.active,
+        sortOrder: issue.sortOrder,
+      },
+      { status: 201 }
+    );
   } catch {
     return unauthorizedResponse();
   }

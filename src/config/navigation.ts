@@ -145,6 +145,7 @@ export const stormAiSettingsSidebar: NavSection[] = [
     items: [
       { label: "General", href: "/settings/storm-ai", exact: true },
       { label: "Technician Assistant", href: "/settings/storm-ai/technician-assistant" },
+      { label: "Parts Info", href: "/settings/storm-ai/technician-assistant/parts" },
     ],
   },
 ];

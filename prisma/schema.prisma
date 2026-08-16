@@ -803,6 +803,8 @@ model Company {
   stormAiAuditLogs       StormAiAuditLog[]
   techAssistIssues       TechAssistIssue[]
   techAssistSessions     TechAssistSession[]
+  techAssistPartSections TechAssistPartSection[]
+  techAssistParts        TechAssistPart[]
 }
 
 model LocalSeoSerpSearch {
@@ -1047,6 +1049,8 @@ model StormAiMessage {
   userId         String
   role           String
   content        String   @db.Text
+  /// Optional user uploads for this turn (photos for part ID, etc.).
+  attachmentsJson Json?
   toolName       String?
   toolCallId     String?
   usageJson      Json?
@@ -1150,6 +1154,65 @@ model TechAssistSession {
 
   @@index([conversationId, status])
   @@index([userId, status])
+}
+
+/// Folder/section for technician parts knowledge (solenoids, valves, controllers, etc.).
+model TechAssistPartSection {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parts   TechAssistPart[]
+
+  @@index([companyId, sortOrder])
+}
+
+/// Part catalog entry with visual/technical copy, photos, and optional manual PDF.
+model TechAssistPart {
+  id                    String   @id @default(cuid())
+  companyId             String
+  sectionId             String
+  name                  String
+  manufacturer          String?
+  partNumber            String?
+  /// How the part looks / how to recognize it in the field.
+  visualDescription     String?  @db.Text
+  /// Specs, wiring, ratings, install notes.
+  technicalDescription  String?  @db.Text
+  manualUrl             String?
+  manualFileName        String?
+  manualMimeType        String?
+  active                Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  company Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section TechAssistPartSection   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  photos  TechAssistPartPhoto[]
+
+  @@index([companyId, sectionId, sortOrder])
+  @@index([companyId, active])
+}
+
+model TechAssistPartPhoto {
+  id        String   @id @default(cuid())
+  partId    String
+  blobUrl   String
+  pathname  String
+  fileName  String
+  mimeType  String
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  part TechAssistPart @relation(fields: [partId], references: [id], onDelete: Cascade)
+
+  @@index([partId, sortOrder])
 }
 
 enum AuthMfaPurpose {

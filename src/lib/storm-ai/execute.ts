@@ -36,6 +36,7 @@ import {
   matchTechIssues,
   startTechAssistSession,
 } from "./tech-assist";
+import { getPartsInfoDetail, searchPartsInfo } from "./parts-info";
 import { getStormAiVehicleReport } from "./vehicles";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 import type { StormAiToolResult } from "./types";
@@ -629,6 +630,35 @@ export async function runStormAiTool(
         });
         if (!continued.ok) return fail("NOT_FOUND", continued.error);
         return ok(continued);
+      }
+      case "search_parts_info": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const query = typeof args.query === "string" ? args.query : "";
+        const parts = await searchPartsInfo(user.companyId, query);
+        return ok({
+          query,
+          count: parts.length,
+          parts,
+          note:
+            parts.length === 0
+              ? "No matching parts in the company parts library. Do not invent part specs or manuals."
+              : "Use get_parts_info with a partId for the full write-up and manual link. Ground answers in these results only.",
+        });
+      }
+      case "get_parts_info": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const partId = typeof args.partId === "string" ? args.partId : "";
+        if (!partId) return fail("INVALID", "partId is required");
+        const part = await getPartsInfoDetail(user.companyId, partId);
+        if (!part) return fail("NOT_FOUND", "Part not found");
+        return ok({
+          part,
+          note: "Share visual/technical details and the manual link when helpful. Do not invent specs beyond this record.",
+        });
       }
       case "get_vehicles": {
         if (!canViewVehicles(user.role)) {

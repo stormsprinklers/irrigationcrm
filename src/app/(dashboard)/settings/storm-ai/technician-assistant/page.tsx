@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 type Issue = {
   id: string;
   name: string;
-  trigger: string;
+  description: string | null;
   active: boolean;
   nodeCount: number;
   sortOrder: number;
@@ -46,7 +46,7 @@ export default function TechAssistantIssuesPage() {
       const res = await fetch("/api/settings/storm-ai/issues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed, trigger: trimmed }),
+        body: JSON.stringify({ name: trimmed }),
       });
       if (!res.ok) throw new Error("create failed");
       const issue = await res.json();
@@ -94,12 +94,12 @@ export default function TechAssistantIssuesPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Technician Assistant"]}
         title="Technician Assistant"
-        subtitle="Issues (triggers) and diagnostic workflows Storm AI walks technicians through one step at a time"
+        subtitle="Issues Storm AI matches by title and description, then walks technicians through one diagnostic at a time. Use the Parts Info tab for the parts library."
       />
 
       <div className="mb-6 flex gap-2">
         <Input
-          placeholder="New issue, e.g. Zone valve not opening"
+          placeholder="New issue title, e.g. Zone valve not opening"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
@@ -124,8 +124,8 @@ export default function TechAssistantIssuesPage() {
                 >
                   {issue.name}
                 </Link>
-                <p className="text-xs text-muted-foreground">
-                  Trigger: {issue.trigger} · {issue.nodeCount} steps
+                <p className="truncate text-xs text-muted-foreground">
+                  {issue.description?.trim() || "No description"} · {issue.nodeCount} steps
                   {issue.active ? "" : " · inactive"}
                 </p>
               </div>

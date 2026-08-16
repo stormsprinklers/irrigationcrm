@@ -6,6 +6,8 @@ export const TECH_ASSIST_TOOL_NAMES = [
   "match_tech_issue",
   "start_tech_assist",
   "continue_tech_assist",
+  "search_parts_info",
+  "get_parts_info",
 ] as const;
 
 const FIELD_TOOLS = new Set<string>(["get_technician_performance", ...TECH_ASSIST_TOOL_NAMES]);
@@ -52,10 +54,10 @@ export function stormAiCapabilityLines(role: string): string {
     return "You may use every available tool, including technician field workflows.";
   }
   if (isFieldRole(role)) {
-    return "You may only use technician KPIs (yourself) and the technician assistant (match_tech_issue, start_tech_assist, continue_tech_assist).";
+    return "You may only use technician KPIs (yourself) and the technician assistant (diagnostic workflows plus parts info: match_tech_issue, start_tech_assist, continue_tech_assist, search_parts_info, get_parts_info).";
   }
   if (role === "CSR") {
-    return "You may use customers, schedule, invoices, inbound call coaching (analyze_inbound_calls), price book, and the technician assistant. You cannot use marketing, revenue, fleet, or company performance tools.";
+    return "You may use customers, schedule, invoices, inbound call coaching (analyze_inbound_calls), price book, and the technician assistant (including parts info). You cannot use marketing, revenue, fleet, or company performance tools.";
   }
   return "Use only the tools provided. Technician assistant workflows are not available for your role.";
 }

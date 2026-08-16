@@ -1,16 +1,30 @@
 import type { SessionUser } from "@/lib/api-auth";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
+import {
+  attachmentsToOpenAiImageParts,
+  parseStoredAttachments,
+  serializeAttachments,
+  storeStormAiImages,
+  type StormAiImageInput,
+  type StormAiStoredAttachment,
+} from "./attachments";
 import { runStormAiTool } from "./execute";
 import { stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
 import type { StormAiPageContext } from "./types";
 
 const MAX_TOOL_ROUNDS = 8;
+/** Include images from at most this many recent user turns (token control). */
+const MAX_IMAGE_HISTORY_TURNS = 2;
+
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 
 type ChatMessage = {
   role: "system" | "user" | "assistant" | "tool";
-  content: string | null;
+  content: string | null | ContentPart[];
   tool_calls?: Array<{
     id: string;
     type: "function";
@@ -24,10 +38,14 @@ function stormAiModel() {
   return process.env.STORM_AI_MODEL?.trim() || "gpt-4o";
 }
 
+const DEFAULT_PHOTO_PROMPT =
+  "What part is this? Identify it from our parts library if possible.";
+
 export async function runStormAiTurn(opts: {
   user: SessionUser;
   conversationId: string;
   content: string;
+  images?: StormAiImageInput[];
   pageContext?: StormAiPageContext | null;
 }) {
   const conversation = await prisma.stormAiConversation.findFirst({
@@ -47,10 +65,41 @@ export async function runStormAiTurn(opts: {
   });
   const timezone = company?.timezone || "America/Denver";
 
+  const hasImages = (opts.images?.length ?? 0) > 0;
+  const content =
+    opts.content.trim() || (hasImages ? DEFAULT_PHOTO_PROMPT : "");
+  if (!content) {
+    return { error: "Message is required", status: 400 as const };
+  }
+
+  let storedAttachments: StormAiStoredAttachment[] = [];
+  if (hasImages) {
+    try {
+      storedAttachments = await storeStormAiImages({
+        companyId: opts.user.companyId,
+        conversationId: conversation.id,
+        images: opts.images!,
+      });
+    } catch (err) {
+      console.error("[storm-ai] image upload failed", err);
+      return {
+        error: "Could not upload photo(s). Check blob storage configuration.",
+        status: 500 as const,
+      };
+    }
+    if (!storedAttachments.length) {
+      return {
+        error: "No valid images (use JPEG, PNG, or WebP under 8MB).",
+        status: 400 as const,
+      };
+    }
+  }
+
   if (!conversation.title) {
+    const titleSeed = opts.content.trim() || (hasImages ? "Photo question" : content);
     await prisma.stormAiConversation.update({
       where: { id: conversation.id },
-      data: { title: opts.content.slice(0, 80) },
+      data: { title: titleSeed.slice(0, 80) },
     });
   }
 
@@ -59,7 +108,8 @@ export async function runStormAiTurn(opts: {
       conversationId: conversation.id,
       userId: opts.user.id,
       role: "user",
-      content: opts.content,
+      content,
+      attachmentsJson: storedAttachments.length ? (storedAttachments as never) : undefined,
     },
   });
 
@@ -74,7 +124,7 @@ export async function runStormAiTurn(opts: {
     await writeAudit({
       user: opts.user,
       conversationId: conversation.id,
-      question: opts.content,
+      question: content,
       tools: [],
       ok: false,
       model: stormAiModel(),
@@ -86,6 +136,8 @@ export async function runStormAiTurn(opts: {
     };
   }
 
+  const openAiHistory = await buildOpenAiHistory(history);
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -96,10 +148,7 @@ export async function runStormAiTurn(opts: {
         pageContext: opts.pageContext,
       }),
     },
-    ...history.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
+    ...openAiHistory,
   ];
 
   const toolsUsed: Array<{ name: string; args: unknown }> = [];
@@ -180,7 +229,7 @@ export async function runStormAiTurn(opts: {
         continue;
       }
 
-      assistantText = (message.content ?? "").trim();
+      assistantText = (typeof message.content === "string" ? message.content : "").trim();
       break;
     }
 
@@ -207,7 +256,7 @@ export async function runStormAiTurn(opts: {
     await writeAudit({
       user: opts.user,
       conversationId: conversation.id,
-      question: opts.content,
+      question: content,
       tools: toolsUsed,
       ok: true,
       model: stormAiModel(),
@@ -222,7 +271,7 @@ export async function runStormAiTurn(opts: {
     await writeAudit({
       user: opts.user,
       conversationId: conversation.id,
-      question: opts.content,
+      question: content,
       tools: toolsUsed,
       ok: false,
       model: stormAiModel(),
@@ -237,7 +286,59 @@ export async function runStormAiTurn(opts: {
   }
 }
 
-async function listMessages(conversationId: string) {
+async function buildOpenAiHistory(
+  history: Array<{
+    role: string;
+    content: string;
+    attachmentsJson: unknown;
+  }>
+): Promise<ChatMessage[]> {
+  const userTurnsWithImages = history
+    .map((m, index) => ({ m, index }))
+    .filter(
+      ({ m }) => m.role === "user" && parseStoredAttachments(m.attachmentsJson).length > 0
+    );
+  const imageTurnIndexes = new Set(
+    userTurnsWithImages.slice(-MAX_IMAGE_HISTORY_TURNS).map(({ index }) => index)
+  );
+
+  const out: ChatMessage[] = [];
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i]!;
+    if (m.role === "assistant") {
+      out.push({ role: "assistant", content: m.content });
+      continue;
+    }
+    if (m.role !== "user") continue;
+
+    const attachments = parseStoredAttachments(m.attachmentsJson);
+    if (!attachments.length || !imageTurnIndexes.has(i)) {
+      const note =
+        attachments.length > 0
+          ? `\n\n[User attached ${attachments.length} photo(s) earlier in this chat.]`
+          : "";
+      out.push({ role: "user", content: `${m.content}${note}` });
+      continue;
+    }
+
+    const imageParts = await attachmentsToOpenAiImageParts(attachments);
+    if (!imageParts.length) {
+      out.push({
+        role: "user",
+        content: `${m.content}\n\n[Photo attached but could not be loaded.]`,
+      });
+      continue;
+    }
+
+    out.push({
+      role: "user",
+      content: [{ type: "text", text: m.content }, ...imageParts],
+    });
+  }
+  return out;
+}
+
+export async function listMessages(conversationId: string) {
   const rows = await prisma.stormAiMessage.findMany({
     where: { conversationId, role: { in: ["user", "assistant"] } },
     orderBy: { createdAt: "asc" },
@@ -247,6 +348,7 @@ async function listMessages(conversationId: string) {
     role: m.role,
     content: m.content,
     createdAt: m.createdAt.toISOString(),
+    attachments: serializeAttachments(m.attachmentsJson),
   }));
 }
 
