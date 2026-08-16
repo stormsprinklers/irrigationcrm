@@ -9,6 +9,7 @@ import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { EstimateOptionPresentCards } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
+import { PortalShell } from "./PortalShell";
 import type { HolidayStrandMap } from "@/lib/holiday-lighting/strand-map";
 
 type LineItem = {
