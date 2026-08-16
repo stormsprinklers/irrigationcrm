@@ -83,8 +83,42 @@ export default function TechAssistPartsPage() {
 
   useEffect(() => {
     const part = parts.find((p) => p.id === selectedPartId) ?? null;
-    setPartDraft(part ? { ...part } : null);
+    setPartDraft((prev) => {
+      if (!part) return null;
+      // Same part refreshed (e.g. after photo/manual upload): keep in-progress text fields.
+      if (prev?.id === part.id) {
+        return {
+          ...part,
+          name: prev.name,
+          manufacturer: prev.manufacturer,
+          partNumber: prev.partNumber,
+          visualDescription: prev.visualDescription,
+          technicalDescription: prev.technicalDescription,
+          active: prev.active,
+          sectionId: prev.sectionId,
+        };
+      }
+      return { ...part };
+    });
   }, [parts, selectedPartId]);
+
+  /** Persist name/descriptions without clobbering the draft from a subsequent reload. */
+  async function persistPartFields(draft: Part) {
+    const res = await fetch(`/api/settings/storm-ai/parts/${draft.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: draft.name,
+        manufacturer: draft.manufacturer,
+        partNumber: draft.partNumber,
+        visualDescription: draft.visualDescription,
+        technicalDescription: draft.technicalDescription,
+        active: draft.active,
+        sectionId: draft.sectionId,
+      }),
+    });
+    if (!res.ok) throw new Error("save");
+  }
 
   async function createSection() {
     const name = sectionName.trim();
@@ -151,20 +185,7 @@ export default function TechAssistPartsPage() {
     if (!partDraft) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/settings/storm-ai/parts/${partDraft.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: partDraft.name,
-          manufacturer: partDraft.manufacturer,
-          partNumber: partDraft.partNumber,
-          visualDescription: partDraft.visualDescription,
-          technicalDescription: partDraft.technicalDescription,
-          active: partDraft.active,
-          sectionId: partDraft.sectionId,
-        }),
-      });
-      if (!res.ok) throw new Error("save");
+      await persistPartFields(partDraft);
       await loadParts(selectedSectionId);
       toast.success("Part saved");
     } catch {
@@ -191,6 +212,8 @@ export default function TechAssistPartsPage() {
     if (!partDraft || !files?.length) return;
     setUploading(true);
     try {
+      // Save text fields first so a media refresh cannot wipe unsaved edits in the DB either.
+      await persistPartFields(partDraft);
       for (const file of Array.from(files)) {
         const form = new FormData();
         form.append("file", file);
@@ -215,6 +238,11 @@ export default function TechAssistPartsPage() {
 
   async function removePhoto(photoId: string) {
     if (!partDraft) return;
+    try {
+      await persistPartFields(partDraft);
+    } catch {
+      /* still try delete */
+    }
     const res = await fetch(
       `/api/settings/storm-ai/parts/${partDraft.id}/photos/${photoId}`,
       { method: "DELETE" }
@@ -230,6 +258,7 @@ export default function TechAssistPartsPage() {
     if (!partDraft || !files?.[0]) return;
     setUploading(true);
     try {
+      await persistPartFields(partDraft);
       const form = new FormData();
       form.append("file", files[0]);
       const res = await fetch(`/api/settings/storm-ai/parts/${partDraft.id}/manual`, {
@@ -252,6 +281,11 @@ export default function TechAssistPartsPage() {
 
   async function clearManual() {
     if (!partDraft) return;
+    try {
+      await persistPartFields(partDraft);
+    } catch {
+      /* still try clear */
+    }
     const res = await fetch(`/api/settings/storm-ai/parts/${partDraft.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
