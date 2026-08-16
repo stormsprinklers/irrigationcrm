@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   { href: "/settings/storm-ai/technician-assistant", label: "Issues", exact: true },
-  { href: "/settings/storm-ai/technician-assistant/parts", label: "Parts Info" },
+  { href: "/settings/storm-ai/technician-assistant/parts", label: "Parts Info", exact: false },
 ] as const;
 
 export default function TechnicianAssistantLayout({
