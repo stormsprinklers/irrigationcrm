@@ -948,6 +948,8 @@ export function EstimateDetail({ estimateId }: Props) {
           </Card>
 
           <Card id="estimate-signature">
+            <CardHeader>
+              <CardTitle className="text-base">Signature</CardTitle>
             </CardHeader>
             <CardContent>
               {estimate.signatureBlobUrl ? (
