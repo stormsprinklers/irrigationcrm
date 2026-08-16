@@ -16,16 +16,51 @@ type Props = {
   footerNote?: string | null;
 };
 
-function formatRuntime(zone: ControllerProgram["zones"][number]) {
-  if (zone.cycleSoak.enabled && zone.cycleSoak.cycleCount > 1) {
-    return `${zone.cycleSoak.minutesPerCycle} min × ${zone.cycleSoak.cycleCount}`;
-  }
-  return `${zone.runtimePerEventMinutes} min`;
-}
-
 function formatGallons(value: number) {
   const rounded = Math.round(value);
   return `${rounded.toLocaleString()} gal`;
+}
+
+function zoneStartRuntimes(
+  zone: ControllerProgram["zones"][number],
+  startTimes: string[]
+): Array<{ time: string; minutes: number }> {
+  const cycleCount = zone.cycleSoak.enabled ? Math.max(zone.cycleSoak.cycleCount, 1) : 1;
+  const perStart = zone.cycleSoak.enabled
+    ? zone.cycleSoak.minutesPerCycle
+    : zone.runtimePerEventMinutes;
+  const times = startTimes.length ? startTimes : ["Start"];
+  return times.map((time, index) => ({
+    time,
+    minutes: index < cycleCount ? Math.round(perStart) : 0,
+  }));
+}
+
+function ZoneRuntimeBreakdown({
+  zone,
+  startTimes,
+  compact = false,
+}: {
+  zone: ControllerProgram["zones"][number];
+  startTimes: string[];
+  compact?: boolean;
+}) {
+  const starts = zoneStartRuntimes(zone, startTimes);
+  const total = Math.round(zone.runtimePerEventMinutes);
+  return (
+    <div className={compact ? "text-right" : "text-center"}>
+      <ul className="space-y-0.5 text-xs tabular-nums text-slate-700">
+        {starts.map((start) => (
+          <li key={start.time} className={start.minutes > 0 ? "" : "text-muted-foreground"}>
+            {start.time}: {start.minutes} min
+          </li>
+        ))}
+      </ul>
+      <div className="mt-1 text-sm font-semibold tabular-nums text-slate-900">
+        Total {total} min
+      </div>
+    </div>
+  );
 }
 
 export function SprinklerProgrammingSetupTable({ guide, className, footerNote }: Props) {
@@ -52,7 +87,8 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
           Sprinkler Programming Setup
         </h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Each runtime occurs on every watering day for each start time listed in that program.
+          Program each zone for the minutes shown at every start time. Total is all starts
+          combined on a watering day.
         </p>
       </div>
 
@@ -89,10 +125,14 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
                           <p className="mt-0.5 text-xs text-amber-700">{zone.establishmentNote}</p>
                         ) : null}
                       </div>
-                      <div className="shrink-0 text-right text-sm tabular-nums text-slate-800">
-                        <div>{formatRuntime(zone)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatGallons(zone.gallonsPerEvent)}
+                      <div className="shrink-0">
+                        <ZoneRuntimeBreakdown
+                          zone={zone}
+                          startTimes={program.startTimes}
+                          compact
+                        />
+                        <div className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                          {formatGallons(zone.gallonsPerEvent)} / watering day
                         </div>
                       </div>
                     </div>
@@ -118,7 +158,9 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
               ))}
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">Zone #</th>
               <th className="px-3 py-2.5 text-left font-semibold">Zone Description</th>
-              <th className="px-3 py-2.5 text-center font-semibold">Runtime</th>
+              <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                Runtime
+              </th>
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
                 Est. Water Use
               </th>
@@ -166,11 +208,12 @@ export function SprinklerProgrammingSetupTable({ guide, className, footerNote }:
                       <div className="mt-0.5 text-xs text-amber-700">{zone.establishmentNote}</div>
                     ) : null}
                   </td>
-                  <td className="border-r border-slate-200 px-3 py-2.5 text-center tabular-nums text-slate-800">
-                    {formatRuntime(zone)}
+                  <td className="border-r border-slate-200 px-3 py-2.5 align-top">
+                    <ZoneRuntimeBreakdown zone={zone} startTimes={program.startTimes} />
                   </td>
-                  <td className="px-3 py-2.5 text-center tabular-nums text-slate-800">
+                  <td className="px-3 py-2.5 text-center align-top tabular-nums text-slate-800">
                     {formatGallons(zone.gallonsPerEvent)}
+                    <div className="text-xs text-muted-foreground">/ watering day</div>
                   </td>
                 </tr>
               ));

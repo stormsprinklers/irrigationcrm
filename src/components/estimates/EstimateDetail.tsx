@@ -12,6 +12,7 @@ import {
   FileText,
   Loader2,
   Plus,
+  Presentation,
   Send,
   Trash2,
   Upload,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { isFieldRole } from "@/lib/employees";
 import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
 import { EstimatePostApprovalDialog } from "@/components/estimates/EstimatePostApprovalDialog";
+import { EstimatePresentMode } from "@/components/estimates/EstimatePresentMode";
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
@@ -37,6 +39,9 @@ type EstimateOptionData = {
   id: string;
   letter: string | null;
   label: string;
+  description?: string | null;
+  photoUrl?: string | null;
+  declinedAt?: string | null;
   sortOrder: number;
   subtotal: number;
   discountTotal: number;
@@ -232,6 +237,7 @@ export function EstimateDetail({ estimateId }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [presentOpen, setPresentOpen] = useState(false);
   const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
     "choose"
   );
@@ -382,7 +388,7 @@ export function EstimateDetail({ estimateId }: Props) {
       const res = await fetch(`/api/estimates/${estimateId}/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signature: dataUrl }),
+        body: JSON.stringify({ signature: dataUrl, selectedOptionId: activeOptionId }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -538,6 +544,10 @@ export function EstimateDetail({ estimateId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPresentOpen(true)} disabled={saving}>
+            <Presentation className="h-4 w-4" />
+            Present
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setSendDialogOpen(true)} disabled={saving}>
             <Send className="h-4 w-4" />
             Send
@@ -641,6 +651,62 @@ export function EstimateDetail({ estimateId }: Props) {
                   );
                 })}
               </div>
+              {activeOption ? (
+                <div className="space-y-2 rounded-md border p-3">
+                  <Input
+                    value={activeOption.label}
+                    onChange={(e) => {
+                      const label = e.target.value;
+                      setEstimate((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              options: prev.options.map((option) =>
+                                option.id === activeOption.id ? { ...option, label } : option
+                              ),
+                            }
+                          : prev
+                      );
+                    }}
+                    onBlur={async (e) => {
+                      await fetch(`/api/estimates/${estimateId}/options`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ optionId: activeOption.id, label: e.target.value }),
+                      });
+                    }}
+                    placeholder="Option name"
+                  />
+                  <textarea
+                    className="min-h-[72px] w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    value={activeOption.description ?? ""}
+                    placeholder="Short description (filled automatically when you Present)"
+                    onChange={(e) => {
+                      const description = e.target.value;
+                      setEstimate((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              options: prev.options.map((option) =>
+                                option.id === activeOption.id ? { ...option, description } : option
+                              ),
+                            }
+                          : prev
+                      );
+                    }}
+                    onBlur={async (e) => {
+                      await fetch(`/api/estimates/${estimateId}/options`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          optionId: activeOption.id,
+                          description: e.target.value,
+                        }),
+                      });
+                    }}
+                  />
+                </div>
+              ) : null}
               {activeOption && estimate.options.length > 1 ? (
                 <Button
                   variant="ghost"
@@ -881,9 +947,7 @@ export function EstimateDetail({ estimateId }: Props) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Customer signature</CardTitle>
+          <Card id="estimate-signature">
             </CardHeader>
             <CardContent>
               {estimate.signatureBlobUrl ? (
@@ -974,6 +1038,27 @@ export function EstimateDetail({ estimateId }: Props) {
         onClose={() => setPostApprovalOpen(false)}
         onConverted={() => {
           void load();
+        }}
+      />
+
+      <EstimatePresentMode
+        estimateId={estimateId}
+        open={presentOpen}
+        onClose={(data) => {
+          setPresentOpen(false);
+          if (data) void load();
+        }}
+        onSaveAndSend={(data) => {
+          setPresentOpen(false);
+          setEstimate(data as EstimateData);
+          setSendDialogOpen(true);
+        }}
+        onRequestSignature={(optionId, data) => {
+          setPresentOpen(false);
+          setEstimate(data as EstimateData);
+          setActiveOptionId(optionId);
+          toast.success("Option selected. Collect the customer signature below.");
+          document.getElementById("estimate-signature")?.scrollIntoView({ behavior: "smooth" });
         }}
       />
 

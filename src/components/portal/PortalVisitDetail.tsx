@@ -27,6 +27,7 @@ type VisitDetail = {
     mimeType: string;
     url: string;
     isImage: boolean;
+    isVideo?: boolean;
   }>;
 };
 
@@ -197,6 +198,13 @@ export function PortalVisitDetail({ slug, visitId }: { slug: string; visitId: st
                       className="aspect-square w-full object-cover"
                     />
                   </a>
+                ) : file.isVideo ? (
+                  <video
+                    key={file.id}
+                    src={file.url}
+                    controls
+                    className="aspect-square w-full rounded-lg border border-border bg-slate-50 object-cover"
+                  />
                 ) : (
                   <a
                     key={file.id}

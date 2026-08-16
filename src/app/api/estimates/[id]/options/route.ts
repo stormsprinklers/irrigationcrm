@@ -89,6 +89,36 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       });
     }
 
+    if (body.description !== undefined) {
+      const description =
+        typeof body.description === "string" ? body.description.trim() || null : null;
+      await prisma.estimateOption.update({
+        where: { id: optionId },
+        data: { description },
+      });
+    }
+
+    if (body.declined === true) {
+      await prisma.estimateOption.update({
+        where: { id: optionId },
+        data: { declinedAt: new Date() },
+      });
+      const remaining = await prisma.estimateOption.findMany({ where: { estimateId: id } });
+      if (remaining.length && remaining.every((row) => row.declinedAt || row.id === optionId)) {
+        await prisma.estimate.update({
+          where: { id },
+          data: { status: "DECLINED" },
+        });
+      }
+    }
+
+    if (body.declined === false) {
+      await prisma.estimateOption.update({
+        where: { id: optionId },
+        data: { declinedAt: null },
+      });
+    }
+
     if (body.select === true) {
       await prisma.estimate.update({
         where: { id },

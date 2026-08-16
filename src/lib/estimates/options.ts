@@ -246,18 +246,27 @@ export function serializeOption(
     id: string;
     letter: string | null;
     label: string;
+    description?: string | null;
+    photoUrl?: string | null;
+    photoAssetId?: string | null;
+    declinedAt?: Date | null;
     sortOrder: number;
     subtotal: unknown;
     discountTotal: unknown;
     total: unknown;
   },
   estimateNumber: string | null,
-  optionCount: number
+  optionCount: number,
+  photoPublicUrl?: string | null
 ) {
   return {
     id: option.id,
     letter: option.letter,
     label: option.label,
+    description: option.description ?? null,
+    photoUrl: photoPublicUrl ?? option.photoUrl ?? null,
+    photoAssetId: option.photoAssetId ?? null,
+    declinedAt: option.declinedAt?.toISOString() ?? null,
     sortOrder: option.sortOrder,
     subtotal: toNumber(option.subtotal),
     discountTotal: toNumber(option.discountTotal),

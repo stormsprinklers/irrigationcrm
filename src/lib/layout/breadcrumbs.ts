@@ -98,6 +98,7 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
     "Company Expense Cards": node("/settings/expense-cards"),
     Team: node("/settings/employees"),
     Employees: node("/settings/employees"),
+    "Field devices": node("/settings/field-devices"),
     Compensation: node("/settings/compensation"),
     "Service areas": node("/settings/service-areas"),
     Communications: node("/settings/notifications"),

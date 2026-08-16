@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       url: session.url,
       /** Same as url when Stripe session is created — prefer this for QR / share. */
       payLink: session.url,
+      sessionId: session.id,
       balanceDue: synced.balanceDue,
       amount,
       invoice: synced.invoice,

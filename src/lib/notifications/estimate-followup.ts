@@ -1,6 +1,7 @@
 import { EstimateStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
 import { cancelPendingJobsForEstimate, scheduleEstimateFollowUpJob } from "./jobs";
 import { sendOperationalNotification } from "./send";
@@ -48,6 +49,16 @@ export async function notifyEstimateFollowUp(estimateId: string, companyId: stri
 
   const { estimate, context, estimateUrl } = payload;
 
+  let emailAttachments: Array<{ filename: string; contentType: string; content: string }> | undefined;
+  try {
+    const pdfs = await buildEstimateOptionPdfs(estimate.id, companyId);
+    if (pdfs.length) {
+      emailAttachments = pdfs.map((pdf) => pdfEmailAttachment(pdf.filename, pdf.buffer));
+    }
+  } catch (err) {
+    console.error("Estimate follow-up PDF failed:", err);
+  }
+
   return sendOperationalNotification({
     companyId,
     event: "ESTIMATE_FOLLOW_UP",
@@ -61,6 +72,7 @@ export async function notifyEstimateFollowUp(estimateId: string, companyId: stri
     options: {
       estimateId: estimate.id,
       linkPlaceholders: { estimate: estimateUrl },
+      emailAttachments,
     },
   });
 }

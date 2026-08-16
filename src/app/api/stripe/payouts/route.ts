@@ -17,7 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
     }
 
-    const summary = await getStripePayoutsSummary();
+    const summary = await getStripePayoutsSummary(user.companyId);
     return NextResponse.json(summary);
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {

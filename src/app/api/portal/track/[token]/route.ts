@@ -14,6 +14,12 @@ export async function GET(_request: Request, { params }: Params) {
     if (!payload) {
       return NextResponse.json({ error: "Tracking link not found or expired" }, { status: 404 });
     }
+    if (payload.expired) {
+      return NextResponse.json(
+        { error: "This tracking link expired after 2 hours", expired: true, company: payload.company },
+        { status: 410 }
+      );
+    }
 
     return NextResponse.json(payload, {
       headers: {

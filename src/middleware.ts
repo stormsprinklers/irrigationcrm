@@ -86,6 +86,10 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/portal/")) {
       const segments = pathname.split("/").filter(Boolean);
       const slug = segments[1];
+      // Guest live-tracking links from On my way texts (no portal login).
+      if (segments[2] === "track") {
+        return withNoIndex(NextResponse.next());
+      }
       if (slug && segments[2] !== "login") {
         const loginUrl = new URL(`/portal/${slug}/login`, request.url);
         loginUrl.searchParams.set("callbackUrl", pathname);

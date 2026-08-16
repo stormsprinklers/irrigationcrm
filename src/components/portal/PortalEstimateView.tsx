@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
-import { PortalShell } from "./PortalShell";
+import { EstimateOptionPresentCards } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
 import type { HolidayStrandMap } from "@/lib/holiday-lighting/strand-map";
@@ -51,6 +51,9 @@ type Estimate = {
     id: string;
     label: string;
     displayNumber: string;
+    description?: string | null;
+    photoUrl?: string | null;
+    declinedAt?: string | null;
     subtotal: number;
     discountTotal: number;
     total: number;
@@ -92,7 +95,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   const [selectedTier, setSelectedTier] = useState<"STANDARD" | "PREMIUM">("STANDARD");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -265,6 +268,26 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     }
   }
 
+  async function declineOption(optionId: string) {
+    if (!estimate) return;
+    setDecidingId(optionId);
+    try {
+      const res = await fetch(`/api/portal/estimates/${token}/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not decline option");
+      setEstimate(data.estimate);
+      toast.success("Option declined");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setDecidingId(null);
+    }
+  }
+
   async function payDeposit() {
     setLoading(true);
     try {
@@ -320,13 +343,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         ) : null}
 
         <div>
-          <h1 className="text-2xl font-semibold">
-            {estimate.options?.length > 1
-              ? "Your proposal options"
-              : estimate.estimateNumber
-                ? `Proposal ${estimate.estimateNumber}`
-                : "Your proposal"}
-          </h1>
+          <h1 className="text-2xl font-semibold">Proposal from {company.name}</h1>
           <p className="text-sm text-muted-foreground capitalize">{estimate.status.toLowerCase()}</p>
           {estimate.expiresAt ? (
             <p className="text-sm">Expires {format(new Date(estimate.expiresAt), "MMM d, yyyy")}</p>
@@ -416,28 +433,21 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
           </section>
         ) : null}
 
-        {canSign && (estimate.options?.length ?? 0) > 1 ? (
-          <section className="grid gap-3 sm:grid-cols-2">
-            {estimate.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`rounded-lg border p-4 text-left ${
-                  selectedOptionId === option.id ? "border-primary ring-2 ring-primary/30" : ""
-                }`}
-                onClick={() => setSelectedOptionId(option.id)}
-              >
-                <p
-                  className={`font-semibold ${
-                    selectedOptionId === option.id ? "text-primary" : ""
-                  }`}
-                >
-                  {option.label}
-                </p>
-                <p className="text-sm text-muted-foreground">{option.displayNumber}</p>
-                <p className="mt-2 font-semibold">{formatCurrency(option.total)}</p>
-              </button>
-            ))}
+        {(estimate.options?.length ?? 0) > 0 ? (
+          <section className="space-y-3">
+            <EstimateOptionPresentCards
+              options={estimate.options}
+              lineItems={estimate.lineItems}
+              discounts={estimate.discounts ?? []}
+              canDecide={canSign}
+              onApprove={(optionId) => {
+                setSelectedOptionId(optionId);
+                document.getElementById("portal-estimate-sign")?.scrollIntoView({ behavior: "smooth" });
+                toast.success("Sign below to approve this option.");
+              }}
+              onDecline={declineOption}
+              decidingId={decidingId}
+            />
           </section>
         ) : canSign && estimate.premiumOptionTotal != null ? (
           <section className="grid gap-3 sm:grid-cols-2">
@@ -554,11 +564,11 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         ) : null}
 
         {canSign ? (
-          <div className="space-y-2">
+          <div id="portal-estimate-sign" className="space-y-2">
             <p className="text-sm font-medium">
               Sign to approve
               {(estimate.options?.length ?? 0) > 1
-                ? ` (${activeOption?.displayNumber ?? "option"})`
+                ? ` (${activeOption?.label ?? "option"})`
                 : selectedTier === "PREMIUM"
                   ? " (Premium)"
                   : estimate.premiumOptionTotal != null

@@ -2,6 +2,10 @@ export type EstimateOptionDTO = {
   id: string;
   letter: string | null;
   label: string;
+  description: string | null;
+  photoUrl: string | null;
+  photoAssetId: string | null;
+  declinedAt: string | null;
   sortOrder: number;
   subtotal: number;
   discountTotal: number;

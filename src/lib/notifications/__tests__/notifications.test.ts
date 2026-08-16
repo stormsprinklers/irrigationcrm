@@ -6,6 +6,7 @@ import { isEstimateOpenForFollowUp } from "../estimate-followup";
 import { splitCustomerName } from "../name-utils";
 import { renderTemplate } from "../templates";
 import { buildNotificationContext, buildEnRouteContext, EN_ROUTE_ETA_FALLBACK } from "../context";
+import { buildPaidReceiptExtras } from "../receipt-extras";
 import {
   injectTrackedUrlsInText,
   templateContextWithTrackedPlaceholders,
@@ -99,4 +100,20 @@ test("review links in SMS templates use tracked redirect URLs", () => {
 
   assert.match(body, /https:\/\/crm\.example\.com\/api\/track\/l\/abc123/);
   assert.doesNotMatch(body, /g\.page\/r\/storm\/review/);
+});
+
+test("paid receipt extras include summary, review placeholder, and photo markup", () => {
+  const { html, text } = buildPaidReceiptExtras({
+    workSummary: "Replaced the broken sprinkler head.",
+    reviewUrl: "https://g.page/r/storm/review",
+    invoicePublicToken: "tok_abc",
+    media: [{ id: "att1", fileName: "zone.jpg", mimeType: "image/jpeg" }],
+  });
+  assert.match(html, /Summary of work/);
+  assert.match(html, /Replaced the broken sprinkler head/);
+  assert.match(html, /Leave a review/);
+  assert.match(html, /\{review_link\}/);
+  assert.match(html, /tok_abc/);
+  assert.match(html, /att1/);
+  assert.match(text, /Leave a review: \{review_link\}/);
 });

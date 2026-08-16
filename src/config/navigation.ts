@@ -165,6 +165,7 @@ export const teamSettingsSidebar: NavSection[] = [
   {
     items: [
       { label: "Employees", href: "/settings/employees" },
+      { label: "Field devices", href: "/settings/field-devices" },
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service areas", href: "/settings/service-areas" },
     ],
@@ -277,6 +278,7 @@ export const settingsSidebar: NavSection[] = [
         href: "/settings/employees",
         activePrefixes: [
           "/settings/employees",
+          "/settings/field-devices",
           "/settings/compensation",
           "/settings/service-areas",
         ],

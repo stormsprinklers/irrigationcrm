@@ -139,7 +139,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
           : {}),
         ...(body.workSummary !== undefined
-          ? { workSummary: body.workSummary ? String(body.workSummary).trim() : null }
+          ? {
+              workSummary: body.workSummary ? String(body.workSummary).trim() : null,
+              customerWorkSummary: null,
+            }
           : {}),
       },
     });

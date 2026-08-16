@@ -1,6 +1,10 @@
 import { randomBytes } from "crypto";
 import { VisitStatus } from "@prisma/client";
-import { buildMapsPlaceEmbedUrl, getGoogleMapsApiKey } from "@/lib/customers/maps";
+import {
+  buildMapsPlaceEmbedUrl,
+  buildMapsViewEmbedUrl,
+  getGoogleMapsApiKey,
+} from "@/lib/customers/maps";
 import {
   computeDrivingEta,
   formatVisitEtaPayload,
@@ -12,6 +16,7 @@ import { formatTimeInTimezone } from "@/lib/notifications/timezone";
 
 const MIN_PING_INTERVAL_MS = 8_000;
 const ETA_REFRESH_INTERVAL_MS = 90_000;
+export const LIVE_TRACK_TTL_MS = 2 * 60 * 60 * 1000;
 
 export function generateLiveTrackToken() {
   return randomBytes(18).toString("base64url");
@@ -43,11 +48,13 @@ export async function activateLiveTracking(params: {
   });
   const token = existing?.liveTrackToken ?? generateLiveTrackToken();
   const now = new Date();
+  const expiresAt = new Date(now.getTime() + LIVE_TRACK_TTL_MS);
   return prisma.visit.update({
     where: { id: params.visitId },
     data: {
       liveTrackToken: token,
       liveTrackingActive: true,
+      liveTrackExpiresAt: expiresAt,
       ...(params.lat != null && params.lng != null
         ? {
             liveLat: params.lat,
@@ -197,6 +204,21 @@ export async function getPublicLiveTrack(token: string) {
   const slug = resolvePortalSlug(visit.company);
   if (!slug) return null;
 
+  const expired =
+    Boolean(visit.liveTrackExpiresAt) &&
+    visit.liveTrackExpiresAt!.getTime() < Date.now();
+  if (expired) {
+    return {
+      expired: true as const,
+      company: {
+        name: visit.company.name,
+        phone: visit.company.phone,
+        emailLogoUrl: visit.company.emailLogoUrl,
+        slug,
+      },
+    };
+  }
+
   const destination = resolveVisitDestination(visit);
   const techLat = visit.liveLat != null ? Number(visit.liveLat) : null;
   const techLng = visit.liveLng != null ? Number(visit.liveLng) : null;
@@ -205,7 +227,7 @@ export async function getPublicLiveTrack(token: string) {
   const apiKey = getGoogleMapsApiKey();
   let mapEmbedUrl: string | null = null;
   if (apiKey && hasLive) {
-    mapEmbedUrl = buildMapsPlaceEmbedUrl(`${techLat},${techLng}`, apiKey, 13);
+    mapEmbedUrl = buildMapsViewEmbedUrl(techLat, techLng, apiKey, 14);
   } else if (apiKey && destination) {
     mapEmbedUrl = buildMapsPlaceEmbedUrl(destination, apiKey, 13);
   }
@@ -220,13 +242,15 @@ export async function getPublicLiveTrack(token: string) {
   const active =
     visit.liveTrackingActive &&
     visit.status === VisitStatus.EN_ROUTE &&
-    Boolean(visit.liveTrackToken);
+    Boolean(visit.liveTrackToken) &&
+    !expired;
 
   const stale =
     !visit.liveLocationAt ||
     Date.now() - visit.liveLocationAt.getTime() > 5 * 60_000;
 
   return {
+    expired: false as const,
     company: {
       name: visit.company.name,
       phone: visit.company.phone,

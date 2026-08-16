@@ -49,6 +49,16 @@ export type SendOptions = {
   smsBackupOnly?: boolean;
   /** Raw link placeholders to replace with tracked URLs. */
   linkPlaceholders?: Partial<Record<TrackedLinkKind, string>>;
+  /** Extra HTML appended after the templated email body (e.g. receipt photos). */
+  htmlAppend?: string;
+  /** Extra plain text appended to email text and SMS. */
+  textAppend?: string;
+  /** Files attached to the email (base64), e.g. estimate/receipt PDFs. */
+  emailAttachments?: Array<{
+    filename: string;
+    contentType: string;
+    content: string;
+  }>;
 };
 
 const EVENT_TOGGLE_MAP: Record<NotificationEvent, keyof CompanyNotifyFlags | null> = {
@@ -235,6 +245,9 @@ export async function sendOperationalNotification(params: {
 
     let body = renderTemplate(rule.template.body, renderContext);
     body = injectTrackedUrlsInText(body, urlMap);
+    const fullText = options.textAppend
+      ? `${body}\n\n${injectTrackedUrlsInText(options.textAppend, urlMap)}`
+      : body;
 
     if (rule.template.channel === Channel.EMAIL && !options.smsOnly) {
       if (
@@ -259,6 +272,9 @@ export async function sendOperationalNotification(params: {
           .split("\n")
           .map((line) => `<p>${line}</p>`)
           .join("");
+        if (options.htmlAppend) {
+          html += injectTrackedUrlsInText(options.htmlAppend, urlMap);
+        }
         const portalSlug = resolvePortalSlug(company);
         if (params.recipient.customerId && portalSlug) {
           html = appendMessagingPreferencesFooter(
@@ -274,8 +290,9 @@ export async function sendOperationalNotification(params: {
           companyId: params.companyId,
           to: [to],
           subject: injectTrackedUrlsInText(subject, urlMap),
-          text: body,
+          text: fullText,
           html,
+          attachments: options.emailAttachments,
         });
         await prisma.notificationDelivery.update({
           where: { id: delivery.id },
@@ -310,7 +327,7 @@ export async function sendOperationalNotification(params: {
           companyId: params.companyId,
           from: company.twilioPhone,
           to,
-          body,
+          body: fullText,
           mediaUrl:
             params.event === "VISIT_EN_ROUTE" && technicianPhotoUrl ? [technicianPhotoUrl] : undefined,
           statusCallback: twilioSmsStatusCallbackUrl(),
@@ -345,7 +362,9 @@ export async function sendOperationalNotification(params: {
       const urlMap = await buildTrackedUrlMap(delivery.id, linkPlaceholders);
 
       const body = injectTrackedUrlsInText(
-        renderTemplate(rule.template.body, renderContext),
+        options.textAppend
+          ? `${renderTemplate(rule.template.body, renderContext)}\n\n${options.textAppend}`
+          : renderTemplate(rule.template.body, renderContext),
         urlMap
       );
       const to = params.recipient.phone;

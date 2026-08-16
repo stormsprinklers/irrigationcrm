@@ -139,6 +139,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
+  if (selectedOptionId) {
+    await prisma.estimateOption.updateMany({
+      where: { estimateId, id: selectedOptionId },
+      data: { declinedAt: null },
+    });
+  }
+
   void onEstimateClosed(estimateId).catch(() => {});
 
   const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");

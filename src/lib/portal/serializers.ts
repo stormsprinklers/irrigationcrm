@@ -1,6 +1,7 @@
 import type { VisitStatus } from "@prisma/client";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { toNumber } from "@/lib/visits/totals";
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
 /** Portal visit detail — only customer-safe fields (no internal notes). */
@@ -11,6 +12,7 @@ export function serializePortalVisit(visit: {
   startAt: Date | null;
   endAt: Date | null;
   workSummary?: string | null;
+  customerWorkSummary?: string | null;
   address: string | null;
   city: string | null;
   state: string | null;
@@ -45,7 +47,7 @@ export function serializePortalVisit(visit: {
     status: visit.status,
     startAt: visit.startAt?.toISOString() ?? null,
     endAt: visit.endAt?.toISOString() ?? null,
-    workSummary: visit.workSummary?.trim() || null,
+    workSummary: visit.customerWorkSummary?.trim() || visit.workSummary?.trim() || null,
     technician: visit.assignedUser
       ? {
           name: visit.assignedUser.name,
@@ -68,6 +70,7 @@ export function serializePortalVisit(visit: {
       createdAt: a.createdAt.toISOString(),
       url: `/api/portal/blob?visitAttachmentId=${encodeURIComponent(a.id)}`,
       isImage: a.mimeType.startsWith("image/"),
+      isVideo: a.mimeType.startsWith("video/"),
     })),
   };
 }
@@ -131,6 +134,10 @@ export function serializePortalEstimate(estimate: {
     id: string;
     letter: string | null;
     label: string;
+    description?: string | null;
+    photoUrl?: string | null;
+    photoAssetId?: string | null;
+    declinedAt?: Date | null;
     sortOrder: number;
     subtotal: { toNumber?: () => number } | number;
     discountTotal: { toNumber?: () => number } | number;
@@ -180,6 +187,11 @@ export function serializePortalEstimate(estimate: {
       id: option.id,
       letter: option.letter,
       label: option.label,
+      description: option.description ?? null,
+      photoUrl: option.photoUrl
+        ? absolutePublicBlobUrl(option.photoUrl) ?? option.photoUrl
+        : null,
+      declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
       subtotal: toNumber(option.subtotal as never),
       discountTotal: toNumber(option.discountTotal as never),

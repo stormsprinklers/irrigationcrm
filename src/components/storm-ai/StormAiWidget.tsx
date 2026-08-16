@@ -124,7 +124,7 @@ export function StormAiWidget() {
   return (
     <>
       {open ? (
-        <div className="fixed bottom-20 right-4 z-[55] flex h-[min(36rem,calc(100dvh-6rem))] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl">
+        <div className="fixed bottom-20 right-4 z-[55] flex h-[min(36rem,calc(100dvh-6rem))] w-[min(100vw-2rem,24rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl sm:bottom-32">
           <header className="flex items-center justify-between border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -196,7 +196,7 @@ export function StormAiWidget() {
         type="button"
         aria-label="Open Storm AI"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-[55] flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
+        className="fixed bottom-4 right-4 z-[55] flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 sm:bottom-16"
       >
         <Sparkles className="h-6 w-6 text-white" />
       </button>

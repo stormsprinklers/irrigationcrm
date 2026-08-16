@@ -191,6 +191,7 @@ export function PortalLiveTrackView({ slug, token }: Props) {
         {tracking.mapEmbedUrl ? (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <iframe
+              key={tracking.updatedAt ?? tracking.mapEmbedUrl}
               title="Technician location map"
               src={tracking.mapEmbedUrl}
               className="h-[360px] w-full border-0 sm:h-[420px]"

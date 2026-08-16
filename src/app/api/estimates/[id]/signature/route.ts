@@ -17,6 +17,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const body = await request.json();
     const signature = body.signature as string | undefined;
+    const selectedOptionId =
+      typeof body.selectedOptionId === "string" ? body.selectedOptionId : null;
     if (!signature?.startsWith("data:image/")) {
       return badRequestResponse("signature must be a base64 data URL");
     }
@@ -43,8 +45,16 @@ export async function POST(request: NextRequest, { params }: Params) {
         signedAt: new Date(),
         status: EstimateStatus.APPROVED,
         approvedAt: new Date(),
+        ...(selectedOptionId ? { selectedOptionId } : {}),
       },
     });
+
+    if (selectedOptionId) {
+      await prisma.estimateOption.updateMany({
+        where: { estimateId: id, id: selectedOptionId },
+        data: { declinedAt: null },
+      });
+    }
 
     void onEstimateClosed(id).catch(() => {});
 

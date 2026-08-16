@@ -1,7 +1,7 @@
 import { EstimateStatus, Prisma } from "@prisma/client";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
-import { ensureEstimateOptions } from "@/lib/estimates/options";
-import { formatEstimateOptionNumber } from "@/lib/estimates/numbering";
+import { ensureEstimateOptions, serializeOption } from "@/lib/estimates/options";
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { EstimateDTO, EstimateListItem } from "./types";
@@ -46,16 +46,14 @@ export function serializeEstimate(
   portalPath: string | null = null
 ): EstimateDTO {
   const optionCount = estimate.options?.length ?? 0;
-  const options = (estimate.options ?? []).map((option) => ({
-    id: option.id,
-    letter: option.letter,
-    label: option.label,
-    sortOrder: option.sortOrder,
-    subtotal: toNumber(option.subtotal),
-    discountTotal: toNumber(option.discountTotal),
-    total: toNumber(option.total),
-    displayNumber: formatEstimateOptionNumber(estimate.estimateNumber, option.letter, optionCount),
-  }));
+  const options = (estimate.options ?? []).map((option) =>
+    serializeOption(
+      option,
+      estimate.estimateNumber,
+      optionCount,
+      option.photoUrl ? absolutePublicBlobUrl(option.photoUrl) ?? option.photoUrl : null
+    )
+  );
 
   return {
     id: estimate.id,

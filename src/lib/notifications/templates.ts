@@ -41,6 +41,7 @@ export const MERGE_FIELD_HINTS = [
   "{about_technician_link}",
   "{estimate_link}",
   "{survey_link}",
+  "{work_summary}",
   "{booking_link}",
   "{estimate_range}",
   "{company_phone}",

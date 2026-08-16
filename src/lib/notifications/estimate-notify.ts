@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
 import { sendOperationalNotification, type SendResult } from "./send";
 
@@ -31,6 +32,18 @@ export async function notifyEstimateViaTemplates(
     estimateUrl,
   });
 
+  let emailAttachments: Array<{ filename: string; contentType: string; content: string }> | undefined;
+  if (channel !== "sms") {
+    try {
+      const pdfs = await buildEstimateOptionPdfs(estimate.id, companyId);
+      if (pdfs.length) {
+        emailAttachments = pdfs.map((pdf) => pdfEmailAttachment(pdf.filename, pdf.buffer));
+      }
+    } catch (err) {
+      console.error("Estimate PDF failed:", err);
+    }
+  }
+
   return sendOperationalNotification({
     companyId,
     event: "ESTIMATE_SENT",
@@ -50,6 +63,7 @@ export async function notifyEstimateViaTemplates(
     options: {
       estimateId: estimate.id,
       linkPlaceholders: { estimate: estimateUrl },
+      emailAttachments,
       ...(channel === "email" ? { emailOnly: true } : {}),
       ...(channel === "sms" ? { smsOnly: true } : {}),
     },

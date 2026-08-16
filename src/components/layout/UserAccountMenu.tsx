@@ -97,7 +97,7 @@ export function UserAccountMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="ml-0.5 flex items-center gap-2 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring sm:ml-1"
+          className="ml-0.5 flex shrink-0 items-center gap-2 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring sm:ml-1"
           aria-label="Account menu"
         >
           <Avatar className="h-8 w-8">

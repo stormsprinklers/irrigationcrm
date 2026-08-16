@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ExternalLink, Menu, Phone, Settings, X } from "lucide-react";
 import {
   getPrimaryNavActive,
@@ -23,6 +23,7 @@ import { NotificationBell } from "@/components/layout/NotificationBell";
 import { GlobalSearchButton } from "@/components/layout/GlobalSearch";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
+import { isStandaloneDisplay } from "@/lib/pwa/client";
 import { Button } from "@/components/ui/button";
 import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import {
@@ -82,6 +83,7 @@ export function TopNav() {
   const { brand } = useCompanyBrand();
   const inboxBadges = useInboxBadges();
   const [dialerOpen, setDialerOpen] = useState(false);
+  const [standalonePwa, setStandalonePwa] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileOtherOpen, setMobileOtherOpen] = useState(false);
   const role = session?.user?.role;
@@ -97,6 +99,10 @@ export function TopNav() {
   const otherItems = filterOtherNav(otherNav, role);
   const otherActive = isOtherNavActive(pathname, otherItems);
   const lmsUrl = process.env.NEXT_PUBLIC_LMS_URL?.replace(/\/$/, "") || "";
+
+  useEffect(() => {
+    setStandalonePwa(isStandaloneDisplay());
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-card">
@@ -183,21 +189,23 @@ export function TopNav() {
           ) : null}
         </nav>
 
-        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
           <GlobalSearchButton />
           <NewMenu />
 
           <NotificationBell />
 
-          <Button
-            variant="ghost"
-            size="icon"
-            type="button"
-            aria-label="Open phone dialer"
-            onClick={() => setDialerOpen(true)}
-          >
-            <Phone className="h-5 w-5" />
-          </Button>
+          {standalonePwa ? null : (
+            <Button
+              variant="ghost"
+              size="icon"
+              type="button"
+              aria-label="Open phone dialer"
+              onClick={() => setDialerOpen(true)}
+            >
+              <Phone className="h-5 w-5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" asChild>
             <Link href="/settings">
               <Settings className="h-5 w-5" />

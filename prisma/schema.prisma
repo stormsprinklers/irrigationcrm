@@ -772,6 +772,7 @@ model Company {
   integrationCredentials IntegrationCredential[]
   mobileSessions         MobileSession[]
   mobilePushDevices      MobilePushDevice[]
+  fieldDeviceLocations   FieldDeviceLocation[]
   webPushSubscriptions   WebPushSubscription[]
   metaWebhookEvents      MetaWebhookEvent[]
   socialPosts            SocialPost[]
@@ -946,6 +947,7 @@ model User {
   assignedLeads      Lead[]               @relation("AssignedLeads")
   mobileSessions     MobileSession[]
   mobilePushDevices  MobilePushDevice[]
+  fieldDeviceLocations FieldDeviceLocation[]
   webPushSubscriptions WebPushSubscription[]
   defaultLeadFor     Company[]            @relation("DefaultLeadAssignee")
   visitTimeEvents    VisitTimeEvent[]
@@ -2533,6 +2535,8 @@ model Visit {
   status         VisitStatus @default(SCHEDULED)
   tags           String[]    @default([])
   workSummary    String?     @db.Text
+  /// Customer-facing rewrite of workSummary (spelling/grammar only). Internal notes stay on workSummary.
+  customerWorkSummary String? @db.Text
   isCallback     Boolean     @default(false)
   address        String?
   city           String?
@@ -2549,6 +2553,8 @@ model Visit {
   liveLng               Decimal?  @db.Decimal(10, 7)
   liveLocationAt        DateTime?
   liveTrackingActive    Boolean   @default(false)
+  /// Customer tracking page is valid until this time (set on EN_ROUTE).
+  liveTrackExpiresAt    DateTime?
   maintenancePlanVisitId String?     @unique
   callSessionId          String?
   designProjectId        String?
@@ -3035,6 +3041,11 @@ model EstimateOption {
   /// Letter suffix when multiple options exist (A, B, C…). Null when the estimate has a single option.
   letter        String?
   label         String   @default("Option")
+  /// Short customer-facing copy; AI fills this the first time Present is opened if empty.
+  description   String?  @db.Text
+  photoUrl      String?
+  photoAssetId  String?
+  declinedAt    DateTime?
   sortOrder     Int      @default(0)
   subtotal      Decimal  @default(0) @db.Decimal(10, 2)
   discountTotal Decimal  @default(0) @db.Decimal(10, 2)
@@ -3660,6 +3671,28 @@ model MobileSession {
 
   @@index([userId])
   @@index([refreshTokenHash])
+}
+
+/// Last known GPS for a logged-in iPad / iPhone (lost-device + fleet map).
+model FieldDeviceLocation {
+  id              String   @id @default(cuid())
+  companyId       String
+  userId          String
+  deviceId        String
+  deviceName      String?
+  lat             Decimal  @db.Decimal(10, 7)
+  lng             Decimal  @db.Decimal(10, 7)
+  heading         Decimal? @db.Decimal(6, 2)
+  accuracyMeters  Decimal? @db.Decimal(8, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, deviceId])
+  @@index([userId])
+  @@index([companyId, updatedAt])
 }
 
 model MobilePushDevice {

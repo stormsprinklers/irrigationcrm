@@ -40,7 +40,7 @@ const SETTINGS_SECTIONS: Array<{
   {
     title: "Team",
     match: (pathname) =>
-      ["/settings/employees", "/settings/compensation", "/settings/service-areas"].some(
+      ["/settings/employees", "/settings/field-devices", "/settings/compensation", "/settings/service-areas"].some(
         (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
       ),
     sections: teamSettingsSidebar,
