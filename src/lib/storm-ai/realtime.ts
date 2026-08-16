@@ -108,16 +108,30 @@ export function safetyIdentifierForUser(user: SessionUser) {
     .slice(0, 64);
 }
 
+export type MintRealtimeClientSecretResult =
+  | {
+      clientSecret: string;
+      expiresAt: number | null;
+      model: string;
+      voice: string;
+      tools: StormAiRealtimeTool[];
+    }
+  | {
+      error: string;
+      status: number;
+      detail?: string;
+    };
+
 export async function mintStormAiRealtimeClientSecret(opts: {
   user: SessionUser;
   timezone: string;
   pageContext?: StormAiPageContext | null;
   voice?: string;
   videoMode?: boolean;
-}) {
+}): Promise<MintRealtimeClientSecretResult> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
-    return { error: "OPENAI_API_KEY is not configured" as const, status: 503 as const };
+    return { error: "OPENAI_API_KEY is not configured", status: 503 };
   }
 
   const session = buildRealtimeSessionConfig(opts);
@@ -136,7 +150,7 @@ export async function mintStormAiRealtimeClientSecret(opts: {
     console.error("[storm-ai realtime] client_secrets failed", errText.slice(0, 1000));
     return {
       error: "Could not start voice session with OpenAI.",
-      status: 502 as const,
+      status: 502,
       detail: errText.slice(0, 500),
     };
   }
@@ -148,7 +162,7 @@ export async function mintStormAiRealtimeClientSecret(opts: {
   };
   const value = data.value || data.client_secret?.value;
   if (!value) {
-    return { error: "OpenAI returned no ephemeral key", status: 502 as const };
+    return { error: "OpenAI returned no ephemeral key", status: 502 };
   }
 
   return {

@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
       videoMode: Boolean(body.videoMode),
     });
 
-    if ("error" in minted && minted.error) {
+    if ("error" in minted) {
       return NextResponse.json(
-        { error: minted.error, detail: "detail" in minted ? minted.detail : undefined },
-        { status: minted.status ?? 500 }
+        { error: minted.error, detail: minted.detail },
+        { status: minted.status }
       );
     }
 

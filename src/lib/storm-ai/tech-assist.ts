@@ -366,7 +366,7 @@ export async function continueTechAssistSession(opts: {
         .sort((a, b) => a.sortOrder - b.sortOrder)[0];
       if (after?.type === "BRANCH") {
         nextId = evaluateBranch(asConfig(after.config), opts.result);
-      } else if (after && after.type !== "BRANCH") {
+      } else if (after) {
         nextId = after.id;
       }
     }
