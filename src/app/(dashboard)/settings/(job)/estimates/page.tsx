@@ -16,6 +16,7 @@ type EstimateSettings = {
   deferredVisitDepositThreshold: string | number;
   deferredVisitDepositPercent: string | number;
   estimateWarrantyText: string | null;
+  estimateFinancingUrl: string | null;
   defaultInstallDurationDays: number;
   supplierEmail: string | null;
   supplierPartsAutoSend: boolean;
@@ -101,6 +102,24 @@ export default function SettingsEstimatesPage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 Shown on the estimate link customers open from email or SMS. Leave blank to hide the
                 warranty section.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Financing link</label>
+              <Input
+                type="url"
+                value={settings.estimateFinancingUrl ?? ""}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    estimateFinancingUrl: e.target.value || null,
+                  })
+                }
+                placeholder="https://..."
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Shown as “Explore financing options” on estimates. Tapping it texts the customer this
+                link so they can check options without affecting their credit score.
               </p>
             </div>
             <div className="flex items-center gap-2">

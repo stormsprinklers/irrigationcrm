@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
+  Banknote,
   CheckCircle2,
   Copy,
   FileText,
@@ -109,6 +110,7 @@ type EstimateData = {
   installDurationDays?: number | null;
   needsScheduling?: boolean;
   premiumOptionTotal?: number | null;
+  financingUrl?: string | null;
 };
 
 type Props = { estimateId: string };
@@ -238,6 +240,7 @@ export function EstimateDetail({ estimateId }: Props) {
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
+  const [financingSending, setFinancingSending] = useState(false);
   const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
     "choose"
   );
@@ -380,6 +383,21 @@ export function EstimateDetail({ estimateId }: Props) {
       return;
     }
     await load();
+  }
+
+  async function sendFinancingText() {
+    setFinancingSending(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/financing`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not send financing text");
+        return;
+      }
+      toast.success("Financing options texted to the customer");
+    } finally {
+      setFinancingSending(false);
+    }
   }
 
   async function saveSignature(dataUrl: string) {
@@ -552,6 +570,21 @@ export function EstimateDetail({ estimateId }: Props) {
             <Send className="h-4 w-4" />
             Send
           </Button>
+          {estimate.financingUrl ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void sendFinancingText()}
+              disabled={saving || financingSending}
+            >
+              {financingSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Banknote className="h-4 w-4" />
+              )}
+              Explore financing options
+            </Button>
+          ) : null}
           {estimate.status === "APPROVED" ? (
             <>
               <Button

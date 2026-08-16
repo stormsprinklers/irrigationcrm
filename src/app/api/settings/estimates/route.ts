@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DepositType } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { normalizeFinancingUrl } from "@/lib/estimates/financing";
 import { prisma } from "@/lib/prisma";
+
+const estimateSettingsSelect = {
+  estimateExpiryDays: true,
+  estimateDepositRequired: true,
+  estimateDepositType: true,
+  estimateDepositAmount: true,
+  deferredVisitDepositThreshold: true,
+  deferredVisitDepositPercent: true,
+  estimateWarrantyText: true,
+  estimateFinancingUrl: true,
+  defaultInstallDurationDays: true,
+  supplierEmail: true,
+  supplierPartsAutoSend: true,
+} as const;
 
 export async function GET() {
   try {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: {
-        estimateExpiryDays: true,
-        estimateDepositRequired: true,
-        estimateDepositType: true,
-        estimateDepositAmount: true,
-        deferredVisitDepositThreshold: true,
-        deferredVisitDepositPercent: true,
-        estimateWarrantyText: true,
-        defaultInstallDurationDays: true,
-        supplierEmail: true,
-        supplierPartsAutoSend: true,
-      },
+      select: estimateSettingsSelect,
     });
     return NextResponse.json(company);
   } catch {
@@ -74,6 +78,14 @@ export async function PATCH(request: NextRequest) {
                   : null,
             }
           : {}),
+        ...(body.estimateFinancingUrl !== undefined
+          ? {
+              estimateFinancingUrl:
+                typeof body.estimateFinancingUrl === "string"
+                  ? normalizeFinancingUrl(body.estimateFinancingUrl)
+                  : null,
+            }
+          : {}),
         ...(body.defaultInstallDurationDays !== undefined
           ? { defaultInstallDurationDays: Number(body.defaultInstallDurationDays) }
           : {}),
@@ -82,18 +94,7 @@ export async function PATCH(request: NextRequest) {
           ? { supplierPartsAutoSend: Boolean(body.supplierPartsAutoSend) }
           : {}),
       },
-      select: {
-        estimateExpiryDays: true,
-        estimateDepositRequired: true,
-        estimateDepositType: true,
-        estimateDepositAmount: true,
-        deferredVisitDepositThreshold: true,
-        deferredVisitDepositPercent: true,
-        estimateWarrantyText: true,
-        defaultInstallDurationDays: true,
-        supplierEmail: true,
-        supplierPartsAutoSend: true,
-      },
+      select: estimateSettingsSelect,
     });
 
     return NextResponse.json(company);

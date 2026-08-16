@@ -85,6 +85,7 @@ export type EstimateDTO = {
   designInternalBom?: unknown;
   premiumOptionTotal?: number | null;
   selectedQuoteTier?: string | null;
+  financingUrl?: string | null;
 };
 
 export type EstimateListItem = Pick<

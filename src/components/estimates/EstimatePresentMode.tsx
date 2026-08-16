@@ -9,6 +9,7 @@ import { EstimateOptionPresentCards } from "@/components/estimates/EstimateOptio
 type EstimateLike = {
   id: string;
   status: string;
+  financingUrl?: string | null;
   options: Array<{
     id: string;
     label: string;
@@ -52,6 +53,7 @@ export function EstimatePresentMode({
   const [estimate, setEstimate] = useState<EstimateLike | null>(null);
   const [loading, setLoading] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [financingSending, setFinancingSending] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -117,6 +119,21 @@ export function EstimatePresentMode({
     }
   }
 
+  async function sendFinancingText() {
+    setFinancingSending(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/financing`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not send financing text");
+        return;
+      }
+      toast.success("Financing options texted to the customer");
+    } finally {
+      setFinancingSending(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#eef1f4]">
       <div className="mx-auto flex min-h-full max-w-6xl flex-col px-4 py-4">
@@ -137,6 +154,15 @@ export function EstimatePresentMode({
             >
               Save and send
             </Button>
+            {estimate?.financingUrl ? (
+              <Button
+                variant="secondary"
+                disabled={financingSending}
+                onClick={() => void sendFinancingText()}
+              >
+                {financingSending ? "Texting…" : "Explore financing options"}
+              </Button>
+            ) : null}
           </div>
         </div>
         {loading || !estimate ? (

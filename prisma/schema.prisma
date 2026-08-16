@@ -554,6 +554,8 @@ model Company {
   deferredVisitDepositPercent   Decimal @default(50) @db.Decimal(5, 2)
   /// Customer-facing warranty copy shown on sent estimate links.
   estimateWarrantyText     String?  @db.Text
+  /// Public financing application URL (soft-pull) sent from estimates.
+  estimateFinancingUrl     String?
   defaultInstallDurationDays Int    @default(4)
   supplierEmail            String?
   supplierPartsAutoSend    Boolean  @default(false)

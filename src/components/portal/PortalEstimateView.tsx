@@ -74,6 +74,7 @@ type CompanyBranding = {
   name: string;
   emailLogoUrl: string | null;
   estimateWarrantyText?: string | null;
+  financingUrl?: string | null;
   features: Record<string, boolean>;
 };
 
@@ -99,6 +100,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [financingSending, setFinancingSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -304,6 +306,30 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     }
   }
 
+  async function exploreFinancing() {
+    setFinancingSending(true);
+    try {
+      const res = await fetch(`/api/portal/estimates/${token}/financing`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        financingUrl?: string | null;
+        smsSent?: boolean;
+      };
+      if (data.financingUrl) {
+        window.open(data.financingUrl, "_blank", "noopener,noreferrer");
+      }
+      if (!res.ok && !data.financingUrl) {
+        toast.error(data.error ?? "Financing is not available");
+        return;
+      }
+      if (data.smsSent) {
+        toast.success("We texted you the financing link");
+      }
+    } finally {
+      setFinancingSending(false);
+    }
+  }
+
   if (pageLoading) {
     return (
       <main className="mx-auto max-w-lg p-8">
@@ -349,6 +375,16 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
           <p className="text-sm text-muted-foreground capitalize">{estimate.status.toLowerCase()}</p>
           {estimate.expiresAt ? (
             <p className="text-sm">Expires {format(new Date(estimate.expiresAt), "MMM d, yyyy")}</p>
+          ) : null}
+          {company.financingUrl ? (
+            <Button
+              className="mt-3"
+              variant="outline"
+              disabled={financingSending}
+              onClick={() => void exploreFinancing()}
+            >
+              {financingSending ? "Opening…" : "Explore financing options"}
+            </Button>
           ) : null}
         </div>
 

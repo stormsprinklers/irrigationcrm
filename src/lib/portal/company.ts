@@ -31,6 +31,7 @@ export const portalCompanySelect = {
   irrigationFeaturesEnabled: true,
   maintenancePlansFeaturesEnabled: true,
   estimateWarrantyText: true,
+  estimateFinancingUrl: true,
 } as const;
 
 export type PortalCompany = {
@@ -64,6 +65,7 @@ export type PortalCompany = {
   irrigationFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
   estimateWarrantyText: string | null;
+  estimateFinancingUrl: string | null;
 };
 
 export function resolvePortalSlug(company: { portalSlug: string | null; bookingSlug: string | null }) {
