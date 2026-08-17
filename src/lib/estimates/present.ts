@@ -19,6 +19,41 @@ function scoreAsset(asset: MediaPick, haystack: string, uniqueBoost = 0) {
   return words.reduce((score, word) => (text.includes(word) ? score + 1 : score), 0) + uniqueBoost;
 }
 
+function isGenericOptionLabel(label: string) {
+  const trimmed = label.trim();
+  return !trimmed || /^option(?:\s+[a-z0-9]+)?$/i.test(trimmed);
+}
+
+function fallbackOptionTitle(label: string, uniqueItems: string[], items: string[]) {
+  if (!isGenericOptionLabel(label)) return label.trim().slice(0, 60);
+  const source = (uniqueItems[0] ?? items[0] ?? "Recommended Work").trim();
+  return source.slice(0, 60);
+}
+
+function uniquifyTitle(title: string, taken: Set<string>) {
+  const base = title.trim() || "Recommended Work";
+  if (!taken.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (taken.has(`${base} ${n}`.toLowerCase())) n += 1;
+  return `${base} ${n}`;
+}
+
+function polishOptionTitle(raw: unknown, fallback: string, taken: Set<string>) {
+  const cleaned =
+    typeof raw === "string"
+      ? raw
+          .replace(/[\r\n]+/g, " ")
+          .replace(/^["'\s]+|["'\s]+$/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+      : "";
+  const candidate = cleaned.slice(0, 60);
+  if (!candidate || isGenericOptionLabel(candidate)) {
+    return uniquifyTitle(fallback, taken);
+  }
+  return uniquifyTitle(candidate, taken);
+}
+
 function uniqueBoostForAsset(asset: MediaPick, uniqueHaystack: string) {
   if (!uniqueHaystack.trim()) return 0;
   const uniqueScore = scoreAsset(asset, uniqueHaystack, 0);
@@ -45,13 +80,16 @@ async function generatePresentationCopy(params: {
   uniqueItems: string[];
   technicianNotes: string | null;
   assets: MediaPick[];
-}): Promise<{ description: string; assetId: string | null }> {
+  takenTitles: string[];
+}): Promise<{ title: string; description: string; assetId: string | null }> {
   const haystack = `${params.label} ${params.technicianNotes ?? ""} ${params.items.join(" ")}`;
   const uniqueHaystack = `${params.technicianNotes ?? ""} ${params.uniqueItems.join(" ")}`;
   const fallbackAsset = pickAssetFallback(params.assets, haystack, uniqueHaystack);
+  const fallbackTitle = fallbackOptionTitle(params.label, params.uniqueItems, params.items);
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
     return {
+      title: fallbackTitle,
       description: params.items.slice(0, 4).join(", ") || params.label,
       assetId: fallbackAsset?.id ?? null,
     };
@@ -76,28 +114,30 @@ async function generatePresentationCopy(params: {
         {
           role: "system",
           content:
-            "You write short customer-facing irrigation/landscape service option copy. Return JSON only. Never reuse a photo across options — the catalog already excludes photos assigned to other options.",
+            "You write short customer-facing irrigation/landscape service option titles and copy. Return JSON only. Never reuse a photo across options — the catalog already excludes photos assigned to other options.",
         },
         {
           role: "user",
           content: JSON.stringify({
             instruction:
-              "Write 2-3 short paragraphs (about 40-90 words total) describing this estimate option for a homeowner. Plain language, no prices, no EST numbers. technicianNotes are staff context — use them as the primary guide for tone, scope, and which photo to pick, but never copy them verbatim; rewrite in homeowner-friendly language. Pick exactly one photo id from mediaCatalog. Prefer a photo that matches technicianNotes and distinctiveLineItems (work unique to this option vs the other options). If none of those fit, match the overall line items. If the catalog is empty or nothing fits, use null. Never invent an id.",
+              "Write a professional customer-facing option title (2-6 words, Title Case) and 2-3 short paragraphs (about 40-90 words total) describing this estimate option for a homeowner. The title should sound like a named service package, not a draft label. Do not use Option A/B/C, prices, EST numbers, or slang. Make the title distinct from titlesAlreadyUsed. Prefer distinctiveLineItems and technicianNotes for what makes this option different. Plain language in the description. technicianNotes are staff context — use them as the primary guide for tone, scope, title, and which photo to pick, but never copy them verbatim; rewrite in homeowner-friendly language. Pick exactly one photo id from mediaCatalog. Strongly prefer a photo that matches distinctiveLineItems (work unique to this option vs the other options). If none of those fit, match technicianNotes, then the overall line items. If the catalog is empty or nothing fits, use null. Never invent an id.",
             optionName: params.label,
+            titlesAlreadyUsed: params.takenTitles,
             technicianNotes: params.technicianNotes,
             lineItems: params.items,
             distinctiveLineItems: params.uniqueItems,
             mediaCatalog: catalog,
-            format: { description: "string", assetId: "string or null" },
+            format: { title: "string", description: "string", assetId: "string or null" },
           }),
         },
       ],
-      max_tokens: 280,
+      max_tokens: 340,
     }),
   });
 
   if (!res.ok) {
     return {
+      title: fallbackTitle,
       description: params.items.slice(0, 4).join(", ") || params.label,
       assetId: fallbackAsset?.id ?? null,
     };
@@ -106,7 +146,7 @@ async function generatePresentationCopy(params: {
   const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const raw = json.choices?.[0]?.message?.content ?? "{}";
   try {
-    const parsed = JSON.parse(raw) as { description?: unknown; assetId?: unknown };
+    const parsed = JSON.parse(raw) as { title?: unknown; description?: unknown; assetId?: unknown };
     const description =
       typeof parsed.description === "string" && parsed.description.trim()
         ? parsed.description.trim()
@@ -115,9 +155,14 @@ async function generatePresentationCopy(params: {
     const assetId = catalog.some((asset) => asset.id === requestedId)
       ? requestedId
       : fallbackAsset?.id ?? null;
-    return { description, assetId };
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : fallbackTitle,
+      description,
+      assetId,
+    };
   } catch {
     return {
+      title: fallbackTitle,
       description: params.items.slice(0, 4).join(", ") || params.label,
       assetId: fallbackAsset?.id ?? null,
     };
@@ -148,6 +193,30 @@ function distinctiveItemNames(
   return own.filter((name) => !otherNames.has(normalizeItemName(name)));
 }
 
+type PresentLineItem = {
+  optionId: string | null;
+  name: string;
+  priceBookItem: { imageUrl: string | null } | null;
+};
+
+function uniqueLineItemPhotoUrls(
+  optionId: string,
+  optionCount: number,
+  lineItems: PresentLineItem[]
+) {
+  const uniqueNames = new Set(
+    distinctiveItemNames(optionId, optionCount, lineItems).map(normalizeItemName)
+  );
+  const urls: string[] = [];
+  for (const item of lineItems) {
+    const onOption = item.optionId === optionId || (!item.optionId && optionCount === 1);
+    if (!onOption || !uniqueNames.has(normalizeItemName(item.name))) continue;
+    const url = item.priceBookItem?.imageUrl?.trim();
+    if (url) urls.push(url);
+  }
+  return urls;
+}
+
 export async function prepareEstimatePresentation(params: {
   companyId: string;
   estimateId: string;
@@ -158,7 +227,10 @@ export async function prepareEstimatePresentation(params: {
     where: { id: params.estimateId, companyId: params.companyId },
     include: {
       options: { orderBy: { sortOrder: "asc" } },
-      lineItems: { orderBy: { sortOrder: "asc" } },
+      lineItems: {
+        orderBy: { sortOrder: "asc" },
+        include: { priceBookItem: { select: { imageUrl: true } } },
+      },
     },
   });
   if (!estimate) return null;
@@ -172,6 +244,7 @@ export async function prepareEstimatePresentation(params: {
 
   const usedAssetIds = new Set<string>();
   const usedBlobUrls = new Set<string>();
+  const usedTitles = new Set<string>();
   const optionCount = estimate.options.length;
 
   const photoKey = (option: { photoAssetId: string | null; photoUrl: string | null }) =>
@@ -187,44 +260,89 @@ export async function prepareEstimatePresentation(params: {
         (option.photoUrl && usedBlobUrls.has(option.photoUrl)));
     const needsPhoto = params.force || !hasPhoto || duplicatePhoto;
     const needsCopy = params.force || !option.description?.trim();
-
-    if (!needsPhoto && !needsCopy) {
-      if (option.photoAssetId) usedAssetIds.add(option.photoAssetId);
-      if (option.photoUrl) usedBlobUrls.add(option.photoUrl);
-      continue;
-    }
-
+    const needsTitle = needsCopy || isGenericOptionLabel(option.label);
+    const uniquePhotoUrl =
+      uniqueLineItemPhotoUrls(option.id, optionCount, estimate.lineItems).find(
+        (url) => !usedBlobUrls.has(url)
+      ) ?? null;
     const available = assets.filter(
       (asset) => !usedAssetIds.has(asset.id) && !usedBlobUrls.has(asset.blobUrl)
     );
-    const generated = await generatePresentationCopy({
-      label: option.label,
-      items,
-      uniqueItems,
-      technicianNotes: option.internalNotes?.trim() || null,
-      assets: available,
-    });
-    const asset = available.find((row) => row.id === generated.assetId) ?? null;
+    const uniqueHaystack = `${option.internalNotes?.trim() ?? ""} ${uniqueItems.join(" ")}`;
+    const uniqueCatalogAsset =
+      uniquePhotoUrl
+        ? available.find((row) => row.blobUrl === uniquePhotoUrl) ?? null
+        : (() => {
+            if (!uniqueItems.length) return null;
+            const match = pickAssetFallback(available, uniqueHaystack, uniqueHaystack);
+            return match && uniqueBoostForAsset(match, uniqueHaystack) > 0 ? match : null;
+          })();
+    const preferredUniqueUrl = uniquePhotoUrl ?? uniqueCatalogAsset?.blobUrl ?? null;
+    const preferUniquePhoto = Boolean(preferredUniqueUrl) && option.photoUrl !== preferredUniqueUrl;
+
+    if (!needsPhoto && !needsCopy && !needsTitle && !preferUniquePhoto) {
+      if (option.photoAssetId) usedAssetIds.add(option.photoAssetId);
+      if (option.photoUrl) usedBlobUrls.add(option.photoUrl);
+      if (option.label.trim()) usedTitles.add(option.label.trim().toLowerCase());
+      continue;
+    }
+
+    const uniquePhotoAsset = uniquePhotoUrl
+      ? available.find((row) => row.blobUrl === uniquePhotoUrl) ?? uniqueCatalogAsset
+      : uniqueCatalogAsset;
+
+    const generated =
+      needsCopy || needsTitle || (needsPhoto && !preferUniquePhoto)
+        ? await generatePresentationCopy({
+            label: option.label,
+            items,
+            uniqueItems,
+            technicianNotes: option.internalNotes?.trim() || null,
+            assets: available,
+            takenTitles: [...usedTitles],
+          })
+        : null;
+    const asset = preferUniquePhoto
+      ? uniquePhotoAsset
+      : available.find((row) => row.id === generated?.assetId) ?? null;
+
+    const nextPhotoUrl = preferUniquePhoto
+      ? preferredUniqueUrl
+      : needsPhoto
+        ? asset?.blobUrl ?? (duplicatePhoto ? null : option.photoUrl)
+        : option.photoUrl;
+    const nextPhotoAssetId = preferUniquePhoto
+      ? uniquePhotoAsset?.id ?? null
+      : needsPhoto
+        ? asset?.id ?? (duplicatePhoto ? null : option.photoAssetId)
+        : option.photoAssetId;
+    const nextLabel =
+      needsTitle && generated
+        ? polishOptionTitle(
+            generated.title,
+            fallbackOptionTitle(option.label, uniqueItems, items),
+            usedTitles
+          )
+        : option.label;
 
     await prisma.estimateOption.update({
       where: { id: option.id },
       data: {
-        ...(needsCopy ? { description: generated.description } : {}),
-        ...(needsPhoto
+        ...(needsTitle ? { label: nextLabel } : {}),
+        ...(needsCopy && generated ? { description: generated.description } : {}),
+        ...(preferUniquePhoto || needsPhoto
           ? {
-              photoUrl: asset?.blobUrl ?? (duplicatePhoto ? null : option.photoUrl),
-              photoAssetId: asset?.id ?? (duplicatePhoto ? null : option.photoAssetId),
+              photoUrl: nextPhotoUrl,
+              photoAssetId: nextPhotoAssetId,
             }
           : {}),
       },
     });
 
-    const assignedId = needsPhoto ? asset?.id ?? option.photoAssetId : option.photoAssetId;
-    const assignedUrl = needsPhoto
-      ? asset?.blobUrl ?? (duplicatePhoto ? null : option.photoUrl)
-      : option.photoUrl;
-    if (assignedId) usedAssetIds.add(assignedId);
-    if (assignedUrl) usedBlobUrls.add(assignedUrl);
+    if (nextLabel.trim()) usedTitles.add(nextLabel.trim().toLowerCase());
+
+    if (nextPhotoAssetId) usedAssetIds.add(nextPhotoAssetId);
+    if (nextPhotoUrl) usedBlobUrls.add(nextPhotoUrl);
   }
 
   return getEstimateForCompany(params.companyId, params.estimateId);

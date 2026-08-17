@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { EstimateOptionPresentCards } from "@/components/estimates/EstimateOptionPresentCards";
+import { EstimateOptionPresentCards, rankPresentOptions } from "@/components/estimates/EstimateOptionPresentCards";
 
 type EstimateLike = {
   id: string;
@@ -17,6 +17,8 @@ type EstimateLike = {
     description: string | null;
     photoUrl: string | null;
     total: number;
+    subtotal?: number;
+    discountTotal?: number;
     declinedAt?: string | null;
   }>;
   lineItems: Array<{
@@ -64,7 +66,13 @@ export function EstimatePresentMode({
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? "Could not prepare presentation");
-        if (!cancelled) setEstimate(data);
+        if (!cancelled) {
+          const highestId = rankPresentOptions(data.options ?? [])[0]?.id ?? null;
+          setEstimate({
+            ...data,
+            selectedOptionId: highestId ?? data.selectedOptionId ?? null,
+          });
+        }
       })
       .catch((err) => {
         toast.error(err instanceof Error ? err.message : "Could not prepare presentation");
@@ -196,7 +204,7 @@ export function EstimatePresentMode({
             discounts={estimate.discounts}
             canDecide={estimate.status !== "APPROVED" && estimate.status !== "CONVERTED"}
             canRename={estimate.status !== "CONVERTED"}
-            selectedId={estimate.selectedOptionId ?? estimate.options[0]?.id ?? null}
+            selectedId={estimate.selectedOptionId ?? rankPresentOptions(estimate.options)[0]?.id ?? null}
             onSelect={(optionId) => {
               setEstimate((prev) => (prev ? { ...prev, selectedOptionId: optionId } : prev));
             }}

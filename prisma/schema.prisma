@@ -3024,6 +3024,8 @@ model Estimate {
   signatureBlobUrl String?
   signedAt        DateTime?
   approvedAt      DateTime?
+  /// Last time the estimate was emailed/texted to the customer.
+  sentAt          DateTime?
   /// Option the customer approved / staff is converting (required when multiple options).
   selectedOptionId String?
   subtotal        Decimal        @default(0) @db.Decimal(10, 2)
@@ -3106,6 +3108,7 @@ model EstimateOption {
   /// Letter suffix when multiple options exist (A, B, C…). Null when the estimate has a single option.
   letter        String?
   label         String   @default("Option")
+  /// Customer-facing option title. AI polishes generic names (Option A/B) when Present is opened.
   /// Short customer-facing copy; AI fills this the first time Present is opened if empty.
   description   String?  @db.Text
   /// Staff-only notes the AI uses for customer copy and photo matching. Never shown to customers.

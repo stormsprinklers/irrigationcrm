@@ -1,7 +1,7 @@
 import { Division, Prisma, VisitStatus } from "@prisma/client";
 import { formatVisitEtaPayload } from "@/lib/maps/eta";
 import { prisma } from "@/lib/prisma";
-import { sumDiscounts, sumLineItems } from "./totals";
+import { sumDiscounts, sumLineItems, toNumber } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
 
 export const visitInclude = {
@@ -74,7 +74,17 @@ export const visitDetailInclude = {
     orderBy: { createdAt: "desc" as const },
     include: { uploadedBy: { select: { id: true, name: true } } },
   },
-  estimates: { select: { id: true, status: true, total: true, createdAt: true } },
+  estimates: {
+    orderBy: { createdAt: "desc" as const },
+    select: {
+      id: true,
+      estimateNumber: true,
+      status: true,
+      total: true,
+      createdAt: true,
+      options: { select: { id: true, total: true } },
+    },
+  },
   invoices: {
     orderBy: { createdAt: "desc" as const },
     take: 1,
@@ -328,6 +338,29 @@ export async function resolveVisitProperty(visit: VisitDetailRecord) {
   });
 }
 
+function serializeVisitEstimateSummary(
+  estimate: VisitDetailRecord["estimates"][number]
+) {
+  const optionTotals = estimate.options.map((option) => toNumber(option.total));
+  const optionCount = estimate.options.length;
+  const fallbackTotal = toNumber(estimate.total);
+  const hasOptionPrices = optionTotals.some((value) => value > 0);
+  const optionMinTotal = hasOptionPrices ? Math.min(...optionTotals) : fallbackTotal;
+  const optionMaxTotal = hasOptionPrices ? Math.max(...optionTotals) : fallbackTotal;
+
+  return {
+    id: estimate.id,
+    estimateNumber: estimate.estimateNumber,
+    displayNumber: estimate.estimateNumber,
+    status: estimate.status,
+    total: fallbackTotal,
+    createdAt: estimate.createdAt.toISOString(),
+    optionCount,
+    optionMinTotal,
+    optionMaxTotal,
+  };
+}
+
 export async function serializeVisitDetail(
   visit: VisitDetailRecord,
   extras?: { etaWarning?: string }
@@ -337,6 +370,7 @@ export async function serializeVisitDetail(
   return {
     ...visit,
     property,
+    estimates: visit.estimates.map(serializeVisitEstimateSummary),
     startAt: visit.startAt.toISOString(),
     endAt: visit.endAt.toISOString(),
     enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,

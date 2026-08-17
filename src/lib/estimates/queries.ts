@@ -69,6 +69,9 @@ export function serializeEstimate(
     signatureBlobUrl: estimate.signatureBlobUrl,
     signedAt: estimate.signedAt?.toISOString() ?? null,
     approvedAt: estimate.approvedAt?.toISOString() ?? null,
+    sentAt:
+      estimate.sentAt?.toISOString() ??
+      (estimate.status === EstimateStatus.SENT ? estimate.updatedAt.toISOString() : null),
     selectedOptionId: estimate.selectedOptionId ?? null,
     subtotal: toNumber(estimate.subtotal),
     discountTotal: toNumber(estimate.discountTotal),

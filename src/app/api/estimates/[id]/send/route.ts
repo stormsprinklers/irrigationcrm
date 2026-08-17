@@ -54,7 +54,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await prisma.estimate.update({
       where: { id },
-      data: { status: EstimateStatus.SENT },
+      data: { status: EstimateStatus.SENT, sentAt: new Date() },
     });
 
     void onEstimateSent(id, user.companyId).catch((err) =>

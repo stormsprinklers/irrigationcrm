@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
-import { EstimateOptionPresentCards } from "@/components/estimates/EstimateOptionPresentCards";
+import { EstimateOptionPresentCards, rankPresentOptions } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
 import { PortalShell } from "./PortalShell";
@@ -141,8 +141,15 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         setEstimate(estData.estimate);
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
+        const highestId = rankPresentOptions(estData.estimate.options ?? [])[0]?.id ?? null;
+        const alreadyChosen =
+          estData.estimate.status === "APPROVED" ||
+          estData.estimate.status === "CONVERTED" ||
+          Boolean(estData.estimate.signedAt);
         setSelectedOptionId(
-          estData.estimate.selectedOptionId ?? estData.estimate.options?.[0]?.id ?? null
+          alreadyChosen
+            ? estData.estimate.selectedOptionId ?? highestId
+            : highestId
         );
 
         if (estData.estimate?.hasDesign) {
