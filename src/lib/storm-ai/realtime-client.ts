@@ -54,6 +54,11 @@ export class StormAiRealtimeClient {
   private lastFrameAt = 0;
   private frameInFlight = false;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
+  /** While true, do not inject camera/user items (would sit between function_call and output). */
+  private suppressUserItems = false;
+  private eventChain: Promise<void> = Promise.resolve();
+  /** Prefetch tool HTTP while the model finishes speaking "let me look that up". */
+  private toolPrefetch = new Map<string, Promise<unknown>>();
   private callbacks: StormAiRealtimeCallbacks;
 
   constructor(callbacks: StormAiRealtimeCallbacks = {}) {
@@ -79,6 +84,9 @@ export class StormAiRealtimeClient {
   }) {
     this.closed = false;
     this.handledCallIds.clear();
+    this.suppressUserItems = false;
+    this.toolPrefetch.clear();
+    this.eventChain = Promise.resolve();
     this.videoMode = Boolean(opts.videoMode);
     this.visitId =
       typeof opts.pageContext?.visitId === "string" ? opts.pageContext.visitId : null;
@@ -135,7 +143,10 @@ export class StormAiRealtimeClient {
 
     this.dc = this.pc.createDataChannel("oai-events");
     this.dc.addEventListener("message", (event) => {
-      void this.onDataMessage(String(event.data));
+      const raw = String(event.data);
+      this.eventChain = this.eventChain
+        .then(() => this.onDataMessage(raw))
+        .catch(() => undefined);
     });
 
     const offer = await this.pc.createOffer();
@@ -318,6 +329,9 @@ export class StormAiRealtimeClient {
   }
 
   private async captureAndSendFrame(reason: string, force = false) {
+    // Never insert user/camera items while a function call is awaiting output —
+    // that leaves the model stuck saying it is "still waiting" on the tool.
+    if (this.suppressUserItems) return;
     if (!this.videoMode || this.closed || !this.conversationId) return;
     const now = Date.now();
     if (!force && now - this.lastFrameAt < FRAME_MIN_INTERVAL_MS) return;
@@ -461,9 +475,12 @@ export class StormAiRealtimeClient {
       const name = String(event.name || this.pendingNames[callId] || "");
       const argText = String(event.arguments || this.pendingArgs[callId] || "{}");
       delete this.pendingArgs[callId];
-      delete this.pendingNames[callId];
+      if (name) this.pendingNames[callId] = name;
+      // Prefetch only — do not send function_call_output until response.done.
       if (callId && name) {
-        await this.handleToolCall(callId, name, argText);
+        this.setStatus("tool");
+        this.callbacks.onTool?.(name);
+        this.beginToolPrefetch(callId, name, argText);
       }
       return;
     }
@@ -476,7 +493,10 @@ export class StormAiRealtimeClient {
         arguments?: string;
       } | undefined;
       if (item?.type === "function_call" && item.call_id && item.name) {
-        await this.handleToolCall(
+        this.pendingNames[item.call_id] = item.name;
+        this.setStatus("tool");
+        this.callbacks.onTool?.(item.name);
+        this.beginToolPrefetch(
           item.call_id,
           item.name,
           String(item.arguments || this.pendingArgs[item.call_id] || "{}")
@@ -496,40 +516,35 @@ export class StormAiRealtimeClient {
         status?: string;
       } | undefined;
       const outputs = response?.output ?? [];
-      for (const item of outputs) {
-        if (item.type === "function_call" && item.call_id && item.name) {
-          await this.handleToolCall(
-            item.call_id,
-            item.name,
-            String(item.arguments || "{}")
-          );
-        }
-      }
-      if (!outputs.some((o) => o.type === "function_call")) {
+      const toolItems = outputs.filter(
+        (item) => item.type === "function_call" && item.call_id && item.name
+      );
+
+      if (toolItems.length === 0) {
         this.setStatus("listening");
+        return;
       }
+
+      // Wait until this model turn is fully done, then deliver every tool output
+      // and create a single follow-up response.
+      for (const item of toolItems) {
+        await this.deliverToolOutput(
+          String(item.call_id),
+          String(item.name),
+          String(item.arguments || "{}")
+        );
+      }
+      await this.finishToolTurn();
     }
   }
 
-  private async handleToolCall(callId: string, name: string, argText: string) {
-    if (!this.conversationId || !callId || !name) return;
-    if (this.handledCallIds.has(callId)) return;
-    this.handledCallIds.add(callId);
+  private beginToolPrefetch(callId: string, name: string, argText: string) {
+    if (!this.conversationId || this.toolPrefetch.has(callId)) return;
+    this.suppressUserItems = true;
+    this.toolPrefetch.set(callId, this.fetchToolResult(callId, name, argText));
+  }
 
-    this.setStatus("tool");
-    this.callbacks.onTool?.(name);
-
-    // Fresh frame before parts lookup so the model has an image in context.
-    if (
-      this.videoMode &&
-      (name === "search_parts_info" || name === "get_parts_info")
-    ) {
-      await Promise.race([
-        this.captureAndSendFrame(`before_${name}`, true),
-        new Promise<void>((resolve) => setTimeout(resolve, 1200)),
-      ]);
-    }
-
+  private async fetchToolResult(callId: string, name: string, argText: string): Promise<unknown> {
     let args: unknown = {};
     try {
       args = JSON.parse(argText || "{}");
@@ -537,7 +552,6 @@ export class StormAiRealtimeClient {
       args = {};
     }
 
-    let result: unknown = { ok: false, error: "Tool request failed" };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
     try {
@@ -552,16 +566,17 @@ export class StormAiRealtimeClient {
         }),
         signal: controller.signal,
       });
-      result = await res.json().catch(() => ({
+      let result: unknown = await res.json().catch(() => ({
         ok: false,
         error: "Invalid tool response",
       }));
       if (!res.ok && typeof result === "object" && result && !("error" in result)) {
         result = { ok: false, error: `Tool failed (${res.status})` };
       }
+      return result;
     } catch (err) {
       const timedOut = err instanceof Error && err.name === "AbortError";
-      result = {
+      return {
         ok: false,
         error: timedOut
           ? "Tool timed out — tell the tech briefly and ask them to continue."
@@ -570,6 +585,42 @@ export class StormAiRealtimeClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private async deliverToolOutput(callId: string, name: string, argText: string) {
+    if (!this.conversationId || !callId || !name) return;
+    if (this.handledCallIds.has(callId)) return;
+    this.handledCallIds.add(callId);
+
+    this.setStatus("tool");
+    this.callbacks.onTool?.(name);
+
+    if (!this.toolPrefetch.has(callId)) {
+      this.beginToolPrefetch(callId, name, argText);
+    }
+    const result =
+      (await this.toolPrefetch.get(callId)) ??
+      ({ ok: false, error: "Tool request failed" } as const);
+    this.toolPrefetch.delete(callId);
+
+    this.sendEvent({
+      type: "session.update",
+      session: {
+        type: "realtime",
+        audio: {
+          input: {
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.78,
+              prefix_padding_ms: 400,
+              silence_duration_ms: 900,
+              interrupt_response: false,
+              create_response: true,
+            },
+          },
+        },
+      },
+    });
 
     const sentOutput = this.sendEvent({
       type: "conversation.item.create",
@@ -579,22 +630,55 @@ export class StormAiRealtimeClient {
         output: JSON.stringify(result),
       },
     });
-    const sentResponse = this.sendEvent({
-      type: "response.create",
-      response: {
-        output_modalities: ["audio"],
-        instructions:
-          "You just received a tool result. Speak a short, clear answer to the technician now using that result. Do not stay silent. Then stop and listen.",
-      },
-    });
-
-    if (!sentOutput || !sentResponse) {
+    if (!sentOutput) {
       this.callbacks.onError?.(
         "Lost connection while looking something up — tap mic to reconnect."
       );
       this.setStatus("error");
+    }
+  }
+
+  private async finishToolTurn() {
+    const sentResponse = this.sendEvent({
+      type: "response.create",
+      response: {
+        instructions:
+          "A tool result was just added. Speak the answer to the technician now in one or two short sentences using only that result. Do not say you are still waiting. Then stop and listen.",
+      },
+    });
+
+    if (!sentResponse) {
+      this.callbacks.onError?.(
+        "Lost connection while looking something up — tap mic to reconnect."
+      );
+      this.setStatus("error");
+      this.suppressUserItems = false;
       return;
     }
+
+    window.setTimeout(() => {
+      if (this.closed) return;
+      this.suppressUserItems = false;
+      this.sendEvent({
+        type: "session.update",
+        session: {
+          type: "realtime",
+          audio: {
+            input: {
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.78,
+                prefix_padding_ms: 400,
+                silence_duration_ms: 900,
+                interrupt_response: true,
+                create_response: true,
+              },
+            },
+          },
+        },
+      });
+    }, 2500);
+
     this.setStatus("speaking");
   }
 }

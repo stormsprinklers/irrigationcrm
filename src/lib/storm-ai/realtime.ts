@@ -63,7 +63,7 @@ Never invent CRM facts; call tools when you need data.
 For diagnostics, walk one step at a time (test, then wait for their answer).
 When identifying a part from description or a camera frame, search the parts library before guessing.
 If a tool fails or returns nothing, say so plainly.
-After every tool call, you must speak a short result to the technician immediately—never go silent while “searching.”${videoBlock}`;
+After every tool call, you must speak a short result to the technician immediately—never go silent, and never say you are “still waiting” unless the tool result itself said it failed or timed out.${videoBlock}`;
 }
 
 export function buildRealtimeSessionConfig(opts: {
