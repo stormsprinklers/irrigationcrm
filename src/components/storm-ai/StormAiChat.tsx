@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { pageContextFromLocation } from "@/lib/storm-ai/page-context";
 import {
   StormAiRealtimeClient,
+  type StormAiPartsCardPayload,
   type StormAiRealtimeStatus,
 } from "@/lib/storm-ai/realtime-client";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ type ChatMessage = {
   content: string;
   createdAt: string;
   attachments?: ChatAttachment[];
+  partsCard?: StormAiPartsCardPayload | null;
 };
 
 type PendingImage = {
@@ -103,6 +105,69 @@ function ChatMarkdown({ text }: { text: string }) {
       })}
     </p>
   );
+}
+
+function PartsInfoCard({ card }: { card: StormAiPartsCardPayload }) {
+  const meta = [card.manufacturer, card.partNumber, card.section].filter(Boolean).join(" · ");
+  return (
+    <div className="space-y-2">
+      <p className="font-medium">{card.name}</p>
+      {card.photos.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {card.photos.map((photo) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={photo.url}
+              src={photo.url}
+              alt={photo.fileName || card.name}
+              className="h-28 w-28 rounded-md object-cover"
+            />
+          ))}
+        </div>
+      ) : null}
+      {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
+      {card.visualDescription ? (
+        <p className="text-sm whitespace-pre-wrap">{card.visualDescription}</p>
+      ) : null}
+      {card.technicalDescription ? (
+        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+          {card.technicalDescription}
+        </p>
+      ) : null}
+      {card.manualUrl ? (
+        <a
+          href={card.manualUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex text-sm font-medium text-primary underline underline-offset-2"
+        >
+          Open manual{card.manualKind === "pdf" ? " (PDF)" : ""}
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function appendPartsCardMessage(
+  prev: ChatMessage[],
+  card: StormAiPartsCardPayload
+): ChatMessage[] {
+  if (prev.some((m) => m.partsCard?.partId === card.partId && m.role === "assistant")) {
+    return prev;
+  }
+  const lines = [`**${card.name}**`];
+  const meta = [card.manufacturer, card.partNumber, card.section].filter(Boolean);
+  if (meta.length) lines.push(meta.join(" · "));
+  return [
+    ...prev,
+    {
+      id: `parts-${card.partId}-${Date.now()}`,
+      role: "assistant",
+      content: lines.join("\n"),
+      createdAt: new Date().toISOString(),
+      partsCard: card,
+    },
+  ];
 }
 
 async function fileToCompressedDataUrl(file: File): Promise<PendingImage | null> {
@@ -198,13 +263,14 @@ export function StormAiChat() {
   }, []);
 
   useEffect(() => {
+    if (!videoMode) return;
     const el = previewVideoRef.current;
     if (!el) return;
     el.srcObject = localPreviewStream;
     if (localPreviewStream) {
       void el.play().catch(() => undefined);
     }
-  }, [localPreviewStream]);
+  }, [localPreviewStream, videoMode]);
 
   function stopVoice() {
     voiceClientRef.current?.stop();
@@ -238,6 +304,7 @@ export function StormAiChat() {
       onError: (message) => toast.error(message),
       onLocalStream: (stream) => setLocalPreviewStream(stream),
       onVideoModeChange: (enabled) => setVideoMode(enabled),
+      onPartsCard: (card) => setMessages((prev) => appendPartsCardMessage(prev, card)),
       onFrameCaptured: (info) => {
         if (info.savedToJob) {
           toast.success("Frame saved to job attachments");
@@ -308,6 +375,7 @@ export function StormAiChat() {
       onError: (message) => toast.error(message),
       onLocalStream: (stream) => setLocalPreviewStream(stream),
       onVideoModeChange: (enabled) => setVideoMode(enabled),
+      onPartsCard: (card) => setMessages((prev) => appendPartsCardMessage(prev, card)),
       onFrameCaptured: (info) => {
         if (info.savedToJob) {
           toast.success("Frame saved to job attachments");
@@ -490,7 +558,11 @@ export function StormAiChat() {
                         ))}
                       </div>
                     ) : null}
-                    <ChatMarkdown text={m.content} />
+                    {m.partsCard ? (
+                      <PartsInfoCard card={m.partsCard} />
+                    ) : (
+                      <ChatMarkdown text={m.content} />
+                    )}
                   </div>
                 ))
               )}

@@ -51,7 +51,7 @@ export function buildStormAiRealtimeInstructions(opts: {
 The technician has video mode on. Still camera frames arrive automatically while they speak and periodically from the live preview (not a continuous video stream).
 When a frame arrives, look at it carefully. For part ID questions, describe what you see then call search_parts_info / get_parts_info.
 Frames are also saved to the active job when possible—you do not need a tool to save them.
-When sharing a manual from get_parts_info, tell the tech to open the manual link in chat (use the exact manualUrl as a markdown link).
+When sharing a manual from get_parts_info, tell the tech the photos and manual are already shown in the chat panel — do not invent a link.
 Ground answers in the latest frame plus tool results. Never invent part numbers or manuals.`
     : "";
 
@@ -62,7 +62,8 @@ Keep answers short and conversational—one or two sentences when possible, then
 Never invent CRM facts; call tools when you need data.
 For diagnostics, walk one step at a time (test, then wait for their answer).
 When identifying a part from description or a camera frame, you MUST call search_parts_info in the same turn—never only say that you will search.
-Do not tell the technician you are “searching” or “still waiting” unless a tool result just failed. After a tool returns, speak the answer immediately.${videoBlock}`;
+Do not tell the technician you are “searching” or “still waiting” unless a tool result just failed. After a tool returns, speak the answer immediately.
+Parts photos, technical info, and manuals appear automatically in the chat panel after a parts lookup — tell them to look there rather than promising a link you send yourself.${videoBlock}`;
 }
 
 export function buildRealtimeSessionConfig(opts: {

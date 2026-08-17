@@ -10,6 +10,7 @@ import {
   type StormAiStoredAttachment,
 } from "./attachments";
 import { runStormAiTool } from "./execute";
+import { parsePartsCardFromAttachments } from "./parts-card";
 import { stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
 import type { StormAiPageContext } from "./types";
@@ -349,6 +350,7 @@ export async function listMessages(conversationId: string) {
     content: m.content,
     createdAt: m.createdAt.toISOString(),
     attachments: serializeAttachments(m.attachmentsJson),
+    partsCard: parsePartsCardFromAttachments(m.attachmentsJson),
   }));
 }
 

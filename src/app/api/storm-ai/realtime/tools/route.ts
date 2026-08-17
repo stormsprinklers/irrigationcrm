@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { runStormAiTool } from "@/lib/storm-ai/execute";
+import {
+  buildPartsChatCard,
+  formatPartsCardMarkdown,
+} from "@/lib/storm-ai/parts-card";
 import { canUseStormAiTool } from "@/lib/storm-ai/permissions";
 import { sanitizeToolPayload } from "@/lib/storm-ai/prompt";
 
@@ -46,7 +50,8 @@ function slimRealtimeToolResult(name: string, result: unknown): unknown {
         data: {
           ...data,
           parts: slimParts,
-          note: "Speak the best match to the technician now. Call get_parts_info only if they need the full write-up or manual.",
+          note:
+            "Speak the best match now. Photos, specs, and the manual (if any) are already shown in the chat panel — tell the tech to look there. Do not invent a link.",
         },
       };
     }
@@ -75,7 +80,8 @@ function slimRealtimeToolResult(name: string, result: unknown): unknown {
           data: {
             ...data,
             part: slimPart,
-            note: "Speak these details now. If manualUrl exists, tell them to open the manual link in chat.",
+            note:
+              "Speak these details now. Photos and the manual link are already shown in the chat panel — tell the tech to open them there. Do not invent a link.",
           },
         };
       }
@@ -142,6 +148,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await runStormAiTool(user, name, args, { conversationId });
+    const chatCard = await buildPartsChatCard(user.companyId, name, result);
     const slimmed = slimRealtimeToolResult(name, result);
     const payload = sanitizeToolPayload(slimmed, 3500);
 
@@ -156,6 +163,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (chatCard) {
+      await prisma.stormAiMessage.create({
+        data: {
+          conversationId,
+          userId: user.id,
+          role: "assistant",
+          content: formatPartsCardMarkdown(chatCard),
+          attachmentsJson: [chatCard] as never,
+        },
+      });
+    }
+
     await prisma.stormAiAuditLog.create({
       data: {
         companyId: user.companyId,
@@ -169,7 +188,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(payload);
+    return NextResponse.json({
+      ...(typeof payload === "object" && payload ? payload : { result: payload }),
+      chatCard: chatCard ?? undefined,
+    });
   } catch {
     return unauthorizedResponse();
   }
