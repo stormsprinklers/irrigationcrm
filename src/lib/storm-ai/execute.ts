@@ -657,7 +657,7 @@ export async function runStormAiTool(
         if (!part) return fail("NOT_FOUND", "Part not found");
         return ok({
           part,
-          note: "Share visual/technical details and the manual link when helpful. Do not invent specs beyond this record.",
+          note: "If manualUrl is present, share it as a markdown link using the exact URL: [Open manual](manualUrl). Do not invent specs beyond this record.",
         });
       }
       case "get_vehicles": {

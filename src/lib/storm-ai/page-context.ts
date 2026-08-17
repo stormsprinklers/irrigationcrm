@@ -22,5 +22,12 @@ export function pageContextFromLocation(pathname: string, search = ""): StormAiP
   const employeeQuery = params.get("employeeId") || params.get("userId");
   if (employeeQuery) ctx.employeeId = employeeQuery;
 
+  const visitQuery = params.get("visitId");
+  if (visitQuery) ctx.visitId = visitQuery;
+  const customerQuery = params.get("customerId");
+  if (customerQuery) ctx.customerId = customerQuery;
+  const invoiceQuery = params.get("invoiceId");
+  if (invoiceQuery) ctx.invoiceId = invoiceQuery;
+
   return ctx;
 }

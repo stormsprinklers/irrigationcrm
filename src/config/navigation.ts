@@ -20,6 +20,7 @@ export const primaryNav: NavItem[] = [
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
+  { label: "Storm AI", href: "/storm-ai" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Holiday Lighting", href: "/holiday-lighting/quote" },
   { label: "Marketing", href: "/marketing" },
@@ -361,6 +362,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/vehicles") return pathname.startsWith("/vehicles");
   if (href === "/campaigns") return pathname.startsWith("/campaigns") || pathname.startsWith("/marketing");
   if (href === "/reporting") return pathname.startsWith("/reporting");
+  if (href === "/storm-ai") return pathname === "/storm-ai" || pathname.startsWith("/storm-ai/");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
   if (href === "/settings") return pathname.startsWith("/settings");
   return pathname.startsWith(href);

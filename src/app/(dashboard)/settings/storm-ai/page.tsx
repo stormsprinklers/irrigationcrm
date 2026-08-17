@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -47,14 +48,17 @@ export default function StormAiGeneralPage() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="text-lg font-semibold">General</h3>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Floating assistant on authenticated CRM pages. It only reads CRM data through
-          permission-checked tools.
+          Storm AI is a full page in the main navigation (
+          <Link href="/storm-ai" className="text-primary underline underline-offset-2">
+            /storm-ai
+          </Link>
+          ). It only reads CRM data through permission-checked tools.
         </p>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">Show Storm AI button</p>
+            <p className="text-sm font-medium">Enable Storm AI</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Blue circle in the bottom-right corner. On by default.
+              When off, the Storm AI page shows as disabled for this company. On by default.
             </p>
           </div>
           <Switch checked={showFab} onCheckedChange={setShowFab} disabled={loading} />

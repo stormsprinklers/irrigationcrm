@@ -15,6 +15,7 @@ export type StormAiRealtimeCallbacks = {
   onFrameCaptured?: (info: { savedToJob: boolean; visitId: string | null }) => void;
   /** Local camera stream for full-FPS preview (video track is NOT sent to OpenAI). */
   onLocalStream?: (stream: MediaStream | null) => void;
+  onVideoModeChange?: (enabled: boolean) => void;
 };
 
 type SessionResponse = {
@@ -24,12 +25,14 @@ type SessionResponse = {
   error?: string;
 };
 
-const FRAME_MIN_INTERVAL_MS = 2500;
+const FRAME_MIN_INTERVAL_MS = 2200;
+const FRAME_PERIODIC_MS = 3200;
 const FRAME_MAX_EDGE = 1280;
 const FRAME_JPEG_QUALITY = 0.82;
+const TOOL_TIMEOUT_MS = 25_000;
 
 const VISUAL_QUESTION_RE =
-  /\b(what|which|look|see|show|showing|this|that|valve|solenoid|controller|part|identify|tell me about|can you (see|tell))\b/i;
+  /\b(what|which|look|see|show|showing|this|that|valve|solenoid|controller|part|identify|tell me about|can you (see|tell)|manual)\b/i;
 
 /**
  * Browser WebRTC client for Storm AI voice/video.
@@ -45,9 +48,12 @@ export class StormAiRealtimeClient {
   private visitId: string | null = null;
   private videoMode = false;
   private pendingArgs: Record<string, string> = {};
+  private pendingNames: Record<string, string> = {};
+  private handledCallIds = new Set<string>();
   private closed = false;
   private lastFrameAt = 0;
   private frameInFlight = false;
+  private frameTimer: ReturnType<typeof setInterval> | null = null;
   private callbacks: StormAiRealtimeCallbacks;
 
   constructor(callbacks: StormAiRealtimeCallbacks = {}) {
@@ -62,12 +68,17 @@ export class StormAiRealtimeClient {
     return this.videoMode;
   }
 
+  get isActive() {
+    return Boolean(this.pc && !this.closed);
+  }
+
   async start(opts: {
     conversationId?: string | null;
     pageContext?: Record<string, unknown> | null;
     videoMode?: boolean;
   }) {
     this.closed = false;
+    this.handledCallIds.clear();
     this.videoMode = Boolean(opts.videoMode);
     this.visitId =
       typeof opts.pageContext?.visitId === "string" ? opts.pageContext.visitId : null;
@@ -115,15 +126,12 @@ export class StormAiRealtimeClient {
     }
 
     if (this.videoMode) {
-      this.previewVideo = document.createElement("video");
-      this.previewVideo.playsInline = true;
-      this.previewVideo.muted = true;
-      this.previewVideo.autoplay = true;
-      this.previewVideo.srcObject = this.localStream;
-      await this.previewVideo.play().catch(() => undefined);
+      await this.setupPreviewFromStream();
+      this.startPeriodicFrames();
     }
 
     this.callbacks.onLocalStream?.(this.localStream);
+    this.callbacks.onVideoModeChange?.(this.videoMode);
 
     this.dc = this.pc.createDataChannel("oai-events");
     this.dc.addEventListener("message", (event) => {
@@ -152,14 +160,77 @@ export class StormAiRealtimeClient {
     return { conversationId: this.conversationId };
   }
 
-  /** Manual snap while video mode is on. */
-  async captureFrameNow(reason = "manual") {
+  /** Turn camera on without ending the voice session (same conversation). */
+  async enableVideo() {
+    if (this.closed || !this.pc || !this.localStream) {
+      throw new Error("Start voice first");
+    }
+    if (this.videoMode) return;
+
+    const cam = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    for (const track of cam.getVideoTracks()) {
+      this.localStream.addTrack(track);
+    }
+    this.videoMode = true;
+    await this.setupPreviewFromStream();
+    this.callbacks.onLocalStream?.(this.localStream);
+    this.callbacks.onVideoModeChange?.(true);
+    this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "[Video mode enabled. Camera frames will arrive automatically while I speak. Use them for part ID and visual questions.]",
+          },
+        ],
+      },
+    });
+    this.startPeriodicFrames();
+    void this.captureAndSendFrame("video_enabled", true);
+  }
+
+  /** Turn camera off but keep the live voice session. */
+  disableVideo() {
     if (!this.videoMode) return;
-    await this.captureAndSendFrame(reason, true);
+    this.stopPeriodicFrames();
+    this.localStream?.getVideoTracks().forEach((t) => {
+      t.stop();
+      this.localStream?.removeTrack(t);
+    });
+    if (this.previewVideo) {
+      this.previewVideo.srcObject = null;
+      this.previewVideo = null;
+    }
+    this.videoMode = false;
+    this.callbacks.onLocalStream?.(this.localStream);
+    this.callbacks.onVideoModeChange?.(false);
+    this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "[Video mode off. Continue this same voice conversation without new camera frames.]",
+          },
+        ],
+      },
+    });
   }
 
   stop() {
     this.closed = true;
+    this.stopPeriodicFrames();
     try {
       this.dc?.close();
     } catch {
@@ -173,6 +244,7 @@ export class StormAiRealtimeClient {
     }
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.callbacks.onLocalStream?.(null);
+    this.callbacks.onVideoModeChange?.(false);
     if (this.previewVideo) {
       this.previewVideo.srcObject = null;
       this.previewVideo = null;
@@ -184,7 +256,35 @@ export class StormAiRealtimeClient {
     this.pc = null;
     this.dc = null;
     this.localStream = null;
+    this.videoMode = false;
     this.setStatus("ended");
+  }
+
+  private async setupPreviewFromStream() {
+    if (!this.localStream) return;
+    if (!this.previewVideo) {
+      this.previewVideo = document.createElement("video");
+      this.previewVideo.playsInline = true;
+      this.previewVideo.muted = true;
+      this.previewVideo.autoplay = true;
+    }
+    this.previewVideo.srcObject = this.localStream;
+    await this.previewVideo.play().catch(() => undefined);
+  }
+
+  private startPeriodicFrames() {
+    this.stopPeriodicFrames();
+    this.frameTimer = setInterval(() => {
+      if (!this.videoMode || this.closed) return;
+      void this.captureAndSendFrame("periodic");
+    }, FRAME_PERIODIC_MS);
+  }
+
+  private stopPeriodicFrames() {
+    if (this.frameTimer) {
+      clearInterval(this.frameTimer);
+      this.frameTimer = null;
+    }
   }
 
   private setStatus(status: StormAiRealtimeStatus) {
@@ -192,8 +292,13 @@ export class StormAiRealtimeClient {
   }
 
   private sendEvent(payload: Record<string, unknown>) {
-    if (!this.dc || this.dc.readyState !== "open") return;
-    this.dc.send(JSON.stringify(payload));
+    if (!this.dc || this.dc.readyState !== "open") return false;
+    try {
+      this.dc.send(JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private grabJpegDataUrl(): string | null {
@@ -287,9 +392,8 @@ export class StormAiRealtimeClient {
 
     if (type === "input_audio_buffer.speech_started") {
       this.setStatus("listening");
-      // Capture while they start asking about what they're showing — before VAD response.
       if (this.videoMode) {
-        void this.captureAndSendFrame("speech_started");
+        void this.captureAndSendFrame("speech_started", true);
       }
       return;
     }
@@ -305,7 +409,6 @@ export class StormAiRealtimeClient {
     }
 
     if (
-      type === "response.done" ||
       type === "response.cancelled" ||
       type === "output_audio_buffer.stopped"
     ) {
@@ -318,7 +421,6 @@ export class StormAiRealtimeClient {
     ) {
       const transcript = String(event.transcript || "").trim();
       if (transcript) this.callbacks.onTranscript?.("user", transcript);
-      // Extra frame when the question is clearly about what they are showing.
       if (this.videoMode && transcript && VISUAL_QUESTION_RE.test(transcript)) {
         void this.captureAndSendFrame("visual_question", true);
       }
@@ -334,26 +436,99 @@ export class StormAiRealtimeClient {
       return;
     }
 
+    if (type === "response.output_item.added") {
+      const item = event.item as { type?: string; call_id?: string; name?: string } | undefined;
+      if (item?.type === "function_call" && item.call_id && item.name) {
+        this.pendingNames[item.call_id] = item.name;
+        this.setStatus("tool");
+        this.callbacks.onTool?.(item.name);
+      }
+      return;
+    }
+
     if (type === "response.function_call_arguments.delta") {
       const callId = String(event.call_id || "");
+      if (!callId) return;
       this.pendingArgs[callId] =
         (this.pendingArgs[callId] || "") + String(event.delta || "");
+      const name = String(event.name || this.pendingNames[callId] || "");
+      if (name) this.pendingNames[callId] = name;
       return;
     }
 
     if (type === "response.function_call_arguments.done") {
       const callId = String(event.call_id || "");
-      const name = String(event.name || "");
+      const name = String(event.name || this.pendingNames[callId] || "");
       const argText = String(event.arguments || this.pendingArgs[callId] || "{}");
       delete this.pendingArgs[callId];
-      await this.handleToolCall(callId, name, argText);
+      delete this.pendingNames[callId];
+      if (callId && name) {
+        await this.handleToolCall(callId, name, argText);
+      }
+      return;
+    }
+
+    if (type === "response.output_item.done") {
+      const item = event.item as {
+        type?: string;
+        call_id?: string;
+        name?: string;
+        arguments?: string;
+      } | undefined;
+      if (item?.type === "function_call" && item.call_id && item.name) {
+        await this.handleToolCall(
+          item.call_id,
+          item.name,
+          String(item.arguments || this.pendingArgs[item.call_id] || "{}")
+        );
+      }
+      return;
+    }
+
+    if (type === "response.done") {
+      const response = event.response as {
+        output?: Array<{
+          type?: string;
+          call_id?: string;
+          name?: string;
+          arguments?: string;
+        }>;
+        status?: string;
+      } | undefined;
+      const outputs = response?.output ?? [];
+      for (const item of outputs) {
+        if (item.type === "function_call" && item.call_id && item.name) {
+          await this.handleToolCall(
+            item.call_id,
+            item.name,
+            String(item.arguments || "{}")
+          );
+        }
+      }
+      if (!outputs.some((o) => o.type === "function_call")) {
+        this.setStatus("listening");
+      }
     }
   }
 
   private async handleToolCall(callId: string, name: string, argText: string) {
-    if (!this.conversationId) return;
+    if (!this.conversationId || !callId || !name) return;
+    if (this.handledCallIds.has(callId)) return;
+    this.handledCallIds.add(callId);
+
     this.setStatus("tool");
     this.callbacks.onTool?.(name);
+
+    // Fresh frame before parts lookup so the model has an image in context.
+    if (
+      this.videoMode &&
+      (name === "search_parts_info" || name === "get_parts_info")
+    ) {
+      await Promise.race([
+        this.captureAndSendFrame(`before_${name}`, true),
+        new Promise<void>((resolve) => setTimeout(resolve, 1200)),
+      ]);
+    }
 
     let args: unknown = {};
     try {
@@ -363,6 +538,8 @@ export class StormAiRealtimeClient {
     }
 
     let result: unknown = { ok: false, error: "Tool request failed" };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
     try {
       const res = await fetch("/api/storm-ai/realtime/tools", {
         method: "POST",
@@ -373,13 +550,28 @@ export class StormAiRealtimeClient {
           name,
           arguments: args,
         }),
+        signal: controller.signal,
       });
-      result = await res.json().catch(() => ({ ok: false, error: "Invalid tool response" }));
-    } catch {
-      result = { ok: false, error: "Tool request failed" };
+      result = await res.json().catch(() => ({
+        ok: false,
+        error: "Invalid tool response",
+      }));
+      if (!res.ok && typeof result === "object" && result && !("error" in result)) {
+        result = { ok: false, error: `Tool failed (${res.status})` };
+      }
+    } catch (err) {
+      const timedOut = err instanceof Error && err.name === "AbortError";
+      result = {
+        ok: false,
+        error: timedOut
+          ? "Tool timed out — tell the tech briefly and ask them to continue."
+          : "Tool request failed",
+      };
+    } finally {
+      clearTimeout(timer);
     }
 
-    this.sendEvent({
+    const sentOutput = this.sendEvent({
       type: "conversation.item.create",
       item: {
         type: "function_call_output",
@@ -387,14 +579,22 @@ export class StormAiRealtimeClient {
         output: JSON.stringify(result),
       },
     });
-    this.sendEvent({
+    const sentResponse = this.sendEvent({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
         instructions:
-          "Continue speaking briefly with the technician using the tool result. Then stop and listen.",
+          "You just received a tool result. Speak a short, clear answer to the technician now using that result. Do not stay silent. Then stop and listen.",
       },
     });
+
+    if (!sentOutput || !sentResponse) {
+      this.callbacks.onError?.(
+        "Lost connection while looking something up — tap mic to reconnect."
+      );
+      this.setStatus("error");
+      return;
+    }
     this.setStatus("speaking");
   }
 }

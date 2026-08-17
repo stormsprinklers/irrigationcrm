@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
+import { absoluteBlobProxyUrl, blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 
 export const PART_MANUAL_LINK_MIME = "text/uri-list";
 
@@ -22,46 +22,22 @@ export function normalizeManualLink(raw: string): string | null {
   }
 }
 
-export function resolveManualUrl(storedUrl: string | null, mimeType: string | null) {
+function resolveStoredBlobUrl(storedUrl: string, absolute: boolean) {
+  return (absolute ? absoluteBlobProxyUrl(storedUrl) : blobProxyUrl(storedUrl)) ?? storedUrl;
+}
+
+export function resolveManualUrl(
+  storedUrl: string | null,
+  mimeType: string | null,
+  absolute = false
+) {
   if (!storedUrl) return null;
   if (isPartManualLink(mimeType, storedUrl)) return storedUrl;
-  return blobProxyUrl(storedUrl) ?? storedUrl;
+  return resolveStoredBlobUrl(storedUrl, absolute);
 }
 
-export function serializePartPhoto(photo: {
-  id: string;
-  blobUrl: string;
-  pathname: string;
-  fileName: string;
-  mimeType: string;
-  alt: string | null;
-  sortOrder: number;
-}) {
-  return {
-    id: photo.id,
-    fileName: photo.fileName,
-    mimeType: photo.mimeType,
-    alt: photo.alt,
-    sortOrder: photo.sortOrder,
-    url: blobProxyUrl(photo.blobUrl) ?? photo.blobUrl,
-  };
-}
-
-export function serializePart(part: {
-  id: string;
-  sectionId: string;
-  name: string;
-  manufacturer: string | null;
-  partNumber: string | null;
-  visualDescription: string | null;
-  technicalDescription: string | null;
-  manualUrl: string | null;
-  manualFileName: string | null;
-  manualMimeType: string | null;
-  active: boolean;
-  sortOrder: number;
-  section?: { id: string; name: string } | null;
-  photos?: Array<{
+export function serializePartPhoto(
+  photo: {
     id: string;
     blobUrl: string;
     pathname: string;
@@ -69,8 +45,47 @@ export function serializePart(part: {
     mimeType: string;
     alt: string | null;
     sortOrder: number;
-  }>;
-}) {
+  },
+  absolute = false
+) {
+  return {
+    id: photo.id,
+    fileName: photo.fileName,
+    mimeType: photo.mimeType,
+    alt: photo.alt,
+    sortOrder: photo.sortOrder,
+    url: resolveStoredBlobUrl(photo.blobUrl, absolute),
+  };
+}
+
+export function serializePart(
+  part: {
+    id: string;
+    sectionId: string;
+    name: string;
+    manufacturer: string | null;
+    partNumber: string | null;
+    visualDescription: string | null;
+    technicalDescription: string | null;
+    manualUrl: string | null;
+    manualFileName: string | null;
+    manualMimeType: string | null;
+    active: boolean;
+    sortOrder: number;
+    section?: { id: string; name: string } | null;
+    photos?: Array<{
+      id: string;
+      blobUrl: string;
+      pathname: string;
+      fileName: string;
+      mimeType: string;
+      alt: string | null;
+      sortOrder: number;
+    }>;
+  },
+  opts?: { absoluteUrls?: boolean }
+) {
+  const absolute = opts?.absoluteUrls === true;
   const manualIsLink = isPartManualLink(part.manualMimeType, part.manualUrl);
   return {
     id: part.id,
@@ -81,7 +96,7 @@ export function serializePart(part: {
     partNumber: part.partNumber,
     visualDescription: part.visualDescription,
     technicalDescription: part.technicalDescription,
-    manualUrl: resolveManualUrl(part.manualUrl, part.manualMimeType),
+    manualUrl: resolveManualUrl(part.manualUrl, part.manualMimeType, absolute),
     manualFileName: part.manualFileName,
     manualMimeType: part.manualMimeType,
     manualKind: part.manualUrl ? (manualIsLink ? ("link" as const) : ("pdf" as const)) : null,
@@ -90,7 +105,7 @@ export function serializePart(part: {
     photos: (part.photos ?? [])
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map(serializePartPhoto),
+      .map((p) => serializePartPhoto(p, absolute)),
   };
 }
 
@@ -149,6 +164,7 @@ export async function searchPartsInfo(companyId: string, query: string, take = 1
       ? part.technicalDescription.slice(0, 400)
       : null,
     hasManual: Boolean(part.manualUrl),
+    manualUrl: resolveManualUrl(part.manualUrl, part.manualMimeType, true),
     manualKind: part.manualUrl
       ? isPartManualLink(part.manualMimeType, part.manualUrl)
         ? ("link" as const)
@@ -157,7 +173,7 @@ export async function searchPartsInfo(companyId: string, query: string, take = 1
     photoCount: part.photos.length,
     photos: part.photos.map((p) => ({
       id: p.id,
-      url: blobProxyUrl(p.blobUrl) ?? p.blobUrl,
+      url: absoluteBlobProxyUrl(p.blobUrl) ?? p.blobUrl,
       fileName: p.fileName,
     })),
   }));
@@ -172,5 +188,5 @@ export async function getPartsInfoDetail(companyId: string, partId: string) {
     },
   });
   if (!part) return null;
-  return serializePart(part);
+  return serializePart(part, { absoluteUrls: true });
 }

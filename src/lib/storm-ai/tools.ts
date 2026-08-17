@@ -356,7 +356,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "get_parts_info",
       description:
-        "Load full details for one parts-info entry: visual description, technical description, photo URLs, and manual (PDF or external URL). Call after search_parts_info when you need the complete write-up or manual. Share manualUrl with the tech when present.",
+        "Load full details for one parts-info entry: visual description, technical description, photo URLs, and manual (PDF or external URL). Call after search_parts_info when you need the complete write-up or manual. When manualUrl is set, share it as a markdown link [Open manual](manualUrl) using that exact URL.",
       parameters: {
         type: "object",
         additionalProperties: false,

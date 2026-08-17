@@ -7,6 +7,45 @@ import { sanitizeToolPayload } from "@/lib/storm-ai/prompt";
 
 export const maxDuration = 60;
 
+/** Keep realtime tool payloads small so the model can speak again quickly. */
+function slimRealtimeToolResult(name: string, result: unknown): unknown {
+  if (!result || typeof result !== "object") return result;
+  const root = result as Record<string, unknown>;
+
+  if (name === "search_parts_info" && Array.isArray(root.parts)) {
+    return {
+      ...root,
+      parts: root.parts.map((row) => {
+        if (!row || typeof row !== "object") return row;
+        const part = row as Record<string, unknown>;
+        const { photos: _photos, ...rest } = part;
+        return {
+          ...rest,
+          photoCount: Array.isArray(part.photos) ? part.photos.length : part.photoCount ?? 0,
+        };
+      }),
+    };
+  }
+
+  if (name === "get_parts_info" && root.part && typeof root.part === "object") {
+    const part = root.part as Record<string, unknown>;
+    const photos = Array.isArray(part.photos) ? part.photos : [];
+    return {
+      ...root,
+      part: {
+        ...part,
+        photos: photos.slice(0, 2).map((p) => {
+          if (!p || typeof p !== "object") return p;
+          const photo = p as Record<string, unknown>;
+          return { id: photo.id, url: photo.url, fileName: photo.fileName };
+        }),
+      },
+    };
+  }
+
+  return result;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
@@ -63,7 +102,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await runStormAiTool(user, name, args, { conversationId });
-    const payload = sanitizeToolPayload(result, 8000);
+    const slimmed = slimRealtimeToolResult(name, result);
+    const payload = sanitizeToolPayload(slimmed, 3500);
 
     await prisma.stormAiMessage.create({
       data: {

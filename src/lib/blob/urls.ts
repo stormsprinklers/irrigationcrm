@@ -52,6 +52,16 @@ export function blobProxyUrl(storedUrl: string | null | undefined) {
   return `/api/blob?pathname=${encodeURIComponent(pathname)}`;
 }
 
+/** Absolute CRM URL for a private blob proxy path (or pass-through https). */
+export function absoluteBlobProxyUrl(storedUrl: string | null | undefined) {
+  const proxied = blobProxyUrl(storedUrl);
+  if (!proxied) return undefined;
+  if (/^https?:\/\//i.test(proxied)) return proxied;
+  const origin = appOrigin();
+  if (!origin) return proxied;
+  return `${origin}${proxied.startsWith("/") ? proxied : `/${proxied}`}`;
+}
+
 /**
  * Absolute URL that email clients / Google can fetch without a CRM session.
  * Non-blob URLs are returned unchanged.
