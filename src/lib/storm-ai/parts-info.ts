@@ -1,5 +1,32 @@
 import { prisma } from "@/lib/prisma";
-import { blobProxyUrl } from "@/lib/blob/urls";
+import { blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
+
+export const PART_MANUAL_LINK_MIME = "text/uri-list";
+
+export function isPartManualLink(mimeType: string | null | undefined, url: string | null | undefined) {
+  if (!url) return false;
+  if (mimeType === PART_MANUAL_LINK_MIME || mimeType === "link") return true;
+  return /^https?:\/\//i.test(url) && !isBlobStorageUrl(url);
+}
+
+export function normalizeManualLink(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProtocol);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveManualUrl(storedUrl: string | null, mimeType: string | null) {
+  if (!storedUrl) return null;
+  if (isPartManualLink(mimeType, storedUrl)) return storedUrl;
+  return blobProxyUrl(storedUrl) ?? storedUrl;
+}
 
 export function serializePartPhoto(photo: {
   id: string;
@@ -44,6 +71,7 @@ export function serializePart(part: {
     sortOrder: number;
   }>;
 }) {
+  const manualIsLink = isPartManualLink(part.manualMimeType, part.manualUrl);
   return {
     id: part.id,
     sectionId: part.sectionId,
@@ -53,9 +81,10 @@ export function serializePart(part: {
     partNumber: part.partNumber,
     visualDescription: part.visualDescription,
     technicalDescription: part.technicalDescription,
-    manualUrl: part.manualUrl ? blobProxyUrl(part.manualUrl) ?? part.manualUrl : null,
+    manualUrl: resolveManualUrl(part.manualUrl, part.manualMimeType),
     manualFileName: part.manualFileName,
     manualMimeType: part.manualMimeType,
+    manualKind: part.manualUrl ? (manualIsLink ? ("link" as const) : ("pdf" as const)) : null,
     active: part.active,
     sortOrder: part.sortOrder,
     photos: (part.photos ?? [])
@@ -120,6 +149,11 @@ export async function searchPartsInfo(companyId: string, query: string, take = 1
       ? part.technicalDescription.slice(0, 400)
       : null,
     hasManual: Boolean(part.manualUrl),
+    manualKind: part.manualUrl
+      ? isPartManualLink(part.manualMimeType, part.manualUrl)
+        ? ("link" as const)
+        : ("pdf" as const)
+      : null,
     photoCount: part.photos.length,
     photos: part.photos.map((p) => ({
       id: p.id,

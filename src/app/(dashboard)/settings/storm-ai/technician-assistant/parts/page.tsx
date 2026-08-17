@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { FileText, Link2, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -30,6 +30,8 @@ type Part = {
   technicalDescription: string | null;
   manualUrl: string | null;
   manualFileName: string | null;
+  manualMimeType?: string | null;
+  manualKind?: "pdf" | "link" | null;
   active: boolean;
   photos: PartPhoto[];
 };
@@ -44,6 +46,8 @@ export default function TechAssistPartsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [manualLinkInput, setManualLinkInput] = useState("");
+  const [savingManualLink, setSavingManualLink] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,9 +102,18 @@ export default function TechAssistPartsPage() {
           sectionId: prev.sectionId,
         };
       }
-      return { ...part };
+      return part;
     });
   }, [parts, selectedPartId]);
+
+  useEffect(() => {
+    const part = parts.find((p) => p.id === selectedPartId) ?? null;
+    if (part?.manualKind === "link" && part.manualUrl) {
+      setManualLinkInput(part.manualUrl);
+    } else {
+      setManualLinkInput("");
+    }
+  }, [selectedPartId]); // eslint-disable-line react-hooks/exhaustive-deps -- sync on part switch only
 
   /** Persist name/descriptions without clobbering the draft from a subsequent reload. */
   async function persistPartFields(draft: Part) {
@@ -271,6 +284,7 @@ export default function TechAssistPartsPage() {
       }
       await loadParts(selectedSectionId);
       toast.success("Manual uploaded");
+      setManualLinkInput("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -295,7 +309,37 @@ export default function TechAssistPartsPage() {
       toast.error("Could not remove manual");
       return;
     }
+    setManualLinkInput("");
     await loadParts(selectedSectionId);
+  }
+
+  async function saveManualLink() {
+    if (!partDraft) return;
+    const trimmed = manualLinkInput.trim();
+    if (!trimmed) {
+      toast.error("Paste a manual URL first");
+      return;
+    }
+    setSavingManualLink(true);
+    try {
+      await persistPartFields(partDraft);
+      const res = await fetch(`/api/settings/storm-ai/parts/${partDraft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manualLink: trimmed }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Part & { error?: string };
+      if (!res.ok) {
+        throw new Error(data.error ?? "Could not save link");
+      }
+      if (data.manualUrl) setManualLinkInput(data.manualUrl);
+      await loadParts(selectedSectionId);
+      toast.success("Manual link saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save link");
+    } finally {
+      setSavingManualLink(false);
+    }
   }
 
   if (loading) {
@@ -556,8 +600,8 @@ export default function TechAssistPartsPage() {
               </div>
 
               <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-medium">Manual (PDF)</p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Manual (PDF or link)</p>
                   <Button
                     type="button"
                     size="sm"
@@ -576,23 +620,55 @@ export default function TechAssistPartsPage() {
                     onChange={(e) => void uploadManual(e.target.files)}
                   />
                 </div>
+                <div className="mb-2 flex gap-2">
+                  <Input
+                    value={manualLinkInput}
+                    onChange={(e) => setManualLinkInput(e.target.value)}
+                    placeholder="https://… manufacturer manual URL"
+                    className="text-sm"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={savingManualLink || uploading}
+                    onClick={() => void saveManualLink()}
+                  >
+                    {savingManualLink ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Link2 className="mr-1 h-3 w-3" />
+                    )}
+                    Save link
+                  </Button>
+                </div>
                 {partDraft.manualUrl ? (
                   <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
                     <a
                       href={partDraft.manualUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-2 text-primary hover:underline"
+                      className="inline-flex min-w-0 items-center gap-2 text-primary hover:underline"
                     >
-                      <FileText className="h-4 w-4" />
-                      {partDraft.manualFileName || "Manual.pdf"}
+                      {partDraft.manualKind === "link" ? (
+                        <Link2 className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <FileText className="h-4 w-4 shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {partDraft.manualKind === "link"
+                          ? partDraft.manualFileName || partDraft.manualUrl
+                          : partDraft.manualFileName || "Manual.pdf"}
+                      </span>
                     </a>
                     <Button type="button" size="sm" variant="ghost" onClick={() => void clearManual()}>
                       Remove
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No manual uploaded.</p>
+                  <p className="text-xs text-muted-foreground">
+                    No manual yet — upload a PDF or paste a link above.
+                  </p>
                 )}
               </div>
 

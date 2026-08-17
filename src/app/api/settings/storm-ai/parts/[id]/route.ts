@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { del } from "@vercel/blob";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { serializePart } from "@/lib/storm-ai/parts-info";
+import { isBlobStorageUrl } from "@/lib/blob/urls";
+import {
+  normalizeManualLink,
+  PART_MANUAL_LINK_MIME,
+  serializePart,
+} from "@/lib/storm-ai/parts-info";
 import { prisma } from "@/lib/prisma";
 
 function forbid(role: string) {
@@ -52,6 +57,50 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const clearManual = body.clearManual === true;
+    const manualLinkRaw =
+      typeof body.manualLink === "string"
+        ? body.manualLink
+        : body.manualLink === null
+          ? ""
+          : undefined;
+
+    let manualLinkUpdate: {
+      manualUrl: string | null;
+      manualFileName: string | null;
+      manualMimeType: string | null;
+    } | null = null;
+
+    if (clearManual) {
+      manualLinkUpdate = { manualUrl: null, manualFileName: null, manualMimeType: null };
+    } else if (manualLinkRaw !== undefined) {
+      const normalized = normalizeManualLink(manualLinkRaw);
+      if (manualLinkRaw.trim() && !normalized) {
+        return NextResponse.json({ error: "Enter a valid http(s) manual URL" }, { status: 400 });
+      }
+      if (normalized) {
+        let label: string | null = null;
+        try {
+          label = new URL(normalized).hostname;
+        } catch {
+          label = "Manual link";
+        }
+        manualLinkUpdate = {
+          manualUrl: normalized,
+          manualFileName:
+            typeof body.manualFileName === "string" && body.manualFileName.trim()
+              ? body.manualFileName.trim()
+              : label,
+          manualMimeType: PART_MANUAL_LINK_MIME,
+        };
+      } else {
+        manualLinkUpdate = { manualUrl: null, manualFileName: null, manualMimeType: null };
+      }
+    }
+
+    const previousManualUrl = existing.manualUrl;
+    const previousWasBlob = Boolean(
+      previousManualUrl && isBlobStorageUrl(previousManualUrl)
+    );
 
     const part = await prisma.techAssistPart.update({
       where: { id },
@@ -88,9 +137,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           : {}),
         ...(typeof body.active === "boolean" ? { active: body.active } : {}),
         ...(typeof body.sortOrder === "number" ? { sortOrder: body.sortOrder } : {}),
-        ...(clearManual
-          ? { manualUrl: null, manualFileName: null, manualMimeType: null }
-          : {}),
+        ...(manualLinkUpdate ?? {}),
       },
       include: {
         section: { select: { id: true, name: true } },
@@ -98,9 +145,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
-    if (clearManual && existing.manualUrl && process.env.BLOB_READ_WRITE_TOKEN) {
+    const shouldDeletePreviousBlob =
+      previousWasBlob &&
+      previousManualUrl &&
+      process.env.BLOB_READ_WRITE_TOKEN &&
+      (clearManual ||
+        (manualLinkUpdate && manualLinkUpdate.manualUrl !== previousManualUrl));
+
+    if (shouldDeletePreviousBlob) {
       try {
-        await del(existing.manualUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        await del(previousManualUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
       } catch {
         /* best-effort */
       }
@@ -130,7 +184,9 @@ export async function DELETE(_request: Request, { params }: Params) {
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       const urls = [
         ...existing.photos.map((p) => p.blobUrl),
-        ...(existing.manualUrl ? [existing.manualUrl] : []),
+        ...(existing.manualUrl && isBlobStorageUrl(existing.manualUrl)
+          ? [existing.manualUrl]
+          : []),
       ];
       for (const url of urls) {
         try {

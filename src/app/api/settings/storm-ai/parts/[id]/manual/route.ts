@@ -6,7 +6,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
-import { blobProxyUrl } from "@/lib/blob/urls";
+import { blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 import { prisma } from "@/lib/prisma";
 
 function forbid(role: string) {
@@ -57,7 +57,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
-    if (previousUrl && process.env.BLOB_READ_WRITE_TOKEN) {
+    if (
+      previousUrl &&
+      isBlobStorageUrl(previousUrl) &&
+      process.env.BLOB_READ_WRITE_TOKEN
+    ) {
       try {
         await del(previousUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
       } catch {
@@ -69,6 +73,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       manualUrl: blobProxyUrl(updated.manualUrl) ?? updated.manualUrl,
       manualFileName: updated.manualFileName,
       manualMimeType: updated.manualMimeType,
+      manualKind: "pdf" as const,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
