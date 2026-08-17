@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
-    return NextResponse.json({ parts: parts.map(serializePart) });
+    return NextResponse.json({ parts: parts.map((part) => serializePart(part)) });
   } catch {
     return unauthorizedResponse();
   }
