@@ -27,11 +27,17 @@ export function canAccessBlobPath(companyId: string, pathname: string) {
   return gbpMatch !== null && gbpMatch[1] === companyId;
 }
 
-/** Paths safe to expose without auth (email logos, Google-fetchable marketing media, portal offers). */
+/** Paths safe to expose without auth (email logos, marketing media, portal offers, present photos). */
 export function canPublicAccessBlobPath(pathname: string) {
-  return /^(company-email|company-brand|company-bimi|company-holiday|gbp\/local-posts|portal-offers|employees|media)\/[^/]+\//.test(
+  return /^(company-email|company-brand|company-bimi|company-holiday|gbp\/local-posts|portal-offers|employees|media|price-book)\/[^/]+\//.test(
     pathname
   );
+}
+
+/** Customer-facing estimate option photo URL (Present mode, portal, mobile). */
+export function estimateOptionPhotoUrl(storedUrl: string | null | undefined) {
+  if (!storedUrl?.trim()) return null;
+  return absolutePublicBlobUrl(storedUrl) ?? storedUrl.trim();
 }
 
 function appOrigin() {

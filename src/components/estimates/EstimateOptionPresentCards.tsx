@@ -196,12 +196,19 @@ export function EstimateOptionPresentCards({
                     <h3 className="text-lg font-semibold">{option.label}</h3>
                   )}
                 </div>
-                {option.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={option.photoUrl} alt="" className="mt-3 h-40 w-full object-cover" />
-                ) : (
-                  <div className="mt-3 h-40 w-full bg-muted" />
-                )}
+                <div className="relative mt-3 h-40 w-full overflow-hidden bg-muted">
+                  {option.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={option.photoUrl}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                </div>
                 <div className="flex flex-1 flex-col px-4 py-3">
                   {option.description ? (
                     <p

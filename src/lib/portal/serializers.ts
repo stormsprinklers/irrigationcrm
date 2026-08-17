@@ -1,7 +1,7 @@
 import type { VisitStatus } from "@prisma/client";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { toNumber } from "@/lib/visits/totals";
-import { absolutePublicBlobUrl } from "@/lib/blob/urls";
+import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
 /** Portal visit detail — only customer-safe fields (no internal notes). */
@@ -188,9 +188,7 @@ export function serializePortalEstimate(estimate: {
       letter: option.letter,
       label: option.label,
       description: option.description ?? null,
-      photoUrl: option.photoUrl
-        ? absolutePublicBlobUrl(option.photoUrl) ?? option.photoUrl
-        : null,
+      photoUrl: estimateOptionPhotoUrl(option.photoUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
       subtotal: toNumber(option.subtotal as never),

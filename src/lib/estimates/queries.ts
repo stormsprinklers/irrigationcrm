@@ -1,7 +1,7 @@
 import { EstimateStatus, Prisma } from "@prisma/client";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { ensureEstimateOptions, serializeOption } from "@/lib/estimates/options";
-import { absolutePublicBlobUrl } from "@/lib/blob/urls";
+import { estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { EstimateDTO, EstimateListItem } from "./types";
@@ -52,7 +52,7 @@ export function serializeEstimate(
       option,
       estimate.estimateNumber,
       optionCount,
-      option.photoUrl ? absolutePublicBlobUrl(option.photoUrl) ?? option.photoUrl : null
+      option.photoUrl ? estimateOptionPhotoUrl(option.photoUrl) : null
     )
   );
 
