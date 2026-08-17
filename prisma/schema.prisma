@@ -3108,6 +3108,8 @@ model EstimateOption {
   label         String   @default("Option")
   /// Short customer-facing copy; AI fills this the first time Present is opened if empty.
   description   String?  @db.Text
+  /// Staff-only notes the AI uses for customer copy and photo matching. Never shown to customers.
+  internalNotes String?  @db.Text
   photoUrl      String?
   photoAssetId  String?
   declinedAt    DateTime?

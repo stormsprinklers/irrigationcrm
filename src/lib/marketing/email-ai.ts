@@ -7,6 +7,7 @@ import {
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
 import type { CampaignAllowedLink } from "@/lib/marketing/campaign-links";
+import { buildCompanySignatureHtml } from "@/lib/inbox/company-email-signature";
 
 export type EmailBrandPalette = {
   /** Main CTA / accent */
@@ -38,7 +39,7 @@ function formatAllowedLinks(links: CampaignAllowedLink[]) {
 function stripDisallowedHrefs(html: string, allowedUrls: Set<string>) {
   return html.replace(/\bhref\s*=\s*(["'])(.*?)\1/gi, (full, quote: string, href: string) => {
     const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:")) {
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("mailto:") || trimmed.startsWith("tel:")) {
       return full;
     }
     if (allowedUrls.has(trimmed)) return full;
@@ -66,6 +67,10 @@ export async function generateCampaignEmail(params: {
   companyPhone?: string | null;
   companyEmail?: string | null;
   companyWebsite?: string | null;
+  companyAddress?: string | null;
+  companyCity?: string | null;
+  companyState?: string | null;
+  companyZip?: string | null;
 }) {
   const apiKey = requireOpenAIApiKey();
   const existing = params.existingHtml?.trim() ?? "";
@@ -73,10 +78,17 @@ export async function generateCampaignEmail(params: {
   const templateId = isEmailTemplateId(params.templateId) ? params.templateId : null;
   const allowedLinks = params.allowedLinks ?? [];
   const imageUrls = (params.imageUrls ?? []).filter(Boolean);
+  const websiteRaw = params.companyWebsite?.trim();
+  const websiteUrl = websiteRaw
+    ? /^https?:\/\//i.test(websiteRaw)
+      ? websiteRaw
+      : `https://${websiteRaw}`
+    : null;
   const allowedUrlSet = new Set<string>([
     ...allowedLinks.map((l) => l.url),
     ...imageUrls,
     ...(params.logoUrl ? [params.logoUrl] : []),
+    ...(websiteUrl ? [websiteUrl] : []),
   ]);
 
   const primary = normalizeHex(params.brandPalette?.primary, stormBrand.sky);
@@ -117,6 +129,10 @@ ${formatAllowedLinks(allowedLinks)}
             phone: params.companyPhone,
             email: params.companyEmail,
             website: params.companyWebsite,
+            address: params.companyAddress,
+            city: params.companyCity,
+            state: params.companyState,
+            zip: params.companyZip,
           },
         })
       : null;
@@ -141,8 +157,8 @@ bodyHtml must be a complete responsive marketing email using table-based layout 
 Style CTA buttons with primary ${primary}. Use secondary ${secondary} for headers.
 ${
   skeleton
-    ? `A TEMPLATE SKELETON is provided. Replace placeholders like {{HEADLINE}}, {{INTRO}}, {{BODY}}, {{BODY_2}}, {{OFFER}}, {{GREETING}}, {{CLOSING}}, {{CTA}}, {{FINE_PRINT}} with real content. Keep the overall layout and brand colors. For letter templates, keep the signature block (logo/company/contact) unchanged and write plain letter prose. For {{CTA}}, output a centered table-based button using ONLY an allowed link URL (omit CTA entirely for letter templates).`
-    : `Include: compelling headline, short paragraphs, one clear call-to-action button, and a brief footer.`
+    ? `A TEMPLATE SKELETON is provided. Replace placeholders like {{HEADLINE}}, {{INTRO}}, {{BODY}}, {{BODY_2}}, {{OFFER}}, {{GREETING}}, {{CLOSING}}, {{CTA}}, {{FINE_PRINT}} with real content. Keep the overall layout and brand colors. Keep the signature/footer block (company name and contact info) unchanged. For {{CTA}}, output a centered table-based button using ONLY an allowed link URL (omit CTA entirely for letter templates).`
+    : `Include: compelling headline, short paragraphs, one clear call-to-action button, and a footer with the company name plus phone, email, website, and address when provided.`
 }
 ${linkRules}
 Do not include markdown fences or extra commentary.`;
@@ -201,7 +217,7 @@ ${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
   bodyHtml = stripDisallowedHrefs(bodyHtml, allowedUrlSet);
 
   if (!isEdit && !looksLikeFullEmail(bodyHtml) && !skeleton) {
-    bodyHtml = wrapBrandedEmail(bodyHtml, params.companyName, { primary, secondary });
+    bodyHtml = wrapBrandedEmail(bodyHtml, params, { primary, secondary });
   }
 
   const subject = parsed.subject ?? params.subject ?? "News from " + params.companyName;
@@ -216,10 +232,32 @@ function looksLikeFullEmail(html: string) {
 
 function wrapBrandedEmail(
   innerHtml: string,
-  companyName: string,
+  company: {
+    companyName: string;
+    companyPhone?: string | null;
+    companyEmail?: string | null;
+    companyWebsite?: string | null;
+    companyAddress?: string | null;
+    companyCity?: string | null;
+    companyState?: string | null;
+    companyZip?: string | null;
+  },
   colors: { primary: string; secondary: string }
 ) {
   const logoUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}${stormBrand.logoPath}`;
+  const signature = buildCompanySignatureHtml(
+    {
+      companyName: company.companyName,
+      phone: company.companyPhone,
+      supportEmail: company.companyEmail,
+      website: company.companyWebsite,
+      address: company.companyAddress,
+      city: company.companyCity,
+      state: company.companyState,
+      zip: company.companyZip,
+    },
+    { align: "center" }
+  );
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -230,7 +268,7 @@ function wrapBrandedEmail(
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;">
           <tr>
             <td style="background-color:${colors.secondary};padding:24px;text-align:center;">
-              <img src="${logoUrl}" alt="${companyName}" width="180" style="max-width:180px;height:auto;" />
+              <img src="${logoUrl}" alt="${escapeAttr(company.companyName)}" width="180" style="max-width:180px;height:auto;" />
             </td>
           </tr>
           <tr>
@@ -239,9 +277,9 @@ function wrapBrandedEmail(
             </td>
           </tr>
           <tr>
-            <td style="background-color:${colors.primary}22;padding:20px 28px;text-align:center;font-size:12px;color:#64748b;">
-              <p style="margin:0 0 8px;">${companyName}</p>
-              <p style="margin:0;">You're receiving this because you're a valued customer.</p>
+            <td style="background-color:${colors.primary}22;padding:12px 28px 20px;">
+              ${signature}
+              <p style="margin:12px 0 0;font-size:12px;color:#64748b;text-align:center;">You're receiving this because you're a valued customer.</p>
             </td>
           </tr>
         </table>
@@ -250,4 +288,13 @@ function wrapBrandedEmail(
   </table>
 </body>
 </html>`;
+}
+
+function escapeAttr(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

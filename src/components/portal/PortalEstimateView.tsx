@@ -75,11 +75,29 @@ type CompanyBranding = {
   emailLogoUrl: string | null;
   estimateWarrantyText?: string | null;
   financingUrl?: string | null;
+  termsOfServiceUrl?: string | null;
+  privacyPolicyUrl?: string | null;
   features: Record<string, boolean>;
 };
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+function LegalDocLink({ href, children }: { href?: string | null; children: string }) {
+  if (href?.trim()) {
+    return (
+      <a
+        href={href.trim()}
+        target="_blank"
+        rel="noreferrer"
+        className="font-medium text-[#4C9BC8] underline underline-offset-2"
+      >
+        {children}
+      </a>
+    );
+  }
+  return <span className="font-medium">{children}</span>;
 }
 
 function techPhotoSrc(photoUrl: string | null | undefined) {
@@ -97,7 +115,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   const [selectedTier, setSelectedTier] = useState<"STANDARD" | "PREMIUM">("STANDARD");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
-  const [decidingId, setDecidingId] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [financingSending, setFinancingSending] = useState(false);
@@ -157,20 +174,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     return estimate.options.find((o) => o.id === selectedOptionId) ?? estimate.options[0] ?? null;
   }, [estimate, selectedOptionId]);
 
-  const visibleLineItems = useMemo(() => {
-    if (!estimate) return [];
-    if (!activeOption) return estimate.lineItems;
-    return estimate.lineItems.filter(
-      (item) => !item.optionId || item.optionId === activeOption.id
-    );
-  }, [estimate, activeOption]);
-
-  const visibleDiscounts = useMemo(() => {
-    if (!estimate?.discounts?.length) return [];
-    if (!activeOption) return estimate.discounts;
-    return estimate.discounts.filter((d) => !d.optionId || d.optionId === activeOption.id);
-  }, [estimate, activeOption]);
-
   function displayTotal() {
     if (!estimate) return 0;
     if (activeOption) return activeOption.total;
@@ -178,12 +181,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
       return estimate.premiumOptionTotal;
     }
     return estimate.total;
-  }
-
-  function displaySubtotal() {
-    if (!estimate) return 0;
-    if (activeOption) return activeOption.subtotal;
-    return estimate.subtotal;
   }
 
   function getPoint(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
@@ -269,26 +266,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
       toast.error(err instanceof Error ? err.message : "Failed to sign");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function declineOption(optionId: string) {
-    if (!estimate) return;
-    setDecidingId(optionId);
-    try {
-      const res = await fetch(`/api/portal/estimates/${token}/decline`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ optionId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not decline option");
-      setEstimate(data.estimate);
-      toast.success("Option declined");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setDecidingId(null);
     }
   }
 
@@ -481,14 +458,8 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
               }))}
               lineItems={estimate.lineItems}
               discounts={estimate.discounts ?? []}
-              canDecide={canSign}
-              onApprove={(optionId) => {
-                setSelectedOptionId(optionId);
-                document.getElementById("portal-estimate-sign")?.scrollIntoView({ behavior: "smooth" });
-                toast.success("Sign below to approve this option.");
-              }}
-              onDecline={declineOption}
-              decidingId={decidingId}
+              selectedId={selectedOptionId}
+              onSelect={setSelectedOptionId}
             />
           </section>
         ) : canSign && estimate.premiumOptionTotal != null ? (
@@ -516,87 +487,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
             </button>
           </section>
         ) : null}
-
-        <section className="rounded-lg border bg-white p-4">
-          <h2 className="mb-3 text-sm font-medium">Line items</h2>
-          {visibleLineItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No line items on this estimate.</p>
-          ) : (
-            <ul className="space-y-3">
-              {visibleLineItems.map((item, index) => (
-                <li key={`${item.name}-${index}`} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium">
-                        {item.name}
-                        {item.itemType === "MATERIAL" ? (
-                          <span className="ml-2 text-xs font-normal uppercase tracking-wide text-muted-foreground">
-                            Material
-                          </span>
-                        ) : null}
-                      </p>
-                      {item.description ? (
-                        <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">
-                          {item.description}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {item.quantity === 1 && (!item.unit || item.unit === "each")
-                          ? null
-                          : (
-                              <>
-                                Qty {item.quantity}
-                                {item.unit ? ` ${item.unit}` : ""} ×{" "}
-                                {formatCurrency(item.unitPrice)}
-                              </>
-                            )}
-                      </p>
-                    </div>
-                    <p className="shrink-0 font-medium">{formatCurrency(item.total)}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {visibleDiscounts.length > 0 ? (
-            <div className="mt-4 space-y-2 border-t pt-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Discounts
-              </p>
-              {visibleDiscounts.map((discount, index) => (
-                <div key={`${discount.label}-${index}`} className="flex justify-between gap-3 text-sm">
-                  <span>{discount.label?.trim() || "Discount"}</span>
-                  <span className="text-emerald-700">
-                    −
-                    {discount.type === "PERCENT"
-                      ? `${discount.amount}%`
-                      : formatCurrency(discount.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="mt-4 space-y-1 border-t pt-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{formatCurrency(displaySubtotal())}</span>
-            </div>
-            {(activeOption?.discountTotal ?? estimate.discountTotal) > 0 ? (
-              <div className="flex justify-between text-emerald-700">
-                <span>Discounts</span>
-                <span>
-                  −{formatCurrency(activeOption?.discountTotal ?? estimate.discountTotal)}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex justify-between text-base font-semibold">
-              <span>Total</span>
-              <span>{formatCurrency(displayTotal())}</span>
-            </div>
-          </div>
-        </section>
 
         {warrantyText ? (
           <section className="rounded-lg border bg-white p-4">
@@ -644,6 +534,12 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
                     : "Approve estimate"}
               </Button>
             </div>
+            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              By signing, you acknowledge that you understand our{" "}
+              <LegalDocLink href={company.termsOfServiceUrl}>Terms of Service</LegalDocLink>,{" "}
+              <LegalDocLink href={company.privacyPolicyUrl}>Privacy Policy</LegalDocLink>, and
+              the scope of work being approved.
+            </p>
           </div>
         ) : needsDeposit ? (
           <Button onClick={() => void payDeposit()} disabled={loading}>

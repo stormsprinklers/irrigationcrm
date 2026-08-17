@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees } from "@/lib/employees";
 import { listFieldDeviceLocations } from "@/lib/field-devices";
-import { buildMapsViewEmbedUrl, getGoogleMapsApiKey } from "@/lib/customers/maps";
+import { buildMapsPinEmbedUrl, getGoogleMapsApiKey } from "@/lib/customers/maps";
 
 export async function GET() {
   try {
@@ -17,7 +17,7 @@ export async function GET() {
         ...device,
         mapEmbedUrl:
           apiKey && Number.isFinite(device.lat) && Number.isFinite(device.lng)
-            ? buildMapsViewEmbedUrl(device.lat, device.lng, apiKey, 15)
+            ? buildMapsPinEmbedUrl(device.lat, device.lng, apiKey, 15)
             : null,
       })),
     });

@@ -98,6 +98,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       });
     }
 
+    if (body.internalNotes !== undefined) {
+      const internalNotes =
+        typeof body.internalNotes === "string" ? body.internalNotes.trim() || null : null;
+      await prisma.estimateOption.update({
+        where: { id: optionId },
+        data: { internalNotes },
+      });
+    }
+
     if (body.declined === true) {
       await prisma.estimateOption.update({
         where: { id: optionId },

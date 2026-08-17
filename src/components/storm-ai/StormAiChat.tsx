@@ -13,6 +13,7 @@ import { pageContextFromLocation } from "@/lib/storm-ai/page-context";
 import {
   StormAiRealtimeClient,
   type StormAiPartsCardPayload,
+  type StormAiRealtimeActivity,
   type StormAiRealtimeStatus,
 } from "@/lib/storm-ai/realtime-client";
 import { cn } from "@/lib/utils";
@@ -216,6 +217,7 @@ export function StormAiChat() {
   const [sending, setSending] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<StormAiRealtimeStatus>("idle");
   const [voiceTool, setVoiceTool] = useState<string | null>(null);
+  const [voiceActivity, setVoiceActivity] = useState<StormAiRealtimeActivity[]>([]);
   const [videoMode, setVideoMode] = useState(false);
   const [localPreviewStream, setLocalPreviewStream] = useState<MediaStream | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -253,7 +255,7 @@ export function StormAiChat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending, voiceStatus]);
+  }, [messages, sending, voiceStatus, voiceActivity.length]);
 
   useEffect(() => {
     return () => {
@@ -272,6 +274,10 @@ export function StormAiChat() {
     }
   }, [localPreviewStream, videoMode]);
 
+  function pushVoiceActivity(entry: StormAiRealtimeActivity) {
+    setVoiceActivity((prev) => [...prev.slice(-24), entry]);
+  }
+
   function stopVoice() {
     voiceClientRef.current?.stop();
     voiceClientRef.current = null;
@@ -279,17 +285,18 @@ export function StormAiChat() {
     setVoiceTool(null);
     setVideoMode(false);
     setLocalPreviewStream(null);
+    setVoiceActivity([]);
   }
 
-  async function ensureRealtimeClient() {
-    if (voiceClientRef.current?.isActive) return voiceClientRef.current;
-    if (sending) return null;
-    const client = new StormAiRealtimeClient({
-      onStatus: (status) => {
+  function realtimeCallbacks(base?: {
+    onLocalStream?: (stream: MediaStream | null) => void;
+  }) {
+    return {
+      onStatus: (status: StormAiRealtimeStatus) => {
         setVoiceStatus(status);
         if (status === "ended" || status === "idle") setVoiceTool(null);
       },
-      onTranscript: (role, text) => {
+      onTranscript: (role: "user" | "assistant", text: string) => {
         setMessages((prev) => [
           ...prev,
           {
@@ -300,17 +307,29 @@ export function StormAiChat() {
           },
         ]);
       },
-      onTool: (name) => setVoiceTool(name),
-      onError: (message) => toast.error(message),
-      onLocalStream: (stream) => setLocalPreviewStream(stream),
-      onVideoModeChange: (enabled) => setVideoMode(enabled),
-      onPartsCard: (card) => setMessages((prev) => appendPartsCardMessage(prev, card)),
-      onFrameCaptured: (info) => {
+      onTool: (name: string) => setVoiceTool(name),
+      onError: (message: string) => toast.error(message),
+      onLocalStream: (stream: MediaStream | null) => {
+        setLocalPreviewStream(stream);
+        base?.onLocalStream?.(stream);
+      },
+      onVideoModeChange: (enabled: boolean) => setVideoMode(enabled),
+      onPartsCard: (card: StormAiPartsCardPayload) =>
+        setMessages((prev) => appendPartsCardMessage(prev, card)),
+      onActivity: pushVoiceActivity,
+      onFrameCaptured: (info: { savedToJob: boolean; visitId: string | null }) => {
         if (info.savedToJob) {
           toast.success("Frame saved to job attachments");
         }
       },
-    });
+    };
+  }
+
+  async function ensureRealtimeClient() {
+    if (voiceClientRef.current?.isActive) return voiceClientRef.current;
+    if (sending) return null;
+    setVoiceActivity([]);
+    const client = new StormAiRealtimeClient(realtimeCallbacks());
     voiceClientRef.current = client;
     try {
       const { conversationId } = await client.start({
@@ -355,33 +374,8 @@ export function StormAiChat() {
 
     // Start a new realtime session with video (same chat conversation id).
     setVideoMode(true);
-    const client = new StormAiRealtimeClient({
-      onStatus: (status) => {
-        setVoiceStatus(status);
-        if (status === "ended" || status === "idle") setVoiceTool(null);
-      },
-      onTranscript: (role, text) => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `voice-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            role: role === "user" ? "user" : "assistant",
-            content: text,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-      },
-      onTool: (name) => setVoiceTool(name),
-      onError: (message) => toast.error(message),
-      onLocalStream: (stream) => setLocalPreviewStream(stream),
-      onVideoModeChange: (enabled) => setVideoMode(enabled),
-      onPartsCard: (card) => setMessages((prev) => appendPartsCardMessage(prev, card)),
-      onFrameCaptured: (info) => {
-        if (info.savedToJob) {
-          toast.success("Frame saved to job attachments");
-        }
-      },
-    });
+    setVoiceActivity([]);
+    const client = new StormAiRealtimeClient(realtimeCallbacks());
     voiceClientRef.current = client;
     try {
       const { conversationId } = await client.start({
@@ -568,19 +562,48 @@ export function StormAiChat() {
               )}
               {sending ? <p className="text-xs text-muted-foreground">Thinking…</p> : null}
               {voiceActive ? (
-                <p className="text-xs text-muted-foreground">
-                  {voiceStatus === "connecting"
-                    ? videoMode
-                      ? "Connecting video…"
-                      : "Connecting voice…"
-                    : voiceStatus === "tool"
-                      ? `Looking up ${voiceTool ?? "CRM data"}…`
-                      : voiceStatus === "speaking"
-                        ? "Storm AI speaking…"
-                        : videoMode
-                          ? "Listening — point the camera and ask about what you see"
-                          : "Listening — speak anytime"}
-                </p>
+                <div className="space-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                  <p className="text-xs font-medium text-foreground">
+                    {voiceStatus === "connecting"
+                      ? videoMode
+                        ? "Connecting video…"
+                        : "Connecting voice…"
+                      : voiceStatus === "tool"
+                        ? `Looking up ${voiceTool ?? "CRM data"}…`
+                        : voiceStatus === "speaking"
+                          ? "Storm AI speaking…"
+                          : videoMode
+                            ? "Listening — point the camera and ask about what you see"
+                            : "Listening — speak anytime"}
+                  </p>
+                  {voiceActivity.length > 0 ? (
+                    <div className="max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-snug text-muted-foreground">
+                      {voiceActivity.map((entry) => (
+                        <p
+                          key={`${entry.at}-${entry.message}`}
+                          className={cn(
+                            entry.level === "error" && "text-destructive",
+                            entry.level === "ok" && "text-emerald-700 dark:text-emerald-400",
+                            entry.level === "wait" && "text-amber-700 dark:text-amber-400"
+                          )}
+                        >
+                          <span className="tabular-nums opacity-70">
+                            {new Date(entry.at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </span>{" "}
+                          {entry.message}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      Live steps will appear here while voice is active.
+                    </p>
+                  )}
+                </div>
               ) : null}
               {voiceActive && videoMode ? (
                 <div className="mx-auto max-w-lg space-y-2">

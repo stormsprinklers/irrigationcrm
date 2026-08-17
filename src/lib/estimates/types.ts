@@ -3,6 +3,7 @@ export type EstimateOptionDTO = {
   letter: string | null;
   label: string;
   description: string | null;
+  internalNotes: string | null;
   photoUrl: string | null;
   photoAssetId: string | null;
   declinedAt: string | null;

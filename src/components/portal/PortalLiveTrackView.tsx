@@ -74,7 +74,7 @@ export function PortalLiveTrackView({ slug, token }: Props) {
 
   useEffect(() => {
     if (!data?.tracking.active) return;
-    const id = window.setInterval(() => void load(), 12_000);
+    const id = window.setInterval(() => void load(), 60_000);
     return () => window.clearInterval(id);
   }, [data?.tracking.active, load]);
 

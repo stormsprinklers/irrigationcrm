@@ -1,8 +1,9 @@
 import { randomBytes } from "crypto";
 import { VisitStatus } from "@prisma/client";
 import {
+  buildMapsDirectionsEmbedUrl,
   buildMapsPlaceEmbedUrl,
-  buildMapsViewEmbedUrl,
+  buildMapsPinEmbedUrl,
   getGoogleMapsApiKey,
 } from "@/lib/customers/maps";
 import {
@@ -15,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { formatTimeInTimezone } from "@/lib/notifications/timezone";
 
 const MIN_PING_INTERVAL_MS = 8_000;
-const ETA_REFRESH_INTERVAL_MS = 90_000;
+const ETA_REFRESH_INTERVAL_MS = 60_000;
 export const LIVE_TRACK_TTL_MS = 2 * 60 * 60 * 1000;
 
 export function generateLiveTrackToken() {
@@ -175,6 +176,47 @@ export async function recordLiveLocationPing(params: {
   };
 }
 
+function etaNeedsRefresh(calculatedAt: Date | null, nowMs: number) {
+  return !calculatedAt || nowMs - calculatedAt.getTime() >= ETA_REFRESH_INTERVAL_MS;
+}
+
+async function refreshEnRouteEtaIfStale(params: {
+  visitId: string;
+  originLat: number;
+  originLng: number;
+  destination: string;
+  calculatedAt: Date | null;
+}) {
+  const now = Date.now();
+  if (!etaNeedsRefresh(params.calculatedAt, now)) {
+    return null;
+  }
+  try {
+    const eta = await computeDrivingEta({
+      originLat: params.originLat,
+      originLng: params.originLng,
+      destinationAddress: params.destination,
+    });
+    const calculatedAt = new Date();
+    await prisma.visit.update({
+      where: { id: params.visitId },
+      data: {
+        enRouteEtaSeconds: eta.durationInTrafficSeconds,
+        enRouteEtaAt: eta.arrivalAt,
+        enRouteCalculatedAt: calculatedAt,
+      },
+    });
+    return {
+      enRouteEtaSeconds: eta.durationInTrafficSeconds,
+      enRouteEtaAt: eta.arrivalAt,
+      enRouteCalculatedAt: calculatedAt,
+    };
+  } catch (err) {
+    console.error("[live-tracking] public ETA refresh failed", err);
+    return null;
+  }
+}
+
 export async function getPublicLiveTrack(token: string) {
   const visit = await prisma.visit.findFirst({
     where: { liveTrackToken: token },
@@ -223,27 +265,56 @@ export async function getPublicLiveTrack(token: string) {
   const techLat = visit.liveLat != null ? Number(visit.liveLat) : null;
   const techLng = visit.liveLng != null ? Number(visit.liveLng) : null;
   const hasLive = techLat != null && techLng != null;
-
-  const apiKey = getGoogleMapsApiKey();
-  let mapEmbedUrl: string | null = null;
-  if (apiKey && hasLive) {
-    mapEmbedUrl = buildMapsViewEmbedUrl(techLat, techLng, apiKey, 14);
-  } else if (apiKey && destination) {
-    mapEmbedUrl = buildMapsPlaceEmbedUrl(destination, apiKey, 13);
-  }
-
-  const eta = formatVisitEtaPayload(visit);
-  const timezone = visit.company.timezone;
-  const etaLabel =
-    eta && visit.enRouteEtaAt
-      ? `${formatTimeInTimezone(visit.enRouteEtaAt, timezone)} (about ${eta.minutes} min)`
-      : null;
-
   const active =
     visit.liveTrackingActive &&
     visit.status === VisitStatus.EN_ROUTE &&
     Boolean(visit.liveTrackToken) &&
     !expired;
+
+  let etaSeconds = visit.enRouteEtaSeconds;
+  let etaAt = visit.enRouteEtaAt;
+  let etaCalculatedAt = visit.enRouteCalculatedAt;
+
+  if (active && hasLive && destination) {
+    const refreshed = await refreshEnRouteEtaIfStale({
+      visitId: visit.id,
+      originLat: techLat,
+      originLng: techLng,
+      destination,
+      calculatedAt: visit.enRouteCalculatedAt,
+    });
+    if (refreshed) {
+      etaSeconds = refreshed.enRouteEtaSeconds;
+      etaAt = refreshed.enRouteEtaAt;
+      etaCalculatedAt = refreshed.enRouteCalculatedAt;
+    }
+  }
+
+  const apiKey = getGoogleMapsApiKey();
+  let mapEmbedUrl: string | null = null;
+  if (apiKey && hasLive && destination) {
+    mapEmbedUrl = buildMapsDirectionsEmbedUrl({
+      originLat: techLat,
+      originLng: techLng,
+      destination,
+      apiKey,
+    });
+  } else if (apiKey && hasLive) {
+    mapEmbedUrl = buildMapsPinEmbedUrl(techLat, techLng, apiKey, 14);
+  } else if (apiKey && destination) {
+    mapEmbedUrl = buildMapsPlaceEmbedUrl(destination, apiKey, 13);
+  }
+
+  const eta = formatVisitEtaPayload({
+    enRouteEtaSeconds: etaSeconds,
+    enRouteEtaAt: etaAt,
+    enRouteCalculatedAt: etaCalculatedAt,
+  });
+  const timezone = visit.company.timezone;
+  const etaLabel =
+    eta && etaAt
+      ? `${formatTimeInTimezone(etaAt, timezone)} (about ${eta.minutes} min)`
+      : null;
 
   const stale =
     !visit.liveLocationAt ||

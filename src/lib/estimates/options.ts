@@ -174,6 +174,12 @@ export async function createEstimateOption(params: {
       include: { lineItems: true, discounts: true },
     });
     if (source) {
+      if (source.internalNotes) {
+        await prisma.estimateOption.update({
+          where: { id: option.id },
+          data: { internalNotes: source.internalNotes },
+        });
+      }
       if (source.lineItems.length) {
         await prisma.estimateLineItem.createMany({
           data: source.lineItems.map((item, index) => ({
@@ -247,6 +253,7 @@ export function serializeOption(
     letter: string | null;
     label: string;
     description?: string | null;
+    internalNotes?: string | null;
     photoUrl?: string | null;
     photoAssetId?: string | null;
     declinedAt?: Date | null;
@@ -264,6 +271,7 @@ export function serializeOption(
     letter: option.letter,
     label: option.label,
     description: option.description ?? null,
+    internalNotes: option.internalNotes ?? null,
     photoUrl: photoPublicUrl ?? option.photoUrl ?? null,
     photoAssetId: option.photoAssetId ?? null,
     declinedAt: option.declinedAt?.toISOString() ?? null,

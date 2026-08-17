@@ -134,6 +134,29 @@ export function buildMapsPlaceEmbedUrl(query: string, apiKey?: string, zoom = 14
   return `https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(key)}&q=${encodeURIComponent(query)}&zoom=${zoom}`;
 }
 
+/** Place-mode embed that drops a pin at lat/lng. View mode only centers with no marker. */
+export function buildMapsPinEmbedUrl(lat: number, lng: number, apiKey?: string, zoom = 14) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return buildMapsPlaceEmbedUrl(`${lat},${lng}`, apiKey, zoom);
+}
+
+export function buildMapsDirectionsEmbedUrl(params: {
+  originLat: number;
+  originLng: number;
+  destination: string;
+  apiKey?: string;
+}) {
+  const key = params.apiKey ?? getGoogleMapsApiKey();
+  if (!key || !params.destination.trim()) return null;
+  if (!Number.isFinite(params.originLat) || !Number.isFinite(params.originLng)) return null;
+  const url = new URL("https://www.google.com/maps/embed/v1/directions");
+  url.searchParams.set("key", key);
+  url.searchParams.set("origin", `${params.originLat},${params.originLng}`);
+  url.searchParams.set("destination", params.destination.trim());
+  url.searchParams.set("mode", "driving");
+  return url.toString();
+}
+
 export function buildMapsViewEmbedUrl(
   lat: number,
   lng: number,

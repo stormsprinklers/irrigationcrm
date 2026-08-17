@@ -47,6 +47,8 @@ export function portalCompanyPayload(company: PortalCompany) {
     emailLogoUrl: company.emailLogoUrl,
     estimateWarrantyText: company.estimateWarrantyText ?? null,
     financingUrl: company.estimateFinancingUrl ?? null,
+    termsOfServiceUrl: company.termsOfServiceUrl ?? null,
+    privacyPolicyUrl: company.privacyPolicyUrl ?? null,
     features: {
       jobs: portalFeatureEnabled(company, "jobs"),
       invoices: portalFeatureEnabled(company, "invoices"),

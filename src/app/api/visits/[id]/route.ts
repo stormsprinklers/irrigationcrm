@@ -58,7 +58,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const workSummaryOnlyUpdate =
       bodyKeys.length > 0 && bodyKeys.every((key) => key === "workSummary");
     const fieldSelfScheduleUpdate =
-      bodyKeys.length > 0 && bodyKeys.every((key) => fieldSelfScheduleKeys.has(key));
+      bodyKeys.length > 0 &&
+      bodyKeys.every((key) => {
+        if (fieldSelfScheduleKeys.has(key)) return true;
+        // Field may cancel own visits (keeps the record for reporting) but cannot set other statuses.
+        if (key === "status" && body.status === VisitStatus.CANCELLED) return true;
+        return false;
+      });
 
     if (isFieldRole(user.role)) {
       if (!fieldSelfScheduleUpdate && !workSummaryOnlyUpdate) {

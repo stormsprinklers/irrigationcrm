@@ -1,6 +1,10 @@
 import type { BrandPalette } from "@/lib/brand-palette";
 import { contrastForeground, mixWithWhite, normalizeHex } from "@/lib/brand-palette";
 import { stormBrand } from "@/lib/branding";
+import {
+  buildCompanySignatureHtml,
+  type CompanySignatureFields,
+} from "@/lib/inbox/company-email-signature";
 
 export const EMAIL_TEMPLATE_IDS = ["announcement", "offer", "letter"] as const;
 export type EmailTemplateId = (typeof EMAIL_TEMPLATE_IDS)[number];
@@ -49,7 +53,31 @@ export type EmailTemplateCompanyInfo = {
   phone?: string | null;
   email?: string | null;
   website?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
 };
+
+function signatureFieldsFromCompany(
+  companyName: string,
+  company?: EmailTemplateCompanyInfo
+): CompanySignatureFields {
+  return {
+    companyName: company?.companyName ?? companyName,
+    phone: company?.phone,
+    supportEmail: company?.email,
+    website: company?.website,
+    address: company?.address,
+    city: company?.city,
+    state: company?.state,
+    zip: company?.zip,
+  };
+}
+
+function templateFooterHtml(fields: CompanySignatureFields, align: "left" | "center") {
+  return buildCompanySignatureHtml(fields, { align });
+}
 
 function colorsFromPalette(palette?: Partial<BrandPalette> | null): TemplateColors {
   const primary = normalizeHex(palette?.primary, stormBrand.sky);
@@ -106,6 +134,7 @@ export function renderEmailTemplateSkeleton(params: {
   const logo = params.logoUrl?.trim() ?? params.company?.logoUrl?.trim();
   const hero = params.heroImageUrl?.trim();
   const companyName = params.company?.companyName ?? params.companyName;
+  const fields = signatureFieldsFromCompany(companyName, params.company);
   const lightBg = mixWithWhite(c.primary, 0.92);
 
   const logoBlock = logo
@@ -122,7 +151,7 @@ export function renderEmailTemplateSkeleton(params: {
 
   if (params.templateId === "offer") {
     return wrapShell(
-      companyName,
+      fields,
       `
       <tr><td style="background-color:${c.secondary};padding:28px 24px;text-align:center;">${logoBlock}</td></tr>
       ${heroBlock}
@@ -163,21 +192,22 @@ export function renderEmailTemplateSkeleton(params: {
           }
         </td>
       </tr>
+      <tr>
+        <td style="padding:8px 28px 24px;background:#ffffff;">
+          ${templateFooterHtml(fields, "center")}
+        </td>
+      </tr>
       `
     );
   }
 
   if (params.templateId === "letter") {
-    const phone = params.company?.phone?.trim() || "";
-    const email = params.company?.email?.trim() || "";
-    const website = params.company?.website?.trim() || "";
-    const contactLines = [phone, email, website].filter(Boolean);
     const sigLogo = logo
       ? `<img src="${escapeAttr(logo)}" alt="${escapeAttr(companyName)}" width="120" style="max-width:120px;height:auto;display:block;margin:0 0 10px;" />`
       : "";
 
     return wrapShell(
-      companyName,
+      fields,
       `
       <tr>
         <td style="padding:36px 40px;background:#ffffff;font-family:Georgia,'Times New Roman',serif;color:#1e293b;">
@@ -203,15 +233,9 @@ export function renderEmailTemplateSkeleton(params: {
                 )
               : `<p style="margin:24px 0 0;font-size:16px;line-height:1.7;font-family:Georgia,'Times New Roman',serif;">{{CLOSING}}</p>`
           }
-          <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;">
+          <div style="margin-top:28px;font-family:Arial,Helvetica,sans-serif;">
             ${sigLogo}
-            <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:${c.secondary};">${escapeHtml(companyName)}</p>
-            ${contactLines
-              .map(
-                (line) =>
-                  `<p style="margin:0 0 2px;font-size:13px;line-height:1.5;color:#64748b;">${escapeHtml(line)}</p>`
-              )
-              .join("")}
+            ${templateFooterHtml(fields, "left")}
           </div>
         </td>
       </tr>
@@ -221,7 +245,7 @@ export function renderEmailTemplateSkeleton(params: {
 
   // announcement
   return wrapShell(
-    companyName,
+    fields,
     `
     <tr><td style="background-color:${c.secondary};padding:28px 24px;text-align:center;">${logoBlock}</td></tr>
     ${heroBlock}
@@ -247,15 +271,15 @@ export function renderEmailTemplateSkeleton(params: {
       </td>
     </tr>
     <tr>
-      <td style="padding:18px 28px;background:${lightBg};text-align:center;font-size:12px;color:#64748b;">
-        <p style="margin:0;">${escapeHtml(companyName)}</p>
+      <td style="padding:8px 28px 24px;background:${lightBg};">
+        ${templateFooterHtml(fields, "center")}
       </td>
     </tr>
     `
   );
 }
 
-function wrapShell(companyName: string, innerRows: string) {
+function wrapShell(fields: CompanySignatureFields, innerRows: string) {
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -266,7 +290,7 @@ function wrapShell(companyName: string, innerRows: string) {
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;">
           ${innerRows}
         </table>
-        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">${escapeHtml(companyName)}</p>
+        <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;">${escapeHtml(fields.companyName)}</p>
       </td>
     </tr>
   </table>

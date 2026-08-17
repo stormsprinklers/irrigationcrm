@@ -57,6 +57,10 @@ type CompanyContact = {
   phone: string | null;
   supportEmail: string | null;
   website: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
   emailLogoUrl: string | null;
 };
 
@@ -103,6 +107,10 @@ function EmailCampaignEditorInner({
     phone: null,
     supportEmail: null,
     website: null,
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
     emailLogoUrl: null,
   });
   const [templateSeeded, setTemplateSeeded] = useState(false);
@@ -127,6 +135,10 @@ function EmailCampaignEditorInner({
           phone: data.phone ?? null,
           supportEmail: data.supportEmail ?? null,
           website: data.website ?? null,
+          address: data.address ?? null,
+          city: data.city ?? null,
+          state: data.state ?? null,
+          zip: data.zip ?? null,
           emailLogoUrl: data.emailLogoUrl ?? null,
         });
       })
@@ -153,6 +165,10 @@ function EmailCampaignEditorInner({
           phone: companyContact.phone,
           email: companyContact.supportEmail,
           website: companyContact.website,
+          address: companyContact.address,
+          city: companyContact.city,
+          state: companyContact.state,
+          zip: companyContact.zip,
         },
         palette: {
           primary: p.primary,

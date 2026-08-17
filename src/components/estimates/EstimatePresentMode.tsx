@@ -10,6 +10,7 @@ type EstimateLike = {
   id: string;
   status: string;
   financingUrl?: string | null;
+  selectedOptionId?: string | null;
   options: Array<{
     id: string;
     label: string;
@@ -101,6 +102,20 @@ export function EstimatePresentMode({
     }
   }
 
+  async function rename(optionId: string, label: string) {
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/options`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionId, label }),
+      });
+      if (!res.ok) throw new Error("Could not rename option");
+      setEstimate((await res.json()) as EstimateLike);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    }
+  }
+
   async function decline(optionId: string) {
     setDecidingId(optionId);
     try {
@@ -180,8 +195,14 @@ export function EstimatePresentMode({
             lineItems={estimate.lineItems}
             discounts={estimate.discounts}
             canDecide={estimate.status !== "APPROVED" && estimate.status !== "CONVERTED"}
+            canRename={estimate.status !== "CONVERTED"}
+            selectedId={estimate.selectedOptionId ?? estimate.options[0]?.id ?? null}
+            onSelect={(optionId) => {
+              setEstimate((prev) => (prev ? { ...prev, selectedOptionId: optionId } : prev));
+            }}
             onApprove={approve}
             onDecline={decline}
+            onRename={(optionId, label) => void rename(optionId, label)}
             decidingId={decidingId}
           />
         )}

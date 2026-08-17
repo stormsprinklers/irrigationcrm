@@ -41,6 +41,7 @@ type EstimateOptionData = {
   letter: string | null;
   label: string;
   description?: string | null;
+  internalNotes?: string | null;
   photoUrl?: string | null;
   declinedAt?: string | null;
   sortOrder: number;
@@ -467,6 +468,20 @@ export function EstimateDetail({ estimateId }: Props) {
   const optionDiscountTotal = activeOption?.discountTotal ?? estimate.discountTotal;
   const optionTotal = activeOption?.total ?? estimate.total;
 
+  async function persistActiveOptionFields() {
+    if (!activeOption) return;
+    await fetch(`/api/estimates/${estimateId}/options`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        optionId: activeOption.id,
+        label: activeOption.label,
+        internalNotes: activeOption.internalNotes ?? "",
+        description: activeOption.description ?? "",
+      }),
+    });
+  }
+
   async function selectOption(optionId: string) {
     setActiveOptionId(optionId);
     const res = await fetch(`/api/estimates/${estimateId}/options`, {
@@ -562,7 +577,14 @@ export function EstimateDetail({ estimateId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => setPresentOpen(true)} disabled={saving}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void persistActiveOptionFields().then(() => setPresentOpen(true));
+            }}
+            disabled={saving}
+          >
             <Presentation className="h-4 w-4" />
             Present
           </Button>
@@ -686,6 +708,7 @@ export function EstimateDetail({ estimateId }: Props) {
               </div>
               {activeOption ? (
                 <div className="space-y-2 rounded-md border p-3">
+                  <label className="text-xs font-medium text-muted-foreground">Option name</label>
                   <Input
                     value={activeOption.label}
                     onChange={(e) => {
@@ -710,10 +733,46 @@ export function EstimateDetail({ estimateId }: Props) {
                     }}
                     placeholder="Option name"
                   />
+                  <label className="text-xs font-medium text-muted-foreground">Notes for AI</label>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    Staff only. Helps write the homeowner description and pick a photo. Not shown to
+                    the customer.
+                  </p>
+                  <textarea
+                    className="min-h-[72px] w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+                    value={activeOption.internalNotes ?? ""}
+                    placeholder="Optional context for this option (scope, materials, what to highlight, photo cues…)"
+                    onChange={(e) => {
+                      const internalNotes = e.target.value;
+                      setEstimate((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              options: prev.options.map((option) =>
+                                option.id === activeOption.id ? { ...option, internalNotes } : option
+                              ),
+                            }
+                          : prev
+                      );
+                    }}
+                    onBlur={async (e) => {
+                      await fetch(`/api/estimates/${estimateId}/options`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          optionId: activeOption.id,
+                          internalNotes: e.target.value,
+                        }),
+                      });
+                    }}
+                  />
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Customer description
+                  </label>
                   <textarea
                     className="min-h-[72px] w-full rounded-md border bg-transparent px-3 py-2 text-sm"
                     value={activeOption.description ?? ""}
-                    placeholder="Short description (filled automatically when you Present)"
+                    placeholder="Shown to the customer. Leave blank to let Present write this."
                     onChange={(e) => {
                       const description = e.target.value;
                       setEstimate((prev) =>

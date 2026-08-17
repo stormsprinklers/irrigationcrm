@@ -24,6 +24,10 @@ export async function POST(request: NextRequest) {
         phone: true,
         supportEmail: true,
         website: true,
+        address: true,
+        city: true,
+        state: true,
+        zip: true,
         bookingSlug: true,
         websiteBaseUrl: true,
         privacyPolicyUrl: true,
@@ -59,7 +63,11 @@ export async function POST(request: NextRequest) {
       logoUrl,
       companyPhone: company.phone,
       companyEmail: company.supportEmail,
-      companyWebsite: company.website,
+      companyWebsite: company.website ?? company.websiteBaseUrl,
+      companyAddress: company.address,
+      companyCity: company.city,
+      companyState: company.state,
+      companyZip: company.zip,
       brandPalette:
         brandPalette && typeof brandPalette === "object"
           ? {
