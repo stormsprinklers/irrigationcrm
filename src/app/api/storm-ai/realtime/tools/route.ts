@@ -11,36 +11,76 @@ export const maxDuration = 60;
 function slimRealtimeToolResult(name: string, result: unknown): unknown {
   if (!result || typeof result !== "object") return result;
   const root = result as Record<string, unknown>;
+  const data =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
 
-  if (name === "search_parts_info" && Array.isArray(root.parts)) {
-    return {
-      ...root,
-      parts: root.parts.map((row) => {
-        if (!row || typeof row !== "object") return row;
-        const part = row as Record<string, unknown>;
-        const { photos: _photos, ...rest } = part;
-        return {
-          ...rest,
-          photoCount: Array.isArray(part.photos) ? part.photos.length : part.photoCount ?? 0,
-        };
-      }),
-    };
+  if (name === "search_parts_info" && Array.isArray(data.parts)) {
+    const slimParts = data.parts.slice(0, 5).map((row) => {
+      if (!row || typeof row !== "object") return row;
+      const part = row as Record<string, unknown>;
+      return {
+        id: part.id,
+        name: part.name,
+        manufacturer: part.manufacturer,
+        partNumber: part.partNumber,
+        section: part.section,
+        visualDescription:
+          typeof part.visualDescription === "string"
+            ? part.visualDescription.slice(0, 220)
+            : part.visualDescription,
+        technicalDescription:
+          typeof part.technicalDescription === "string"
+            ? part.technicalDescription.slice(0, 220)
+            : part.technicalDescription,
+        hasManual: part.hasManual,
+        manualUrl: part.manualUrl ?? null,
+        manualKind: part.manualKind ?? null,
+        photoCount: Array.isArray(part.photos) ? part.photos.length : part.photoCount ?? 0,
+      };
+    });
+    if (root.data && typeof root.data === "object") {
+      return {
+        ...root,
+        data: {
+          ...data,
+          parts: slimParts,
+          note: "Speak the best match to the technician now. Call get_parts_info only if they need the full write-up or manual.",
+        },
+      };
+    }
+    return { ...data, parts: slimParts };
   }
 
-  if (name === "get_parts_info" && root.part && typeof root.part === "object") {
-    const part = root.part as Record<string, unknown>;
-    const photos = Array.isArray(part.photos) ? part.photos : [];
-    return {
-      ...root,
-      part: {
-        ...part,
-        photos: photos.slice(0, 2).map((p) => {
-          if (!p || typeof p !== "object") return p;
-          const photo = p as Record<string, unknown>;
-          return { id: photo.id, url: photo.url, fileName: photo.fileName };
-        }),
-      },
-    };
+  if (name === "get_parts_info") {
+    const part = data.part;
+    if (part && typeof part === "object") {
+      const p = part as Record<string, unknown>;
+      const slimPart = {
+        id: p.id,
+        name: p.name,
+        manufacturer: p.manufacturer,
+        partNumber: p.partNumber,
+        sectionName: p.sectionName,
+        visualDescription: p.visualDescription,
+        technicalDescription: p.technicalDescription,
+        manualUrl: p.manualUrl,
+        manualKind: p.manualKind,
+        manualFileName: p.manualFileName,
+      };
+      if (root.data && typeof root.data === "object") {
+        return {
+          ...root,
+          data: {
+            ...data,
+            part: slimPart,
+            note: "Speak these details now. If manualUrl exists, tell them to open the manual link in chat.",
+          },
+        };
+      }
+      return { ...data, part: slimPart };
+    }
   }
 
   return result;

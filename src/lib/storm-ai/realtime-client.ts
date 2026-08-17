@@ -26,13 +26,17 @@ type SessionResponse = {
 };
 
 const FRAME_MIN_INTERVAL_MS = 2200;
-const FRAME_PERIODIC_MS = 3200;
+const FRAME_PERIODIC_MS = 3500;
 const FRAME_MAX_EDGE = 1280;
 const FRAME_JPEG_QUALITY = 0.82;
 const TOOL_TIMEOUT_MS = 25_000;
+const SEARCH_FALLBACK_MS = 2500;
 
 const VISUAL_QUESTION_RE =
   /\b(what|which|look|see|show|showing|this|that|valve|solenoid|controller|part|identify|tell me about|can you (see|tell)|manual)\b/i;
+
+const SEARCHING_SPEECH_RE =
+  /\b(search|searching|look(ing)? up|check(ing)?|parts (list|library|info)|let me (find|check|look|search))\b/i;
 
 /**
  * Browser WebRTC client for Storm AI voice/video.
@@ -54,11 +58,15 @@ export class StormAiRealtimeClient {
   private lastFrameAt = 0;
   private frameInFlight = false;
   private frameTimer: ReturnType<typeof setInterval> | null = null;
-  /** While true, do not inject camera/user items (would sit between function_call and output). */
-  private suppressUserItems = false;
+  /** Block camera frames only while a real function_call awaits output. */
+  private awaitingFunctionOutput = false;
   private eventChain: Promise<void> = Promise.resolve();
-  /** Prefetch tool HTTP while the model finishes speaking "let me look that up". */
   private toolPrefetch = new Map<string, Promise<unknown>>();
+  /** callIds that still need response.create after the current model response ends. */
+  private pendingResponseAfterTools = new Set<string>();
+  private lastUserTranscript = "";
+  private searchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchFallbackUsed = false;
   private callbacks: StormAiRealtimeCallbacks;
 
   constructor(callbacks: StormAiRealtimeCallbacks = {}) {
@@ -84,8 +92,11 @@ export class StormAiRealtimeClient {
   }) {
     this.closed = false;
     this.handledCallIds.clear();
-    this.suppressUserItems = false;
+    this.awaitingFunctionOutput = false;
+    this.pendingResponseAfterTools.clear();
     this.toolPrefetch.clear();
+    this.searchFallbackUsed = false;
+    this.clearSearchFallback();
     this.eventChain = Promise.resolve();
     this.videoMode = Boolean(opts.videoMode);
     this.visitId =
@@ -128,7 +139,6 @@ export class StormAiRealtimeClient {
         : false,
     });
 
-    // Audio only to OpenAI — never attach the camera track to the peer connection.
     for (const track of this.localStream.getAudioTracks()) {
       this.pc.addTrack(track, this.localStream);
     }
@@ -146,7 +156,9 @@ export class StormAiRealtimeClient {
       const raw = String(event.data);
       this.eventChain = this.eventChain
         .then(() => this.onDataMessage(raw))
-        .catch(() => undefined);
+        .catch((err) => {
+          console.error("[storm-ai realtime] event handler error", err);
+        });
     });
 
     const offer = await this.pc.createOffer();
@@ -171,7 +183,6 @@ export class StormAiRealtimeClient {
     return { conversationId: this.conversationId };
   }
 
-  /** Turn camera on without ending the voice session (same conversation). */
   async enableVideo() {
     if (this.closed || !this.pc || !this.localStream) {
       throw new Error("Start voice first");
@@ -209,7 +220,6 @@ export class StormAiRealtimeClient {
     void this.captureAndSendFrame("video_enabled", true);
   }
 
-  /** Turn camera off but keep the live voice session. */
   disableVideo() {
     if (!this.videoMode) return;
     this.stopPeriodicFrames();
@@ -241,6 +251,7 @@ export class StormAiRealtimeClient {
 
   stop() {
     this.closed = true;
+    this.clearSearchFallback();
     this.stopPeriodicFrames();
     try {
       this.dc?.close();
@@ -298,6 +309,13 @@ export class StormAiRealtimeClient {
     }
   }
 
+  private clearSearchFallback() {
+    if (this.searchFallbackTimer) {
+      clearTimeout(this.searchFallbackTimer);
+      this.searchFallbackTimer = null;
+    }
+  }
+
   private setStatus(status: StormAiRealtimeStatus) {
     this.callbacks.onStatus?.(status);
   }
@@ -307,7 +325,8 @@ export class StormAiRealtimeClient {
     try {
       this.dc.send(JSON.stringify(payload));
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[storm-ai realtime] send failed", err);
       return false;
     }
   }
@@ -329,9 +348,7 @@ export class StormAiRealtimeClient {
   }
 
   private async captureAndSendFrame(reason: string, force = false) {
-    // Never insert user/camera items while a function call is awaiting output —
-    // that leaves the model stuck saying it is "still waiting" on the tool.
-    if (this.suppressUserItems) return;
+    if (this.awaitingFunctionOutput) return;
     if (!this.videoMode || this.closed || !this.conversationId) return;
     const now = Date.now();
     if (!force && now - this.lastFrameAt < FRAME_MIN_INTERVAL_MS) return;
@@ -398,7 +415,8 @@ export class StormAiRealtimeClient {
     const type = String(event.type || "");
 
     if (type === "error") {
-      const err = event.error as { message?: string } | undefined;
+      const err = event.error as { message?: string; code?: string } | undefined;
+      console.error("[storm-ai realtime] server error", err);
       this.callbacks.onError?.(err?.message || "Realtime error");
       this.setStatus("error");
       return;
@@ -422,11 +440,8 @@ export class StormAiRealtimeClient {
       return;
     }
 
-    if (
-      type === "response.cancelled" ||
-      type === "output_audio_buffer.stopped"
-    ) {
-      this.setStatus("listening");
+    if (type === "response.cancelled" || type === "output_audio_buffer.stopped") {
+      if (!this.awaitingFunctionOutput) this.setStatus("listening");
     }
 
     if (
@@ -434,7 +449,10 @@ export class StormAiRealtimeClient {
       type === "conversation.item.input_audio.transcription.completed"
     ) {
       const transcript = String(event.transcript || "").trim();
-      if (transcript) this.callbacks.onTranscript?.("user", transcript);
+      if (transcript) {
+        this.lastUserTranscript = transcript;
+        this.callbacks.onTranscript?.("user", transcript);
+      }
       if (this.videoMode && transcript && VISUAL_QUESTION_RE.test(transcript)) {
         void this.captureAndSendFrame("visual_question", true);
       }
@@ -446,7 +464,10 @@ export class StormAiRealtimeClient {
       type === "response.audio_transcript.done"
     ) {
       const transcript = String(event.transcript || "").trim();
-      if (transcript) this.callbacks.onTranscript?.("assistant", transcript);
+      if (transcript) {
+        this.callbacks.onTranscript?.("assistant", transcript);
+        this.maybeScheduleSearchFallback(transcript);
+      }
       return;
     }
 
@@ -456,6 +477,7 @@ export class StormAiRealtimeClient {
         this.pendingNames[item.call_id] = item.name;
         this.setStatus("tool");
         this.callbacks.onTool?.(item.name);
+        this.clearSearchFallback();
       }
       return;
     }
@@ -476,11 +498,9 @@ export class StormAiRealtimeClient {
       const argText = String(event.arguments || this.pendingArgs[callId] || "{}");
       delete this.pendingArgs[callId];
       if (name) this.pendingNames[callId] = name;
-      // Prefetch only — do not send function_call_output until response.done.
       if (callId && name) {
-        this.setStatus("tool");
-        this.callbacks.onTool?.(name);
-        this.beginToolPrefetch(callId, name, argText);
+        this.clearSearchFallback();
+        await this.completeFunctionCall(callId, name, argText);
       }
       return;
     }
@@ -493,10 +513,8 @@ export class StormAiRealtimeClient {
         arguments?: string;
       } | undefined;
       if (item?.type === "function_call" && item.call_id && item.name) {
-        this.pendingNames[item.call_id] = item.name;
-        this.setStatus("tool");
-        this.callbacks.onTool?.(item.name);
-        this.beginToolPrefetch(
+        this.clearSearchFallback();
+        await this.completeFunctionCall(
           item.call_id,
           item.name,
           String(item.arguments || this.pendingArgs[item.call_id] || "{}")
@@ -516,32 +534,78 @@ export class StormAiRealtimeClient {
         status?: string;
       } | undefined;
       const outputs = response?.output ?? [];
-      const toolItems = outputs.filter(
-        (item) => item.type === "function_call" && item.call_id && item.name
-      );
+      for (const item of outputs) {
+        if (item.type === "function_call" && item.call_id && item.name) {
+          this.clearSearchFallback();
+          await this.completeFunctionCall(
+            String(item.call_id),
+            String(item.name),
+            String(item.arguments || "{}")
+          );
+        }
+      }
 
-      if (toolItems.length === 0) {
+      // Previous model turn is finished — safe to ask for a spoken tool follow-up.
+      if (this.pendingResponseAfterTools.size > 0) {
+        this.pendingResponseAfterTools.clear();
+        this.awaitingFunctionOutput = false;
+        this.requestSpokenToolFollowUp();
+      } else if (!this.awaitingFunctionOutput) {
         this.setStatus("listening");
-        return;
       }
-
-      // Wait until this model turn is fully done, then deliver every tool output
-      // and create a single follow-up response.
-      for (const item of toolItems) {
-        await this.deliverToolOutput(
-          String(item.call_id),
-          String(item.name),
-          String(item.arguments || "{}")
-        );
-      }
-      await this.finishToolTurn();
     }
   }
 
-  private beginToolPrefetch(callId: string, name: string, argText: string) {
-    if (!this.conversationId || this.toolPrefetch.has(callId)) return;
-    this.suppressUserItems = true;
-    this.toolPrefetch.set(callId, this.fetchToolResult(callId, name, argText));
+  private async completeFunctionCall(callId: string, name: string, argText: string) {
+    if (!this.conversationId || !callId || !name) return;
+    if (this.handledCallIds.has(callId)) return;
+    this.handledCallIds.add(callId);
+
+    this.awaitingFunctionOutput = true;
+    this.pendingResponseAfterTools.add(callId);
+    this.setStatus("tool");
+    this.callbacks.onTool?.(name);
+
+    if (!this.toolPrefetch.has(callId)) {
+      this.toolPrefetch.set(callId, this.fetchToolResult(callId, name, argText));
+    }
+    const result =
+      (await this.toolPrefetch.get(callId)) ??
+      ({ ok: false, error: "Tool request failed" } as const);
+    this.toolPrefetch.delete(callId);
+
+    console.info("[storm-ai realtime] function_call_output", name, callId);
+
+    const sent = this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: callId,
+        output: JSON.stringify(result),
+      },
+    });
+    if (!sent) {
+      this.callbacks.onError?.(
+        "Lost connection while looking something up — tap mic to reconnect."
+      );
+      this.setStatus("error");
+      this.awaitingFunctionOutput = false;
+      this.pendingResponseAfterTools.delete(callId);
+    }
+  }
+
+  private requestSpokenToolFollowUp() {
+    const sent = this.sendEvent({
+      type: "response.create",
+    });
+    if (!sent) {
+      this.callbacks.onError?.(
+        "Lost connection while looking something up — tap mic to reconnect."
+      );
+      this.setStatus("error");
+      return;
+    }
+    this.setStatus("speaking");
   }
 
   private async fetchToolResult(callId: string, name: string, argText: string): Promise<unknown> {
@@ -587,98 +651,89 @@ export class StormAiRealtimeClient {
     }
   }
 
-  private async deliverToolOutput(callId: string, name: string, argText: string) {
-    if (!this.conversationId || !callId || !name) return;
-    if (this.handledCallIds.has(callId)) return;
-    this.handledCallIds.add(callId);
+  /**
+   * If the model says it will search but never emits a function_call, run the
+   * parts search ourselves and force a spoken answer.
+   */
+  private maybeScheduleSearchFallback(assistantTranscript: string) {
+    if (!SEARCHING_SPEECH_RE.test(assistantTranscript)) return;
+    if (this.searchFallbackUsed || this.awaitingFunctionOutput) return;
+    if (this.pendingResponseAfterTools.size > 0) return;
 
-    this.setStatus("tool");
-    this.callbacks.onTool?.(name);
-
-    if (!this.toolPrefetch.has(callId)) {
-      this.beginToolPrefetch(callId, name, argText);
-    }
-    const result =
-      (await this.toolPrefetch.get(callId)) ??
-      ({ ok: false, error: "Tool request failed" } as const);
-    this.toolPrefetch.delete(callId);
-
-    this.sendEvent({
-      type: "session.update",
-      session: {
-        type: "realtime",
-        audio: {
-          input: {
-            turn_detection: {
-              type: "server_vad",
-              threshold: 0.78,
-              prefix_padding_ms: 400,
-              silence_duration_ms: 900,
-              interrupt_response: false,
-              create_response: true,
-            },
-          },
-        },
-      },
-    });
-
-    const sentOutput = this.sendEvent({
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: callId,
-        output: JSON.stringify(result),
-      },
-    });
-    if (!sentOutput) {
-      this.callbacks.onError?.(
-        "Lost connection while looking something up — tap mic to reconnect."
-      );
-      this.setStatus("error");
-    }
+    this.clearSearchFallback();
+    this.searchFallbackTimer = setTimeout(() => {
+      void this.runSearchFallback();
+    }, SEARCH_FALLBACK_MS);
   }
 
-  private async finishToolTurn() {
-    const sentResponse = this.sendEvent({
-      type: "response.create",
-      response: {
-        instructions:
-          "A tool result was just added. Speak the answer to the technician now in one or two short sentences using only that result. Do not say you are still waiting. Then stop and listen.",
+  private async runSearchFallback() {
+    if (this.closed || this.searchFallbackUsed || this.awaitingFunctionOutput) return;
+    if (this.pendingResponseAfterTools.size > 0) return;
+    if (!this.conversationId) return;
+
+    this.searchFallbackUsed = true;
+    this.setStatus("tool");
+    this.callbacks.onTool?.("search_parts_info");
+
+    const query =
+      this.lastUserTranscript.trim() ||
+      "identify irrigation part from camera description valve solenoid controller";
+
+    console.info("[storm-ai realtime] client search fallback", query);
+
+    const result = await this.fetchToolResult(
+      `fallback-${Date.now()}`,
+      "search_parts_info",
+      JSON.stringify({ query })
+    );
+
+    const spoken = this.formatPartsFallbackSpeech(result);
+    this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: `[Parts library search already completed. Results JSON follows. Speak the answer to the technician now using only these results. Do not say you are still searching or waiting.]\n${JSON.stringify(result)}`,
+          },
+        ],
       },
     });
-
-    if (!sentResponse) {
-      this.callbacks.onError?.(
-        "Lost connection while looking something up — tap mic to reconnect."
-      );
-      this.setStatus("error");
-      this.suppressUserItems = false;
-      return;
-    }
-
-    window.setTimeout(() => {
-      if (this.closed) return;
-      this.suppressUserItems = false;
-      this.sendEvent({
-        type: "session.update",
-        session: {
-          type: "realtime",
-          audio: {
-            input: {
-              turn_detection: {
-                type: "server_vad",
-                threshold: 0.78,
-                prefix_padding_ms: 400,
-                silence_duration_ms: 900,
-                interrupt_response: true,
-                create_response: true,
-              },
-            },
-          },
-        },
-      });
-    }, 2500);
-
+    this.sendEvent({
+      type: "response.create",
+      response: {
+        instructions: spoken
+          ? `Speak this to the technician now, then stop and listen: ${spoken}`
+          : "Tell the technician the parts library search finished and summarize the tool JSON that was just added. Do not say you are still waiting.",
+      },
+    });
     this.setStatus("speaking");
+    // Allow another fallback later in the session if needed.
+    window.setTimeout(() => {
+      this.searchFallbackUsed = false;
+    }, 15_000);
+  }
+
+  private formatPartsFallbackSpeech(result: unknown): string | null {
+    if (!result || typeof result !== "object") return null;
+    const root = result as Record<string, unknown>;
+    const data = (root.data as Record<string, unknown> | undefined) ?? root;
+    const parts = data.parts;
+    if (!Array.isArray(parts) || parts.length === 0) {
+      return "I checked the parts library and did not find a match for what you are showing.";
+    }
+    const top = parts[0] as Record<string, unknown>;
+    const name = typeof top.name === "string" ? top.name : "a matching part";
+    const manufacturer =
+      typeof top.manufacturer === "string" && top.manufacturer
+        ? ` by ${top.manufacturer}`
+        : "";
+    const partNumber =
+      typeof top.partNumber === "string" && top.partNumber
+        ? `, part number ${top.partNumber}`
+        : "";
+    return `From the parts library, this looks like ${name}${manufacturer}${partNumber}.`;
   }
 }
