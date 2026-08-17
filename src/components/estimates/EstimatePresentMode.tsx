@@ -64,7 +64,7 @@ export function EstimatePresentMode({
     setLoading(true);
     fetch(`/api/estimates/${estimateId}/present`, { method: "POST" })
       .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
+        const data = (await res.json().catch(() => ({}))) as EstimateLike & { error?: string };
         if (!res.ok) throw new Error(data.error ?? "Could not prepare presentation");
         if (!cancelled) {
           const highestId = rankPresentOptions(data.options ?? [])[0]?.id ?? null;

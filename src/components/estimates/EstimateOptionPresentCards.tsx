@@ -47,7 +47,7 @@ function approxDescriptionLines(text: string) {
   }, 0);
 }
 
-export function rankPresentOptions<T extends { total: number; declinedAt?: string | null }>(
+export function rankPresentOptions<T extends { id: string; total: number; declinedAt?: string | null }>(
   options: T[]
 ) {
   return [...options]
