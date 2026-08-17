@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { PortalShell } from "./PortalShell";
 
 type TrackPayload = {
@@ -42,31 +43,44 @@ export function PortalLiveTrackView({ slug, token }: Props) {
   const [data, setData] = useState<TrackPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [photoBroken, setPhotoBroken] = useState(false);
+  const [mapNonce, setMapNonce] = useState(0);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/portal/track/${encodeURIComponent(token)}`, {
-        cache: "no-store",
-      });
-      const json = (await res.json()) as TrackPayload & { error?: string };
-      if (!res.ok) {
-        setError(json.error ?? "Tracking unavailable");
-        setData(null);
-        return;
+  const load = useCallback(
+    async (opts?: { refresh?: boolean }) => {
+      const isRefresh = Boolean(opts?.refresh);
+      if (isRefresh) setRefreshing(true);
+      try {
+        const qs = isRefresh ? "?refresh=1" : "";
+        const res = await fetch(`/api/portal/track/${encodeURIComponent(token)}${qs}`, {
+          cache: "no-store",
+        });
+        const json = (await res.json()) as TrackPayload & { error?: string };
+        if (!res.ok) {
+          setError(json.error ?? "Tracking unavailable");
+          if (!isRefresh) setData(null);
+          return;
+        }
+        if (json.company.slug !== slug) {
+          setError("Tracking link does not match this portal");
+          if (!isRefresh) setData(null);
+          return;
+        }
+        setData(json);
+        setError(null);
+        setPhotoBroken(false);
+        if (isRefresh) setMapNonce((n) => n + 1);
+      } catch {
+        setError("Failed to load tracking");
+        if (!isRefresh) setData(null);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      if (json.company.slug !== slug) {
-        setError("Tracking link does not match this portal");
-        setData(null);
-        return;
-      }
-      setData(json);
-      setError(null);
-    } catch {
-      setError("Failed to load tracking");
-    } finally {
-      setLoading(false);
-    }
-  }, [slug, token]);
+    },
+    [slug, token]
+  );
 
   useEffect(() => {
     void load();
@@ -86,7 +100,7 @@ export function PortalLiveTrackView({ slug, token }: Props) {
     );
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f8fafc] px-4">
         <div className="max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
@@ -138,12 +152,13 @@ export function PortalLiveTrackView({ slug, token }: Props) {
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-3">
-            {technician.photoUrl ? (
+            {technician.photoUrl && !photoBroken ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={technician.photoUrl}
                 alt={technician.name}
                 className="h-14 w-14 rounded-full object-cover"
+                onError={() => setPhotoBroken(true)}
               />
             ) : (
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-lg font-semibold text-slate-600">
@@ -186,12 +201,26 @@ export function PortalLiveTrackView({ slug, token }: Props) {
               Heading to <span className="font-medium text-slate-800">{visit.destination}</span>
             </p>
           ) : null}
+
+          {error ? (
+            <p className="mt-3 text-sm text-red-600">{error}</p>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={() => void load({ refresh: true })}
+            disabled={refreshing}
+            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#102341] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#16345c] disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Updating location…" : "Refresh location"}
+          </button>
         </div>
 
         {tracking.mapEmbedUrl ? (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <iframe
-              key={tracking.updatedAt ?? tracking.mapEmbedUrl}
+              key={`${tracking.updatedAt ?? tracking.mapEmbedUrl}-${mapNonce}`}
               title="Technician location map"
               src={tracking.mapEmbedUrl}
               className="h-[360px] w-full border-0 sm:h-[420px]"

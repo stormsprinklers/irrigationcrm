@@ -13,6 +13,7 @@ import {
 } from "@/lib/maps/eta";
 import { resolvePortalSlug } from "@/lib/portal/company";
 import { prisma } from "@/lib/prisma";
+import { publicTechnicianPhotoUrl } from "@/lib/notifications/technician-photo";
 import { formatTimeInTimezone } from "@/lib/notifications/timezone";
 
 const MIN_PING_INTERVAL_MS = 8_000;
@@ -186,9 +187,10 @@ async function refreshEnRouteEtaIfStale(params: {
   originLng: number;
   destination: string;
   calculatedAt: Date | null;
+  force?: boolean;
 }) {
   const now = Date.now();
-  if (!etaNeedsRefresh(params.calculatedAt, now)) {
+  if (!params.force && !etaNeedsRefresh(params.calculatedAt, now)) {
     return null;
   }
   try {
@@ -217,7 +219,7 @@ async function refreshEnRouteEtaIfStale(params: {
   }
 }
 
-export async function getPublicLiveTrack(token: string) {
+export async function getPublicLiveTrack(token: string, options?: { forceRefresh?: boolean }) {
   const visit = await prisma.visit.findFirst({
     where: { liveTrackToken: token },
     include: {
@@ -233,7 +235,7 @@ export async function getPublicLiveTrack(token: string) {
           portalEnabled: true,
         },
       },
-      assignedUser: { select: { name: true, photoUrl: true } },
+      assignedUser: { select: { id: true, name: true, photoUrl: true } },
       customer: {
         select: { name: true, address: true, city: true, state: true, zip: true },
       },
@@ -282,6 +284,7 @@ export async function getPublicLiveTrack(token: string) {
       originLng: techLng,
       destination,
       calculatedAt: visit.enRouteCalculatedAt,
+      force: options?.forceRefresh,
     });
     if (refreshed) {
       etaSeconds = refreshed.enRouteEtaSeconds;
@@ -335,7 +338,12 @@ export async function getPublicLiveTrack(token: string) {
     },
     technician: {
       name: visit.assignedUser?.name ?? "Your technician",
-      photoUrl: visit.assignedUser?.photoUrl ?? null,
+      photoUrl: visit.assignedUser
+        ? publicTechnicianPhotoUrl({
+            userId: visit.assignedUser.id,
+            photoUrl: visit.assignedUser.photoUrl,
+          })
+        : null,
       firstName: (visit.assignedUser?.name ?? "Your technician").split(/\s+/)[0],
     },
     tracking: {

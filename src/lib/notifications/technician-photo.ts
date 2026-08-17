@@ -1,5 +1,5 @@
 import { getAppBaseUrl } from "@/lib/app-url";
-import { isBlobStorageUrl } from "@/lib/blob/urls";
+import { absolutePublicBlobUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 
 /** Twilio-accessible URL for a technician headshot (MMS). */
 export function technicianPhotoMediaUrl(params: {
@@ -14,4 +14,15 @@ export function technicianPhotoMediaUrl(params: {
   }
 
   return photoUrl;
+}
+
+/** Guest-safe technician photo URL (portal tracking, public pages). */
+export function publicTechnicianPhotoUrl(params: {
+  userId: string;
+  photoUrl: string | null | undefined;
+}): string | null {
+  if (!params.photoUrl?.trim()) return null;
+  const publicUrl = absolutePublicBlobUrl(params.photoUrl);
+  if (publicUrl && !isBlobStorageUrl(publicUrl)) return publicUrl;
+  return technicianPhotoMediaUrl(params);
 }

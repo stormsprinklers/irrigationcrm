@@ -3,14 +3,15 @@ import { getPublicLiveTrack } from "@/lib/visits/live-tracking";
 
 type Params = { params: Promise<{ token: string }> };
 
-export async function GET(_request: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   try {
     const { token } = await params;
     if (!token || token.length < 8) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const payload = await getPublicLiveTrack(token);
+    const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
+    const payload = await getPublicLiveTrack(token, { forceRefresh });
     if (!payload) {
       return NextResponse.json({ error: "Tracking link not found or expired" }, { status: 404 });
     }
