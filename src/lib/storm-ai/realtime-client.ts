@@ -49,12 +49,12 @@ type SessionResponse = {
   error?: string;
 };
 
-const FRAME_MIN_INTERVAL_MS = 2200;
-const FRAME_PERIODIC_MS = 3500;
+const FRAME_MIN_INTERVAL_MS = 1500;
 const FRAME_MAX_EDGE = 1280;
 const FRAME_JPEG_QUALITY = 0.82;
 const TOOL_TIMEOUT_MS = 25_000;
 const SEARCH_FALLBACK_MS = 2500;
+const VIDEO_TURN_FLUSH_MS = 1800;
 
 function stripChatCard(result: unknown): unknown {
   if (!result || typeof result !== "object") return result;
@@ -62,8 +62,20 @@ function stripChatCard(result: unknown): unknown {
   return rest;
 }
 
+const VIDEO_SKIP_FRAME_RE =
+  /^(ok|okay|yes|yeah|yep|no|nope|thanks|thank you|got it|alright|all right|continue|next|done|copy|uh-huh|mm-hmm)[\s.!?]*$/i;
+
 const VISUAL_QUESTION_RE =
-  /\b(what|which|look|see|show|showing|this|that|valve|solenoid|controller|part|identify|tell me about|can you (see|tell)|manual)\b/i;
+  /\b(what|which|where|how|look|see|show|showing|this|that|here|valve|solenoid|controller|part|identify|tell me|can you|could you|manual)\b/i;
+
+function shouldSendCameraFrame(transcript: string): boolean {
+  const text = transcript.trim();
+  if (text.length < 3) return false;
+  if (VIDEO_SKIP_FRAME_RE.test(text)) return false;
+  if (/\?/.test(text)) return true;
+  if (VISUAL_QUESTION_RE.test(text)) return true;
+  return text.split(/\s+/).length >= 3;
+}
 
 const SEARCHING_SPEECH_RE =
   /\b(search|searching|look(ing)? up|check(ing)?|parts (list|library|info)|let me (find|check|look|search))\b/i;
@@ -87,7 +99,9 @@ export class StormAiRealtimeClient {
   private closed = false;
   private lastFrameAt = 0;
   private frameInFlight = false;
-  private frameTimer: ReturnType<typeof setInterval> | null = null;
+  /** Video mode waits for the user question, then attaches one still before responding. */
+  private videoTurnPending = false;
+  private videoTurnTimer: ReturnType<typeof setTimeout> | null = null;
   /** Block camera frames only while a real function_call awaits output. */
   private awaitingFunctionOutput = false;
   private eventChain: Promise<void> = Promise.resolve();
@@ -184,7 +198,6 @@ export class StormAiRealtimeClient {
 
     if (this.videoMode) {
       await this.setupPreviewFromStream();
-      this.startPeriodicFrames();
     }
 
     this.callbacks.onLocalStream?.(this.localStream);
@@ -253,18 +266,18 @@ export class StormAiRealtimeClient {
         content: [
           {
             type: "input_text",
-            text: "[Video mode enabled. Camera frames will arrive automatically while I speak. Use them for part ID and visual questions.]",
+            text: "[Video mode enabled. Send a camera frame only when I ask about what I am showing.]",
           },
         ],
       },
     });
-    this.startPeriodicFrames();
-    void this.captureAndSendFrame("video_enabled", true);
+    this.setAutoCreateResponse(false);
   }
 
   disableVideo() {
     if (!this.videoMode) return;
-    this.stopPeriodicFrames();
+    this.clearVideoTurn();
+    this.setAutoCreateResponse(true);
     this.localStream?.getVideoTracks().forEach((t) => {
       t.stop();
       this.localStream?.removeTrack(t);
@@ -299,7 +312,7 @@ export class StormAiRealtimeClient {
     this.followUpWaitStartedAt = 0;
     this.inFlightTools = 0;
     this.modelResponseActive = false;
-    this.stopPeriodicFrames();
+    this.clearVideoTurn();
     try {
       this.dc?.close();
     } catch {
@@ -341,19 +354,51 @@ export class StormAiRealtimeClient {
     await this.previewVideo.play().catch(() => undefined);
   }
 
-  private startPeriodicFrames() {
-    this.stopPeriodicFrames();
-    this.frameTimer = setInterval(() => {
-      if (!this.videoMode || this.closed) return;
-      void this.captureAndSendFrame("periodic");
-    }, FRAME_PERIODIC_MS);
+  private setAutoCreateResponse(enabled: boolean) {
+    this.sendEvent({
+      type: "session.update",
+      session: {
+        audio: {
+          input: {
+            turn_detection: {
+              type: "server_vad",
+              threshold: 0.78,
+              prefix_padding_ms: 400,
+              silence_duration_ms: 900,
+              interrupt_response: true,
+              create_response: enabled,
+            },
+          },
+        },
+      },
+    });
   }
 
-  private stopPeriodicFrames() {
-    if (this.frameTimer) {
-      clearInterval(this.frameTimer);
-      this.frameTimer = null;
+  private clearVideoTurn() {
+    this.videoTurnPending = false;
+    if (this.videoTurnTimer) {
+      clearTimeout(this.videoTurnTimer);
+      this.videoTurnTimer = null;
     }
+  }
+
+  private beginVideoTurn() {
+    if (!this.videoMode || this.closed) return;
+    this.videoTurnPending = true;
+    if (this.videoTurnTimer) clearTimeout(this.videoTurnTimer);
+    this.videoTurnTimer = setTimeout(() => {
+      void this.finishVideoTurn(false);
+    }, VIDEO_TURN_FLUSH_MS);
+  }
+
+  private async finishVideoTurn(withFrame: boolean) {
+    if (!this.videoTurnPending || this.closed) return;
+    this.clearVideoTurn();
+    if (withFrame) {
+      this.activity("Capturing camera frame for your question");
+      await this.captureAndSendFrame("user_question", true);
+    }
+    this.sendEvent({ type: "response.create" });
   }
 
   private clearSearchFallback() {
@@ -429,32 +474,36 @@ export class StormAiRealtimeClient {
             },
             {
               type: "input_text",
-              text: `[Live camera frame (${reason}). Use this image for what the technician is asking about.]`,
+              text: `[Camera frame for this question (${reason}). Look at this image to answer.]`,
             },
           ],
         },
       });
 
-      const res = await fetch("/api/storm-ai/realtime/frame", {
+      const conversationId = this.conversationId;
+      void fetch("/api/storm-ai/realtime/frame", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          conversationId: this.conversationId,
+          conversationId,
           visitId: this.visitId || undefined,
           dataUrl,
           fileName: `storm-ai-frame-${Date.now()}.jpg`,
         }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        savedToJob?: boolean;
-        visitId?: string | null;
-      };
-      if (res.ok) {
-        this.callbacks.onFrameCaptured?.({
-          savedToJob: Boolean(data.savedToJob),
-          visitId: data.visitId ?? null,
-        });
-      }
+      })
+        .then(async (res) => {
+          const data = (await res.json().catch(() => ({}))) as {
+            savedToJob?: boolean;
+            visitId?: string | null;
+          };
+          if (res.ok) {
+            this.callbacks.onFrameCaptured?.({
+              savedToJob: Boolean(data.savedToJob),
+              visitId: data.visitId ?? null,
+            });
+          }
+        })
+        .catch(() => undefined);
     } finally {
       this.frameInFlight = false;
     }
@@ -482,9 +531,11 @@ export class StormAiRealtimeClient {
     if (type === "input_audio_buffer.speech_started") {
       this.setStatus("listening");
       this.activity("Heard speech — listening");
-      if (this.videoMode) {
-        void this.captureAndSendFrame("speech_started", true);
-      }
+      return;
+    }
+
+    if (type === "input_audio_buffer.speech_stopped") {
+      if (this.videoMode) this.beginVideoTurn();
       return;
     }
 
@@ -522,8 +573,8 @@ export class StormAiRealtimeClient {
         this.callbacks.onTranscript?.("user", transcript);
         this.activity(`You: ${transcript.slice(0, 80)}${transcript.length > 80 ? "…" : ""}`);
       }
-      if (this.videoMode && transcript && VISUAL_QUESTION_RE.test(transcript)) {
-        void this.captureAndSendFrame("visual_question", true);
+      if (this.videoMode && this.videoTurnPending && transcript) {
+        void this.finishVideoTurn(shouldSendCameraFrame(transcript));
       }
       return;
     }

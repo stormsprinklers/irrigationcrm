@@ -527,8 +527,8 @@ export function StormAiChat() {
               {messages.length === 0 && !voiceActive ? (
                 <p className="text-muted-foreground">
                     Ask about customers, attach a part photo, or use mic / video for live help.
-                    Video shows full FPS locally; frames are sent to the AI automatically
-                    (and saved to the job when linked).
+                    Video shows full FPS locally; a still is sent to the AI when you ask
+                    about what you are showing (and saved to the job when linked).
                 </p>
               ) : (
                 messages.map((m) => (
@@ -615,7 +615,7 @@ export function StormAiChat() {
                     autoPlay
                   />
                   <p className="text-center text-xs text-muted-foreground">
-                    Live preview — frames are captured automatically for the AI
+                    Live preview — a still is sent when you ask about what you see
                   </p>
                 </div>
               ) : null}

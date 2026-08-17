@@ -48,8 +48,8 @@ export function buildStormAiRealtimeInstructions(opts: {
 
   const videoBlock = opts.videoMode
     ? `
-The technician has video mode on. Still camera frames arrive automatically while they speak and periodically from the live preview (not a continuous video stream).
-When a frame arrives, look at it carefully. For part ID questions, describe what you see then call search_parts_info / get_parts_info.
+The technician has video mode on. A still camera frame is sent only when they ask a question or talk about what they are showing — not continuously.
+When a frame arrives with their question, look at it carefully before answering. For part ID, describe what you see then call search_parts_info / get_parts_info.
 Frames are also saved to the active job when possible—you do not need a tool to save them.
 When sharing a manual from get_parts_info, tell the tech the photos and manual are already shown in the chat panel — do not invent a link.
 Ground answers in the latest frame plus tool results. Never invent part numbers or manuals.`
@@ -93,7 +93,8 @@ export function buildRealtimeSessionConfig(opts: {
           // Longer silence before the model decides the tech finished speaking.
           silence_duration_ms: 900,
           interrupt_response: true,
-          create_response: true,
+          // Video mode attaches a still before answering, so the model must not auto-respond.
+          create_response: !opts.videoMode,
         },
         transcription: { model: "whisper-1" },
       },
