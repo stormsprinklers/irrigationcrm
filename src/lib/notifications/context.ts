@@ -52,8 +52,31 @@ type EstimateSlice = {
   estimateNumber?: string | null;
 };
 
-function formatAddress(parts: Array<string | null | undefined>): string {
-  return parts.filter(Boolean).join(", ");
+type AddressSlice = {
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+};
+
+export function formatCustomerAddress(parts: AddressSlice | null | undefined): string {
+  if (!parts) return "";
+  const cityStateZip = [parts.city, [parts.state, parts.zip].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  return [parts.address, cityStateZip].filter(Boolean).join(", ");
+}
+
+function resolveCustomerAddress(params: {
+  visit?: AddressSlice | null;
+  property?: AddressSlice | null;
+  customer?: AddressSlice | null;
+}) {
+  for (const source of [params.visit, params.property, params.customer]) {
+    const formatted = formatCustomerAddress(source);
+    if (formatted) return formatted;
+  }
+  return "";
 }
 
 function formatCurrency(value: number) {
@@ -67,6 +90,7 @@ export function buildNotificationContext(params: {
   technician?: TechnicianSlice | null;
   invoice?: InvoiceSlice | null;
   estimate?: EstimateSlice | null;
+  property?: AddressSlice | null;
   etaSeconds?: number | null;
   etaAt?: Date | null;
   surveyUrl?: string | null;
@@ -83,11 +107,11 @@ export function buildNotificationContext(params: {
   const customerName = params.customer?.name ?? "Customer";
   const { firstName, lastName } = splitCustomerName(customerName);
 
-  const visitAddress = params.visit
-    ? formatAddress([params.visit.address, params.visit.city, params.visit.state, params.visit.zip])
-    : params.customer
-      ? formatAddress([params.customer.address, params.customer.city, params.customer.state, params.customer.zip])
-      : "";
+  const visitAddress = resolveCustomerAddress({
+    visit: params.visit,
+    property: params.property,
+    customer: params.customer,
+  });
 
   const arrivalHours = params.company.arrivalWindowHours ?? 3;
   const startAt = params.visit?.startAt;

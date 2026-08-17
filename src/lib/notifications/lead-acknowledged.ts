@@ -1,5 +1,7 @@
 import type { Lead } from "@prisma/client";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
+import { formatCustomerAddress } from "@/lib/notifications/context";
 import { sendOperationalNotification } from "@/lib/notifications/send";
 import { prisma } from "@/lib/prisma";
 
@@ -63,6 +65,7 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
     context: {
       customer_first_name: firstNameFrom(lead.name),
       customer_last_name: lead.name.trim().split(/\s+/).slice(1).join(" ") || "",
+      customer_address: formatCustomerAddress(parseLeadServiceAddress(lead.notes, lead.metadata)),
       company_name: company.name,
       companyName: company.name,
       booking_link: bookingLink,

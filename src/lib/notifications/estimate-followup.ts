@@ -13,7 +13,12 @@ export function isEstimateOpenForFollowUp(status: EstimateStatus): boolean {
 async function buildEstimateFollowUpPayload(estimateId: string, companyId: string) {
   const estimate = await prisma.estimate.findFirst({
     where: { id: estimateId, companyId },
-    include: { customer: true, company: true },
+    include: {
+      customer: { include: { properties: { orderBy: { isPrimary: "desc" }, take: 1 } } },
+      company: true,
+      property: true,
+      visit: true,
+    },
   });
   if (!estimate?.customer) return null;
 
@@ -26,6 +31,17 @@ async function buildEstimateFollowUpPayload(estimateId: string, companyId: strin
   const context = buildNotificationContext({
     company: estimate.company,
     customer: estimate.customer,
+    visit: estimate.visit
+      ? {
+          title: estimate.visit.title,
+          startAt: estimate.visit.startAt,
+          address: estimate.visit.address,
+          city: estimate.visit.city,
+          state: estimate.visit.state,
+          zip: estimate.visit.zip,
+        }
+      : undefined,
+    property: estimate.property ?? estimate.customer.properties[0] ?? undefined,
     estimate: { publicToken: estimate.publicToken },
     estimateUrl,
   });

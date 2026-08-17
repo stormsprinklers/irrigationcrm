@@ -64,6 +64,39 @@ test("buildNotificationContext includes arrival window and parsed names", () => 
   assert.equal(ctx.technician_first_name, "Mike");
   assert.equal(ctx.company_name, "Storm Sprinklers");
   assert.ok(String(ctx.visit_arrival_window).includes("–"));
+  assert.equal(ctx.customer_address, "123 Main St");
+});
+
+test("buildNotificationContext fills {customer_address} from property when visit/customer street is empty", () => {
+  const ctx = buildNotificationContext({
+    company: { name: "Storm Sprinklers", timezone: "America/Denver" },
+    customer: { name: "Jane Doe" },
+    property: {
+      address: "456 Spruce Ave",
+      city: "Denver",
+      state: "CO",
+      zip: "80202",
+    },
+  });
+  assert.equal(ctx.customer_address, "456 Spruce Ave, Denver, CO 80202");
+});
+
+test("buildNotificationContext prefers visit address over property and customer", () => {
+  const startAt = new Date("2026-06-24T15:00:00.000Z");
+  const ctx = buildNotificationContext({
+    company: { name: "Storm Sprinklers", timezone: "America/Denver" },
+    customer: { name: "Jane Doe", address: "111 Customer St", city: "Boulder", state: "CO", zip: "80301" },
+    property: { address: "222 Property Rd", city: "Denver", state: "CO", zip: "80202" },
+    visit: {
+      title: "Repair",
+      startAt,
+      address: "333 Visit Ln",
+      city: "Littleton",
+      state: "CO",
+      zip: "80120",
+    },
+  });
+  assert.equal(ctx.customer_address, "333 Visit Ln, Littleton, CO 80120");
 });
 
 test("buildEnRouteContext uses fallback when ETA unavailable", () => {

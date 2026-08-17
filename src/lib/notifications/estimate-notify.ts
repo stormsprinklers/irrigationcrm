@@ -13,7 +13,13 @@ export async function notifyEstimateViaTemplates(
 ): Promise<SendResult> {
   const estimate = await prisma.estimate.findFirst({
     where: { id: estimateId, companyId },
-    include: { customer: true, company: true, lineItems: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      customer: { include: { properties: { orderBy: { isPrimary: "desc" }, take: 1 } } },
+      company: true,
+      property: true,
+      visit: true,
+      lineItems: { orderBy: { sortOrder: "asc" } },
+    },
   });
   if (!estimate?.customer) {
     return { emailSent: false, smsSent: false, skipped: ["no customer"], deliveryIds: [] };
@@ -28,6 +34,17 @@ export async function notifyEstimateViaTemplates(
   const context = buildNotificationContext({
     company: estimate.company,
     customer: estimate.customer,
+    visit: estimate.visit
+      ? {
+          title: estimate.visit.title,
+          startAt: estimate.visit.startAt,
+          address: estimate.visit.address,
+          city: estimate.visit.city,
+          state: estimate.visit.state,
+          zip: estimate.visit.zip,
+        }
+      : undefined,
+    property: estimate.property ?? estimate.customer.properties[0] ?? undefined,
     estimate: { publicToken: estimate.publicToken },
     estimateUrl,
   });

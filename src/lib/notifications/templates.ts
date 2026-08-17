@@ -19,33 +19,35 @@ export const NOTIFICATION_EVENTS = [
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
-export const MERGE_FIELD_HINTS = [
-  "{customer_first_name}",
-  "{customer_last_name}",
-  "{customer_address}",
-  "{technician_first_name}",
-  "{company_name}",
-  "{terms_of_service_url}",
-  "{privacy_policy_url}",
-  "{visit_date}",
-  "{visit_arrival_window}",
-  "{visit_title}",
-  "{invoice_amount}",
-  "{invoice_number}",
-  "{estimate_amount}",
-  "{review_link}",
-  "{technician_eta}",
-  "{portal_link}",
-  "{track_link}",
-  "{invoice_link}",
-  "{about_technician_link}",
-  "{estimate_link}",
-  "{survey_link}",
-  "{work_summary}",
-  "{booking_link}",
-  "{estimate_range}",
-  "{company_phone}",
-];
+export const MERGE_FIELDS = [
+  { token: "{customer_first_name}", label: "Customer first name" },
+  { token: "{customer_last_name}", label: "Customer last name" },
+  { token: "{customer_address}", label: "Customer address" },
+  { token: "{technician_first_name}", label: "Technician first name" },
+  { token: "{company_name}", label: "Company name" },
+  { token: "{terms_of_service_url}", label: "Terms of service URL" },
+  { token: "{privacy_policy_url}", label: "Privacy policy URL" },
+  { token: "{visit_date}", label: "Visit date" },
+  { token: "{visit_arrival_window}", label: "Arrival window" },
+  { token: "{visit_title}", label: "Visit title" },
+  { token: "{invoice_amount}", label: "Invoice amount" },
+  { token: "{invoice_number}", label: "Invoice number" },
+  { token: "{estimate_amount}", label: "Estimate amount" },
+  { token: "{review_link}", label: "Review link" },
+  { token: "{technician_eta}", label: "Technician ETA" },
+  { token: "{portal_link}", label: "Portal link" },
+  { token: "{track_link}", label: "Live track link" },
+  { token: "{invoice_link}", label: "Invoice link" },
+  { token: "{about_technician_link}", label: "About technician link" },
+  { token: "{estimate_link}", label: "Estimate link" },
+  { token: "{survey_link}", label: "Survey link" },
+  { token: "{work_summary}", label: "Work summary" },
+  { token: "{booking_link}", label: "Booking link" },
+  { token: "{estimate_range}", label: "Estimate range" },
+  { token: "{company_phone}", label: "Company phone" },
+] as const;
+
+export const MERGE_FIELD_HINTS = MERGE_FIELDS.map((field) => field.token);
 
 export const EVENT_LABELS: Record<NotificationEvent, string> = {
   VISIT_SCHEDULED: "Visit scheduled",

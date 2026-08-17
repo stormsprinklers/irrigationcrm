@@ -16,6 +16,7 @@ export async function notifyVisitEvent(params: {
     include: {
       customer: true,
       company: true,
+      property: true,
       assignedUser: { select: { name: true, websiteTeamSlug: true } },
     },
   });
@@ -52,6 +53,7 @@ export async function notifyVisitEvent(params: {
       zip: visit.zip,
     },
     technician: visit.assignedUser ?? undefined,
+    property: visit.property ?? undefined,
     surveyUrl,
   });
 

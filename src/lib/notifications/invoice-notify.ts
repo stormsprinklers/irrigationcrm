@@ -29,6 +29,7 @@ export async function notifyInvoiceViaTemplates(params: {
       visit: {
         include: {
           attachments: { orderBy: { createdAt: "asc" } },
+          property: true,
         },
       },
     },
@@ -82,6 +83,7 @@ export async function notifyInvoiceViaTemplates(params: {
           zip: invoice.visit.zip,
         }
       : undefined,
+    property: invoice.visit?.property ?? undefined,
   });
   if (customerWorkSummary) {
     context.work_summary = customerWorkSummary;

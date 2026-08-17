@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useCompanySettings } from "@/components/settings/useCompanySettings";
 import {
   EVENT_LABELS,
-  MERGE_FIELD_HINTS,
+  MERGE_FIELDS,
   NOTIFICATION_EVENTS,
   type NotificationEvent,
 } from "@/lib/notifications/templates";
@@ -380,16 +380,17 @@ export default function SettingsNotificationsPage() {
                     {editingId === tpl.id ? (
                       <div className="space-y-3">
                         <div className="flex flex-wrap gap-1">
-                          {MERGE_FIELD_HINTS.map((f) => (
+                          {MERGE_FIELDS.map((field) => (
                             <Button
-                              key={f}
+                              key={field.token}
                               type="button"
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-xs"
-                              onClick={() => insertMergeField(f)}
+                              title={field.label}
+                              onClick={() => insertMergeField(field.token)}
                             >
-                              {f}
+                              {field.token}
                             </Button>
                           ))}
                         </div>
