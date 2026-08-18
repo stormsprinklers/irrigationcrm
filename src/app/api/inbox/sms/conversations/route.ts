@@ -136,11 +136,19 @@ export async function GET(request: NextRequest) {
     const scopeParam = request.nextUrl.searchParams.get("scope") ?? "external";
     const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
 
+    const { fieldCustomerCommsWhere } = await import("@/lib/field/access");
+    const fieldCommsWhere =
+      scope === Scope.EXTERNAL ? await fieldCustomerCommsWhere(user) : null;
+    if (fieldCommsWhere && fieldCommsWhere.customerId.in.length === 0) {
+      return NextResponse.json([]);
+    }
+
     const conversations = await prisma.conversation.findMany({
       where: {
         companyId: user.companyId,
         channel: Channel.SMS,
         scope,
+        ...(fieldCommsWhere ?? {}),
         ...(scope === Scope.EXTERNAL
           ? {
               messages: {
@@ -202,6 +210,21 @@ export async function POST(request: NextRequest) {
     const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
 
     if (!to) return badRequestResponse("Recipient phone required");
+
+    if (scope === Scope.EXTERNAL) {
+      const { canAccessFieldCustomerComms, FIELD_CUSTOMER_COMMS_FORBIDDEN } = await import(
+        "@/lib/field/access"
+      );
+      const { findCustomerByPhone } = await import("@/lib/inbox/customer-lookup");
+      let resolvedCustomerId = customerId;
+      if (!resolvedCustomerId) {
+        const customer = await findCustomerByPhone(user.companyId, normalizePhone(to));
+        resolvedCustomerId = customer?.id;
+      }
+      if (!(await canAccessFieldCustomerComms(user, resolvedCustomerId))) {
+        return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+      }
+    }
 
     const result = await sendSmsMessage({
       user,

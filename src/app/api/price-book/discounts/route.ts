@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DiscountType, PriceBookDiscountAppliesTo } from "@prisma/client";
-import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listDiscounts, serializeDiscount } from "@/lib/price-book/extras";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -17,7 +18,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
+    if (!canManagePriceBook(user.role)) return forbiddenResponse();
     const body = await request.json();
     if (!body.name || body.amount == null) return badRequestResponse("name and amount are required");
 

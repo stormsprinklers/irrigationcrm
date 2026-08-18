@@ -18,6 +18,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Pencil, Users, X } from "lucide
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import type { ScheduleFilters } from "@/lib/schedule/types";
 import { scheduleCrewColumnId } from "@/lib/schedule/columns";
 
@@ -40,6 +41,9 @@ type Props = {
   hiddenUserIds: string[];
   onHiddenUserIdsChange: (ids: string[]) => void;
   onOpenTeamSchedule?: () => void;
+  pendingTimeOffCount?: number;
+  hideTeamSchedule?: boolean;
+  hideUnassigned?: boolean;
 };
 
 export function ScheduleFilterSidebar({
@@ -55,6 +59,9 @@ export function ScheduleFilterSidebar({
   hiddenUserIds,
   onHiddenUserIdsChange,
   onOpenTeamSchedule,
+  pendingTimeOffCount = 0,
+  hideTeamSchedule = false,
+  hideUnassigned = false,
 }: Props) {
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(weekStart));
   const [areaSearch, setAreaSearch] = useState("");
@@ -110,6 +117,7 @@ export function ScheduleFilterSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
+        {hideTeamSchedule ? null : (
         <div className="mb-6">
           <button
             type="button"
@@ -117,15 +125,20 @@ export function ScheduleFilterSidebar({
               onOpenTeamSchedule?.();
               onClose();
             }}
-            className="flex w-full items-center gap-2 rounded-md border border-border px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/60"
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md border px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/60",
+              pendingTimeOffCount > 0 ? "border-primary/40 bg-primary/5" : "border-border"
+            )}
           >
             <Users className="h-4 w-4 text-primary" />
-            Team schedules
+            <span className="flex-1">Team schedules</span>
+            <InboxCountOrb count={pendingTimeOffCount} />
           </button>
           <p className="mt-1 px-1 text-[11px] text-muted-foreground">
             Work days, time off, and request approvals
           </p>
         </div>
+        )}
 
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between">
@@ -244,14 +257,14 @@ export function ScheduleFilterSidebar({
           >
             <span className="flex items-center gap-2">
               <Checkbox
-                checked={allEmployeesVisible && showUnassigned}
+                checked={allEmployeesVisible && (hideUnassigned || showUnassigned)}
                 onCheckedChange={(checked) => {
                   if (checked) {
                     onHiddenUserIdsChange([]);
-                    onShowUnassignedChange(true);
+                    if (!hideUnassigned) onShowUnassignedChange(true);
                   } else {
                     onHiddenUserIdsChange(allColumnIds);
-                    onShowUnassignedChange(false);
+                    if (!hideUnassigned) onShowUnassignedChange(false);
                   }
                 }}
                 onClick={(e) => e.stopPropagation()}
@@ -264,6 +277,7 @@ export function ScheduleFilterSidebar({
           </button>
           {employeesOpen ? (
             <div className="space-y-2 pl-1">
+              {hideUnassigned ? null : (
               <label className="flex cursor-pointer items-center gap-2 text-sm">
                 <Checkbox
                   checked={showUnassigned}
@@ -271,6 +285,7 @@ export function ScheduleFilterSidebar({
                 />
                 <span>Unassigned</span>
               </label>
+              )}
               {options.crews.map((crew) => {
                 const columnId = scheduleCrewColumnId(crew.id);
                 const visible = !hiddenUserIds.includes(columnId);

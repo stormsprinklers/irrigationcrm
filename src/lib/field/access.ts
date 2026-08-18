@@ -1,4 +1,4 @@
-import { VisitStatus, type UserRole } from "@prisma/client";
+import { VisitStatus } from "@prisma/client";
 import { isFieldRole } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 
@@ -80,32 +80,20 @@ export async function getTechSmsWindowDays(companyId: string) {
 }
 
 /**
- * Customer ids whose EXTERNAL SMS the field user may see:
- * customers on visits assigned to them within ± window days from now.
+ * Customers whose SMS/calls a field user may see: anyone they have actually
+ * visited (non-cancelled past/current job) or are scheduled to visit.
  */
 export async function listEligibleCustomerIdsForFieldSms(
-  user: FieldAccessUser,
-  now = new Date()
+  user: FieldAccessUser
 ): Promise<string[]> {
   if (!isFieldRole(user.role)) {
-    // Office roles: no restriction via this helper (callers should skip).
     return [];
   }
-
-  const { pastDays, futureDays } = await getTechSmsWindowDays(user.companyId);
-  const start = new Date(now);
-  start.setDate(start.getDate() - pastDays);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setDate(end.getDate() + futureDays);
-  end.setHours(23, 59, 59, 999);
 
   const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
   const visits = await prisma.visit.findMany({
     where: {
       ...assigneeWhere,
-      startAt: { lte: end },
-      endAt: { gte: start },
       status: { not: VisitStatus.CANCELLED },
       customerId: { not: null },
     },
@@ -118,6 +106,39 @@ export async function listEligibleCustomerIdsForFieldSms(
     .filter((id): id is string => Boolean(id));
 }
 
-export function isFieldRoleString(role: string): role is Extract<UserRole, "TECH" | "INSTALLER"> {
-  return isFieldRole(role);
+export const FIELD_CUSTOMER_COMMS_FORBIDDEN =
+  "You can only view conversations and calls for customers you have visited or are scheduled to visit.";
+
+export async function canAccessFieldCustomerComms(
+  user: FieldAccessUser,
+  customerId: string | null | undefined
+) {
+  if (!isFieldRole(user.role)) return true;
+  if (!customerId) return false;
+  const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
+  const visit = await prisma.visit.findFirst({
+    where: {
+      ...assigneeWhere,
+      customerId,
+      status: { not: VisitStatus.CANCELLED },
+    },
+    select: { id: true },
+  });
+  return Boolean(visit);
+}
+
+/** Prisma filter for customer SMS/calls. `null` means no extra restriction. */
+export async function fieldCustomerCommsWhere(user: FieldAccessUser) {
+  if (!isFieldRole(user.role)) return null;
+  const ids = await listEligibleCustomerIdsForFieldSms(user);
+  return { customerId: { in: ids } };
+}
+
+export async function canAccessFieldSmsConversation(
+  user: FieldAccessUser,
+  conversation: { scope: string; customerId: string | null }
+) {
+  if (!isFieldRole(user.role)) return true;
+  if (conversation.scope !== "EXTERNAL") return true;
+  return canAccessFieldCustomerComms(user, conversation.customerId);
 }

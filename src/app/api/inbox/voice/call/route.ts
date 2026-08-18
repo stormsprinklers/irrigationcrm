@@ -27,6 +27,19 @@ export async function POST(request: NextRequest) {
       if (blocked) {
         return NextResponse.json({ error: "Contact is blocked" }, { status: 403 });
       }
+      const { canAccessFieldCustomerComms, FIELD_CUSTOMER_COMMS_FORBIDDEN } = await import(
+        "@/lib/field/access"
+      );
+      const { findCustomerByPhone } = await import("@/lib/inbox/customer-lookup");
+      const { forbiddenResponse } = await import("@/lib/api-auth");
+      let resolvedCustomerId = typeof customerId === "string" ? customerId : undefined;
+      if (!resolvedCustomerId) {
+        const customer = await findCustomerByPhone(user.companyId, normalizedTo);
+        resolvedCustomerId = customer?.id;
+      }
+      if (!(await canAccessFieldCustomerComms(user, resolvedCustomerId))) {
+        return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+      }
     }
 
     const twimlUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/twilio/voice/twiml?to=${encodeURIComponent(normalizedTo)}`;

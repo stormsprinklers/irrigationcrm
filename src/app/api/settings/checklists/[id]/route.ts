@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ChecklistItemType, Division, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageChecklists } from "@/lib/checklists/permissions";
+import { canManageChecklists, canViewChecklistSettings } from "@/lib/checklists/permissions";
 import { checklistTemplateInclude, serializeChecklistTemplate } from "@/lib/checklists/queries";
 import type { ChecklistItemInput } from "@/lib/checklists/types";
 import { prisma } from "@/lib/prisma";
@@ -52,7 +52,7 @@ async function getTemplate(companyId: string, id: string) {
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageChecklists(user.role as UserRole)) return forbiddenResponse();
+    if (!canViewChecklistSettings(user.role as UserRole)) return forbiddenResponse();
 
     const { id } = await params;
     const template = await getTemplate(user.companyId, id);

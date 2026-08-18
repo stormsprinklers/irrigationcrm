@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EmployeeStatus } from "@prisma/client";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { canViewEmployeeLms } from "@/lib/employees";
 import { fetchLmsTrainingSummary } from "@/lib/integrations/lms-sync";
 import { prisma } from "@/lib/prisma";
 
@@ -12,6 +13,7 @@ export type CertBadge = {
 export async function GET() {
   try {
     const user = await requireSessionUser();
+    if (!canViewEmployeeLms(user.role)) return forbiddenResponse();
     const employees = await prisma.user.findMany({
       where: { companyId: user.companyId, status: EmployeeStatus.ACTIVE },
       select: { id: true },

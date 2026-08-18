@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireSessionUser, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
+import {
+  canAccessFieldSmsConversation,
+  FIELD_CUSTOMER_COMMS_FORBIDDEN,
+} from "@/lib/field/access";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -52,6 +56,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           },
         });
       }
+    }
+
+    if (!(await canAccessFieldSmsConversation(user, conversation))) {
+      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
     }
 
     await markInboundConversationRead(user.companyId, id);

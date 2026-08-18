@@ -1,7 +1,6 @@
 import { notifyInvoiceViaTemplates } from "@/lib/notifications/invoice-notify";
 import { getInvoiceForCompany } from "@/lib/invoices/queries";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
-import { createStripeCheckoutPayUrl } from "@/lib/stripe/invoice-checkout";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -23,17 +22,7 @@ export async function deliverInvoice(params: {
   const balanceDue = Math.max(0, toNumber(invoice.total) - paid);
   if (balanceDue <= 0) return { error: "Invoice has no balance due", status: 400 as const };
 
-  // Prefer a live Stripe Checkout session URL (Apple Pay / Klarna / branded domain when ready).
-  let payUrl = getInvoicePayUrl(invoice.publicToken);
-  try {
-    const checkout = await createStripeCheckoutPayUrl({
-      invoiceId: invoice.id,
-      companyId: params.companyId,
-    });
-    if (checkout?.url) payUrl = checkout.url;
-  } catch (err) {
-    console.error("Stripe checkout URL for invoice delivery failed; falling back to CRM pay page:", err);
-  }
+  const payUrl = getInvoicePayUrl(invoice.publicToken);
 
   const { emailSent, smsSent } = await notifyInvoiceViaTemplates({
     invoiceId: params.invoiceId,

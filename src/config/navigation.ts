@@ -20,7 +20,6 @@ export const primaryNav: NavItem[] = [
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
-  { label: "Storm AI", href: "/storm-ai" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Holiday Lighting", href: "/holiday-lighting/quote" },
   { label: "Marketing", href: "/marketing" },
@@ -76,11 +75,8 @@ export const inboxSidebar: NavSection[] = [
         activePrefixes: ["/inbox/sms"],
       },
       { label: "Leads", href: "/inbox/leads" },
-      {
-        label: "Social DMs",
-        href: "/inbox/social",
-        activePrefixes: ["/inbox/social"],
-      },
+      { label: "Social DMs", href: "/inbox/social", activePrefixes: ["/inbox/social"] },
+      { label: "Google Reviews", href: "/inbox/reviews" },
     ],
   },
 ];

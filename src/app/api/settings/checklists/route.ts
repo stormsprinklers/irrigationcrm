@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ChecklistItemType, Division } from "@prisma/client";
 import { UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageChecklists } from "@/lib/checklists/permissions";
+import { canManageChecklists, canViewChecklistSettings } from "@/lib/checklists/permissions";
 import { checklistTemplateInclude, serializeChecklistTemplate } from "@/lib/checklists/queries";
 import type { ChecklistItemInput } from "@/lib/checklists/types";
 import { prisma } from "@/lib/prisma";
@@ -43,7 +43,7 @@ function parsePriceBookItemIds(ids: unknown): string[] {
 export async function GET() {
   try {
     const user = await requireSessionUser();
-    if (!canManageChecklists(user.role as UserRole)) return forbiddenResponse();
+    if (!canViewChecklistSettings(user.role as UserRole)) return forbiddenResponse();
 
     const templates = await prisma.checklistTemplate.findMany({
       where: { companyId: user.companyId },

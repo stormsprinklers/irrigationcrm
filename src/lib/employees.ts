@@ -60,6 +60,36 @@ export function canManageEmployees(role: string) {
   return role === "ADMIN" || role === "MANAGER";
 }
 
+export function canEditEmployeeColor(role: string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
+export function canViewEmployeeLms(role: string) {
+  return role === "ADMIN" || role === "MANAGER";
+}
+
+export function canViewFieldDevices(role: string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
+export function canManageServiceAreas(role: string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
+export function redactEmployeeForRole<T extends object>(employee: T, role: string): T {
+  if (role !== "CSR") return employee;
+  return {
+    ...employee,
+    payType: null,
+    hourlyRate: null,
+    commissionPercent: null,
+    annualSalary: null,
+    lmsUserId: null,
+    lmsSyncStatus: null,
+    lmsLastSyncedAt: null,
+  };
+}
+
 export function canViewProfitMargins(role: string) {
   return role === "ADMIN" || role === "MANAGER";
 }

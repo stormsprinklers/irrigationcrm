@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const q = request.nextUrl.searchParams.get("q") ?? "";
-    const result = await globalSearch(user.companyId, q);
+    const result = await globalSearch(user.companyId, q, user);
     return NextResponse.json(result);
   } catch {
     return unauthorizedResponse();

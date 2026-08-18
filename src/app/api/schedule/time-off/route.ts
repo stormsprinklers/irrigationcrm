@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TimeOffStatus, TimeOffType } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { notifyTimeOffRequestSubmitted } from "@/lib/schedule/time-off-notify";
 import {
   canManageTeamSchedule,
   canReviewTimeOff,
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     const employee = await prisma.user.findFirst({
       where: { id: requestedFor, companyId: user.companyId, status: "ACTIVE" },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!employee) return badRequestResponse("Employee not found");
 
@@ -114,6 +115,20 @@ export async function POST(request: NextRequest) {
       },
       include: timeOffInclude,
     });
+
+    if (status === TimeOffStatus.PENDING) {
+      await notifyTimeOffRequestSubmitted({
+        companyId: user.companyId,
+        employeeUserId: employee.id,
+        employeeName: employee.name?.trim() || "An employee",
+        startAt: start,
+        endAt: end,
+        type: type as string,
+        reason: reason ? String(reason) : null,
+      }).catch((err) => {
+        console.error("Failed to notify time-off reviewers:", err);
+      });
+    }
 
     return NextResponse.json(serializeTimeOffRequest(entry), { status: 201 });
   } catch {

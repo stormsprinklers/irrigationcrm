@@ -12,7 +12,10 @@ export async function GET(_request: NextRequest) {
       status: TimeOffStatus.PENDING,
     });
 
-    return NextResponse.json({ requests });
+    return NextResponse.json({
+      requests,
+      count: requests.length,
+    });
   } catch {
     return unauthorizedResponse();
   }

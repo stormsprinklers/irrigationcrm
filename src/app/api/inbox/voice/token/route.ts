@@ -10,8 +10,20 @@ export async function POST(request: NextRequest) {
     const platformParam = request.nextUrl.searchParams.get("platform");
     const platform =
       platformParam === "ios" || platformParam === "android" ? platformParam : "web";
+    const pushCredentialSid =
+      platform === "ios"
+        ? process.env.TWILIO_PUSH_CREDENTIAL_SID?.trim()
+        : platform === "android"
+          ? process.env.TWILIO_ANDROID_PUSH_CREDENTIAL_SID?.trim()
+          : undefined;
     const token = getTwilioVoiceToken(identity, { platform });
-    return NextResponse.json({ token, identity });
+    return NextResponse.json({
+      token,
+      identity,
+      ...(platform === "ios"
+        ? { pushCredentialConfigured: Boolean(pushCredentialSid) }
+        : {}),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate token";
     const missingCredentials =

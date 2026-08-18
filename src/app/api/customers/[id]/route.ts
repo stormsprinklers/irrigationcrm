@@ -19,7 +19,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const { id } = await params;
     const customer = await getCustomerForCompany(user.companyId, id);
     if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(serializeCustomer(customer));
+    const { canAccessFieldCustomerComms } = await import("@/lib/field/access");
+    return NextResponse.json({
+      ...serializeCustomer(customer),
+      canViewCustomerComms: await canAccessFieldCustomerComms(user, id),
+    });
   } catch {
     return unauthorizedResponse();
   }

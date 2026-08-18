@@ -97,6 +97,16 @@ export async function GET(request: NextRequest) {
     }
     if (tag) where.tags = { has: tag };
 
+    const { isFieldRole } = await import("@/lib/employees");
+    const { listEligibleCustomerIdsForFieldSms } = await import("@/lib/field/access");
+    if (isFieldRole(user.role)) {
+      const ids = await listEligibleCustomerIdsForFieldSms(user);
+      if (!ids.length) {
+        return NextResponse.json({ customers: [], availableTags: [] });
+      }
+      where.id = { in: ids };
+    }
+
     const [customers, availableTags] = await Promise.all([
       prisma.customer.findMany({
         where,

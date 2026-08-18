@@ -6,7 +6,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canManageEmployees } from "@/lib/employees";
+import { canHandleGbpReviews } from "@/lib/google-business/permissions";
 import { REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
 import { manuallyAssignGbpReview } from "@/lib/google-business/review-assigner";
 import { prisma } from "@/lib/prisma";
@@ -77,7 +77,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canHandleGbpReviews(user.role)) return forbiddenResponse();
 
     const body = await request.json();
     const reviewId = String(body.reviewId ?? "").trim();

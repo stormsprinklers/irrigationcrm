@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { VisitStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listVisitsForCompany } from "@/lib/visits/queries";
+import { isFieldRole } from "@/lib/employees";
+import { fieldVisitAssigneeWhere } from "@/lib/field/access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +16,13 @@ export async function GET(request: NextRequest) {
         ? (statusParam as VisitStatus)
         : undefined;
 
-    const visits = await listVisitsForCompany(user.companyId, { search, status });
+    const visits = await listVisitsForCompany(user.companyId, {
+      search,
+      status,
+      extraWhere: isFieldRole(user.role)
+        ? await fieldVisitAssigneeWhere(user.companyId, user.id)
+        : undefined,
+    });
     return NextResponse.json({ visits });
   } catch {
     return unauthorizedResponse();

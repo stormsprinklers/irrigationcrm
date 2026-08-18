@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CreditCard, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -9,6 +9,15 @@ import type { PublicInvoiceDTO } from "@/lib/invoices/types";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+}
+
+function isInvoicePaid(invoice: PublicInvoiceDTO) {
+  return (
+    invoice.balanceDue <= 0 ||
+    invoice.status === "PAID" ||
+    invoice.status === "REFUNDED" ||
+    invoice.status === "VOID"
+  );
 }
 
 type Props = {
@@ -24,6 +33,7 @@ export function PublicInvoicePayPage({ token }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoForwarded = useRef(false);
 
   async function loadInvoice() {
     const res = await fetch(`/api/invoices/public/${token}`);
@@ -90,11 +100,21 @@ export function PublicInvoicePayPage({ token }: Props) {
       }
       if (data.url) {
         window.location.href = data.url;
+        return;
       }
     } finally {
       setPaying(false);
     }
   }
+
+  useEffect(() => {
+    if (loading || !invoice || error) return;
+    if (paymentStatus === "success" || paymentStatus === "cancelled") return;
+    if (isInvoicePaid(invoice)) return;
+    if (autoForwarded.current) return;
+    autoForwarded.current = true;
+    void handlePay();
+  }, [loading, invoice, error, paymentStatus]);
 
   if (loading) {
     return (
@@ -113,11 +133,7 @@ export function PublicInvoicePayPage({ token }: Props) {
     );
   }
 
-  const isPaid =
-    invoice.balanceDue <= 0 ||
-    invoice.status === "PAID" ||
-    invoice.status === "REFUNDED" ||
-    invoice.status === "VOID";
+  const isPaid = isInvoicePaid(invoice);
   const isRefunded = invoice.status === "REFUNDED";
 
   return (

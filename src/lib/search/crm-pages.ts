@@ -62,10 +62,14 @@ export function listSearchableCrmPages(): CrmPageHit[] {
   return [...out.values()].sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function searchCrmPages(query: string, limit = 8): CrmPageHit[] {
+export function searchCrmPages(
+  query: string,
+  limit = 8,
+  includeHref: (href: string) => boolean = () => true
+): CrmPageHit[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const pages = listSearchableCrmPages();
+  const pages = listSearchableCrmPages().filter((page) => includeHref(page.href));
   const scored = pages
     .map((page) => {
       const title = page.title.toLowerCase();

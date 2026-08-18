@@ -14,11 +14,19 @@ export async function GET(
 
     const call = await prisma.callLog.findFirst({
       where: { id, companyId: user.companyId },
-      select: { recordingUrl: true },
+      select: { recordingUrl: true, customerId: true },
     });
 
     if (!call?.recordingUrl) {
       return NextResponse.json({ error: "Recording not found" }, { status: 404 });
+    }
+
+    const { canAccessFieldCustomerComms, FIELD_CUSTOMER_COMMS_FORBIDDEN } = await import(
+      "@/lib/field/access"
+    );
+    const { forbiddenResponse } = await import("@/lib/api-auth");
+    if (!(await canAccessFieldCustomerComms(user, call.customerId))) {
+      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
     }
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID;

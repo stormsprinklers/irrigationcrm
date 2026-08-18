@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   badRequestResponse,
+  forbiddenResponse,
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
+import { canWriteCompanySettings } from "@/lib/settings/access";
 import {
   parseCampaignCtaLinks,
   resolveCampaignAllowedLinks,
@@ -84,6 +86,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await requireSessionUser();
+    if (!canWriteCompanySettings(user.role)) return forbiddenResponse();
     const body = (await request.json().catch(() => ({}))) as {
       bookingUrl?: string | null;
       privacyPolicyUrl?: string | null;

@@ -9,14 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm, type EmployeeRecord } from "./EmployeeForm";
 import { CrewManager } from "./CrewManager";
-import { ROLE_LABELS, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
+import { ROLE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { useSession } from "next-auth/react";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
 type CertBadge = { title: string; badgeUrl: string | null };
 
 export function EmployeeList() {
+  const { data: session } = useSession();
+  const role = session?.user?.role ?? "";
+  const canManage = canManageEmployees(role);
+  const showLms = canViewEmployeeLms(role);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [serviceAreas, setServiceAreas] = useState<ServiceAreaOption[]>([]);
   const [certBadgesByUser, setCertBadgesByUser] = useState<Record<string, CertBadge[]>>({});
@@ -43,7 +48,7 @@ export function EmployeeList() {
   }, [load]);
 
   useEffect(() => {
-    if (tab !== "ACTIVE") {
+    if (tab !== "ACTIVE" || !showLms) {
       setCertBadgesByUser({});
       return;
     }
@@ -59,7 +64,7 @@ export function EmployeeList() {
     return () => {
       cancelled = true;
     };
-  }, [tab, employees]);
+  }, [tab, employees, showLms]);
 
   async function syncEmployeeToLms(id: string) {
     const res = await fetch(`/api/settings/employees/${id}`, {
@@ -150,7 +155,7 @@ export function EmployeeList() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-56"
             />
-            <Button onClick={() => setCreating(true)}>Add employee</Button>
+            {canManage ? <Button onClick={() => setCreating(true)}>Add employee</Button> : null}
           </div>
         </div>
 
@@ -203,27 +208,31 @@ export function EmployeeList() {
                         <Badge variant="secondary">{ROLE_LABELS[employee.role]}</Badge>
                         {employee.title ? <Badge variant="outline">{employee.title}</Badge> : null}
                         {employee.division ? <Badge variant="outline">{employee.division}</Badge> : null}
-                        {employee.lmsSyncStatus === "synced" ? (
-                          <Badge variant="outline" className="text-green-700">
-                            LMS synced
-                          </Badge>
-                        ) : employee.lmsSyncStatus === "error" ? (
-                          <Badge variant="destructive">LMS sync error</Badge>
-                        ) : (
-                          <Badge variant="outline">LMS not synced</Badge>
-                        )}
+                        {showLms ? (
+                          employee.lmsSyncStatus === "synced" ? (
+                            <Badge variant="outline" className="text-green-700">
+                              LMS synced
+                            </Badge>
+                          ) : employee.lmsSyncStatus === "error" ? (
+                            <Badge variant="destructive">LMS sync error</Badge>
+                          ) : (
+                            <Badge variant="outline">LMS not synced</Badge>
+                          )
+                        ) : null}
                       </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void syncEmployeeToLms(employee.id)}
-                    >
-                      Sync LMS
-                    </Button>
-                    {process.env.NEXT_PUBLIC_LMS_URL ? (
+                    {showLms ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void syncEmployeeToLms(employee.id)}
+                      >
+                        Sync LMS
+                      </Button>
+                    ) : null}
+                    {showLms && process.env.NEXT_PUBLIC_LMS_URL ? (
                       <Button variant="outline" size="sm" asChild>
                         <a
                           href={`${process.env.NEXT_PUBLIC_LMS_URL.replace(/\/$/, "")}/admin/users?email=${encodeURIComponent(employee.email)}`}
@@ -235,20 +244,23 @@ export function EmployeeList() {
                       </Button>
                     ) : null}
                     <Button variant="outline" size="sm" onClick={() => setEditing(employee)}>
-                      Edit
+                      {canManage ? "Edit" : "Color"}
                     </Button>
-                    {employee.status === "ACTIVE" ? (
+                    {canManage && employee.status === "ACTIVE" ? (
                       <Button variant="outline" size="sm" onClick={() => archiveEmployee(employee.id, "archive")}>
                         Archive
                       </Button>
-                    ) : (
+                    ) : null}
+                    {canManage && employee.status !== "ACTIVE" ? (
                       <Button variant="outline" size="sm" onClick={() => archiveEmployee(employee.id, "restore")}>
                         Restore
                       </Button>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={() => deleteEmployee(employee.id)}>
-                      Delete
-                    </Button>
+                    ) : null}
+                    {canManage ? (
+                      <Button variant="ghost" size="sm" onClick={() => deleteEmployee(employee.id)}>
+                        Delete
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -258,7 +270,9 @@ export function EmployeeList() {
         </TabsContent>
       </Tabs>
 
-      <CrewManager employees={employees.filter((e) => e.status === "ACTIVE")} />
+      {canManage ? (
+        <CrewManager employees={employees.filter((e) => e.status === "ACTIVE")} />
+      ) : null}
     </div>
   );
 }

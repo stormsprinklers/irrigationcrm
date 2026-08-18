@@ -2,7 +2,6 @@ import { AppNotificationType, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { notifyStaffInApp } from "@/lib/notifications/in-app";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
-import { createStripeCheckoutPayUrl } from "@/lib/stripe/invoice-checkout";
 import { notifyInvoiceViaTemplates } from "@/lib/notifications/invoice-notify";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -148,7 +147,7 @@ export async function notifyCashCheckPayment(params: {
 
 /**
  * Customer CRM email/SMS + admin alert after a Stripe payment failure.
- * Retry link is a fresh Stripe Checkout session.url when possible.
+ * Retry link is the short CRM /pay/{token} URL (forwards to Stripe).
  */
 export async function handleInvoicePaymentFailure(params: {
   invoiceId: string;
@@ -187,16 +186,7 @@ export async function handleInvoicePaymentFailure(params: {
   const amount = params.amount != null && params.amount > 0 ? params.amount : balanceDue;
   if (amount <= 0) return;
 
-  let retryUrl = getInvoicePayUrl(invoice.publicToken);
-  try {
-    const checkout = await createStripeCheckoutPayUrl({
-      invoiceId: invoice.id,
-      companyId: invoice.companyId,
-    });
-    if (checkout?.url) retryUrl = checkout.url;
-  } catch (err) {
-    console.error("Failed to create Stripe retry checkout URL:", err);
-  }
+  const retryUrl = getInvoicePayUrl(invoice.publicToken);
 
   const companyFlags = invoice.company as {
     notifyInvoicePaymentFailed?: boolean;

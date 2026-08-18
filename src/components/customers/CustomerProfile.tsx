@@ -37,6 +37,7 @@ import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection"
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { canViewMaintenancePlansNav } from "@/lib/settings/access";
 import { useIrrigationFeatures, useHolidayLightingFeatures, useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
@@ -167,6 +168,7 @@ export function CustomerProfile({ customerId }: Props) {
   const canRefund = canIssueRefunds(userRole);
   const canManagePayments =
     userRole === "CSR" || userRole === "MANAGER" || userRole === "ADMIN";
+  const showMaintenance = maintenanceEnabled && canViewMaintenancePlansNav(userRole);
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
   const [phones, setPhones] = useState<CustomerPhoneDTO[]>([]);
@@ -220,6 +222,13 @@ export function CustomerProfile({ customerId }: Props) {
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
+  const canViewComms = customer?.canViewCustomerComms !== false;
+
+  useEffect(() => {
+    if (!customer) return;
+    if (activeTab === "calls" && !canViewComms) setActiveTab("profile");
+    if (activeTab === "maintenance" && !showMaintenance) setActiveTab("profile");
+  }, [customer, activeTab, canViewComms, showMaintenance]);
 
   useEffect(() => {
     if (tabFromUrl && validTabs.has(tabFromUrl)) {
@@ -322,7 +331,10 @@ export function CustomerProfile({ customerId }: Props) {
         return;
       }
       const updated = await res.json();
-      setCustomer(updated);
+      setCustomer({
+        ...updated,
+        canViewCustomerComms: updated.canViewCustomerComms ?? customer?.canViewCustomerComms,
+      });
       setDraftCustomer(null);
       setEditMode(false);
       toast.success("Customer updated");
@@ -725,10 +737,10 @@ export function CustomerProfile({ customerId }: Props) {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
-          <TabsTrigger value="calls">Calls</TabsTrigger>
+          {canViewComms ? <TabsTrigger value="calls">Calls</TabsTrigger> : null}
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
           {canViewInvoices ? <TabsTrigger value="invoices">Invoices</TabsTrigger> : null}
-          {maintenanceEnabled ? (
+          {showMaintenance ? (
             <TabsTrigger value="maintenance">Maintenance Plans</TabsTrigger>
           ) : null}
         </TabsList>
@@ -752,11 +764,13 @@ export function CustomerProfile({ customerId }: Props) {
                     label="Phone"
                     value={formatPhoneDisplay(customer.phone) || null}
                     actions={
+                      canViewComms ? (
                       <CustomerPhoneActions
                         customerId={customer.id}
                         name={customer.name}
                         phone={customer.phone}
                       />
+                      ) : null
                     }
                   />
                   <ProfileDetail
@@ -1005,7 +1019,7 @@ export function CustomerProfile({ customerId }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1">
                             <p className="font-medium">{formatPhoneDisplay(phone.phone)}</p>
-                            {!editMode && customer ? (
+                            {!editMode && customer && canViewComms ? (
                               <CustomerPhoneActions
                                 customerId={customer.id}
                                 name={customer.name}
@@ -1337,9 +1351,11 @@ export function CustomerProfile({ customerId }: Props) {
           </Card>
         </TabsContent>
 
+        {canViewComms ? (
         <TabsContent value="calls" className="space-y-4">
           <CustomerCallsTab customerId={customerId} />
         </TabsContent>
+        ) : null}
 
         <TabsContent value="estimates" className="space-y-4">
           <div className="flex justify-end">
@@ -1488,7 +1504,7 @@ export function CustomerProfile({ customerId }: Props) {
         </TabsContent>
         ) : null}
 
-        {maintenanceEnabled ? (
+        {showMaintenance ? (
         <TabsContent value="maintenance" className="space-y-4">
           {(() => {
             const lateEnrollments = enrollments.filter(enrollmentHasLatePayment);

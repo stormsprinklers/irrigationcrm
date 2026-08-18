@@ -97,6 +97,7 @@ export async function GET() {
         name: true,
         email: true,
         role: true,
+        photoUrl: true,
         company: { select: { id: true, name: true } },
       },
     });
@@ -114,6 +115,7 @@ export async function GET() {
         name: current.name,
         email: current.email,
         role: current.role,
+        photoUrl: current.photoUrl,
         companyId: current.company.id,
         companyName: current.company.name,
         source: "same-email" as const,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees } from "@/lib/employees";
+import { canManageServiceAreas } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 import { findZipConflict, parseZipInput } from "@/lib/service-areas";
 
@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canManageServiceAreas(user.role)) return forbiddenResponse();
 
     const { id } = await params;
     const area = await prisma.serviceArea.findFirst({
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 export async function DELETE(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canManageServiceAreas(user.role)) return forbiddenResponse();
 
     const { id } = await params;
     const area = await prisma.serviceArea.findFirst({

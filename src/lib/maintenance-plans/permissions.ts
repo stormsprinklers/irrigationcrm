@@ -5,8 +5,6 @@ export function canViewMaintenancePlans(role: UserRole) {
     role === "CSR" ||
     role === "MANAGER" ||
     role === "ADMIN" ||
-    role === "TECH" ||
-    role === "INSTALLER" ||
     role === "SALES"
   );
 }
@@ -20,7 +18,6 @@ export function canManageEnrollments(role: UserRole) {
     role === "CSR" ||
     role === "MANAGER" ||
     role === "ADMIN" ||
-    role === "TECH" ||
     role === "SALES"
   );
 }

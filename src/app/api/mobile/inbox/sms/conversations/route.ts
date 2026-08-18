@@ -7,7 +7,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { isFieldRole } from "@/lib/employees";
-import { listEligibleCustomerIdsForFieldSms } from "@/lib/field/access";
+import { listEligibleCustomerIdsForFieldSms, FIELD_CUSTOMER_COMMS_FORBIDDEN } from "@/lib/field/access";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         resolvedCustomerId = customer?.id;
       }
       if (!resolvedCustomerId || !eligible.includes(resolvedCustomerId)) {
-        return forbiddenResponse("Customer is outside your SMS access window");
+        return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
       }
     }
 

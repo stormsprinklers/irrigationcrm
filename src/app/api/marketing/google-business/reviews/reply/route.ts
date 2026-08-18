@@ -5,14 +5,15 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canManageCustomers } from "@/lib/customers/permissions";
+import { canHandleGbpReviews } from "@/lib/google-business/permissions";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { updateGbpReviewReply } from "@/lib/google-business/v4-api";
+import { prisma } from "@/lib/prisma";
 
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
+    if (!canHandleGbpReviews(user.role)) return forbiddenResponse();
 
     await requireGbpCompany(user.companyId);
     const body = await request.json();
@@ -22,6 +23,14 @@ export async function PUT(request: NextRequest) {
     if (!comment) return badRequestResponse("Reply comment is required");
 
     const data = await updateGbpReviewReply(user.companyId, reviewName, comment);
+    const reviewId =
+      String(body.reviewId ?? "").trim() || reviewName.split("/").filter(Boolean).pop() || "";
+    if (reviewId) {
+      await prisma.gbpReview.updateMany({
+        where: { companyId: user.companyId, reviewId },
+        data: { hasReply: true },
+      });
+    }
     return NextResponse.json(data);
   } catch (error) {
     if (error instanceof GoogleBusinessApiError) {

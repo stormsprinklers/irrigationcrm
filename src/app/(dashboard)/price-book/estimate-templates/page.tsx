@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,8 +16,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 
 export default function EstimateTemplatesPage() {
+  const { data: session } = useSession();
+  const canManage = canManagePriceBook(session?.user?.role);
   const [templates, setTemplates] = useState<
     Array<{ id: string; name: string; description: string | null; lineItems: Array<{ name: string; unitPrice: number }> }>
   >([]);
@@ -52,12 +56,14 @@ export default function EstimateTemplatesPage() {
   return (
     <ContentArea>
       <PageHeader breadcrumb={["Price book", "Estimate Templates"]} title="Estimate Templates" />
-      <div className="mb-4 flex flex-wrap gap-2 rounded-lg border border-border bg-white p-4">
-        <Input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[200px]" />
-        <Input placeholder="Line item name" value={itemName} onChange={(e) => setItemName(e.target.value)} className="max-w-[200px]" />
-        <Input placeholder="Price" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} className="max-w-[100px]" />
-        <Button size="sm" onClick={createTemplate}><Plus className="h-4 w-4" />Add template</Button>
-      </div>
+      {canManage ? (
+        <div className="mb-4 flex flex-wrap gap-2 rounded-lg border border-border bg-white p-4">
+          <Input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[200px]" />
+          <Input placeholder="Line item name" value={itemName} onChange={(e) => setItemName(e.target.value)} className="max-w-[200px]" />
+          <Input placeholder="Price" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} className="max-w-[100px]" />
+          <Button size="sm" onClick={createTemplate}><Plus className="h-4 w-4" />Add template</Button>
+        </div>
+      ) : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : (
         <div className="rounded-lg border border-border bg-white">
           <Table>

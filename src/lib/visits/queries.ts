@@ -1,6 +1,8 @@
 import { Division, Prisma, VisitStatus } from "@prisma/client";
 import { formatVisitEtaPayload } from "@/lib/maps/eta";
 import { prisma } from "@/lib/prisma";
+import { isFieldRole } from "@/lib/employees";
+import { getUserCrewIds } from "@/lib/field/access";
 import { sumDiscounts, sumLineItems, toNumber } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
 
@@ -163,6 +165,7 @@ function buildVisitWhere(
 export type VisitListFilters = {
   search?: string;
   status?: VisitStatus;
+  extraWhere?: Prisma.VisitWhereInput;
 };
 
 export async function listVisitsForCompany(
@@ -183,6 +186,10 @@ export async function listVisitsForCompany(
       { title: { contains: q, mode: "insensitive" } },
       { customer: { name: { contains: q, mode: "insensitive" } } },
     ];
+  }
+
+  if (filters?.extraWhere) {
+    where.AND = [filters.extraWhere];
   }
 
   const visits = await prisma.visit.findMany({
@@ -212,10 +219,13 @@ export async function getScheduleSummary(
   companyId: string,
   start: Date,
   end: Date,
-  filters?: ScheduleFilters
+  filters?: ScheduleFilters,
+  extraWhere?: Prisma.VisitWhereInput
 ) {
   const visits = await prisma.visit.findMany({
-    where: buildVisitWhere(companyId, start, end, filters),
+    where: extraWhere
+      ? { AND: [buildVisitWhere(companyId, start, end, filters), extraWhere] }
+      : buildVisitWhere(companyId, start, end, filters),
     include: { lineItems: true, discounts: true },
   });
 
@@ -240,8 +250,11 @@ export async function getScheduleSummary(
   };
 }
 
-export async function getScheduleFilters(companyId: string) {
-  const [serviceAreas, employees, crewsRaw, company] = await Promise.all([
+export async function getScheduleFilters(
+  companyId: string,
+  viewer?: { id: string; role: string }
+) {
+  const [serviceAreas, employeesRaw, crewsRaw, company] = await Promise.all([
     prisma.serviceArea.findMany({
       where: { companyId },
       orderBy: { sortOrder: "asc" },
@@ -271,7 +284,8 @@ export async function getScheduleFilters(companyId: string) {
     }),
   ]);
 
-  const crews = crewsRaw.map((crew) => {
+  let employees = employeesRaw;
+  let crews = crewsRaw.map((crew) => {
     const avatar =
       crew.foreman ??
       crew.members.find((m) => m.userId === crew.foremanUserId)?.user ??
@@ -289,6 +303,12 @@ export async function getScheduleFilters(companyId: string) {
       members: crew.members,
     };
   });
+
+  if (viewer && isFieldRole(viewer.role)) {
+    const crewIds = await getUserCrewIds(companyId, viewer.id);
+    employees = employees.filter((employee) => employee.id === viewer.id);
+    crews = crews.filter((crew) => crewIds.includes(crew.id));
+  }
 
   const scheduleUserIds = new Set<string>();
   for (const employee of employees) scheduleUserIds.add(employee.id);

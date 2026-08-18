@@ -48,7 +48,7 @@ export default function StormAiGeneralPage() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="text-lg font-semibold">General</h3>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Storm AI is a full page in the main navigation (
+          Open Storm AI from the sparkles icon in the top-right of the CRM (
           <Link href="/storm-ai" className="text-primary underline underline-offset-2">
             /storm-ai
           </Link>

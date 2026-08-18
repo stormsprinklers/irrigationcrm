@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import { notifyTimeOffPendingChanged } from "@/contexts/InboxBadgesProvider";
 
 type Employee = {
   id: string;
@@ -194,6 +195,7 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
       });
       if (!res.ok) throw new Error("Failed to update");
       toast.success(status === "APPROVED" ? "Request approved" : "Request denied");
+      notifyTimeOffPendingChanged();
       await loadPending();
       await loadEmployeeData();
     } catch {
@@ -442,8 +444,15 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
         </div>
 
         {canManage ? (
-          <aside className="min-h-0 w-full shrink-0 overflow-y-auto border-t border-border bg-muted/20 p-4 xl:w-80 xl:border-l xl:border-t-0">
-            <h3 className="mb-3 font-semibold">Pending approvals</h3>
+          <aside className="order-first min-h-0 w-full shrink-0 overflow-y-auto border-b border-border bg-muted/20 p-4 xl:order-none xl:w-80 xl:border-b-0 xl:border-l xl:border-t-0">
+            <h3 className="mb-3 flex items-center justify-between font-semibold">
+              <span>Pending approvals</span>
+              {pendingRequests.length > 0 ? (
+                <span className="rounded-full bg-[#FF3B30] px-2 py-0.5 text-[11px] font-semibold text-white">
+                  {pendingRequests.length}
+                </span>
+              ) : null}
+            </h3>
             {pendingRequests.length === 0 ? (
               <p className="text-sm text-muted-foreground">No pending requests.</p>
             ) : (

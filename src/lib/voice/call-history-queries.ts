@@ -217,10 +217,16 @@ async function loadAiReceptionistIndexes(rows: CallLogRow[]) {
 
 export async function listCallHistory(
   companyId: string,
-  take = CALL_HISTORY_UI_LIMIT
+  take = CALL_HISTORY_UI_LIMIT,
+  options?: { customerIds?: string[] }
 ): Promise<CallHistoryListItem[]> {
+  if (options?.customerIds && options.customerIds.length === 0) return [];
   const rows = await prisma.callLog.findMany({
-    where: { companyId, scope: "EXTERNAL" },
+    where: {
+      companyId,
+      scope: "EXTERNAL",
+      ...(options?.customerIds ? { customerId: { in: options.customerIds } } : {}),
+    },
     include: callLogInclude,
     orderBy: { startedAt: "desc" },
     take,

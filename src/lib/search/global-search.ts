@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { formatPhoneDisplay, phoneDigitsKey, phoneLookupVariants } from "@/lib/inbox/phone";
 import { searchCrmPages, type CrmPageHit } from "@/lib/search/crm-pages";
+import { canSearchCrmPage } from "@/lib/settings/access";
+import type { RolePreviewUser } from "@/lib/role-preview";
 
 export type GlobalSearchCustomerHit = {
   id: string;
@@ -57,7 +59,8 @@ function joinMeta(parts: Array<string | null | undefined>) {
 
 export async function globalSearch(
   companyId: string,
-  query: string
+  query: string,
+  user?: RolePreviewUser | null
 ): Promise<GlobalSearchResult> {
   const q = query.trim();
   if (q.length < 2) {
@@ -235,6 +238,6 @@ export async function globalSearch(
       ]),
       meta: formatMoney(Number(item.unitPrice)),
     })),
-    pages: searchCrmPages(q, 8),
+    pages: searchCrmPages(q, 8, (href) => canSearchCrmPage(href, user ?? null)),
   };
 }

@@ -54,6 +54,7 @@ function serializeCompanyPay(company: {
 export async function GET() {
   try {
     const user = await requireSessionUser();
+    if (!canManageCompensation(user.role)) return forbiddenResponse();
     const company = await prisma.company.findUniqueOrThrow({
       where: { id: user.companyId },
       select: companySelect,

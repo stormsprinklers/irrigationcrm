@@ -155,6 +155,21 @@ export async function findActiveStaffById(id: string): Promise<StaffAuthUser | n
   return user;
 }
 
+export async function getStaffAuthUserForSession(params: {
+  id: string;
+  companyId: string;
+}): Promise<StaffAuthUser | null> {
+  return prisma.user.findFirst({
+    where: {
+      id: params.id,
+      companyId: params.companyId,
+      status: "ACTIVE",
+      systemKind: null,
+    },
+    select: STAFF_AUTH_SELECT,
+  });
+}
+
 export async function verifyStaffPassword(user: StaffAuthUser, password: string) {
   if (!user.passwordHash) return false;
   return bcrypt.compare(password, user.passwordHash);
@@ -216,7 +231,9 @@ export async function startStaffMfaChallenge(
             ? `Storm Sprinklers expense card verification code: ${code}. Expires in 10 minutes.`
             : purpose === "PHONE_NUMBER_RELEASE"
               ? `Storm Sprinklers phone number release code: ${code}. Expires in 10 minutes.`
-              : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
+              : purpose === "ACCOUNT_PASSWORD"
+                ? `Storm Sprinklers password change code: ${code}. Expires in 10 minutes.`
+                : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
         bypassCommsFreeze: true,
       });
     } catch (err) {

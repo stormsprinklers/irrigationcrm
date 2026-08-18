@@ -34,6 +34,8 @@ export async function POST(_request: NextRequest, context: Ctx) {
             companyId: true,
             participantPhone: true,
             channel: true,
+            customerId: true,
+            scope: true,
           },
         },
       },
@@ -41,6 +43,13 @@ export async function POST(_request: NextRequest, context: Ctx) {
 
     if (!original || original.conversation.companyId !== user.companyId) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+
+    const { canAccessFieldSmsConversation, FIELD_CUSTOMER_COMMS_FORBIDDEN } = await import(
+      "@/lib/field/access"
+    );
+    if (!(await canAccessFieldSmsConversation(user, original.conversation))) {
+      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
     }
     if (original.direction !== MessageDirection.OUTBOUND) {
       return badRequestResponse("Only outbound messages can be resent");

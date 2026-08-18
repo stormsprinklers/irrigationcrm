@@ -3,9 +3,6 @@ import { UserRole } from "@prisma/client";
 const VIEW_ROLES: UserRole[] = [
   UserRole.ADMIN,
   UserRole.MANAGER,
-  UserRole.CSR,
-  UserRole.TECH,
-  UserRole.INSTALLER,
   UserRole.SALES,
 ];
 

@@ -316,6 +316,9 @@ export function GoogleBusinessProfilePanel() {
                 <RefreshCw className={`mr-1 h-4 w-4 ${loadingReviewSummary ? "animate-spin" : ""}`} />
                 Refresh reviews
               </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/inbox/reviews">Reply in Inbox</Link>
+              </Button>
             </div>
             {!slackChannelConfigured ? (
               <p className="text-xs text-muted-foreground text-right">

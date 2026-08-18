@@ -16,7 +16,7 @@ export async function notifyInvoiceViaTemplates(params: {
     "INVOICE_SENT" | "INVOICE_REMINDER" | "INVOICE_PAID_RECEIPT" | "INVOICE_PAYMENT_FAILED"
   >;
   smsBackupOnly?: boolean;
-  /** Prefer Stripe Checkout session.url when notifying customers to pay / retry. */
+  /** Customer-facing pay URL. Always a short CRM /pay/{token} link. */
   payUrlOverride?: string | null;
   amountOverride?: number | null;
 }) {
@@ -89,7 +89,7 @@ export async function notifyInvoiceViaTemplates(params: {
     context.work_summary = customerWorkSummary;
   }
 
-  // Force invoice_link / payUrl placeholders to the Stripe (or override) URL.
+  // Force invoice_link / payUrl placeholders to the CRM pay URL (forwards to Stripe).
   context.invoice_link = payUrl;
   context.payUrl = payUrl;
 

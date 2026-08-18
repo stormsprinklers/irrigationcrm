@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   addDays,
   addMonths,
@@ -38,6 +39,9 @@ import {
   workDayForDate,
 } from "@/lib/schedule/open-time-slots";
 import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
+import { useSession } from "next-auth/react";
+import { isFieldRole } from "@/lib/employees";
 
 function scheduleColumnIdForJob(job: ScheduleJobDTO) {
   if (job.crew?.id) return scheduleCrewColumnId(job.crew.id);
@@ -73,6 +77,11 @@ type FilterOptions = {
 };
 
 export function ScheduleView() {
+  const searchParams = useSearchParams();
+  const { data: session } = useSession();
+  const fieldRole = isFieldRole(session?.user?.role ?? "");
+  const inboxBadges = useInboxBadges();
+  const timeOffPending = fieldRole ? 0 : inboxBadges?.timeOffPending ?? 0;
   const [viewMode, setViewMode] = useState<ScheduleViewMode>("week");
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
   const [monthStart, setMonthStart] = useState(() => startOfMonth(new Date()));
@@ -86,8 +95,10 @@ export function ScheduleView() {
     crews: [],
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [panelMode, setPanelMode] = useState<"jobs" | "team">("jobs");
-  const [showUnassigned, setShowUnassigned] = useState(true);
+  const [panelMode, setPanelMode] = useState<"jobs" | "team">(
+    searchParams.get("panel") === "team" ? "team" : "jobs"
+  );
+  const [showUnassigned, setShowUnassigned] = useState(!fieldRole);
   const [hiddenUserIds, setHiddenUserIds] = useState<string[]>([]);
   const [summary, setSummary] = useState({
     revenueFormatted: "$0.00",
@@ -95,6 +106,18 @@ export function ScheduleView() {
   });
   const [loading, setLoading] = useState(true);
   const [quickAddSlot, setQuickAddSlot] = useState<ScheduleSlotClick | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("panel") === "team" && !fieldRole) {
+      setPanelMode("team");
+    }
+  }, [searchParams, fieldRole]);
+
+  useEffect(() => {
+    if (!fieldRole) return;
+    setShowUnassigned(false);
+    setPanelMode("jobs");
+  }, [fieldRole]);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "day") {
@@ -296,6 +319,7 @@ export function ScheduleView() {
         colorBy={colorBy}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        pendingTimeOffCount={panelMode === "jobs" ? timeOffPending : 0}
         onPrevWeek={goPrev}
         onNextWeek={goNext}
         onToday={goToToday}
@@ -308,6 +332,24 @@ export function ScheduleView() {
         }}
         onColorByChange={setColorBy}
       />
+
+      {panelMode === "jobs" && timeOffPending > 0 && !fieldRole ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+          <p>
+            <span className="font-semibold">
+              {timeOffPending} time-off {timeOffPending === 1 ? "request" : "requests"}
+            </span>{" "}
+            waiting for approval.
+          </p>
+          <button
+            type="button"
+            className="font-medium text-amber-900 underline underline-offset-2 hover:text-amber-950"
+            onClick={() => setPanelMode("team")}
+          >
+            Review requests
+          </button>
+        </div>
+      ) : null}
 
       <div className="relative flex min-h-0 w-full flex-1 overflow-hidden">
         {sidebarOpen ? (
@@ -344,7 +386,10 @@ export function ScheduleView() {
           onShowUnassignedChange={setShowUnassigned}
           hiddenUserIds={hiddenUserIds}
           onHiddenUserIdsChange={setHiddenUserIds}
-          onOpenTeamSchedule={() => setPanelMode("team")}
+          onOpenTeamSchedule={fieldRole ? undefined : () => setPanelMode("team")}
+          pendingTimeOffCount={timeOffPending}
+          hideTeamSchedule={fieldRole}
+          hideUnassigned={fieldRole}
         />
 
         {panelMode === "team" ? (

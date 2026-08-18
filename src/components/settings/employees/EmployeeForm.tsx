@@ -7,10 +7,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
 import { Loader2, Sparkles } from "lucide-react";
 import { blobProxyUrl } from "@/lib/blob/urls";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { trueRoleOf } from "@/lib/role-preview";
 import { EmployeeTrainingPanel } from "./EmployeeTrainingPanel";
 
@@ -96,11 +95,16 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
   const trueRole = session?.user ? trueRoleOf(session.user) : "";
+  const effectiveRole = session?.user?.role ?? "";
   const isAdmin = trueRole === "ADMIN";
+  const canManage = canManageEmployees(effectiveRole);
+  const colorOnly = effectiveRole === "CSR" && !canManage;
+  const showLms = canViewEmployeeLms(effectiveRole);
   const canEditReviewAliases = trueRole === "ADMIN" || trueRole === "MANAGER";
   const [generatingAliases, setGeneratingAliases] = useState(false);
 
   useEffect(() => {
+    if (!canManage) return;
     fetch("/api/settings/compensation")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -112,7 +116,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         });
       })
       .catch(() => {});
-  }, []);
+  }, [canManage]);
 
   function applyTechnicianPayDefaults() {
     if (!techPayDefaults) return;
@@ -243,6 +247,26 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
 
     setSaving(true);
     try {
+      if (colorOnly) {
+        if (!employee) {
+          toast.error("You can only update employee colors");
+          return;
+        }
+        const res = await fetch(`/api/settings/employees/${employee.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ color: form.color }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? "Save failed");
+          return;
+        }
+        toast.success("Employee color updated");
+        onSaved();
+        return;
+      }
+
       if (employee && isAdmin && password) {
         const pwRes = await fetch(`/api/settings/employees/${employee.id}/password`, {
           method: "POST",
@@ -336,19 +360,21 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
             {initials || "?"}
           </AvatarFallback>
         </Avatar>
-        <div>
-          <label className="text-sm font-medium">Photo</label>
-          <Input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            disabled={uploading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handlePhotoSelected(file);
-            }}
-          />
-        </div>
+        {colorOnly ? null : (
+          <div>
+            <label className="text-sm font-medium">Photo</label>
+            <Input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoSelected(file);
+              }}
+            />
+          </div>
+        )}
         <div>
           <label className="text-sm font-medium">Color</label>
           <input
@@ -360,6 +386,15 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         </div>
       </div>
 
+      {colorOnly ? (
+        <p className="text-sm text-muted-foreground">
+          You can change this employee&apos;s schedule color. Other employee details are managed by
+          admins.
+        </p>
+      ) : null}
+
+      {colorOnly ? null : (
+      <fieldset className="min-w-0 space-y-4 border-0 p-0">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="text-sm font-medium">First name</label>
@@ -518,6 +553,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         </div>
       </div>
 
+      {canManage ? (
       <div className="rounded-md border border-border p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">Compensation</h3>
@@ -590,6 +626,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           )}
         </div>
       </div>
+      ) : null}
 
       <div>
         <label className="text-sm font-medium">Service areas</label>
@@ -646,9 +683,12 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         </div>
       ) : null}
 
-      {employee ? (
+      {employee && showLms ? (
         <EmployeeTrainingPanel employeeId={employee.id} email={employee.email} />
       ) : null}
+
+      </fieldset>
+      )}
 
       <div className="flex gap-2">
         <Button type="submit" disabled={saving}>

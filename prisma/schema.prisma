@@ -1221,6 +1221,7 @@ enum AuthMfaPurpose {
   LMS_LOGIN
   EXPENSE_CARD_ADMIN
   PHONE_NUMBER_RELEASE
+  ACCOUNT_PASSWORD
 }
 
 enum ExpenseCardStatus {
@@ -1892,6 +1893,7 @@ enum AppNotificationType {
   SYNC_FAILED
   EXPENSE_CARD_FUNDING
   PORTAL_CONTACT
+  TIME_OFF_REQUEST
 }
 
 model NotificationTemplate {
@@ -4060,6 +4062,8 @@ model GbpReview {
   starRating       String
   createTime       DateTime?
   status           GbpReviewAssignStatus @default(NEEDS_REVIEW)
+  /// Whether Google already has an owner reply (kept in sync from GBP).
+  hasReply         Boolean               @default(true)
   customerId       String?
   assignedManually Boolean               @default(false)
   createdAt        DateTime              @default(now())

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listPricingForms, serializePricingForm } from "@/lib/price-book/extras";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -16,7 +17,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
+    if (!canManagePriceBook(user.role)) return forbiddenResponse();
     const body = await request.json();
     if (!body.name) return badRequestResponse("name is required");
 

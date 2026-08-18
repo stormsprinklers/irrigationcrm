@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { ChevronDown, ExternalLink, Menu, Phone, Settings, X } from "lucide-react";
+import { ChevronDown, ExternalLink, Menu, Phone, Settings, Sparkles, X } from "lucide-react";
 import {
   getPrimaryNavActive,
   isOtherNavActive,
@@ -14,6 +14,13 @@ import {
 } from "@/config/navigation";
 import { canAccessHiring } from "@/lib/hiring/permissions";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
+import {
+  canViewMaintenancePlansNav,
+  canViewMarketing,
+  canViewReporting,
+  canViewSettingsNav,
+} from "@/lib/settings/access";
+import { isFieldRole } from "@/lib/employees";
 import { stormBrand } from "@/lib/branding";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { cn } from "@/lib/utils";
@@ -92,8 +99,11 @@ export function TopNav() {
       return brand.holidayLightingFeaturesEnabled;
     }
     if (item.href === "/maintenance-plans") {
-      return brand.maintenancePlansFeaturesEnabled;
+      return brand.maintenancePlansFeaturesEnabled && canViewMaintenancePlansNav(role);
     }
+    if (item.href === "/settings") return canViewSettingsNav(role);
+    if (item.href === "/marketing") return canViewMarketing(role);
+    if (item.href === "/reporting") return canViewReporting(role);
     return true;
   });
   const otherItems = filterOtherNav(otherNav, role);
@@ -136,7 +146,13 @@ export function TopNav() {
               key={item.href}
               item={item}
               pathname={pathname}
-              badgeCount={item.href === "/inbox" ? inboxBadges?.counts.total ?? 0 : 0}
+              badgeCount={
+                item.href === "/inbox"
+                  ? inboxBadges?.counts.total ?? 0
+                  : item.href === "/schedule"
+                    ? inboxBadges?.timeOffPending ?? 0
+                    : 0
+              }
             />
           ))}
 
@@ -191,11 +207,13 @@ export function TopNav() {
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
           <GlobalSearchButton />
-          <NewMenu />
+          <div className="hidden sm:block">
+            <NewMenu />
+          </div>
 
           <NotificationBell />
 
-          {standalonePwa ? null : (
+          {standalonePwa || isFieldRole(role ?? "") ? null : (
             <Button
               variant="ghost"
               size="icon"
@@ -207,10 +225,26 @@ export function TopNav() {
             </Button>
           )}
           <Button variant="ghost" size="icon" asChild>
-            <Link href="/settings">
-              <Settings className="h-5 w-5" />
+            <Link
+              href="/storm-ai"
+              aria-label="Storm AI"
+              aria-current={pathname === "/storm-ai" || pathname.startsWith("/storm-ai/") ? "page" : undefined}
+              className={cn(
+                pathname === "/storm-ai" || pathname.startsWith("/storm-ai/")
+                  ? "text-foreground"
+                  : undefined
+              )}
+            >
+              <Sparkles className="h-5 w-5" />
             </Link>
           </Button>
+          {canViewSettingsNav(role) ? (
+            <Button variant="ghost" size="icon" asChild>
+              <Link href="/settings" aria-label="Settings">
+                <Settings className="h-5 w-5" />
+              </Link>
+            </Button>
+          ) : null}
 
           <UserAccountMenu />
         </div>
@@ -237,7 +271,12 @@ export function TopNav() {
         <div className="overflow-y-auto py-2">
           {navItems.map((item) => {
             const active = getPrimaryNavActive(pathname, item.href);
-            const inboxCount = item.href === "/inbox" ? inboxBadges?.counts.total ?? 0 : 0;
+            const badgeCount =
+              item.href === "/inbox"
+                ? inboxBadges?.counts.total ?? 0
+                : item.href === "/schedule"
+                  ? inboxBadges?.timeOffPending ?? 0
+                  : 0;
             return (
               <Link
                 key={item.href}
@@ -253,7 +292,7 @@ export function TopNav() {
                   <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r bg-primary" />
                 ) : null}
                 <span>{item.label}</span>
-                <InboxCountOrb count={inboxCount} />
+                <InboxCountOrb count={badgeCount} />
               </Link>
             );
           })}

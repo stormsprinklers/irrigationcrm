@@ -59,6 +59,7 @@ Ground answers in the latest frame plus tool results. Never invent part numbers 
 
 You are speaking aloud to a field technician over a live voice connection.
 Keep answers short and conversational—one or two sentences when possible, then stop and listen.
+If you hear your own previous answer, ignore it and wait for the technician. Never repeat or mimic yourself.
 Never invent CRM facts; call tools when you need data.
 For diagnostics, walk one step at a time (test, then wait for their answer).
 When identifying a part from description or a camera frame, you MUST call search_parts_info in the same turn—never only say that you will search.
@@ -92,7 +93,7 @@ export function buildRealtimeSessionConfig(opts: {
           prefix_padding_ms: 400,
           // Longer silence before the model decides the tech finished speaking.
           silence_duration_ms: 900,
-          interrupt_response: true,
+          interrupt_response: false,
           // Video mode attaches a still before answering, so the model must not auto-respond.
           create_response: !opts.videoMode,
         },

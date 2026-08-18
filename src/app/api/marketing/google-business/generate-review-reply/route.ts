@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   badRequestResponse,
+  forbiddenResponse,
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { generateGbpReviewReplyDraft } from "@/lib/google-business/gbp-ai";
 import { GBP_STAR_LABELS } from "@/lib/google-business/engagement-types";
+import { canHandleGbpReviews } from "@/lib/google-business/permissions";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
+    if (!canHandleGbpReviews(user.role)) return forbiddenResponse();
     if (!getOpenAIApiKey()) {
       return NextResponse.json(
         { error: "OPENAI_API_KEY is not configured on the server" },

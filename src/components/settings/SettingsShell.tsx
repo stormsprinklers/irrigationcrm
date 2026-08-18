@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,31 +12,29 @@ import {
 } from "@/components/layout/CompanyBrandProvider";
 import type { NavItem, NavSection } from "@/config/navigation";
 import { HOLIDAY_LIGHTING_NAV_HREFS, IRRIGATION_SETTINGS_HREFS } from "@/lib/company/features";
-import { canUseRolePreview } from "@/lib/role-preview";
+import {
+  canWriteSettingsPath,
+  filterSettingsNavForUser,
+  isSettingsPathHidden,
+} from "@/lib/settings/access";
+import { isFieldRole } from "@/lib/employees";
 import { settingsRootSections } from "@/lib/settings/nav";
 
 function filterFeatureNavItems(
   items: NavItem[],
   irrigationEnabled: boolean,
-  holidayEnabled: boolean,
-  showRolePreview: boolean
+  holidayEnabled: boolean
 ): NavItem[] {
   return items
     .filter((item) => {
       if (!irrigationEnabled && IRRIGATION_SETTINGS_HREFS.has(item.href)) return false;
       if (!holidayEnabled && HOLIDAY_LIGHTING_NAV_HREFS.has(item.href)) return false;
-      if (!showRolePreview && item.href === "/settings/role-preview") return false;
       return true;
     })
     .map((item) => ({
       ...item,
       children: item.children
-        ? filterFeatureNavItems(
-            item.children,
-            irrigationEnabled,
-            holidayEnabled,
-            showRolePreview
-          )
+        ? filterFeatureNavItems(item.children, irrigationEnabled, holidayEnabled)
         : undefined,
     }));
 }
@@ -44,17 +42,11 @@ function filterFeatureNavItems(
 function filterFeatureNav(
   sections: NavSection[],
   irrigationEnabled: boolean,
-  holidayEnabled: boolean,
-  showRolePreview: boolean
+  holidayEnabled: boolean
 ): NavSection[] {
   return sections.map((section) => ({
     ...section,
-    items: filterFeatureNavItems(
-      section.items,
-      irrigationEnabled,
-      holidayEnabled,
-      showRolePreview
-    ),
+    items: filterFeatureNavItems(section.items, irrigationEnabled, holidayEnabled),
   }));
 }
 
@@ -64,25 +56,32 @@ function filterFeatureNav(
  */
 export function SettingsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: holidayEnabled } = useHolidayLightingFeatures();
-  const showRolePreview = Boolean(session?.user && canUseRolePreview(session.user));
+  const user = session?.user ?? null;
+  const canWrite = canWriteSettingsPath(pathname, user);
   const rootSections = useMemo(
     () =>
-      filterFeatureNav(
-        settingsRootSections(),
-        irrigationEnabled,
-        holidayEnabled,
-        showRolePreview
+      filterSettingsNavForUser(
+        filterFeatureNav(settingsRootSections(), irrigationEnabled, holidayEnabled),
+        user
       ),
-    [irrigationEnabled, holidayEnabled, showRolePreview]
+    [irrigationEnabled, holidayEnabled, user]
   );
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (isSettingsPathHidden(pathname, user)) {
+      router.replace(isFieldRole(user.role ?? "") ? "/home" : "/settings");
+    }
+  }, [pathname, router, user]);
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden">
@@ -123,7 +122,18 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
           <h2 className="truncate font-display text-base font-bold text-foreground">Settings</h2>
         </div>
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          {canWrite ? (
+            children
+          ) : (
+            <fieldset disabled className="min-w-0 border-0 p-0">
+              <div className="border-b border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+                You can view these settings but cannot change them.
+              </div>
+              {children}
+            </fieldset>
+          )}
+        </div>
       </div>
     </div>
   );

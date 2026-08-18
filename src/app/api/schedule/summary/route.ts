@@ -25,11 +25,18 @@ export async function GET(request: NextRequest) {
 
     const start = new Date(startParam);
     const end = new Date(endParam);
+    let extraWhere;
+    const { isFieldRole } = await import("@/lib/employees");
+    if (isFieldRole(user.role)) {
+      const { fieldVisitAssigneeWhere } = await import("@/lib/field/access");
+      extraWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
+    }
     const summary = await getScheduleSummary(
       user.companyId,
       start,
       end,
-      parseFilters(searchParams)
+      parseFilters(searchParams),
+      extraWhere
     );
     return NextResponse.json(summary);
   } catch {

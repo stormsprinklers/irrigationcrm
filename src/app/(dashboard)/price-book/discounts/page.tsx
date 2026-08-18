@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,8 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 
 export default function PriceBookDiscountsPage() {
+  const { data: session } = useSession();
+  const canManage = canManagePriceBook(session?.user?.role);
   const [discounts, setDiscounts] = useState<
     Array<{ id: string; name: string; code: string | null; type: string; amount: number; active: boolean; appliesTo: string }>
   >([]);
@@ -57,16 +61,18 @@ export default function PriceBookDiscountsPage() {
   return (
     <ContentArea>
       <PageHeader breadcrumb={["Price book", "Discounts"]} title="Discounts" />
-      <div className="mb-4 flex flex-wrap gap-2 rounded-lg border border-border bg-white p-4">
-        <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="max-w-[180px]" />
-        <Input placeholder="Code (optional)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="max-w-[140px]" />
-        <Input placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="max-w-[100px]" />
-        <select className="h-9 rounded-md border px-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-          <option value="PERCENT">Percent</option>
-          <option value="FIXED">Fixed</option>
-        </select>
-        <Button size="sm" onClick={createDiscount}><Plus className="h-4 w-4" />Add</Button>
-      </div>
+      {canManage ? (
+        <div className="mb-4 flex flex-wrap gap-2 rounded-lg border border-border bg-white p-4">
+          <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="max-w-[180px]" />
+          <Input placeholder="Code (optional)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="max-w-[140px]" />
+          <Input placeholder="Amount" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="max-w-[100px]" />
+          <select className="h-9 rounded-md border px-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            <option value="PERCENT">Percent</option>
+            <option value="FIXED">Fixed</option>
+          </select>
+          <Button size="sm" onClick={createDiscount}><Plus className="h-4 w-4" />Add</Button>
+        </div>
+      ) : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : (
         <div className="rounded-lg border border-border bg-white">
           <Table>
@@ -77,7 +83,7 @@ export default function PriceBookDiscountsPage() {
                 <TableHead>Amount</TableHead>
                 <TableHead>Applies to</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead />
+                {canManage ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -88,11 +94,13 @@ export default function PriceBookDiscountsPage() {
                   <TableCell>{d.type === "PERCENT" ? `${d.amount}%` : `$${d.amount}`}</TableCell>
                   <TableCell>{d.appliesTo}</TableCell>
                   <TableCell><Badge variant={d.active ? "default" : "outline"}>{d.active ? "Active" : "Inactive"}</Badge></TableCell>
-                  <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => toggleActive(d.id, d.active)}>
-                      {d.active ? "Deactivate" : "Activate"}
-                    </Button>
-                  </TableCell>
+                  {canManage ? (
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => toggleActive(d.id, d.active)}>
+                        {d.active ? "Deactivate" : "Activate"}
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

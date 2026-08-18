@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Channel, Scope } from "@prisma/client";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  badRequestResponse,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
+import {
+  canAccessFieldCustomerComms,
+  FIELD_CUSTOMER_COMMS_FORBIDDEN,
+} from "@/lib/field/access";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +26,16 @@ export async function GET(request: NextRequest) {
 
     if (or.length === 0) {
       return badRequestResponse("customerId or phone is required");
+    }
+
+    if (customerId && !(await canAccessFieldCustomerComms(user, customerId))) {
+      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+    }
+    if (!customerId && phoneParam) {
+      const matched = await findCustomerByPhone(user.companyId, normalizePhone(phoneParam));
+      if (!(await canAccessFieldCustomerComms(user, matched?.id))) {
+        return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+      }
     }
 
     const conversation = await prisma.conversation.findFirst({

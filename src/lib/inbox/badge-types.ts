@@ -3,6 +3,7 @@ export type InboxBadgeCounts = {
   social: number;
   leads: number;
   missedCalls: number;
+  googleReviews: number;
   total: number;
 };
 
@@ -11,6 +12,7 @@ export function inboxCountForHref(href: string, counts: InboxBadgeCounts): numbe
   if (href.startsWith("/inbox/sms")) return counts.sms;
   if (href.startsWith("/inbox/leads")) return counts.leads;
   if (href.startsWith("/inbox/social")) return counts.social;
+  if (href.startsWith("/inbox/reviews")) return counts.googleReviews;
   if (href === "/inbox") return counts.total;
   return 0;
 }

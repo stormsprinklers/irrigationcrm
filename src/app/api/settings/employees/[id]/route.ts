@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PayType, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canDeleteEmployee, canManageEmployees, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision } from "@/lib/employees";
+import { canDeleteEmployee, canEditEmployeeColor, canManageEmployees, employeeSelectFields, parseEmployeeNameFields, redactEmployeeForRole, resolveEmployeeDivision } from "@/lib/employees";
 import {
   generateReviewNameAliases,
   reservedReviewNameTokens,
@@ -24,7 +24,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     });
     if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    return NextResponse.json(employee);
+    return NextResponse.json(redactEmployeeForRole(employee, user.role));
   } catch {
     return unauthorizedResponse();
   }
@@ -33,13 +33,30 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
-
     const { id } = await params;
     const existing = await prisma.user.findFirst({ where: { id, companyId: user.companyId } });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
+
+    if (user.role === "CSR") {
+      if (!canEditEmployeeColor(user.role)) return forbiddenResponse();
+      const keys = Object.keys(body).filter((key) => body[key] !== undefined);
+      if (keys.length !== 1 || keys[0] !== "color") {
+        return forbiddenResponse("CSRs may only update employee colors");
+      }
+      await prisma.user.update({
+        where: { id },
+        data: { color: body.color ?? null },
+      });
+      const employee = await prisma.user.findUnique({
+        where: { id },
+        select: employeeSelectFields(),
+      });
+      return NextResponse.json(employee ? redactEmployeeForRole(employee, user.role) : employee);
+    }
+
+    if (!canManageEmployees(user.role)) return forbiddenResponse();
     const { serviceAreaIds, ...fields } = body;
 
     if (fields.email && fields.email !== existing.email) {

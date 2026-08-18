@@ -44,6 +44,7 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
     SMS: node("/inbox/sms/customers"),
     Leads: node("/inbox/leads"),
     "Social DMs": node("/inbox/social"),
+    "Google Reviews": node("/inbox/reviews"),
   })),
   Schedule: node("/schedule"),
   "Maintenance Plans": node("/maintenance-plans", kids({

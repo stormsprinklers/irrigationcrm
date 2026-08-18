@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { CategoryCard } from "@/components/price-book/CategoryCard";
 import { PriceBookItemDialog } from "@/components/price-book/PriceBookItemDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import type { PriceBookCategoryDTO, PriceBookItemDTO } from "@/lib/price-book/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
@@ -20,6 +22,8 @@ function formatCurrency(value: number) {
 
 export function PriceBookCategoryView({ categoryId }: Props) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const canManage = canManagePriceBook(session?.user?.role);
   const [category, setCategory] = useState<
     (PriceBookCategoryDTO & {
       parent?: { id: string; name: string } | null;
@@ -179,28 +183,32 @@ export function PriceBookCategoryView({ categoryId }: Props) {
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => void renameCategory()}>
-              <Pencil className="h-4 w-4" />
-              Rename
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void deleteCategory()}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
-            <Button variant="outline" size="sm" onClick={createSubcategory}>
-              <Plus className="h-4 w-4" />
-              Subcategory
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingItem(null);
-                setDialogOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              Add {itemLabel}
-            </Button>
+            {canManage ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => void renameCategory()}>
+                  <Pencil className="h-4 w-4" />
+                  Rename
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void deleteCategory()}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+                <Button variant="outline" size="sm" onClick={createSubcategory}>
+                  <Plus className="h-4 w-4" />
+                  Subcategory
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingItem(null);
+                    setDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add {itemLabel}
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -216,8 +224,8 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                 key={child.id}
                 category={child}
                 href={`/price-book/categories/${child.id}`}
-                onRename={() => void renameChild(child)}
-                onDelete={() => void deleteChild(child)}
+                onRename={canManage ? () => void renameChild(child) : undefined}
+                onDelete={canManage ? () => void deleteChild(child) : undefined}
               />
             ))}
           </div>
@@ -242,7 +250,7 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                   <th className="px-4 py-2 font-medium">Cost</th>
                   <th className="px-4 py-2 font-medium">Unit</th>
                   {category.type === "SERVICE" && <th className="px-4 py-2 font-medium">Labor</th>}
-                  <th className="px-4 py-2" />
+                  {canManage ? <th className="px-4 py-2" /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -282,37 +290,39 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                             : "—"}
                       </td>
                     )}
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Edit item"
-                          onClick={() => {
-                            setEditingItem(item);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Duplicate item"
-                          onClick={() => void duplicateItem(item)}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Remove item"
-                          onClick={() => void removeItem(item)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
+                    {canManage ? (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Edit item"
+                            onClick={() => {
+                              setEditingItem(item);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Duplicate item"
+                            onClick={() => void duplicateItem(item)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Remove item"
+                            onClick={() => void removeItem(item)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -321,17 +331,19 @@ export function PriceBookCategoryView({ categoryId }: Props) {
         )}
       </div>
 
-      <PriceBookItemDialog
-        open={dialogOpen}
-        type={category.type}
-        categoryId={category.id}
-        item={editingItem}
-        onClose={() => {
-          setDialogOpen(false);
-          setEditingItem(null);
-        }}
-        onSaved={load}
-      />
+      {canManage ? (
+        <PriceBookItemDialog
+          open={dialogOpen}
+          type={category.type}
+          categoryId={category.id}
+          item={editingItem}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditingItem(null);
+          }}
+          onSaved={load}
+        />
+      ) : null}
     </div>
   );
 }

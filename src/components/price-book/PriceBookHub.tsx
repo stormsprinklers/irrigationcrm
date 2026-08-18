@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Download, Plus, Search, Upload } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { CategoryCard } from "@/components/price-book/CategoryCard";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PriceBookImportDialog } from "@/components/price-book/PriceBookImportDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import type { PriceBookCategoryDTO, PriceBookImportResult, PriceBookItemDTO } from "@/lib/price-book/types";
 
 type Props = {
@@ -22,6 +24,8 @@ function formatCurrency(value: number) {
 }
 
 export function PriceBookHub({ type, title, breadcrumb }: Props) {
+  const { data: session } = useSession();
+  const canManage = canManagePriceBook(session?.user?.role);
   const [categories, setCategories] = useState<PriceBookCategoryDTO[]>([]);
   const [items, setItems] = useState<PriceBookItemDTO[]>([]);
   const [search, setSearch] = useState("");
@@ -111,18 +115,22 @@ export function PriceBookHub({ type, title, breadcrumb }: Props) {
                 Export CSV
               </a>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-              <Upload className="h-4 w-4" />
-              Import CSV
-            </Button>
+            {canManage ? (
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                Import CSV
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" onClick={() => setShowSearch((v) => !v)}>
               <Search className="h-4 w-4" />
               Search
             </Button>
-            <Button variant="outline" size="sm" onClick={createCategory}>
-              <Plus className="h-4 w-4" />
-              {type === "SERVICE" ? "Add industry/category" : "Add category"}
-            </Button>
+            {canManage ? (
+              <Button variant="outline" size="sm" onClick={createCategory}>
+                <Plus className="h-4 w-4" />
+                {type === "SERVICE" ? "Add industry/category" : "Add category"}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -170,12 +178,16 @@ export function PriceBookHub({ type, title, breadcrumb }: Props) {
       ) : categories.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No categories yet. Create one or import a Housecall Pro CSV export.
+            {canManage
+              ? `No categories yet. Create one or import a Housecall Pro CSV export.`
+              : "No categories yet."}
           </p>
-          <Button className="mt-4" onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4" />
-            Import CSV
-          </Button>
+          {canManage ? (
+            <Button className="mt-4" onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -184,19 +196,21 @@ export function PriceBookHub({ type, title, breadcrumb }: Props) {
               key={category.id}
               category={category}
               href={`/price-book/categories/${category.id}`}
-              onRename={() => void renameCategory(category)}
-              onDelete={() => void deleteCategory(category)}
+              onRename={canManage ? () => void renameCategory(category) : undefined}
+              onDelete={canManage ? () => void deleteCategory(category) : undefined}
             />
           ))}
         </div>
       )}
 
-      <PriceBookImportDialog
-        open={importOpen}
-        type={type}
-        onClose={() => setImportOpen(false)}
-        onImported={handleImported}
-      />
+      {canManage ? (
+        <PriceBookImportDialog
+          open={importOpen}
+          type={type}
+          onClose={() => setImportOpen(false)}
+          onImported={handleImported}
+        />
+      ) : null}
     </>
   );
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AppNotificationType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+
+const BELL_EXCLUDED_TYPES: AppNotificationType[] = [AppNotificationType.INBOX_SMS];
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +13,7 @@ export async function GET(request: NextRequest) {
 
     const where = {
       userId: user.id,
+      type: { notIn: BELL_EXCLUDED_TYPES },
       ...(since ? { createdAt: { gt: new Date(since) } } : {}),
     };
 
@@ -20,7 +24,7 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.appNotification.count({
-        where: { userId: user.id, isRead: false },
+        where: { userId: user.id, isRead: false, type: { notIn: BELL_EXCLUDED_TYPES } },
       }),
     ]);
 

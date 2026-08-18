@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { EmployeeStatus, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
+import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, redactEmployeeForRole, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
 import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { generateReviewNameAliases, REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       select: employeeSelectFields(),
     });
 
-    return NextResponse.json(employees);
+    return NextResponse.json(employees.map((employee) => redactEmployeeForRole(employee, user.role)));
   } catch {
     return unauthorizedResponse();
   }

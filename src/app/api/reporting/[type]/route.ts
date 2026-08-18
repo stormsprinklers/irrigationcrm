@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { canViewReporting } from "@/lib/settings/access";
 import {
   getCsrReport,
   getEstimatesReport,
@@ -33,6 +34,7 @@ const handlers: Record<string, (companyId: string) => Promise<unknown>> = {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await requireSessionUser();
+    if (!canViewReporting(user.role)) return forbiddenResponse();
     const { type } = await params;
 
     if (type === "kpi-dashboard") {

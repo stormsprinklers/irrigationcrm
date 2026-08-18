@@ -117,7 +117,7 @@ export async function notifyStaffOfNewGbpReviews(
       body: commentPreview
         ? `${review.reviewerName}: ${commentPreview}`
         : `From ${review.reviewerName}`,
-      href: "/marketing/google-business",
+      href: "/inbox/reviews",
     });
 
     await prisma.gbpReviewStaffNotify.create({

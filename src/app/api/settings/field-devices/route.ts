@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees } from "@/lib/employees";
+import { canViewFieldDevices } from "@/lib/employees";
 import { listFieldDeviceLocations } from "@/lib/field-devices";
 import { buildMapsPinEmbedUrl, getGoogleMapsApiKey } from "@/lib/customers/maps";
 
 export async function GET() {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canViewFieldDevices(user.role)) return forbiddenResponse();
 
     const devices = await listFieldDeviceLocations(user.companyId);
     const apiKey = getGoogleMapsApiKey();

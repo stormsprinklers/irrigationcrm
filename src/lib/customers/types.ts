@@ -27,6 +27,7 @@ export type CustomerDTO = {
   visitCount?: number;
   estimateCount?: number;
   invoiceCount?: number;
+  canViewCustomerComms?: boolean;
 };
 
 export type CustomerPropertyDTO = {

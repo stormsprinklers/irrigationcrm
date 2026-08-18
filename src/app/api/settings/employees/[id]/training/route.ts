@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { canViewEmployeeLms } from "@/lib/employees";
 import { fetchLmsTrainingSummary } from "@/lib/integrations/lms-sync";
 
 type Params = { params: Promise<{ id: string }> };
@@ -8,6 +9,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
+    if (!canViewEmployeeLms(user.role)) return forbiddenResponse();
 
     const { id } = await params;
     const summary = await fetchLmsTrainingSummary(id);

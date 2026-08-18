@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees } from "@/lib/employees";
+import { canManageServiceAreas } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canManageServiceAreas(user.role)) return forbiddenResponse();
 
     const { id } = await params;
     const body = await request.json();
@@ -39,7 +39,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canManageEmployees(user.role)) return forbiddenResponse();
+    if (!canManageServiceAreas(user.role)) return forbiddenResponse();
 
     const { id } = await params;
     const existing = await prisma.serviceArea.findFirst({

@@ -75,8 +75,8 @@ export async function createInvoiceCheckoutSession(params: {
 }
 
 /**
- * Create a fresh Stripe Checkout Session for an invoice and return session.url.
- * Once a Stripe custom domain finishes provisioning, session.url is automatically branded.
+ * Create a fresh Stripe Checkout Session for in-app card collection.
+ * Do not put session.url in SMS, email, or QR — use getInvoicePayUrl() instead.
  */
 export async function createStripeCheckoutPayUrl(params: {
   invoiceId: string;

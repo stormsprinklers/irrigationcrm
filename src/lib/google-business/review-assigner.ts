@@ -184,6 +184,7 @@ async function assignStoredReview(
 export async function upsertGbpReviews(companyId: string, reviews: GbpReviewDto[]) {
   for (const review of reviews) {
     if (!review.reviewId) continue;
+    const hasReply = Boolean(review.reply?.trim());
     const createTime = review.createTime ? new Date(review.createTime) : null;
     await prisma.gbpReview.upsert({
       where: { companyId_reviewId: { companyId, reviewId: review.reviewId } },
@@ -194,11 +195,13 @@ export async function upsertGbpReviews(companyId: string, reviews: GbpReviewDto[
         comment: review.comment,
         starRating: review.starRating,
         createTime: createTime && !Number.isNaN(createTime.getTime()) ? createTime : null,
+        hasReply,
       },
       update: {
         reviewerName: review.reviewerName,
         comment: review.comment,
         starRating: review.starRating,
+        hasReply,
         ...(createTime && !Number.isNaN(createTime.getTime()) ? { createTime } : {}),
       },
     });

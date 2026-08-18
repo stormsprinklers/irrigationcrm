@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,8 +17,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PricingFormField } from "@/lib/price-book/extras";
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 
 export default function PricingFormsPage() {
+  const { data: session } = useSession();
+  const canManage = canManagePriceBook(session?.user?.role);
   const [forms, setForms] = useState<
     Array<{ id: string; name: string; description: string | null; fields: PricingFormField[] }>
   >([]);
@@ -52,10 +56,12 @@ export default function PricingFormsPage() {
   return (
     <ContentArea>
       <PageHeader breadcrumb={["Price book", "Pricing forms"]} title="Pricing forms" />
-      <div className="mb-4 flex gap-2 rounded-lg border border-border bg-white p-4">
-        <Input placeholder="Form name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[240px]" />
-        <Button size="sm" onClick={createForm}><Plus className="h-4 w-4" />Add form</Button>
-      </div>
+      {canManage ? (
+        <div className="mb-4 flex gap-2 rounded-lg border border-border bg-white p-4">
+          <Input placeholder="Form name" value={name} onChange={(e) => setName(e.target.value)} className="max-w-[240px]" />
+          <Button size="sm" onClick={createForm}><Plus className="h-4 w-4" />Add form</Button>
+        </div>
+      ) : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : (
         <div className="rounded-lg border border-border bg-white">
           <Table>

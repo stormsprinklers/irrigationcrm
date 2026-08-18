@@ -23,6 +23,8 @@ export async function notifyStaffInApp(params: {
   href?: string | null;
   userIds?: string[];
   conversationId?: string;
+  /** When false, send push only — skip the CRM bell/toast feed. */
+  createInApp?: boolean;
 }) {
   const where =
     params.userIds && params.userIds.length
@@ -44,16 +46,18 @@ export async function notifyStaffInApp(params: {
 
   if (!staff.length) return;
 
-  await prisma.appNotification.createMany({
-    data: staff.map((user) => ({
-      companyId: params.companyId,
-      userId: user.id,
-      type: params.type,
-      title: params.title,
-      body: params.body ?? null,
-      href: params.href ?? null,
-    })),
-  });
+  if (params.createInApp !== false) {
+    await prisma.appNotification.createMany({
+      data: staff.map((user) => ({
+        companyId: params.companyId,
+        userId: user.id,
+        type: params.type,
+        title: params.title,
+        body: params.body ?? null,
+        href: params.href ?? null,
+      })),
+    });
+  }
 
   await sendStaffPush({
     companyId: params.companyId,
@@ -165,6 +169,7 @@ export async function notifyInboundSms(params: {
     href,
     userIds: notifyUserIds,
     conversationId: params.conversationId,
+    createInApp: false,
   });
 }
 

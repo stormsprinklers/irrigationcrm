@@ -1,7 +1,6 @@
 /**
- * Fallback CRM invoice page (`/pay/[token]`). Prefer Stripe Checkout `session.url`
- * from createInvoiceCheckoutSession / createStripeCheckoutPayUrl for customer pay links.
- * Stripe custom domains brand session.url automatically once DNS finishes — no CRM change needed.
+ * Customer-facing invoice pay URL (`/pay/[token]`).
+ * This page forwards to Stripe Checkout — never put session.url in SMS, email, or QR codes.
  */
 export function getPayBaseUrl() {
   const configured =

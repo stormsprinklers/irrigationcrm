@@ -8,6 +8,7 @@ import {
   Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +25,7 @@ type Props = {
   colorBy: ColorByMode;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  pendingTimeOffCount?: number;
   onPrevWeek: () => void;
   onNextWeek: () => void;
   onToday: () => void;
@@ -52,6 +54,7 @@ export function ScheduleToolbar({
   colorBy,
   sidebarOpen,
   onToggleSidebar,
+  pendingTimeOffCount = 0,
   onPrevWeek,
   onNextWeek,
   onToday,
@@ -67,11 +70,12 @@ export function ScheduleToolbar({
         <Button
           variant={sidebarOpen ? "secondary" : "outline"}
           size="icon"
-          className="h-8 w-8"
+          className="relative h-8 w-8"
           onClick={onToggleSidebar}
           aria-label={sidebarOpen ? "Close schedule filters" : "Open schedule filters"}
         >
           <Menu className="h-4 w-4" />
+          <InboxCountOrb count={pendingTimeOffCount} className="absolute -right-1.5 -top-1.5" />
         </Button>
         <Button variant="outline" size="sm" onClick={onToday}>
           Today

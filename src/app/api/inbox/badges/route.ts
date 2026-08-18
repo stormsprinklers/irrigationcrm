@@ -5,7 +5,7 @@ import { getInboxBadgeCounts } from "@/lib/inbox/badge-counts";
 export async function GET() {
   try {
     const user = await requireSessionUser();
-    const counts = await getInboxBadgeCounts(user.companyId);
+    const counts = await getInboxBadgeCounts(user.companyId, user);
     return NextResponse.json(counts);
   } catch {
     return unauthorizedResponse();
