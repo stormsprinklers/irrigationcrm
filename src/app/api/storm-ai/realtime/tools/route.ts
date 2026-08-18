@@ -9,7 +9,21 @@ import {
 import { canUseStormAiTool } from "@/lib/storm-ai/permissions";
 import { sanitizeToolPayload } from "@/lib/storm-ai/prompt";
 
-export const maxDuration = 60;
+export const maxDuration = 90;
+
+function asVisualMatch(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function slimSearchNote(visualMatch: Record<string, unknown> | null) {
+  if (visualMatch?.confirmed === true) {
+    return "Visual compare confirmed the top part. Speak that match now. The matching library photo is already shown in the chat panel.";
+  }
+  if (visualMatch?.ran === true) {
+    return "Visual compare did not confirm a library part. Say you could not confirm from the photo. Do not invent a link.";
+  }
+  return "Speak the best match now in a few short sentences. Photos are already shown in the chat panel. Do not read visualDescription or the full technical write-up. Do not invent a link.";
+}
 
 /** Keep realtime tool payloads small so the model can speak again quickly. */
 function slimRealtimeToolResult(name: string, result: unknown): unknown {
@@ -42,20 +56,24 @@ function slimRealtimeToolResult(name: string, result: unknown): unknown {
         manualUrl: part.manualUrl ?? null,
         manualKind: part.manualKind ?? null,
         photoCount: Array.isArray(part.photos) ? part.photos.length : part.photoCount ?? 0,
+        matchedPhotoId: part.matchedPhotoId ?? null,
+        visualConfidence: part.visualConfidence ?? null,
       };
     });
+    const visualMatch = asVisualMatch(data.visualMatch);
+    const note = slimSearchNote(visualMatch);
     if (root.data && typeof root.data === "object") {
       return {
         ...root,
         data: {
           ...data,
           parts: slimParts,
-          note:
-            "Speak the best match now. Photos, specs, and the manual (if any) are already shown in the chat panel — tell the tech to look there. Do not invent a link.",
+          visualMatch,
+          note,
         },
       };
     }
-    return { ...data, parts: slimParts };
+    return { ...data, parts: slimParts, visualMatch, note };
   }
 
   if (name === "get_parts_info") {
@@ -81,7 +99,7 @@ function slimRealtimeToolResult(name: string, result: unknown): unknown {
             ...data,
             part: slimPart,
             note:
-              "Speak these details now. Photos and the manual link are already shown in the chat panel — tell the tech to open them there. Do not invent a link.",
+              "Speak a few short sentences about this part. Photos are already shown in the chat panel. Do not read visualDescription or paste the full technicalDescription. Do not invent a link.",
           },
         };
       }

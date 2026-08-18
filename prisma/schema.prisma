@@ -805,6 +805,7 @@ model Company {
   techAssistSessions     TechAssistSession[]
   techAssistPartSections TechAssistPartSection[]
   techAssistParts        TechAssistPart[]
+  stormAiCompanyPolicies StormAiCompanyPolicy[]
 }
 
 model LocalSeoSerpSearch {
@@ -1083,6 +1084,22 @@ model StormAiAuditLog {
 
   @@index([companyId, createdAt])
   @@index([userId, createdAt])
+}
+
+model StormAiCompanyPolicy {
+  id          String   @id @default(cuid())
+  companyId   String
+  title       String
+  category    String?
+  description String   @db.Text
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, active, sortOrder])
 }
 
 enum TechAssistNodeType {

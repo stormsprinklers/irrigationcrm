@@ -10,9 +10,10 @@ import {
   type StormAiStoredAttachment,
 } from "./attachments";
 import { runStormAiTool } from "./execute";
-import { parsePartsCardFromAttachments } from "./parts-card";
+import { parsePartsCardFromAttachments, buildPartsChatCard } from "./parts-card";
 import { stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
+import { formatPolicyCheckForTurn } from "./policies";
 import type { StormAiPageContext } from "./types";
 
 const MAX_TOOL_ROUNDS = 8;
@@ -138,17 +139,19 @@ export async function runStormAiTurn(opts: {
   }
 
   const openAiHistory = await buildOpenAiHistory(history);
+  const policyCheck = await formatPolicyCheckForTurn(opts.user.companyId, content);
 
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildStormAiSystemPrompt({
+      content: await buildStormAiSystemPrompt({
         user: opts.user,
         timezone,
         nowIso: new Date().toISOString(),
         pageContext: opts.pageContext,
       }),
     },
+    ...(policyCheck ? [{ role: "system" as const, content: policyCheck }] : []),
     ...openAiHistory,
   ];
 
@@ -156,6 +159,7 @@ export async function runStormAiTurn(opts: {
   let promptTokens = 0;
   let completionTokens = 0;
   let assistantText = "";
+  let partsCard: Awaited<ReturnType<typeof buildPartsChatCard>> = null;
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -169,7 +173,10 @@ export async function runStormAiTurn(opts: {
           model: stormAiModel(),
           messages,
           tools: stormAiToolsForRole(opts.user.role),
-          tool_choice: "auto",
+          tool_choice:
+            round === 0 && policyCheck
+              ? { type: "function" as const, function: { name: "search_company_policies" } }
+              : "auto",
         }),
       });
 
@@ -210,6 +217,14 @@ export async function runStormAiTurn(opts: {
             conversationId: conversation.id,
           });
           const payload = sanitizeToolPayload(result, 8000);
+          if (call.function.name === "search_parts_info" || !partsCard) {
+            const card = await buildPartsChatCard(
+              opts.user.companyId,
+              call.function.name,
+              result
+            );
+            if (card) partsCard = card;
+          }
           await prisma.stormAiMessage.create({
             data: {
               conversationId: conversation.id,
@@ -246,6 +261,7 @@ export async function runStormAiTurn(opts: {
         role: "assistant",
         content: assistantText,
         usageJson: { promptTokens, completionTokens },
+        attachmentsJson: partsCard ? ([partsCard] as never) : undefined,
       },
     });
 

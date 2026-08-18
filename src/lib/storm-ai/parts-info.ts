@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { absoluteBlobProxyUrl, blobProxyUrl, isBlobStorageUrl } from "@/lib/blob/urls";
+import type { PartsSearchHit } from "./parts-vision-match";
 
 export const PART_MANUAL_LINK_MIME = "text/uri-list";
 
@@ -109,7 +110,11 @@ export function serializePart(
   };
 }
 
-export async function searchPartsInfo(companyId: string, query: string, take = 12) {
+export async function searchPartsInfo(
+  companyId: string,
+  query: string,
+  take = 12
+): Promise<PartsSearchHit[]> {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
 

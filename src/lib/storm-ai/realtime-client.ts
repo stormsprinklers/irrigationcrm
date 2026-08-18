@@ -35,11 +35,13 @@ export type StormAiPartsCardPayload = {
   manufacturer: string | null;
   partNumber: string | null;
   section: string | null;
-  visualDescription: string | null;
-  technicalDescription: string | null;
+  summary?: string | null;
   manualUrl: string | null;
   manualKind: "pdf" | "link" | null;
   photos: Array<{ id?: string; url: string; fileName: string }>;
+  confirmedPhotoId?: string | null;
+  matchConfidence?: number | null;
+  visuallyConfirmed?: boolean;
 };
 
 type SessionResponse = {
@@ -358,6 +360,7 @@ export class StormAiRealtimeClient {
     this.sendEvent({
       type: "session.update",
       session: {
+        type: "realtime",
         audio: {
           input: {
             turn_detection: {
@@ -520,11 +523,17 @@ export class StormAiRealtimeClient {
     const type = String(event.type || "");
 
     if (type === "error") {
-      const err = event.error as { message?: string; code?: string } | undefined;
+      const err = event.error as { message?: string; code?: string; param?: string } | undefined;
+      const message = err?.message || "Realtime error";
+      const recoverable =
+        /session\.type|session\.update/i.test(message) ||
+        /session\.type/i.test(String(err?.param || ""));
       console.error("[storm-ai realtime] server error", err);
-      this.activity(`Server error: ${err?.message || "Realtime error"}`, "error");
-      this.callbacks.onError?.(err?.message || "Realtime error");
-      this.setStatus("error");
+      this.activity(`Server error: ${message}`, "error");
+      if (!recoverable) {
+        this.callbacks.onError?.(message);
+        this.setStatus("error");
+      }
       return;
     }
 
@@ -850,8 +859,9 @@ export class StormAiRealtimeClient {
       args = {};
     }
 
+    const timeoutMs = name === "search_parts_info" ? 55_000 : TOOL_TIMEOUT_MS;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TOOL_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await fetch("/api/storm-ai/realtime/tools", {
         method: "POST",
@@ -962,6 +972,13 @@ export class StormAiRealtimeClient {
     if (!result || typeof result !== "object") return null;
     const root = result as Record<string, unknown>;
     const data = (root.data as Record<string, unknown> | undefined) ?? root;
+    const visual =
+      data.visualMatch && typeof data.visualMatch === "object"
+        ? (data.visualMatch as Record<string, unknown>)
+        : null;
+    if (visual?.ran === true && visual.confirmed !== true) {
+      return "I compared that photo to the parts library and could not confirm a match. Try a closer, well-lit shot of the part.";
+    }
     const parts = data.parts;
     if (!Array.isArray(parts) || parts.length === 0) {
       return "I checked the parts library and did not find a match for what you are showing.";
@@ -976,6 +993,7 @@ export class StormAiRealtimeClient {
       typeof top.partNumber === "string" && top.partNumber
         ? `, part number ${top.partNumber}`
         : "";
-    return `From the parts library, this looks like ${name}${manufacturer}${partNumber}.`;
+    const confirmed = visual?.confirmed === true ? "The library photo matches what you are showing. " : "";
+    return `${confirmed}From the parts library, this looks like ${name}${manufacturer}${partNumber}.`;
   }
 }

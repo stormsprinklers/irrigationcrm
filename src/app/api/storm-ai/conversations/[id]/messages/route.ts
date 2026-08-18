@@ -3,7 +3,7 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { runStormAiTurn } from "@/lib/storm-ai/chat";
 import type { StormAiPageContext } from "@/lib/storm-ai/types";
 
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 type Params = { params: Promise<{ id: string }> };
 

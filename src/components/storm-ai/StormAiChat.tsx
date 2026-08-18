@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ImagePlus, Mic, MicOff, Sparkles, Video, VideoOff, X } from "lucide-react";
+import { ChevronDown, ImagePlus, Mic, MicOff, Sparkles, Video, VideoOff, X } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -32,6 +32,13 @@ type ChatMessage = {
   createdAt: string;
   attachments?: ChatAttachment[];
   partsCard?: StormAiPartsCardPayload | null;
+};
+
+type ChatThread = {
+  id: string;
+  title: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 type PendingImage = {
@@ -110,31 +117,46 @@ function ChatMarkdown({ text }: { text: string }) {
 
 function PartsInfoCard({ card }: { card: StormAiPartsCardPayload }) {
   const meta = [card.manufacturer, card.partNumber, card.section].filter(Boolean).join(" · ");
+  const summary =
+    card.summary?.trim() ||
+    [card.name + (meta ? `. ${meta}` : "")].join("");
   return (
     <div className="space-y-2">
-      <p className="font-medium">{card.name}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-medium">{card.name}</p>
+        {card.visuallyConfirmed ? (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+            Photo match
+          </span>
+        ) : null}
+      </div>
       {card.photos.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {card.photos.map((photo) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={photo.url}
-              src={photo.url}
-              alt={photo.fileName || card.name}
-              className="h-28 w-28 rounded-md object-cover"
-            />
-          ))}
+          {card.photos.map((photo) => {
+            const confirmed =
+              Boolean(card.confirmedPhotoId) && photo.id === card.confirmedPhotoId;
+            return (
+              <div key={photo.url} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.url}
+                  alt={photo.fileName || card.name}
+                  className={cn(
+                    "h-28 w-28 rounded-md object-cover",
+                    confirmed ? "ring-2 ring-emerald-500 ring-offset-2" : ""
+                  )}
+                />
+                {confirmed ? (
+                  <span className="absolute left-1 top-1 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    Match
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
-      {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
-      {card.visualDescription ? (
-        <p className="text-sm whitespace-pre-wrap">{card.visualDescription}</p>
-      ) : null}
-      {card.technicalDescription ? (
-        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-          {card.technicalDescription}
-        </p>
-      ) : null}
+      {summary ? <p className="text-sm whitespace-pre-wrap">{summary}</p> : null}
       {card.manualUrl ? (
         <a
           href={card.manualUrl}
@@ -156,9 +178,7 @@ function appendPartsCardMessage(
   if (prev.some((m) => m.partsCard?.partId === card.partId && m.role === "assistant")) {
     return prev;
   }
-  const lines = [`**${card.name}**`];
-  const meta = [card.manufacturer, card.partNumber, card.section].filter(Boolean);
-  if (meta.length) lines.push(meta.join(" · "));
+  const lines = [card.summary?.trim() || `**${card.name}**`];
   return [
     ...prev,
     {
@@ -212,6 +232,8 @@ export function StormAiChat() {
   const [enabled, setEnabled] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [sending, setSending] = useState(false);
@@ -235,6 +257,23 @@ export function StormAiChat() {
     () => pageContextFromLocation(pathname, searchParams.toString()),
     [pathname, searchParams]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/storm-ai/conversations");
+        if (!res.ok) return;
+        const data = (await res.json()) as { conversations?: ChatThread[] };
+        if (!cancelled) setThreads(data.conversations ?? []);
+      } catch {
+        /* history is optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,6 +429,37 @@ export function StormAiChat() {
     }
   }
 
+  async function refreshThreads() {
+    try {
+      const res = await fetch("/api/storm-ai/conversations");
+      if (!res.ok) return;
+      const data = (await res.json()) as { conversations?: ChatThread[] };
+      setThreads(data.conversations ?? []);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function openThread(id: string) {
+    stopVoice();
+    setHistoryOpen(false);
+    try {
+      const res = await fetch(`/api/storm-ai/conversations/${id}`);
+      if (!res.ok) {
+        toast.error("Could not open that chat");
+        return;
+      }
+      const data = (await res.json()) as {
+        conversation?: { id: string; messages?: ChatMessage[] };
+      };
+      setActiveId(data.conversation?.id ?? id);
+      setMessages(data.conversation?.messages ?? []);
+      setPendingImages([]);
+    } catch {
+      toast.error("Could not open that chat");
+    }
+  }
+
   async function startNewChat() {
     stopVoice();
     const res = await fetch("/api/storm-ai/conversations", { method: "POST" });
@@ -401,6 +471,8 @@ export function StormAiChat() {
     setActiveId(data.conversation.id);
     setMessages([]);
     setPendingImages([]);
+    setHistoryOpen(false);
+    void refreshThreads();
   }
 
   async function onPickFiles(files: FileList | null) {
@@ -477,6 +549,7 @@ export function StormAiChat() {
       if (!res.ok) throw new Error(data.error ?? "Send failed");
       setMessages(data.messages ?? []);
       if (data.warning) toast.warning(data.warning);
+      void refreshThreads();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
@@ -520,6 +593,47 @@ export function StormAiChat() {
             </Button>
           }
         />
+
+        {threads.length > 0 ? (
+          <div className="mb-3 shrink-0 rounded-lg border border-border bg-muted/40">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium"
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-expanded={historyOpen}
+            >
+              Past chats
+              <ChevronDown
+                className={cn("h-4 w-4 text-muted-foreground transition-transform", historyOpen && "rotate-180")}
+              />
+            </button>
+            {historyOpen ? (
+              <ul className="max-h-48 space-y-0.5 overflow-y-auto border-t border-border px-2 py-2">
+                {threads.map((thread) => (
+                  <li key={thread.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-background",
+                        thread.id === activeId && "bg-background font-medium"
+                      )}
+                      onClick={() => void openThread(thread.id)}
+                    >
+                      <span className="block truncate">
+                        {thread.title?.trim() || "Untitled chat"}
+                      </span>
+                      {thread.updatedAt ? (
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(thread.updatedAt).toLocaleString()}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
           <ScrollArea className="min-h-0 flex-1">

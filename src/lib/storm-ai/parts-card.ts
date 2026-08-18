@@ -7,12 +7,31 @@ export type StormAiPartsCard = {
   manufacturer: string | null;
   partNumber: string | null;
   section: string | null;
-  visualDescription: string | null;
-  technicalDescription: string | null;
+  /** Short ID blurb for the chat card — never visual or full technical library text. */
+  summary: string;
   manualUrl: string | null;
   manualKind: "pdf" | "link" | null;
   photos: Array<{ id?: string; url: string; fileName: string }>;
+  confirmedPhotoId?: string | null;
+  matchConfidence?: number | null;
+  visuallyConfirmed?: boolean;
 };
+
+export function partsCardSummary(part: {
+  name: string;
+  manufacturer?: string | null;
+  partNumber?: string | null;
+  section?: string | null;
+}) {
+  const sentences: string[] = [];
+  const manufacturer = part.manufacturer?.trim();
+  sentences.push(manufacturer ? `${part.name} by ${manufacturer}.` : `${part.name}.`);
+  const partNumber = part.partNumber?.trim();
+  if (partNumber) sentences.push(`Part number ${partNumber}.`);
+  const section = part.section?.trim();
+  if (section) sentences.push(`Listed under ${section}.`);
+  return sentences.join(" ");
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -35,7 +54,21 @@ function photoFromUnknown(row: unknown): { id?: string; url: string; fileName: s
   };
 }
 
-export function partRecordToCard(part: Record<string, unknown>): StormAiPartsCard | null {
+function orderPhotos(
+  photos: Array<{ id?: string; url: string; fileName: string }>,
+  confirmedPhotoId?: string | null
+) {
+  if (!confirmedPhotoId) return photos;
+  return [
+    ...photos.filter((photo) => photo.id === confirmedPhotoId),
+    ...photos.filter((photo) => photo.id !== confirmedPhotoId),
+  ];
+}
+
+export function partRecordToCard(
+  part: Record<string, unknown>,
+  opts?: { confirmedPhotoId?: string | null; matchConfidence?: number | null; visuallyConfirmed?: boolean }
+): StormAiPartsCard | null {
   const id = typeof part.id === "string" ? part.id : null;
   const name = typeof part.name === "string" ? part.name : null;
   if (!id || !name) return null;
@@ -51,6 +84,12 @@ export function partRecordToCard(part: Record<string, unknown>): StormAiPartsCar
   const photos = Array.isArray(part.photos)
     ? part.photos.map(photoFromUnknown).filter(Boolean)
     : [];
+  const confirmedPhotoId =
+    opts?.confirmedPhotoId ??
+    (typeof part.matchedPhotoId === "string" ? part.matchedPhotoId : null);
+  const matchConfidence =
+    opts?.matchConfidence ??
+    (typeof part.visualConfidence === "number" ? part.visualConfidence : null);
 
   return {
     kind: "parts_card",
@@ -59,13 +98,21 @@ export function partRecordToCard(part: Record<string, unknown>): StormAiPartsCar
     manufacturer: typeof part.manufacturer === "string" ? part.manufacturer : null,
     partNumber: typeof part.partNumber === "string" ? part.partNumber : null,
     section,
-    visualDescription:
-      typeof part.visualDescription === "string" ? part.visualDescription : null,
-    technicalDescription:
-      typeof part.technicalDescription === "string" ? part.technicalDescription : null,
+    summary: partsCardSummary({
+      name,
+      manufacturer: typeof part.manufacturer === "string" ? part.manufacturer : null,
+      partNumber: typeof part.partNumber === "string" ? part.partNumber : null,
+      section,
+    }),
     manualUrl: typeof part.manualUrl === "string" ? part.manualUrl : null,
     manualKind,
-    photos: photos as Array<{ id?: string; url: string; fileName: string }>,
+    photos: orderPhotos(
+      photos as Array<{ id?: string; url: string; fileName: string }>,
+      confirmedPhotoId
+    ),
+    confirmedPhotoId,
+    matchConfidence,
+    visuallyConfirmed: opts?.visuallyConfirmed,
   };
 }
 
@@ -86,32 +133,46 @@ export async function buildPartsChatCard(
   }
 
   if (toolName === "search_parts_info" && Array.isArray(data.parts) && data.parts.length > 0) {
+    const visual = asRecord(data.visualMatch);
+    const visionRan = visual?.ran === true;
+    const visionError = visual?.error === true;
+    const confirmed = visual?.confirmed === true;
+    if (visionRan && !confirmed && !visionError) {
+      return null;
+    }
+
+    const confirmedPhotoId =
+      typeof visual?.photoId === "string" ? visual.photoId : null;
+    const matchConfidence =
+      typeof visual?.confidence === "number" ? visual.confidence : null;
     const top = asRecord(data.parts[0]);
     if (!top) return null;
-    const topId = typeof top.id === "string" ? top.id : null;
+    const topId =
+      (typeof visual?.partId === "string" && visual.partId) ||
+      (typeof top.id === "string" ? top.id : null);
     if (topId) {
       const detail = await getPartsInfoDetail(companyId, topId);
       if (detail) {
-        const card = partRecordToCard(detail as unknown as Record<string, unknown>);
+        const card = partRecordToCard(detail as unknown as Record<string, unknown>, {
+          confirmedPhotoId,
+          matchConfidence,
+          visuallyConfirmed: confirmed,
+        });
         if (card) return card;
       }
     }
-    return partRecordToCard(top);
+    return partRecordToCard(top, {
+      confirmedPhotoId,
+      matchConfidence,
+      visuallyConfirmed: confirmed,
+    });
   }
 
   return null;
 }
 
 export function formatPartsCardMarkdown(card: StormAiPartsCard): string {
-  const lines: string[] = [`**${card.name}**`];
-  const meta = [card.manufacturer, card.partNumber, card.section].filter(Boolean);
-  if (meta.length) lines.push(meta.join(" · "));
-  if (card.visualDescription) lines.push(`\n${card.visualDescription}`);
-  if (card.technicalDescription) lines.push(`\n${card.technicalDescription}`);
-  if (card.manualUrl) {
-    lines.push(`\n[Open manual](${card.manualUrl})`);
-  }
-  return lines.join("\n").trim();
+  return card.summary;
 }
 
 export function parsePartsCardFromAttachments(raw: unknown): StormAiPartsCard | null {
@@ -119,7 +180,16 @@ export function parsePartsCardFromAttachments(raw: unknown): StormAiPartsCard | 
   for (const item of raw) {
     const row = asRecord(item);
     if (!row || row.kind !== "parts_card") continue;
-    return partRecordToCard({ ...row, id: row.partId ?? row.id });
+    return partRecordToCard(
+      { ...row, id: row.partId ?? row.id },
+      {
+        confirmedPhotoId:
+          typeof row.confirmedPhotoId === "string" ? row.confirmedPhotoId : null,
+        matchConfidence:
+          typeof row.matchConfidence === "number" ? row.matchConfidence : null,
+        visuallyConfirmed: row.visuallyConfirmed === true,
+      }
+    );
   }
   return null;
 }

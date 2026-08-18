@@ -37,6 +37,8 @@ import {
   startTechAssistSession,
 } from "./tech-assist";
 import { getPartsInfoDetail, searchPartsInfo } from "./parts-info";
+import { applyPartsVisionMatch, visualMatchNote } from "./parts-vision-match";
+import { getCompanyPolicy, searchCompanyPolicies } from "./policies";
 import { getStormAiVehicleReport } from "./vehicles";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 import type { StormAiToolResult } from "./types";
@@ -636,15 +638,20 @@ export async function runStormAiTool(
           return fail("FORBIDDEN", "Your role cannot access that.");
         }
         const query = typeof args.query === "string" ? args.query : "";
-        const parts = await searchPartsInfo(user.companyId, query);
+        const textHits = await searchPartsInfo(user.companyId, query);
+        const compared = ctx?.conversationId
+          ? await applyPartsVisionMatch({
+              companyId: user.companyId,
+              conversationId: ctx.conversationId,
+              parts: textHits,
+            })
+          : { parts: textHits, visualMatch: { ran: false, confirmed: false, partId: null, photoId: null, confidence: null, reason: null } };
         return ok({
           query,
-          count: parts.length,
-          parts,
-          note:
-            parts.length === 0
-              ? "No matching parts in the company parts library. Do not invent part specs or manuals."
-              : "Use get_parts_info with a partId for the full write-up and manual link. Ground answers in these results only.",
+          count: compared.parts.length,
+          parts: compared.parts,
+          visualMatch: compared.visualMatch,
+          note: visualMatchNote(compared.visualMatch, compared.parts.length),
         });
       }
       case "get_parts_info": {
@@ -657,7 +664,30 @@ export async function runStormAiTool(
         if (!part) return fail("NOT_FOUND", "Part not found");
         return ok({
           part,
-          note: "If manualUrl is present, share it as a markdown link using the exact URL: [Open manual](manualUrl). Do not invent specs beyond this record.",
+          note: "Answer the technician in a few sentences using this record. Never paste visualDescription. Never paste the full technicalDescription. If manualUrl is present, share it as [Open manual](manualUrl). Do not invent specs.",
+        });
+      }
+      case "search_company_policies": {
+        const query = typeof args.query === "string" ? args.query : "";
+        const policies = await searchCompanyPolicies(user.companyId, query);
+        return ok({
+          query,
+          count: policies.length,
+          policies,
+          note:
+            policies.length === 0
+              ? "No matching company policy. Do not invent discounts, callbacks, repair, or customer-service rules."
+              : "Follow these policies. They override generic advice. Do not add rules that are not written here.",
+        });
+      }
+      case "get_company_policy": {
+        const policyId = typeof args.policyId === "string" ? args.policyId : "";
+        if (!policyId) return fail("INVALID", "policyId is required");
+        const policy = await getCompanyPolicy(user.companyId, policyId);
+        if (!policy) return fail("NOT_FOUND", "Policy not found");
+        return ok({
+          policy,
+          note: "Follow this policy exactly. Do not invent additional company rules.",
         });
       }
       case "get_vehicles": {

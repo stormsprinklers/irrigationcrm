@@ -91,8 +91,9 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
   Settings: node("/settings", kids({
     Company: node("/settings"),
     Appearance: node("/settings/appearance"),
-    "Storm AI": node("/settings/storm-ai", kids({
+      "Storm AI": node("/settings/storm-ai", kids({
       General: node("/settings/storm-ai"),
+      "Company policies": node("/settings/storm-ai/policies"),
       "Technician Assistant": node("/settings/storm-ai/technician-assistant", kids({
         Issues: node("/settings/storm-ai/technician-assistant"),
         "Parts Info": node("/settings/storm-ai/technician-assistant/parts"),

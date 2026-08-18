@@ -336,7 +336,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "search_parts_info",
       description:
-        "Search the technician parts knowledge base (sections of parts with visual/technical descriptions, photos, and manuals). Use when identifying a part from a photo or text, looking up a part number, wiring/specs, or finding a manual. After viewing a user photo, pass a detailed visual description as the query. Returns matching parts with short descriptions and photo URLs — never invent part data.",
+        "Search the technician parts knowledge base (sections of parts with visual/technical descriptions, photos, and manuals). Use when identifying a part from a photo or text, looking up a part number, wiring/specs, or finding a manual. After viewing a user photo, pass a detailed visual description as the query. The tool then compares that photo to catalog photos of several candidates and returns visualMatch. Treat a part as identified only when visualMatch.confirmed is true. Never invent part data.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -363,6 +363,41 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
         required: ["partId"],
         properties: {
           partId: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_company_policies",
+      description:
+        "Search this company's written policies (discounts, callbacks, repair process, customer service, warranty, scheduling, and similar). Always call this before answering how the company does something or advising staff on discounts, callbacks, repairs, or customer handling. Pass the user's question as the query. Use only returned policy text — never invent company rules.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["query"],
+        properties: {
+          query: {
+            type: "string",
+            description: "The staff question or topic, e.g. discount, callback, leak repair, angry customer",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_company_policy",
+      description:
+        "Load the full text of one company policy by id from search_company_policies. Use when you need the complete rule after a search hit.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["policyId"],
+        properties: {
+          policyId: { type: "string" },
         },
       },
     },

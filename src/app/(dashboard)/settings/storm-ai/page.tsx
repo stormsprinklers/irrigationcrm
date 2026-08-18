@@ -43,7 +43,7 @@ export default function StormAiGeneralPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI"]}
         title="Storm AI"
-        subtitle="Assistant visibility and technician diagnostic workflows"
+        subtitle="Assistant visibility, company policies, and technician diagnostic workflows"
       />
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="text-lg font-semibold">General</h3>
@@ -66,6 +66,28 @@ export default function StormAiGeneralPage() {
         <Button className="mt-6" onClick={() => void save()} disabled={saving || loading}>
           {saving ? "Saving…" : "Save"}
         </Button>
+      </section>
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Link
+          href="/settings/storm-ai/policies"
+          className="rounded-lg border border-border bg-card p-6 transition-colors hover:bg-muted/40"
+        >
+          <h3 className="text-lg font-semibold">Company policies</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Add, edit, or remove the written rules Storm AI must follow for discounts, callbacks,
+            repairs, and customer service.
+          </p>
+        </Link>
+        <Link
+          href="/settings/storm-ai/technician-assistant"
+          className="rounded-lg border border-border bg-card p-6 transition-colors hover:bg-muted/40"
+        >
+          <h3 className="text-lg font-semibold">Technician assistant</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Diagnostic workflows and the parts library Storm AI uses in the field.
+          </p>
+        </Link>
       </section>
     </ContentArea>
   );

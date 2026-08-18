@@ -33,13 +33,13 @@ export function toRealtimeTools(role: string): StormAiRealtimeTool[] {
   }));
 }
 
-export function buildStormAiRealtimeInstructions(opts: {
+export async function buildStormAiRealtimeInstructions(opts: {
   user: SessionUser;
   timezone: string;
   pageContext?: StormAiPageContext | null;
   videoMode?: boolean;
 }) {
-  const base = buildStormAiSystemPrompt({
+  const base = await buildStormAiSystemPrompt({
     user: opts.user,
     timezone: opts.timezone,
     nowIso: new Date().toISOString(),
@@ -49,9 +49,9 @@ export function buildStormAiRealtimeInstructions(opts: {
   const videoBlock = opts.videoMode
     ? `
 The technician has video mode on. A still camera frame is sent only when they ask a question or talk about what they are showing — not continuously.
-When a frame arrives with their question, look at it carefully before answering. For part ID, describe what you see then call search_parts_info / get_parts_info.
+When a frame arrives with their question, look at it carefully before answering. For part ID, describe what you see then call search_parts_info. The tool compares the frame to library photos and only confirms when a catalog image matches — wait for visualMatch.confirmed before naming a part.
 Frames are also saved to the active job when possible—you do not need a tool to save them.
-When sharing a manual from get_parts_info, tell the tech the photos and manual are already shown in the chat panel — do not invent a link.
+When sharing a manual from get_parts_info, tell the tech the photos are already shown in the chat panel — do not invent a link. Never read visualDescription or the full technical write-up.
 Ground answers in the latest frame plus tool results. Never invent part numbers or manuals.`
     : "";
 
@@ -61,13 +61,14 @@ You are speaking aloud to a field technician over a live voice connection.
 Keep answers short and conversational—one or two sentences when possible, then stop and listen.
 If you hear your own previous answer, ignore it and wait for the technician. Never repeat or mimic yourself.
 Never invent CRM facts; call tools when you need data.
+Always check company policy before answering how the company does discounts, callbacks, repairs, or customer service — call search_company_policies in the same turn.
 For diagnostics, walk one step at a time (test, then wait for their answer).
 When identifying a part from description or a camera frame, you MUST call search_parts_info in the same turn—never only say that you will search.
 Do not tell the technician you are “searching” or “still waiting” unless a tool result just failed. After a tool returns, speak the answer immediately.
-Parts photos, technical info, and manuals appear automatically in the chat panel after a parts lookup — tell them to look there rather than promising a link you send yourself.${videoBlock}`;
+Parts photos and a short ID appear automatically in the chat panel after a parts lookup — tell them to look there rather than promising a link you send yourself. Never read visualDescription aloud. Never read the full technicalDescription; answer the question in a couple of sentences.${videoBlock}`;
 }
 
-export function buildRealtimeSessionConfig(opts: {
+export async function buildRealtimeSessionConfig(opts: {
   user: SessionUser;
   timezone: string;
   pageContext?: StormAiPageContext | null;
@@ -76,10 +77,11 @@ export function buildRealtimeSessionConfig(opts: {
 }) {
   const model = stormAiRealtimeModel();
   const voice = opts.voice || stormAiRealtimeVoice();
+  const instructions = await buildStormAiRealtimeInstructions(opts);
   return {
     type: "realtime" as const,
     model,
-    instructions: buildStormAiRealtimeInstructions(opts),
+    instructions,
     output_modalities: ["audio"] as string[],
     tools: toRealtimeTools(opts.user.role),
     tool_choice: "auto" as const,
@@ -140,7 +142,7 @@ export async function mintStormAiRealtimeClientSecret(opts: {
     return { error: "OPENAI_API_KEY is not configured", status: 503 };
   }
 
-  const session = buildRealtimeSessionConfig(opts);
+  const session = await buildRealtimeSessionConfig(opts);
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: {
