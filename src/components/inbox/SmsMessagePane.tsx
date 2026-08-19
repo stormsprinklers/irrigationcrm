@@ -238,6 +238,34 @@ export function SmsMessagePane({
   const headerSubtitle =
     displayName && displayPhone && displayName !== displayPhone ? displayPhone : null;
 
+  const blockPhone =
+    conversation?.customer?.phone ?? conversation?.participantPhone ?? null;
+  const showBlockAction =
+    scope === "customers" && Boolean(conversationId) && Boolean(blockPhone);
+
+  function PhoneRow({
+    phone,
+    className,
+  }: {
+    phone: string;
+    className?: string;
+  }) {
+    return (
+      <div className="flex min-w-0 items-center gap-0.5">
+        <p className={cn("truncate text-xs text-muted-foreground", className)}>{phone}</p>
+        {showBlockAction ? (
+          <BlockContactAction
+            inline
+            customerId={conversation?.customer?.id}
+            phone={blockPhone}
+            email={conversation?.customer?.email}
+            name={conversation?.customer?.name ?? phone}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full w-full min-w-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
@@ -249,27 +277,26 @@ export function SmsMessagePane({
                 doNotService={conversation.customer.doNotService}
                 nameClassName="truncate font-semibold"
               />
-              {displayPhone ? (
-                <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
-              ) : null}
+              {displayPhone ? <PhoneRow phone={displayPhone} /> : null}
             </>
           ) : (
             <>
-              <h3 className="truncate font-semibold">{headerTitle}</h3>
-              {headerSubtitle ? (
-                <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
-              ) : null}
+              {displayPhone && showBlockAction && !displayName ? (
+                <div className="flex min-w-0 items-center gap-1">
+                  <h3 className="truncate font-semibold">{displayPhone}</h3>
+                  <BlockContactAction
+                    inline
+                    phone={blockPhone}
+                    name={displayPhone}
+                  />
+                </div>
+              ) : (
+                <h3 className="truncate font-semibold">{headerTitle}</h3>
+              )}
+              {headerSubtitle ? <PhoneRow phone={headerSubtitle} /> : null}
             </>
           )}
         </div>
-        {scope === "customers" && conversation?.customer && (
-          <BlockContactAction
-            customerId={conversation.customer.id}
-            phone={conversation.customer.phone}
-            email={conversation.customer.email}
-            name={conversation.customer.name}
-          />
-        )}
       </div>
 
       {isCompose && (

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { toast } from "sonner";
-import { Ban } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +17,9 @@ type BlockContactActionProps = {
   phone?: string | null;
   email?: string | null;
   name?: string;
+  /** Smaller trigger for inline placement next to phone numbers. */
+  inline?: boolean;
+  onBlocked?: () => void;
 };
 
 export function BlockContactAction({
@@ -22,34 +27,79 @@ export function BlockContactAction({
   phone,
   email,
   name,
+  inline = false,
+  onBlocked,
 }: BlockContactActionProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const blockLabel = phone ? "Block number" : "Block contact";
+  const confirmDescription = phone
+    ? "Are you sure you want to block this number?"
+    : `Are you sure you want to block ${name ?? "this contact"}?`;
+
   async function handleBlock() {
-    const res = await fetch("/api/inbox/block", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerId, phone, email, reason: "Blocked from inbox" }),
-    });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/inbox/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          phone,
+          email,
+          reason: "Blocked from inbox",
+        }),
+      });
 
-    if (!res.ok) {
-      toast.error("Failed to block contact");
-      return;
+      if (!res.ok) {
+        toast.error("Failed to block contact");
+        return;
+      }
+
+      toast.success(phone ? "Number blocked" : `${name ?? "Contact"} blocked`);
+      setConfirmOpen(false);
+      onBlocked?.();
+    } finally {
+      setBusy(false);
     }
-
-    toast.success(`${name ?? "Contact"} blocked`);
   }
 
+  if (!phone && !email && !customerId) return null;
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Ban className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={handleBlock} className="text-destructive">
-          Block {name ?? "contact"}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={inline ? "h-6 w-6 shrink-0" : "h-8 w-8"}
+            aria-label="More actions"
+          >
+            <MoreHorizontal className={inline ? "h-3.5 w-3.5" : "h-4 w-4"} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => setConfirmOpen(true)}
+            className="text-destructive"
+          >
+            {blockLabel}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={blockLabel}
+        description={confirmDescription}
+        confirmLabel="Yes, block"
+        confirmVariant="destructive"
+        busy={busy}
+        onConfirm={() => void handleBlock()}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </>
   );
 }
