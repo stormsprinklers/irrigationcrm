@@ -3,6 +3,10 @@ import type { SessionUser } from "@/lib/api-auth";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { buildStormAiSystemPrompt } from "./prompt";
 import { stormAiToolsForRole } from "./permissions";
+import {
+  STORM_AI_INPUT_NOISE_REDUCTION,
+  stormAiServerVad,
+} from "./realtime-vad";
 import type { StormAiPageContext } from "./types";
 
 export type StormAiRealtimeTool = {
@@ -88,20 +92,13 @@ export async function buildRealtimeSessionConfig(opts: {
     audio: {
       input: {
         format: { type: "audio/pcm", rate: 24000 },
-        turn_detection: {
-          type: "server_vad",
-          // Higher threshold = less barge-in from wind, tools, and background noise.
-          threshold: 0.78,
-          prefix_padding_ms: 400,
-          // Longer silence before the model decides the tech finished speaking.
-          silence_duration_ms: 900,
-          // Do not cancel playback on VAD start (echo/noise). The browser client also
-          // temporarily sets create_response=false while the model is speaking so a
-          // second response.create cannot race and cut audio mid-sentence.
-          interrupt_response: false,
-          // Video mode attaches a still before answering, so the model must not auto-respond.
-          create_response: !opts.videoMode,
-        },
+        // Filter ambient noise before VAD so shop/truck sound is less likely to
+        // register as a technician turn (false transcripts like "Thank you.").
+        noise_reduction: STORM_AI_INPUT_NOISE_REDUCTION,
+        turn_detection: stormAiServerVad({
+          createResponse: !opts.videoMode,
+          interruptResponse: false,
+        }),
         transcription: { model: "whisper-1" },
       },
       output: {

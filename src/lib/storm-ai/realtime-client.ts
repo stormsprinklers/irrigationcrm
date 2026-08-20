@@ -1,4 +1,8 @@
 import { isRecoverableRealtimeError } from "./realtime-errors";
+import {
+  STORM_AI_INPUT_NOISE_REDUCTION,
+  stormAiServerVad,
+} from "./realtime-vad";
 
 export type StormAiRealtimeStatus =
   | "idle"
@@ -59,11 +63,6 @@ const FRAME_JPEG_QUALITY = 0.82;
 const TOOL_TIMEOUT_MS = 25_000;
 const SEARCH_FALLBACK_MS = 2500;
 const VIDEO_TURN_FLUSH_MS = 1800;
-
-/** Shared server VAD knobs — keep in sync with buildRealtimeSessionConfig. */
-const VAD_THRESHOLD = 0.78;
-const VAD_PREFIX_PADDING_MS = 400;
-const VAD_SILENCE_DURATION_MS = 900;
 
 function stripChatCard(result: unknown): unknown {
   if (!result || typeof result !== "object") return result;
@@ -386,15 +385,11 @@ export class StormAiRealtimeClient {
         type: "realtime",
         audio: {
           input: {
-            turn_detection: {
-              type: "server_vad",
-              threshold: VAD_THRESHOLD,
-              prefix_padding_ms: VAD_PREFIX_PADDING_MS,
-              silence_duration_ms: VAD_SILENCE_DURATION_MS,
-              // Never auto-cancel mid-sentence from wind/noise/echo; we gate create_response instead.
-              interrupt_response: false,
-              create_response: enabled,
-            },
+            noise_reduction: STORM_AI_INPUT_NOISE_REDUCTION,
+            turn_detection: stormAiServerVad({
+              createResponse: enabled,
+              interruptResponse: false,
+            }),
           },
         },
       },
