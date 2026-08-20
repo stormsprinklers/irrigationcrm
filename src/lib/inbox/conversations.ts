@@ -225,7 +225,9 @@ export async function resolveInboundSmsLine(phone: string): Promise<InboundSmsLi
 
 export async function getCompanyByTwilioPhone(phone: string) {
   const resolved = await resolveInboundSmsLine(phone);
-  return resolved?.company ?? null;
+  if (!resolved) return null;
+  // Voice routing needs the full Company row (recordCalls, businessHours, etc.).
+  return prisma.company.findUnique({ where: { id: resolved.company.id } });
 }
 
 export async function getCompanyBySendGridAddress(email: string) {
