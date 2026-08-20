@@ -367,13 +367,13 @@ export default function VoiceNumbersPage() {
       if (codes.length) params.set("areaCodes", codes.join(","));
       if (containsPattern.trim()) params.set("contains", containsPattern.trim());
       const res = await fetch(`/api/settings/voice/numbers/search?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Search failed");
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Search failed");
         setSearchResults([]);
-        return;
-      }
-      setSearchResults(data.numbers ?? []);
+      return;
+    }
+    setSearchResults(data.numbers ?? []);
       if (!(data.numbers ?? []).length) {
         toast.message("No matching numbers found — try another pattern or area code");
       }
@@ -385,27 +385,27 @@ export default function VoiceNumbersPage() {
   async function purchaseNumber(phone: string) {
     setPurchasing(phone);
     try {
-      const res = await fetch("/api/settings/voice/numbers/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          e164: phone,
-          friendlyName,
-          numberType,
+    const res = await fetch("/api/settings/voice/numbers/purchase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        e164: phone,
+        friendlyName,
+        numberType,
           isPrimary: numberType === "PRIMARY",
-          callFlowId: callFlowId || null,
+        callFlowId: callFlowId || null,
           assignedUserId: assignedUserId || null,
-          trackingSource: trackingSource || null,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        toast.error(data.error ?? "Purchase failed");
-        return;
-      }
-      toast.success("Number purchased");
-      setTab("list");
-      load();
+        trackingSource: trackingSource || null,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      toast.error(data.error ?? "Purchase failed");
+      return;
+    }
+    toast.success("Number purchased");
+    setTab("list");
+    load();
     } finally {
       setPurchasing(null);
     }
@@ -468,7 +468,7 @@ export default function VoiceNumbersPage() {
         return;
       }
       toast.success("Number released from Twilio");
-      load();
+    load();
     } finally {
       setReleasingId(null);
     }
@@ -741,7 +741,7 @@ export default function VoiceNumbersPage() {
                     <label className="mb-1 block text-xs font-medium">
                       Code sent to {mfaPhone}
                     </label>
-                    <Input
+            <Input
                       value={mfaCode}
                       onChange={(e) => setMfaCode(e.target.value)}
                       className="w-40"
@@ -753,8 +753,8 @@ export default function VoiceNumbersPage() {
                   </Button>
                   <Button type="button" variant="outline" onClick={() => void startReleaseMfa()}>
                     Resend
-                  </Button>
-                </div>
+            </Button>
+          </div>
               )}
             </div>
           ) : (
@@ -874,17 +874,17 @@ export default function VoiceNumbersPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-sm font-medium">Number type (on purchase)</label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={numberType}
-                onChange={(e) => setNumberType(e.target.value)}
-              >
-                {NUMBER_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={numberType}
+              onChange={(e) => setNumberType(e.target.value)}
+            >
+              {NUMBER_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">Call flow</label>
@@ -914,18 +914,18 @@ export default function VoiceNumbersPage() {
             {numberType === "AGENT_DIRECT" ? (
               <div className="space-y-1 sm:col-span-2">
                 <label className="text-sm font-medium">Assign to employee</label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={assignedUserId}
-                  onChange={(e) => setAssignedUserId(e.target.value)}
-                >
-                  <option value="">Select employee</option>
-                  {employees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.name}
-                    </option>
-                  ))}
-                </select>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={assignedUserId}
+                onChange={(e) => setAssignedUserId(e.target.value)}
+              >
+                <option value="">Select employee</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
               </div>
             ) : null}
             <div className="space-y-1 sm:col-span-2">
@@ -1023,7 +1023,7 @@ export default function VoiceNumbersPage() {
                       </TableCell>
                       {showCompanyColumn ? (
                         <TableCell>
-                          <select
+            <select
                             className="h-9 w-full min-w-[150px] rounded-md border border-input bg-background px-2 text-sm"
                             value={n.companyId}
                             onChange={(e) => {
@@ -1035,9 +1035,9 @@ export default function VoiceNumbersPage() {
                             {companies.map((c) => (
                               <option key={c.id} value={c.id}>
                                 {c.name}
-                              </option>
-                            ))}
-                          </select>
+                </option>
+              ))}
+            </select>
                         </TableCell>
                       ) : null}
                       <TableCell>
@@ -1094,8 +1094,8 @@ export default function VoiceNumbersPage() {
                               <p className="text-[10px] leading-snug text-muted-foreground">
                                 Used for outbound CRM texts
                               </p>
-                            ) : null}
-                          </div>
+                    ) : null}
+                  </div>
                         ) : n.smsEnabled === false ? (
                           <Badge variant="outline" className="text-muted-foreground">
                             Off
@@ -1108,20 +1108,20 @@ export default function VoiceNumbersPage() {
                       </TableCell>
                       <TableCell>
                         {onCurrentCompany ? (
-                          <select
+                  <select
                             className="h-9 w-full min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                            value={n.callFlowId ?? ""}
-                            onChange={(e) =>
+                    value={n.callFlowId ?? ""}
+                    onChange={(e) =>
                               void updateNumber(n.id, { callFlowId: e.target.value || null })
-                            }
-                          >
-                            <option value="">Default flow</option>
-                            {flows.map((f) => (
-                              <option key={f.id} value={f.id}>
-                                {f.name}
-                              </option>
-                            ))}
-                          </select>
+                    }
+                  >
+                    <option value="">Default flow</option>
+                    {flows.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
                         ) : (
                           <span className="text-sm text-muted-foreground">
                             {n.callFlow?.name ?? "Default flow"}

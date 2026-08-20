@@ -1,0 +1,10 @@
+---
+description: Never push or deploy unless the user explicitly asks
+alwaysApply: true
+---
+
+# Git push / deploy
+
+- Do **not** run `git push`, deploy, or trigger Vercel builds unless the user explicitly asks (e.g. "push", "commit and push", "deploy").
+- Committing is also only when the user asks to commit.
+- Prefer leaving changes local after implementation so the user can review before paying for a build.
