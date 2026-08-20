@@ -2,7 +2,17 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronDown, ImagePlus, Mic, MicOff, Sparkles, Video, VideoOff, X } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  ImagePlus,
+  Mic,
+  MicOff,
+  Sparkles,
+  Video,
+  VideoOff,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -240,6 +250,9 @@ export function StormAiChat() {
   const [voiceStatus, setVoiceStatus] = useState<StormAiRealtimeStatus>("idle");
   const [voiceTool, setVoiceTool] = useState<string | null>(null);
   const [voiceActivity, setVoiceActivity] = useState<StormAiRealtimeActivity[]>([]);
+  const [activityExportMeta, setActivityExportMeta] = useState<{
+    videoMode: boolean;
+  }>({ videoMode: false });
   const [videoMode, setVideoMode] = useState(false);
   const [localPreviewStream, setLocalPreviewStream] = useState<MediaStream | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -314,7 +327,46 @@ export function StormAiChat() {
   }, [localPreviewStream, videoMode]);
 
   function pushVoiceActivity(entry: StormAiRealtimeActivity) {
-    setVoiceActivity((prev) => [...prev.slice(-24), entry]);
+    // Keep a larger ring buffer so exported debug logs cover full AI paths.
+    setVoiceActivity((prev) => [...prev.slice(-199), entry]);
+  }
+
+  function resetVoiceActivity(nextVideoMode = false) {
+    setVoiceActivity([]);
+    setActivityExportMeta({ videoMode: nextVideoMode });
+  }
+
+  function exportVoiceActivity() {
+    if (voiceActivity.length === 0) {
+      toast.error("No live steps to export yet");
+      return;
+    }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      source: "storm-ai-live-debug",
+      conversationId: activeId,
+      videoMode: activityExportMeta.videoMode || videoMode,
+      status: voiceStatus,
+      entryCount: voiceActivity.length,
+      entries: voiceActivity.map((entry, index) => ({
+        seq: index + 1,
+        at: entry.at,
+        iso: new Date(entry.at).toISOString(),
+        level: entry.level,
+        message: entry.message,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `storm-ai-debug-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Debug log exported as JSON");
   }
 
   function stopVoice() {
@@ -324,7 +376,7 @@ export function StormAiChat() {
     setVoiceTool(null);
     setVideoMode(false);
     setLocalPreviewStream(null);
-    setVoiceActivity([]);
+    // Keep voiceActivity so the session can still be exported after hang-up.
   }
 
   function realtimeCallbacks(base?: {
@@ -352,7 +404,10 @@ export function StormAiChat() {
         setLocalPreviewStream(stream);
         base?.onLocalStream?.(stream);
       },
-      onVideoModeChange: (enabled: boolean) => setVideoMode(enabled),
+      onVideoModeChange: (enabled: boolean) => {
+        setVideoMode(enabled);
+        setActivityExportMeta((prev) => ({ ...prev, videoMode: enabled || prev.videoMode }));
+      },
       onPartsCard: (card: StormAiPartsCardPayload) =>
         setMessages((prev) => appendPartsCardMessage(prev, card)),
       onActivity: pushVoiceActivity,
@@ -367,7 +422,7 @@ export function StormAiChat() {
   async function ensureRealtimeClient() {
     if (voiceClientRef.current?.isActive) return voiceClientRef.current;
     if (sending) return null;
-    setVoiceActivity([]);
+    resetVoiceActivity(false);
     const client = new StormAiRealtimeClient(realtimeCallbacks());
     voiceClientRef.current = client;
     try {
@@ -413,7 +468,7 @@ export function StormAiChat() {
 
     // Start a new realtime session with video (same chat conversation id).
     setVideoMode(true);
-    setVoiceActivity([]);
+    resetVoiceActivity(true);
     const client = new StormAiRealtimeClient(realtimeCallbacks());
     voiceClientRef.current = client;
     try {
@@ -675,21 +730,50 @@ export function StormAiChat() {
                 ))
               )}
               {sending ? <p className="text-xs text-muted-foreground">Thinking…</p> : null}
-              {voiceActive ? (
+              {voiceActive || voiceActivity.length > 0 ? (
                 <div className="space-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
-                  <p className="text-xs font-medium text-foreground">
-                    {voiceStatus === "connecting"
-                      ? videoMode
-                        ? "Connecting video…"
-                        : "Connecting voice…"
-                      : voiceStatus === "tool"
-                        ? `Looking up ${voiceTool ?? "CRM data"}…`
-                        : voiceStatus === "speaking"
-                          ? "Storm AI speaking…"
-                          : videoMode
-                            ? "Listening — point the camera and ask about what you see"
-                            : "Listening — speak anytime"}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">
+                      {voiceActive
+                        ? voiceStatus === "connecting"
+                          ? videoMode
+                            ? "Connecting video…"
+                            : "Connecting voice…"
+                          : voiceStatus === "tool"
+                            ? `Looking up ${voiceTool ?? "CRM data"}…`
+                            : voiceStatus === "speaking"
+                              ? "Storm AI speaking…"
+                              : videoMode
+                                ? "Listening — point the camera and ask about what you see"
+                                : "Listening — speak anytime"
+                        : "Session debug log"}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {voiceActivity.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={exportVoiceActivity}
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />
+                          Export JSON
+                        </Button>
+                      ) : null}
+                      {!voiceActive && voiceActivity.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-[11px]"
+                          onClick={() => resetVoiceActivity(false)}
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
                   {voiceActivity.length > 0 ? (
                     <div className="max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-snug text-muted-foreground">
                       {voiceActivity.map((entry) => (
