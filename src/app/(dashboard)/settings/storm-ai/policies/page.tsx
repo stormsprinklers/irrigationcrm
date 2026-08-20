@@ -26,6 +26,36 @@ function categoryLabel(category: string | null) {
   return category?.trim() || UNCATEGORIZED;
 }
 
+function csvEscape(value: string) {
+  if (/[",\n\r]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function policiesToCsv(rows: Policy[]) {
+  const header = ["Title", "Category", "Active", "Sort order", "Description"];
+  const lines = [header.join(",")];
+  const sorted = [...rows].sort(
+    (a, b) =>
+      categoryLabel(a.category).localeCompare(categoryLabel(b.category)) ||
+      a.sortOrder - b.sortOrder ||
+      a.title.localeCompare(b.title)
+  );
+  for (const policy of sorted) {
+    lines.push(
+      [
+        csvEscape(policy.title),
+        csvEscape(categoryLabel(policy.category)),
+        policy.active ? "yes" : "no",
+        String(policy.sortOrder),
+        csvEscape(policy.description),
+      ].join(",")
+    );
+  }
+  return `${lines.join("\r\n")}\r\n`;
+}
+
 export default function StormAiPoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -200,12 +230,41 @@ export default function StormAiPoliciesPage() {
     await load();
   }
 
+  function exportCsv() {
+    if (!policies.length) {
+      toast.error("No policies to export");
+      return;
+    }
+    const csv = policiesToCsv(policies);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `storm-ai-company-policies-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Policies exported");
+  }
+
   return (
     <ContentArea className="max-w-5xl">
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Company policies"]}
         title="Company policies"
         subtitle="Tell Storm AI how this company handles safety, property protection, technical standards, customer authorization, pricing/payments, and employee operations. Storm AI checks these before it answers."
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            onClick={exportCsv}
+            disabled={loading || policies.length === 0}
+          >
+            Export CSV
+          </Button>
+        }
       />
 
       <div className="mb-4 flex gap-2">

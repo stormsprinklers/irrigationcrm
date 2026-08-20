@@ -1,13 +1,14 @@
 "use client";
 
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Sparkles, Star } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Loader2, Sparkles, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import type { GbpReviewDto } from "@/lib/google-business/engagement-types";
 import { GBP_STAR_LABELS } from "@/lib/google-business/engagement-types";
+import { cn } from "@/lib/utils";
 
 function starCount(rating: string) {
   return GBP_STAR_LABELS[rating] ?? 0;
@@ -32,9 +33,21 @@ type NeedsAssignmentReview = {
   createTime: string | null;
 };
 
+type InboxReviewCard = {
+  key: string;
+  googleReviewId: string;
+  reviewerName: string;
+  comment: string | null;
+  starRating: string;
+  createTime: string | null;
+  gbp: GbpReviewDto | null;
+  needsReply: boolean;
+  needsAssignment: NeedsAssignmentReview | null;
+  assigned: Array<{ userId: string; name: string; share: number }>;
+};
+
 export function GoogleReviewsInbox() {
-  const [reviews, setReviews] = useState<GbpReviewDto[]>([]);
-  const [allReviewsResponded, setAllReviewsResponded] = useState(false);
+  const [googleReviews, setGoogleReviews] = useState<GbpReviewDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [generatingId, setGeneratingId] = useState<string | null>(null);
@@ -61,13 +74,11 @@ export function GoogleReviewsInbox() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load reviews");
       const list = (data.reviews ?? []) as GbpReviewDto[];
-      const unreplied = list.filter((review) => !review.reply?.trim());
-      setReviews(unreplied);
-      setAllReviewsResponded(list.length > 0 && unreplied.length === 0);
+      setGoogleReviews(list);
       setReplyDrafts((current) => {
         const next = { ...current };
-        for (const review of unreplied) {
-          if (next[review.name] === undefined) {
+        for (const review of list) {
+          if (!review.reply?.trim() && next[review.name] === undefined) {
             next[review.name] = "";
           }
         }
@@ -77,8 +88,7 @@ export function GoogleReviewsInbox() {
       notifyInboxBadgesChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load reviews");
-      setReviews([]);
-      setAllReviewsResponded(false);
+      setGoogleReviews([]);
     } finally {
       setLoading(false);
     }
@@ -87,6 +97,53 @@ export function GoogleReviewsInbox() {
   useEffect(() => {
     void loadReviews();
   }, [loadReviews]);
+
+  const cards = useMemo(() => {
+    const needsByGoogleId = new Map(needsReview.map((row) => [row.reviewId, row]));
+    const seenGoogleIds = new Set<string>();
+    const items: InboxReviewCard[] = [];
+
+    for (const review of googleReviews) {
+      const needsReply = !review.reply?.trim();
+      const needsAssignment = needsByGoogleId.get(review.reviewId) ?? null;
+      if (!needsReply && !needsAssignment) continue;
+      seenGoogleIds.add(review.reviewId);
+      items.push({
+        key: review.name,
+        googleReviewId: review.reviewId,
+        reviewerName: review.reviewerName,
+        comment: review.comment,
+        starRating: review.starRating,
+        createTime: review.createTime,
+        gbp: review,
+        needsReply,
+        needsAssignment,
+        assigned: assignmentsByGoogleReviewId[review.reviewId] ?? [],
+      });
+    }
+
+    for (const row of needsReview) {
+      if (seenGoogleIds.has(row.reviewId)) continue;
+      items.push({
+        key: `assign-${row.id}`,
+        googleReviewId: row.reviewId,
+        reviewerName: row.reviewerName,
+        comment: row.comment,
+        starRating: row.starRating,
+        createTime: row.createTime,
+        gbp: null,
+        needsReply: false,
+        needsAssignment: row,
+        assigned: [],
+      });
+    }
+
+    return items.sort((a, b) => {
+      const aTime = a.createTime ? new Date(a.createTime).getTime() : 0;
+      const bTime = b.createTime ? new Date(b.createTime).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [assignmentsByGoogleReviewId, googleReviews, needsReview]);
 
   async function generateReply(review: GbpReviewDto) {
     setGeneratingId(review.name);
@@ -146,8 +203,7 @@ export function GoogleReviewsInbox() {
         <p className="text-xs text-muted-foreground">Inbox &gt; Google Reviews</p>
         <h1 className="mt-1 font-display text-xl font-bold">Google Reviews</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Reply to new Google reviews and assign credit when a technician could not be matched
-          automatically.
+          Reply to new Google reviews and assign technician credit when needed — in one list.
         </p>
       </div>
 
@@ -156,132 +212,158 @@ export function GoogleReviewsInbox() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading reviews…
         </div>
+      ) : cards.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {googleReviews.length > 0
+            ? "You're all caught up — every review has a response and assignment when needed."
+            : "No reviews returned from Google for this location yet."}
+        </p>
       ) : (
-        <div className="space-y-6 pb-8">
-          <NeedsAssignmentList
-            reviews={needsReview}
-            technicians={technicians}
-            onAssigned={() => {
-              notifyInboxBadgesChanged();
-              void loadAssignments();
-            }}
-          />
-
-          {reviews.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {allReviewsResponded
-                ? "You're all caught up — every review has a response."
-                : "No reviews returned from Google for this location yet."}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {reviews.map((review) => {
-                const assigned = assignmentsByGoogleReviewId[review.reviewId] ?? [];
-                return (
-                  <div key={review.name} className="rounded-lg border bg-card p-4 space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{review.reviewerName}</p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <Stars count={starCount(review.starRating)} />
-                          {review.createTime ? (
-                            <span className="text-xs text-muted-foreground">
-                              {format(new Date(review.createTime), "MMM d, yyyy")}
-                            </span>
-                          ) : null}
-                        </div>
-                        {assigned.length > 0 ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Assigned:{" "}
-                            {assigned
-                              .map((row) => `${row.name} (${row.share.toFixed(2)})`)
-                              .join(", ")}
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                    {review.comment ? (
-                      <p className="text-sm text-foreground/90 whitespace-pre-wrap">{review.comment}</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">No written comment</p>
-                    )}
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Your reply
-                      </label>
-                      <textarea
-                        className="min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                        value={replyDrafts[review.name] ?? ""}
-                        onChange={(e) =>
-                          setReplyDrafts((current) => ({ ...current, [review.name]: e.target.value }))
-                        }
-                        placeholder="Write a reply…"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={generatingId === review.name}
-                          onClick={() => void generateReply(review)}
-                        >
-                          {generatingId === review.name ? (
-                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Sparkles className="mr-1 h-4 w-4" />
-                          )}
-                          Generate with AI
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={postingId === review.name}
-                          onClick={() => void postReply(review)}
-                        >
-                          {postingId === review.name ? (
-                            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                          ) : null}
-                          Post reply
-                        </Button>
-                      </div>
-                    </div>
+        <div className="space-y-4 pb-8">
+          {cards.map((card) => (
+            <div key={card.key} className="space-y-3 rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{card.reviewerName}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <Stars count={starCount(card.starRating)} />
+                    {card.createTime ? (
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(card.createTime), "MMM d, yyyy")}
+                      </span>
+                    ) : null}
+                    {card.needsReply ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                        Needs reply
+                      </span>
+                    ) : null}
+                    {card.needsAssignment ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                        Needs assignment
+                      </span>
+                    ) : null}
                   </div>
-                );
-              })}
+                  {card.assigned.length > 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Assigned:{" "}
+                      {card.assigned
+                        .map((row) => `${row.name} (${row.share.toFixed(2)})`)
+                        .join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              {card.comment ? (
+                <p className="whitespace-pre-wrap text-sm text-foreground/90">{card.comment}</p>
+              ) : (
+                <p className="text-sm italic text-muted-foreground">No written comment</p>
+              )}
+
+              {card.gbp?.reply?.trim() ? (
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Posted reply
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{card.gbp.reply}</p>
+                </div>
+              ) : null}
+
+              {card.needsReply && card.gbp ? (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Your reply
+                  </label>
+                  <textarea
+                    className="min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                    value={replyDrafts[card.gbp.name] ?? ""}
+                    onChange={(e) =>
+                      setReplyDrafts((current) => ({
+                        ...current,
+                        [card.gbp!.name]: e.target.value,
+                      }))
+                    }
+                    placeholder="Write a reply…"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={generatingId === card.gbp.name}
+                      onClick={() => void generateReply(card.gbp!)}
+                    >
+                      {generatingId === card.gbp.name ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-1 h-4 w-4" />
+                      )}
+                      Generate with AI
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={postingId === card.gbp.name}
+                      onClick={() => void postReply(card.gbp!)}
+                    >
+                      {postingId === card.gbp.name ? (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Post reply
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {card.needsAssignment ? (
+                <AssignmentPanel
+                  review={card.needsAssignment}
+                  technicians={technicians}
+                  defaultOpen={card.needsReply}
+                  onAssigned={() => {
+                    notifyInboxBadgesChanged();
+                    void loadAssignments();
+                  }}
+                />
+              ) : null}
             </div>
-          )}
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function NeedsAssignmentList({
-  reviews,
+function AssignmentPanel({
+  review,
   technicians,
+  defaultOpen,
   onAssigned,
 }: {
-  reviews: NeedsAssignmentReview[];
+  review: NeedsAssignmentReview;
   technicians: Array<{ id: string; name: string }>;
+  defaultOpen: boolean;
   onAssigned: () => void;
 }) {
-  const [selected, setSelected] = useState<Record<string, string[]>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(defaultOpen);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  if (reviews.length === 0) return null;
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen, review.id]);
 
-  async function assign(reviewId: string) {
-    const userIds = selected[reviewId] ?? [];
-    if (!userIds.length) {
+  async function assign() {
+    if (!selected.length) {
       toast.error("Select at least one technician");
       return;
     }
-    setSavingId(reviewId);
+    setSaving(true);
     try {
       const res = await fetch("/api/marketing/google-business/reviews/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId, userIds }),
+        body: JSON.stringify({ reviewId: review.id, userIds: selected }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to assign review");
@@ -290,74 +372,63 @@ function NeedsAssignmentList({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to assign review");
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   }
 
-  function toggleTech(reviewId: string, userId: string) {
-    setSelected((current) => {
-      const list = current[reviewId] ?? [];
-      return {
-        ...current,
-        [reviewId]: list.includes(userId) ? list.filter((id) => id !== userId) : [...list, userId],
-      };
-    });
+  function toggleTech(userId: string) {
+    setSelected((current) =>
+      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
+    );
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-      <div>
-        <p className="font-medium text-amber-950">Needs assignment</p>
-        <p className="text-sm text-amber-900/80">
-          These Google reviews could not be matched to a customer or technician. Assign credit
-          manually.
-        </p>
-      </div>
-      {reviews.map((review) => (
-        <div key={review.id} className="rounded-md border border-amber-200 bg-white p-3 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-medium">{review.reviewerName}</p>
-            {review.createTime ? (
-              <span className="text-xs text-muted-foreground">
-                {format(new Date(review.createTime), "MMM d, yyyy")}
-              </span>
-            ) : null}
-          </div>
-          <Stars count={starCount(review.starRating)} />
-          {review.comment ? (
-            <p className="text-sm whitespace-pre-wrap">{review.comment}</p>
-          ) : (
-            <p className="text-sm italic text-muted-foreground">No written comment</p>
-          )}
+    <div className="rounded-md border border-amber-200 bg-amber-50/70">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>
+          <span className="block text-sm font-medium text-amber-950">Assign credit</span>
+          <span className="block text-xs text-amber-900/80">
+            Could not match a technician automatically — pick who should get credit.
+          </span>
+        </span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-amber-900/70 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open ? (
+        <div className="space-y-3 border-t border-amber-200 px-3 py-3">
           <div className="flex flex-wrap gap-2">
             {technicians.map((tech) => {
-              const checked = (selected[review.id] ?? []).includes(tech.id);
+              const checked = selected.includes(tech.id);
               return (
                 <label
                   key={tech.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2 py-1 text-xs"
                 >
                   <input
                     type="checkbox"
                     checked={checked}
-                    onChange={() => toggleTech(review.id, tech.id)}
+                    onChange={() => toggleTech(tech.id)}
                   />
                   {tech.name}
                 </label>
               );
             })}
           </div>
-          <Button
-            type="button"
-            size="sm"
-            disabled={savingId === review.id}
-            onClick={() => void assign(review.id)}
-          >
-            {savingId === review.id ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+          {technicians.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No technicians available to assign.</p>
+          ) : null}
+          <Button type="button" size="sm" disabled={saving} onClick={() => void assign()}>
+            {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             Assign
           </Button>
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }

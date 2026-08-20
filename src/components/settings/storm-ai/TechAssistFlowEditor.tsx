@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { CheckCircle2, FlaskConical, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TechAssistOptionMatch } from "@/lib/storm-ai/tech-assist";
+import { cn } from "@/lib/utils";
 
 export type EditorNodeType = "DIAGNOSTIC" | "RESOLUTION";
 
@@ -198,6 +199,109 @@ function VerticalConnector({ taller }: { taller?: boolean }) {
   return <div className={`w-px bg-border ${taller ? "h-5" : "h-3"}`} />;
 }
 
+function InsertDiagnosticButton({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="flex flex-col items-center py-1">
+      <VerticalConnector />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 rounded-full px-2 text-xs"
+        onClick={onClick}
+      >
+        <Plus className="h-3 w-3" />
+        Diagnostic
+      </Button>
+      <VerticalConnector />
+    </div>
+  );
+}
+
+function NextStepActions({
+  onDiagnostic,
+  onResolution,
+}: {
+  onDiagnostic: () => void;
+  onResolution: () => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-col items-center gap-2">
+      <VerticalConnector />
+      <div className="flex flex-wrap justify-center gap-2">
+        <Button type="button" size="sm" variant="secondary" onClick={onDiagnostic}>
+          + Diagnostic
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={onResolution}>
+          + Resolution
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PanCanvas({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [grabbing, setGrabbing] = useState(false);
+
+  function shouldIgnore(target: EventTarget | null) {
+    if (!(target instanceof HTMLElement)) return false;
+    return Boolean(target.closest("button, input, textarea, select, a, label"));
+  }
+
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (e.button !== 0 || shouldIgnore(e.target)) return;
+    const el = ref.current;
+    if (!el) return;
+    drag.current = {
+      x: e.clientX,
+      y: e.clientY,
+      left: el.scrollLeft,
+      top: el.scrollTop,
+    };
+    setGrabbing(true);
+    el.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    const el = ref.current;
+    const start = drag.current;
+    if (!el || !start) return;
+    el.scrollLeft = start.left - (e.clientX - start.x);
+    el.scrollTop = start.top - (e.clientY - start.y);
+  }
+
+  function endDrag(e: PointerEvent<HTMLDivElement>) {
+    if (!drag.current) return;
+    drag.current = null;
+    setGrabbing(false);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "h-[min(70vh,720px)] overflow-auto rounded-lg border border-border bg-muted/20",
+        grabbing ? "cursor-grabbing select-none" : "cursor-grab"
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
+      <div className="inline-block min-h-full min-w-full p-8" style={{ width: "max-content" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function YSplit({ count }: { count: number }) {
   if (count <= 0) return null;
   if (count === 1) {
@@ -290,6 +394,37 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     type: EditorNodeType
   ) {
     const child = type === "RESOLUTION" ? emptyResolution(nodes.length) : emptyDiagnostic(nodes.length);
+    onChange(
+      nodes
+        .map((n) =>
+          n.id === parentId
+            ? {
+                ...n,
+                options: n.options.map((o) =>
+                  o.id === optionId ? { ...o, nextNodeId: child.id } : o
+                ),
+              }
+            : n
+        )
+        .concat(child)
+    );
+    setExpandedId(child.id);
+  }
+
+  /** Insert a diagnostic between this option and its current next step. */
+  function insertDiagnosticBetween(parentId: string, optionId: string) {
+    const parent = nodes.find((n) => n.id === parentId);
+    const option = parent?.options.find((o) => o.id === optionId);
+    if (!parent || !option) return;
+    const previousNext = option.nextNodeId;
+    const child = emptyDiagnostic(nodes.length);
+    child.options = [
+      emptyOption({
+        label: "Continue",
+        match: "label",
+        nextNodeId: previousNext || "",
+      }),
+    ];
     onChange(
       nodes
         .map((n) =>
@@ -636,11 +771,16 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                   </div>
                   {option.nextNodeId && byId.has(option.nextNodeId) ? (
                     <>
-                      <VerticalConnector />
+                      <InsertDiagnosticButton
+                        onClick={() => insertDiagnosticBetween(node.id, option.id)}
+                      />
                       {depth < 12 ? renderNode(option.nextNodeId, depth + 1, nextSeen) : null}
                     </>
                   ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">No next step</p>
+                    <NextStepActions
+                      onDiagnostic={() => addChild(node.id, option.id, "DIAGNOSTIC")}
+                      onResolution={() => addChild(node.id, option.id, "RESOLUTION")}
+                    />
                   )}
                 </div>
               ))}
@@ -655,67 +795,72 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col items-center">
-        <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
-          <p className="text-sm font-semibold">Issue start</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Storm AI begins at the first diagnostic below.
-          </p>
-          {nodes.length > 1 ? (
-            <label className="mt-3 block text-left text-xs">
-              Starting step
-              <select
-                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                value={startId ?? ""}
-                onChange={(e) => onEntryChange(e.target.value)}
-              >
-                {nodes.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.title || n.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
+      <p className="text-xs text-muted-foreground">
+        Click and drag empty space to pan the tree. Scroll wheel works too.
+      </p>
+      <PanCanvas>
+        <div className="flex flex-col items-center">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
+            <p className="text-sm font-semibold">Issue start</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Storm AI begins at the first diagnostic below.
+            </p>
+            {nodes.length > 1 ? (
+              <label className="mt-3 block text-left text-xs">
+                Starting step
+                <select
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                  value={startId ?? ""}
+                  onChange={(e) => onEntryChange(e.target.value)}
+                >
+                  {nodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.title || n.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+
+          {startId ? (
+            <>
+              <VerticalConnector taller />
+              {renderNode(startId, 0)}
+            </>
+          ) : (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <VerticalConnector />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const node = emptyDiagnostic(0);
+                    onChange([node]);
+                    onEntryChange(node.id);
+                    setExpandedId(node.id);
+                  }}
+                >
+                  Add first diagnostic
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {orphans.length > 0 ? (
+            <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
+              <p className="mb-3 text-sm font-medium">Unused steps</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Not reachable from the start. Connect them from an option, or delete them.
+              </p>
+              <div className="flex flex-col items-center gap-4">
+                {orphans.map((node) => renderNode(node.id, 0))}
+              </div>
+            </div>
           ) : null}
         </div>
-
-        {startId ? (
-          <>
-            <VerticalConnector taller />
-            {renderNode(startId, 0)}
-          </>
-        ) : (
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <VerticalConnector />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  const node = emptyDiagnostic(0);
-                  onChange([node]);
-                  onEntryChange(node.id);
-                  setExpandedId(node.id);
-                }}
-              >
-                Add first diagnostic
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {orphans.length > 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-4">
-          <p className="mb-3 text-sm font-medium">Unused steps</p>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Not reachable from the start. Connect them from an option, or delete them.
-          </p>
-          <div className="flex flex-col items-center gap-4">
-            {orphans.map((node) => renderNode(node.id, 0))}
-          </div>
-        </div>
-      ) : null}
+      </PanCanvas>
 
       {nodes.length > 0 ? (
         <div className="flex flex-wrap justify-center gap-2">
