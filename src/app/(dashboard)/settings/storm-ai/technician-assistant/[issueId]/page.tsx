@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { Redo2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { Button } from "@/components/ui/button";
@@ -13,6 +15,7 @@ import {
   migrateLegacyNodes,
   nodesToSavePayload,
   type EditorNode,
+  type TechAssistHistoryApi,
 } from "@/components/settings/storm-ai/TechAssistFlowEditor";
 
 export default function TechAssistIssueEditorPage() {
@@ -26,6 +29,9 @@ export default function TechAssistIssueEditorPage() {
   const [nodes, setNodes] = useState<EditorNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const historyRef = useRef<TechAssistHistoryApi | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/settings/storm-ai/issues/${issueId}`);
@@ -81,49 +87,76 @@ export default function TechAssistIssueEditorPage() {
   }
 
   return (
-    <ContentArea className="relative h-full max-w-none overflow-hidden !p-0">
-      <div className="absolute inset-0">
+    <ContentArea className="flex h-full max-w-none flex-col overflow-hidden !p-0">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+        <Link
+          href="/settings/storm-ai/technician-assistant"
+          className="shrink-0 border-b-2 border-primary px-2 py-1 text-sm font-medium text-foreground"
+        >
+          Issues
+        </Link>
+        <Input
+          className="h-8 min-w-[10rem] max-w-xs flex-1 text-sm font-semibold"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Issue title"
+          aria-label="Issue title"
+        />
+        <Input
+          className="h-8 min-w-[12rem] max-w-md flex-[1.4] text-sm"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Description — when Storm AI should pick this…"
+          aria-label="Issue description"
+        />
+        <label className="flex shrink-0 items-center gap-2 text-sm">
+          <span className="text-muted-foreground">Active</span>
+          <Switch checked={active} onCheckedChange={setActive} />
+        </label>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 px-0"
+            disabled={!canUndo}
+            onClick={() => historyRef.current?.undo()}
+            aria-label="Undo"
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 px-0"
+            disabled={!canRedo}
+            onClick={() => historyRef.current?.redo()}
+            aria-label="Redo"
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
+        </div>
+        <Button onClick={() => void save()} disabled={saving} size="sm" className="shrink-0">
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+
+      <div className="relative min-h-0 flex-1">
         <TechAssistFlowEditor
           nodes={nodes}
           entryNodeId={entryNodeId}
           onChange={setNodes}
           onEntryChange={setEntryNodeId}
+          historyKey={issueId}
+          historyRef={historyRef}
+          onHistoryStateChange={({ canUndo: u, canRedo: r }) => {
+            setCanUndo(u);
+            setCanRedo(r);
+          }}
         />
-      </div>
-
-      <div className="pointer-events-none absolute left-4 right-4 top-3 z-20 max-w-xl lg:right-auto">
-        <div className="pointer-events-auto rounded-lg border border-border/80 bg-white/95 p-3 shadow-md backdrop-blur-sm">
-          <div className="flex flex-wrap items-start gap-3">
-            <label className="min-w-[10rem] flex-1 text-xs font-medium text-muted-foreground">
-              Title
-              <Input
-                className="mt-1 h-8 text-sm font-semibold"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Zone valve not opening"
-              />
-            </label>
-            <div className="flex items-center gap-3 pt-5">
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Active</span>
-                <Switch checked={active} onCheckedChange={setActive} />
-              </label>
-              <Button onClick={() => void save()} disabled={saving} size="sm">
-                {saving ? "Saving…" : "Save"}
-              </Button>
-            </div>
-          </div>
-          <label className="mt-2 block text-xs font-medium text-muted-foreground">
-            Description
-            <textarea
-              className="mt-1 max-h-16 min-h-[2.25rem] w-full resize-y rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="When Storm AI should pick this issue…"
-              rows={1}
-            />
-          </label>
-        </div>
       </div>
     </ContentArea>
   );

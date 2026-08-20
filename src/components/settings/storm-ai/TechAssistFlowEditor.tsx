@@ -1,10 +1,13 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
   type PointerEvent,
   type ReactNode,
 } from "react";
@@ -52,9 +55,28 @@ type Selection =
   | { kind: "node"; nodeId: string }
   | { kind: "option"; nodeId: string; optionId: string };
 
+export type TechAssistHistoryApi = {
+  undo: () => void;
+  redo: () => void;
+};
+
+type HistorySnapshot = {
+  nodes: EditorNode[];
+  entryNodeId: string;
+};
+
+const HISTORY_LIMIT = 50;
+
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.5;
+/** Button +/- step (10%). */
 const ZOOM_STEP = 0.1;
+/** Wheel/pinch: smaller = slower trackpad zoom. */
+const ZOOM_WHEEL_SENSITIVITY = 0.0012;
+
+function clampZoom(value: number) {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 1000) / 1000));
+}
 
 export function newId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -323,6 +345,8 @@ function PanCanvas({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const [grabbing, setGrabbing] = useState(false);
 
   useEffect(() => {
@@ -331,12 +355,13 @@ function PanCanvas({
     function onWheel(e: WheelEvent) {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      onZoomChange(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + delta)));
+      // Proportional to delta so trackpad pinch zooms smoothly; buttons still use ZOOM_STEP.
+      const next = clampZoom(zoomRef.current - e.deltaY * ZOOM_WHEEL_SENSITIVITY);
+      if (next !== zoomRef.current) onZoomChange(next);
     }
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [onZoomChange, zoom]);
+  }, [onZoomChange]);
 
   function shouldIgnore(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -389,7 +414,7 @@ function PanCanvas({
       onPointerCancel={endDrag}
     >
       <div
-        className="inline-block min-h-full min-w-full p-8 pt-28"
+        className="inline-block min-h-full min-w-full p-8"
         style={{
           width: "max-content",
           transform: `scale(${zoom})`,
@@ -418,7 +443,7 @@ function ZoomControls({
         className="h-7 w-7"
         aria-label="Zoom out"
         disabled={zoom <= ZOOM_MIN}
-        onClick={() => onZoomChange(Math.max(ZOOM_MIN, zoom - ZOOM_STEP))}
+        onClick={() => onZoomChange(clampZoom(zoom - ZOOM_STEP))}
       >
         <Minus className="h-3.5 w-3.5" />
       </Button>
@@ -432,7 +457,7 @@ function ZoomControls({
         className="h-7 w-7"
         aria-label="Zoom in"
         disabled={zoom >= ZOOM_MAX}
-        onClick={() => onZoomChange(Math.min(ZOOM_MAX, zoom + ZOOM_STEP))}
+        onClick={() => onZoomChange(clampZoom(zoom + ZOOM_STEP))}
       >
         <Plus className="h-3.5 w-3.5" />
       </Button>
@@ -440,36 +465,222 @@ function ZoomControls({
   );
 }
 
-function YSplit({ count }: { count: number }) {
+/** Half of gap-12 so horizontal rails bridge the column gaps. */
+const BRANCH_GAP_HALF = "1.5rem";
+
+/**
+ * Tree fork whose vertical drops sit on each column’s center (same flex + gap as
+ * the branch row), instead of equal-width slots that drift off the chips.
+ */
+function BranchFork({ columns }: { columns: ReactNode[] }) {
+  const count = columns.length;
   if (count <= 0) return null;
   if (count === 1) {
     return (
-      <div className="flex flex-col items-center">
+      <div className="flex w-max flex-col items-center">
         <VerticalConnector taller />
+        {columns[0]}
       </div>
     );
   }
   return (
-    <div className="flex w-full flex-col items-center">
+    <div className="flex w-max flex-col items-center">
       <div className="h-3 w-px bg-border" />
-      <div className="flex w-full">
-        {Array.from({ length: count }, (_, i) => (
-          <div key={i} className="relative flex h-7 flex-1 justify-center">
+      <div className="flex items-start gap-12">
+        {columns.map((column, i) => (
+          <div key={i} className="relative flex flex-col items-center">
             <div
-              className={cn(
-                "absolute top-0 h-px bg-border",
+              className="absolute top-0 h-px bg-border"
+              style={
                 i === 0
-                  ? "left-1/2 right-0"
+                  ? { left: "50%", right: `-${BRANCH_GAP_HALF}` }
                   : i === count - 1
-                    ? "left-0 right-1/2"
-                    : "inset-x-0"
-              )}
+                    ? { left: `-${BRANCH_GAP_HALF}`, right: "50%" }
+                    : { left: `-${BRANCH_GAP_HALF}`, right: `-${BRANCH_GAP_HALF}` }
+              }
             />
-            <div className="absolute top-0 h-7 w-px bg-border" />
+            <div className="h-7 w-px bg-border" />
+            {column}
           </div>
         ))}
       </div>
     </div>
+  );
+}
+
+type BranchColumn =
+  | {
+      kind: "linked";
+      options: EditorOption[];
+      nextNodeId: string;
+      /** Inline under this branch; otherwise a jump link to a step hosted elsewhere. */
+      inline: boolean;
+    }
+  | { kind: "open"; option: EditorOption }
+  | { kind: "add" };
+
+/**
+ * First BFS edge into each step owns the inline tree placement; later edges are jumps.
+ */
+function computePrimaryParent(
+  entryId: string | undefined,
+  byId: Map<string, EditorNode>
+): Map<string, string> {
+  const primaryParent = new Map<string, string>();
+  if (!entryId || !byId.has(entryId)) return primaryParent;
+
+  const queue: string[] = [entryId];
+  const visited = new Set<string>();
+
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = byId.get(id);
+    if (!node) continue;
+    for (const option of node.options) {
+      const target = option.nextNodeId;
+      if (!target || !byId.has(target)) continue;
+      if (!primaryParent.has(target)) {
+        primaryParent.set(target, id);
+        queue.push(target);
+      }
+    }
+  }
+  return primaryParent;
+}
+
+/** Sibling options that share a next step become one column with OR chips. */
+function groupBranchColumns(
+  options: EditorOption[],
+  parentId: string,
+  nodeExists: (id: string) => boolean,
+  primaryParent: Map<string, string>
+): BranchColumn[] {
+  const columns: BranchColumn[] = [];
+  const targetIndex = new Map<string, number>();
+
+  for (const option of options) {
+    const target =
+      option.nextNodeId && nodeExists(option.nextNodeId) ? option.nextNodeId : "";
+    if (target) {
+      const existing = targetIndex.get(target);
+      if (existing !== undefined) {
+        const col = columns[existing];
+        if (col?.kind === "linked") col.options.push(option);
+        continue;
+      }
+      targetIndex.set(target, columns.length);
+      columns.push({
+        kind: "linked",
+        options: [option],
+        nextNodeId: target,
+        inline: primaryParent.get(target) === parentId,
+      });
+      continue;
+    }
+    columns.push({ kind: "open", option });
+  }
+
+  columns.push({ kind: "add" });
+  return columns;
+}
+
+type JumpEdge = {
+  key: string;
+  fromKey: string;
+  toNodeId: string;
+};
+
+function buildJumpPath(x1: number, y1: number, x2: number, y2: number): string {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const bow =
+    (dx === 0 ? (x1 > x2 ? -1 : 1) : Math.sign(dx)) *
+    Math.min(160, Math.max(56, Math.abs(dx) * 0.35 + (Math.abs(dx) < 48 ? 72 : 0)));
+  const cy1 = y1 + Math.max(32, Math.abs(dy) * 0.28);
+  const cy2 = y2 - Math.max(20, Math.abs(dy) * 0.18);
+  const cx1 = x1 + (Math.abs(dx) < 64 ? bow : dx * 0.15);
+  const cx2 = x2 - (Math.abs(dx) < 64 ? bow * 0.35 : dx * 0.15);
+  return `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`;
+}
+
+function CrossLinkLayer({
+  surfaceRef,
+  edges,
+  zoom,
+  layoutKey,
+}: {
+  surfaceRef: MutableRefObject<HTMLDivElement | null>;
+  edges: JumpEdge[];
+  zoom: number;
+  layoutKey: string;
+}) {
+  const [paths, setPaths] = useState<{ key: string; d: string }[]>([]);
+
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) {
+      setPaths([]);
+      return;
+    }
+
+    function measure() {
+      const root = surfaceRef.current;
+      if (!root) return;
+      const rootRect = root.getBoundingClientRect();
+      const scale = root.offsetWidth > 0 ? rootRect.width / root.offsetWidth : zoom || 1;
+      const next: { key: string; d: string }[] = [];
+
+      for (const edge of edges) {
+        const fromEl = root.querySelector<HTMLElement>(
+          `[data-flow-jump-from="${CSS.escape(edge.fromKey)}"]`
+        );
+        const toEl = root.querySelector<HTMLElement>(
+          `[data-flow-node="${CSS.escape(edge.toNodeId)}"]`
+        );
+        if (!fromEl || !toEl) continue;
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        const x1 = (fromRect.left + fromRect.width / 2 - rootRect.left) / scale;
+        const y1 = (fromRect.bottom - rootRect.top) / scale;
+        const x2 = (toRect.left + toRect.width / 2 - rootRect.left) / scale;
+        const y2 = (toRect.top - rootRect.top) / scale;
+        next.push({ key: edge.key, d: buildJumpPath(x1, y1, x2, y2) });
+      }
+      setPaths(next);
+    }
+
+    measure();
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(surface);
+    const id = requestAnimationFrame(measure);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(id);
+    };
+  }, [edges, zoom, layoutKey, surfaceRef]);
+
+  if (paths.length === 0) return null;
+
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 z-0 overflow-visible text-sky-500/70"
+      aria-hidden
+    >
+      {paths.map((path) => (
+        <path
+          key={path.key}
+          d={path.d}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.75}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="7 5"
+        />
+      ))}
+    </svg>
   );
 }
 
@@ -658,6 +869,7 @@ function OptionDetailPanel({
   nodes,
   onClose,
   updateNode,
+  recordHistory,
 }: {
   node: EditorNode;
   option: EditorOption;
@@ -665,8 +877,10 @@ function OptionDetailPanel({
   nodes: EditorNode[];
   onClose: () => void;
   updateNode: (id: string, patch: Partial<EditorNode>) => void;
+  recordHistory: () => void;
 }) {
-  function updateOption(patch: Partial<EditorOption>) {
+  function updateOption(patch: Partial<EditorOption>, structural = false) {
+    if (structural) recordHistory();
     const options = [...node.options];
     options[optionIndex] = { ...option, ...patch };
     updateNode(node.id, { options });
@@ -737,10 +951,14 @@ function OptionDetailPanel({
         <AnyOfEditor anyOf={option.anyOf} onChange={(anyOf) => updateOption({ anyOf })} />
         <label className="block text-xs">
           Goes to
+          <p className="mt-0.5 text-[11px] font-normal text-muted-foreground">
+            Pick any existing diagnostic or resolution — even one already used on another
+            branch. Extra links draw as jump lines.
+          </p>
           <select
             className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
             value={option.nextNodeId}
-            onChange={(e) => updateOption({ nextNodeId: e.target.value })}
+            onChange={(e) => updateOption({ nextNodeId: e.target.value }, true)}
           >
             <option value="">Select step…</option>
             {nodes
@@ -760,6 +978,7 @@ function OptionDetailPanel({
             variant="ghost"
             className="text-destructive"
             onClick={() => {
+              recordHistory();
               updateNode(node.id, {
                 options: node.options.filter((o) => o.id !== option.id),
               });
@@ -782,6 +1001,7 @@ function DetailPanel({
   updateNode,
   removeNode,
   onEntryChange,
+  recordHistory,
 }: {
   selection: Selection;
   nodes: EditorNode[];
@@ -790,6 +1010,7 @@ function DetailPanel({
   updateNode: (id: string, patch: Partial<EditorNode>) => void;
   removeNode: (id: string) => void;
   onEntryChange: (id: string) => void;
+  recordHistory: () => void;
 }) {
   if (selection.kind === "node") {
     const node = nodes.find((n) => n.id === selection.nodeId);
@@ -905,6 +1126,7 @@ function DetailPanel({
       nodes={nodes}
       onClose={onClose}
       updateNode={updateNode}
+      recordHistory={recordHistory}
     />
   );
 }
@@ -914,13 +1136,159 @@ type Props = {
   entryNodeId: string;
   onChange: (nodes: EditorNode[]) => void;
   onEntryChange: (id: string) => void;
+  historyKey?: string;
+  historyRef?: MutableRefObject<TechAssistHistoryApi | null>;
+  onHistoryStateChange?: (state: { canUndo: boolean; canRedo: boolean }) => void;
 };
 
-export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChange }: Props) {
+function cloneSnapshot(nodes: EditorNode[], entryNodeId: string): HistorySnapshot {
+  return {
+    nodes: structuredClone(nodes),
+    entryNodeId,
+  };
+}
+
+export function TechAssistFlowEditor({
+  nodes,
+  entryNodeId,
+  onChange,
+  onEntryChange,
+  historyKey,
+  historyRef,
+  onHistoryStateChange,
+}: Props) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [zoom, setZoom] = useState(1);
+  const pastRef = useRef<HistorySnapshot[]>([]);
+  const futureRef = useRef<HistorySnapshot[]>([]);
+  const applyingHistoryRef = useRef(false);
+  const nodesRef = useRef(nodes);
+  const entryRef = useRef(entryNodeId);
+  nodesRef.current = nodes;
+  entryRef.current = entryNodeId;
+
+  const notifyHistory = useCallback(() => {
+    onHistoryStateChange?.({
+      canUndo: pastRef.current.length > 0,
+      canRedo: futureRef.current.length > 0,
+    });
+  }, [onHistoryStateChange]);
+
+  const recordHistory = useCallback(() => {
+    if (applyingHistoryRef.current) return;
+    pastRef.current.push(cloneSnapshot(nodesRef.current, entryRef.current));
+    if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
+    futureRef.current = [];
+    notifyHistory();
+  }, [notifyHistory]);
+
+  const undo = useCallback(() => {
+    if (!pastRef.current.length) return;
+    futureRef.current.push(cloneSnapshot(nodesRef.current, entryRef.current));
+    const prev = pastRef.current.pop()!;
+    applyingHistoryRef.current = true;
+    onChange(prev.nodes);
+    onEntryChange(prev.entryNodeId);
+    setSelection(null);
+    applyingHistoryRef.current = false;
+    notifyHistory();
+  }, [notifyHistory, onChange, onEntryChange]);
+
+  const redo = useCallback(() => {
+    if (!futureRef.current.length) return;
+    pastRef.current.push(cloneSnapshot(nodesRef.current, entryRef.current));
+    const next = futureRef.current.pop()!;
+    applyingHistoryRef.current = true;
+    onChange(next.nodes);
+    onEntryChange(next.entryNodeId);
+    setSelection(null);
+    applyingHistoryRef.current = false;
+    notifyHistory();
+  }, [notifyHistory, onChange, onEntryChange]);
+
+  useEffect(() => {
+    pastRef.current = [];
+    futureRef.current = [];
+    notifyHistory();
+  }, [historyKey, notifyHistory]);
+
+  useEffect(() => {
+    if (!historyRef) return;
+    historyRef.current = { undo, redo };
+    return () => {
+      historyRef.current = null;
+    };
+  }, [historyRef, undo, redo]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest("input, textarea, select, [contenteditable=true]")
+      ) {
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        redo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo, redo]);
 
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  const startId = entryNodeId || nodes[0]?.id;
+
+  const primaryParent = useMemo(
+    () => computePrimaryParent(startId, byId),
+    [startId, byId]
+  );
+
+  const jumpEdges = useMemo(() => {
+    const edges: JumpEdge[] = [];
+    const seen = new Set<string>();
+    for (const node of nodes) {
+      const byTarget = new Map<string, EditorOption[]>();
+      for (const option of node.options) {
+        const target = option.nextNodeId;
+        if (!target || !byId.has(target)) continue;
+        if (primaryParent.get(target) === node.id) continue;
+        const list = byTarget.get(target) ?? [];
+        list.push(option);
+        byTarget.set(target, list);
+      }
+      for (const [toNodeId] of byTarget) {
+        const fromKey = `${node.id}::${toNodeId}`;
+        if (seen.has(fromKey)) continue;
+        seen.add(fromKey);
+        edges.push({
+          key: fromKey,
+          fromKey,
+          toNodeId,
+        });
+      }
+    }
+    return edges;
+  }, [nodes, byId, primaryParent]);
+
+  const layoutKey = useMemo(
+    () =>
+      `${zoom}:${selection?.kind ?? ""}:${
+        selection && "nodeId" in selection ? selection.nodeId : ""
+      }:${nodes.map((n) => `${n.id}:${n.options.map((o) => o.nextNodeId).join(",")}`).join("|")}`,
+    [nodes, zoom, selection]
+  );
+
+  const flowSurfaceRef = useRef<HTMLDivElement | null>(null);
 
   const reachable = useMemo(() => {
     const seen = new Set<string>();
@@ -931,9 +1299,9 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
       seen.add(id);
       for (const option of node.options) walk(option.nextNodeId);
     };
-    walk(entryNodeId || nodes[0]?.id);
+    walk(startId);
     return seen;
-  }, [byId, entryNodeId, nodes]);
+  }, [byId, startId]);
 
   const orphans = nodes.filter((n) => !reachable.has(n.id));
 
@@ -965,6 +1333,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
   }
 
   function removeNode(id: string) {
+    recordHistory();
     const next = nodes
       .filter((n) => n.id !== id)
       .map((n) => ({
@@ -978,8 +1347,11 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     clearSelectionIfRemoved(id);
   }
 
-  function addChild(parentId: string, optionId: string, type: EditorNodeType) {
-    const child = type === "RESOLUTION" ? emptyResolution(nodes.length) : emptyDiagnostic(nodes.length);
+  function addChild(parentId: string, optionIds: string[], type: EditorNodeType) {
+    recordHistory();
+    const child =
+      type === "RESOLUTION" ? emptyResolution(nodes.length) : emptyDiagnostic(nodes.length);
+    const idSet = new Set(optionIds);
     onChange(
       nodes
         .map((n) =>
@@ -987,7 +1359,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
             ? {
                 ...n,
                 options: n.options.map((o) =>
-                  o.id === optionId ? { ...o, nextNodeId: child.id } : o
+                  idSet.has(o.id) ? { ...o, nextNodeId: child.id } : o
                 ),
               }
             : n
@@ -997,11 +1369,14 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     setSelection({ kind: "node", nodeId: child.id });
   }
 
-  function insertDiagnosticBetween(parentId: string, optionId: string) {
+  function insertDiagnosticBetween(parentId: string, optionIds: string[]) {
     const parent = nodes.find((n) => n.id === parentId);
-    const option = parent?.options.find((o) => o.id === optionId);
-    if (!parent || !option) return;
-    const previousNext = option.nextNodeId;
+    if (!parent || optionIds.length === 0) return;
+    const idSet = new Set(optionIds);
+    const first = parent.options.find((o) => idSet.has(o.id));
+    if (!first) return;
+    recordHistory();
+    const previousNext = first.nextNodeId;
     const child = emptyDiagnostic(nodes.length);
     child.options = [
       emptyOption({
@@ -1017,7 +1392,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
             ? {
                 ...n,
                 options: n.options.map((o) =>
-                  o.id === optionId ? { ...o, nextNodeId: child.id } : o
+                  idSet.has(o.id) ? { ...o, nextNodeId: child.id } : o
                 ),
               }
             : n
@@ -1030,25 +1405,77 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
   function addOptionBranch(nodeId: string) {
     const node = byId.get(nodeId);
     if (!node) return;
+    recordHistory();
     const option = emptyOption({ match: "label" });
     updateNode(nodeId, { options: [...node.options, option] });
     setSelection({ kind: "option", nodeId, optionId: option.id });
   }
 
+  function renderOptionChip(nodeId: string, option: EditorOption) {
+    const optionSelected = isOptionSelected(nodeId, option.id);
+    return (
+      <button
+        type="button"
+        key={option.id}
+        className={cn(
+          "max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
+          optionSelected
+            ? "border-sky-400 bg-sky-50 text-sky-900 ring-2 ring-sky-300 ring-offset-1"
+            : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelection({ kind: "option", nodeId, optionId: option.id });
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        {optionBranchLabel(option)}
+      </button>
+    );
+  }
+
+  function renderJumpTarget(parentId: string, nextNodeId: string, options: EditorOption[]) {
+    const target = byId.get(nextNodeId);
+    const fromKey = `${parentId}::${nextNodeId}`;
+    const label =
+      target?.title?.trim() ||
+      (target?.type === "RESOLUTION" ? "Resolution" : "Diagnostic");
+    return (
+      <div className="mt-1 flex flex-col items-center">
+        <div className="h-3 w-px bg-border" />
+        <button
+          type="button"
+          data-flow-jump-from={fromKey}
+          className="max-w-[14rem] rounded-full border border-dashed border-sky-400 bg-sky-50/80 px-3 py-1.5 text-center text-xs font-medium text-sky-900 hover:bg-sky-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelection({ kind: "node", nodeId: nextNodeId });
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          title="Jumps to an existing step elsewhere in the flow"
+        >
+          → {label}
+        </button>
+        {/* Keep option chips selectable above; this is the visual jump endpoint. */}
+        <span className="sr-only">
+          Links from {options.map((o) => o.label || o.id).join(" OR ")}
+        </span>
+      </div>
+    );
+  }
+
   function renderNode(
     nodeId: string,
     depth: number,
-    pathSeen: Set<string> = new Set()
+    pathSeen: Set<string> = new Set(),
+    rendered: Set<string> = new Set()
   ): ReactNode {
     const node = byId.get(nodeId);
     if (!node) return null;
-    if (pathSeen.has(nodeId)) {
-      return (
-        <div className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-          Loops back to “{node.title || "step"}”
-        </div>
-      );
+    if (pathSeen.has(nodeId) || rendered.has(nodeId)) {
+      return null;
     }
+    rendered.add(nodeId);
     const nextSeen = new Set(pathSeen);
     nextSeen.add(nodeId);
     const isDiagnostic = node.type === "DIAGNOSTIC";
@@ -1056,11 +1483,12 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     const selected = isNodeSelected(node.id);
 
     return (
-      <div key={node.id} className="flex w-max flex-col items-center">
+      <div key={node.id} className="relative z-[1] flex w-max flex-col items-center">
         <button
           type="button"
+          data-flow-node={node.id}
           className={cn(
-            "w-72 shrink-0 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
+            "relative z-[1] w-72 shrink-0 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
             isDiagnostic ? "border-sky-200" : "border-emerald-200",
             selected && "ring-2 ring-primary ring-offset-2"
           )}
@@ -1097,131 +1525,162 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
         </button>
 
         {isDiagnostic ? (
-          <div className="flex w-max flex-col items-center">
-            <YSplit count={optionCount + 1} />
-            <div className="flex items-start justify-center gap-12">
-              {node.options.map((option) => {
-                const optionSelected = isOptionSelected(node.id, option.id);
+          <BranchFork
+            columns={groupBranchColumns(
+              node.options,
+              node.id,
+              (id) => byId.has(id),
+              primaryParent
+            ).map((column) => {
+              if (column.kind === "add") {
                 return (
-                  <div key={option.id} className="flex w-max min-w-72 flex-col items-center">
+                  <div key="add" className="flex w-max min-w-72 flex-col items-center">
                     <button
                       type="button"
-                      className={cn(
-                        "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
-                        optionSelected
-                          ? "border-sky-400 bg-sky-50 text-sky-900 ring-2 ring-sky-300 ring-offset-1"
-                          : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
-                      )}
+                      className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelection({ kind: "option", nodeId: node.id, optionId: option.id });
+                        addOptionBranch(node.id);
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      {optionBranchLabel(option)}
+                      + Add Option
                     </button>
-                    {option.nextNodeId && byId.has(option.nextNodeId) ? (
-                      <>
-                        <InsertDiagnosticButton
-                          onClick={() => insertDiagnosticBetween(node.id, option.id)}
-                        />
-                        {depth < 12 ? renderNode(option.nextNodeId, depth + 1, nextSeen) : null}
-                      </>
-                    ) : (
-                      <NextStepActions
-                        onDiagnostic={() => addChild(node.id, option.id, "DIAGNOSTIC")}
-                        onResolution={() => addChild(node.id, option.id, "RESOLUTION")}
-                      />
-                    )}
                   </div>
                 );
-              })}
-              <div className="flex w-max min-w-72 flex-col items-center">
-                <button
-                  type="button"
-                  className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    addOptionBranch(node.id);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
+              }
+
+              if (column.kind === "open") {
+                const option = column.option;
+                return (
+                  <div key={option.id} className="flex w-max min-w-72 flex-col items-center">
+                    <div className="mb-1 flex flex-col items-center gap-1">
+                      {renderOptionChip(node.id, option)}
+                    </div>
+                    <NextStepActions
+                      onDiagnostic={() => addChild(node.id, [option.id], "DIAGNOSTIC")}
+                      onResolution={() => addChild(node.id, [option.id], "RESOLUTION")}
+                    />
+                  </div>
+                );
+              }
+
+              const optionIds = column.options.map((o) => o.id);
+              return (
+                <div
+                  key={`${column.nextNodeId}:${column.inline ? "inline" : "jump"}`}
+                  className="flex w-max min-w-72 flex-col items-center"
                 >
-                  + Add Option
-                </button>
-              </div>
-            </div>
-          </div>
+                  <div className="mb-1 flex flex-col items-center gap-1">
+                    {column.options.map((option, i) => (
+                      <div key={option.id} className="flex flex-col items-center gap-1">
+                        {i > 0 ? (
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                            OR
+                          </span>
+                        ) : null}
+                        {renderOptionChip(node.id, option)}
+                      </div>
+                    ))}
+                  </div>
+                  {column.inline ? (
+                    <>
+                      <InsertDiagnosticButton
+                        onClick={() => insertDiagnosticBetween(node.id, optionIds)}
+                      />
+                      {depth < 12
+                        ? renderNode(column.nextNodeId, depth + 1, nextSeen, rendered)
+                        : null}
+                    </>
+                  ) : (
+                    renderJumpTarget(node.id, column.nextNodeId, column.options)
+                  )}
+                </div>
+              );
+            })}
+          />
         ) : null}
       </div>
     );
   }
 
-  const startId = entryNodeId || nodes[0]?.id;
+  const treeRendered = new Set<string>();
 
   return (
     <div className="flex h-full min-h-0">
       <div className="relative min-h-0 min-w-0 flex-1">
         <PanCanvas zoom={zoom} onZoomChange={setZoom}>
-          <div className="flex flex-col items-center">
-            <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
-              <p className="text-sm font-semibold">Issue start</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Storm AI begins at the first diagnostic below.
-              </p>
-              {nodes.length > 1 ? (
-                <label className="mt-3 block text-left text-xs">
-                  Starting step
-                  <select
-                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                    value={startId ?? ""}
-                    onChange={(e) => onEntryChange(e.target.value)}
-                  >
-                    {nodes.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.title || n.id.slice(0, 8)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+          <div ref={flowSurfaceRef} className="relative flex flex-col items-center">
+            <CrossLinkLayer
+              surfaceRef={flowSurfaceRef}
+              edges={jumpEdges}
+              zoom={zoom}
+              layoutKey={layoutKey}
+            />
+            <div className="relative z-[1] flex flex-col items-center">
+              <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
+                <p className="text-sm font-semibold">Issue start</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Storm AI begins at the first diagnostic below.
+                </p>
+                {nodes.length > 1 ? (
+                  <label className="mt-3 block text-left text-xs">
+                    Starting step
+                    <select
+                      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                      value={startId ?? ""}
+                      onChange={(e) => onEntryChange(e.target.value)}
+                    >
+                      {nodes.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.title || n.id.slice(0, 8)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+
+              {startId ? (
+                <>
+                  <VerticalConnector taller />
+                  {renderNode(startId, 0, new Set(), treeRendered)}
+                </>
+              ) : (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <VerticalConnector />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        recordHistory();
+                        const node = emptyDiagnostic(0);
+                        onChange([node]);
+                        onEntryChange(node.id);
+                        setSelection({ kind: "node", nodeId: node.id });
+                      }}
+                    >
+                      Add first diagnostic
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {orphans.length > 0 ? (
+                <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
+                  <p className="mb-3 text-sm font-medium">Unused steps</p>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Not reachable from the start. Connect them from an option, or delete them.
+                  </p>
+                  <div className="flex flex-col items-center gap-4">
+                    {orphans.map((node) =>
+                      renderNode(node.id, 0, new Set(), treeRendered)
+                    )}
+                  </div>
+                </div>
               ) : null}
             </div>
-
-            {startId ? (
-              <>
-                <VerticalConnector taller />
-                {renderNode(startId, 0)}
-              </>
-            ) : (
-              <div className="mt-4 flex flex-col items-center gap-2">
-                <VerticalConnector />
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const node = emptyDiagnostic(0);
-                      onChange([node]);
-                      onEntryChange(node.id);
-                      setSelection({ kind: "node", nodeId: node.id });
-                    }}
-                  >
-                    Add first diagnostic
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {orphans.length > 0 ? (
-              <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
-                <p className="mb-3 text-sm font-medium">Unused steps</p>
-                <p className="mb-3 text-xs text-muted-foreground">
-                  Not reachable from the start. Connect them from an option, or delete them.
-                </p>
-                <div className="flex flex-col items-center gap-4">
-                  {orphans.map((node) => renderNode(node.id, 0))}
-                </div>
-              </div>
-            ) : null}
           </div>
         </PanCanvas>
         <ZoomControls zoom={zoom} onZoomChange={setZoom} />
@@ -1236,6 +1695,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
           updateNode={updateNode}
           removeNode={removeNode}
           onEntryChange={onEntryChange}
+          recordHistory={recordHistory}
         />
       ) : null}
     </div>
