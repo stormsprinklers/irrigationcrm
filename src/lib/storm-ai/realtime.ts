@@ -95,6 +95,9 @@ export async function buildRealtimeSessionConfig(opts: {
           prefix_padding_ms: 400,
           // Longer silence before the model decides the tech finished speaking.
           silence_duration_ms: 900,
+          // Do not cancel playback on VAD start (echo/noise). The browser client also
+          // temporarily sets create_response=false while the model is speaking so a
+          // second response.create cannot race and cut audio mid-sentence.
           interrupt_response: false,
           // Video mode attaches a still before answering, so the model must not auto-respond.
           create_response: !opts.videoMode,
