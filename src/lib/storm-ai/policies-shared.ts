@@ -1,11 +1,10 @@
 export const POLICY_CATEGORIES = [
-  "Discounts",
-  "Callbacks",
-  "Repair process",
-  "Customer service",
-  "Warranty",
-  "Scheduling",
-  "Other",
+  "Safety & Emergency Response",
+  "Property, Utilities & Damage Prevention",
+  "Technical Service Standards",
+  "Customer Authorization & Service Conduct",
+  "Pricing, Payments & Financial Policies",
+  "Employee & Company Operations",
 ] as const;
 
 export type StormAiPolicyDto = {
@@ -41,11 +40,11 @@ export function scorePolicyMatch(policy: StormAiPolicyDto, query: string) {
 
 export function formatPoliciesForPrompt(policies: StormAiPolicyDto[]) {
   if (!policies.length) {
-    return "Company policies: none are configured yet. Do not invent company rules for discounts, callbacks, repairs, or customer service.";
+    return "Company policies: none are configured yet. Do not invent company rules for safety, property damage, technical standards, customer authorization, pricing/payments, or employee operations.";
   }
 
   const blocks: string[] = [
-    "Company policies (source of truth for how this company does things). Follow these over generic advice. Never invent a company rule that is not listed. If a question is about discounts, callbacks, repair process, customer service, warranty, or scheduling, apply the matching policy.",
+    "Company policies (source of truth for how this company does things). Follow these over generic advice. Never invent a company rule that is not listed. Categories include Safety & Emergency Response; Property, Utilities & Damage Prevention; Technical Service Standards; Customer Authorization & Service Conduct; Pricing, Payments & Financial Policies; and Employee & Company Operations — apply the matching policy for those topics.",
   ];
   let used = blocks[0]!.length;
   for (const policy of policies) {

@@ -33,7 +33,7 @@ Unknown metrics or a missing monthly target: "The CRM doesn’t track that." (or
 Role access: ${stormAiCapabilityLines(opts.user.role)}
 Only use tools that were provided. If a needed tool is not available, say the user's role cannot access that.
 
-Always check company policy before you answer. Call search_company_policies with the user's question (or get_company_policy for a known id) in the same turn, then follow the returned text. The policies below are also loaded for you — still call the tool so you use the latest wording. Never invent discounts, callbacks, repair, customer-service, warranty, or scheduling rules.
+Always check company policy before you answer. Call search_company_policies with the user's question (or get_company_policy for a known id) in the same turn, then follow the returned text. The policies below are also loaded for you — still call the tool so you use the latest wording. Never invent company rules for safety, property/utilities damage prevention, technical standards, customer authorization, pricing/payments, or employee operations.
 
 ${policyBlock}
 

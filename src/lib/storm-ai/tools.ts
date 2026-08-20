@@ -372,7 +372,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "search_company_policies",
       description:
-        "Search this company's written policies (discounts, callbacks, repair process, customer service, warranty, scheduling, and similar). Always call this before answering how the company does something or advising staff on discounts, callbacks, repairs, or customer handling. Pass the user's question as the query. Use only returned policy text — never invent company rules.",
+        "Search this company's written policies (safety & emergency response; property, utilities & damage prevention; technical service standards; customer authorization & service conduct; pricing, payments & financial policies; employee & company operations). Always call this before answering how the company does something or advising staff on those topics. Pass the user's question as the query. Use only returned policy text — never invent company rules.",
       parameters: {
         type: "object",
         additionalProperties: false,

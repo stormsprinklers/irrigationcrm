@@ -137,12 +137,12 @@ export default function StormAiPoliciesPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Company policies"]}
         title="Company policies"
-        subtitle="Tell Storm AI how this company handles discounts, callbacks, repairs, customer service, and similar rules. Storm AI checks these before it answers."
+        subtitle="Tell Storm AI how this company handles safety, property protection, technical standards, customer authorization, pricing/payments, and employee operations. Storm AI checks these before it answers."
       />
 
       <div className="mb-4 flex gap-2">
         <Input
-          placeholder="New policy title, e.g. Same-day callback"
+          placeholder="New policy title, e.g. Mark sprinkler lines before dig"
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -228,6 +228,11 @@ export default function StormAiPoliciesPage() {
                   onChange={(e) => setDraft({ ...draft, category: e.target.value || null })}
                 >
                   <option value="">Uncategorized</option>
+                  {/* Keep any legacy category still stored on this policy so editing does not clear it. */}
+                  {draft.category &&
+                  !(POLICY_CATEGORIES as readonly string[]).includes(draft.category) ? (
+                    <option value={draft.category}>{draft.category} (current)</option>
+                  ) : null}
                   {POLICY_CATEGORIES.map((category) => (
                     <option key={category} value={category}>
                       {category}

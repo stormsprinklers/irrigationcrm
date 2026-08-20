@@ -75,8 +75,8 @@ export default function StormAiGeneralPage() {
         >
           <h3 className="text-lg font-semibold">Company policies</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Add, edit, or remove the written rules Storm AI must follow for discounts, callbacks,
-            repairs, and customer service.
+            Add, edit, or remove the written rules Storm AI must follow for safety, property
+            protection, technical standards, customer authorization, pricing, and operations.
           </p>
         </Link>
         <Link

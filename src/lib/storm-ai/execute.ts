@@ -676,7 +676,7 @@ export async function runStormAiTool(
           policies,
           note:
             policies.length === 0
-              ? "No matching company policy. Do not invent discounts, callbacks, repair, or customer-service rules."
+              ? "No matching company policy. Do not invent company rules for safety, property damage, technical standards, customer authorization, pricing/payments, or employee operations."
               : "Follow these policies. They override generic advice. Do not add rules that are not written here.",
         });
       }
