@@ -39,13 +39,22 @@ export default function SettingsLeadSourcesPage() {
         setNumbers([]);
         return;
       }
-      setNumbers(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.numbers)
+          ? data.numbers
+          : [];
+      setNumbers(
+        company?.id
+          ? list.filter((n: { companyId?: string }) => n.companyId === company.id)
+          : list
+      );
     } catch {
       toast.error("Failed to load phone numbers");
     } finally {
       setNumbersLoading(false);
     }
-  }, []);
+  }, [company?.id]);
 
   useEffect(() => {
     void loadNumbers();

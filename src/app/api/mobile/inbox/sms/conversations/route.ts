@@ -85,7 +85,10 @@ export async function POST(request: NextRequest) {
     }
 
     const company = await prisma.company.findUnique({ where: { id: user.companyId } });
-    if (!company?.twilioPhone) return badRequestResponse("Twilio phone not configured");
+    const { getCompanyCallerId } = await import("@/lib/voice/company-phone");
+    const fromNumber =
+      (await getCompanyCallerId(user.companyId)) ?? company?.twilioPhone ?? null;
+    if (!fromNumber) return badRequestResponse("Twilio phone not configured");
 
     const normalizedTo = normalizePhone(to);
     const blocked = await isContactBlocked(user.companyId, normalizedTo, null);
@@ -114,7 +117,7 @@ export async function POST(request: NextRequest) {
     const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
     const twilioMessage = await sendSms({
       companyId: user.companyId,
-      from: company.twilioPhone,
+      from: fromNumber,
       to: normalizedTo,
       body: messageBody,
       mediaUrl: mediaUrls.length ? mediaUrls : undefined,

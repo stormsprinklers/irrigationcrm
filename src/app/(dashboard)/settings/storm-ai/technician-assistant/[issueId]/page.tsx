@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -82,36 +81,38 @@ export default function TechAssistIssueEditorPage() {
   }
 
   return (
-    <ContentArea className="max-w-5xl">
-      <PageHeader
-        breadcrumb={["Settings", "Storm AI", "Technician Assistant", name || "Issue"]}
-        title={name || "Diagnostic workflow"}
-        subtitle="Title and description help Storm AI pick this issue. Diagnostics branch visually like call flows."
-      />
-
-      <div className="mb-6 space-y-3 rounded-lg border border-border bg-card p-4">
-        <label className="block text-sm">
-          Title
-          <Input
-            className="mt-1"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Zone valve not opening"
-          />
-        </label>
-        <label className="block text-sm">
+    <ContentArea className="flex h-[calc(100dvh-9.5rem)] max-w-none flex-col gap-3 overflow-hidden pb-2">
+      <div className="shrink-0 space-y-2 border-b border-border pb-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <label className="min-w-[12rem] flex-1 text-xs font-medium text-muted-foreground">
+            Title
+            <Input
+              className="mt-1 h-9 text-base font-semibold"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Zone valve not opening"
+            />
+          </label>
+          <div className="flex items-center gap-3 pt-5">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Active</span>
+              <Switch checked={active} onCheckedChange={setActive} />
+            </label>
+            <Button onClick={() => void save()} disabled={saving} size="sm">
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+        <label className="block text-xs font-medium text-muted-foreground">
           Description
           <textarea
-            className="mt-1 min-h-[80px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            className="mt-1 min-h-[2.75rem] max-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="When a zone has power but no water, or the valve will not open…"
+            placeholder="When Storm AI should pick this issue…"
+            rows={2}
           />
         </label>
-        <div className="flex items-center justify-between">
-          <span className="text-sm">Active</span>
-          <Switch checked={active} onCheckedChange={setActive} />
-        </div>
       </div>
 
       <TechAssistFlowEditor
@@ -120,12 +121,6 @@ export default function TechAssistIssueEditorPage() {
         onChange={setNodes}
         onEntryChange={setEntryNodeId}
       />
-
-      <div className="mt-6 flex justify-end">
-        <Button onClick={() => void save()} disabled={saving}>
-          {saving ? "Saving…" : "Save workflow"}
-        </Button>
-      </div>
     </ContentArea>
   );
 }

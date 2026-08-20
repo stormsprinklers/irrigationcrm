@@ -10,7 +10,8 @@ import { isContactBlocked, normalizePhone, blockCustomer } from "@/lib/inbox/con
 import {
   findExistingSmsConversationAnyScope,
   findOrCreateSmsConversation,
-  getCompanyByTwilioPhone,
+  inboundSmsViaLinePrefix,
+  resolveInboundSmsLine,
 } from "@/lib/inbox/conversations";
 import { parseTwilioMediaParams, downloadTwilioMedia } from "@/lib/inbox/twilio-media";
 import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
@@ -44,11 +45,13 @@ export async function POST(request: NextRequest) {
   if (!from || !to) return NextResponse.json({ ok: true });
 
   try {
-    const company = await getCompanyByTwilioPhone(to);
-    if (!company) {
+    // Any company line (Primary, tracking, agent) → that company's shared SMS inbox.
+    const inboundLine = await resolveInboundSmsLine(to);
+    if (!inboundLine) {
       console.error("Twilio SMS inbound: no company for To number", { to });
       return NextResponse.json({ ok: true });
     }
+    const company = inboundLine.company;
 
     const normalizedFrom = normalizePhone(from);
     const normalizedBody = body.trim().toUpperCase();
@@ -140,11 +143,16 @@ export async function POST(request: NextRequest) {
     const contactInfoDetected =
       scope === Scope.EXTERNAL && body.trim() ? messageSharesContactInfo(body) : false;
 
+    const trimmedBody = body.trim() || (mediaItems.length ? "[Media message]" : "");
+    const viaPrefix = inboundSmsViaLinePrefix(inboundLine);
+    const storedBody =
+      viaPrefix && trimmedBody ? `${viaPrefix}\n${trimmedBody}` : trimmedBody;
+
     const message = await prisma.message.create({
       data: {
         conversationId: conversation.id,
         direction: MessageDirection.INBOUND,
-        body: body.trim() || (mediaItems.length ? "[Media message]" : ""),
+        body: storedBody,
         twilioMessageSid: messageSid || null,
         contactInfoDetected,
       },
@@ -186,7 +194,6 @@ export async function POST(request: NextRequest) {
     void (async () => {
       try {
         const { AttributionFirstTouchMethod } = await import("@prisma/client");
-        const { normalizePhone } = await import("@/lib/inbox/contacts");
         const {
           normalizeAttribution,
           recordTouchEvent,
@@ -196,18 +203,7 @@ export async function POST(request: NextRequest) {
           "@/lib/voice/call-attribution"
         );
 
-        const dialed = normalizePhone(to);
-        const phoneRecord = await prisma.phoneNumber.findFirst({
-          where: {
-            companyId: company.id,
-            OR: [
-              { e164: dialed },
-              { e164: to },
-              { e164: `+1${dialed.replace(/\D/g, "").slice(-10)}` },
-            ],
-          },
-          select: { id: true, trackingSource: true },
-        });
+        const phoneRecord = inboundLine.phoneNumber;
 
         let trackingSource = phoneRecord?.trackingSource?.trim() || null;
         let googleLsaLeadId: string | null = null;
@@ -225,8 +221,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        let customerId =
-          customer?.id ?? conversation.customerId ?? null;
+        let customerId = customer?.id ?? conversation.customerId ?? null;
         let leadId: string | null = null;
         if (!customerId) {
           const matched = await resolvePersonByPhone(company.id, normalizedFrom);
@@ -257,6 +252,7 @@ export async function POST(request: NextRequest) {
             googleLsaLeadId,
             dialedNumber: to,
             phoneNumberId: phoneRecord?.id ?? null,
+            viaNonPrimaryLine: !inboundLine.isPrimaryLine,
           },
         });
       } catch (err) {
@@ -268,7 +264,7 @@ export async function POST(request: NextRequest) {
       companyId: company.id,
       conversationId: conversation.id,
       fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
-      preview: body.trim() || (mediaItems.length ? "[Media message]" : "New message"),
+      preview: storedBody || (mediaItems.length ? "[Media message]" : "New message"),
       scope: conversation.scope,
       participantPhone: conversation.participantPhone,
       fromPhone: normalizedFrom,

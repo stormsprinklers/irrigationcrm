@@ -67,7 +67,10 @@ export async function POST(_request: NextRequest, context: Ctx) {
       where: { id: user.companyId },
       select: { twilioPhone: true },
     });
-    if (!company?.twilioPhone) {
+    const { getCompanyCallerId } = await import("@/lib/voice/company-phone");
+    const fromNumber =
+      (await getCompanyCallerId(user.companyId)) ?? company?.twilioPhone ?? null;
+    if (!fromNumber) {
       return badRequestResponse(
         "No outbound SMS number configured — set a Primary phone number for this company"
       );
@@ -89,7 +92,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
     try {
       twilioMessage = await sendSms({
         companyId: user.companyId,
-        from: company.twilioPhone,
+        from: fromNumber,
         to,
         body: bodyText,
         mediaUrl: mediaUrls.length ? mediaUrls : undefined,

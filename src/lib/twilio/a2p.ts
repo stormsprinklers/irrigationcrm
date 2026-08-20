@@ -70,6 +70,19 @@ export async function saveSharedMessagingServiceSid(params: {
     },
   });
 
+  // Inbound texts to every number on this service must hit the CRM SMS inbox.
+  if (sid) {
+    const { ensureMessagingServiceInboundWebhook } = await import("@/lib/twilio/numbers");
+    const webhook = await ensureMessagingServiceInboundWebhook(sid);
+    if (!webhook.ok) {
+      console.warn(
+        "[a2p] saved Messaging Service but could not set inbound webhook",
+        sid,
+        webhook.error
+      );
+    }
+  }
+
   return sid;
 }
 
@@ -397,6 +410,14 @@ export async function syncCompaniesNumbersToA2p(
     );
   }
 
+  const { ensureMessagingServiceInboundWebhook, configureNumberWebhooks } = await import(
+    "@/lib/twilio/numbers"
+  );
+  const webhook = await ensureMessagingServiceInboundWebhook(messagingServiceSid);
+  if (!webhook.ok) {
+    console.warn("[a2p] sync: could not set messaging service inbound webhook", webhook.error);
+  }
+
   const numbers = await prisma.phoneNumber.findMany({
     where: {
       companyId: { in: companyIds },
@@ -411,6 +432,11 @@ export async function syncCompaniesNumbersToA2p(
 
   for (const row of numbers) {
     if (!row.twilioSid) continue;
+    try {
+      await configureNumberWebhooks(row.twilioSid);
+    } catch (err) {
+      console.warn("[a2p] sync: configure number webhooks failed", row.e164, err);
+    }
     const result = await attachNumberToA2pMessagingService(row.twilioSid);
     if (result.ok) {
       if (result.alreadyAttached) alreadyAttached += 1;

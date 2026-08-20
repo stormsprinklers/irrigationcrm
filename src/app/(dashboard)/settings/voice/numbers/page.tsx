@@ -23,6 +23,7 @@ import { vanityLettersToDigits } from "@/lib/twilio/vanity";
 
 type PhoneNumberRow = {
   id: string;
+  companyId: string;
   e164: string;
   friendlyName: string | null;
   numberType: string;
@@ -35,7 +36,10 @@ type PhoneNumberRow = {
   twilioSid: string | null;
   callFlow?: { id: string; name: string } | null;
   assignedUser?: { id: string; name: string } | null;
+  company?: { id: string; name: string } | null;
 };
+
+type CompanyOption = { id: string; name: string };
 
 type CallFlowOption = { id: string; name: string };
 type EmployeeOption = { id: string; name: string };
@@ -96,6 +100,7 @@ export default function VoiceNumbersPage() {
     session?.user?.role === "ADMIN" || session?.user?.role === "MANAGER";
   const [tab, setTab] = useState<"list" | "buy" | "port" | "a2p" | "release">("list");
   const [numbers, setNumbers] = useState<PhoneNumberRow[]>([]);
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [flows, setFlows] = useState<CallFlowOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [e164, setE164] = useState("");
@@ -142,8 +147,13 @@ export default function VoiceNumbersPage() {
         if (nums?.error) {
           toast.error(nums.error);
           setNumbers([]);
+          setCompanies([]);
+        } else if (Array.isArray(nums)) {
+          setNumbers(nums);
+          setCompanies([]);
         } else {
-          setNumbers(Array.isArray(nums) ? nums : []);
+          setNumbers(Array.isArray(nums?.numbers) ? nums.numbers : []);
+          setCompanies(Array.isArray(nums?.companies) ? nums.companies : []);
         }
         setFlows(Array.isArray(fl) ? fl.map((f: CallFlowOption) => ({ id: f.id, name: f.name })) : []);
         setEmployees(Array.isArray(emps) ? emps.map((e: EmployeeOption) => ({ id: e.id, name: e.name })) : []);
@@ -401,15 +411,33 @@ export default function VoiceNumbersPage() {
     }
   }
 
-  async function updateNumber(id: string, patch: Partial<PhoneNumberRow>) {
+  const sessionCompanyId = session?.user?.companyId ?? "";
+  const showCompanyColumn = companies.length > 1;
+  const sortedNumbers = useMemo(() => {
+    if (!showCompanyColumn) return numbers;
+    return [...numbers].sort((a, b) => {
+      const an = a.company?.name ?? a.companyId;
+      const bn = b.company?.name ?? b.companyId;
+      const byCo = an.localeCompare(bn);
+      if (byCo !== 0) return byCo;
+      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+      return a.e164.localeCompare(b.e164);
+    });
+  }, [numbers, showCompanyColumn]);
+
+  async function updateNumber(id: string, patch: Partial<PhoneNumberRow> & { companyId?: string }) {
     const res = await fetch(`/api/settings/voice/numbers/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      toast.error("Update failed");
+      toast.error(typeof data.error === "string" ? data.error : "Update failed");
       return;
+    }
+    if (patch.companyId) {
+      toast.success("Company updated");
     }
     load();
   }
@@ -455,7 +483,7 @@ export default function VoiceNumbersPage() {
   }
 
   return (
-    <ContentArea className="max-w-4xl">
+    <ContentArea className={showCompanyColumn ? "max-w-6xl" : "max-w-4xl"}>
       <PageHeader
         breadcrumb={["Settings", "Voice", "Numbers"]}
         title="Phone numbers"
@@ -957,10 +985,14 @@ export default function VoiceNumbersPage() {
             <div>
               <h3 className="font-semibold">Your numbers</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Edit title, type, and call flow inline. Primary is the default outbound caller ID and
-                the number used for outbound inbox SMS. “SMS Capable” means Twilio allows SMS on that
-                line — for US delivery it must also be on your A2P Messaging Service (see the A2P
-                campaign tab).
+                Edit title, company, type, and call flow inline. Texts to any of these numbers land in
+                this company&apos;s SMS inbox so nothing is missed; replies always send from Primary.
+                Primary is also the default outbound caller ID. “SMS Capable” means Twilio lists SMS
+                capability — for US delivery the number must also be on your A2P Messaging Service
+                (see the A2P campaign tab).
+                {showCompanyColumn
+                  ? " Numbers from every business you operate are listed here so you can move them between companies."
+                  : ""}
               </p>
             </div>
             <div className="rounded-lg border border-border bg-white">
@@ -968,6 +1000,9 @@ export default function VoiceNumbersPage() {
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="min-w-[140px]">Phone number</TableHead>
+                    {showCompanyColumn ? (
+                      <TableHead className="min-w-[160px]">Company</TableHead>
+                    ) : null}
                     <TableHead className="min-w-[160px]">Title</TableHead>
                     <TableHead className="min-w-[140px]">Type</TableHead>
                     <TableHead title="Twilio SMS capability — not the same as A2P approval. Outbound CRM texts use the Primary number.">
@@ -980,7 +1015,9 @@ export default function VoiceNumbersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {numbers.map((n) => (
+                  {sortedNumbers.map((n) => {
+                    const onCurrentCompany = n.companyId === sessionCompanyId;
+                    return (
                     <TableRow key={n.id}>
                       <TableCell>
                         <span className="font-medium tabular-nums">
@@ -992,6 +1029,25 @@ export default function VoiceNumbersPage() {
                           </Badge>
                         ) : null}
                       </TableCell>
+                      {showCompanyColumn ? (
+                        <TableCell>
+                          <select
+                            className="h-9 w-full min-w-[150px] rounded-md border border-input bg-background px-2 text-sm"
+                            value={n.companyId}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (next === n.companyId) return;
+                              void updateNumber(n.id, { companyId: next });
+                            }}
+                          >
+                            {companies.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <Input
                           placeholder="e.g. PPC Repair"
@@ -1059,20 +1115,26 @@ export default function VoiceNumbersPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <select
-                          className="h-9 w-full min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
-                          value={n.callFlowId ?? ""}
-                          onChange={(e) =>
-                            void updateNumber(n.id, { callFlowId: e.target.value || null })
-                          }
-                        >
-                          <option value="">Default flow</option>
-                          {flows.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
+                        {onCurrentCompany ? (
+                          <select
+                            className="h-9 w-full min-w-[140px] rounded-md border border-input bg-background px-2 text-sm"
+                            value={n.callFlowId ?? ""}
+                            onChange={(e) =>
+                              void updateNumber(n.id, { callFlowId: e.target.value || null })
+                            }
+                          >
+                            <option value="">Default flow</option>
+                            {flows.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {n.callFlow?.name ?? "Default flow"}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {n.numberType === "AGENT_DIRECT" || n.assignedUser
@@ -1101,10 +1163,14 @@ export default function VoiceNumbersPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
-                  {!numbers.length ? (
+                    );
+                  })}
+                  {!sortedNumbers.length ? (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={showCompanyColumn ? 9 : 8}
+                        className="py-8 text-center text-muted-foreground"
+                      >
                         No phone numbers yet. Add one below or buy from Twilio.
                       </TableCell>
                     </TableRow>

@@ -9,6 +9,16 @@ import { cn } from "@/lib/utils";
 
 export type EditorNodeType = "DIAGNOSTIC" | "RESOLUTION";
 
+export type EditorMatchCondition = {
+  id: string;
+  match: TechAssistOptionMatch;
+  /** Free-text phrase for label matching (used by OR alternatives). */
+  label: string;
+  value: string;
+  min: string;
+  max: string;
+};
+
 export type EditorOption = {
   id: string;
   label: string;
@@ -16,6 +26,7 @@ export type EditorOption = {
   value: string;
   min: string;
   max: string;
+  anyOf: EditorMatchCondition[];
   nextNodeId: string;
 };
 
@@ -59,6 +70,18 @@ export function emptyResolution(sortOrder = 0): EditorNode {
   };
 }
 
+function emptyCondition(partial?: Partial<EditorMatchCondition>): EditorMatchCondition {
+  return {
+    id: newId(),
+    match: "label",
+    label: "",
+    value: "",
+    min: "",
+    max: "",
+    ...partial,
+  };
+}
+
 function emptyOption(partial?: Partial<EditorOption>): EditorOption {
   return {
     id: newId(),
@@ -67,9 +90,36 @@ function emptyOption(partial?: Partial<EditorOption>): EditorOption {
     value: "",
     min: "",
     max: "",
+    anyOf: [],
     nextNodeId: "",
     ...partial,
   };
+}
+
+function parseStoredAnyOf(raw: unknown): EditorMatchCondition[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const alt = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+    return emptyCondition({
+      id: String(alt.id ?? newId()),
+      match: (alt.match as TechAssistOptionMatch) || "label",
+      label: String(alt.label ?? ""),
+      value: alt.value != null ? String(alt.value) : "",
+      min: alt.min != null ? String(alt.min) : "",
+      max: alt.max != null ? String(alt.max) : "",
+    });
+  });
+}
+
+function serializeMatchValue(value: string) {
+  if (value === "") return undefined;
+  return Number.isNaN(Number(value)) ? value : Number(value);
+}
+
+function serializeMatchNumber(value: string) {
+  if (value === "") return undefined;
+  const num = Number(value);
+  return Number.isNaN(num) ? undefined : num;
 }
 
 /** Migrate legacy BRANCH nodes into the preceding DIAGNOSTIC's options. */
@@ -101,6 +151,7 @@ export function migrateLegacyNodes(
         value: opt.value != null ? String(opt.value) : "",
         min: opt.min != null ? String(opt.min) : "",
         max: opt.max != null ? String(opt.max) : "",
+        anyOf: parseStoredAnyOf(opt.anyOf),
         nextNodeId: String(opt.nextNodeId ?? ""),
       }));
     } else {
@@ -179,14 +230,20 @@ export function nodesToSavePayload(nodes: EditorNode[], entryNodeId: string | nu
                 id: option.id,
                 label: option.label.trim() || "Option",
                 match: option.match,
-                value:
-                  option.value === ""
-                    ? undefined
-                    : Number.isNaN(Number(option.value))
-                      ? option.value
-                      : Number(option.value),
-                min: option.min === "" ? undefined : Number(option.min),
-                max: option.max === "" ? undefined : Number(option.max),
+                value: serializeMatchValue(option.value),
+                min: serializeMatchNumber(option.min),
+                max: serializeMatchNumber(option.max),
+                anyOf:
+                  option.anyOf.length > 0
+                    ? option.anyOf.map((alt) => ({
+                        id: alt.id,
+                        match: alt.match,
+                        label: alt.label.trim() || undefined,
+                        value: serializeMatchValue(alt.value),
+                        min: serializeMatchNumber(alt.min),
+                        max: serializeMatchNumber(alt.max),
+                      }))
+                    : undefined,
                 nextNodeId: option.nextNodeId || null,
               })),
             }
@@ -287,7 +344,7 @@ function PanCanvas({ children }: { children: ReactNode }) {
     <div
       ref={ref}
       className={cn(
-        "h-[min(70vh,720px)] overflow-auto rounded-lg border border-border bg-muted/20",
+        "h-full min-h-[28rem] overflow-auto rounded-lg border border-border bg-muted/20",
         grabbing ? "cursor-grabbing select-none" : "cursor-grab"
       )}
       onPointerDown={onPointerDown}
@@ -311,27 +368,26 @@ function YSplit({ count }: { count: number }) {
       </div>
     );
   }
-  // Evenly space down-stems across the bar
-  const positions = Array.from({ length: count }, (_, i) =>
-    count === 1 ? 50 : (i / (count - 1)) * 70 + 15
-  );
   return (
-    <div className="relative h-10 w-full max-w-3xl">
-      <div className="absolute left-1/2 top-0 h-3 w-px -translate-x-1/2 bg-border" />
-      <div
-        className="absolute top-3 h-px bg-border"
-        style={{
-          left: `${positions[0]}%`,
-          right: `${100 - (positions[positions.length - 1] ?? 50)}%`,
-        }}
-      />
-      {positions.map((pct, i) => (
-        <div
-          key={i}
-          className="absolute top-3 h-7 w-px bg-border"
-          style={{ left: `${pct}%` }}
-        />
-      ))}
+    <div className="flex w-full flex-col items-center">
+      <div className="h-3 w-px bg-border" />
+      <div className="flex w-full">
+        {Array.from({ length: count }, (_, i) => (
+          <div key={i} className="relative flex h-7 flex-1 justify-center">
+            <div
+              className={cn(
+                "absolute top-0 h-px bg-border",
+                i === 0
+                  ? "left-1/2 right-0"
+                  : i === count - 1
+                    ? "left-0 right-1/2"
+                    : "inset-x-0"
+              )}
+            />
+            <div className="absolute top-0 h-7 w-px bg-border" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -344,6 +400,59 @@ function matchNeedsRange(match: TechAssistOptionMatch) {
   return match === "between";
 }
 
+function MatchTypeSelect({
+  value,
+  onChange,
+}: {
+  value: TechAssistOptionMatch;
+  onChange: (value: TechAssistOptionMatch) => void;
+}) {
+  return (
+    <select
+      className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+      value={value}
+      onChange={(e) => onChange(e.target.value as TechAssistOptionMatch)}
+    >
+      <option value="label">Match label / free text</option>
+      <option value="yes">Yes</option>
+      <option value="no">No</option>
+      <option value="lt">Number &lt;</option>
+      <option value="gt">Number &gt;</option>
+      <option value="lte">Number ≤</option>
+      <option value="gte">Number ≥</option>
+      <option value="eq">Number equals</option>
+      <option value="between">Number between</option>
+    </select>
+  );
+}
+
+function optionBranchLabel(option: EditorOption) {
+  const primary = option.label.trim() || "Option";
+  if (!option.anyOf.length) return primary;
+  const alts = option.anyOf
+    .map((alt) => {
+      if (alt.match === "yes") return "Yes";
+      if (alt.match === "no") return "No";
+      if (alt.match === "between" && (alt.min || alt.max)) return `${alt.min}–${alt.max}`;
+      if (matchNeedsValue(alt.match) && alt.value) {
+        const op =
+          alt.match === "lt"
+            ? "<"
+            : alt.match === "gt"
+              ? ">"
+              : alt.match === "lte"
+                ? "≤"
+                : alt.match === "gte"
+                  ? "≥"
+                  : "=";
+        return `${op} ${alt.value}`;
+      }
+      return alt.label.trim();
+    })
+    .filter(Boolean);
+  return alts.length ? `${primary} OR ${alts.join(" OR ")}` : primary;
+}
+
 type Props = {
   nodes: EditorNode[];
   entryNodeId: string;
@@ -353,6 +462,7 @@ type Props = {
 
 export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChange }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(entryNodeId || nodes[0]?.id || null);
+  const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
@@ -409,6 +519,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
         .concat(child)
     );
     setExpandedId(child.id);
+    setEditingOptionId(null);
   }
 
   /** Insert a diagnostic between this option and its current next step. */
@@ -440,6 +551,16 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
         .concat(child)
     );
     setExpandedId(child.id);
+    setEditingOptionId(null);
+  }
+
+  function addOptionBranch(nodeId: string) {
+    const node = byId.get(nodeId);
+    if (!node) return;
+    const option = emptyOption({ match: "label" });
+    updateNode(nodeId, { options: [...node.options, option] });
+    setEditingOptionId(option.id);
+    setExpandedId(null);
   }
 
   function renderNode(
@@ -463,16 +584,19 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     const optionCount = node.options.length;
 
     return (
-      <div key={node.id} className="flex w-full flex-col items-center">
+      <div key={node.id} className="flex w-max flex-col items-center">
         <div
-          className={`w-full max-w-md rounded-lg border bg-white shadow-sm ${
+          className={`w-80 shrink-0 rounded-lg border bg-white shadow-sm ${
             isDiagnostic ? "border-sky-200" : "border-emerald-200"
           }`}
         >
           <button
             type="button"
             className="flex w-full items-start gap-3 p-4 text-left"
-            onClick={() => setExpandedId(expanded ? null : node.id)}
+            onClick={() => {
+              setExpandedId(expanded ? null : node.id);
+              setEditingOptionId(null);
+            }}
           >
             <span
               className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
@@ -525,72 +649,65 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                 />
               </label>
               {isDiagnostic ? (
-                <>
-                  <label className="block text-sm">
-                    Tips (optional guidance if unclear)
-                    <textarea
-                      className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                      value={node.tips}
-                      onChange={(e) => updateNode(node.id, { tips: e.target.value })}
-                      placeholder="e.g. Probe both wires with the meter on resistance mode"
-                    />
-                  </label>
+                <label className="block text-sm">
+                  Tips (optional guidance if unclear)
+                  <textarea
+                    className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    value={node.tips}
+                    onChange={(e) => updateNode(node.id, { tips: e.target.value })}
+                    placeholder="e.g. Probe both wires with the meter on resistance mode"
+                  />
+                </label>
+              ) : null}
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">Options (branches)</p>
-                      <div className="flex gap-1">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            updateNode(node.id, {
-                              options: [
-                                ...node.options,
-                                emptyOption({ label: "Yes", match: "yes" }),
-                                emptyOption({ label: "No", match: "no" }),
-                              ],
-                            })
-                          }
-                        >
-                          Yes / No
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            updateNode(node.id, {
-                              options: [
-                                ...node.options,
-                                emptyOption({ label: "", match: "lt" }),
-                              ],
-                            })
-                          }
-                        >
-                          Number
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            updateNode(node.id, {
-                              options: [...node.options, emptyOption({ match: "label" })],
-                            })
-                          }
-                        >
-                          <Plus className="mr-1 h-3 w-3" />
-                          Option
-                        </Button>
-                      </div>
-                    </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => removeNode(node.id)}
+                >
+                  Delete step
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
-                    {node.options.map((option, oi) => (
+        {isDiagnostic ? (
+          <div className="flex w-max flex-col items-center">
+            <YSplit count={optionCount + 1} />
+            <div className="flex items-start justify-center gap-12">
+              {node.options.map((option, oi) => {
+                const editing = editingOptionId === option.id;
+                return (
+                  <div
+                    key={option.id}
+                    className="flex w-max min-w-80 flex-col items-center"
+                  >
+                    <button
+                      type="button"
+                      className={cn(
+                        "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
+                        editing
+                          ? "border-sky-400 bg-sky-50 text-sky-900"
+                          : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingOptionId(editing ? null : option.id);
+                        setExpandedId(null);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      {optionBranchLabel(option)}
+                    </button>
+                    {editing ? (
                       <div
-                        key={option.id}
-                        className="space-y-2 rounded-md border border-border bg-muted/30 p-3"
+                        className="mt-2 w-[min(100%,20rem)] space-y-2 rounded-lg border border-sky-200 bg-white p-3 text-left shadow-sm"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-start gap-2">
                           <Input
@@ -607,11 +724,13 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                             type="button"
                             size="icon"
                             variant="ghost"
-                            onClick={() =>
+                            aria-label="Delete option"
+                            onClick={() => {
                               updateNode(node.id, {
                                 options: node.options.filter((o) => o.id !== option.id),
-                              })
-                            }
+                              });
+                              setEditingOptionId(null);
+                            }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -619,28 +738,14 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label className="text-xs">
                             Match type
-                            <select
-                              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                            <MatchTypeSelect
                               value={option.match}
-                              onChange={(e) => {
+                              onChange={(match) => {
                                 const options = [...node.options];
-                                options[oi] = {
-                                  ...option,
-                                  match: e.target.value as TechAssistOptionMatch,
-                                };
+                                options[oi] = { ...option, match };
                                 updateNode(node.id, { options });
                               }}
-                            >
-                              <option value="label">Match label / free text</option>
-                              <option value="yes">Yes</option>
-                              <option value="no">No</option>
-                              <option value="lt">Number &lt;</option>
-                              <option value="gt">Number &gt;</option>
-                              <option value="lte">Number ≤</option>
-                              <option value="gte">Number ≥</option>
-                              <option value="eq">Number equals</option>
-                              <option value="between">Number between</option>
-                            </select>
+                            />
                           </label>
                           {matchNeedsValue(option.match) ? (
                             <label className="text-xs">
@@ -685,107 +790,197 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                             </>
                           ) : null}
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <label className="flex-1 text-xs">
-                            Goes to
-                            <select
-                              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                              value={option.nextNodeId}
-                              onChange={(e) => {
+                        <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Also match if (OR)
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
                                 const options = [...node.options];
-                                options[oi] = { ...option, nextNodeId: e.target.value };
+                                options[oi] = {
+                                  ...option,
+                                  anyOf: [...option.anyOf, emptyCondition()],
+                                };
                                 updateNode(node.id, { options });
                               }}
                             >
-                              <option value="">Select step…</option>
-                              {nodes
-                                .filter((n) => n.id !== node.id)
-                                .map((n) => (
-                                  <option key={n.id} value={n.id}>
-                                    {n.type === "RESOLUTION" ? "Resolution: " : "Diagnostic: "}
-                                    {n.title || n.id.slice(0, 6)}
-                                  </option>
-                                ))}
-                            </select>
-                          </label>
-                          {!option.nextNodeId ? (
-                            <>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                className="mt-4"
-                                onClick={() => addChild(node.id, option.id, "DIAGNOSTIC")}
-                              >
-                                + Diagnostic
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                className="mt-4"
-                                onClick={() => addChild(node.id, option.id, "RESOLUTION")}
-                              >
-                                + Resolution
-                              </Button>
-                            </>
+                              <Plus className="mr-1 h-3 w-3" />
+                              OR
+                            </Button>
+                          </div>
+                          {option.anyOf.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              Optional. Add another condition so this branch is taken if either
+                              match is true.
+                            </p>
                           ) : null}
+                          {option.anyOf.map((alt, ai) => (
+                            <div
+                              key={alt.id}
+                              className="space-y-2 rounded-md border border-border bg-background p-2"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  OR condition {ai + 1}
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    const options = [...node.options];
+                                    options[oi] = {
+                                      ...option,
+                                      anyOf: option.anyOf.filter((row) => row.id !== alt.id),
+                                    };
+                                    updateNode(node.id, { options });
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <label className="text-xs">
+                                  Match type
+                                  <MatchTypeSelect
+                                    value={alt.match}
+                                    onChange={(match) => {
+                                      const options = [...node.options];
+                                      const anyOf = [...option.anyOf];
+                                      anyOf[ai] = { ...alt, match };
+                                      options[oi] = { ...option, anyOf };
+                                      updateNode(node.id, { options });
+                                    }}
+                                  />
+                                </label>
+                                {alt.match === "label" ? (
+                                  <label className="text-xs">
+                                    Phrase to match
+                                    <Input
+                                      className="mt-1"
+                                      value={alt.label}
+                                      placeholder="e.g. open circuit"
+                                      onChange={(e) => {
+                                        const options = [...node.options];
+                                        const anyOf = [...option.anyOf];
+                                        anyOf[ai] = { ...alt, label: e.target.value };
+                                        options[oi] = { ...option, anyOf };
+                                        updateNode(node.id, { options });
+                                      }}
+                                    />
+                                  </label>
+                                ) : null}
+                                {matchNeedsValue(alt.match) ? (
+                                  <label className="text-xs">
+                                    Value
+                                    <Input
+                                      className="mt-1"
+                                      value={alt.value}
+                                      onChange={(e) => {
+                                        const options = [...node.options];
+                                        const anyOf = [...option.anyOf];
+                                        anyOf[ai] = { ...alt, value: e.target.value };
+                                        options[oi] = { ...option, anyOf };
+                                        updateNode(node.id, { options });
+                                      }}
+                                    />
+                                  </label>
+                                ) : null}
+                                {matchNeedsRange(alt.match) ? (
+                                  <>
+                                    <label className="text-xs">
+                                      Min
+                                      <Input
+                                        className="mt-1"
+                                        value={alt.min}
+                                        onChange={(e) => {
+                                          const options = [...node.options];
+                                          const anyOf = [...option.anyOf];
+                                          anyOf[ai] = { ...alt, min: e.target.value };
+                                          options[oi] = { ...option, anyOf };
+                                          updateNode(node.id, { options });
+                                        }}
+                                      />
+                                    </label>
+                                    <label className="text-xs">
+                                      Max
+                                      <Input
+                                        className="mt-1"
+                                        value={alt.max}
+                                        onChange={(e) => {
+                                          const options = [...node.options];
+                                          const anyOf = [...option.anyOf];
+                                          anyOf[ai] = { ...alt, max: e.target.value };
+                                          options[oi] = { ...option, anyOf };
+                                          updateNode(node.id, { options });
+                                        }}
+                                      />
+                                    </label>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))}
                         </div>
+                        <label className="block text-xs">
+                          Goes to
+                          <select
+                            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                            value={option.nextNodeId}
+                            onChange={(e) => {
+                              const options = [...node.options];
+                              options[oi] = { ...option, nextNodeId: e.target.value };
+                              updateNode(node.id, { options });
+                            }}
+                          >
+                            <option value="">Select step…</option>
+                            {nodes
+                              .filter((n) => n.id !== node.id)
+                              .map((n) => (
+                                <option key={n.id} value={n.id}>
+                                  {n.type === "RESOLUTION" ? "Resolution: " : "Diagnostic: "}
+                                  {n.title || n.id.slice(0, 6)}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
                       </div>
-                    ))}
+                    ) : null}
+                    {option.nextNodeId && byId.has(option.nextNodeId) ? (
+                      <>
+                        <InsertDiagnosticButton
+                          onClick={() => insertDiagnosticBetween(node.id, option.id)}
+                        />
+                        {depth < 12 ? renderNode(option.nextNodeId, depth + 1, nextSeen) : null}
+                      </>
+                    ) : (
+                      <NextStepActions
+                        onDiagnostic={() => addChild(node.id, option.id, "DIAGNOSTIC")}
+                        onResolution={() => addChild(node.id, option.id, "RESOLUTION")}
+                      />
+                    )}
                   </div>
-                </>
-              ) : null}
-
-              <div className="flex justify-end">
-                <Button
+                );
+              })}
+              <div className="flex w-max min-w-80 flex-col items-center">
+                <button
                   type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  onClick={() => removeNode(node.id)}
+                  className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    addOptionBranch(node.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
                 >
-                  Delete step
-                </Button>
+                  + Add Option
+                </button>
               </div>
             </div>
-          ) : null}
-        </div>
-
-        {isDiagnostic && optionCount > 0 ? (
-          <>
-            <YSplit count={optionCount} />
-            <div
-              className={`grid w-full gap-4 ${
-                optionCount === 1
-                  ? "max-w-md grid-cols-1"
-                  : optionCount === 2
-                    ? "max-w-3xl grid-cols-1 sm:grid-cols-2"
-                    : "max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-              }`}
-            >
-              {node.options.map((option) => (
-                <div key={option.id} className="flex flex-col items-center">
-                  <div className="mb-2 max-w-[12rem] rounded-full border border-border bg-muted/50 px-3 py-1 text-center text-xs font-medium">
-                    {option.label || "Option"}
-                  </div>
-                  {option.nextNodeId && byId.has(option.nextNodeId) ? (
-                    <>
-                      <InsertDiagnosticButton
-                        onClick={() => insertDiagnosticBetween(node.id, option.id)}
-                      />
-                      {depth < 12 ? renderNode(option.nextNodeId, depth + 1, nextSeen) : null}
-                    </>
-                  ) : (
-                    <NextStepActions
-                      onDiagnostic={() => addChild(node.id, option.id, "DIAGNOSTIC")}
-                      onResolution={() => addChild(node.id, option.id, "RESOLUTION")}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
+          </div>
         ) : null}
       </div>
     );
@@ -794,102 +989,76 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
   const startId = entryNodeId || nodes[0]?.id;
 
   return (
-    <div className="space-y-6">
-      <p className="text-xs text-muted-foreground">
-        Click and drag empty space to pan the tree. Scroll wheel works too.
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <p className="shrink-0 text-xs text-muted-foreground">
+        Click a diagnostic to edit the test. Click an option chip to edit that branch, or use + Add
+        Option. Drag empty space to pan.
       </p>
-      <PanCanvas>
-        <div className="flex flex-col items-center">
-          <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
-            <p className="text-sm font-semibold">Issue start</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Storm AI begins at the first diagnostic below.
-            </p>
-            {nodes.length > 1 ? (
-              <label className="mt-3 block text-left text-xs">
-                Starting step
-                <select
-                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                  value={startId ?? ""}
-                  onChange={(e) => onEntryChange(e.target.value)}
-                >
-                  {nodes.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.title || n.id.slice(0, 8)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+      <div className="min-h-0 flex-1">
+        <PanCanvas>
+          <div className="flex flex-col items-center">
+            <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
+              <p className="text-sm font-semibold">Issue start</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Storm AI begins at the first diagnostic below.
+              </p>
+              {nodes.length > 1 ? (
+                <label className="mt-3 block text-left text-xs">
+                  Starting step
+                  <select
+                    className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                    value={startId ?? ""}
+                    onChange={(e) => onEntryChange(e.target.value)}
+                  >
+                    {nodes.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.title || n.id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+
+            {startId ? (
+              <>
+                <VerticalConnector taller />
+                {renderNode(startId, 0)}
+              </>
+            ) : (
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <VerticalConnector />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const node = emptyDiagnostic(0);
+                      onChange([node]);
+                      onEntryChange(node.id);
+                      setExpandedId(node.id);
+                    }}
+                  >
+                    Add first diagnostic
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {orphans.length > 0 ? (
+              <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
+                <p className="mb-3 text-sm font-medium">Unused steps</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Not reachable from the start. Connect them from an option, or delete them.
+                </p>
+                <div className="flex flex-col items-center gap-4">
+                  {orphans.map((node) => renderNode(node.id, 0))}
+                </div>
+              </div>
             ) : null}
           </div>
-
-          {startId ? (
-            <>
-              <VerticalConnector taller />
-              {renderNode(startId, 0)}
-            </>
-          ) : (
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <VerticalConnector />
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const node = emptyDiagnostic(0);
-                    onChange([node]);
-                    onEntryChange(node.id);
-                    setExpandedId(node.id);
-                  }}
-                >
-                  Add first diagnostic
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {orphans.length > 0 ? (
-            <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
-              <p className="mb-3 text-sm font-medium">Unused steps</p>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Not reachable from the start. Connect them from an option, or delete them.
-              </p>
-              <div className="flex flex-col items-center gap-4">
-                {orphans.map((node) => renderNode(node.id, 0))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </PanCanvas>
-
-      {nodes.length > 0 ? (
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const node = emptyDiagnostic(nodes.length);
-              onChange([...nodes, node]);
-              setExpandedId(node.id);
-            }}
-          >
-            Add diagnostic
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const node = emptyResolution(nodes.length);
-              onChange([...nodes, node]);
-              setExpandedId(node.id);
-            }}
-          >
-            Add resolution
-          </Button>
-        </div>
-      ) : null}
+        </PanCanvas>
+      </div>
     </div>
   );
 }

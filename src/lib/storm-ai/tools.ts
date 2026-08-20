@@ -315,7 +315,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "continue_tech_assist",
       description:
-        "Advance the current technician assistant session with the technician's answer or measurement. Match their reply to one of the diagnostic options when provided. Returns only the next diagnostic or a final resolution.",
+        "Advance the current technician assistant session with the technician's answer or measurement. Match their reply to one of the diagnostic options when provided (an option may list multiple OR alternatives — take that branch if any alternative matches). Returns only the next diagnostic or a final resolution.",
       parameters: {
         type: "object",
         additionalProperties: false,

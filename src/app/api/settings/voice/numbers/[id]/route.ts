@@ -3,10 +3,27 @@ import { PhoneNumberType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
+import {
+  PhoneCompanyReassignError,
+  reassignPhoneNumberToCompany,
+} from "@/lib/voice/reassign-phone-company";
 import { releaseNumber } from "@/lib/twilio/numbers";
 import { verifyPhoneReleaseActionToken } from "@/lib/twilio/phone-release-token";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
+import { listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
 import { prisma } from "@/lib/prisma";
+
+async function operatedCompanyIdsFor(user: {
+  id: string;
+  companyId: string;
+}): Promise<string[]> {
+  const sessionUser = await prisma.user.findFirst({
+    where: { id: user.id },
+    select: { email: true },
+  });
+  if (!sessionUser?.email) return [user.companyId];
+  return listUserOperatedCompanyIds(user.id, sessionUser.email, user.companyId);
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -20,13 +37,57 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { e164, friendlyName, callFlowId, isPrimary, numberType, assignedUserId, trackingSource } = body;
+    const {
+      e164,
+      friendlyName,
+      callFlowId,
+      isPrimary,
+      numberType,
+      assignedUserId,
+      trackingSource,
+      companyId: nextCompanyId,
+    } = body;
 
-    const existing = await prisma.phoneNumber.findFirst({
-      where: { id, companyId: user.companyId },
+    const allowedCompanyIds = await operatedCompanyIdsFor(user);
+
+    let existing = await prisma.phoneNumber.findFirst({
+      where: { id, companyId: { in: allowedCompanyIds } },
     });
     if (!existing) {
       return NextResponse.json({ error: "Phone number not found" }, { status: 404 });
+    }
+
+    if (
+      nextCompanyId !== undefined &&
+      nextCompanyId !== null &&
+      String(nextCompanyId) !== existing.companyId
+    ) {
+      try {
+        existing = await reassignPhoneNumberToCompany({
+          numberId: id,
+          toCompanyId: String(nextCompanyId),
+          allowedCompanyIds,
+        });
+      } catch (err) {
+        if (err instanceof PhoneCompanyReassignError) {
+          return NextResponse.json({ error: err.message }, { status: err.status });
+        }
+        throw err;
+      }
+    }
+
+    const companyId = existing.companyId;
+    const onlyCompanyChange =
+      nextCompanyId !== undefined &&
+      e164 === undefined &&
+      friendlyName === undefined &&
+      callFlowId === undefined &&
+      isPrimary === undefined &&
+      numberType === undefined &&
+      assignedUserId === undefined &&
+      trackingSource === undefined;
+    if (onlyCompanyChange) {
+      return NextResponse.json(existing);
     }
 
     const wantPrimary =
@@ -35,7 +96,7 @@ export async function PATCH(
       numberType === PhoneNumberType.PRIMARY;
 
     if (wantPrimary) {
-      await setExclusivePrimaryNumber({ companyId: user.companyId, numberId: id });
+      await setExclusivePrimaryNumber({ companyId, numberId: id });
       const number = await prisma.phoneNumber.update({
         where: { id },
         data: {
@@ -48,10 +109,10 @@ export async function PATCH(
           numberType: PhoneNumberType.PRIMARY,
         },
       });
-      await syncCompanyTwilioPhone(user.companyId, number.e164);
+      await syncCompanyTwilioPhone(companyId, number.e164);
       try {
         const { ensureCompanyFromNumberOnA2p } = await import("@/lib/twilio/a2p");
-        const a2p = await ensureCompanyFromNumberOnA2p(user.companyId, number.e164);
+        const a2p = await ensureCompanyFromNumberOnA2p(companyId, number.e164);
         if (!a2p.ok) {
           console.warn("[numbers] primary set but A2P attach failed", number.e164, a2p.error);
         }
@@ -61,7 +122,6 @@ export async function PATCH(
       return NextResponse.json(number);
     }
 
-    // Changing type away from PRIMARY while it was primary — clear primary flag.
     const clearingPrimary =
       (isPrimary === false && existing.isPrimary) ||
       (numberType !== undefined &&
@@ -70,7 +130,7 @@ export async function PATCH(
         (existing.isPrimary || existing.numberType === PhoneNumberType.PRIMARY));
 
     const number = await prisma.phoneNumber.update({
-      where: { id, companyId: user.companyId },
+      where: { id },
       data: {
         ...(e164 !== undefined ? { e164: normalizePhone(String(e164)) } : {}),
         ...(friendlyName !== undefined ? { friendlyName: friendlyName || null } : {}),
@@ -97,8 +157,15 @@ export async function DELETE(
     const user = await requireSessionUser();
     const { id } = await params;
     const releaseInTwilio = request.nextUrl.searchParams.get("releaseTwilio") === "true";
+    const allowedCompanyIds = await operatedCompanyIdsFor(user);
 
-    // Releasing a Twilio number is ADMIN-only and requires step-up MFA.
+    const existing = await prisma.phoneNumber.findFirst({
+      where: { id, companyId: { in: allowedCompanyIds } },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Phone number not found" }, { status: 404 });
+    }
+
     if (releaseInTwilio) {
       if (user.role !== "ADMIN") {
         return NextResponse.json({ error: "Only admins can release Twilio numbers" }, { status: 403 });
@@ -120,16 +187,15 @@ export async function DELETE(
       if (!verified.ok) {
         return NextResponse.json({ error: verified.error }, { status: 401 });
       }
-      await releaseNumber(user.companyId, id);
+      await releaseNumber(existing.companyId, id);
       return NextResponse.json({ ok: true });
     }
 
-    // Soft CRM-only unlink (no Twilio release) — still ADMIN/MANAGER.
     if (user.role !== "ADMIN" && user.role !== "MANAGER") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await prisma.phoneNumber.delete({ where: { id, companyId: user.companyId } });
+    await prisma.phoneNumber.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch {
     return unauthorizedResponse();

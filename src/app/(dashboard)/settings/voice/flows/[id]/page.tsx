@@ -300,7 +300,17 @@ export default function FlowEditorPage() {
             ? us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))
             : []
         );
-        setNumbers(Array.isArray(nums) ? nums : []);
+        const list = Array.isArray(nums)
+          ? nums
+          : Array.isArray(nums?.numbers)
+            ? nums.numbers
+            : [];
+        const companyId = fl.companyId as string | undefined;
+        setNumbers(
+          companyId
+            ? list.filter((n: { companyId?: string }) => n.companyId === companyId)
+            : list
+        );
       })
       .catch(() => toast.error("Failed to load flow"));
   }

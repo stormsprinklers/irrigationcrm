@@ -12,6 +12,16 @@ export type TechAssistOptionMatch =
   | "between"
   | "label";
 
+/** One match rule used by a branch option (primary or OR alternative). */
+export type TechAssistMatchCondition = {
+  match?: TechAssistOptionMatch;
+  /** Free-text phrase when match is "label" (OR alts often differ from the display label). */
+  label?: string;
+  value?: number | string;
+  min?: number;
+  max?: number;
+};
+
 export type TechAssistOption = {
   id: string;
   label: string;
@@ -19,6 +29,8 @@ export type TechAssistOption = {
   value?: number | string;
   min?: number;
   max?: number;
+  /** Additional match rules — branch is taken if the primary rule OR any of these match. */
+  anyOf?: TechAssistMatchCondition[];
   nextNodeId?: string | null;
 };
 
@@ -60,34 +72,95 @@ function resultNumber(result: unknown): number | null {
   return Number(text);
 }
 
-function optionMatches(option: TechAssistOption, result: unknown): boolean {
-  const match = option.match ?? "label";
+function conditionMatches(
+  condition: TechAssistMatchCondition,
+  result: unknown,
+  fallbackLabel = ""
+): boolean {
+  const match = condition.match ?? "label";
   const text = normalizeResultText(result);
   const num = resultNumber(result);
-  const label = option.label.trim().toLowerCase();
+  const label = String(condition.label ?? fallbackLabel)
+    .trim()
+    .toLowerCase();
 
   if (match === "yes") {
-    return ["yes", "y", "true", "1"].includes(text) || text === label;
+    return ["yes", "y", "true", "1"].includes(text) || (label ? text === label : false);
   }
   if (match === "no") {
-    return ["no", "n", "false", "0"].includes(text) || text === label;
+    return ["no", "n", "false", "0"].includes(text) || (label ? text === label : false);
   }
-  if (match === "lt" && num != null && option.value != null) return num < Number(option.value);
-  if (match === "gt" && num != null && option.value != null) return num > Number(option.value);
-  if (match === "lte" && num != null && option.value != null) return num <= Number(option.value);
-  if (match === "gte" && num != null && option.value != null) return num >= Number(option.value);
-  if (match === "between" && num != null && option.min != null && option.max != null) {
-    return num >= option.min && num <= option.max;
+  if (match === "lt" && num != null && condition.value != null) {
+    return num < Number(condition.value);
+  }
+  if (match === "gt" && num != null && condition.value != null) {
+    return num > Number(condition.value);
+  }
+  if (match === "lte" && num != null && condition.value != null) {
+    return num <= Number(condition.value);
+  }
+  if (match === "gte" && num != null && condition.value != null) {
+    return num >= Number(condition.value);
+  }
+  if (match === "between" && num != null && condition.min != null && condition.max != null) {
+    return num >= condition.min && num <= condition.max;
   }
   if (match === "eq") {
-    if (num != null && option.value != null && typeof option.value !== "string") {
-      return num === Number(option.value);
+    if (num != null && condition.value != null && typeof condition.value !== "string") {
+      return num === Number(condition.value);
     }
-    return text === String(option.value ?? label).toLowerCase();
+    return text === String(condition.value ?? label).toLowerCase();
   }
   // label / free-text: match option label or contained phrase
   if (!label) return false;
   return text === label || text.includes(label) || label.includes(text);
+}
+
+export function optionMatches(option: TechAssistOption, result: unknown): boolean {
+  if (
+    conditionMatches(
+      {
+        match: option.match,
+        label: option.label,
+        value: option.value,
+        min: option.min,
+        max: option.max,
+      },
+      result,
+      option.label
+    )
+  ) {
+    return true;
+  }
+  for (const alt of option.anyOf ?? []) {
+    if (conditionMatches(alt, result, alt.label ?? option.label)) return true;
+  }
+  return false;
+}
+
+function conditionPublicLabel(condition: TechAssistMatchCondition, fallback = ""): string {
+  const match = condition.match ?? "label";
+  if (match === "yes") return "Yes";
+  if (match === "no") return "No";
+  if (match === "between" && condition.min != null && condition.max != null) {
+    return `${condition.min}–${condition.max}`;
+  }
+  if (match === "lt" && condition.value != null) return `< ${condition.value}`;
+  if (match === "gt" && condition.value != null) return `> ${condition.value}`;
+  if (match === "lte" && condition.value != null) return `≤ ${condition.value}`;
+  if (match === "gte" && condition.value != null) return `≥ ${condition.value}`;
+  if (match === "eq" && condition.value != null) return String(condition.value);
+  return String(condition.label ?? fallback).trim();
+}
+
+/** Label shown to the model for a branch, including OR alternatives. */
+export function optionPublicLabel(option: TechAssistOption): string {
+  const primary = option.label.trim() || conditionPublicLabel(option, "Option");
+  const alts = (option.anyOf ?? [])
+    .map((alt) => conditionPublicLabel(alt))
+    .filter((text) => text && text.toLowerCase() !== primary.toLowerCase());
+  if (!alts.length) return primary || "Option";
+  return [primary, ...alts].join(" OR ");
 }
 
 /** Resolve next node from a diagnostic's options (new model) or legacy BRANCH rules. */
@@ -156,7 +229,7 @@ export function publicStep(node: {
   if (node.type === "DIAGNOSTIC") {
     const options = (config.options ?? []).map((option) => ({
       id: option.id,
-      label: option.label,
+      label: optionPublicLabel(option),
     }));
     return {
       nodeId: node.id,

@@ -52,6 +52,29 @@ export async function configureMessagingServiceWebhooks() {
   return { messagingServices: updated };
 }
 
+/** Point one Messaging Service’s inbound SMS webhook at the CRM inbox handler. */
+export async function ensureMessagingServiceInboundWebhook(
+  serviceSid: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const urls = twilioWebhookUrls();
+    const client = getTwilioClient();
+    await client.messaging.v1.services(serviceSid).update({
+      inboundRequestUrl: urls.smsInbound,
+      inboundMethod: "POST",
+    });
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[twilio] ensure messaging service inbound webhook failed",
+      serviceSid,
+      err
+    );
+    return { ok: false, error: message };
+  }
+}
+
 export async function configureAllSmsWebhooks(companyId?: string) {
   const client = getTwilioClient();
   const numbers = await client.incomingPhoneNumbers.list({ limit: 100 });

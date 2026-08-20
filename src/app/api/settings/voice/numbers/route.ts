@@ -5,17 +5,38 @@ import { normalizePhone } from "@/lib/inbox/contacts";
 import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
 import { fetchTwilioNumberCapabilitiesBySid } from "@/lib/twilio/numbers";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
+import { listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
 import { prisma } from "@/lib/prisma";
+
+const numberInclude = {
+  callFlow: { select: { id: true, name: true } },
+  assignedUser: { select: { id: true, name: true } },
+  company: { select: { id: true, name: true } },
+} as const;
+
+async function companyIdsForNumbersList(user: {
+  id: string;
+  companyId: string;
+  role: string;
+}): Promise<string[]> {
+  if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    return [user.companyId];
+  }
+  const sessionUser = await prisma.user.findFirst({
+    where: { id: user.id },
+    select: { email: true },
+  });
+  if (!sessionUser?.email) return [user.companyId];
+  return listUserOperatedCompanyIds(user.id, sessionUser.email, user.companyId);
+}
 
 export async function GET() {
   try {
     const user = await requireSessionUser();
+    const companyIds = await companyIdsForNumbersList(user);
     let numbers = await prisma.phoneNumber.findMany({
-      where: { companyId: user.companyId },
-      include: {
-        callFlow: { select: { id: true, name: true } },
-        assignedUser: { select: { id: true, name: true } },
-      },
+      where: { companyId: { in: companyIds } },
+      include: numberInclude,
       orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
     });
 
@@ -36,17 +57,20 @@ export async function GET() {
             })
         );
         numbers = await prisma.phoneNumber.findMany({
-          where: { companyId: user.companyId },
-          include: {
-            callFlow: { select: { id: true, name: true } },
-            assignedUser: { select: { id: true, name: true } },
-          },
+          where: { companyId: { in: companyIds } },
+          include: numberInclude,
           orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
         });
       }
     }
 
-    return NextResponse.json(numbers);
+    const companies = await prisma.company.findMany({
+      where: { id: { in: companyIds } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+
+    return NextResponse.json({ numbers, companies });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

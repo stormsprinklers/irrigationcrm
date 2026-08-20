@@ -18,6 +18,7 @@ import { isBlobStorageUrl } from "@/lib/blob/urls";
 import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
+import { getCompanyCallerId } from "@/lib/voice/company-phone";
 
 type SendSmsBody = {
   to: string;
@@ -41,7 +42,11 @@ async function sendSmsMessage(params: {
   userId?: string;
 }) {
   const company = await prisma.company.findUnique({ where: { id: params.user.companyId } });
-  if (!company?.twilioPhone) throw new Error("Twilio phone not configured");
+  if (!company) throw new Error("Company not found");
+  const fromNumber = (await getCompanyCallerId(params.user.companyId)) ?? company.twilioPhone;
+  if (!fromNumber) {
+    throw new Error("Twilio phone not configured — set a Primary phone number for this company");
+  }
 
   const normalizedTo = normalizePhone(params.to);
   const blocked = await isContactBlocked(params.user.companyId, normalizedTo, null);
@@ -78,7 +83,7 @@ async function sendSmsMessage(params: {
 
   const twilioMessage = await sendSms({
     companyId: params.user.companyId,
-    from: company.twilioPhone,
+    from: fromNumber,
     to: normalizedTo,
     body: params.messageBody,
     mediaUrl: mediaUrls.length ? mediaUrls : undefined,
