@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/settings/storm-ai/technician-assistant", label: "Issues", exact: true },
   { href: "/settings/storm-ai/technician-assistant/parts", label: "Parts Info", exact: false },
 ] as const;
+
+function isIssueEditorRoute(pathname: string) {
+  return (
+    pathname.startsWith("/settings/storm-ai/technician-assistant/") &&
+    !pathname.startsWith("/settings/storm-ai/technician-assistant/parts")
+  );
+}
 
 export default function TechnicianAssistantLayout({
   children,
@@ -14,10 +22,18 @@ export default function TechnicianAssistantLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const isIssueEditor = isIssueEditorRoute(pathname);
 
   return (
-    <div>
-      <div className="mb-6 flex gap-1 border-b border-border">
+    <div
+      className={cn(isIssueEditor && "flex h-full min-h-0 flex-col overflow-hidden")}
+    >
+      <div
+        className={cn(
+          "flex shrink-0 gap-1 border-b border-border",
+          isIssueEditor ? "mb-2" : "mb-6"
+        )}
+      >
         {TABS.map((tab) => {
           const active = tab.exact
             ? pathname === tab.href
@@ -37,7 +53,7 @@ export default function TechnicianAssistantLayout({
           );
         })}
       </div>
-      {children}
+      <div className={cn(isIssueEditor && "min-h-0 flex-1")}>{children}</div>
     </div>
   );
 }

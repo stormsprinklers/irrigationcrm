@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { CheckCircle2, FlaskConical, Plus, Trash2 } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import { CheckCircle2, FlaskConical, Minus, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TechAssistOptionMatch } from "@/lib/storm-ai/tech-assist";
@@ -40,6 +47,14 @@ export type EditorNode = {
   options: EditorOption[];
   sortOrder: number;
 };
+
+type Selection =
+  | { kind: "node"; nodeId: string }
+  | { kind: "option"; nodeId: string; optionId: string };
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
 
 export function newId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -297,10 +312,31 @@ function NextStepActions({
   );
 }
 
-function PanCanvas({ children }: { children: ReactNode }) {
+function PanCanvas({
+  children,
+  zoom,
+  onZoomChange,
+}: {
+  children: ReactNode;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [grabbing, setGrabbing] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      onZoomChange(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + delta)));
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onZoomChange, zoom]);
 
   function shouldIgnore(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -344,7 +380,7 @@ function PanCanvas({ children }: { children: ReactNode }) {
     <div
       ref={ref}
       className={cn(
-        "h-full min-h-[28rem] overflow-auto rounded-lg border border-border bg-muted/20",
+        "h-full min-h-0 overflow-auto bg-muted/30",
         grabbing ? "cursor-grabbing select-none" : "cursor-grab"
       )}
       onPointerDown={onPointerDown}
@@ -352,9 +388,54 @@ function PanCanvas({ children }: { children: ReactNode }) {
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >
-      <div className="inline-block min-h-full min-w-full p-8" style={{ width: "max-content" }}>
+      <div
+        className="inline-block min-h-full min-w-full p-8 pt-28"
+        style={{
+          width: "max-content",
+          transform: `scale(${zoom})`,
+          transformOrigin: "top center",
+        }}
+      >
         {children}
       </div>
+    </div>
+  );
+}
+
+function ZoomControls({
+  zoom,
+  onZoomChange,
+}: {
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+}) {
+  return (
+    <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-md border border-border bg-background/95 px-1 py-1 shadow-sm backdrop-blur-sm">
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        aria-label="Zoom out"
+        disabled={zoom <= ZOOM_MIN}
+        onClick={() => onZoomChange(Math.max(ZOOM_MIN, zoom - ZOOM_STEP))}
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </Button>
+      <span className="min-w-[3rem] text-center text-xs tabular-nums text-muted-foreground">
+        {Math.round(zoom * 100)}%
+      </span>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        aria-label="Zoom in"
+        disabled={zoom >= ZOOM_MAX}
+        onClick={() => onZoomChange(Math.min(ZOOM_MAX, zoom + ZOOM_STEP))}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }
@@ -453,6 +534,381 @@ function optionBranchLabel(option: EditorOption) {
   return alts.length ? `${primary} OR ${alts.join(" OR ")}` : primary;
 }
 
+function AnyOfEditor({
+  anyOf,
+  onChange,
+}: {
+  anyOf: EditorMatchCondition[];
+  onChange: (anyOf: EditorMatchCondition[]) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">Also match if (OR)</p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onChange([...anyOf, emptyCondition()])}
+        >
+          <Plus className="mr-1 h-3 w-3" />
+          OR
+        </Button>
+      </div>
+      {anyOf.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          Optional. Add another condition so this branch is taken if either match is true.
+        </p>
+      ) : null}
+      {anyOf.map((alt, ai) => (
+        <div key={alt.id} className="space-y-2 rounded-md border border-border bg-background p-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              OR condition {ai + 1}
+            </span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => onChange(anyOf.filter((row) => row.id !== alt.id))}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="text-xs">
+              Match type
+              <MatchTypeSelect
+                value={alt.match}
+                onChange={(match) => {
+                  const next = [...anyOf];
+                  next[ai] = { ...alt, match };
+                  onChange(next);
+                }}
+              />
+            </label>
+            {alt.match === "label" ? (
+              <label className="text-xs">
+                Phrase to match
+                <Input
+                  className="mt-1"
+                  value={alt.label}
+                  placeholder="e.g. open circuit"
+                  onChange={(e) => {
+                    const next = [...anyOf];
+                    next[ai] = { ...alt, label: e.target.value };
+                    onChange(next);
+                  }}
+                />
+              </label>
+            ) : null}
+            {matchNeedsValue(alt.match) ? (
+              <label className="text-xs">
+                Value
+                <Input
+                  className="mt-1"
+                  value={alt.value}
+                  onChange={(e) => {
+                    const next = [...anyOf];
+                    next[ai] = { ...alt, value: e.target.value };
+                    onChange(next);
+                  }}
+                />
+              </label>
+            ) : null}
+            {matchNeedsRange(alt.match) ? (
+              <>
+                <label className="text-xs">
+                  Min
+                  <Input
+                    className="mt-1"
+                    value={alt.min}
+                    onChange={(e) => {
+                      const next = [...anyOf];
+                      next[ai] = { ...alt, min: e.target.value };
+                      onChange(next);
+                    }}
+                  />
+                </label>
+                <label className="text-xs">
+                  Max
+                  <Input
+                    className="mt-1"
+                    value={alt.max}
+                    onChange={(e) => {
+                      const next = [...anyOf];
+                      next[ai] = { ...alt, max: e.target.value };
+                      onChange(next);
+                    }}
+                  />
+                </label>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OptionDetailPanel({
+  node,
+  option,
+  optionIndex,
+  nodes,
+  onClose,
+  updateNode,
+}: {
+  node: EditorNode;
+  option: EditorOption;
+  optionIndex: number;
+  nodes: EditorNode[];
+  onClose: () => void;
+  updateNode: (id: string, patch: Partial<EditorNode>) => void;
+}) {
+  function updateOption(patch: Partial<EditorOption>) {
+    const options = [...node.options];
+    options[optionIndex] = { ...option, ...patch };
+    updateNode(node.id, { options });
+  }
+
+  return (
+    <aside className="flex w-[360px] shrink-0 flex-col border-l border-border bg-background">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Branch option
+          </p>
+          <h3 className="font-semibold text-foreground">Edit option</h3>
+        </div>
+        <Button type="button" size="icon" variant="ghost" aria-label="Close" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <label className="block text-sm">
+          Label
+          <Input
+            className="mt-1"
+            placeholder="Option label (shown to AI)"
+            value={option.label}
+            onChange={(e) => updateOption({ label: e.target.value })}
+          />
+        </label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="text-xs">
+            Match type
+            <MatchTypeSelect
+              value={option.match}
+              onChange={(match) => updateOption({ match })}
+            />
+          </label>
+          {matchNeedsValue(option.match) ? (
+            <label className="text-xs">
+              Value
+              <Input
+                className="mt-1"
+                value={option.value}
+                onChange={(e) => updateOption({ value: e.target.value })}
+              />
+            </label>
+          ) : null}
+          {matchNeedsRange(option.match) ? (
+            <>
+              <label className="text-xs">
+                Min
+                <Input
+                  className="mt-1"
+                  value={option.min}
+                  onChange={(e) => updateOption({ min: e.target.value })}
+                />
+              </label>
+              <label className="text-xs">
+                Max
+                <Input
+                  className="mt-1"
+                  value={option.max}
+                  onChange={(e) => updateOption({ max: e.target.value })}
+                />
+              </label>
+            </>
+          ) : null}
+        </div>
+        <AnyOfEditor anyOf={option.anyOf} onChange={(anyOf) => updateOption({ anyOf })} />
+        <label className="block text-xs">
+          Goes to
+          <select
+            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            value={option.nextNodeId}
+            onChange={(e) => updateOption({ nextNodeId: e.target.value })}
+          >
+            <option value="">Select step…</option>
+            {nodes
+              .filter((n) => n.id !== node.id)
+              .map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.type === "RESOLUTION" ? "Resolution: " : "Diagnostic: "}
+                  {n.title || n.id.slice(0, 6)}
+                </option>
+              ))}
+          </select>
+        </label>
+        <div className="border-t border-border pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-destructive"
+            onClick={() => {
+              updateNode(node.id, {
+                options: node.options.filter((o) => o.id !== option.id),
+              });
+              onClose();
+            }}
+          >
+            Delete option
+          </Button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function DetailPanel({
+  selection,
+  nodes,
+  entryNodeId,
+  onClose,
+  updateNode,
+  removeNode,
+  onEntryChange,
+}: {
+  selection: Selection;
+  nodes: EditorNode[];
+  entryNodeId: string;
+  onClose: () => void;
+  updateNode: (id: string, patch: Partial<EditorNode>) => void;
+  removeNode: (id: string) => void;
+  onEntryChange: (id: string) => void;
+}) {
+  if (selection.kind === "node") {
+    const node = nodes.find((n) => n.id === selection.nodeId);
+    if (!node) return null;
+    const isDiagnostic = node.type === "DIAGNOSTIC";
+    const isEntry = (entryNodeId || nodes[0]?.id) === node.id;
+
+    return (
+      <aside className="flex w-[360px] shrink-0 flex-col border-l border-border bg-background">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {isDiagnostic ? "Diagnostic" : "Resolution"}
+            </p>
+            <h3 className="font-semibold text-foreground">Edit step</h3>
+          </div>
+          <Button type="button" size="icon" variant="ghost" aria-label="Close" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          {isEntry ? (
+            <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+              This is the starting step for this issue.
+              {nodes.length > 1 ? (
+                <>
+                  {" "}
+                  Change it from the <span className="font-medium">Issue start</span> card on the
+                  canvas.
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          <label className="block text-sm">
+            Title
+            <Input
+              className="mt-1"
+              value={node.title}
+              onChange={(e) => updateNode(node.id, { title: e.target.value })}
+            />
+          </label>
+          <label className="block text-sm">
+            {isDiagnostic ? "Test (what to do or ask)" : "Resolution instructions"}
+            <textarea
+              className="mt-1 min-h-[80px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              value={node.body}
+              onChange={(e) => updateNode(node.id, { body: e.target.value })}
+              placeholder={
+                isDiagnostic
+                  ? "e.g. Measure ohms across the solenoid leads"
+                  : "e.g. Replace the solenoid and retest the zone"
+              }
+            />
+          </label>
+          {isDiagnostic ? (
+            <label className="block text-sm">
+              Tips (optional guidance if unclear)
+              <textarea
+                className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                value={node.tips}
+                onChange={(e) => updateNode(node.id, { tips: e.target.value })}
+                placeholder="e.g. Probe both wires with the meter on resistance mode"
+              />
+            </label>
+          ) : null}
+          {nodes.length > 1 && isEntry ? (
+            <label className="block text-sm">
+              Starting step
+              <select
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+                value={entryNodeId || nodes[0]?.id || ""}
+                onChange={(e) => onEntryChange(e.target.value)}
+              >
+                {nodes.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.title || n.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="border-t border-border pt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => {
+                removeNode(node.id);
+                onClose();
+              }}
+            >
+              Delete step
+            </Button>
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
+  const parentNode = nodes.find((n) => n.id === selection.nodeId);
+  const optionIndex =
+    parentNode?.options.findIndex((o) => o.id === selection.optionId) ?? -1;
+  const currentOption =
+    parentNode && optionIndex >= 0 ? parentNode.options[optionIndex] : null;
+  if (!parentNode || !currentOption) return null;
+
+  return (
+    <OptionDetailPanel
+      node={parentNode}
+      option={currentOption}
+      optionIndex={optionIndex}
+      nodes={nodes}
+      onClose={onClose}
+      updateNode={updateNode}
+    />
+  );
+}
+
 type Props = {
   nodes: EditorNode[];
   entryNodeId: string;
@@ -461,8 +917,8 @@ type Props = {
 };
 
 export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChange }: Props) {
-  const [expandedId, setExpandedId] = useState<string | null>(entryNodeId || nodes[0]?.id || null);
-  const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [zoom, setZoom] = useState(1);
 
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
@@ -481,6 +937,29 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
 
   const orphans = nodes.filter((n) => !reachable.has(n.id));
 
+  function isNodeSelected(nodeId: string) {
+    return selection?.kind === "node" && selection.nodeId === nodeId;
+  }
+
+  function isOptionSelected(nodeId: string, optionId: string) {
+    return (
+      selection?.kind === "option" &&
+      selection.nodeId === nodeId &&
+      selection.optionId === optionId
+    );
+  }
+
+  function clearSelectionIfRemoved(nodeId: string, optionId?: string) {
+    if (!selection) return;
+    if (selection.kind === "node" && selection.nodeId === nodeId) setSelection(null);
+    if (
+      selection.kind === "option" &&
+      (selection.nodeId === nodeId || selection.optionId === optionId)
+    ) {
+      setSelection(null);
+    }
+  }
+
   function updateNode(id: string, patch: Partial<EditorNode>) {
     onChange(nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)));
   }
@@ -496,13 +975,10 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
       }));
     onChange(next);
     if (entryNodeId === id) onEntryChange(next[0]?.id ?? "");
+    clearSelectionIfRemoved(id);
   }
 
-  function addChild(
-    parentId: string,
-    optionId: string,
-    type: EditorNodeType
-  ) {
+  function addChild(parentId: string, optionId: string, type: EditorNodeType) {
     const child = type === "RESOLUTION" ? emptyResolution(nodes.length) : emptyDiagnostic(nodes.length);
     onChange(
       nodes
@@ -518,11 +994,9 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
         )
         .concat(child)
     );
-    setExpandedId(child.id);
-    setEditingOptionId(null);
+    setSelection({ kind: "node", nodeId: child.id });
   }
 
-  /** Insert a diagnostic between this option and its current next step. */
   function insertDiagnosticBetween(parentId: string, optionId: string) {
     const parent = nodes.find((n) => n.id === parentId);
     const option = parent?.options.find((o) => o.id === optionId);
@@ -550,8 +1024,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
         )
         .concat(child)
     );
-    setExpandedId(child.id);
-    setEditingOptionId(null);
+    setSelection({ kind: "node", nodeId: child.id });
   }
 
   function addOptionBranch(nodeId: string) {
@@ -559,8 +1032,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     if (!node) return;
     const option = emptyOption({ match: "label" });
     updateNode(nodeId, { options: [...node.options, option] });
-    setEditingOptionId(option.id);
-    setExpandedId(null);
+    setSelection({ kind: "option", nodeId, optionId: option.id });
   }
 
   function renderNode(
@@ -580,376 +1052,74 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
     const nextSeen = new Set(pathSeen);
     nextSeen.add(nodeId);
     const isDiagnostic = node.type === "DIAGNOSTIC";
-    const expanded = expandedId === node.id;
     const optionCount = node.options.length;
+    const selected = isNodeSelected(node.id);
 
     return (
       <div key={node.id} className="flex w-max flex-col items-center">
-        <div
-          className={`w-80 shrink-0 rounded-lg border bg-white shadow-sm ${
-            isDiagnostic ? "border-sky-200" : "border-emerald-200"
-          }`}
+        <button
+          type="button"
+          className={cn(
+            "w-72 shrink-0 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
+            isDiagnostic ? "border-sky-200" : "border-emerald-200",
+            selected && "ring-2 ring-primary ring-offset-2"
+          )}
+          onClick={() => setSelection({ kind: "node", nodeId: node.id })}
         >
-          <button
-            type="button"
-            className="flex w-full items-start gap-3 p-4 text-left"
-            onClick={() => {
-              setExpandedId(expanded ? null : node.id);
-              setEditingOptionId(null);
-            }}
-          >
+          <span className="flex items-start gap-3">
             <span
-              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+              className={cn(
+                "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
                 isDiagnostic ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
-              }`}
+              )}
             >
               {isDiagnostic ? (
-                <FlaskConical className="h-4 w-4" />
+                <FlaskConical className="h-3.5 w-3.5" />
               ) : (
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5" />
               )}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 {isDiagnostic ? "Diagnostic" : "Resolution"}
               </span>
-              <span className="block font-semibold text-foreground">
+              <span className="block text-sm font-semibold text-foreground">
                 {node.title || (isDiagnostic ? "Untitled test" : "Untitled resolution")}
               </span>
-              {!expanded ? (
-                <span className="mt-1 block truncate text-xs text-muted-foreground">
-                  {node.body || (isDiagnostic ? "No test yet" : "No instructions yet")}
-                  {isDiagnostic && optionCount > 0 ? ` · ${optionCount} option${optionCount === 1 ? "" : "s"}` : ""}
-                </span>
-              ) : null}
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {node.body || (isDiagnostic ? "No test yet" : "No instructions yet")}
+                {isDiagnostic && optionCount > 0
+                  ? ` · ${optionCount} option${optionCount === 1 ? "" : "s"}`
+                  : ""}
+              </span>
             </span>
-          </button>
-
-          {expanded ? (
-            <div className="space-y-3 border-t border-border px-4 pb-4 pt-3">
-              <label className="block text-sm">
-                Title
-                <Input
-                  className="mt-1"
-                  value={node.title}
-                  onChange={(e) => updateNode(node.id, { title: e.target.value })}
-                />
-              </label>
-              <label className="block text-sm">
-                {isDiagnostic ? "Test (what to do or ask)" : "Resolution instructions"}
-                <textarea
-                  className="mt-1 min-h-[80px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                  value={node.body}
-                  onChange={(e) => updateNode(node.id, { body: e.target.value })}
-                  placeholder={
-                    isDiagnostic
-                      ? "e.g. Measure ohms across the solenoid leads"
-                      : "e.g. Replace the solenoid and retest the zone"
-                  }
-                />
-              </label>
-              {isDiagnostic ? (
-                <label className="block text-sm">
-                  Tips (optional guidance if unclear)
-                  <textarea
-                    className="mt-1 min-h-[60px] w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    value={node.tips}
-                    onChange={(e) => updateNode(node.id, { tips: e.target.value })}
-                    placeholder="e.g. Probe both wires with the meter on resistance mode"
-                  />
-                </label>
-              ) : null}
-
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  onClick={() => removeNode(node.id)}
-                >
-                  Delete step
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          </span>
+        </button>
 
         {isDiagnostic ? (
           <div className="flex w-max flex-col items-center">
             <YSplit count={optionCount + 1} />
             <div className="flex items-start justify-center gap-12">
-              {node.options.map((option, oi) => {
-                const editing = editingOptionId === option.id;
+              {node.options.map((option) => {
+                const optionSelected = isOptionSelected(node.id, option.id);
                 return (
-                  <div
-                    key={option.id}
-                    className="flex w-max min-w-80 flex-col items-center"
-                  >
+                  <div key={option.id} className="flex w-max min-w-72 flex-col items-center">
                     <button
                       type="button"
                       className={cn(
                         "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
-                        editing
-                          ? "border-sky-400 bg-sky-50 text-sky-900"
+                        optionSelected
+                          ? "border-sky-400 bg-sky-50 text-sky-900 ring-2 ring-sky-300 ring-offset-1"
                           : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
                       )}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingOptionId(editing ? null : option.id);
-                        setExpandedId(null);
+                        setSelection({ kind: "option", nodeId: node.id, optionId: option.id });
                       }}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
                       {optionBranchLabel(option)}
                     </button>
-                    {editing ? (
-                      <div
-                        className="mt-2 w-[min(100%,20rem)] space-y-2 rounded-lg border border-sky-200 bg-white p-3 text-left shadow-sm"
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-start gap-2">
-                          <Input
-                            className="flex-1"
-                            placeholder="Option label (shown to AI)"
-                            value={option.label}
-                            onChange={(e) => {
-                              const options = [...node.options];
-                              options[oi] = { ...option, label: e.target.value };
-                              updateNode(node.id, { options });
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            aria-label="Delete option"
-                            onClick={() => {
-                              updateNode(node.id, {
-                                options: node.options.filter((o) => o.id !== option.id),
-                              });
-                              setEditingOptionId(null);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <label className="text-xs">
-                            Match type
-                            <MatchTypeSelect
-                              value={option.match}
-                              onChange={(match) => {
-                                const options = [...node.options];
-                                options[oi] = { ...option, match };
-                                updateNode(node.id, { options });
-                              }}
-                            />
-                          </label>
-                          {matchNeedsValue(option.match) ? (
-                            <label className="text-xs">
-                              Value
-                              <Input
-                                className="mt-1"
-                                value={option.value}
-                                onChange={(e) => {
-                                  const options = [...node.options];
-                                  options[oi] = { ...option, value: e.target.value };
-                                  updateNode(node.id, { options });
-                                }}
-                              />
-                            </label>
-                          ) : null}
-                          {matchNeedsRange(option.match) ? (
-                            <>
-                              <label className="text-xs">
-                                Min
-                                <Input
-                                  className="mt-1"
-                                  value={option.min}
-                                  onChange={(e) => {
-                                    const options = [...node.options];
-                                    options[oi] = { ...option, min: e.target.value };
-                                    updateNode(node.id, { options });
-                                  }}
-                                />
-                              </label>
-                              <label className="text-xs">
-                                Max
-                                <Input
-                                  className="mt-1"
-                                  value={option.max}
-                                  onChange={(e) => {
-                                    const options = [...node.options];
-                                    options[oi] = { ...option, max: e.target.value };
-                                    updateNode(node.id, { options });
-                                  }}
-                                />
-                              </label>
-                            </>
-                          ) : null}
-                        </div>
-                        <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-muted-foreground">
-                              Also match if (OR)
-                            </p>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const options = [...node.options];
-                                options[oi] = {
-                                  ...option,
-                                  anyOf: [...option.anyOf, emptyCondition()],
-                                };
-                                updateNode(node.id, { options });
-                              }}
-                            >
-                              <Plus className="mr-1 h-3 w-3" />
-                              OR
-                            </Button>
-                          </div>
-                          {option.anyOf.length === 0 ? (
-                            <p className="text-[11px] text-muted-foreground">
-                              Optional. Add another condition so this branch is taken if either
-                              match is true.
-                            </p>
-                          ) : null}
-                          {option.anyOf.map((alt, ai) => (
-                            <div
-                              key={alt.id}
-                              className="space-y-2 rounded-md border border-border bg-background p-2"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                  OR condition {ai + 1}
-                                </span>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    const options = [...node.options];
-                                    options[oi] = {
-                                      ...option,
-                                      anyOf: option.anyOf.filter((row) => row.id !== alt.id),
-                                    };
-                                    updateNode(node.id, { options });
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <label className="text-xs">
-                                  Match type
-                                  <MatchTypeSelect
-                                    value={alt.match}
-                                    onChange={(match) => {
-                                      const options = [...node.options];
-                                      const anyOf = [...option.anyOf];
-                                      anyOf[ai] = { ...alt, match };
-                                      options[oi] = { ...option, anyOf };
-                                      updateNode(node.id, { options });
-                                    }}
-                                  />
-                                </label>
-                                {alt.match === "label" ? (
-                                  <label className="text-xs">
-                                    Phrase to match
-                                    <Input
-                                      className="mt-1"
-                                      value={alt.label}
-                                      placeholder="e.g. open circuit"
-                                      onChange={(e) => {
-                                        const options = [...node.options];
-                                        const anyOf = [...option.anyOf];
-                                        anyOf[ai] = { ...alt, label: e.target.value };
-                                        options[oi] = { ...option, anyOf };
-                                        updateNode(node.id, { options });
-                                      }}
-                                    />
-                                  </label>
-                                ) : null}
-                                {matchNeedsValue(alt.match) ? (
-                                  <label className="text-xs">
-                                    Value
-                                    <Input
-                                      className="mt-1"
-                                      value={alt.value}
-                                      onChange={(e) => {
-                                        const options = [...node.options];
-                                        const anyOf = [...option.anyOf];
-                                        anyOf[ai] = { ...alt, value: e.target.value };
-                                        options[oi] = { ...option, anyOf };
-                                        updateNode(node.id, { options });
-                                      }}
-                                    />
-                                  </label>
-                                ) : null}
-                                {matchNeedsRange(alt.match) ? (
-                                  <>
-                                    <label className="text-xs">
-                                      Min
-                                      <Input
-                                        className="mt-1"
-                                        value={alt.min}
-                                        onChange={(e) => {
-                                          const options = [...node.options];
-                                          const anyOf = [...option.anyOf];
-                                          anyOf[ai] = { ...alt, min: e.target.value };
-                                          options[oi] = { ...option, anyOf };
-                                          updateNode(node.id, { options });
-                                        }}
-                                      />
-                                    </label>
-                                    <label className="text-xs">
-                                      Max
-                                      <Input
-                                        className="mt-1"
-                                        value={alt.max}
-                                        onChange={(e) => {
-                                          const options = [...node.options];
-                                          const anyOf = [...option.anyOf];
-                                          anyOf[ai] = { ...alt, max: e.target.value };
-                                          options[oi] = { ...option, anyOf };
-                                          updateNode(node.id, { options });
-                                        }}
-                                      />
-                                    </label>
-                                  </>
-                                ) : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <label className="block text-xs">
-                          Goes to
-                          <select
-                            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                            value={option.nextNodeId}
-                            onChange={(e) => {
-                              const options = [...node.options];
-                              options[oi] = { ...option, nextNodeId: e.target.value };
-                              updateNode(node.id, { options });
-                            }}
-                          >
-                            <option value="">Select step…</option>
-                            {nodes
-                              .filter((n) => n.id !== node.id)
-                              .map((n) => (
-                                <option key={n.id} value={n.id}>
-                                  {n.type === "RESOLUTION" ? "Resolution: " : "Diagnostic: "}
-                                  {n.title || n.id.slice(0, 6)}
-                                </option>
-                              ))}
-                          </select>
-                        </label>
-                      </div>
-                    ) : null}
                     {option.nextNodeId && byId.has(option.nextNodeId) ? (
                       <>
                         <InsertDiagnosticButton
@@ -966,7 +1136,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                   </div>
                 );
               })}
-              <div className="flex w-max min-w-80 flex-col items-center">
+              <div className="flex w-max min-w-72 flex-col items-center">
                 <button
                   type="button"
                   className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
@@ -989,15 +1159,11 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
   const startId = entryNodeId || nodes[0]?.id;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <p className="shrink-0 text-xs text-muted-foreground">
-        Click a diagnostic to edit the test. Click an option chip to edit that branch, or use + Add
-        Option. Drag empty space to pan.
-      </p>
-      <div className="min-h-0 flex-1">
-        <PanCanvas>
+    <div className="flex h-full min-h-0">
+      <div className="relative min-h-0 min-w-0 flex-1">
+        <PanCanvas zoom={zoom} onZoomChange={setZoom}>
           <div className="flex flex-col items-center">
-            <div className="w-full max-w-sm rounded-lg border border-border bg-muted/40 p-4 text-center">
+            <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
               <p className="text-sm font-semibold">Issue start</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Storm AI begins at the first diagnostic below.
@@ -1036,7 +1202,7 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
                       const node = emptyDiagnostic(0);
                       onChange([node]);
                       onEntryChange(node.id);
-                      setExpandedId(node.id);
+                      setSelection({ kind: "node", nodeId: node.id });
                     }}
                   >
                     Add first diagnostic
@@ -1058,7 +1224,20 @@ export function TechAssistFlowEditor({ nodes, entryNodeId, onChange, onEntryChan
             ) : null}
           </div>
         </PanCanvas>
+        <ZoomControls zoom={zoom} onZoomChange={setZoom} />
       </div>
+
+      {selection ? (
+        <DetailPanel
+          selection={selection}
+          nodes={nodes}
+          entryNodeId={entryNodeId}
+          onClose={() => setSelection(null)}
+          updateNode={updateNode}
+          removeNode={removeNode}
+          onEntryChange={onEntryChange}
+        />
+      ) : null}
     </div>
   );
 }

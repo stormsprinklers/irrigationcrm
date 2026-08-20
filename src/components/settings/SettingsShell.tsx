@@ -19,6 +19,14 @@ import {
 } from "@/lib/settings/access";
 import { isFieldRole } from "@/lib/employees";
 import { settingsRootSections } from "@/lib/settings/nav";
+import { cn } from "@/lib/utils";
+
+function isTechAssistIssueEditor(pathname: string) {
+  return (
+    pathname.startsWith("/settings/storm-ai/technician-assistant/") &&
+    !pathname.startsWith("/settings/storm-ai/technician-assistant/parts")
+  );
+}
 
 function filterFeatureNavItems(
   items: NavItem[],
@@ -63,6 +71,7 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
   const { enabled: holidayEnabled } = useHolidayLightingFeatures();
   const user = session?.user ?? null;
   const canWrite = canWriteSettingsPath(pathname, user);
+  const flowEditor = isTechAssistIssueEditor(pathname);
   const rootSections = useMemo(
     () =>
       filterSettingsNavForUser(
@@ -122,7 +131,12 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
           <h2 className="truncate font-display text-base font-bold text-foreground">Settings</h2>
         </div>
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1",
+            flowEditor ? "overflow-hidden" : "overflow-y-auto"
+          )}
+        >
           {canWrite ? (
             children
           ) : (

@@ -81,46 +81,50 @@ export default function TechAssistIssueEditorPage() {
   }
 
   return (
-    <ContentArea className="flex h-[calc(100dvh-9.5rem)] max-w-none flex-col gap-3 overflow-hidden pb-2">
-      <div className="shrink-0 space-y-2 border-b border-border pb-3">
-        <div className="flex flex-wrap items-start gap-3">
-          <label className="min-w-[12rem] flex-1 text-xs font-medium text-muted-foreground">
-            Title
-            <Input
-              className="mt-1 h-9 text-base font-semibold"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Zone valve not opening"
-            />
-          </label>
-          <div className="flex items-center gap-3 pt-5">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Active</span>
-              <Switch checked={active} onCheckedChange={setActive} />
-            </label>
-            <Button onClick={() => void save()} disabled={saving} size="sm">
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </div>
-        </div>
-        <label className="block text-xs font-medium text-muted-foreground">
-          Description
-          <textarea
-            className="mt-1 min-h-[2.75rem] max-h-24 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="When Storm AI should pick this issue…"
-            rows={2}
-          />
-        </label>
+    <ContentArea className="relative h-full max-w-none overflow-hidden !p-0">
+      <div className="absolute inset-0">
+        <TechAssistFlowEditor
+          nodes={nodes}
+          entryNodeId={entryNodeId}
+          onChange={setNodes}
+          onEntryChange={setEntryNodeId}
+        />
       </div>
 
-      <TechAssistFlowEditor
-        nodes={nodes}
-        entryNodeId={entryNodeId}
-        onChange={setNodes}
-        onEntryChange={setEntryNodeId}
-      />
+      <div className="pointer-events-none absolute left-4 right-4 top-3 z-20 max-w-xl lg:right-auto">
+        <div className="pointer-events-auto rounded-lg border border-border/80 bg-white/95 p-3 shadow-md backdrop-blur-sm">
+          <div className="flex flex-wrap items-start gap-3">
+            <label className="min-w-[10rem] flex-1 text-xs font-medium text-muted-foreground">
+              Title
+              <Input
+                className="mt-1 h-8 text-sm font-semibold"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Zone valve not opening"
+              />
+            </label>
+            <div className="flex items-center gap-3 pt-5">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Active</span>
+                <Switch checked={active} onCheckedChange={setActive} />
+              </label>
+              <Button onClick={() => void save()} disabled={saving} size="sm">
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+          <label className="mt-2 block text-xs font-medium text-muted-foreground">
+            Description
+            <textarea
+              className="mt-1 max-h-16 min-h-[2.25rem] w-full resize-y rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="When Storm AI should pick this issue…"
+              rows={1}
+            />
+          </label>
+        </div>
+      </div>
     </ContentArea>
   );
 }
