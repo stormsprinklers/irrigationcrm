@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { POLICY_CATEGORIES } from "@/lib/storm-ai/policies-shared";
+import { cn } from "@/lib/utils";
 
 type Policy = {
   id: string;
@@ -18,6 +20,12 @@ type Policy = {
   sortOrder: number;
 };
 
+const UNCATEGORIZED = "Uncategorized";
+
+function categoryLabel(category: string | null) {
+  return category?.trim() || UNCATEGORIZED;
+}
+
 export default function StormAiPoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -25,6 +33,46 @@ export default function StormAiPoliciesPage() {
   const [newTitle, setNewTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  const groups = useMemo(() => {
+    const known = new Set<string>(POLICY_CATEGORIES);
+    const byCategory = new Map<string, Policy[]>();
+
+    for (const category of POLICY_CATEGORIES) {
+      byCategory.set(category, []);
+    }
+    byCategory.set(UNCATEGORIZED, []);
+
+    for (const policy of policies) {
+      const label = categoryLabel(policy.category);
+      if (!byCategory.has(label)) byCategory.set(label, []);
+      byCategory.get(label)!.push(policy);
+    }
+
+    for (const rows of byCategory.values()) {
+      rows.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+    }
+
+    const ordered: Array<{ label: string; policies: Policy[] }> = [];
+    for (const category of POLICY_CATEGORIES) {
+      ordered.push({ label: category, policies: byCategory.get(category) ?? [] });
+    }
+
+    const extras = [...byCategory.keys()]
+      .filter((label) => label !== UNCATEGORIZED && !known.has(label))
+      .sort((a, b) => a.localeCompare(b));
+    for (const label of extras) {
+      ordered.push({ label, policies: byCategory.get(label) ?? [] });
+    }
+
+    const uncategorized = byCategory.get(UNCATEGORIZED) ?? [];
+    if (uncategorized.length > 0) {
+      ordered.push({ label: UNCATEGORIZED, policies: uncategorized });
+    }
+
+    return ordered;
+  }, [policies]);
 
   async function load() {
     const res = await fetch("/api/settings/storm-ai/policies");
@@ -58,6 +106,18 @@ export default function StormAiPoliciesPage() {
     });
   }, [policies, selectedId]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    const selected = policies.find((row) => row.id === selectedId);
+    if (!selected) return;
+    const label = categoryLabel(selected.category);
+    setOpenGroups((prev) => (prev[label] ? prev : { ...prev, [label]: true }));
+  }, [policies, selectedId]);
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+  }
+
   async function createPolicy() {
     const title = newTitle.trim();
     if (!title) return;
@@ -72,6 +132,7 @@ export default function StormAiPoliciesPage() {
       setNewTitle("");
       await load();
       setSelectedId(created.id);
+      setOpenGroups((prev) => ({ ...prev, [UNCATEGORIZED]: true }));
     } catch {
       toast.error("Could not add policy");
     }
@@ -94,6 +155,9 @@ export default function StormAiPoliciesPage() {
       if (!res.ok) throw new Error("save");
       toast.success("Saved");
       await load();
+      if (draft.category) {
+        setOpenGroups((prev) => ({ ...prev, [draft.category!]: true }));
+      }
     } catch {
       toast.error("Could not save policy");
     } finally {
@@ -113,12 +177,16 @@ export default function StormAiPoliciesPage() {
     await load();
   }
 
-  async function move(id: string, direction: -1 | 1) {
-    const index = policies.findIndex((row) => row.id === id);
-    const swap = policies[index + direction];
+  async function moveWithinGroup(id: string, direction: -1 | 1) {
+    const policy = policies.find((row) => row.id === id);
+    if (!policy) return;
+    const label = categoryLabel(policy.category);
+    const group = groups.find((row) => row.label === label)?.policies ?? [];
+    const index = group.findIndex((row) => row.id === id);
+    const swap = group[index + direction];
     if (index < 0 || !swap) return;
     await Promise.all([
-      fetch(`/api/settings/storm-ai/policies/${policies[index]!.id}`, {
+      fetch(`/api/settings/storm-ai/policies/${policy.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sortOrder: swap.sortOrder }),
@@ -126,7 +194,7 @@ export default function StormAiPoliciesPage() {
       fetch(`/api/settings/storm-ai/policies/${swap.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sortOrder: policies[index]!.sortOrder }),
+        body: JSON.stringify({ sortOrder: policy.sortOrder }),
       }),
     ]);
     await load();
@@ -157,58 +225,101 @@ export default function StormAiPoliciesPage() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
-          <ul className="divide-y rounded-lg border border-border bg-card">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+          <div className="space-y-2">
             {policies.length === 0 ? (
-              <li className="p-4 text-sm text-muted-foreground">No policies yet.</li>
+              <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+                No policies yet.
+              </p>
             ) : (
-              policies.map((policy, index) => (
-                <li key={policy.id}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(policy.id)}
-                    className={`flex w-full items-start justify-between gap-2 px-3 py-3 text-left text-sm ${
-                      policy.id === selectedId ? "bg-muted/60" : "hover:bg-muted/40"
-                    }`}
+              groups.map((group) => {
+                const open = Boolean(openGroups[group.label]);
+                return (
+                  <div
+                    key={group.label}
+                    className="overflow-hidden rounded-lg border border-border bg-card"
                   >
-                    <span className="min-w-0">
-                      <span className="block font-medium">{policy.title}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {policy.category || "Uncategorized"}
-                        {policy.active ? "" : " · inactive"}
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium hover:bg-muted/40"
+                      aria-expanded={open}
+                      onClick={() => toggleGroup(group.label)}
+                    >
+                      <span className="min-w-0 truncate">{group.label}</span>
+                      <span className="flex shrink-0 items-center gap-2 text-xs font-normal text-muted-foreground">
+                        {group.policies.length}
+                        <ChevronDown
+                          className={cn(
+                            "h-4 w-4 transition-transform",
+                            open && "rotate-180"
+                          )}
+                        />
                       </span>
-                    </span>
-                    <span className="flex shrink-0 gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={index === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void move(policy.id, -1);
-                        }}
-                      >
-                        Up
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={index === policies.length - 1}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void move(policy.id, 1);
-                        }}
-                      >
-                        Down
-                      </Button>
-                    </span>
-                  </button>
-                </li>
-              ))
+                    </button>
+                    {open ? (
+                      group.policies.length === 0 ? (
+                        <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                          No policies in this category yet.
+                        </p>
+                      ) : (
+                        <ul className="divide-y border-t border-border">
+                          {group.policies.map((policy, index) => (
+                            <li key={policy.id}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedId(policy.id)}
+                                className={cn(
+                                  "flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left text-sm",
+                                  policy.id === selectedId
+                                    ? "bg-muted/60"
+                                    : "hover:bg-muted/40"
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block font-medium">{policy.title}</span>
+                                  {!policy.active ? (
+                                    <span className="block text-xs text-muted-foreground">
+                                      inactive
+                                    </span>
+                                  ) : null}
+                                </span>
+                                <span className="flex shrink-0 gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={index === 0}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void moveWithinGroup(policy.id, -1);
+                                    }}
+                                  >
+                                    Up
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={index === group.policies.length - 1}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void moveWithinGroup(policy.id, 1);
+                                    }}
+                                  >
+                                    Down
+                                  </Button>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )
+                    ) : null}
+                  </div>
+                );
+              })
             )}
-          </ul>
+          </div>
 
           {draft ? (
             <section className="space-y-4 rounded-lg border border-border bg-card p-4">
@@ -228,7 +339,6 @@ export default function StormAiPoliciesPage() {
                   onChange={(e) => setDraft({ ...draft, category: e.target.value || null })}
                 >
                   <option value="">Uncategorized</option>
-                  {/* Keep any legacy category still stored on this policy so editing does not clear it. */}
                   {draft.category &&
                   !(POLICY_CATEGORIES as readonly string[]).includes(draft.category) ? (
                     <option value={draft.category}>{draft.category} (current)</option>
