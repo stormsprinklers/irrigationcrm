@@ -413,17 +413,7 @@ export default function VoiceNumbersPage() {
 
   const sessionCompanyId = session?.user?.companyId ?? "";
   const showCompanyColumn = companies.length > 1;
-  const sortedNumbers = useMemo(() => {
-    if (!showCompanyColumn) return numbers;
-    return [...numbers].sort((a, b) => {
-      const an = a.company?.name ?? a.companyId;
-      const bn = b.company?.name ?? b.companyId;
-      const byCo = an.localeCompare(bn);
-      if (byCo !== 0) return byCo;
-      if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
-      return a.e164.localeCompare(b.e164);
-    });
-  }, [numbers, showCompanyColumn]);
+  const sortedNumbers = numbers;
 
   async function updateNumber(id: string, patch: Partial<PhoneNumberRow> & { companyId?: string }) {
     const res = await fetch(`/api/settings/voice/numbers/${id}`, {
@@ -436,7 +426,9 @@ export default function VoiceNumbersPage() {
       toast.error(typeof data.error === "string" ? data.error : "Update failed");
       return;
     }
-    if (patch.companyId) {
+    if (patch.companyId && patch.companyId !== sessionCompanyId) {
+      toast.success("Moved to the other company — switch accounts to manage it there");
+    } else if (patch.companyId) {
       toast.success("Company updated");
     }
     load();
@@ -991,7 +983,7 @@ export default function VoiceNumbersPage() {
                 capability — for US delivery the number must also be on your A2P Messaging Service
                 (see the A2P campaign tab).
                 {showCompanyColumn
-                  ? " Numbers from every business you operate are listed here so you can move them between companies."
+                  ? " Use the Company column to move a number to another business you operate; it will leave this list and appear under that company."
                   : ""}
               </p>
             </div>

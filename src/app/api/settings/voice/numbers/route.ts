@@ -33,9 +33,9 @@ async function companyIdsForNumbersList(user: {
 export async function GET() {
   try {
     const user = await requireSessionUser();
-    const companyIds = await companyIdsForNumbersList(user);
+    // List numbers for the active company only so each business menu shows its own lines.
     let numbers = await prisma.phoneNumber.findMany({
-      where: { companyId: { in: companyIds } },
+      where: { companyId: user.companyId },
       include: numberInclude,
       orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
     });
@@ -57,15 +57,17 @@ export async function GET() {
             })
         );
         numbers = await prisma.phoneNumber.findMany({
-          where: { companyId: { in: companyIds } },
+          where: { companyId: user.companyId },
           include: numberInclude,
           orderBy: [{ isPrimary: "desc" }, { e164: "asc" }],
         });
       }
     }
 
+    // Operated businesses (for the Company reassignment dropdown), not for the list itself.
+    const operatedIds = await companyIdsForNumbersList(user);
     const companies = await prisma.company.findMany({
-      where: { id: { in: companyIds } },
+      where: { id: { in: operatedIds } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });

@@ -60,6 +60,34 @@ function reviewerFirstName(fullName: string): string {
   return trimmed.split(/\s+/)[0] ?? trimmed;
 }
 
+/** Rotate opening style so replies do not all start the same AI-sounding way. */
+const OPENING_STYLES = [
+  "Start by thanking them by name for the review, then jump into a specific detail they mentioned.",
+  "Open with a short reaction to a concrete detail from the review (tech name, yard area, timing), then thank them.",
+  "Lead with appreciation for trusting the company, then reference one specific point from their review.",
+  "Start with their first name and a direct line about the work (e.g. glad the zone is fixed / system is running), then thank them for posting.",
+  "Open by naming the technician or service they mentioned if present; otherwise open with a brief thanks and what went well.",
+  "Begin with a casual one-sentence thanks using their name, then add one personal detail from the review.",
+] as const;
+
+const BANNED_OPENERS =
+  /^(it'?s\s+)?(so\s+)?(great|good|wonderful|awesome|nice|amazing|lovely)\s+to\s+hear\b/i;
+
+function pickOpeningStyle() {
+  return OPENING_STYLES[Math.floor(Math.random() * OPENING_STYLES.length)]!;
+}
+
+function stripBannedOpener(text: string): string {
+  const trimmed = text.trim();
+  // Drop a leading stock opener sentence if the model ignores the ban list.
+  const sentences = trimmed.split(/(?<=[.!?])\s+/);
+  if (sentences.length < 2) return trimmed;
+  if (BANNED_OPENERS.test(sentences[0] ?? "")) {
+    return sentences.slice(1).join(" ").trim() || trimmed;
+  }
+  return trimmed;
+}
+
 export async function generateGbpReviewReplyDraft(params: {
   companyName: string;
   locationTitle: string | null;
@@ -72,6 +100,7 @@ export async function generateGbpReviewReplyDraft(params: {
   const firstName = reviewerFirstName(params.reviewerName);
   const isPositive = params.starRating >= 4;
   const mentionWinterization = isPositive && Math.random() < 0.5;
+  const openingStyle = pickOpeningStyle();
 
   const winterizationRule = mentionWinterization
     ? `- Include one brief, natural sentence reminding them they can reach out to schedule sprinkler winterization before cold weather sets in. Work it in conversationally — not as a hard sell.`
@@ -80,14 +109,20 @@ export async function generateGbpReviewReplyDraft(params: {
   const system = `You write public replies to Google Business Profile reviews for a local irrigation and sprinkler company.
 Return ONLY valid JSON: { "text": "..." }
 
-Voice: sound like a real person at a local business — friendly, direct, and human. Not corporate or scripted.
+Voice: sound like a real owner or office manager typing a quick reply — friendly, specific, and human. Not corporate, not scripted, not "AI customer service."
+
+Opening (critical):
+- ${openingStyle}
+- Never open with generic emotion filler. Especially never start with: "It's great to hear", "Great to hear", "So glad to hear", "Happy to hear", "Wonderful to hear", "Awesome to hear", or any "___ to hear that..." opener.
+- Do not start two replies the same way across generations; invent a fresh opening each time.
 
 Rules:
 - 2-4 sentences. Keep it concise.
-- Address the reviewer by first name (${firstName}) naturally — vary how you open (do not start every reply the same way).
+- Use first name (${firstName}) somewhere naturally — not always as the first two words.
 - If the review mentions something specific (a technician, service, timing, part of their yard, communication, price), echo that detail so the reply feels written for them.
+- Star-only reviews (no comment): keep it short and warm without inventing details.
 - Vary wording every time. Never reuse stock phrases.
-- Banned words and phrases (never use): thrilled, delighted, over the moon, couldn't be happier, means the world, it was our pleasure, thank you for taking the time, we appreciate your kind words, so glad, happy to hear.
+- Banned words and phrases (never use): thrilled, delighted, over the moon, couldn't be happier, means the world, it was our pleasure, thank you for taking the time, we appreciate your kind words, so glad, happy to hear, great to hear, glad to hear, wonderful to hear, awesome to hear, it's great to hear, so glad to hear.
 - No emojis, hashtags, markdown, or placeholders like [Name].
 - Do not mention AI or automated drafting.
 - For ratings below 4: acknowledge the concern without being defensive; invite them to call or email so you can follow up. Do not upsell or mention seasonal services.
@@ -116,7 +151,7 @@ ${params.reviewComment?.trim() || "(No written comment — star rating only)"}`;
         { role: "user", content: user },
       ],
       max_tokens: 350,
-      temperature: 0.78,
+      temperature: 0.9,
     }),
   });
 
@@ -135,5 +170,5 @@ ${params.reviewComment?.trim() || "(No written comment — star rating only)"}`;
   const text = parsed.text?.trim();
   if (!text) throw new Error("AI did not return reply text");
 
-  return { text };
+  return { text: stripBannedOpener(text) };
 }
