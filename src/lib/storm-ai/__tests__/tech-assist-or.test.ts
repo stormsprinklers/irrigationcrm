@@ -260,3 +260,32 @@ test("applyKnownFactsAlongPath stops when facts do not answer the current step",
   assert.equal(sought.stepsApplied, 0);
   assert.equal(sought.node?.id, "d1");
 });
+
+test("manual solenoid open answer prefers Yes over bleed-screw/solenoid option", () => {
+  const reply =
+    "Yes, manually it’s working fine if I open from solenoid";
+  const options: TechAssistOption[] = [
+    {
+      id: "yes",
+      label: "Yes, it opens manually.",
+      match: "yes",
+      nextNodeId: "next-yes",
+    },
+    {
+      id: "no",
+      label: "No, it does not open manually.",
+      match: "no",
+      nextNodeId: "next-no",
+    },
+    {
+      id: "bleed",
+      label: "It opens from the bleed screw, but not from the solenoid.",
+      match: "label",
+      nextNodeId: "next-bleed",
+    },
+  ];
+  const resolved = resolveNextFromDiagnostic({ options }, reply);
+  assert.equal(resolved.matched, true);
+  assert.equal(resolved.nextNodeId, "next-yes");
+  assert.equal(resolved.matchedOptionId, "yes");
+});

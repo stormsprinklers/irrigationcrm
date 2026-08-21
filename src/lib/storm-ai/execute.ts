@@ -730,7 +730,7 @@ export async function runStormAiTool(
   } catch (err) {
     return fail(
       "UNAVAILABLE",
-      err instanceof Error ? err.message : "I wasn’t able to retrieve that report."
+      err instanceof Error ? err.message : "I wasn’t able to get that information right now."
     );
   }
 }
