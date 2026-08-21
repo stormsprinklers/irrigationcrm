@@ -60,6 +60,23 @@ type SessionResponse = {
   clientSecret: string;
   model?: string;
   error?: string;
+  activeTechAssist?: {
+    active: true;
+    sessionId: string;
+    issueId: string;
+    issueName: string;
+    step: {
+      type: string;
+      title?: string;
+      test?: string;
+      instructions?: string;
+      tips?: string | null;
+      options?: Array<{ id: string; label: string }> | null;
+      choices?: string[] | null;
+      done?: boolean;
+    };
+    note?: string;
+  } | null;
 };
 
 const FRAME_MIN_INTERVAL_MS = 1500;
@@ -264,6 +281,10 @@ export class StormAiRealtimeClient {
         .catch((err) => {
           console.error("[storm-ai realtime] event handler error", err);
         });
+    });
+    const activeTechAssist = session.activeTechAssist ?? null;
+    this.dc.addEventListener("open", () => {
+      this.seedActiveTechAssist(activeTechAssist);
     });
     this.dc.addEventListener("close", () => {
       if (this.closed) return;
@@ -677,6 +698,47 @@ export class StormAiRealtimeClient {
     } catch (err) {
       console.error("[storm-ai realtime] send failed", err);
       return false;
+    }
+  }
+
+  /** After reconnect, remind the model of the in-progress diagnostic so it does not freestyle. */
+  private seedActiveTechAssist(
+    active: SessionResponse["activeTechAssist"] | null | undefined
+  ) {
+    if (!active?.active || !active.sessionId) return;
+    const step = active.step;
+    const options =
+      Array.isArray(step.options) && step.options.length
+        ? step.options.map((o) => o.label).join(" | ")
+        : Array.isArray(step.choices) && step.choices.length
+          ? step.choices.join(" | ")
+          : null;
+    const lines = [
+      "[System: voice reconnected with an active technician assist session. Resume this step only — do not invent other tests.]",
+      `sessionId: ${active.sessionId}`,
+      `issue: ${active.issueName}`,
+      `step: ${step.title ?? ""} (${step.type})`,
+    ];
+    if (step.type === "DIAGNOSTIC") {
+      lines.push(`test: ${step.test || step.instructions || ""}`);
+      if (step.tips) lines.push(`tips: ${step.tips}`);
+      if (options) lines.push(`options: ${options}`);
+    } else if (step.instructions) {
+      lines.push(`instructions: ${step.instructions}`);
+    }
+    lines.push(
+      "When the technician answers, call continue_tech_assist with this sessionId. Do not restart at step 1."
+    );
+    const sent = this.sendEvent({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: lines.join("\n") }],
+      },
+    });
+    if (sent) {
+      this.activity(`Resumed tech assist: ${active.issueName}`, "ok");
     }
   }
 

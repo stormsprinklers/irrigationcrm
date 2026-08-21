@@ -33,6 +33,7 @@ import { getInboundCallCoachingReport } from "./call-coaching";
 import { canUseStormAiTool, canUseTechAssist } from "./permissions";
 import {
   continueTechAssistSession,
+  getActiveTechAssistSession,
   matchTechIssues,
   startTechAssistSession,
 } from "./tech-assist";
@@ -598,14 +599,29 @@ export async function runStormAiTool(
           note:
             issues.length === 0
               ? "No matching technician workflow. Do not invent a procedure."
-              : "Pick the best issueId and call start_tech_assist. Do not invent steps.",
+              : "Pick the best issueId and call start_tech_assist. If the technician already stated findings, pass them as knownFacts. Do not invent steps.",
         });
+      }
+      case "get_active_tech_assist": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const conversationId = ctx?.conversationId;
+        if (!conversationId) return fail("INVALID", "Conversation is required");
+        const active = await getActiveTechAssistSession({
+          companyId: user.companyId,
+          userId: user.id,
+          conversationId,
+        });
+        return ok(active);
       }
       case "start_tech_assist": {
         if (!canUseTechAssist(user.role)) {
           return fail("FORBIDDEN", "Your role cannot access that.");
         }
         const issueId = typeof args.issueId === "string" ? args.issueId : "";
+        const knownFacts =
+          typeof args.knownFacts === "string" ? args.knownFacts : undefined;
         const conversationId = ctx?.conversationId;
         if (!issueId) return fail("INVALID", "issueId is required");
         if (!conversationId) return fail("INVALID", "Conversation is required");
@@ -614,6 +630,7 @@ export async function runStormAiTool(
           userId: user.id,
           conversationId,
           issueId,
+          knownFacts,
         });
         if (!started.ok) return fail("NOT_FOUND", started.error);
         return ok(started);

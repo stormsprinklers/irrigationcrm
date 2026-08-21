@@ -2,11 +2,15 @@ import { createHash } from "crypto";
 import type { SessionUser } from "@/lib/api-auth";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { buildStormAiSystemPrompt } from "./prompt";
-import { stormAiToolsForRole } from "./permissions";
+import { canUseTechAssist, stormAiToolsForRole } from "./permissions";
 import {
   STORM_AI_INPUT_NOISE_REDUCTION,
   stormAiServerVad,
 } from "./realtime-vad";
+import {
+  formatActiveTechAssistForPrompt,
+  getActiveTechAssistSession,
+} from "./tech-assist";
 import type { StormAiPageContext } from "./types";
 
 export type StormAiRealtimeTool = {
@@ -42,6 +46,7 @@ export async function buildStormAiRealtimeInstructions(opts: {
   timezone: string;
   pageContext?: StormAiPageContext | null;
   videoMode?: boolean;
+  conversationId?: string | null;
 }) {
   const base = await buildStormAiSystemPrompt({
     user: opts.user,
@@ -59,6 +64,23 @@ When sharing a manual from get_parts_info, tell the tech the photos are already 
 Ground answers in the latest frame plus tool results. Never invent part numbers or manuals.`
     : "";
 
+  let activeAssistBlock = "";
+  if (opts.conversationId && canUseTechAssist(opts.user.role)) {
+    try {
+      const active = await getActiveTechAssistSession({
+        companyId: opts.user.companyId,
+        userId: opts.user.id,
+        conversationId: opts.conversationId,
+      });
+      const formatted = formatActiveTechAssistForPrompt(active);
+      if (formatted) {
+        activeAssistBlock = `\n\n${formatted}`;
+      }
+    } catch {
+      /* ignore — session mint should still succeed */
+    }
+  }
+
   return `${base}
 
 You are speaking aloud to a field technician over a live voice connection.
@@ -66,10 +88,11 @@ Keep answers short and conversational—one or two sentences when possible, then
 If you hear your own previous answer, ignore it and wait for the technician. Never repeat or mimic yourself.
 Never invent CRM facts; call tools when you need data.
 Always check company policy before answering how the company handles safety, property damage, technical standards, customer authorization, pricing/payments, or employee operations — call search_company_policies in the same turn.
-For diagnostics, walk one step at a time (test, then wait for their answer).
+For diagnostics, walk one step at a time for unanswered tests. When the technician volunteers findings, pass them into continue_tech_assist (or knownFacts on start) so the path can advance to the correct spot — do not re-ask steps their facts already answered. Never invent field tests that were not returned by tech-assist tools.
+If this session was just reconnected and an active technician assist block is present below, resume that step only (or call get_active_tech_assist if you need the sessionId again).
 When identifying a part from description or a camera frame, you MUST call search_parts_info in the same turn—never only say that you will search.
 Do not tell the technician you are “searching” or “still waiting” unless a tool result just failed. After a tool returns, speak the answer immediately.
-Parts photos and a short ID appear automatically in the chat panel after a parts lookup — tell them to look there rather than promising a link you send yourself. Never read visualDescription aloud. Never read the full technicalDescription; answer the question in a couple of sentences.${videoBlock}`;
+Parts photos and a short ID appear automatically in the chat panel after a parts lookup — tell them to look there rather than promising a link you send yourself. Never read visualDescription aloud. Never read the full technicalDescription; answer the question in a couple of sentences.${videoBlock}${activeAssistBlock}`;
 }
 
 export async function buildRealtimeSessionConfig(opts: {
@@ -78,6 +101,7 @@ export async function buildRealtimeSessionConfig(opts: {
   pageContext?: StormAiPageContext | null;
   voice?: string;
   videoMode?: boolean;
+  conversationId?: string | null;
 }) {
   const model = stormAiRealtimeModel();
   const voice = opts.voice || stormAiRealtimeVoice();
@@ -136,6 +160,7 @@ export async function mintStormAiRealtimeClientSecret(opts: {
   pageContext?: StormAiPageContext | null;
   voice?: string;
   videoMode?: boolean;
+  conversationId?: string | null;
 }): Promise<MintRealtimeClientSecretResult> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
