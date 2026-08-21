@@ -299,9 +299,23 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
   {
     type: "function",
     function: {
+      name: "get_active_tech_assist",
+      description:
+        "Return the active technician assist session for this conversation (sessionId, issue, current diagnostic or resolution). Call this after a voice reconnect, when unsure which step you are on, or before inventing any field test. Never invent diagnostics — only use the returned step.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: [],
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "start_tech_assist",
       description:
-        "Start a technician assistant session for one matched issue. Returns only the first diagnostic (test, tips, options). Never dump the rest of the workflow.",
+        "Start a technician assistant session for one matched issue. Returns only the current diagnostic (test, tips, options). If the same issue is already active in this conversation, resumes that session instead of restarting at step 1. Never dump the rest of the workflow.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -315,17 +329,17 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "continue_tech_assist",
       description:
-        "Advance the current technician assistant session with the technician's answer or measurement. Match their reply to one of the diagnostic options when provided (an option may list multiple OR alternatives — take that branch if any alternative matches). Returns only the next diagnostic or a final resolution.",
+        "Advance the current technician assistant session with the technician's answer or measurement. Call this as soon as they answer the current step — map spoken replies to yes/no or the closest option label (an option may list multiple OR alternatives). Returns only the next diagnostic or a final resolution. If unmatched is true, stay on the same step and clarify using the listed options only — do not invent other tests.",
       parameters: {
         type: "object",
         additionalProperties: false,
-        required: ["sessionId"],
+        required: ["sessionId", "result"],
         properties: {
           sessionId: { type: "string" },
           result: {
             type: "string",
             description:
-              "Technician answer: yes/no, number, or the option label that best matches their reply",
+              "Technician answer mapped to an option: yes/no, a number, or the option label that best matches their spoken reply (e.g. 'yes' when they say the valve operated manually)",
           },
         },
       },

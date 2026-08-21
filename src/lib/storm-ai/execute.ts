@@ -33,6 +33,7 @@ import { getInboundCallCoachingReport } from "./call-coaching";
 import { canUseStormAiTool, canUseTechAssist } from "./permissions";
 import {
   continueTechAssistSession,
+  getActiveTechAssistSession,
   matchTechIssues,
   startTechAssistSession,
 } from "./tech-assist";
@@ -600,6 +601,19 @@ export async function runStormAiTool(
               ? "No matching technician workflow. Do not invent a procedure."
               : "Pick the best issueId and call start_tech_assist. Do not invent steps.",
         });
+      }
+      case "get_active_tech_assist": {
+        if (!canUseTechAssist(user.role)) {
+          return fail("FORBIDDEN", "Your role cannot access that.");
+        }
+        const conversationId = ctx?.conversationId;
+        if (!conversationId) return fail("INVALID", "Conversation is required");
+        const active = await getActiveTechAssistSession({
+          companyId: user.companyId,
+          userId: user.id,
+          conversationId,
+        });
+        return ok(active);
       }
       case "start_tech_assist": {
         if (!canUseTechAssist(user.role)) {

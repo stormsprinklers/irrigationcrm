@@ -68,8 +68,101 @@ function normalizeResultText(result: unknown) {
 function resultNumber(result: unknown): number | null {
   if (typeof result === "number" && Number.isFinite(result)) return result;
   const text = String(result ?? "").trim();
+  // Prefer a standalone measurement when speech includes units ("30 ohms", "about 24.5").
+  const embedded = text.match(/-?\d+(?:\.\d+)?/);
+  if (embedded && !Number.isNaN(Number(embedded[0]))) return Number(embedded[0]);
   if (!text || Number.isNaN(Number(text))) return null;
   return Number(text);
+}
+
+const MATCH_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "does",
+  "did",
+  "do",
+  "for",
+  "from",
+  "i",
+  "in",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "so",
+  "that",
+  "the",
+  "this",
+  "to",
+  "was",
+  "we",
+]);
+
+/** Light stemming so spoken tense variants still match option labels. */
+function stemToken(word: string): string {
+  if (word.length <= 3) return word;
+  if (word.endsWith("ing") && word.length > 5) return word.slice(0, -3);
+  if (word.endsWith("ed") && word.length > 4) return word.slice(0, -2);
+  if (word.endsWith("es") && word.length > 4) return word.slice(0, -2);
+  if (word.endsWith("s") && word.length > 3 && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+function significantTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .map(stemToken)
+    .filter((t) => t.length > 1 && !MATCH_STOP_WORDS.has(t));
+}
+
+/** True when most tokens of the shorter phrase appear in the longer (spoken paraphrase). */
+export function phrasesOverlap(a: string, b: string): boolean {
+  const ta = significantTokens(a);
+  const tb = significantTokens(b);
+  if (!ta.length || !tb.length) return false;
+  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  const longerSet = new Set(longer);
+  const hits = shorter.filter((t) => longerSet.has(t)).length;
+  const need = Math.max(1, Math.ceil(shorter.length * 0.75));
+  return hits >= need;
+}
+
+const YES_EXACT = new Set(["yes", "y", "true", "1", "yeah", "yep", "yup", "affirmative"]);
+const NO_EXACT = new Set(["no", "n", "false", "0", "nope", "nah"]);
+
+function hasNegation(text: string): boolean {
+  return /\b(not|no|nope|nah|never|doesn't|doesnt|didn't|didnt|won't|wont|isn't|isnt|can't|cant|cannot)\b/.test(
+    text
+  );
+}
+
+/** Spoken yes/no beyond exact tokens (e.g. "it operated manually" → yes). */
+export function spokenYesNo(text: string): "yes" | "no" | null {
+  const t = text.trim().toLowerCase();
+  if (!t) return null;
+  if (YES_EXACT.has(t) || /^(yes|yeah|yep|yup)\b/.test(t)) return "yes";
+  if (NO_EXACT.has(t) || /^(no|nope|nah)\b/.test(t)) return "no";
+  if (hasNegation(t)) {
+    if (/\b(does not|doesn't|did not|didn't|will not|won't|is not|isn't|cannot|can't)\b/.test(t)) {
+      return "no";
+    }
+    if (/^(no|not)\b/.test(t)) return "no";
+  }
+  // Affirmative restatements without negation: "it does", "valve operated manually", "it opened"
+  if (
+    /\b(it (does|did|will|works|worked|opens?|opened|operates?|operated)|works|worked|opens?|opened|operates?|operated)\b/.test(
+      t
+    ) &&
+    !hasNegation(t)
+  ) {
+    return "yes";
+  }
+  return null;
 }
 
 function conditionMatches(
@@ -85,10 +178,14 @@ function conditionMatches(
     .toLowerCase();
 
   if (match === "yes") {
-    return ["yes", "y", "true", "1"].includes(text) || (label ? text === label : false);
+    if (YES_EXACT.has(text) || (label && text === label)) return true;
+    if (spokenYesNo(text) === "yes") return true;
+    return label ? phrasesOverlap(text, label) : false;
   }
   if (match === "no") {
-    return ["no", "n", "false", "0"].includes(text) || (label ? text === label : false);
+    if (NO_EXACT.has(text) || (label && text === label)) return true;
+    if (spokenYesNo(text) === "no") return true;
+    return label ? phrasesOverlap(text, label) : false;
   }
   if (match === "lt" && num != null && condition.value != null) {
     return num < Number(condition.value);
@@ -109,11 +206,12 @@ function conditionMatches(
     if (num != null && condition.value != null && typeof condition.value !== "string") {
       return num === Number(condition.value);
     }
-    return text === String(condition.value ?? label).toLowerCase();
+    const target = String(condition.value ?? label).toLowerCase();
+    return text === target || phrasesOverlap(text, target);
   }
-  // label / free-text: match option label or contained phrase
+  // label / free-text: match option label or spoken paraphrase
   if (!label) return false;
-  return text === label || text.includes(label) || label.includes(text);
+  return text === label || text.includes(label) || label.includes(text) || phrasesOverlap(text, label);
 }
 
 export function optionMatches(option: TechAssistOption, result: unknown): boolean {
@@ -163,21 +261,37 @@ export function optionPublicLabel(option: TechAssistOption): string {
   return [primary, ...alts].join(" OR ");
 }
 
+export type ResolveDiagnosticNext = {
+  nextNodeId: string | null;
+  /** False when the diagnostic listed options and none matched the result. */
+  matched: boolean;
+  matchedOptionId?: string | null;
+};
+
 /** Resolve next node from a diagnostic's options (new model) or legacy BRANCH rules. */
 export function resolveNextFromDiagnostic(
   config: TechAssistNodeConfig,
   result: unknown
-): string | null {
+): ResolveDiagnosticNext {
   const options = config.options ?? [];
   if (options.length > 0) {
     for (const option of options) {
-      if (optionMatches(option, result) && option.nextNodeId) {
-        return option.nextNodeId;
+      if (optionMatches(option, result)) {
+        return {
+          nextNodeId: option.nextNodeId ?? config.defaultNextNodeId ?? null,
+          matched: true,
+          matchedOptionId: option.id,
+        };
       }
     }
-    return config.defaultNextNodeId ?? null;
+    // Do not fall through to an arbitrary next node when options exist but none matched.
+    return {
+      nextNodeId: config.defaultNextNodeId ?? null,
+      matched: Boolean(config.defaultNextNodeId),
+      matchedOptionId: null,
+    };
   }
-  return evaluateBranch(config, result);
+  return { nextNodeId: evaluateBranch(config, result), matched: true };
 }
 
 export function evaluateBranch(config: TechAssistNodeConfig, result: unknown): string | null {
@@ -335,6 +449,85 @@ export async function matchTechIssues(companyId: string, query: string) {
   }));
 }
 
+/** Active diagnostic for a conversation (resume after voice reconnect). */
+export async function getActiveTechAssistSession(opts: {
+  companyId: string;
+  userId: string;
+  conversationId: string;
+}) {
+  const session = await prisma.techAssistSession.findFirst({
+    where: {
+      conversationId: opts.conversationId,
+      companyId: opts.companyId,
+      userId: opts.userId,
+      status: TechAssistSessionStatus.ACTIVE,
+    },
+    include: {
+      issue: { include: { nodes: { orderBy: { sortOrder: "asc" } } } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!session) {
+    return {
+      ok: true as const,
+      active: false as const,
+      note: "No active technician assist session for this conversation.",
+    };
+  }
+
+  const current =
+    session.issue.nodes.find((n) => n.id === session.currentNodeId) ?? null;
+  if (!current) {
+    return {
+      ok: true as const,
+      active: false as const,
+      note: "Active session is missing its current step.",
+    };
+  }
+
+  return {
+    ok: true as const,
+    active: true as const,
+    sessionId: session.id,
+    issueId: session.issueId,
+    issueName: session.issue.name,
+    step: publicStep(current),
+    note:
+      "Resume this step only. If the technician just answered it, call continue_tech_assist with this sessionId. Do not restart, invent tests, or ask about steps not returned here.",
+  };
+}
+
+/** Compact block for realtime session instructions after reconnect. */
+export function formatActiveTechAssistForPrompt(
+  active: Awaited<ReturnType<typeof getActiveTechAssistSession>>
+): string {
+  if (!active.ok || !active.active) return "";
+  const step = active.step;
+  const options =
+    step.type === "DIAGNOSTIC" && Array.isArray(step.options) && step.options.length
+      ? step.options.map((o) => o.label).join(" | ")
+      : step.type === "DIAGNOSTIC" && Array.isArray(step.choices) && step.choices.length
+        ? step.choices.join(" | ")
+        : null;
+  const lines = [
+    "Active technician assist session (resume here — do not invent other tests):",
+    `- sessionId: ${active.sessionId}`,
+    `- issue: ${active.issueName}`,
+    `- current step (${step.type}): ${step.title}`,
+  ];
+  if (step.type === "DIAGNOSTIC") {
+    lines.push(`- test: ${step.test || step.instructions || ""}`);
+    if (step.tips) lines.push(`- tips: ${step.tips}`);
+    if (options) lines.push(`- options: ${options}`);
+  } else if (step.type === "RESOLUTION") {
+    lines.push(`- instructions: ${step.instructions}`);
+  }
+  lines.push(
+    "When the technician answers this step, call continue_tech_assist with this sessionId and their result. Never ask about water pressure, ohms, or other checks unless this step says so."
+  );
+  return lines.join("\n");
+}
+
 export async function startTechAssistSession(opts: {
   companyId: string;
   userId: string;
@@ -347,6 +540,33 @@ export async function startTechAssistSession(opts: {
   });
   if (!issue) return { ok: false as const, error: "Issue not found" };
   if (!issue.nodes.length) return { ok: false as const, error: "This workflow has no steps yet" };
+
+  // Same issue already in progress for this chat — resume instead of resetting to step 1.
+  const existing = await prisma.techAssistSession.findFirst({
+    where: {
+      conversationId: opts.conversationId,
+      companyId: opts.companyId,
+      userId: opts.userId,
+      issueId: issue.id,
+      status: TechAssistSessionStatus.ACTIVE,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (existing) {
+    const current =
+      issue.nodes.find((n) => n.id === existing.currentNodeId) ??
+      firstContentNode(issue.nodes, issue.entryNodeId);
+    if (current && current.type !== "BRANCH") {
+      return {
+        ok: true as const,
+        sessionId: existing.id,
+        issueName: issue.name,
+        step: publicStep(current),
+        resumed: true as const,
+        note: "Resumed the active session for this issue at the current step. Do not restart from the beginning. Ask only for this step's result.",
+      };
+    }
+  }
 
   const start = skipPastBranches(issue.nodes, issue.entryNodeId, null);
   const first = start?.node ?? firstContentNode(issue.nodes, issue.entryNodeId);
@@ -379,6 +599,7 @@ export async function startTechAssistSession(opts: {
     sessionId: session.id,
     issueName: issue.name,
     step: publicStep(first),
+    resumed: false as const,
     note: "Ask the technician to complete only this step. Share tips if they are stuck. Do not mention later tests or the rest of the workflow.",
   };
 }
@@ -430,10 +651,15 @@ export async function continueTechAssistSession(opts: {
   history.push({ nodeId: current.id, result: opts.result, at: new Date().toISOString() });
 
   let nextId: string | null = null;
+  let matchedOption = true;
   if (current.type === "DIAGNOSTIC") {
-    nextId = resolveNextFromDiagnostic(asConfig(current.config), opts.result);
+    const resolved = resolveNextFromDiagnostic(asConfig(current.config), opts.result);
+    nextId = resolved.nextNodeId;
+    matchedOption = resolved.matched;
+    const config = asConfig(current.config);
+    const hasOptions = (config.options ?? []).length > 0;
     // Legacy: if diagnostic has no options, next sortOrder BRANCH may hold the rules
-    if (!nextId) {
+    if (!nextId && !hasOptions) {
       const after = nodes
         .filter((n) => n.sortOrder > current.sortOrder)
         .sort((a, b) => a.sortOrder - b.sortOrder)[0];
@@ -442,6 +668,17 @@ export async function continueTechAssistSession(opts: {
       } else if (after) {
         nextId = after.id;
       }
+    }
+    if (hasOptions && !matchedOption) {
+      return {
+        ok: true as const,
+        sessionId: session.id,
+        step: publicStep(current),
+        unmatched: true as const,
+        note: `Could not match "${String(opts.result)}" to an option (${(config.options ?? [])
+          .map((o) => optionPublicLabel(o))
+          .join(" | ")}). Ask a short clarifying question using only those options. Do not invent other tests or leave this step.`,
+      };
     }
   } else if (current.type === "BRANCH") {
     nextId = evaluateBranch(asConfig(current.config), opts.result);

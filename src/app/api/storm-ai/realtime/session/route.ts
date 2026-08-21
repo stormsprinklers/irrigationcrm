@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { canUseTechAssist } from "@/lib/storm-ai/permissions";
 import { mintStormAiRealtimeClientSecret } from "@/lib/storm-ai/realtime";
+import { getActiveTechAssistSession } from "@/lib/storm-ai/tech-assist";
 import type { StormAiPageContext } from "@/lib/storm-ai/types";
 
 export const maxDuration = 30;
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest) {
       pageContext: body.pageContext ?? null,
       voice: typeof body.voice === "string" ? body.voice : undefined,
       videoMode: Boolean(body.videoMode),
+      conversationId,
     });
 
     if ("error" in minted) {
@@ -62,6 +65,20 @@ export async function POST(request: NextRequest) {
         { error: minted.error, detail: minted.detail },
         { status: minted.status }
       );
+    }
+
+    let activeTechAssist: Awaited<ReturnType<typeof getActiveTechAssistSession>> | null =
+      null;
+    if (canUseTechAssist(user.role)) {
+      try {
+        activeTechAssist = await getActiveTechAssistSession({
+          companyId: user.companyId,
+          userId: user.id,
+          conversationId,
+        });
+      } catch {
+        activeTechAssist = null;
+      }
     }
 
     return NextResponse.json({
@@ -72,6 +89,11 @@ export async function POST(request: NextRequest) {
       voice: minted.voice,
       /** Tools are already bound on the ephemeral session; returned for client UI only. */
       toolNames: minted.tools.map((t) => t.name),
+      /** So the client can seed the live model after reconnect without guessing. */
+      activeTechAssist:
+        activeTechAssist && activeTechAssist.ok && activeTechAssist.active
+          ? activeTechAssist
+          : null,
     });
   } catch {
     return unauthorizedResponse();

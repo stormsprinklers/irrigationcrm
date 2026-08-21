@@ -9,6 +9,7 @@ test("technicians can look up customers and the price book", () => {
     "get_customer_history",
     "search_price_book",
     "search_parts_info",
+    "get_active_tech_assist",
   ]) {
     assert.equal(canUseStormAiTool("TECH", tool), true, tool);
   }

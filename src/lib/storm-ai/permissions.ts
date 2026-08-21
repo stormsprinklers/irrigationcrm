@@ -4,6 +4,7 @@ import type { StormAiOpenAiTool } from "./types";
 
 export const TECH_ASSIST_TOOL_NAMES = [
   "match_tech_issue",
+  "get_active_tech_assist",
   "start_tech_assist",
   "continue_tech_assist",
   "search_parts_info",
@@ -74,10 +75,10 @@ export function stormAiCapabilityLines(role: string) {
     return "You may use every available tool, including technician field workflows and company policies.";
   }
   if (role === "TECH") {
-    return "You may use technician KPIs (yourself), customers, price book, company policies, and the technician assistant (diagnostic workflows plus parts info: match_tech_issue, start_tech_assist, continue_tech_assist, search_parts_info, get_parts_info, search_customers, get_customer, get_customer_history, search_price_book, search_company_policies, get_company_policy). You cannot use marketing, revenue, fleet, or company-wide performance tools.";
+    return "You may use technician KPIs (yourself), customers, price book, company policies, and the technician assistant (diagnostic workflows plus parts info: match_tech_issue, get_active_tech_assist, start_tech_assist, continue_tech_assist, search_parts_info, get_parts_info, search_customers, get_customer, get_customer_history, search_price_book, search_company_policies, get_company_policy). You cannot use marketing, revenue, fleet, or company-wide performance tools.";
   }
   if (role === "INSTALLER") {
-    return "You may only use technician KPIs (yourself), company policies, and the technician assistant (diagnostic workflows plus parts info: match_tech_issue, start_tech_assist, continue_tech_assist, search_parts_info, get_parts_info, search_company_policies, get_company_policy). You cannot look up customers or the price book.";
+    return "You may only use technician KPIs (yourself), company policies, and the technician assistant (diagnostic workflows plus parts info: match_tech_issue, get_active_tech_assist, start_tech_assist, continue_tech_assist, search_parts_info, get_parts_info, search_company_policies, get_company_policy). You cannot look up customers or the price book.";
   }
   if (role === "CSR") {
     return "You may use customers, schedule, invoices, inbound call coaching (analyze_inbound_calls), price book, company policies, and the technician assistant (including parts info). You cannot use marketing, revenue, fleet, or company performance tools.";
