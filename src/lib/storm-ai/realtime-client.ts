@@ -1,7 +1,11 @@
 import { isRecoverableRealtimeError } from "./realtime-errors";
 import {
+  STORM_AI_ECHO_GUARD_MS,
   STORM_AI_INPUT_NOISE_REDUCTION,
+  isPartsSearchIntentSpeech,
+  isShortAckTranscript,
   stormAiServerVad,
+  VIDEO_SKIP_FRAME_RE,
 } from "./realtime-vad";
 
 export type StormAiRealtimeStatus =
@@ -91,9 +95,6 @@ function stripChatCard(result: unknown): unknown {
   return rest;
 }
 
-const VIDEO_SKIP_FRAME_RE =
-  /^(ok|okay|yes|yeah|yep|no|nope|thanks|thank you|got it|alright|all right|continue|next|done|copy|uh-huh|mm-hmm)[\s.!?]*$/i;
-
 const VISUAL_QUESTION_RE =
   /\b(what|which|where|how|look|see|show|showing|this|that|here|valve|solenoid|controller|part|identify|tell me|can you|could you|manual)\b/i;
 
@@ -105,9 +106,6 @@ function shouldSendCameraFrame(transcript: string): boolean {
   if (VISUAL_QUESTION_RE.test(text)) return true;
   return text.split(/\s+/).length >= 3;
 }
-
-const SEARCHING_SPEECH_RE =
-  /\b(search|searching|look(ing)? up|check(ing)?|parts (list|library|info)|let me (find|check|look|search))\b/i;
 
 /**
  * Browser WebRTC client for Storm AI voice/video.
@@ -159,6 +157,9 @@ export class StormAiRealtimeClient {
   private lastUserTranscript = "";
   private searchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private searchFallbackUsed = false;
+  /** Mic/create_response stay gated after AI speech so speaker echo cannot start a turn. */
+  private echoGuardUntil = 0;
+  private echoGuardTimer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: StormAiRealtimeCallbacks;
 
   constructor(callbacks: StormAiRealtimeCallbacks = {}) {
@@ -196,6 +197,7 @@ export class StormAiRealtimeClient {
     this.speechStartedDuringResponse = false;
     this.heardTranscriptDuringResponse = false;
     this.clearFollowUpTimer();
+    this.clearEchoGuard();
     this.toolPrefetch.clear();
     this.searchFallbackUsed = false;
     this.clearSearchFallback();
@@ -377,6 +379,7 @@ export class StormAiRealtimeClient {
     this.closed = true;
     this.clearSearchFallback();
     this.clearFollowUpTimer();
+    this.clearEchoGuard();
     this.clearVideoResponseWatchdog();
     this.needsSpokenFollowUp = false;
     this.followUpWaitStartedAt = 0;
@@ -447,27 +450,93 @@ export class StormAiRealtimeClient {
     });
   }
 
-  /** While the model is speaking, block VAD from starting a second response (cuts audio). */
+  private setMicEnabled(enabled: boolean) {
+    this.localStream?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }
+
+  private clearEchoGuard() {
+    if (this.echoGuardTimer) {
+      clearTimeout(this.echoGuardTimer);
+      this.echoGuardTimer = null;
+    }
+    this.echoGuardUntil = 0;
+  }
+
+  private inEchoGuard() {
+    return Date.now() < this.echoGuardUntil;
+  }
+
+  /**
+   * After AI audio ends, keep mic + auto-response off briefly so speaker echo
+   * (often transcribed as "thank you" / "bye-bye") cannot start a new turn.
+   */
+  private armEchoGuard(ms = STORM_AI_ECHO_GUARD_MS) {
+    this.clearEchoGuard();
+    this.echoGuardUntil = Date.now() + ms;
+    this.setMicEnabled(false);
+    if (!this.videoMode) {
+      this.setAutoCreateResponse(false);
+    }
+    this.echoGuardTimer = setTimeout(() => {
+      this.echoGuardTimer = null;
+      this.echoGuardUntil = 0;
+      if (this.closed || this.modelResponseActive) return;
+      this.setMicEnabled(true);
+      if (!this.videoMode && !this.autoCreateResponse) {
+        this.setAutoCreateResponse(true);
+      }
+      this.activity("Echo guard ended — listening", "ok");
+      this.setStatus("listening");
+    }, ms);
+  }
+
+  /** While the model is speaking, mute the mic and block VAD auto-responses. */
   private setSpeakingGate(speaking: boolean) {
-    if (this.closed || this.videoMode) return;
+    if (this.closed) return;
     if (speaking) {
-      if (this.autoCreateResponse) this.setAutoCreateResponse(false);
+      this.clearEchoGuard();
+      this.setMicEnabled(false);
+      if (!this.videoMode && this.autoCreateResponse) {
+        this.setAutoCreateResponse(false);
+      }
       return;
     }
-    if (!this.autoCreateResponse) this.setAutoCreateResponse(true);
+    // End of model audio — hold the gate briefly for speaker echo.
+    this.armEchoGuard();
+  }
+
+  private cancelLikelyEchoTurn(reason: string) {
+    this.activity(reason, "wait");
+    this.pendingUserTurnAfterResponse = false;
+    this.heardTranscriptDuringResponse = false;
+    this.speechStartedDuringResponse = false;
+    this.sendEvent({ type: "response.cancel" });
+    this.sendEvent({ type: "input_audio_buffer.clear" });
+    this.modelResponseActive = false;
+    this.awaitingResponseCreated = false;
+    this.clearVideoResponseWatchdog();
+    if (!this.inEchoGuard()) {
+      this.armEchoGuard(Math.min(900, STORM_AI_ECHO_GUARD_MS));
+    }
   }
 
   private requestPendingUserFollowUp() {
     if (this.closed || this.videoMode) return;
     if (this.modelResponseActive || this.awaitingFunctionOutput) return;
     if (this.needsSpokenFollowUp || this.inFlightTools > 0) return;
+    if (this.inEchoGuard()) {
+      this.activity("Skipping follow-up during echo guard", "wait");
+      return;
+    }
     if (!this.heardTranscriptDuringResponse) {
       this.activity("No new user transcript during AI turn — not following up", "wait");
       return;
     }
     this.heardTranscriptDuringResponse = false;
     // Echo/"thanks" while the AI is talking should not start a new spoken turn.
-    if (VIDEO_SKIP_FRAME_RE.test(this.lastUserTranscript.trim())) {
+    if (isShortAckTranscript(this.lastUserTranscript)) {
       this.activity("Ignoring short ack from during AI turn", "wait");
       return;
     }
@@ -747,13 +816,17 @@ export class StormAiRealtimeClient {
     if (type === "input_audio_buffer.speech_started") {
       // Keep "speaking" in the UI while the model is still playing — false VAD
       // from echo/noise used to flip status and feel like the answer cut out.
-      if (!this.modelResponseActive) {
-        this.setStatus("listening");
-        this.activity("Heard speech — listening");
-      } else {
+      if (this.modelResponseActive) {
         this.speechStartedDuringResponse = true;
         this.activity("Heard speech during AI turn — keeping playback", "wait");
+        return;
       }
+      if (this.inEchoGuard()) {
+        this.activity("Heard speech during echo guard — ignoring", "wait");
+        return;
+      }
+      this.setStatus("listening");
+      this.activity("Heard speech — listening");
       return;
     }
 
@@ -762,9 +835,16 @@ export class StormAiRealtimeClient {
         this.beginVideoTurn();
         return;
       }
+      if (this.inEchoGuard() && !this.modelResponseActive) {
+        this.activity("Speech ended during echo guard — not queueing a turn", "wait");
+        this.sendEvent({ type: "input_audio_buffer.clear" });
+        return;
+      }
       // create_response is off while the model speaks; queue a follow-up instead
       // of letting server VAD race a second response.create (audio cutoff).
-      if (this.modelResponseActive || !this.autoCreateResponse) {
+      // Only queue when the model is actually speaking — echo-guard periods also
+      // set autoCreateResponse false and must not leave a sticky pending turn.
+      if (this.modelResponseActive) {
         this.pendingUserTurnAfterResponse = true;
       }
       return;
@@ -813,6 +893,16 @@ export class StormAiRealtimeClient {
     ) {
       const transcript = String(event.transcript || "").trim();
       if (transcript) {
+        // Speaker echo after AI audio often lands as "thank you" / "bye-bye".
+        if (
+          isShortAckTranscript(transcript) &&
+          (this.inEchoGuard() || this.modelResponseActive)
+        ) {
+          this.cancelLikelyEchoTurn(
+            `Ignoring likely echo transcript: "${transcript.slice(0, 40)}"`
+          );
+          return;
+        }
         this.lastUserTranscript = transcript;
         // Ignore delayed transcripts of the turn that triggered this response.
         if (this.modelResponseActive && this.speechStartedDuringResponse) {
@@ -1149,12 +1239,12 @@ export class StormAiRealtimeClient {
    * parts search ourselves and force a spoken answer.
    */
   private maybeScheduleSearchFallback(assistantTranscript: string) {
-    if (!SEARCHING_SPEECH_RE.test(assistantTranscript)) return;
+    if (!isPartsSearchIntentSpeech(assistantTranscript)) return;
     if (this.searchFallbackUsed || this.awaitingFunctionOutput) return;
     if (this.needsSpokenFollowUp || this.inFlightTools > 0) return;
 
     this.activity(
-      "AI said it would search — starting fallback timer (2.5s)",
+      "AI said it would search parts — starting fallback timer (2.5s)",
       "wait"
     );
     this.clearSearchFallback();
@@ -1169,6 +1259,10 @@ export class StormAiRealtimeClient {
     if (!this.conversationId) return;
 
     this.searchFallbackUsed = true;
+    this.clearFollowUpTimer();
+    // We are about to create the spoken answer ourselves — do not leave a
+    // sticky needsSpokenFollowUp that would trigger a second response.done speak.
+    this.needsSpokenFollowUp = false;
     this.setStatus("tool");
     this.callbacks.onTool?.("search_parts_info");
     this.activity("No tool call yet — running client parts search fallback", "wait");
@@ -1200,7 +1294,6 @@ export class StormAiRealtimeClient {
         ],
       },
     });
-    this.needsSpokenFollowUp = true;
     this.sendEvent({
       type: "response.create",
       response: {
