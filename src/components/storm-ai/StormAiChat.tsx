@@ -251,6 +251,7 @@ export function StormAiChat() {
   const [voiceStatus, setVoiceStatus] = useState<StormAiRealtimeStatus>("idle");
   const [voiceTool, setVoiceTool] = useState<string | null>(null);
   const [voiceActivity, setVoiceActivity] = useState<StormAiRealtimeActivity[]>([]);
+  const [chatFault, setChatFault] = useState(false);
   const [activityExportMeta, setActivityExportMeta] = useState<{
     videoMode: boolean;
   }>({ videoMode: false });
@@ -308,7 +309,35 @@ export function StormAiChat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending, voiceStatus, voiceActivity.length]);
+  }, [messages, sending, voiceStatus]);
+
+  const liveStatus = useMemo(() => {
+    if (voiceStatus === "error" || chatFault) {
+      return { color: "red" as const, label: "Error" };
+    }
+    if (sending || voiceStatus === "connecting" || voiceStatus === "tool" || voiceStatus === "speaking") {
+      const label =
+        voiceStatus === "connecting"
+          ? videoMode
+            ? "Connecting video…"
+            : "Connecting…"
+          : voiceStatus === "tool"
+            ? `Looking up ${voiceTool ?? "CRM data"}…`
+            : voiceStatus === "speaking"
+              ? "Speaking…"
+              : "Thinking…";
+      return { color: "yellow" as const, label };
+    }
+    if (voiceStatus === "listening") {
+      return {
+        color: "green" as const,
+        label: videoMode
+          ? "Listening — point the camera and ask"
+          : "Listening",
+      };
+    }
+    return null;
+  }, [chatFault, sending, videoMode, voiceStatus, voiceTool]);
 
   const latestPartsCard = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -343,6 +372,7 @@ export function StormAiChat() {
   function resetVoiceActivity(nextVideoMode = false) {
     setVoiceActivity([]);
     setActivityExportMeta({ videoMode: nextVideoMode });
+    setChatFault(false);
   }
 
   function exportVoiceActivity() {
@@ -395,6 +425,9 @@ export function StormAiChat() {
       onStatus: (status: StormAiRealtimeStatus) => {
         setVoiceStatus(status);
         if (status === "ended" || status === "idle") setVoiceTool(null);
+        if (status !== "error" && status !== "idle" && status !== "ended") {
+          setChatFault(false);
+        }
       },
       onTranscript: (role: "user" | "assistant", text: string) => {
         setMessages((prev) => [
@@ -408,7 +441,10 @@ export function StormAiChat() {
         ]);
       },
       onTool: (name: string) => setVoiceTool(name),
-      onError: (message: string) => toast.error(message),
+      onError: (message: string) => {
+        setChatFault(true);
+        toast.error(message);
+      },
       onLocalStream: (stream: MediaStream | null) => {
         setLocalPreviewStream(stream);
         base?.onLocalStream?.(stream);
@@ -506,6 +542,7 @@ export function StormAiChat() {
 
   async function openThread(id: string) {
     stopVoice();
+    resetVoiceActivity(false);
     setHistoryOpen(false);
     try {
       const res = await fetch(`/api/storm-ai/conversations/${id}`);
@@ -526,6 +563,7 @@ export function StormAiChat() {
 
   async function startNewChat() {
     stopVoice();
+    resetVoiceActivity(false);
     const res = await fetch("/api/storm-ai/conversations", { method: "POST" });
     if (!res.ok) {
       toast.error("Could not start a new chat");
@@ -589,6 +627,7 @@ export function StormAiChat() {
     setDraft("");
     setPendingImages([]);
     setSending(true);
+    setChatFault(false);
     setMessages((prev) => [
       ...prev,
       {
@@ -612,9 +651,13 @@ export function StormAiChat() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Send failed");
       setMessages(data.messages ?? []);
-      if (data.warning) toast.warning(data.warning);
+      if (data.warning) {
+        setChatFault(true);
+        toast.warning(data.warning);
+      }
       void refreshThreads();
     } catch (err) {
+      setChatFault(true);
       toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
       setSending(false);
@@ -652,9 +695,21 @@ export function StormAiChat() {
           }
           subtitle="Ask about customers, attach a part photo, or use mic / video for live help"
           actions={
-            <Button type="button" size="sm" variant="outline" onClick={() => void startNewChat()}>
-              New chat
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={voiceActivity.length === 0}
+                onClick={exportVoiceActivity}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export debug
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => void startNewChat()}>
+                New chat
+              </Button>
+            </div>
           }
         />
 
@@ -700,6 +755,22 @@ export function StormAiChat() {
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+          {liveStatus ? (
+            <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 sm:px-6">
+              <span
+                className={cn(
+                  "h-2.5 w-2.5 shrink-0 rounded-full",
+                  liveStatus.color === "green" && "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.25)] animate-pulse",
+                  liveStatus.color === "yellow" && "bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.25)] animate-pulse",
+                  liveStatus.color === "red" && "bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.25)]"
+                )}
+                aria-hidden
+              />
+              <p className="truncate text-xs font-medium text-foreground" role="status">
+                {liveStatus.label}
+              </p>
+            </div>
+          ) : null}
           <ScrollArea className="min-h-0 flex-1">
             <div className="mx-auto w-full max-w-3xl space-y-3 p-4 text-sm sm:p-6">
               {messages.length === 0 && !voiceActive ? (
@@ -738,80 +809,6 @@ export function StormAiChat() {
                   </div>
                 ))
               )}
-              {sending ? <p className="text-xs text-muted-foreground">Thinking…</p> : null}
-              {voiceActive || voiceActivity.length > 0 ? (
-                <div className="space-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-medium text-foreground">
-                      {voiceActive
-                        ? voiceStatus === "connecting"
-                          ? videoMode
-                            ? "Connecting video…"
-                            : "Connecting voice…"
-                          : voiceStatus === "tool"
-                            ? `Looking up ${voiceTool ?? "CRM data"}…`
-                            : voiceStatus === "speaking"
-                              ? "Storm AI speaking…"
-                              : videoMode
-                                ? "Listening — point the camera and ask about what you see"
-                                : "Listening — speak anytime"
-                        : "Session debug log"}
-                    </p>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {voiceActivity.length > 0 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={exportVoiceActivity}
-                        >
-                          <Download className="mr-1 h-3.5 w-3.5" />
-                          Export JSON
-                        </Button>
-                      ) : null}
-                      {!voiceActive && voiceActivity.length > 0 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => resetVoiceActivity(false)}
-                        >
-                          Clear
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  {voiceActivity.length > 0 ? (
-                    <div className="max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-snug text-muted-foreground">
-                      {voiceActivity.map((entry) => (
-                        <p
-                          key={`${entry.at}-${entry.message}`}
-                          className={cn(
-                            entry.level === "error" && "text-destructive",
-                            entry.level === "ok" && "text-emerald-700 dark:text-emerald-400",
-                            entry.level === "wait" && "text-amber-700 dark:text-amber-400"
-                          )}
-                        >
-                          <span className="tabular-nums opacity-70">
-                            {new Date(entry.at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                            })}
-                          </span>{" "}
-                          {entry.message}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="font-mono text-[11px] text-muted-foreground">
-                      Live steps will appear here while voice is active.
-                    </p>
-                  )}
-                </div>
-              ) : null}
               {voiceActive && latestPartsCard ? (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
