@@ -3,6 +3,7 @@ import {
   STORM_AI_INPUT_NOISE_REDUCTION,
   stormAiServerVad,
 } from "./realtime-vad";
+import { isRealtimeToolResultOk } from "./realtime-tool-payload";
 
 export type StormAiRealtimeStatus =
   | "idle"
@@ -962,11 +963,7 @@ export class StormAiRealtimeClient {
       ({ ok: false, error: "Tool request failed" } as const);
     this.toolPrefetch.delete(callId);
 
-    const ok =
-      typeof result === "object" &&
-      result &&
-      "ok" in result &&
-      (result as { ok?: boolean }).ok !== false;
+    const ok = isRealtimeToolResultOk(result);
     const errMsg =
       typeof result === "object" &&
       result &&
@@ -981,14 +978,16 @@ export class StormAiRealtimeClient {
       ok ? "ok" : "error"
     );
 
-    this.publishPartsCard(result);
-    if (
+    const cardPublished = this.publishPartsCard(result);
+    if (cardPublished) {
+      this.activity("Parts card sent to chat", "ok");
+    } else if (
       typeof result === "object" &&
       result &&
       "chatCard" in result &&
       (result as { chatCard?: unknown }).chatCard
     ) {
-      this.activity("Parts card sent to chat", "ok");
+      this.activity("Parts card present but could not render in chat", "wait");
     }
 
     this.activity(`Sending ${name} result to model…`);
@@ -1072,14 +1071,20 @@ export class StormAiRealtimeClient {
     this.activity(message, "wait");
   }
 
-  private publishPartsCard(result: unknown) {
-    if (!result || typeof result !== "object") return;
+  private publishPartsCard(result: unknown): boolean {
+    if (!result || typeof result !== "object") return false;
     const row = result as Record<string, unknown>;
     const card = row.chatCard;
-    if (!card || typeof card !== "object") return;
+    if (!card || typeof card !== "object") return false;
     const parsed = card as StormAiPartsCardPayload;
-    if (parsed.kind !== "parts_card" || !parsed.name) return;
-    this.callbacks.onPartsCard?.(parsed);
+    if (parsed.kind !== "parts_card" || !parsed.name) return false;
+    // Ensure photos is always an array so the chat card never crashes on render.
+    const safeCard: StormAiPartsCardPayload = {
+      ...parsed,
+      photos: Array.isArray(parsed.photos) ? parsed.photos : [],
+    };
+    this.callbacks.onPartsCard?.(safeCard);
+    return true;
   }
 
   private requestSpokenToolFollowUp() {

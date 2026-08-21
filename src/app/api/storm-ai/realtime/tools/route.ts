@@ -8,107 +8,9 @@ import {
 } from "@/lib/storm-ai/parts-card";
 import { canUseStormAiTool } from "@/lib/storm-ai/permissions";
 import { sanitizeToolPayload } from "@/lib/storm-ai/prompt";
+import { finalizeRealtimeToolPayload } from "@/lib/storm-ai/realtime-tool-payload";
 
 export const maxDuration = 90;
-
-function asVisualMatch(value: unknown) {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-}
-
-function slimSearchNote(visualMatch: Record<string, unknown> | null) {
-  if (visualMatch?.confirmed === true) {
-    return "Visual compare confirmed the top part. Speak that match now. The matching library photo is already shown in the chat panel.";
-  }
-  if (visualMatch?.ran === true) {
-    return "Visual compare did not confirm a library part. Say you could not confirm from the photo. Do not invent a link.";
-  }
-  return "Speak the best match now in a few short sentences. Photos are already shown in the chat panel. Do not read visualDescription or the full technical write-up. Do not invent a link.";
-}
-
-/** Keep realtime tool payloads small so the model can speak again quickly. */
-function slimRealtimeToolResult(name: string, result: unknown): unknown {
-  if (!result || typeof result !== "object") return result;
-  const root = result as Record<string, unknown>;
-  const data =
-    root.data && typeof root.data === "object"
-      ? (root.data as Record<string, unknown>)
-      : root;
-
-  if (name === "search_parts_info" && Array.isArray(data.parts)) {
-    const slimParts = data.parts.slice(0, 5).map((row) => {
-      if (!row || typeof row !== "object") return row;
-      const part = row as Record<string, unknown>;
-      return {
-        id: part.id,
-        name: part.name,
-        manufacturer: part.manufacturer,
-        partNumber: part.partNumber,
-        section: part.section,
-        visualDescription:
-          typeof part.visualDescription === "string"
-            ? part.visualDescription.slice(0, 220)
-            : part.visualDescription,
-        technicalDescription:
-          typeof part.technicalDescription === "string"
-            ? part.technicalDescription.slice(0, 220)
-            : part.technicalDescription,
-        hasManual: part.hasManual,
-        manualUrl: part.manualUrl ?? null,
-        manualKind: part.manualKind ?? null,
-        photoCount: Array.isArray(part.photos) ? part.photos.length : part.photoCount ?? 0,
-        matchedPhotoId: part.matchedPhotoId ?? null,
-        visualConfidence: part.visualConfidence ?? null,
-      };
-    });
-    const visualMatch = asVisualMatch(data.visualMatch);
-    const note = slimSearchNote(visualMatch);
-    if (root.data && typeof root.data === "object") {
-      return {
-        ...root,
-        data: {
-          ...data,
-          parts: slimParts,
-          visualMatch,
-          note,
-        },
-      };
-    }
-    return { ...data, parts: slimParts, visualMatch, note };
-  }
-
-  if (name === "get_parts_info") {
-    const part = data.part;
-    if (part && typeof part === "object") {
-      const p = part as Record<string, unknown>;
-      const slimPart = {
-        id: p.id,
-        name: p.name,
-        manufacturer: p.manufacturer,
-        partNumber: p.partNumber,
-        sectionName: p.sectionName,
-        visualDescription: p.visualDescription,
-        technicalDescription: p.technicalDescription,
-        manualUrl: p.manualUrl,
-        manualKind: p.manualKind,
-        manualFileName: p.manualFileName,
-      };
-      if (root.data && typeof root.data === "object") {
-        return {
-          ...root,
-          data: {
-            ...data,
-            part: slimPart,
-            note:
-              "Speak a few short sentences about this part. Photos are already shown in the chat panel. Do not read visualDescription or paste the full technicalDescription. Do not invent a link.",
-          },
-        };
-      }
-      return { ...data, part: slimPart };
-    }
-  }
-
-  return result;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -167,15 +69,22 @@ export async function POST(request: NextRequest) {
 
     const result = await runStormAiTool(user, name, args, { conversationId });
     const chatCard = await buildPartsChatCard(user.companyId, name, result);
-    const slimmed = slimRealtimeToolResult(name, result);
-    const payload = sanitizeToolPayload(slimmed, 3500);
+    const payload = finalizeRealtimeToolPayload(
+      name,
+      result,
+      chatCard,
+      sanitizeToolPayload,
+      3500
+    );
 
+    // Persist without the live chatCard blob (stored as its own assistant message).
+    const { chatCard: _omitCard, ...forDb } = payload;
     await prisma.stormAiMessage.create({
       data: {
         conversationId,
         userId: user.id,
         role: "tool",
-        content: JSON.stringify(payload),
+        content: JSON.stringify(sanitizeToolPayload(forDb, 3500)),
         toolName: name,
         toolCallId: callId || null,
       },
@@ -202,14 +111,11 @@ export async function POST(request: NextRequest) {
         toolsJson: [{ name, args: sanitizeToolPayload(args, 1500) }] as never,
         ok: Boolean((result as { ok?: boolean }).ok),
         model: process.env.STORM_AI_REALTIME_MODEL || process.env.OPENAI_REALTIME_MODEL || "gpt-realtime",
-        responsePreview: JSON.stringify(payload).slice(0, 500),
+        responsePreview: JSON.stringify(forDb).slice(0, 500),
       },
     });
 
-    return NextResponse.json({
-      ...(typeof payload === "object" && payload ? payload : { result: payload }),
-      chatCard: chatCard ?? undefined,
-    });
+    return NextResponse.json(payload);
   } catch {
     return unauthorizedResponse();
   }

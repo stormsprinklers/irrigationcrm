@@ -130,6 +130,7 @@ function PartsInfoCard({ card }: { card: StormAiPartsCardPayload }) {
   const summary =
     card.summary?.trim() ||
     [card.name + (meta ? `. ${meta}` : "")].join("");
+  const photos = Array.isArray(card.photos) ? card.photos : [];
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -140,9 +141,9 @@ function PartsInfoCard({ card }: { card: StormAiPartsCardPayload }) {
           </span>
         ) : null}
       </div>
-      {card.photos.length > 0 ? (
+      {photos.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {card.photos.map((photo) => {
+          {photos.map((photo) => {
             const confirmed =
               Boolean(card.confirmedPhotoId) && photo.id === card.confirmedPhotoId;
             return (
@@ -308,6 +309,14 @@ export function StormAiChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending, voiceStatus, voiceActivity.length]);
+
+  const latestPartsCard = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const card = messages[i]?.partsCard;
+      if (card) return card;
+    }
+    return null;
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -801,6 +810,14 @@ export function StormAiChat() {
                       Live steps will appear here while voice is active.
                     </p>
                   )}
+                </div>
+              ) : null}
+              {voiceActive && latestPartsCard ? (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                    Parts card
+                  </p>
+                  <PartsInfoCard card={latestPartsCard} />
                 </div>
               ) : null}
               {voiceActive && videoMode ? (

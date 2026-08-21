@@ -1,3 +1,4 @@
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { getPartsInfoDetail } from "@/lib/storm-ai/parts-info";
 
 export type StormAiPartsCard = {
@@ -16,6 +17,21 @@ export type StormAiPartsCard = {
   matchConfidence?: number | null;
   visuallyConfirmed?: boolean;
 };
+
+function browserPhotoUrl(url: string) {
+  // Prefer same-origin proxy paths so cards work on whatever host the tech is using.
+  if (url.startsWith("/api/blob?")) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.pathname === "/api/blob" || parsed.pathname.startsWith("/api/blob")) {
+      return `${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    /* keep original */
+  }
+  const proxied = blobProxyUrl(url);
+  return proxied ?? url;
+}
 
 export function partsCardSummary(part: {
   name: string;
@@ -107,7 +123,10 @@ export function partRecordToCard(
     manualUrl: typeof part.manualUrl === "string" ? part.manualUrl : null,
     manualKind,
     photos: orderPhotos(
-      photos as Array<{ id?: string; url: string; fileName: string }>,
+      (photos as Array<{ id?: string; url: string; fileName: string }>).map((photo) => ({
+        ...photo,
+        url: browserPhotoUrl(photo.url),
+      })),
       confirmedPhotoId
     ),
     confirmedPhotoId,
