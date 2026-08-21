@@ -8,6 +8,7 @@ import {
   VIDEO_SKIP_FRAME_RE,
 } from "./realtime-vad";
 import { isRealtimeToolResultOk } from "./realtime-tool-payload";
+import { buildTechAssistSpeakInstructions } from "./tech-assist-reply";
 
 export type StormAiRealtimeStatus =
   | "idle"
@@ -175,6 +176,11 @@ export class StormAiRealtimeClient {
   private lastUserTranscript = "";
   private searchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
   private searchFallbackUsed = false;
+  /** After tool output we expect audible speech; empty turns get one forced retry. */
+  private expectingSpokenAnswer = false;
+  private heardAssistantTranscriptThisResponse = false;
+  private emptySpeakRetryUsed = false;
+  private pendingSpeakInstructions: string | null = null;
   /** Mic/create_response stay gated after AI speech so speaker echo cannot start a turn. */
   private echoGuardUntil = 0;
   private echoGuardTimer: ReturnType<typeof setTimeout> | null = null;
@@ -219,6 +225,10 @@ export class StormAiRealtimeClient {
     this.toolPrefetch.clear();
     this.searchFallbackUsed = false;
     this.clearSearchFallback();
+    this.expectingSpokenAnswer = false;
+    this.heardAssistantTranscriptThisResponse = false;
+    this.emptySpeakRetryUsed = false;
+    this.pendingSpeakInstructions = null;
     this.eventChain = Promise.resolve();
     this.videoMode = Boolean(opts.videoMode);
     this.visitId =
@@ -926,6 +936,7 @@ export class StormAiRealtimeClient {
         this.videoResponseRetryUsed = false;
         this.speechStartedDuringResponse = false;
         this.heardTranscriptDuringResponse = false;
+        this.heardAssistantTranscriptThisResponse = false;
         this.setSpeakingGate(true);
         this.activity("Model started a response");
       }
@@ -986,6 +997,7 @@ export class StormAiRealtimeClient {
     ) {
       const transcript = String(event.transcript || "").trim();
       if (transcript) {
+        this.heardAssistantTranscriptThisResponse = true;
         this.callbacks.onTranscript?.("assistant", transcript);
         this.activity(
           `AI said: ${transcript.slice(0, 80)}${transcript.length > 80 ? "…" : ""}`
@@ -1075,12 +1087,36 @@ export class StormAiRealtimeClient {
         }
       }
 
+      // Tool follow-up produced silence (common on RESOLUTION steps) — force one retry.
+      if (
+        this.expectingSpokenAnswer &&
+        !this.heardAssistantTranscriptThisResponse &&
+        !this.needsSpokenFollowUp &&
+        this.inFlightTools === 0
+      ) {
+        this.expectingSpokenAnswer = false;
+        if (!this.emptySpeakRetryUsed) {
+          this.emptySpeakRetryUsed = true;
+          this.activity(
+            "Empty spoken answer after tool — retrying with explicit instructions",
+            "wait"
+          );
+          this.requestSpokenToolFollowUp(true);
+          return;
+        }
+        this.activity("Empty spoken answer after retry — staying silent", "error");
+      } else if (this.heardAssistantTranscriptThisResponse) {
+        this.expectingSpokenAnswer = false;
+        this.emptySpeakRetryUsed = false;
+      }
+
       // Safe to ask for spoken follow-up only after outputs are sent.
       this.scheduleSpokenFollowUp(80);
       if (
         !this.awaitingFunctionOutput &&
         !this.needsSpokenFollowUp &&
-        this.inFlightTools === 0
+        this.inFlightTools === 0 &&
+        !this.expectingSpokenAnswer
       ) {
         this.setStatus("listening");
         if (this.pendingUserTurnAfterResponse) {
@@ -1167,6 +1203,10 @@ export class StormAiRealtimeClient {
     if (this.inFlightTools === 0) {
       this.awaitingFunctionOutput = false;
       this.needsSpokenFollowUp = true;
+      this.emptySpeakRetryUsed = false;
+      this.pendingSpeakInstructions =
+        buildTechAssistSpeakInstructions(result) ??
+        "You must speak now. Tell the technician what the tool result means in one or two short sentences, then stop and listen. Do not stay silent.";
       this.activity("Tool result delivered — waiting to speak answer", "wait");
       // Wait until any in-flight model response ends, then speak.
       this.scheduleSpokenFollowUp(250);
@@ -1239,10 +1279,26 @@ export class StormAiRealtimeClient {
     return true;
   }
 
-  private requestSpokenToolFollowUp() {
-    this.activity("Asking model to speak the tool answer…");
+  private requestSpokenToolFollowUp(forceRetry = false) {
+    const instructions =
+      this.pendingSpeakInstructions ||
+      (forceRetry
+        ? "You must speak now. Summarize the latest tool result for the technician in one or two short sentences. Do not stay silent."
+        : null);
+    this.activity(
+      forceRetry
+        ? "Retrying spoken tool answer with explicit instructions…"
+        : "Asking model to speak the tool answer…"
+    );
     const sent = this.sendEvent({
       type: "response.create",
+      ...(instructions
+        ? {
+            response: {
+              instructions,
+            },
+          }
+        : {}),
     });
     if (!sent) {
       this.activity("Could not request spoken answer — connection lost", "error");
@@ -1252,6 +1308,8 @@ export class StormAiRealtimeClient {
       this.setStatus("error");
       return;
     }
+    this.expectingSpokenAnswer = true;
+    this.heardAssistantTranscriptThisResponse = false;
     this.modelResponseActive = true;
     this.setSpeakingGate(true);
     this.setStatus("speaking");
