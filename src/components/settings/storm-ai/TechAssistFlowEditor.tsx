@@ -11,7 +11,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { CheckCircle2, FlaskConical, Minus, Plus, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, CircleAlert, FlaskConical, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TechAssistOptionMatch } from "@/lib/storm-ai/tech-assist";
@@ -289,8 +289,31 @@ export function nodesToSavePayload(nodes: EditorNode[], entryNodeId: string | nu
   };
 }
 
-function VerticalConnector({ taller }: { taller?: boolean }) {
-  return <div className={`w-px bg-border ${taller ? "h-5" : "h-3"}`} />;
+function FlowArrowDown({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "h-0 w-0 border-l-[3.5px] border-r-[3.5px] border-t-[5px] border-l-transparent border-r-transparent border-t-border",
+        className
+      )}
+      aria-hidden
+    />
+  );
+}
+
+function VerticalConnector({
+  taller,
+  arrow = true,
+}: {
+  taller?: boolean;
+  arrow?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center">
+      <div className={`w-px bg-border ${taller ? "h-5" : "h-3"}`} />
+      {arrow ? <FlowArrowDown className="-mt-px" /> : null}
+    </div>
+  );
 }
 
 function InsertDiagnosticButton({ onClick }: { onClick: () => void }) {
@@ -499,7 +522,10 @@ function BranchFork({ columns }: { columns: ReactNode[] }) {
                     : { left: `-${BRANCH_GAP_HALF}`, right: `-${BRANCH_GAP_HALF}` }
               }
             />
-            <div className="h-7 w-px bg-border" />
+            <div className="flex h-7 flex-col items-center">
+              <div className="w-px flex-1 bg-border" />
+              <FlowArrowDown className="-mt-px" />
+            </div>
             {column}
           </div>
         ))}
@@ -548,6 +574,33 @@ function computePrimaryParent(
     }
   }
   return primaryParent;
+}
+
+/**
+ * Nodes from which every path ends at a RESOLUTION (fixed-point over the graph).
+ */
+function computeNodesEndingInResolution(byId: Map<string, EditorNode>): Set<string> {
+  const complete = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [id, node] of byId) {
+      if (complete.has(id)) continue;
+      if (node.type === "RESOLUTION") {
+        complete.add(id);
+        changed = true;
+        continue;
+      }
+      if (
+        node.options.length > 0 &&
+        node.options.every((o) => Boolean(o.nextNodeId) && complete.has(o.nextNodeId))
+      ) {
+        complete.add(id);
+        changed = true;
+      }
+    }
+  }
+  return complete;
 }
 
 /** Sibling options that share a next step become one column with OR chips. */
@@ -668,6 +721,19 @@ function CrossLinkLayer({
       className="pointer-events-none absolute inset-0 z-0 overflow-visible text-sky-500/70"
       aria-hidden
     >
+      <defs>
+        <marker
+          id="tech-assist-jump-arrow"
+          markerWidth="7"
+          markerHeight="7"
+          refX="6"
+          refY="3.5"
+          orient="auto"
+          markerUnits="strokeWidth"
+        >
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="currentColor" />
+        </marker>
+      </defs>
       {paths.map((path) => (
         <path
           key={path.key}
@@ -678,6 +744,7 @@ function CrossLinkLayer({
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeDasharray="7 5"
+          markerEnd="url(#tech-assist-jump-arrow)"
         />
       ))}
     </svg>
@@ -862,6 +929,154 @@ function AnyOfEditor({
   );
 }
 
+function sortNodesForGoesTo(nodes: EditorNode[], excludeId: string) {
+  return nodes
+    .filter((n) => n.id !== excludeId)
+    .sort((a, b) => {
+      const typeRank = (t: EditorNodeType) => (t === "DIAGNOSTIC" ? 0 : 1);
+      const byType = typeRank(a.type) - typeRank(b.type);
+      if (byType !== 0) return byType;
+      // Newer steps first within each type (higher sortOrder = added later).
+      return b.sortOrder - a.sortOrder;
+    });
+}
+
+function GoesToPicker({
+  nodes,
+  excludeId,
+  value,
+  onChange,
+}: {
+  nodes: EditorNode[];
+  excludeId: string;
+  value: string;
+  onChange: (nextNodeId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const sorted = useMemo(
+    () => sortNodesForGoesTo(nodes, excludeId),
+    [nodes, excludeId]
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter((n) => {
+      const title = (n.title || "").toLowerCase();
+      const body = (n.body || "").toLowerCase();
+      const kind = n.type === "RESOLUTION" ? "resolution" : "diagnostic";
+      return title.includes(q) || body.includes(q) || kind.includes(q);
+    });
+  }, [sorted, query]);
+
+  const diagnostics = filtered.filter((n) => n.type === "DIAGNOSTIC");
+  const resolutions = filtered.filter((n) => n.type === "RESOLUTION");
+  const selected = nodes.find((n) => n.id === value);
+
+  function renderGroup(label: string, items: EditorNode[]) {
+    if (items.length === 0) return null;
+    return (
+      <div>
+        <p className="sticky top-0 z-[1] bg-muted/95 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+          {label}
+        </p>
+        <ul className="py-0.5">
+          {items.map((n) => {
+            const active = n.id === value;
+            return (
+              <li key={n.id}>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex w-full items-start gap-2 px-2 py-1.5 text-left text-sm hover:bg-muted/80",
+                    active && "bg-sky-50 text-sky-950"
+                  )}
+                  onClick={() => onChange(n.id)}
+                >
+                  <span
+                    className={cn(
+                      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+                      n.type === "DIAGNOSTIC"
+                        ? "bg-sky-100 text-sky-700"
+                        : "bg-emerald-100 text-emerald-700"
+                    )}
+                  >
+                    {n.type === "DIAGNOSTIC" ? (
+                      <FlaskConical className="h-3 w-3" />
+                    ) : (
+                      <CheckCircle2 className="h-3 w-3" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {n.title || (n.type === "DIAGNOSTIC" ? "Untitled test" : "Untitled resolution")}
+                    </span>
+                    {n.body.trim() ? (
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {n.body}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 space-y-2">
+      {selected ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
+          <span className="min-w-0 truncate">
+            <span className="text-muted-foreground">
+              {selected.type === "RESOLUTION" ? "Resolution" : "Diagnostic"}:{" "}
+            </span>
+            <span className="font-medium">
+              {selected.title || selected.id.slice(0, 8)}
+            </span>
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-6 shrink-0 px-2 text-xs"
+            onClick={() => onChange("")}
+          >
+            Clear
+          </Button>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">No step selected yet.</p>
+      )}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="h-8 pl-8 text-sm"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search steps…"
+          aria-label="Search goes-to steps"
+        />
+      </div>
+      <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-background">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+            No matching steps
+          </p>
+        ) : (
+          <>
+            {renderGroup("Diagnostics", diagnostics)}
+            {renderGroup("Resolutions", resolutions)}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OptionDetailPanel({
   node,
   option,
@@ -949,28 +1164,18 @@ function OptionDetailPanel({
           ) : null}
         </div>
         <AnyOfEditor anyOf={option.anyOf} onChange={(anyOf) => updateOption({ anyOf })} />
-        <label className="block text-xs">
+        <div className="block text-xs font-medium">
           Goes to
           <p className="mt-0.5 text-[11px] font-normal text-muted-foreground">
-            Pick any existing diagnostic or resolution — even one already used on another
-            branch. Extra links draw as jump lines.
+            Diagnostics first (newest on top), then resolutions. Search by title or details.
           </p>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          <GoesToPicker
+            nodes={nodes}
+            excludeId={node.id}
             value={option.nextNodeId}
-            onChange={(e) => updateOption({ nextNodeId: e.target.value }, true)}
-          >
-            <option value="">Select step…</option>
-            {nodes
-              .filter((n) => n.id !== node.id)
-              .map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.type === "RESOLUTION" ? "Resolution: " : "Diagnostic: "}
-                  {n.title || n.id.slice(0, 6)}
-                </option>
-              ))}
-          </select>
-        </label>
+            onChange={(nextNodeId) => updateOption({ nextNodeId }, true)}
+          />
+        </div>
         <div className="border-t border-border pt-3">
           <Button
             type="button"
@@ -1159,6 +1364,7 @@ export function TechAssistFlowEditor({
 }: Props) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
   const pastRef = useRef<HistorySnapshot[]>([]);
   const futureRef = useRef<HistorySnapshot[]>([]);
   const applyingHistoryRef = useRef(false);
@@ -1166,6 +1372,15 @@ export function TechAssistFlowEditor({
   const entryRef = useRef(entryNodeId);
   nodesRef.current = nodes;
   entryRef.current = entryNodeId;
+
+  const toggleCollapsed = useCallback((nodeId: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }, []);
 
   const notifyHistory = useCallback(() => {
     onHistoryStateChange?.({
@@ -1209,8 +1424,22 @@ export function TechAssistFlowEditor({
   useEffect(() => {
     pastRef.current = [];
     futureRef.current = [];
+    setCollapsedIds(new Set());
     notifyHistory();
   }, [historyKey, notifyHistory]);
+
+  useEffect(() => {
+    const alive = new Set(nodes.map((n) => n.id));
+    setCollapsedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (alive.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [nodes]);
 
   useEffect(() => {
     if (!historyRef) return;
@@ -1253,6 +1482,15 @@ export function TechAssistFlowEditor({
     [startId, byId]
   );
 
+  const nodesEndingInResolution = useMemo(
+    () => computeNodesEndingInResolution(byId),
+    [byId]
+  );
+
+  function optionEndsInResolution(option: EditorOption) {
+    return Boolean(option.nextNodeId) && nodesEndingInResolution.has(option.nextNodeId);
+  }
+
   const jumpEdges = useMemo(() => {
     const edges: JumpEdge[] = [];
     const seen = new Set<string>();
@@ -1284,8 +1522,10 @@ export function TechAssistFlowEditor({
     () =>
       `${zoom}:${selection?.kind ?? ""}:${
         selection && "nodeId" in selection ? selection.nodeId : ""
-      }:${nodes.map((n) => `${n.id}:${n.options.map((o) => o.nextNodeId).join(",")}`).join("|")}`,
-    [nodes, zoom, selection]
+      }:c[${[...collapsedIds].sort().join(",")}]:${nodes
+        .map((n) => `${n.id}:${n.options.map((o) => o.nextNodeId).join(",")}`)
+        .join("|")}`,
+    [nodes, zoom, selection, collapsedIds]
   );
 
   const flowSurfaceRef = useRef<HTMLDivElement | null>(null);
@@ -1413,24 +1653,35 @@ export function TechAssistFlowEditor({
 
   function renderOptionChip(nodeId: string, option: EditorOption) {
     const optionSelected = isOptionSelected(nodeId, option.id);
+    const incomplete = !optionEndsInResolution(option);
     return (
-      <button
-        type="button"
-        key={option.id}
-        className={cn(
-          "max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
-          optionSelected
-            ? "border-sky-400 bg-sky-50 text-sky-900 ring-2 ring-sky-300 ring-offset-1"
-            : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelection({ kind: "option", nodeId, optionId: option.id });
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        {optionBranchLabel(option)}
-      </button>
+      <div key={option.id} className="flex items-center gap-1">
+        <button
+          type="button"
+          className={cn(
+            "max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium transition-colors",
+            optionSelected
+              ? "border-sky-400 bg-sky-50 text-sky-900 ring-2 ring-sky-300 ring-offset-1"
+              : "border-border bg-muted/50 hover:border-sky-300 hover:bg-sky-50/60"
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelection({ kind: "option", nodeId, optionId: option.id });
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {optionBranchLabel(option)}
+        </button>
+        {incomplete ? (
+          <span
+            className="shrink-0 text-red-500"
+            title="This branch does not end in a resolution"
+            aria-label="This branch does not end in a resolution"
+          >
+            <CircleAlert className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </span>
+        ) : null}
+      </div>
     );
   }
 
@@ -1442,7 +1693,7 @@ export function TechAssistFlowEditor({
       (target?.type === "RESOLUTION" ? "Resolution" : "Diagnostic");
     return (
       <div className="mt-1 flex flex-col items-center">
-        <div className="h-3 w-px bg-border" />
+        <VerticalConnector />
         <button
           type="button"
           data-flow-jump-from={fromKey}
@@ -1481,50 +1732,93 @@ export function TechAssistFlowEditor({
     const isDiagnostic = node.type === "DIAGNOSTIC";
     const optionCount = node.options.length;
     const selected = isNodeSelected(node.id);
+    const hasBranches = isDiagnostic && optionCount > 0;
+    const collapsed = hasBranches && collapsedIds.has(node.id);
 
     return (
       <div key={node.id} className="relative z-[1] flex w-max flex-col items-center">
-        <button
-          type="button"
-          data-flow-node={node.id}
-          className={cn(
-            "relative z-[1] w-72 shrink-0 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
-            isDiagnostic ? "border-sky-200" : "border-emerald-200",
-            selected && "ring-2 ring-primary ring-offset-2"
-          )}
-          onClick={() => setSelection({ kind: "node", nodeId: node.id })}
-        >
-          <span className="flex items-start gap-3">
-            <span
-              className={cn(
-                "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                isDiagnostic ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
-              )}
+        <div className="relative w-72 shrink-0">
+          {hasBranches ? (
+            <button
+              type="button"
+              className="absolute right-1 top-1 z-[2] flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleCollapsed(node.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title={collapsed ? "Expand branches below" : "Collapse branches below"}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? "Expand branches below" : "Collapse branches below"}
             >
-              {isDiagnostic ? (
-                <FlaskConical className="h-3.5 w-3.5" />
+              {collapsed ? (
+                <ChevronRight className="h-4 w-4" />
               ) : (
-                <CheckCircle2 className="h-3.5 w-3.5" />
+                <ChevronDown className="h-4 w-4" />
               )}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            data-flow-node={node.id}
+            className={cn(
+              "relative z-[1] w-full rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
+              hasBranches && "pr-9",
+              isDiagnostic ? "border-sky-200" : "border-emerald-200",
+              selected && "ring-2 ring-primary ring-offset-2"
+            )}
+            onClick={() => setSelection({ kind: "node", nodeId: node.id })}
+          >
+            <span className="flex items-start gap-3">
+              <span
+                className={cn(
+                  "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                  isDiagnostic ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
+                )}
+              >
+                {isDiagnostic ? (
+                  <FlaskConical className="h-3.5 w-3.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {isDiagnostic ? "Diagnostic" : "Resolution"}
+                </span>
+                <span className="block text-sm font-semibold text-foreground">
+                  {node.title || (isDiagnostic ? "Untitled test" : "Untitled resolution")}
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {node.body || (isDiagnostic ? "No test yet" : "No instructions yet")}
+                  {isDiagnostic && optionCount > 0
+                    ? ` · ${optionCount} option${optionCount === 1 ? "" : "s"}`
+                    : ""}
+                </span>
+              </span>
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                {isDiagnostic ? "Diagnostic" : "Resolution"}
-              </span>
-              <span className="block text-sm font-semibold text-foreground">
-                {node.title || (isDiagnostic ? "Untitled test" : "Untitled resolution")}
-              </span>
-              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                {node.body || (isDiagnostic ? "No test yet" : "No instructions yet")}
-                {isDiagnostic && optionCount > 0
-                  ? ` · ${optionCount} option${optionCount === 1 ? "" : "s"}`
-                  : ""}
-              </span>
-            </span>
-          </span>
-        </button>
+          </button>
+        </div>
 
-        {isDiagnostic ? (
+        {hasBranches && collapsed ? (
+          <div className="mt-1 flex flex-col items-center">
+            <VerticalConnector />
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-full border border-dashed border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground hover:border-sky-300 hover:bg-sky-50/60 hover:text-sky-900"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleCollapsed(node.id);
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ChevronRight className="h-3 w-3" />
+              {optionCount} branch{optionCount === 1 ? "" : "es"} hidden
+            </button>
+          </div>
+        ) : null}
+
+        {hasBranches && !collapsed ? (
           <BranchFork
             columns={groupBranchColumns(
               node.options,
