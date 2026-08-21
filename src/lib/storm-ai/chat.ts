@@ -135,6 +135,12 @@ export async function runStormAiTurn(opts: {
     return {
       warning: "Storm AI is not configured (missing OPENAI_API_KEY).",
       messages: await listMessages(conversation.id),
+      debugLog: [
+        {
+          level: "error" as const,
+          message: "OPENAI_API_KEY is not configured",
+        },
+      ],
     };
   }
 
@@ -156,13 +162,26 @@ export async function runStormAiTurn(opts: {
   ];
 
   const toolsUsed: Array<{ name: string; args: unknown }> = [];
+  const debugLog: Array<{ level: "info" | "wait" | "ok" | "error"; message: string }> = [];
   let promptTokens = 0;
   let completionTokens = 0;
   let assistantText = "";
   let partsCard: Awaited<ReturnType<typeof buildPartsChatCard>> = null;
 
+  debugLog.push({
+    level: "info",
+    message: `Text turn started${hasImages ? ` (${storedAttachments.length} photo(s))` : ""}`,
+  });
+  if (policyCheck) {
+    debugLog.push({ level: "info", message: "Policy check context attached" });
+  }
+
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      debugLog.push({
+        level: "wait",
+        message: `Model round ${round + 1}/${MAX_TOOL_ROUNDS}…`,
+      });
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -213,17 +232,37 @@ export async function runStormAiTurn(opts: {
             name: call.function.name,
             args: sanitizeToolPayload(parsed, 1500),
           });
+          debugLog.push({
+            level: "wait",
+            message: `Running tool ${call.function.name}…`,
+          });
           const result = await runStormAiTool(opts.user, call.function.name, parsed, {
             conversationId: conversation.id,
           });
           const payload = sanitizeToolPayload(result, 8000);
+          const toolOk =
+            result &&
+            typeof result === "object" &&
+            "ok" in result &&
+            (result as { ok?: unknown }).ok === false
+              ? false
+              : true;
+          debugLog.push({
+            level: toolOk ? "ok" : "error",
+            message: toolOk
+              ? `Tool ${call.function.name} finished`
+              : `Tool ${call.function.name} returned an error`,
+          });
           if (call.function.name === "search_parts_info" || !partsCard) {
             const card = await buildPartsChatCard(
               opts.user.companyId,
               call.function.name,
               result
             );
-            if (card) partsCard = card;
+            if (card) {
+              partsCard = card;
+              debugLog.push({ level: "ok", message: "Parts card prepared for chat" });
+            }
           }
           await prisma.stormAiMessage.create({
             data: {
@@ -246,12 +285,19 @@ export async function runStormAiTurn(opts: {
       }
 
       assistantText = (typeof message.content === "string" ? message.content : "").trim();
+      debugLog.push({
+        level: "ok",
+        message: assistantText
+          ? `Assistant reply ready (${assistantText.length} chars)`
+          : "Assistant returned an empty reply",
+      });
       break;
     }
 
     if (!assistantText) {
       assistantText =
         "I wasn’t able to finish that request. Try asking again with a more specific question.";
+      debugLog.push({ level: "wait", message: "Filled empty assistant reply with fallback text" });
     }
 
     await prisma.stormAiMessage.create({
@@ -282,9 +328,15 @@ export async function runStormAiTurn(opts: {
       completionTokens,
     });
 
-    return { messages: await listMessages(conversation.id) };
+    debugLog.push({
+      level: "ok",
+      message: `Text turn complete · tools=${toolsUsed.length} · tokens=${promptTokens + completionTokens}`,
+    });
+
+    return { messages: await listMessages(conversation.id), debugLog };
   } catch (err) {
     const error = err instanceof Error ? err.message : "Storm AI failed";
+    debugLog.push({ level: "error", message: `Text turn failed: ${error.slice(0, 240)}` });
     await writeAudit({
       user: opts.user,
       conversationId: conversation.id,
@@ -299,6 +351,7 @@ export async function runStormAiTurn(opts: {
     return {
       warning: "I wasn’t able to retrieve that report.",
       messages: await listMessages(conversation.id),
+      debugLog,
     };
   }
 }

@@ -254,7 +254,8 @@ export function StormAiChat() {
   const [chatFault, setChatFault] = useState(false);
   const [activityExportMeta, setActivityExportMeta] = useState<{
     videoMode: boolean;
-  }>({ videoMode: false });
+    usedText: boolean;
+  }>({ videoMode: false, usedText: false });
   const [videoMode, setVideoMode] = useState(false);
   const [localPreviewStream, setLocalPreviewStream] = useState<MediaStream | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -371,20 +372,29 @@ export function StormAiChat() {
 
   function resetVoiceActivity(nextVideoMode = false) {
     setVoiceActivity([]);
-    setActivityExportMeta({ videoMode: nextVideoMode });
+    setActivityExportMeta({ videoMode: nextVideoMode, usedText: false });
     setChatFault(false);
   }
 
   function exportVoiceActivity() {
     if (voiceActivity.length === 0) {
-      toast.error("No live steps to export yet");
+      toast.error("No debug steps to export yet — send a message or start a live session first");
       return;
     }
     const payload = {
       exportedAt: new Date().toISOString(),
-      source: "storm-ai-live-debug",
+      source: "storm-ai-debug",
       conversationId: activeId,
+      channel:
+        activityExportMeta.videoMode || videoMode
+          ? "video"
+          : voiceStatus !== "idle" && voiceStatus !== "ended"
+            ? "voice"
+            : activityExportMeta.usedText
+              ? "text"
+              : "session",
       videoMode: activityExportMeta.videoMode || videoMode,
+      usedText: activityExportMeta.usedText,
       status: voiceStatus,
       entryCount: voiceActivity.length,
       entries: voiceActivity.map((entry, index) => ({
@@ -628,6 +638,12 @@ export function StormAiChat() {
     setPendingImages([]);
     setSending(true);
     setChatFault(false);
+    setActivityExportMeta((prev) => ({ ...prev, usedText: true }));
+    pushVoiceActivity({
+      at: Date.now(),
+      level: "info",
+      message: `Sending text message${imagesPayload.length ? ` with ${imagesPayload.length} photo(s)` : ""}…`,
+    });
     setMessages((prev) => [
       ...prev,
       {
@@ -648,8 +664,29 @@ export function StormAiChat() {
           pageContext,
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        warning?: string;
+        messages?: ChatMessage[];
+        debugLog?: Array<{ level?: StormAiRealtimeActivity["level"]; message?: string }>;
+      };
       if (!res.ok) throw new Error(data.error ?? "Send failed");
+      if (Array.isArray(data.debugLog)) {
+        for (const entry of data.debugLog) {
+          if (!entry?.message) continue;
+          pushVoiceActivity({
+            at: Date.now(),
+            level: entry.level ?? "info",
+            message: entry.message,
+          });
+        }
+      } else {
+        pushVoiceActivity({
+          at: Date.now(),
+          level: "ok",
+          message: "Text reply received",
+        });
+      }
       setMessages(data.messages ?? []);
       if (data.warning) {
         setChatFault(true);
@@ -658,6 +695,11 @@ export function StormAiChat() {
       void refreshThreads();
     } catch (err) {
       setChatFault(true);
+      pushVoiceActivity({
+        at: Date.now(),
+        level: "error",
+        message: err instanceof Error ? err.message : "Send failed",
+      });
       toast.error(err instanceof Error ? err.message : "Send failed");
     } finally {
       setSending(false);
