@@ -55,6 +55,7 @@ test("spokenYesNo maps field paraphrases", () => {
   assert.equal(spokenYesNo("yes"), "yes");
   assert.equal(spokenYesNo("the valve operated manually"), "yes");
   assert.equal(spokenYesNo("it opens"), "yes");
+  assert.equal(spokenYesNo("Yes, manually it’s working fine if I open from solenoid"), "yes");
   assert.equal(spokenYesNo("no"), "no");
   assert.equal(spokenYesNo("it didn't operate manually"), "no");
   assert.equal(spokenYesNo("water pressure is fine"), null);

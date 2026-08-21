@@ -11,14 +11,28 @@ import {
 } from "./attachments";
 import { runStormAiTool } from "./execute";
 import { parsePartsCardFromAttachments, buildPartsChatCard } from "./parts-card";
-import { stormAiToolsForRole } from "./permissions";
+import { canUseTechAssist, stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
 import { formatPolicyCheckForTurn } from "./policies";
+import {
+  continueTechAssistSession,
+  formatActiveTechAssistForPrompt,
+  getActiveTechAssistSession,
+} from "./tech-assist";
+import {
+  isOpenAiRateLimitError,
+  parseRetryAfterMs,
+  sleep,
+  wantsNewTechIssue,
+} from "./chat-helpers";
 import type { StormAiPageContext } from "./types";
 
 const MAX_TOOL_ROUNDS = 8;
 /** Include images from at most this many recent user turns (token control). */
 const MAX_IMAGE_HISTORY_TURNS = 2;
+const MAX_OPENAI_RETRIES = 3;
+const TURN_FAILURE_WARNING =
+  "Storm AI couldn’t finish that reply. Try sending your message again.";
 
 type ContentPart =
   | { type: "text"; text: string }
@@ -147,6 +161,38 @@ export async function runStormAiTurn(opts: {
   const openAiHistory = await buildOpenAiHistory(history);
   const policyCheck = await formatPolicyCheckForTurn(opts.user.companyId, content);
 
+  let activeAssistBlock = "";
+  let autoContinued: Awaited<ReturnType<typeof continueTechAssistSession>> | null = null;
+  if (canUseTechAssist(opts.user.role)) {
+    try {
+      const active = await getActiveTechAssistSession({
+        companyId: opts.user.companyId,
+        userId: opts.user.id,
+        conversationId: conversation.id,
+      });
+      activeAssistBlock = formatActiveTechAssistForPrompt(active);
+      // Text chat previously rematched issues on every answer (voice injects active session).
+      // Apply the answer deterministically when a diagnostic is already in progress.
+      if (
+        active.ok &&
+        active.active &&
+        active.step.type === "DIAGNOSTIC" &&
+        !wantsNewTechIssue(content) &&
+        !hasImages
+      ) {
+        autoContinued = await continueTechAssistSession({
+          companyId: opts.user.companyId,
+          userId: opts.user.id,
+          sessionId: active.sessionId,
+          result: content,
+        });
+      }
+    } catch (err) {
+      console.error("[storm-ai] active tech-assist lookup failed", err);
+    }
+  }
+
+  const skipForcedPolicy = Boolean(autoContinued?.ok) || Boolean(activeAssistBlock);
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -157,9 +203,27 @@ export async function runStormAiTurn(opts: {
         pageContext: opts.pageContext,
       }),
     },
-    ...(policyCheck ? [{ role: "system" as const, content: policyCheck }] : []),
+    ...(policyCheck && !skipForcedPolicy
+      ? [{ role: "system" as const, content: policyCheck }]
+      : []),
+    ...(activeAssistBlock
+      ? [
+          {
+            role: "system" as const,
+            content: `${activeAssistBlock}\nDo not call match_tech_issue or restart this workflow unless the technician clearly switched to a different problem.`,
+          },
+        ]
+      : []),
     ...openAiHistory,
   ];
+
+  if (autoContinued?.ok) {
+    const payload = sanitizeToolPayload({ ok: true, data: autoContinued }, 8000);
+    messages.push({
+      role: "system",
+      content: `The technician's latest message was already applied with continue_tech_assist. Tool result:\n${JSON.stringify(payload)}\n\nReply only about this step. If unmatched is true, ask them to choose from the listed options. Otherwise give the next test or the resolution. Do not call match_tech_issue, start_tech_assist, or continue_tech_assist again for this same answer.`,
+    });
+  }
 
   const toolsUsed: Array<{ name: string; args: unknown }> = [];
   const debugLog: Array<{ level: "info" | "wait" | "ok" | "error"; message: string }> = [];
@@ -172,8 +236,37 @@ export async function runStormAiTurn(opts: {
     level: "info",
     message: `Text turn started${hasImages ? ` (${storedAttachments.length} photo(s))` : ""}`,
   });
-  if (policyCheck) {
+  if (policyCheck && !skipForcedPolicy) {
     debugLog.push({ level: "info", message: "Policy check context attached" });
+  }
+  if (activeAssistBlock) {
+    debugLog.push({ level: "info", message: "Active tech-assist context attached" });
+  }
+  if (autoContinued?.ok) {
+    toolsUsed.push({
+      name: "continue_tech_assist",
+      args: sanitizeToolPayload(
+        { sessionId: autoContinued.sessionId, result: content, source: "auto" },
+        1500
+      ),
+    });
+    debugLog.push({
+      level: "ok",
+      message:
+        "unmatched" in autoContinued && autoContinued.unmatched
+          ? "Auto continue_tech_assist: unmatched — staying on step"
+          : `Auto continue_tech_assist: applied ${"stepsApplied" in autoContinued ? autoContinued.stepsApplied : 0} step(s)`,
+    });
+    await prisma.stormAiMessage.create({
+      data: {
+        conversationId: conversation.id,
+        userId: opts.user.id,
+        role: "tool",
+        content: JSON.stringify(sanitizeToolPayload({ ok: true, data: autoContinued }, 8000)),
+        toolName: "continue_tech_assist",
+        toolCallId: `auto-continue-${Date.now()}`,
+      },
+    });
   }
 
   try {
@@ -182,25 +275,51 @@ export async function runStormAiTurn(opts: {
         level: "wait",
         message: `Model round ${round + 1}/${MAX_TOOL_ROUNDS}…`,
       });
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: stormAiModel(),
-          messages,
-          tools: stormAiToolsForRole(opts.user.role),
-          tool_choice:
-            round === 0 && policyCheck
-              ? { type: "function" as const, function: { name: "search_company_policies" } }
-              : "auto",
-        }),
-      });
 
-      if (!res.ok) {
-        const errText = await res.text();
+      const forcePolicy =
+        round === 0 && Boolean(policyCheck) && !skipForcedPolicy && !autoContinued?.ok;
+      const forceContinue =
+        round === 0 &&
+        Boolean(activeAssistBlock) &&
+        !autoContinued?.ok &&
+        !wantsNewTechIssue(content) &&
+        !hasImages;
+
+      let res: Response | null = null;
+      let errText = "";
+      for (let attempt = 0; attempt < MAX_OPENAI_RETRIES; attempt++) {
+        res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: stormAiModel(),
+            messages,
+            tools: stormAiToolsForRole(opts.user.role),
+            tool_choice: forcePolicy
+              ? { type: "function" as const, function: { name: "search_company_policies" } }
+              : forceContinue
+                ? { type: "function" as const, function: { name: "continue_tech_assist" } }
+                : autoContinued?.ok
+                  ? "none"
+                  : "auto",
+          }),
+        });
+        if (res.ok) break;
+        errText = await res.text();
+        if (!isOpenAiRateLimitError(res.status, errText) || attempt === MAX_OPENAI_RETRIES - 1) {
+          throw new Error(errText || "OpenAI request failed");
+        }
+        const waitMs = parseRetryAfterMs(errText) ?? 6000 * (attempt + 1);
+        debugLog.push({
+          level: "wait",
+          message: `Rate limited — retrying in ${Math.ceil(waitMs / 1000)}s…`,
+        });
+        await sleep(waitMs);
+      }
+      if (!res?.ok) {
         throw new Error(errText || "OpenAI request failed");
       }
 
@@ -227,6 +346,14 @@ export async function runStormAiTurn(opts: {
             parsed = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
           } catch {
             parsed = {};
+          }
+          // If the model was forced to continue but omitted session/result, fill from context.
+          if (call.function.name === "continue_tech_assist" && activeAssistBlock) {
+            const sessionMatch = activeAssistBlock.match(/sessionId:\s*([^\s]+)/);
+            if (!parsed.sessionId && sessionMatch?.[1]) parsed.sessionId = sessionMatch[1];
+            if (parsed.result === undefined || parsed.result === null || parsed.result === "") {
+              parsed.result = content;
+            }
           }
           toolsUsed.push({
             name: call.function.name,
@@ -349,7 +476,7 @@ export async function runStormAiTurn(opts: {
       completionTokens,
     });
     return {
-      warning: "I wasn’t able to retrieve that report.",
+      warning: TURN_FAILURE_WARNING,
       messages: await listMessages(conversation.id),
       debugLog,
     };

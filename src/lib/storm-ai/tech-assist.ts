@@ -132,7 +132,7 @@ export function phrasesOverlap(a: string, b: string): boolean {
   const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
   const longerSet = new Set(longer);
   const hits = shorter.filter((t) => longerSet.has(t)).length;
-  const need = Math.max(1, Math.ceil(shorter.length * 0.75));
+  const need = Math.max(1, Math.ceil(shorter.length * 0.55));
   return hits >= need;
 }
 
@@ -159,7 +159,7 @@ export function spokenYesNo(text: string): "yes" | "no" | null {
   }
   // Affirmative restatements without negation: "it does", "valve operated manually", "it opened"
   if (
-    /\b(it (does|did|will|works|worked|opens?|opened|operates?|operated)|works|worked|opens?|opened|operates?|operated)\b/.test(
+    /\b(it (does|did|will|works|worked|opens?|opened|operates?|operated|is working|was working)|works|worked|working|opens?|opened|operates?|operated|manually)\b/.test(
       t
     ) &&
     !hasNegation(t)
