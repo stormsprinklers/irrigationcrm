@@ -14,7 +14,17 @@ import { parsePartsCardFromAttachments, buildPartsChatCard } from "./parts-card"
 import { stormAiToolsForRole } from "./permissions";
 import { buildStormAiSystemPrompt, sanitizeToolPayload } from "./prompt";
 import { formatPolicyCheckForTurn } from "./policies";
-import type { StormAiPageContext } from "./types";
+import { formatTechAssistAssistantText } from "./tech-assist-reply";
+import type { StormAiPageContext, StormAiToolResult } from "./types";
+
+const TECH_ASSIST_TOOLS = new Set([
+  "start_tech_assist",
+  "continue_tech_assist",
+  "get_active_tech_assist",
+]);
+
+const TURN_FAILURE_WARNING =
+  "Storm AI couldn’t finish that reply. Try sending your message again.";
 
 const MAX_TOOL_ROUNDS = 8;
 /** Include images from at most this many recent user turns (token control). */
@@ -160,6 +170,7 @@ export async function runStormAiTurn(opts: {
   let completionTokens = 0;
   let assistantText = "";
   let partsCard: Awaited<ReturnType<typeof buildPartsChatCard>> = null;
+  let lastTechAssistResult: StormAiToolResult | null = null;
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -216,6 +227,9 @@ export async function runStormAiTurn(opts: {
           const result = await runStormAiTool(opts.user, call.function.name, parsed, {
             conversationId: conversation.id,
           });
+          if (TECH_ASSIST_TOOLS.has(call.function.name) && result.ok) {
+            lastTechAssistResult = result;
+          }
           const payload = sanitizeToolPayload(result, 8000);
           if (call.function.name === "search_parts_info" || !partsCard) {
             const card = await buildPartsChatCard(
@@ -251,6 +265,7 @@ export async function runStormAiTurn(opts: {
 
     if (!assistantText) {
       assistantText =
+        formatTechAssistAssistantText(lastTechAssistResult) ??
         "I wasn’t able to finish that request. Try asking again with a more specific question.";
     }
 
@@ -285,7 +300,45 @@ export async function runStormAiTurn(opts: {
     return { messages: await listMessages(conversation.id) };
   } catch (err) {
     const error = err instanceof Error ? err.message : "Storm AI failed";
-    await writeAudit({
+    console.error("[storm-ai] turn failed", error);
+
+    // Tech-assist tools may already have advanced the session before the model reply failed.
+    // Recover with the last step so the technician is not stuck on a misleading "report" toast.
+    const fallback = formatTechAssistAssistantText(lastTechAssistResult);
+    if (fallback) {
+      try {
+        await prisma.stormAiMessage.create({
+          data: {
+            conversationId: conversation.id,
+            userId: opts.user.id,
+            role: "assistant",
+            content: fallback,
+            usageJson: { promptTokens, completionTokens },
+          },
+        });
+        await prisma.stormAiConversation.update({
+          where: { id: conversation.id },
+          data: { updatedAt: new Date() },
+        });
+      } catch (persistErr) {
+        console.error("[storm-ai] failed to persist tech-assist fallback", persistErr);
+      }
+      await writeAuditSafe({
+        user: opts.user,
+        conversationId: conversation.id,
+        question: content,
+        tools: toolsUsed,
+        ok: false,
+        model: stormAiModel(),
+        error: `Recovered with tech-assist fallback after: ${error}`.slice(0, 2000),
+        responsePreview: fallback.slice(0, 500),
+        promptTokens,
+        completionTokens,
+      });
+      return { messages: await listMessages(conversation.id) };
+    }
+
+    await writeAuditSafe({
       user: opts.user,
       conversationId: conversation.id,
       question: content,
@@ -297,7 +350,7 @@ export async function runStormAiTurn(opts: {
       completionTokens,
     });
     return {
-      warning: "I wasn’t able to retrieve that report.",
+      warning: TURN_FAILURE_WARNING,
       messages: await listMessages(conversation.id),
     };
   }
@@ -397,4 +450,14 @@ async function writeAudit(input: {
       error: input.error,
     },
   });
+}
+
+async function writeAuditSafe(
+  input: Parameters<typeof writeAudit>[0]
+): Promise<void> {
+  try {
+    await writeAudit(input);
+  } catch (err) {
+    console.error("[storm-ai] audit log failed", err);
+  }
 }
