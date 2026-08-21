@@ -293,7 +293,7 @@ function FlowArrowDown({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "h-0 w-0 border-l-[3.5px] border-r-[3.5px] border-t-[5px] border-l-transparent border-r-transparent border-t-border",
+        "h-0 w-0 border-l-[3.5px] border-r-[3.5px] border-t-[5px] border-l-transparent border-r-transparent border-t-neutral-500",
         className
       )}
       aria-hidden
@@ -310,7 +310,7 @@ function VerticalConnector({
 }) {
   return (
     <div className="flex flex-col items-center">
-      <div className={`w-px bg-border ${taller ? "h-5" : "h-3"}`} />
+      <div className={`w-px bg-neutral-500 ${taller ? "h-5" : "h-3"}`} />
       {arrow ? <FlowArrowDown className="-mt-px" /> : null}
     </div>
   );
@@ -366,25 +366,86 @@ function PanCanvas({
   zoom: number;
   onZoomChange: (zoom: number) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+  const pinchFocusRef = useRef<{
+    vx: number;
+    vy: number;
+    contentX: number;
+    contentY: number;
+  } | null>(null);
+  const [contentSize, setContentSize] = useState({ w: 1, h: 1 });
   const [grabbing, setGrabbing] = useState(false);
 
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const measure = () => {
+      setContentSize({
+        w: Math.max(1, content.offsetWidth),
+        h: Math.max(1, content.offsetHeight),
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const focus = pinchFocusRef.current;
+    if (!viewport || !focus) return;
+    viewport.scrollLeft = focus.contentX * zoom - focus.vx;
+    viewport.scrollTop = focus.contentY * zoom - focus.vy;
+    pinchFocusRef.current = null;
+  }, [zoom, contentSize.w, contentSize.h]);
+
+  function beginZoom(nextZoom: number, clientX: number, clientY: number) {
+    const viewport = viewportRef.current;
+    const prev = zoomRef.current;
+    const clamped = clampZoom(nextZoom);
+    if (clamped === prev) return;
+    if (viewport) {
+      const rect = viewport.getBoundingClientRect();
+      const vx = clientX - rect.left;
+      const vy = clientY - rect.top;
+      pinchFocusRef.current = {
+        vx,
+        vy,
+        contentX: (viewport.scrollLeft + vx) / prev,
+        contentY: (viewport.scrollTop + vy) / prev,
+      };
+    }
+    onZoomChangeRef.current(clamped);
+  }
+
+  function zoomFromControls(nextZoom: number) {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      onZoomChangeRef.current(clampZoom(nextZoom));
+      return;
+    }
+    const rect = viewport.getBoundingClientRect();
+    beginZoom(nextZoom, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+
   useEffect(() => {
-    const el = ref.current;
+    const el = viewportRef.current;
     if (!el) return;
     function onWheel(e: WheelEvent) {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
-      // Proportional to delta so trackpad pinch zooms smoothly; buttons still use ZOOM_STEP.
-      const next = clampZoom(zoomRef.current - e.deltaY * ZOOM_WHEEL_SENSITIVITY);
-      if (next !== zoomRef.current) onZoomChange(next);
+      beginZoom(zoomRef.current - e.deltaY * ZOOM_WHEEL_SENSITIVITY, e.clientX, e.clientY);
     }
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [onZoomChange]);
+  }, []);
 
   function shouldIgnore(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -393,7 +454,7 @@ function PanCanvas({
 
   function onPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (e.button !== 0 || shouldIgnore(e.target)) return;
-    const el = ref.current;
+    const el = viewportRef.current;
     if (!el) return;
     drag.current = {
       x: e.clientX,
@@ -406,7 +467,7 @@ function PanCanvas({
   }
 
   function onPointerMove(e: PointerEvent<HTMLDivElement>) {
-    const el = ref.current;
+    const el = viewportRef.current;
     const start = drag.current;
     if (!el || !start) return;
     el.scrollLeft = start.left - (e.clientX - start.x);
@@ -424,28 +485,43 @@ function PanCanvas({
     }
   }
 
+  const scaledW = contentSize.w * zoom;
+  const scaledH = contentSize.h * zoom;
+
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "h-full min-h-0 overflow-auto bg-muted/30",
-        grabbing ? "cursor-grabbing select-none" : "cursor-grab"
-      )}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-    >
+    <div className="relative h-full min-h-0">
       <div
-        className="inline-block min-h-full min-w-full p-8"
-        style={{
-          width: "max-content",
-          transform: `scale(${zoom})`,
-          transformOrigin: "top center",
-        }}
+        ref={viewportRef}
+        className={cn(
+          "h-full min-h-0 overflow-auto bg-muted/30",
+          grabbing ? "cursor-grabbing select-none" : "cursor-grab"
+        )}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
       >
-        {children}
+        <div
+          className="relative"
+          style={{
+            width: scaledW,
+            height: scaledH,
+          }}
+        >
+          <div
+            ref={contentRef}
+            className="inline-block p-6"
+            style={{
+              width: "max-content",
+              transform: `scale(${zoom})`,
+              transformOrigin: "0 0",
+            }}
+          >
+            {children}
+          </div>
+        </div>
       </div>
+      <ZoomControls zoom={zoom} onZoomChange={zoomFromControls} />
     </div>
   );
 }
@@ -488,8 +564,8 @@ function ZoomControls({
   );
 }
 
-/** Half of gap-12 so horizontal rails bridge the column gaps. */
-const BRANCH_GAP_HALF = "1.5rem";
+/** Half of gap-6 so horizontal rails bridge the column gaps. */
+const BRANCH_GAP_HALF = "0.75rem";
 
 /**
  * Tree fork whose vertical drops sit on each column’s center (same flex + gap as
@@ -508,12 +584,12 @@ function BranchFork({ columns }: { columns: ReactNode[] }) {
   }
   return (
     <div className="flex w-max flex-col items-center">
-      <div className="h-3 w-px bg-border" />
-      <div className="flex items-start gap-12">
+      <div className="h-3 w-px bg-neutral-500" />
+      <div className="flex items-start gap-6">
         {columns.map((column, i) => (
           <div key={i} className="relative flex flex-col items-center">
             <div
-              className="absolute top-0 h-px bg-border"
+              className="absolute top-0 h-px bg-neutral-500"
               style={
                 i === 0
                   ? { left: "50%", right: `-${BRANCH_GAP_HALF}` }
@@ -523,7 +599,7 @@ function BranchFork({ columns }: { columns: ReactNode[] }) {
               }
             />
             <div className="flex h-7 flex-col items-center">
-              <div className="w-px flex-1 bg-border" />
+              <div className="w-px flex-1 bg-neutral-500" />
               <FlowArrowDown className="-mt-px" />
             </div>
             {column}
@@ -718,7 +794,7 @@ function CrossLinkLayer({
 
   return (
     <svg
-      className="pointer-events-none absolute inset-0 z-0 overflow-visible text-sky-500/70"
+      className="pointer-events-none absolute inset-0 z-0 overflow-visible text-neutral-500"
       aria-hidden
     >
       <defs>
@@ -1732,13 +1808,13 @@ export function TechAssistFlowEditor({
     const isDiagnostic = node.type === "DIAGNOSTIC";
     const optionCount = node.options.length;
     const selected = isNodeSelected(node.id);
-    const hasBranches = isDiagnostic && optionCount > 0;
-    const collapsed = hasBranches && collapsedIds.has(node.id);
+    const canCollapse = isDiagnostic && optionCount > 0;
+    const collapsed = canCollapse && collapsedIds.has(node.id);
 
     return (
       <div key={node.id} className="relative z-[1] flex w-max flex-col items-center">
-        <div className="relative w-72 shrink-0">
-          {hasBranches ? (
+        <div className="relative w-64 shrink-0">
+          {canCollapse ? (
             <button
               type="button"
               className="absolute right-1 top-1 z-[2] flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1763,7 +1839,7 @@ export function TechAssistFlowEditor({
             data-flow-node={node.id}
             className={cn(
               "relative z-[1] w-full rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
-              hasBranches && "pr-9",
+              canCollapse && "pr-9",
               isDiagnostic ? "border-sky-200" : "border-emerald-200",
               selected && "ring-2 ring-primary ring-offset-2"
             )}
@@ -1800,7 +1876,7 @@ export function TechAssistFlowEditor({
           </button>
         </div>
 
-        {hasBranches && collapsed ? (
+        {canCollapse && collapsed ? (
           <div className="mt-1 flex flex-col items-center">
             <VerticalConnector />
             <button
@@ -1818,7 +1894,7 @@ export function TechAssistFlowEditor({
           </div>
         ) : null}
 
-        {hasBranches && !collapsed ? (
+        {isDiagnostic && !collapsed ? (
           <BranchFork
             columns={groupBranchColumns(
               node.options,
@@ -1828,7 +1904,7 @@ export function TechAssistFlowEditor({
             ).map((column) => {
               if (column.kind === "add") {
                 return (
-                  <div key="add" className="flex w-max min-w-72 flex-col items-center">
+                  <div key="add" className="flex w-max flex-col items-center">
                     <button
                       type="button"
                       className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
@@ -1847,7 +1923,7 @@ export function TechAssistFlowEditor({
               if (column.kind === "open") {
                 const option = column.option;
                 return (
-                  <div key={option.id} className="flex w-max min-w-72 flex-col items-center">
+                  <div key={option.id} className="flex w-max flex-col items-center">
                     <div className="mb-1 flex flex-col items-center gap-1">
                       {renderOptionChip(node.id, option)}
                     </div>
@@ -1863,7 +1939,7 @@ export function TechAssistFlowEditor({
               return (
                 <div
                   key={`${column.nextNodeId}:${column.inline ? "inline" : "jump"}`}
-                  className="flex w-max min-w-72 flex-col items-center"
+                  className="flex w-max flex-col items-center"
                 >
                   <div className="mb-1 flex flex-col items-center gap-1">
                     {column.options.map((option, i) => (
@@ -1977,7 +2053,6 @@ export function TechAssistFlowEditor({
             </div>
           </div>
         </PanCanvas>
-        <ZoomControls zoom={zoom} onZoomChange={setZoom} />
       </div>
 
       {selection ? (
