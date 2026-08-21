@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isRecoverableRealtimeError } from "../realtime-errors";
+import { nextFrameEncodeAttempt } from "../realtime-client";
 
 test("treats overlapping response.create as recoverable", () => {
   assert.equal(
@@ -25,4 +26,17 @@ test("treats session.update shape mismatches as recoverable", () => {
 test("does not swallow unrelated failures", () => {
   assert.equal(isRecoverableRealtimeError("WebRTC handshake failed"), false);
   assert.equal(isRecoverableRealtimeError("Tool timed out"), false);
+});
+
+test("nextFrameEncodeAttempt accepts frames under the WebRTC budget", () => {
+  assert.equal(nextFrameEncodeAttempt(768, 0.55, 40_000), "ok");
+});
+
+test("nextFrameEncodeAttempt shrinks oversized frames before giving up", () => {
+  const first = nextFrameEncodeAttempt(768, 0.55, 200_000);
+  assert.ok(first !== "ok" && first !== "give_up");
+  assert.ok(first.maxEdge < 768);
+  assert.ok(first.quality < 0.55);
+
+  assert.equal(nextFrameEncodeAttempt(320, 0.35, 200_000), "give_up");
 });

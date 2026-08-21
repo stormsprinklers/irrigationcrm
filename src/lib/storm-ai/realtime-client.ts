@@ -58,11 +58,32 @@ type SessionResponse = {
 };
 
 const FRAME_MIN_INTERVAL_MS = 1500;
-const FRAME_MAX_EDGE = 1280;
-const FRAME_JPEG_QUALITY = 0.82;
+/** Keep stills small — large JPEG data URLs silently break the WebRTC data channel. */
+const FRAME_MAX_EDGE = 768;
+const FRAME_JPEG_QUALITY = 0.55;
+/** Soft cap on data-URL length (chars). Full event JSON must stay under typical DC limits. */
+const FRAME_MAX_DATA_URL_CHARS = 90_000;
+const FRAME_ABSOLUTE_MAX_DATA_URL_CHARS = 180_000;
 const TOOL_TIMEOUT_MS = 25_000;
 const SEARCH_FALLBACK_MS = 2500;
 const VIDEO_TURN_FLUSH_MS = 1800;
+/** If response.create never yields response.created after a video turn, unlock listening. */
+const VIDEO_RESPONSE_WATCHDOG_MS = 6_000;
+
+/** Shrink encode settings until the JPEG data URL fits a WebRTC-safe budget. */
+export function nextFrameEncodeAttempt(
+  maxEdge: number,
+  quality: number,
+  dataUrlChars: number,
+  limit = FRAME_MAX_DATA_URL_CHARS
+): { maxEdge: number; quality: number } | "ok" | "give_up" {
+  if (dataUrlChars <= limit) return "ok";
+  if (maxEdge <= 320 && quality <= 0.35) return "give_up";
+  return {
+    maxEdge: Math.max(320, Math.round(maxEdge * 0.72)),
+    quality: Math.max(0.35, Math.round((quality - 0.1) * 100) / 100),
+  };
+}
 
 function stripChatCard(result: unknown): unknown {
   if (!result || typeof result !== "object") return result;
@@ -110,6 +131,12 @@ export class StormAiRealtimeClient {
   /** Video mode waits for the user question, then attaches one still before responding. */
   private videoTurnPending = false;
   private videoTurnTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True after we sent response.create until response.created (or watchdog unlock). */
+  private awaitingResponseCreated = false;
+  private videoResponseWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private videoResponseEpoch = 0;
+  /** Prevent infinite watchdog retries when the data channel is wedged. */
+  private videoResponseRetryUsed = false;
   /** Block camera frames only while a real function_call awaits output. */
   private awaitingFunctionOutput = false;
   private eventChain: Promise<void> = Promise.resolve();
@@ -161,6 +188,9 @@ export class StormAiRealtimeClient {
     this.needsSpokenFollowUp = false;
     this.inFlightTools = 0;
     this.modelResponseActive = false;
+    this.awaitingResponseCreated = false;
+    this.clearVideoResponseWatchdog();
+    this.videoResponseRetryUsed = false;
     this.autoCreateResponse = !opts.videoMode;
     this.pendingUserTurnAfterResponse = false;
     this.speechStartedDuringResponse = false;
@@ -232,6 +262,15 @@ export class StormAiRealtimeClient {
           console.error("[storm-ai realtime] event handler error", err);
         });
     });
+    this.dc.addEventListener("close", () => {
+      if (this.closed) return;
+      this.activity("Realtime data channel closed", "error");
+      this.unlockStuckModelTurn();
+      this.callbacks.onError?.(
+        "Voice connection dropped — tap mic to reconnect."
+      );
+      this.setStatus("error");
+    });
 
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
@@ -297,6 +336,10 @@ export class StormAiRealtimeClient {
   disableVideo() {
     if (!this.videoMode) return;
     this.clearVideoTurn();
+    // Failed camera turns can leave us waiting forever for response.created.
+    // Only unlock that stuck case — do not cancel a response that already started.
+    const stuckWaitingForModel = this.awaitingResponseCreated;
+    this.videoMode = false;
     this.setAutoCreateResponse(true);
     this.localStream?.getVideoTracks().forEach((t) => {
       t.stop();
@@ -306,7 +349,6 @@ export class StormAiRealtimeClient {
       this.previewVideo.srcObject = null;
       this.previewVideo = null;
     }
-    this.videoMode = false;
     this.callbacks.onLocalStream?.(this.localStream);
     this.callbacks.onVideoModeChange?.(false);
     this.sendEvent({
@@ -322,16 +364,25 @@ export class StormAiRealtimeClient {
         ],
       },
     });
+    if (stuckWaitingForModel) {
+      this.activity("Video off — unlocking stuck turn so voice can continue", "wait");
+      this.unlockStuckModelTurn();
+      // Answer the question that stalled while the camera was on.
+      const sent = this.sendEvent({ type: "response.create" });
+      if (sent) this.markResponseCreateSent();
+    }
   }
 
   stop() {
     this.closed = true;
     this.clearSearchFallback();
     this.clearFollowUpTimer();
+    this.clearVideoResponseWatchdog();
     this.needsSpokenFollowUp = false;
     this.followUpWaitStartedAt = 0;
     this.inFlightTools = 0;
     this.modelResponseActive = false;
+    this.awaitingResponseCreated = false;
     this.pendingUserTurnAfterResponse = false;
     this.speechStartedDuringResponse = false;
     this.heardTranscriptDuringResponse = false;
@@ -437,6 +488,58 @@ export class StormAiRealtimeClient {
     }
   }
 
+  private clearVideoResponseWatchdog() {
+    if (this.videoResponseWatchdog) {
+      clearTimeout(this.videoResponseWatchdog);
+      this.videoResponseWatchdog = null;
+    }
+  }
+
+  /** Clear a turn that never received response.created so listening can resume. */
+  private unlockStuckModelTurn() {
+    this.clearVideoResponseWatchdog();
+    this.awaitingResponseCreated = false;
+    this.modelResponseActive = false;
+    this.pendingUserTurnAfterResponse = false;
+    this.speechStartedDuringResponse = false;
+    this.heardTranscriptDuringResponse = false;
+    this.clearVideoTurn();
+    if (!this.closed) {
+      this.setStatus("listening");
+    }
+  }
+
+  private armVideoResponseWatchdog() {
+    this.clearVideoResponseWatchdog();
+    const epoch = ++this.videoResponseEpoch;
+    this.videoResponseWatchdog = setTimeout(() => {
+      this.videoResponseWatchdog = null;
+      if (this.closed || epoch !== this.videoResponseEpoch) return;
+      if (!this.awaitingResponseCreated) return;
+      this.activity(
+        "No model response after camera turn — unlocking so you can keep talking",
+        "wait"
+      );
+      this.unlockStuckModelTurn();
+      // One best-effort retry without another frame (a large frame may have wedged DC).
+      if (!this.videoResponseRetryUsed && this.dc?.readyState === "open") {
+        this.videoResponseRetryUsed = true;
+        this.activity("Retrying spoken response without a new camera frame", "wait");
+        const sent = this.sendEvent({ type: "response.create" });
+        if (sent) {
+          this.markResponseCreateSent();
+        }
+      }
+    }, VIDEO_RESPONSE_WATCHDOG_MS);
+  }
+
+  private markResponseCreateSent() {
+    this.awaitingResponseCreated = true;
+    this.modelResponseActive = true;
+    this.setStatus("speaking");
+    this.armVideoResponseWatchdog();
+  }
+
   private beginVideoTurn() {
     if (!this.videoMode || this.closed) return;
     this.videoTurnPending = true;
@@ -449,14 +552,20 @@ export class StormAiRealtimeClient {
   private async finishVideoTurn(withFrame: boolean) {
     if (!this.videoTurnPending || this.closed) return;
     this.clearVideoTurn();
+    this.videoResponseRetryUsed = false;
     if (withFrame) {
       this.activity("Capturing camera frame for your question");
-      await this.captureAndSendFrame("user_question", true);
+      const frameOk = await this.captureAndSendFrame("user_question", true);
+      if (!frameOk) {
+        this.activity("Continuing without camera frame", "wait");
+      }
     }
     const sent = this.sendEvent({ type: "response.create" });
     if (sent) {
-      this.modelResponseActive = true;
-      this.setStatus("speaking");
+      this.markResponseCreateSent();
+    } else {
+      this.activity("Could not start response after video turn", "error");
+      this.unlockStuckModelTurn();
     }
   }
 
@@ -483,7 +592,17 @@ export class StormAiRealtimeClient {
   private sendEvent(payload: Record<string, unknown>) {
     if (!this.dc || this.dc.readyState !== "open") return false;
     try {
-      this.dc.send(JSON.stringify(payload));
+      const raw = JSON.stringify(payload);
+      // Hard guard: oversized data-channel messages wedge OpenAI WebRTC sessions.
+      if (raw.length > FRAME_ABSOLUTE_MAX_DATA_URL_CHARS + 2_000) {
+        console.error("[storm-ai realtime] event too large for data channel", raw.length);
+        this.activity(
+          `Skipped oversized realtime event (${Math.round(raw.length / 1000)}KB)`,
+          "wait"
+        );
+        return false;
+      }
+      this.dc.send(raw);
       return true;
     } catch (err) {
       console.error("[storm-ai realtime] send failed", err);
@@ -495,32 +614,55 @@ export class StormAiRealtimeClient {
     const video = this.previewVideo;
     if (!video || video.videoWidth < 2 || video.videoHeight < 2) return null;
 
-    const scale = Math.min(1, FRAME_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight));
-    const width = Math.max(1, Math.round(video.videoWidth * scale));
-    const height = Math.max(1, Math.round(video.videoHeight * scale));
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, width, height);
-    return canvas.toDataURL("image/jpeg", FRAME_JPEG_QUALITY);
+
+    let maxEdge = FRAME_MAX_EDGE;
+    let quality = FRAME_JPEG_QUALITY;
+    let dataUrl = "";
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(video, 0, 0, width, height);
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+      const next = nextFrameEncodeAttempt(maxEdge, quality, dataUrl.length);
+      if (next === "ok") return dataUrl;
+      if (next === "give_up") break;
+      maxEdge = next.maxEdge;
+      quality = next.quality;
+    }
+
+    if (dataUrl && dataUrl.length <= FRAME_ABSOLUTE_MAX_DATA_URL_CHARS) {
+      this.activity(
+        `Camera frame still large (${Math.round(dataUrl.length / 1000)}KB) — sending compressed still`,
+        "wait"
+      );
+      return dataUrl;
+    }
+    this.activity("Camera frame too large to send over voice channel", "wait");
+    return null;
   }
 
-  private async captureAndSendFrame(reason: string, force = false) {
-    if (this.awaitingFunctionOutput) return;
-    if (!this.videoMode || this.closed || !this.conversationId) return;
+  /** @returns true when an image item was sent on the realtime data channel. */
+  private async captureAndSendFrame(reason: string, force = false): Promise<boolean> {
+    if (this.awaitingFunctionOutput) return false;
+    if (!this.videoMode || this.closed || !this.conversationId) return false;
     const now = Date.now();
-    if (!force && now - this.lastFrameAt < FRAME_MIN_INTERVAL_MS) return;
-    if (this.frameInFlight) return;
+    if (!force && now - this.lastFrameAt < FRAME_MIN_INTERVAL_MS) return false;
+    if (this.frameInFlight) return false;
 
     const dataUrl = this.grabJpegDataUrl();
-    if (!dataUrl) return;
+    if (!dataUrl) return false;
 
     this.frameInFlight = true;
     this.lastFrameAt = now;
     try {
-      this.sendEvent({
+      const sent = this.sendEvent({
         type: "conversation.item.create",
         item: {
           type: "message",
@@ -538,6 +680,14 @@ export class StormAiRealtimeClient {
           ],
         },
       });
+      if (!sent) {
+        this.activity("Could not send camera frame over data channel", "wait");
+        return false;
+      }
+      this.activity(
+        `Camera frame sent (${Math.round(dataUrl.length / 1000)}KB)`,
+        "ok"
+      );
 
       const conversationId = this.conversationId;
       void fetch("/api/storm-ai/realtime/frame", {
@@ -563,6 +713,7 @@ export class StormAiRealtimeClient {
           }
         })
         .catch(() => undefined);
+      return true;
     } finally {
       this.frameInFlight = false;
     }
@@ -627,6 +778,9 @@ export class StormAiRealtimeClient {
     ) {
       if (type === "response.created") {
         this.modelResponseActive = true;
+        this.awaitingResponseCreated = false;
+        this.clearVideoResponseWatchdog();
+        this.videoResponseRetryUsed = false;
         this.speechStartedDuringResponse = false;
         this.heardTranscriptDuringResponse = false;
         this.setSpeakingGate(true);
@@ -639,6 +793,8 @@ export class StormAiRealtimeClient {
     if (type === "response.cancelled" || type === "output_audio_buffer.stopped") {
       if (type === "response.cancelled") {
         this.modelResponseActive = false;
+        this.awaitingResponseCreated = false;
+        this.clearVideoResponseWatchdog();
         this.setSpeakingGate(false);
         this.activity("Model response cancelled", "wait");
         if (this.pendingUserTurnAfterResponse) {
@@ -741,6 +897,8 @@ export class StormAiRealtimeClient {
 
     if (type === "response.done") {
       this.modelResponseActive = false;
+      this.awaitingResponseCreated = false;
+      this.clearVideoResponseWatchdog();
       this.setSpeakingGate(false);
       this.activity("Model turn finished");
       const response = event.response as {
