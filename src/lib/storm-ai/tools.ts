@@ -315,12 +315,19 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "start_tech_assist",
       description:
-        "Start a technician assistant session for one matched issue. Returns only the current diagnostic (test, tips, options). If the same issue is already active in this conversation, resumes that session instead of restarting at step 1. Never dump the rest of the workflow.",
+        "Start a technician assistant session for one matched issue. Returns only the diagnostic still needed (test, tips, options). If the same issue is already active, resumes it. Pass knownFacts when the technician already volunteered findings so the workflow can skip answered steps and land on the correct path position. Never dump the rest of the workflow.",
       parameters: {
         type: "object",
         additionalProperties: false,
         required: ["issueId"],
-        properties: { issueId: { type: "string" } },
+        properties: {
+          issueId: { type: "string" },
+          knownFacts: {
+            type: "string",
+            description:
+              "Optional volunteered findings already stated (e.g. 'valve operated manually, solenoid reads 30 ohms'). Used to fast-forward to the first unanswered step.",
+          },
+        },
       },
     },
   },
@@ -329,7 +336,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     function: {
       name: "continue_tech_assist",
       description:
-        "Advance the current technician assistant session with the technician's answer or measurement. Call this as soon as they answer the current step — map spoken replies to yes/no or the closest option label (an option may list multiple OR alternatives). Returns only the next diagnostic or a final resolution. If unmatched is true, stay on the same step and clarify using the listed options only — do not invent other tests.",
+        "Advance the current technician assistant session with the technician's answer or measurement. Pass their full spoken findings — the tool applies what it can to the current step and any following steps that those facts answer, then returns the next unanswered diagnostic or a resolution. Map clear yes/no when obvious, but substantial multi-fact replies are OK as-is. If unmatched is true, stay on the same step and clarify using listed options only — do not invent other tests.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -339,7 +346,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
           result: {
             type: "string",
             description:
-              "Technician answer mapped to an option: yes/no, a number, or the option label that best matches their spoken reply (e.g. 'yes' when they say the valve operated manually)",
+              "Technician answer or volunteered findings for this path (yes/no, a number, an option label, or a longer statement like 'valve operated manually and solenoid is 30 ohms')",
           },
         },
       },

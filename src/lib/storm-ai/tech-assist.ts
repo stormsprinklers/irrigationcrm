@@ -103,12 +103,16 @@ const MATCH_STOP_WORDS = new Set([
 
 /** Light stemming so spoken tense variants still match option labels. */
 function stemToken(word: string): string {
-  if (word.length <= 3) return word;
-  if (word.endsWith("ing") && word.length > 5) return word.slice(0, -3);
-  if (word.endsWith("ed") && word.length > 4) return word.slice(0, -2);
-  if (word.endsWith("es") && word.length > 4) return word.slice(0, -2);
-  if (word.endsWith("s") && word.length > 3 && !word.endsWith("ss")) return word.slice(0, -1);
-  return word;
+  let w = word;
+  if (w.length <= 3) return w;
+  if (w.endsWith("ing") && w.length > 5) w = w.slice(0, -3);
+  else if (w.endsWith("ed") && w.length > 4) w = w.slice(0, -2);
+  else if (w.endsWith("ly") && w.length > 5) w = w.slice(0, -2);
+  else if (w.endsWith("es") && w.length > 4) w = w.slice(0, -2);
+  else if (w.endsWith("s") && w.length > 3 && !w.endsWith("ss")) w = w.slice(0, -1);
+  // Align operate/operated → operat (and similar silent-e verbs)
+  if (w.endsWith("e") && w.length > 4) w = w.slice(0, -1);
+  return w;
 }
 
 function significantTokens(text: string): string[] {
@@ -275,14 +279,13 @@ export function resolveNextFromDiagnostic(
 ): ResolveDiagnosticNext {
   const options = config.options ?? [];
   if (options.length > 0) {
-    for (const option of options) {
-      if (optionMatches(option, result)) {
-        return {
-          nextNodeId: option.nextNodeId ?? config.defaultNextNodeId ?? null,
-          matched: true,
-          matchedOptionId: option.id,
-        };
-      }
+    const hit = bestMatchingOption(options, result);
+    if (hit) {
+      return {
+        nextNodeId: hit.nextNodeId ?? config.defaultNextNodeId ?? null,
+        matched: true,
+        matchedOptionId: hit.id,
+      };
     }
     // Do not fall through to an arbitrary next node when options exist but none matched.
     return {
@@ -292,6 +295,177 @@ export function resolveNextFromDiagnostic(
     };
   }
   return { nextNodeId: evaluateBranch(config, result), matched: true };
+}
+
+function optionMatchScore(option: TechAssistOption, result: unknown): number {
+  if (!optionMatches(option, result)) return -1;
+  const text = normalizeResultText(result);
+  const label = optionPublicLabel(option).toLowerCase();
+  let score = 1;
+  if (option.match === "label" || option.match === "eq") score += 5;
+  if (text === label) score += 4;
+  score += significantTokens(label).filter((t) => significantTokens(text).includes(t)).length;
+  return score;
+}
+
+/** Prefer specific label matches over generic yes/no when several options hit. */
+export function bestMatchingOption(
+  options: TechAssistOption[],
+  result: unknown
+): TechAssistOption | null {
+  let best: TechAssistOption | null = null;
+  let bestScore = -1;
+  for (const option of options) {
+    const score = optionMatchScore(option, result);
+    if (score > bestScore) {
+      best = option;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 0 ? best : null;
+}
+
+type AssistNode = {
+  id: string;
+  type: TechAssistNodeType;
+  title: string;
+  body: string;
+  config: unknown;
+  sortOrder: number;
+};
+
+/**
+ * Walk the tree from startId, applying volunteered facts to each diagnostic while they match.
+ * Stops at the first step that still needs an answer (or a resolution).
+ * Consumes tokens used by each match so later yes/no steps do not re-use the same phrase.
+ */
+export function applyKnownFactsAlongPath(
+  nodes: AssistNode[],
+  startId: string | null,
+  knownFacts: unknown
+): {
+  node: AssistNode | null;
+  history: Array<{ nodeId: string; result: unknown; at: string }>;
+  stepsApplied: number;
+  remainingFacts: string;
+} {
+  const factsOriginal = String(knownFacts ?? "").trim();
+  let remaining = factsOriginal;
+  const history: Array<{ nodeId: string; result: unknown; at: string }> = [];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let current = startId ? byId.get(startId) ?? null : firstContentNode(nodes, startId);
+  const seen = new Set<string>();
+
+  while (current) {
+    if (seen.has(current.id)) break;
+    seen.add(current.id);
+
+    if (current.type === "BRANCH") {
+      const nextId = evaluateBranch(asConfig(current.config), remaining || factsOriginal);
+      current = nextId ? byId.get(nextId) ?? null : null;
+      continue;
+    }
+
+    if (current.type === "RESOLUTION") {
+      return { node: current, history, stepsApplied: history.length, remainingFacts: remaining };
+    }
+
+    if (!remaining.trim()) {
+      return { node: current, history, stepsApplied: history.length, remainingFacts: remaining };
+    }
+
+    const config = asConfig(current.config);
+    const options = config.options ?? [];
+    let appliedResult: unknown = null;
+    let nextId: string | null = null;
+    let matched = false;
+
+    if (options.length > 0) {
+      const hit = bestMatchingOption(options, remaining);
+      if (hit) {
+        matched = true;
+        appliedResult =
+          hit.match === "yes" || hit.match === "no"
+            ? hit.match
+            : hit.label || optionPublicLabel(hit);
+        nextId = hit.nextNodeId ?? config.defaultNextNodeId ?? null;
+        remaining = consumeMatchedFacts(remaining, hit, current);
+      }
+    } else {
+      // Legacy numeric / free-text diagnostic with no options
+      const num = resultNumber(remaining);
+      if (config.inputType === "number" && num != null) {
+        matched = true;
+        appliedResult = num;
+        remaining = remaining.replace(String(num), " ").replace(/\s+/g, " ").trim();
+        const after = nodes
+          .filter((n) => n.sortOrder > current!.sortOrder)
+          .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+        if (after?.type === "BRANCH") {
+          nextId = evaluateBranch(asConfig(after.config), num);
+        } else if (after) {
+          nextId = after.id;
+        }
+      }
+    }
+
+    if (!matched) {
+      return { node: current, history, stepsApplied: history.length, remainingFacts: remaining };
+    }
+
+    history.push({
+      nodeId: current.id,
+      result: appliedResult,
+      at: new Date().toISOString(),
+    });
+
+    const landed = skipPastBranches(nodes, nextId, appliedResult);
+    current = landed?.node ?? (nextId ? byId.get(nextId) ?? null : null);
+  }
+
+  return { node: current, history, stepsApplied: history.length, remainingFacts: remaining };
+}
+
+/** Remove tokens already used so the next diagnostic cannot rematch the same answer. */
+export function consumeMatchedFacts(
+  facts: string,
+  option: TechAssistOption,
+  step: { title: string; body: string }
+): string {
+  const remove = new Set<string>(significantTokens(optionPublicLabel(option)));
+  for (const t of significantTokens(`${step.title} ${step.body}`)) {
+    remove.add(t);
+  }
+  // Overlap between remaining facts and the step topic
+  const stepTopic = new Set(significantTokens(`${step.title} ${step.body} ${option.label}`));
+  for (const t of significantTokens(facts)) {
+    if (stepTopic.has(t)) remove.add(t);
+  }
+  if (option.match === "yes" || option.match === "no") {
+    for (const t of ["yes", "yeah", "yep", "yup", "no", "nope", "nah"]) remove.add(t);
+  }
+  const num = resultNumber(facts);
+  if (
+    num != null &&
+    (option.match === "eq" ||
+      option.match === "lt" ||
+      option.match === "gt" ||
+      option.match === "lte" ||
+      option.match === "gte" ||
+      option.match === "between")
+  ) {
+    remove.add(stemToken(String(num)));
+  }
+
+  return facts
+    .split(/\s+/)
+    .filter((word) => {
+      const stem = stemToken(word.toLowerCase().replace(/[^a-z0-9]/g, ""));
+      if (!stem) return false;
+      return !remove.has(stem);
+    })
+    .join(" ")
+    .trim();
 }
 
 export function evaluateBranch(config: TechAssistNodeConfig, result: unknown): string | null {
@@ -533,6 +707,8 @@ export async function startTechAssistSession(opts: {
   userId: string;
   conversationId: string;
   issueId: string;
+  /** Volunteered findings — fast-forward to the first step still needing an answer. */
+  knownFacts?: string | null;
 }) {
   const issue = await prisma.techAssistIssue.findFirst({
     where: { id: opts.issueId, companyId: opts.companyId, active: true },
@@ -541,7 +717,9 @@ export async function startTechAssistSession(opts: {
   if (!issue) return { ok: false as const, error: "Issue not found" };
   if (!issue.nodes.length) return { ok: false as const, error: "This workflow has no steps yet" };
 
-  // Same issue already in progress for this chat — resume instead of resetting to step 1.
+  const facts = typeof opts.knownFacts === "string" ? opts.knownFacts.trim() : "";
+
+  // Same issue already in progress for this chat — resume (and seek if facts provided).
   const existing = await prisma.techAssistSession.findFirst({
     where: {
       conversationId: opts.conversationId,
@@ -553,6 +731,14 @@ export async function startTechAssistSession(opts: {
     orderBy: { updatedAt: "desc" },
   });
   if (existing) {
+    if (facts) {
+      return continueTechAssistSession({
+        companyId: opts.companyId,
+        userId: opts.userId,
+        sessionId: existing.id,
+        result: facts,
+      });
+    }
     const current =
       issue.nodes.find((n) => n.id === existing.currentNodeId) ??
       firstContentNode(issue.nodes, issue.entryNodeId);
@@ -563,6 +749,7 @@ export async function startTechAssistSession(opts: {
         issueName: issue.name,
         step: publicStep(current),
         resumed: true as const,
+        stepsApplied: 0,
         note: "Resumed the active session for this issue at the current step. Do not restart from the beginning. Ask only for this step's result.",
       };
     }
@@ -582,15 +769,29 @@ export async function startTechAssistSession(opts: {
     data: { status: TechAssistSessionStatus.ABANDONED },
   });
 
+  let currentNodeId = first.id;
+  let history: Array<{ nodeId: string; result: unknown; at: string }> = [];
+  let stepsApplied = 0;
+  let landed = first;
+
+  if (facts) {
+    const sought = applyKnownFactsAlongPath(issue.nodes, first.id, facts);
+    history = sought.history;
+    stepsApplied = sought.stepsApplied;
+    if (sought.node) landed = sought.node;
+    currentNodeId = landed.id;
+  }
+
+  const done = landed.type === "RESOLUTION";
   const session = await prisma.techAssistSession.create({
     data: {
       companyId: opts.companyId,
       userId: opts.userId,
       conversationId: opts.conversationId,
       issueId: issue.id,
-      currentNodeId: first.id,
-      status: TechAssistSessionStatus.ACTIVE,
-      history: [] as Prisma.InputJsonValue,
+      currentNodeId,
+      status: done ? TechAssistSessionStatus.COMPLETED : TechAssistSessionStatus.ACTIVE,
+      history: history as Prisma.InputJsonValue,
     },
   });
 
@@ -598,9 +799,15 @@ export async function startTechAssistSession(opts: {
     ok: true as const,
     sessionId: session.id,
     issueName: issue.name,
-    step: publicStep(first),
+    step: publicStep(landed),
     resumed: false as const,
-    note: "Ask the technician to complete only this step. Share tips if they are stuck. Do not mention later tests or the rest of the workflow.",
+    stepsApplied,
+    note:
+      stepsApplied > 0
+        ? done
+          ? `Applied ${stepsApplied} volunteered finding(s) and reached a resolution. Do not invent extra steps.`
+          : `Applied ${stepsApplied} volunteered finding(s) and moved to this step. Ask only for this step's result — do not re-ask answered steps.`
+        : "Ask the technician to complete only this step. Share tips if they are stuck. Do not mention later tests or the rest of the workflow.",
   };
 }
 
@@ -634,6 +841,7 @@ export async function continueTechAssistSession(opts: {
       ok: true as const,
       sessionId: session.id,
       step: publicStep(current),
+      stepsApplied: 0,
       note: "Workflow complete. Do not invent extra steps.",
     };
   }
@@ -643,49 +851,101 @@ export async function continueTechAssistSession(opts: {
       ok: true as const,
       sessionId: session.id,
       step: publicStep(current),
+      stepsApplied: 0,
       note: "The technician has not given a result yet. Repeat only this step.",
     };
   }
 
-  const history = Array.isArray(session.history) ? [...(session.history as unknown[])] : [];
-  history.push({ nodeId: current.id, result: opts.result, at: new Date().toISOString() });
+  const priorHistory = Array.isArray(session.history)
+    ? [...(session.history as unknown[])]
+    : [];
 
-  let nextId: string | null = null;
-  let matchedOption = true;
-  if (current.type === "DIAGNOSTIC") {
-    const resolved = resolveNextFromDiagnostic(asConfig(current.config), opts.result);
-    nextId = resolved.nextNodeId;
-    matchedOption = resolved.matched;
+  // Apply the answer to the current step and keep walking while remaining facts still match.
+  const sought = applyKnownFactsAlongPath(nodes, current.id, opts.result);
+
+  if (sought.stepsApplied === 0) {
     const config = asConfig(current.config);
     const hasOptions = (config.options ?? []).length > 0;
-    // Legacy: if diagnostic has no options, next sortOrder BRANCH may hold the rules
-    if (!nextId && !hasOptions) {
-      const after = nodes
-        .filter((n) => n.sortOrder > current.sortOrder)
-        .sort((a, b) => a.sortOrder - b.sortOrder)[0];
-      if (after?.type === "BRANCH") {
-        nextId = evaluateBranch(asConfig(after.config), opts.result);
-      } else if (after) {
-        nextId = after.id;
-      }
-    }
-    if (hasOptions && !matchedOption) {
+    if (hasOptions) {
       return {
         ok: true as const,
         sessionId: session.id,
         step: publicStep(current),
         unmatched: true as const,
+        stepsApplied: 0,
         note: `Could not match "${String(opts.result)}" to an option (${(config.options ?? [])
           .map((o) => optionPublicLabel(o))
           .join(" | ")}). Ask a short clarifying question using only those options. Do not invent other tests or leave this step.`,
       };
     }
-  } else if (current.type === "BRANCH") {
-    nextId = evaluateBranch(asConfig(current.config), opts.result);
+    // Legacy no-options diagnostic: fall back to single-step advance
+    const history = [
+      ...priorHistory,
+      { nodeId: current.id, result: opts.result, at: new Date().toISOString() },
+    ];
+    let nextId: string | null = null;
+    if (current.type === "DIAGNOSTIC") {
+      nextId = resolveNextFromDiagnostic(config, opts.result).nextNodeId;
+      if (!nextId) {
+        const after = nodes
+          .filter((n) => n.sortOrder > current.sortOrder)
+          .sort((a, b) => a.sortOrder - b.sortOrder)[0];
+        if (after?.type === "BRANCH") {
+          nextId = evaluateBranch(asConfig(after.config), opts.result);
+        } else if (after) {
+          nextId = after.id;
+        }
+      }
+    } else if (current.type === "BRANCH") {
+      nextId = evaluateBranch(config, opts.result);
+    }
+    const landed = skipPastBranches(nodes, nextId, opts.result);
+    const next = landed?.node ?? (nextId ? nodes.find((n) => n.id === nextId) : null);
+    if (!next || next.type === "BRANCH") {
+      await prisma.techAssistSession.update({
+        where: { id: session.id },
+        data: {
+          status: TechAssistSessionStatus.COMPLETED,
+          currentNodeId: current.id,
+          history: history as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        ok: true as const,
+        sessionId: session.id,
+        stepsApplied: 1,
+        step: {
+          type: "RESOLUTION" as const,
+          title: "End of workflow",
+          instructions:
+            "No further step is configured for this result. Stop here unless the technician describes a different problem.",
+          done: true,
+        },
+      };
+    }
+    const done = next.type === "RESOLUTION";
+    await prisma.techAssistSession.update({
+      where: { id: session.id },
+      data: {
+        currentNodeId: next.id,
+        status: done ? TechAssistSessionStatus.COMPLETED : TechAssistSessionStatus.ACTIVE,
+        history: history as Prisma.InputJsonValue,
+      },
+    });
+    return {
+      ok: true as const,
+      sessionId: session.id,
+      issueName: session.issue.name,
+      step: publicStep(next),
+      stepsApplied: 1,
+      note: done
+        ? "This is the resolution. Do not continue the tree."
+        : "Ask only for this step's result. Share tips if helpful. Do not preview later diagnostics.",
+    };
   }
 
-  const landed = skipPastBranches(nodes, nextId, opts.result);
-  const next = landed?.node ?? (nextId ? nodes.find((n) => n.id === nextId) : null);
+  const history = [...priorHistory, ...sought.history];
+  const next = sought.node;
 
   if (!next || next.type === "BRANCH") {
     await prisma.techAssistSession.update({
@@ -699,6 +959,7 @@ export async function continueTechAssistSession(opts: {
     return {
       ok: true as const,
       sessionId: session.id,
+      stepsApplied: sought.stepsApplied,
       step: {
         type: "RESOLUTION" as const,
         title: "End of workflow",
@@ -724,8 +985,11 @@ export async function continueTechAssistSession(opts: {
     sessionId: session.id,
     issueName: session.issue.name,
     step: publicStep(next),
+    stepsApplied: sought.stepsApplied,
     note: done
-      ? "This is the resolution. Do not continue the tree."
-      : "Ask only for this step's result. Share tips if helpful. Do not preview later diagnostics.",
+      ? `Applied ${sought.stepsApplied} finding(s) and reached the resolution. Do not continue the tree.`
+      : sought.stepsApplied > 1
+        ? `Applied ${sought.stepsApplied} volunteered finding(s) and moved here. Ask only for this step — do not re-ask answered steps or invent others.`
+        : "Ask only for this step's result. Share tips if helpful. Do not preview later diagnostics.",
   };
 }
