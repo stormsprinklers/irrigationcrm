@@ -157,6 +157,13 @@ export default function VoiceNumbersPage() {
         }
         setFlows(Array.isArray(fl) ? fl.map((f: CallFlowOption) => ({ id: f.id, name: f.name })) : []);
         setEmployees(Array.isArray(emps) ? emps.map((e: EmployeeOption) => ({ id: e.id, name: e.name })) : []);
+        return fetch("/api/settings/voice/numbers/a2p").then((r) => r.json());
+      })
+      .then((data) => {
+        if (data && !data.error) {
+          setA2pStatus(data);
+          setA2pServiceDraft(data.messagingServiceSid ?? "");
+        }
       })
       .catch(() => toast.error("Failed to load numbers"));
   }
@@ -167,6 +174,16 @@ export default function VoiceNumbersPage() {
     const params = new URLSearchParams(window.location.search);
     const t = params.get("tab");
     if (t === "port" || t === "buy" || t === "a2p" || t === "release") setTab(t);
+
+    fetch("/api/settings/voice/numbers/a2p")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) {
+          setA2pStatus(data);
+          setA2pServiceDraft(data.messagingServiceSid ?? "");
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -338,7 +355,15 @@ export default function VoiceNumbersPage() {
         toast.error(data.error ?? "Sync failed");
         return;
       }
-      toast.success(`Imported ${data.imported}, updated ${data.updated}`);
+      toast.success(
+        `Imported ${data.imported ?? 0}, updated ${data.updated ?? 0}` +
+          (data.skippedOwnedElsewhere
+            ? `, skipped ${data.skippedOwnedElsewhere} already on another company`
+            : "") +
+          (data.duplicatesRemoved
+            ? `, removed ${data.duplicatesRemoved} duplicate${data.duplicatesRemoved === 1 ? "" : "s"}`
+            : "")
+      );
       load();
     } finally {
       setSyncing(false);
@@ -979,9 +1004,9 @@ export default function VoiceNumbersPage() {
               <p className="mt-1 text-sm text-muted-foreground">
                 Edit title, company, type, and call flow inline. Texts to any of these numbers land in
                 this company&apos;s SMS inbox so nothing is missed; replies always send from Primary.
-                Primary is also the default outbound caller ID. “SMS Capable” means Twilio lists SMS
-                capability — for US delivery the number must also be on your A2P Messaging Service
-                (see the A2P campaign tab).
+                Primary is also the default outbound caller ID. “SMS capable” only means Twilio
+                supports SMS on the line — US texts also need the number on your A2P Messaging
+                Service (Campaign column / A2P campaign tab).
                 {showCompanyColumn
                   ? " Use the Company column to move a number to another business you operate; it will leave this list and appear under that company."
                   : ""}
@@ -997,8 +1022,11 @@ export default function VoiceNumbersPage() {
                     ) : null}
                     <TableHead className="min-w-[160px]">Title</TableHead>
                     <TableHead className="min-w-[140px]">Type</TableHead>
-                    <TableHead title="Twilio SMS capability — not the same as A2P approval. Outbound CRM texts use the Primary number.">
+                    <TableHead title="Twilio SMS capability — not the same as A2P campaign approval.">
                       SMS
+                    </TableHead>
+                    <TableHead title="Whether this number is on your shared A2P / 10DLC Messaging Service.">
+                      Campaign
                     </TableHead>
                     <TableHead className="min-w-[150px]">Call flow</TableHead>
                     <TableHead className="min-w-[140px]">Source / agent</TableHead>
@@ -1088,14 +1116,14 @@ export default function VoiceNumbersPage() {
                         {n.smsEnabled === true ? (
                           <div className="space-y-0.5">
                             <Badge variant="outline" className="border-green-300 text-green-800">
-                              Capable
+                              SMS capable
                             </Badge>
                             {n.isPrimary ? (
                               <p className="text-[10px] leading-snug text-muted-foreground">
                                 Used for outbound CRM texts
                               </p>
-                    ) : null}
-                  </div>
+                            ) : null}
+                          </div>
                         ) : n.smsEnabled === false ? (
                           <Badge variant="outline" className="text-muted-foreground">
                             Off
@@ -1105,6 +1133,37 @@ export default function VoiceNumbersPage() {
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const a2pRow = a2pStatus?.numbers?.find(
+                            (row) => row.id === n.id
+                          );
+                          if (!a2pStatus?.configured) {
+                            return (
+                              <span className="text-xs text-muted-foreground">Not set up</span>
+                            );
+                          }
+                          if (!n.twilioSid) {
+                            return <span className="text-xs text-muted-foreground">—</span>;
+                          }
+                          if (a2pRow?.onMessagingService) {
+                            return (
+                              <Badge variant="outline" className="border-green-300 text-green-800">
+                                On campaign
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-300 text-amber-900"
+                              title="Attach via the A2P campaign tab — SMS capable alone is not enough for US 10DLC."
+                            >
+                              Not on campaign
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         {onCurrentCompany ? (

@@ -231,6 +231,16 @@ export async function purchaseNumber(
   const client = getTwilioClient();
   const normalized = normalizePhone(e164);
 
+  const alreadyOwned = await prisma.phoneNumber.findFirst({
+    where: { e164: normalized },
+    select: { id: true, companyId: true },
+  });
+  if (alreadyOwned) {
+    throw new Error(
+      "This number is already linked to a company in the CRM. Reassign it instead of purchasing again."
+    );
+  }
+
   const purchased = await client.incomingPhoneNumbers.create({
     phoneNumber: normalized,
     friendlyName: options?.friendlyName ?? undefined,
@@ -275,19 +285,46 @@ export async function releaseNumber(companyId: string, phoneNumberId: string) {
 }
 
 export async function syncAccountNumbers(companyId: string) {
+  const { removeCrossCompanyPhoneDuplicates } = await import(
+    "@/lib/voice/phone-number-dedupe"
+  );
+  // Drop ghost rows created by earlier syncs after a number was moved to another company.
+  const deduped = await removeCrossCompanyPhoneDuplicates();
+
   const accountNumbers = await listAccountNumbers();
-  const existing = await prisma.phoneNumber.findMany({
+  const normalizedAccount = accountNumbers.map((n) => ({
+    ...n,
+    e164: normalizePhone(n.e164),
+  }));
+
+  const existingHere = await prisma.phoneNumber.findMany({
     where: { companyId },
     select: { e164: true, twilioSid: true, id: true },
   });
-  const existingByE164 = new Map(existing.map((n) => [n.e164, n]));
+  const existingByE164 = new Map(existingHere.map((n) => [n.e164, n]));
+
+  // Numbers already owned by any company (shared Twilio account → one CRM owner).
+  const ownedElsewhere = await prisma.phoneNumber.findMany({
+    where: {
+      OR: [
+        { e164: { in: normalizedAccount.map((n) => n.e164) } },
+        { twilioSid: { in: normalizedAccount.map((n) => n.sid) } },
+      ],
+      NOT: { companyId },
+    },
+    select: { e164: true, twilioSid: true, companyId: true },
+  });
+  const ownedE164 = new Set(ownedElsewhere.map((n) => n.e164));
+  const ownedSids = new Set(
+    ownedElsewhere.map((n) => n.twilioSid).filter((s): s is string => Boolean(s))
+  );
 
   let imported = 0;
   let updated = 0;
+  let skippedOwnedElsewhere = 0;
 
-  for (const num of accountNumbers) {
-    const normalized = normalizePhone(num.e164);
-    const found = existingByE164.get(normalized);
+  for (const num of normalizedAccount) {
+    const found = existingByE164.get(num.e164);
     if (found) {
       if (!found.twilioSid) {
         await prisma.phoneNumber.update({
@@ -324,10 +361,15 @@ export async function syncAccountNumbers(companyId: string) {
       continue;
     }
 
+    if (ownedE164.has(num.e164) || ownedSids.has(num.sid)) {
+      skippedOwnedElsewhere++;
+      continue;
+    }
+
     await prisma.phoneNumber.create({
       data: {
         companyId,
-        e164: normalized,
+        e164: num.e164,
         friendlyName: num.friendlyName ?? null,
         twilioSid: num.sid,
         numberType: "TRACKING",
@@ -351,5 +393,11 @@ export async function syncAccountNumbers(companyId: string) {
     imported++;
   }
 
-  return { imported, updated, total: accountNumbers.length };
+  return {
+    imported,
+    updated,
+    skippedOwnedElsewhere,
+    duplicatesRemoved: deduped.deleted,
+    total: accountNumbers.length,
+  };
 }

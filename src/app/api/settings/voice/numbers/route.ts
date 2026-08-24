@@ -33,6 +33,12 @@ async function companyIdsForNumbersList(user: {
 export async function GET() {
   try {
     const user = await requireSessionUser();
+    // Remove ghost duplicates (same Twilio SID/E.164 on multiple companies) before listing.
+    const { removeCrossCompanyPhoneDuplicates } = await import(
+      "@/lib/voice/phone-number-dedupe"
+    );
+    await removeCrossCompanyPhoneDuplicates();
+
     // List numbers for the active company only so each business menu shows its own lines.
     let numbers = await prisma.phoneNumber.findMany({
       where: { companyId: user.companyId },

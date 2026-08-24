@@ -2,6 +2,8 @@ import { PhoneNumberType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
 import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
+import { attachNumberToA2pMessagingService } from "@/lib/twilio/a2p";
+import { configureNumberWebhooks } from "@/lib/twilio/numbers";
 
 export class PhoneCompanyReassignError extends Error {
   status: number;
@@ -52,16 +54,25 @@ export async function reassignPhoneNumberToCompany(params: {
   const clash = await prisma.phoneNumber.findFirst({
     where: {
       companyId: params.toCompanyId,
-      e164: existing.e164,
+      OR: [
+        { e164: existing.e164 },
+        ...(existing.twilioSid ? [{ twilioSid: existing.twilioSid }] : []),
+      ],
       NOT: { id: existing.id },
     },
-    select: { id: true },
   });
   if (clash) {
-    throw new PhoneCompanyReassignError(
-      "That company already has this phone number",
-      409
-    );
+    // Target already owns this Twilio line (often after sync re-imported a ghost
+    // under the source company). Drop the duplicate and keep the target row.
+    const fromCompanyId = existing.companyId;
+    const wasPrimary =
+      existing.isPrimary || existing.numberType === PhoneNumberType.PRIMARY;
+    await prisma.phoneNumber.delete({ where: { id: existing.id } });
+    if (wasPrimary) {
+      await promoteOrClearPrimary(fromCompanyId);
+    }
+    await ensureTwilioReadyForNumber(clash.twilioSid);
+    return clash;
   }
 
   const fromCompanyId = existing.companyId;
@@ -83,26 +94,7 @@ export async function reassignPhoneNumberToCompany(params: {
   });
 
   if (wasPrimary) {
-    const nextPrimary = await prisma.phoneNumber.findFirst({
-      where: { companyId: fromCompanyId },
-      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-    });
-    if (nextPrimary) {
-      await setExclusivePrimaryNumber({
-        companyId: fromCompanyId,
-        numberId: nextPrimary.id,
-      });
-      await syncCompanyTwilioPhone(fromCompanyId, nextPrimary.e164).catch(
-        () => undefined
-      );
-    } else {
-      await prisma.company
-        .update({
-          where: { id: fromCompanyId },
-          data: { twilioPhone: null },
-        })
-        .catch(() => undefined);
-    }
+    await promoteOrClearPrimary(fromCompanyId);
   }
 
   const targetHasPrimary = await prisma.phoneNumber.count({
@@ -119,11 +111,50 @@ export async function reassignPhoneNumberToCompany(params: {
     await syncCompanyTwilioPhone(params.toCompanyId, updated.e164).catch(
       () => undefined
     );
-    return (
-      (await prisma.phoneNumber.findUnique({ where: { id: updated.id } })) ??
-      updated
-    );
   }
 
-  return updated;
+  await ensureTwilioReadyForNumber(updated.twilioSid);
+
+  return (
+    (await prisma.phoneNumber.findUnique({ where: { id: updated.id } })) ??
+    updated
+  );
+}
+
+async function promoteOrClearPrimary(companyId: string) {
+  const nextPrimary = await prisma.phoneNumber.findFirst({
+    where: { companyId },
+    orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+  });
+  if (nextPrimary) {
+    await setExclusivePrimaryNumber({
+      companyId,
+      numberId: nextPrimary.id,
+    });
+    await syncCompanyTwilioPhone(companyId, nextPrimary.e164).catch(() => undefined);
+    return;
+  }
+  await prisma.company
+    .update({
+      where: { id: companyId },
+      data: { twilioPhone: null },
+    })
+    .catch(() => undefined);
+}
+
+async function ensureTwilioReadyForNumber(twilioSid: string | null | undefined) {
+  if (!twilioSid?.startsWith("PN")) return;
+  try {
+    await configureNumberWebhooks(twilioSid);
+  } catch (error) {
+    console.error("[reassign] webhook configure failed", twilioSid, error);
+  }
+  try {
+    const a2p = await attachNumberToA2pMessagingService(twilioSid);
+    if (!a2p.ok) {
+      console.warn("[reassign] A2P attach failed", twilioSid, a2p.error);
+    }
+  } catch (error) {
+    console.error("[reassign] A2P attach error", twilioSid, error);
+  }
 }
