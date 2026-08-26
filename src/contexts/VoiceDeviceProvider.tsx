@@ -51,6 +51,8 @@ type VoiceContextValue = {
   rejectIncoming: () => void;
   disconnect: () => void;
   toggleMute: () => void;
+  /** Send DTMF tones (0-9, *, #) on the live call. */
+  sendDigits: (digits: string) => boolean;
   toggleHold: () => Promise<void>;
   transfer: (
     targetUserId: string,
@@ -627,6 +629,20 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     setActiveCall({ ...activeCall, muted: next });
   }, [activeCall]);
 
+  const sendDigits = useCallback((digits: string) => {
+    const call = activeCallRef.current?.call;
+    if (!call) return false;
+    const sanitized = digits.replace(/[^0-9*#wW]/g, "");
+    if (!sanitized) return false;
+    try {
+      call.sendDigits(sanitized);
+      return true;
+    } catch {
+      toast.error("Could not send keypad tone");
+      return false;
+    }
+  }, []);
+
   const toggleHold = useCallback(async () => {
     if (!activeCall?.sessionId) {
       toast.error("Hold unavailable for this call — reconnecting session…");
@@ -709,6 +725,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       rejectIncoming,
       disconnect,
       toggleMute,
+      sendDigits,
       toggleHold,
       transfer,
       openBookAppointment,
@@ -726,6 +743,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       rejectIncoming,
       disconnect,
       toggleMute,
+      sendDigits,
       toggleHold,
       transfer,
       openBookAppointment,

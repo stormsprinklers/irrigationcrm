@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CallDialPad } from "@/components/voice/CallDialPad";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import type { CustomerDTO } from "@/lib/customers/types";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
-
-const DIAL_PAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
 
 type Props = {
   initialPhone?: string | null;
@@ -32,11 +31,12 @@ export function VoiceDialer({
   className,
   onCallStarted,
 }: Props) {
-  const { ready, connect, activeCall } = useVoiceDevice();
+  const { ready, connect, activeCall, sendDigits, disconnect } = useVoiceDevice();
   const [phone, setPhone] = useState(initialPhone ?? "");
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [customerName, setCustomerName] = useState(initialName ?? "");
   const [calling, setCalling] = useState(false);
+  const [dtmfSent, setDtmfSent] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -49,6 +49,10 @@ export function VoiceDialer({
     if (initialCustomerId) setCustomerId(initialCustomerId);
     if (initialName) setCustomerName(initialName);
   }, [initialCustomerId, initialName]);
+
+  useEffect(() => {
+    if (!activeCall) setDtmfSent("");
+  }, [activeCall]);
 
   const loadCustomers = useCallback(async (query: string) => {
     const q = query.trim();
@@ -153,41 +157,65 @@ export function VoiceDialer({
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className={compact ? "text-base" : "text-lg"}
+            disabled={Boolean(activeCall)}
           />
 
-          <div className="grid grid-cols-3 gap-2">
-            {DIAL_PAD.map((digit) => (
-              <Button
-                key={digit}
-                variant="outline"
-                type="button"
-                className={compact ? "h-10 text-base" : "h-12 text-lg"}
-                onClick={() => setPhone((prev) => prev + digit)}
-              >
-                {digit}
-              </Button>
-            ))}
-          </div>
+          {activeCall ? (
+            <p className="text-xs text-muted-foreground">
+              Live call keypad
+              {dtmfSent ? (
+                <span className="ml-1 font-mono tracking-widest text-foreground">{dtmfSent}</span>
+              ) : (
+                " — tap digits to send tones"
+              )}
+            </p>
+          ) : null}
+
+          <CallDialPad
+            compact={compact}
+            onDigit={(digit) => {
+              if (activeCall) {
+                if (sendDigits(digit)) {
+                  setDtmfSent((prev) => (prev + digit).slice(-24));
+                }
+                return;
+              }
+              setPhone((prev) => prev + digit);
+            }}
+          />
 
           <div className="flex gap-2">
-            <Button
-              className="flex-1"
-              type="button"
-              disabled={
-                !phone.trim() ||
-                calling ||
-                !ready ||
-                Boolean(activeCall) ||
-                Boolean(selectedDoNotService)
-              }
-              onClick={() => void handleCall()}
-            >
-              <Phone className="h-4 w-4" />
-              Call
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setPhone("")}>
-              <PhoneOff className="h-4 w-4" />
-            </Button>
+            {activeCall ? (
+              <Button
+                className="flex-1"
+                type="button"
+                variant="destructive"
+                onClick={disconnect}
+              >
+                <PhoneOff className="h-4 w-4" />
+                Hang up
+              </Button>
+            ) : (
+              <>
+                <Button
+                  className="flex-1"
+                  type="button"
+                  disabled={
+                    !phone.trim() ||
+                    calling ||
+                    !ready ||
+                    Boolean(selectedDoNotService)
+                  }
+                  onClick={() => void handleCall()}
+                >
+                  <Phone className="h-4 w-4" />
+                  Call
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setPhone("")}>
+                  <PhoneOff className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
 
           {selectedDoNotService ? (
@@ -276,6 +304,8 @@ export function VoiceDialerDialog({
   initialCustomerId?: string | null;
   initialName?: string | null;
 }) {
+  const { activeCall } = useVoiceDevice();
+
   if (!open) return null;
 
   return (
@@ -289,8 +319,14 @@ export function VoiceDialerDialog({
       <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-5 shadow-xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Phone dialer</h2>
-            <p className="text-sm text-muted-foreground">Place an outbound call from the app</p>
+            <h2 className="text-lg font-semibold">
+              {activeCall ? "In-call keypad" : "Phone dialer"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {activeCall
+                ? "Tap digits to send tones on this call"
+                : "Place an outbound call from the app"}
+            </p>
           </div>
           <Button type="button" variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -301,7 +337,6 @@ export function VoiceDialerDialog({
           initialCustomerId={initialCustomerId}
           initialName={initialName}
           compact
-          onCallStarted={onClose}
         />
       </div>
     </div>

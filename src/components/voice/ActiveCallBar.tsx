@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  Grid3x3,
   Mic,
   MicOff,
   Pause,
@@ -11,6 +12,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CallDialPad, isDtmfKey } from "@/components/voice/CallDialPad";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { BookCallAppointmentModal } from "@/components/voice/BookCallAppointmentModal";
@@ -57,6 +59,7 @@ export function ActiveCallBar() {
     disconnect,
     toggleMute,
     toggleHold,
+    sendDigits,
     transfer,
     openBookAppointment,
     bookAppointmentOpen,
@@ -64,6 +67,8 @@ export function ActiveCallBar() {
   } = useVoiceDevice();
   const [seconds, setSeconds] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [keypadOpen, setKeypadOpen] = useState(false);
+  const [dtmfSent, setDtmfSent] = useState("");
   const [waitingQueue, setWaitingQueue] = useState<
     Array<{ id: string; fromNumber: string; customer?: { name: string | null } | null }>
   >([]);
@@ -71,6 +76,8 @@ export function ActiveCallBar() {
   useEffect(() => {
     if (!activeCall) {
       setSeconds(0);
+      setKeypadOpen(false);
+      setDtmfSent("");
       return;
     }
     const start = Date.now();
@@ -79,6 +86,30 @@ export function ActiveCallBar() {
     }, 1000);
     return () => clearInterval(timer);
   }, [activeCall]);
+
+  useEffect(() => {
+    if (!keypadOpen || !activeCall) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (!isDtmfKey(event.key)) return;
+      event.preventDefault();
+      if (sendDigits(event.key)) {
+        setDtmfSent((prev) => (prev + event.key).slice(-24));
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [keypadOpen, activeCall, sendDigits]);
 
   useEffect(() => {
     if (!activeCall) {
@@ -175,6 +206,14 @@ export function ActiveCallBar() {
             {activeCall.onHold ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
           </CallActionButton>
           <CallActionButton
+            label={keypadOpen ? "Hide pad" : "Keypad"}
+            ariaLabel={keypadOpen ? "Hide keypad" : "Show keypad"}
+            variant={keypadOpen ? "default" : "outline"}
+            onClick={() => setKeypadOpen((open) => !open)}
+          >
+            <Grid3x3 className="h-4 w-4" />
+          </CallActionButton>
+          <CallActionButton
             label="Transfer"
             ariaLabel="Transfer"
             onClick={() => setTransferOpen(true)}
@@ -198,6 +237,21 @@ export function ActiveCallBar() {
             <PhoneOff className="h-4 w-4" />
           </CallActionButton>
         </div>
+        {keypadOpen ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="mb-2 min-h-5 truncate text-center font-mono text-sm tracking-[0.2em] text-foreground">
+              {dtmfSent || "Enter digits"}
+            </p>
+            <CallDialPad
+              compact
+              onDigit={(digit) => {
+                if (sendDigits(digit)) {
+                  setDtmfSent((prev) => (prev + digit).slice(-24));
+                }
+              }}
+            />
+          </div>
+        ) : null}
       </div>
       <TransferDialog
         open={transferOpen}
