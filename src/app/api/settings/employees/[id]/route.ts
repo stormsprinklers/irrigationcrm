@@ -156,6 +156,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ...(fields.annualSalary !== undefined
             ? { annualSalary: fields.annualSalary != null ? Number(fields.annualSalary) : null }
             : {}),
+          ...(fields.onlineBookingEnabled !== undefined
+            ? { onlineBookingEnabled: Boolean(fields.onlineBookingEnabled) }
+            : {}),
         },
       });
 

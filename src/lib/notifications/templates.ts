@@ -43,6 +43,7 @@ export const MERGE_FIELDS = [
   { token: "{survey_link}", label: "Survey link" },
   { token: "{work_summary}", label: "Work summary" },
   { token: "{booking_link}", label: "Booking link" },
+  { token: "{meeting_link}", label: "Google Meet link" },
   { token: "{estimate_range}", label: "Estimate range" },
   { token: "{company_phone}", label: "Company phone" },
 ] as const;
@@ -79,7 +80,7 @@ export const DEFAULT_TEMPLATES: Array<{
     name: "Visit scheduled",
     channel: "SMS",
     event: "VISIT_SCHEDULED",
-    body: "Hi {customer_first_name}, your appointment with {company_name} is set for {visit_date}, arrival window {visit_arrival_window}. Portal: {portal_link}",
+    body: "Hi {customer_first_name}, your appointment with {company_name} is set for {visit_date}, arrival window {visit_arrival_window}.{meeting_link} Portal: {portal_link}",
   },
   {
     slug: "visit_scheduled",
@@ -87,7 +88,7 @@ export const DEFAULT_TEMPLATES: Array<{
     channel: "EMAIL",
     event: "VISIT_SCHEDULED",
     subject: "Your appointment with {company_name}",
-    body: "Hi {customer_first_name},\n\nYour {visit_title} is scheduled for {visit_date}.\nArrival window: {visit_arrival_window}\n\nAddress: {customer_address}\n\nPortal: {portal_link}\n\n— {company_name}",
+    body: "Hi {customer_first_name},\n\nYour {visit_title} is scheduled for {visit_date}.\nArrival window: {visit_arrival_window}\n{meeting_link}\nAddress: {customer_address}\n\nPortal: {portal_link}\n\n— {company_name}",
   },
   {
     slug: "visit_time_updated",

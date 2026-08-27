@@ -16,6 +16,9 @@ export default function PublicBookingPageClient({ slug }: Props) {
       description: string | null;
     };
     slots: Array<{ startAt: string; endAt: string }>;
+    virtual?: boolean;
+    requireEmail?: boolean;
+    setupRequired?: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +52,9 @@ export default function PublicBookingPageClient({ slug }: Props) {
   return (
     <main className="mx-auto max-w-lg p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Book with {data.company.name}</h1>
+        <h1 className="text-2xl font-semibold">
+          {data.virtual ? `Book a virtual consult with ${data.company.name}` : `Book with ${data.company.name}`}
+        </h1>
         {data.company.description && (
           <p className="mt-2 text-sm text-muted-foreground">{data.company.description}</p>
         )}
@@ -59,6 +64,9 @@ export default function PublicBookingPageClient({ slug }: Props) {
           slug={slug}
           company={data.company}
           initialSlots={data.slots}
+          virtual={Boolean(data.virtual)}
+          requireEmail={Boolean(data.requireEmail)}
+          setupRequired={Boolean(data.setupRequired)}
           showHeader={false}
         />
       </div>

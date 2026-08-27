@@ -184,6 +184,7 @@ export function employeeSelectFields() {
     lmsSyncStatus: true,
     lmsLastSyncedAt: true,
     reviewNameAliases: true,
+    onlineBookingEnabled: true,
     createdAt: true,
     serviceAreas: {
       include: { serviceArea: { select: { id: true, name: true, color: true } } },

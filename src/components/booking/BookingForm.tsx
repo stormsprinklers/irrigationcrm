@@ -22,7 +22,15 @@ type BookingFormProps = {
   apiBase?: string;
   company?: BookingCompanyInfo;
   initialSlots?: BookingSlot[];
-  onSuccess?: (result: { visitId: string; startAt: string; endAt: string }) => void;
+  virtual?: boolean;
+  requireEmail?: boolean;
+  setupRequired?: boolean;
+  onSuccess?: (result: {
+    visitId: string;
+    startAt: string;
+    endAt: string;
+    meetingUrl?: string | null;
+  }) => void;
   submitLabel?: string;
   showHeader?: boolean;
 };
@@ -34,17 +42,23 @@ export function BookingForm({
   apiBase = slug ? `/api/book/public/${slug}` : "/api/schedule/jobs",
   company,
   initialSlots,
+  virtual = false,
+  requireEmail = false,
+  setupRequired = false,
   onSuccess,
-  submitLabel = "Book appointment",
+  submitLabel,
   showHeader = true,
 }: BookingFormProps) {
   const isPublic = Boolean(slug);
+  const emailRequired = virtual || requireEmail;
+  const bookLabel = submitLabel ?? (virtual ? "Book consultation" : "Book appointment");
   const [step, setStep] = useState<Step>("contact");
   const [loading, setLoading] = useState(false);
   const [slots, setSlots] = useState<BookingSlot[]>(initialSlots ?? []);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<BookingSlot | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [meetingUrl, setMeetingUrl] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -54,16 +68,17 @@ export function BookingForm({
     city: "",
     state: "",
     zip: "",
-    title: "Service appointment",
+    title: virtual ? "Virtual consultation" : "Service appointment",
     notes: "",
   });
 
   const loadSlots = useCallback(async () => {
     if (!isPublic || !slug) return;
-    if (!form.zip || form.zip.length < 5) return;
+    if (!virtual && (!form.zip || form.zip.length < 5)) return;
     setSlotsLoading(true);
     try {
-      const res = await fetch(`${apiBase}?zip=${encodeURIComponent(form.zip)}`);
+      const url = virtual ? apiBase : `${apiBase}?zip=${encodeURIComponent(form.zip)}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load slots");
       setSlots(data.slots ?? []);
@@ -73,7 +88,7 @@ export function BookingForm({
     } finally {
       setSlotsLoading(false);
     }
-  }, [apiBase, form.zip, isPublic, slug]);
+  }, [apiBase, form.zip, isPublic, slug, virtual]);
 
   useEffect(() => {
     if (step === "slot" && isPublic) loadSlots();
@@ -97,15 +112,18 @@ export function BookingForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Booking failed");
 
+      setMeetingUrl(data.meetingUrl ?? null);
       setConfirmed(true);
       onSuccess?.(data);
-      toast.success("Appointment booked!");
+      toast.success(virtual ? "Consultation booked!" : "Appointment booked!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Booking failed");
     } finally {
       setLoading(false);
     }
   }
+
+  const steps = virtual ? (["contact", "slot"] as const) : (["contact", "address", "slot"] as const);
 
   if (confirmed && selectedSlot) {
     return (
@@ -115,9 +133,22 @@ export function BookingForm({
           {format(new Date(selectedSlot.startAt), "EEEE, MMMM d")} at{" "}
           {format(new Date(selectedSlot.startAt), "h:mm a")}
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          We&apos;ll send a confirmation to {form.phone || form.email}.
-        </p>
+        {meetingUrl ? (
+          <p className="mt-3 text-sm">
+            Google Meet:{" "}
+            <a href={meetingUrl} className="text-primary underline" target="_blank" rel="noreferrer">
+              {meetingUrl}
+            </a>
+          </p>
+        ) : virtual ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            We&apos;ll send your Google Meet invite to {form.email}.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-muted-foreground">
+            We&apos;ll send a confirmation to {form.phone || form.email}.
+          </p>
+        )}
       </div>
     );
   }
@@ -133,13 +164,16 @@ export function BookingForm({
         </div>
       )}
 
+      {virtual ? (
+        <p className="text-sm text-muted-foreground">
+          30-minute virtual consultation over Google Meet. A calendar invite will be sent to your email.
+        </p>
+      ) : null}
+
       <div className="flex gap-2 text-xs text-muted-foreground">
-        {(["contact", "address", "slot"] as Step[]).map((s, i) => (
-          <span
-            key={s}
-            className={step === s ? "font-medium text-foreground" : ""}
-          >
-            {i + 1}. {s.charAt(0).toUpperCase() + s.slice(1)}
+        {steps.map((s, i) => (
+          <span key={s} className={step === s ? "font-medium text-foreground" : ""}>
+            {i + 1}. {s === "slot" ? "Time" : s.charAt(0).toUpperCase() + s.slice(1)}
           </span>
         ))}
       </div>
@@ -164,7 +198,9 @@ export function BookingForm({
             />
           </div>
           <div>
-            <label className="text-sm text-muted-foreground">Email</label>
+            <label className="text-sm text-muted-foreground">
+              Email{emailRequired ? " *" : ""}
+            </label>
             <Input
               className="mt-1"
               type="email"
@@ -172,17 +208,32 @@ export function BookingForm({
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </div>
+          {virtual ? (
+            <div>
+              <label className="text-sm text-muted-foreground">Notes (optional)</label>
+              <Input
+                className="mt-1"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Anything we should know before the call"
+              />
+            </div>
+          ) : null}
           <Button
             className="w-full"
-            disabled={!form.name.trim() || !form.phone.trim()}
-            onClick={() => setStep("address")}
+            disabled={
+              !form.name.trim() ||
+              !form.phone.trim() ||
+              (emailRequired && !form.email.includes("@"))
+            }
+            onClick={() => setStep(virtual ? "slot" : "address")}
           >
             Continue
           </Button>
         </div>
       )}
 
-      {step === "address" && (
+      {step === "address" && !virtual && (
         <div className="space-y-3">
           <div>
             <label className="text-sm text-muted-foreground">Street address</label>
@@ -236,11 +287,17 @@ export function BookingForm({
 
       {step === "slot" && (
         <div className="space-y-3">
-          {slotsLoading ? (
+          {setupRequired ? (
+            <p className="text-sm text-muted-foreground">
+              Online booking is not set up yet. Please call the office to schedule.
+            </p>
+          ) : slotsLoading ? (
             <p className="text-sm text-muted-foreground">Loading available times...</p>
           ) : slots.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No available times in the next two weeks. Try a different zip or contact the office.
+              {virtual
+                ? "No available times in the next two weeks. Please call the office."
+                : "No available times in the next two weeks. Try a different zip or contact the office."}
             </p>
           ) : (
             <div className="max-h-64 space-y-2 overflow-y-auto">
@@ -263,15 +320,15 @@ export function BookingForm({
             </div>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep("address")}>
+            <Button variant="outline" onClick={() => setStep(virtual ? "contact" : "address")}>
               Back
             </Button>
             <Button
               className="flex-1"
-              disabled={!selectedSlot || loading}
+              disabled={!selectedSlot || loading || setupRequired}
               onClick={handleSubmit}
             >
-              {loading ? "Booking..." : submitLabel}
+              {loading ? "Booking..." : bookLabel}
             </Button>
           </div>
         </div>

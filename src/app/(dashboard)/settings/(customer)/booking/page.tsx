@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import {
   type BookingWindow,
   type DivisionBookingWindows,
 } from "@/lib/schedule/open-time-slots";
+import { toast } from "sonner";
 
 function WindowsEditor({
   label,
@@ -125,6 +127,21 @@ export default function SettingsBookingPage() {
           />
           Enable online booking
         </label>
+        <label className="flex items-start gap-3 text-sm">
+          <Checkbox
+            checked={Boolean(company.onlineBookingVirtualOnly)}
+            onCheckedChange={(checked) =>
+              setCompany({ ...company, onlineBookingVirtualOnly: Boolean(checked) })
+            }
+          />
+          <span>
+            Virtual appointments only
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              30-minute Google Meet consults. Enable this for Chestnut &amp; Cheer (or any
+              company that should not book on-site jobs from the website).
+            </span>
+          </span>
+        </label>
         <div>
           <label className="text-sm text-muted-foreground">Booking page slug</label>
           <Input
@@ -147,6 +164,8 @@ export default function SettingsBookingPage() {
         </div>
         <p className="text-sm text-muted-foreground">Public URL: {publicUrl}</p>
       </div>
+
+      <BookingPeopleAndMeet />
 
       <div className="mt-6 space-y-4 rounded-lg border border-border bg-white p-6">
         <div>
@@ -192,5 +211,175 @@ export default function SettingsBookingPage() {
         </Button>
       </div>
     </ContentArea>
+  );
+}
+
+type BookingStaff = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  onlineBookingEnabled: boolean;
+};
+
+function BookingPeopleAndMeet() {
+  const [staff, setStaff] = useState<BookingStaff[]>([]);
+  const [savingStaff, setSavingStaff] = useState(false);
+  const [calendar, setCalendar] = useState<{
+    configured: boolean;
+    connected: boolean;
+    email: string | null;
+  } | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/booking/staff")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.staff) setStaff(data.staff);
+      })
+      .catch(() => {});
+    fetch("/api/settings/booking/google-calendar/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setCalendar(data);
+      })
+      .catch(() => {});
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("calendar") === "connected") {
+      toast.success("Google Calendar connected");
+    }
+    const error = params.get("error");
+    if (error) toast.error(decodeURIComponent(error));
+  }, []);
+
+  async function saveStaff() {
+    setSavingStaff(true);
+    try {
+      const res = await fetch("/api/settings/booking/staff", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabledUserIds: staff.filter((person) => person.onlineBookingEnabled).map((person) => person.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      setStaff(data.staff ?? staff);
+      toast.success("Bookable people saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSavingStaff(false);
+    }
+  }
+
+  async function disconnectCalendar() {
+    setDisconnecting(true);
+    try {
+      const res = await fetch("/api/settings/booking/google-calendar", { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to disconnect");
+      setCalendar((prev) => (prev ? { ...prev, connected: false, email: null } : prev));
+      toast.success("Google Calendar disconnected");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="mt-6 space-y-4 rounded-lg border border-border bg-white p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">Who can take online bookings</h3>
+            <p className="text-sm text-muted-foreground">
+              Only checked people appear on the public/website calendar. Slots use their work
+              hours and skip times they already have assigned visits or approved time off.
+            </p>
+          </div>
+          <Button size="sm" onClick={saveStaff} disabled={savingStaff}>
+            {savingStaff ? "Saving..." : "Save people"}
+          </Button>
+        </div>
+        {staff.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No employees found.</p>
+        ) : (
+          <div className="space-y-2">
+            {staff.map((person) => (
+              <label key={person.id} className="flex items-center gap-3 text-sm">
+                <Checkbox
+                  checked={person.onlineBookingEnabled}
+                  disabled={person.status !== "ACTIVE"}
+                  onCheckedChange={(checked) =>
+                    setStaff((prev) =>
+                      prev.map((row) =>
+                        row.id === person.id
+                          ? { ...row, onlineBookingEnabled: Boolean(checked) }
+                          : row
+                      )
+                    )
+                  }
+                />
+                <span>
+                  {person.name}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {person.email}
+                    {person.status !== "ACTIVE" ? " · archived" : ""}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 space-y-4 rounded-lg border border-border bg-white p-6">
+        <div>
+          <h3 className="font-semibold">Google Meet</h3>
+          <p className="text-sm text-muted-foreground">
+            Connect the company Google Calendar. Virtual bookings create a Meet event and email
+            the customer (and assigned person) automatically.
+          </p>
+        </div>
+        {calendar?.connected ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm">
+              Connected{calendar.email ? ` as ${calendar.email}` : ""}.
+            </p>
+            <Button type="button" variant="outline" size="sm" asChild>
+              <a href="/api/settings/booking/google-calendar">Reconnect</a>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={disconnecting}
+              onClick={disconnectCalendar}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {calendar && !calendar.configured ? (
+              <p className="text-sm text-muted-foreground">
+                Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET, then add this
+                redirect URI in Google Cloud:{" "}
+                <code className="text-xs">
+                  /api/settings/booking/google-calendar/callback
+                </code>
+              </p>
+            ) : null}
+            <Button type="button" size="sm" asChild>
+              <a href="/api/settings/booking/google-calendar">Connect Google Calendar</a>
+            </Button>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

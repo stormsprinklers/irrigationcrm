@@ -51,6 +51,7 @@ export async function notifyVisitEvent(params: {
       city: visit.city,
       state: visit.state,
       zip: visit.zip,
+      meetingUrl: visit.meetingUrl,
     },
     technician: visit.assignedUser ?? undefined,
     property: visit.property ?? undefined,

@@ -567,8 +567,13 @@ model Company {
   invoiceTerms             String?
   invoiceFooter            String?
   onlineBookingEnabled     Boolean  @default(false)
+  /// When true, public/website booking is virtual consults (Google Meet), not on-site jobs.
+  onlineBookingVirtualOnly Boolean  @default(false)
   bookingSlug              String?
   bookingLeadTimeHours     Int      @default(24)
+  googleCalendarRefreshToken    String?
+  googleCalendarConnectedEmail  String?
+  googleCalendarConnectedAt     DateTime?
   portalEnabled            Boolean  @default(false)
   portalShowInvoices       Boolean  @default(true)
   portalShowEstimates      Boolean  @default(true)
@@ -931,6 +936,8 @@ model User {
   systemKind   String?
   /// App Store review / Apple demo technician — no phone or MFA required; disable via Integrations.
   appleDemoAccount Boolean @default(false)
+  /// When true, this person can be assigned public / website online bookings.
+  onlineBookingEnabled Boolean @default(false)
   payType            PayType?
   hourlyRate         Decimal?       @db.Decimal(10, 2)
   commissionPercent  Decimal?       @db.Decimal(5, 2)
@@ -2626,6 +2633,8 @@ model Visit {
   city           String?
   state          String?
   zip            String?
+  /// Google Meet (or other video) link for virtual appointments.
+  meetingUrl     String?
   enRouteEtaSeconds     Int?
   enRouteEtaAt          DateTime?
   enRouteCalculatedAt   DateTime?

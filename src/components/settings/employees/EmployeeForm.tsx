@@ -8,6 +8,7 @@ import { ImageCropDialog } from "@/components/ui/ImageCropDialog";
 import { Loader2, Sparkles } from "lucide-react";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { trueRoleOf } from "@/lib/role-preview";
@@ -43,6 +44,7 @@ export type EmployeeRecord = {
   lmsSyncStatus?: string | null;
   lmsLastSyncedAt?: string | null;
   reviewNameAliases?: string[];
+  onlineBookingEnabled?: boolean;
   serviceAreas: { serviceArea: ServiceAreaOption }[];
 };
 
@@ -80,6 +82,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     annualSalary: "",
     serviceAreaIds: [] as string[],
     reviewNameAliases: "",
+    onlineBookingEnabled: false,
   });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -153,6 +156,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         annualSalary: "",
         serviceAreaIds: [],
         reviewNameAliases: "",
+        onlineBookingEnabled: false,
       });
       setPassword("");
       setConfirmPassword("");
@@ -187,6 +191,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       annualSalary: employee.annualSalary != null ? String(employee.annualSalary) : "",
       serviceAreaIds: employee.serviceAreas.map((sa) => sa.serviceArea.id),
       reviewNameAliases: (employee.reviewNameAliases ?? []).join(", "),
+      onlineBookingEnabled: Boolean(employee.onlineBookingEnabled),
     });
     setPassword("");
     setConfirmPassword("");
@@ -309,6 +314,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
+        onlineBookingEnabled: form.onlineBookingEnabled,
       };
 
       if (!employee && isAdmin && password) {
@@ -479,6 +485,20 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
             Used for {"{about_technician_link}"} in customer messages (/team/slug on your website).
           </p>
         </div>
+        <label className="flex items-start gap-3 text-sm sm:col-span-2">
+          <Checkbox
+            checked={form.onlineBookingEnabled}
+            onCheckedChange={(checked) =>
+              setForm((p) => ({ ...p, onlineBookingEnabled: Boolean(checked) }))
+            }
+          />
+          <span>
+            Available for online booking
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Lets this person receive website and public-page bookings on their schedule.
+            </span>
+          </span>
+        </label>
         <div>
           <label className="text-sm font-medium">Role</label>
           <select

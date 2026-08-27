@@ -34,6 +34,7 @@ type VisitSlice = {
   city?: string | null;
   state?: string | null;
   zip?: string | null;
+  meetingUrl?: string | null;
 };
 
 type TechnicianSlice = {
@@ -154,7 +155,14 @@ export function buildNotificationContext(params: {
     terms_of_service_url: params.company.termsOfServiceUrl?.trim() ?? "",
     privacy_policy_url: params.company.privacyPolicyUrl?.trim() ?? "",
     visit_date: startAt ? formatVisitDate(startAt, timezone) : "",
-    visit_arrival_window: startAt ? formatArrivalWindow(startAt, arrivalHours, timezone) : "",
+    visit_arrival_window: startAt
+      ? params.visit?.meetingUrl
+        ? formatTimeInTimezone(startAt, timezone)
+        : formatArrivalWindow(startAt, arrivalHours, timezone)
+      : "",
+    meeting_link: params.visit?.meetingUrl
+      ? `\nGoogle Meet: ${params.visit.meetingUrl}\n`
+      : "",
     invoice_amount: params.invoice ? formatCurrency(params.invoice.amount) : "",
     review_link: params.company.googleReviewUrl ?? "",
     technician_eta: technicianEta,

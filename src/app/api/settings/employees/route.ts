@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
         commissionPercent: resolvedPay.commissionPercent,
         annualSalary: annualSalary != null ? Number(annualSalary) : null,
         websiteTeamSlug: websiteTeamSlug ? String(websiteTeamSlug) : null,
+        onlineBookingEnabled: Boolean(body.onlineBookingEnabled),
         passwordHash,
         serviceAreas: serviceAreaIds?.length
           ? {

@@ -922,6 +922,7 @@ async function main() {
       referralCode: "CC-REF",
       bookingSlug: "chestnut-cheer",
       onlineBookingEnabled: true,
+      onlineBookingVirtualOnly: true,
       bookingLeadTimeHours: 24,
       intakeRequiredFields: ["name", "phone", "email"],
     },
@@ -946,6 +947,7 @@ async function main() {
       referralCode: "CC-REF",
       bookingSlug: "chestnut-cheer",
       onlineBookingEnabled: true,
+      onlineBookingVirtualOnly: true,
       bookingLeadTimeHours: 24,
       intakeRequiredFields: ["name", "phone", "email"],
       estimateExpiryDays: 14,
@@ -1138,16 +1140,15 @@ async function main() {
     console.log("");
     console.log("Chestnut & Cheer company seeded.");
     console.log("C&C CRM login: admin@utah.christmas / Test123");
-    console.log("Public booking: /book/chestnut-cheer");
+    console.log("Public booking: C&C website /book (or CRM /book/chestnut-cheer)");
     console.log("Set on christmas-lights-website .env.local:");
     console.log(`  CRM_INTEGRATION_URL=<your-crm-origin>/api/integrations`);
     console.log(`  CRM_INTEGRATION_KEY=${rawKey}`);
-    console.log(`  NEXT_PUBLIC_CRM_BOOKING_URL=<your-crm-origin>/book/chestnut-cheer`);
     console.log("(This key is shown once — create a new key in Settings → Integrations if lost.)");
   } else {
     console.log("Chestnut & Cheer company already has a website integration key.");
     console.log("C&C CRM login: admin@utah.christmas / Test123");
-    console.log("Public booking: /book/chestnut-cheer");
+    console.log("Public booking: C&C website /book (or CRM /book/chestnut-cheer)");
   }
 }
 
