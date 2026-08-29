@@ -25,6 +25,7 @@ type AddressAutocompleteInputProps = {
   value: string;
   onChange: (value: string) => void;
   onResolved?: (resolved: ResolvedAddress) => void;
+  onBlur?: () => void;
   placeholder?: string;
   disabled?: boolean;
   autoComplete?: string;
@@ -35,6 +36,7 @@ export function AddressAutocompleteInput({
   value,
   onChange,
   onResolved,
+  onBlur,
   placeholder = "Start typing an address...",
   disabled,
   autoComplete = "street-address",
@@ -138,7 +140,9 @@ export function AddressAutocompleteInput({
           onFocus={() => {
             if (suggestions.length > 0) setOpen(true);
           }}
+          onBlur={onBlur}
           onKeyDown={(e) => {
+            e.stopPropagation();
             if (!open || suggestions.length === 0) return;
 
             if (e.key === "ArrowDown") {

@@ -23,7 +23,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
-import { billedSegmentLengthFt, refreshPitchCorrections, segmentPitchResolved } from "@/lib/holiday-lighting/pitch-match";
+import { refreshPitchCorrections } from "@/lib/holiday-lighting/pitch-match";
 import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import { pruneStrands } from "@/lib/holiday-lighting/strands";
 import {
@@ -71,7 +71,14 @@ type Props = {
   initialZip?: string | null;
 };
 
-type WizardStep = 1 | 2;
+type WizardStep = 1 | 2 | 3 | 4;
+
+const WIZARD_STEPS: Array<{ id: WizardStep; label: string }> = [
+  { id: 1, label: "Street View" },
+  { id: 2, label: "Selections" },
+  { id: 3, label: "Satellite" },
+  { id: 4, label: "Quote" },
+];
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -85,6 +92,25 @@ function formatAddressLine(address: string, city: string, state: string, zip: st
   if (!tail) return street;
   if (city.trim() && street.toLowerCase().includes(city.trim().toLowerCase())) return street;
   return `${street}, ${tail}`;
+}
+
+function addressGeocodeKey(address: string, city: string, state: string, zip: string) {
+  return [address, city, state, zip]
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+}
+
+function displayAddressQuery(
+  address: string,
+  city: string,
+  state: string,
+  zip: string
+) {
+  if (address || city.trim() || zip.trim()) {
+    return formatAddressLine(address, city, state, zip);
+  }
+  return "";
 }
 
 export function HolidayLightingQuoter({
@@ -109,6 +135,14 @@ export function HolidayLightingQuoter({
   const [city, setCity] = useState(initialCity ?? "");
   const [state, setState] = useState(initialState ?? "UT");
   const [zip, setZip] = useState(initialZip ?? "");
+  const [addressQuery, setAddressQuery] = useState(() =>
+    displayAddressQuery(
+      initialAddress ?? "",
+      initialCity ?? "",
+      initialState ?? "",
+      initialZip ?? ""
+    )
+  );
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [customerName, setCustomerName] = useState(initialCustomerName ?? "");
   const [propertyId, setPropertyId] = useState("");
@@ -130,6 +164,8 @@ export function HolidayLightingQuoter({
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastGeocodedKey = useRef("");
+  const geocodeSeq = useRef(0);
 
   const loadQuote = useCallback(async (id: string) => {
     setLoading(true);
@@ -143,6 +179,13 @@ export function HolidayLightingQuoter({
       setCity(q.city ?? "");
       setState(q.state ?? "UT");
       setZip(q.zip ?? "");
+      setAddressQuery(
+        displayAddressQuery(q.address ?? "", q.city ?? "", q.state ?? "", q.zip ?? "")
+      );
+      lastGeocodedKey.current =
+        q.lat != null && q.lng != null
+          ? addressGeocodeKey(q.address ?? "", q.city ?? "", q.state ?? "", q.zip ?? "")
+          : "";
       setCustomerId(q.customerId ?? "");
       setCustomerName(q.customer?.name ?? "");
       setPropertyId(q.propertyId ?? "");
@@ -194,6 +237,14 @@ export function HolidayLightingQuoter({
             setCity(customer.city ?? "");
             setState(customer.state ?? "UT");
             setZip(customer.zip ?? "");
+            setAddressQuery(
+              displayAddressQuery(
+                customer.address ?? "",
+                customer.city ?? "",
+                customer.state ?? "UT",
+                customer.zip ?? ""
+              )
+            );
           }
         })
         .catch(() => {});
@@ -306,42 +357,82 @@ export function HolidayLightingQuoter({
     void save({ measurements: refreshed }, { quiet });
   }
 
-  async function geocode() {
+  async function geocode(fields?: {
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+  }) {
+    const payload = fields ?? { address, city, state, zip };
+    const query =
+      formatAddressLine(payload.address, payload.city, payload.state, payload.zip).trim() ||
+      payload.address.trim();
+    if (query.replace(/\s/g, "").length < 6) return;
+
+    const key = addressGeocodeKey(payload.address, payload.city, payload.state, payload.zip);
+    if (key === lastGeocodedKey.current) return;
+
+    const seq = ++geocodeSeq.current;
     try {
       const res = await fetch("/api/holiday-lighting/geocode", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, city, state, zip }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
+      if (seq !== geocodeSeq.current) return;
+      lastGeocodedKey.current = key;
       if (!res.ok) throw new Error(data.error ?? "Geocode failed");
       setCenter({ lat: data.lat, lng: data.lng });
-      toast.success("Map centered on address");
-      await save({ lat: data.lat, lng: data.lng }, { quiet: true });
+      await save(
+        {
+          address: payload.address,
+          city: payload.city,
+          state: payload.state,
+          zip: payload.zip,
+          lat: data.lat,
+          lng: data.lng,
+        },
+        { quiet: true }
+      );
     } catch (err) {
+      if (seq !== geocodeSeq.current) return;
       toast.error(err instanceof Error ? err.message : "Geocode failed");
     }
   }
 
   function applyResolvedAddress(resolved: ResolvedAddress) {
-    setAddress(resolved.address ?? address);
-    setCity(resolved.city ?? city);
-    setState(resolved.state ?? state);
-    setZip(resolved.zip ?? zip);
+    const nextAddress = resolved.address ?? address;
+    const nextCity = resolved.city ?? city;
+    const nextState = resolved.state ?? state;
+    const nextZip = resolved.zip ?? zip;
+    setAddress(nextAddress);
+    setCity(nextCity);
+    setState(nextState);
+    setZip(nextZip);
+    setAddressQuery(displayAddressQuery(nextAddress, nextCity, nextState, nextZip));
     if (resolved.latitude != null && resolved.longitude != null) {
+      lastGeocodedKey.current = addressGeocodeKey(nextAddress, nextCity, nextState, nextZip);
       setCenter({ lat: resolved.latitude, lng: resolved.longitude });
       void save(
         {
-          address: resolved.address ?? address,
-          city: resolved.city ?? city,
-          state: resolved.state ?? state,
-          zip: resolved.zip ?? zip,
+          address: nextAddress,
+          city: nextCity,
+          state: nextState,
+          zip: nextZip,
           lat: resolved.latitude,
           lng: resolved.longitude,
         },
         { quiet: true }
       );
+      return;
     }
+    void geocode({
+      address: nextAddress,
+      city: nextCity,
+      state: nextState,
+      zip: nextZip,
+    });
   }
 
   function applyProperty(property: CustomerPropertyDTO) {
@@ -350,6 +441,14 @@ export function HolidayLightingQuoter({
     setCity(property.city ?? "");
     setState(property.state ?? "UT");
     setZip(property.zip ?? "");
+    setAddressQuery(
+      displayAddressQuery(
+        property.address ?? "",
+        property.city ?? "",
+        property.state ?? "UT",
+        property.zip ?? ""
+      )
+    );
     void save(
       {
         propertyId: property.id,
@@ -360,6 +459,12 @@ export function HolidayLightingQuoter({
       },
       { quiet: true }
     );
+    void geocode({
+      address: property.address ?? "",
+      city: property.city ?? "",
+      state: property.state ?? "UT",
+      zip: property.zip ?? "",
+    });
   }
 
   function onCustomerPicked(id: string, name: string) {
@@ -381,6 +486,14 @@ export function HolidayLightingQuoter({
       setCity(customer.city ?? "");
       setState(customer.state ?? "UT");
       setZip(customer.zip ?? "");
+      setAddressQuery(
+        displayAddressQuery(
+          customer.address ?? "",
+          customer.city ?? "",
+          customer.state ?? "UT",
+          customer.zip ?? ""
+        )
+      );
       void save(
         {
           customerId: customer.id,
@@ -391,6 +504,12 @@ export function HolidayLightingQuoter({
         },
         { quiet: true }
       );
+      void geocode({
+        address: customer.address ?? "",
+        city: customer.city ?? "",
+        state: customer.state ?? "UT",
+        zip: customer.zip ?? "",
+      });
     } else {
       void save({ customerId: customer.id }, { quiet: true });
     }
@@ -401,10 +520,22 @@ export function HolidayLightingQuoter({
     [address, city, state, zip]
   );
 
+  useEffect(() => {
+    const query = (addressLine || address).trim();
+    if (query.replace(/\s/g, "").length < 6) return;
+    const key = addressGeocodeKey(address, city, state, zip);
+    if (key === lastGeocodedKey.current) return;
+    const timer = window.setTimeout(() => {
+      void geocode({ address, city, state, zip });
+    }, 750);
+    return () => window.clearTimeout(timer);
+    // geocode reads latest fields from this effect's snapshot
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, city, state, zip, addressLine]);
+
   async function onPhotoSelected(file: File) {
     setPhotoUrl(URL.createObjectURL(file));
     setPhotoApproved(false);
-    toast.success("Review the photo, then approve it to continue");
   }
 
   async function captureStreetView() {
@@ -438,7 +569,6 @@ export function HolidayLightingQuoter({
       }
       setPhotoUrl(URL.createObjectURL(blob));
       setPhotoApproved(false);
-      toast.success("Review the capture — approve it if the house looks right");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not capture Street View");
     } finally {
@@ -446,17 +576,34 @@ export function HolidayLightingQuoter({
     }
   }
 
-  async function goToStep2() {
-    if (!photoUrl || !photoApproved) {
-      toast.error("Capture or upload a street photo and approve it first");
+  async function goNext() {
+    if (step === 1) {
+      if (!photoUrl || !photoApproved) {
+        toast.error("Capture or upload a photo and approve it first");
+        return;
+      }
+      await save(undefined, { quiet: true });
+      setStep(2);
       return;
     }
-    if (!measurements.segments.some((s) => s.kind === "roofline")) {
-      toast.error("Draw at least one roofline on the satellite map");
+    if (step === 2) {
+      await save(undefined, { quiet: true });
+      setStep(3);
       return;
     }
-    await save(undefined, { quiet: true });
-    setStep(2);
+    if (step === 3) {
+      if (!measurements.segments.some((s) => s.kind === "roofline" && s.path.length >= 2)) {
+        toast.error("Draw each roofline on the satellite map");
+        return;
+      }
+      await save(undefined, { quiet: true });
+      setStep(4);
+    }
+  }
+
+  function goBack() {
+    if (step <= 1) return;
+    setStep((prev) => (prev - 1) as WizardStep);
   }
 
   async function runVisualize() {
@@ -532,18 +679,17 @@ export function HolidayLightingQuoter({
     toast.success("Quote measurements cleared");
   }
 
-  const totalFt = useMemo(
-    () =>
-      measurements.segments.reduce((s, seg) => s + billedSegmentLengthFt(seg), 0),
-    [measurements.segments]
-  );
-
-  const matchedCount = useMemo(
-    () =>
-      measurements.segments.filter((s) => s.kind === "roofline" && segmentPitchResolved(s))
-        .length,
-    [measurements.segments]
-  );
+  useEffect(() => {
+    if (step !== 3) return;
+    const unmatched = measurements.segments.find(
+      (s) => s.kind === "roofline" && s.path.length < 2
+    );
+    if (!unmatched) return;
+    const current = measurements.segments.find((s) => s.id === matchSegmentId);
+    if (!matchSegmentId || (current && current.path.length >= 2)) {
+      setMatchSegmentId(unmatched.id);
+    }
+  }, [step, measurements.segments, matchSegmentId]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -552,24 +698,28 @@ export function HolidayLightingQuoter({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm">
-          <span
-            className={cn(
-              "rounded-full px-3 py-1 font-medium",
-              step === 1 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}
-          >
-            1 · Measure
-          </span>
-          <span className="text-muted-foreground">→</span>
-          <span
-            className={cn(
-              "rounded-full px-3 py-1 font-medium",
-              step === 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-            )}
-          >
-            2 · Preview &amp; quote
-          </span>
+        <div className="flex flex-wrap items-center gap-1 text-sm sm:gap-2">
+          {WIZARD_STEPS.map((item, index) => (
+            <div key={item.id} className="flex items-center gap-1 sm:gap-2">
+              {index > 0 ? <span className="text-muted-foreground">→</span> : null}
+              <button
+                type="button"
+                className={cn(
+                  "rounded-full px-3 py-1 font-medium",
+                  step === item.id
+                    ? "bg-primary text-primary-foreground"
+                    : step > item.id
+                      ? "bg-muted text-foreground"
+                      : "bg-muted text-muted-foreground"
+                )}
+                onClick={() => {
+                  if (item.id <= step) setStep(item.id);
+                }}
+              >
+                {item.id} · {item.label}
+              </button>
+            </div>
+          ))}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -583,22 +733,22 @@ export function HolidayLightingQuoter({
           <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>
             {saving ? "Saving…" : "Save draft"}
           </Button>
-          {step === 1 ? (
-            <Button type="button" onClick={() => void goToStep2()}>
+          {step > 1 ? (
+            <Button type="button" variant="outline" onClick={goBack}>
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Back
+            </Button>
+          ) : null}
+          {step < 4 ? (
+            <Button type="button" onClick={() => void goNext()}>
               Continue
               <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={() => setStep(1)}>
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Back to measure
-            </Button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {step === 1 ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", step > 3 && "hidden")}>
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
             <CustomerSearchPicker
               compact
@@ -633,72 +783,160 @@ export function HolidayLightingQuoter({
             ) : null}
             <div className="min-w-[220px] flex-[2]">
               <AddressAutocompleteInput
-                value={addressLine}
+                value={addressQuery}
                 onChange={(value) => {
+                  setAddressQuery(value);
                   setAddress(value);
                   setCity("");
                   setState("");
                   setZip("");
                 }}
                 onResolved={applyResolvedAddress}
+                onBlur={() =>
+                  void geocode({
+                    address: city.trim() || zip.trim() ? address : addressQuery,
+                    city,
+                    state,
+                    zip,
+                  })
+                }
                 placeholder="Address, city, state, ZIP…"
               />
             </div>
-            <Button type="button" size="sm" className="h-9" onClick={() => void geocode()}>
-              Locate
-            </Button>
-            <p className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">
-              {totalFt.toFixed(1)} ft · {matchedCount} resolved · {measurements.placements.length}{" "}
-              trees/shrubs
-              {(measurements.strands ?? []).length > 0
-                ? ` · ${(measurements.strands ?? []).length} strands`
-                : ""}
-            </p>
           </div>
 
-          <div className="relative z-0 grid min-h-0 flex-1 gap-4 xl:grid-cols-2">
-            <div className="relative z-0 flex min-h-[420px] flex-col gap-2">
-              <h3 className="text-sm font-semibold">Satellite measure</h3>
-              <HolidayMapPanel
-                ref={mapPanelRef}
-                center={center}
+          <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 2 && "hidden")}>
+            {step === 2 && photoUrl && photoApproved ? (
+              <StreetViewMeasureOverlay
+                imageUrl={photoUrl}
                 measurements={measurements}
-                defaultLightStyleKey={selections.defaultLightStyleKey}
-                onSelectSegment={(id) => {
-                  setMatchSegmentId(id);
-                  if (id) setSelectedStrandId(null);
-                }}
                 selectedSegmentId={matchSegmentId}
-                selectedStrandId={selectedStrandId}
-                showStreetView={!photoApproved}
-                onChange={(next) => {
-                  const segments = next.segments.map((seg) => {
-                    const prev = measurements.segments.find((s) => s.id === seg.id);
-                    if (!prev) {
-                      return {
-                        ...seg,
-                        horizontalLengthFt: seg.horizontalLengthFt ?? seg.lengthFt,
-                      };
-                    }
-                    const pathChanged =
-                      JSON.stringify(prev.path) !== JSON.stringify(seg.path);
-                    if (pathChanged) {
-                      return { ...seg, horizontalLengthFt: seg.lengthFt };
-                    }
+                onSelectSegment={setMatchSegmentId}
+                defaultLightStyleKey={selections.defaultLightStyleKey}
+                onChange={(next) => updateMeasurements(next)}
+              />
+            ) : null}
+          </div>
+
+          <div
+            className={cn(
+              "relative z-0 flex min-h-0 flex-1 flex-col gap-2",
+              step !== 1 && step !== 3 && "hidden"
+            )}
+          >
+            {step === 1 ? (
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {!photoApproved ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={capturing}
+                      onClick={() => void captureStreetView()}
+                    >
+                      {capturing ? "Capturing…" : photoUrl ? "Recapture" : "Capture Street View"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      Upload photo
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPhotoApproved(false)}
+                  >
+                    Change photo
+                  </Button>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void onPhotoSelected(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {step === 1 && photoUrl && !photoApproved ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoUrl}
+                  alt="Capture preview"
+                  className="h-16 w-24 rounded object-cover"
+                />
+                <Button type="button" size="sm" onClick={() => setPhotoApproved(true)}>
+                  Approve photo
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setPhotoUrl(null);
+                    setPhotoApproved(false);
+                  }}
+                >
+                  Discard
+                </Button>
+              </div>
+            ) : null}
+
+            <HolidayMapPanel
+              ref={mapPanelRef}
+              center={center}
+              measurements={measurements}
+              defaultLightStyleKey={selections.defaultLightStyleKey}
+              onSelectSegment={(id) => {
+                setMatchSegmentId(id);
+                if (id) setSelectedStrandId(null);
+              }}
+              selectedSegmentId={matchSegmentId}
+              selectedStrandId={selectedStrandId}
+              showStreetView={step === 1}
+              showSatellite={step === 3}
+              onChange={(next) => {
+                const segments = next.segments.map((seg) => {
+                  const prev = measurements.segments.find((s) => s.id === seg.id);
+                  if (!prev) {
                     return {
                       ...seg,
-                      horizontalLengthFt: prev.horizontalLengthFt ?? seg.lengthFt,
+                      horizontalLengthFt: seg.horizontalLengthFt ?? seg.lengthFt,
                     };
-                  });
-                  updateMeasurements({
-                    ...next,
-                    segments,
-                    streetTraces: (measurements.streetTraces ?? []).filter((t) =>
-                      segments.some((s) => s.id === t.satelliteSegmentId)
-                    ),
-                  });
-                }}
-              />
+                  }
+                  const pathChanged =
+                    JSON.stringify(prev.path) !== JSON.stringify(seg.path);
+                  if (pathChanged) {
+                    return { ...seg, horizontalLengthFt: seg.lengthFt };
+                  }
+                  return {
+                    ...seg,
+                    horizontalLengthFt: prev.horizontalLengthFt ?? seg.lengthFt,
+                  };
+                });
+                updateMeasurements({
+                  ...next,
+                  segments,
+                  streetTraces: (measurements.streetTraces ?? []).filter((t) =>
+                    segments.some((s) => s.id === t.satelliteSegmentId)
+                  ),
+                });
+              }}
+            />
+            {step === 3 ? (
               <StrandBuilder
                 measurements={measurements}
                 selectedStrandId={selectedStrandId}
@@ -708,128 +946,16 @@ export function HolidayLightingQuoter({
                 }}
                 onChange={(next) => updateMeasurements(next)}
               />
-            </div>
-
-            <div className="relative z-10 flex min-h-[420px] flex-col gap-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold">Street View pitch match</h3>
-                <div className="flex flex-wrap gap-2">
-                  {!photoApproved ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={capturing}
-                        onClick={() => void captureStreetView()}
-                      >
-                        {capturing ? "Capturing…" : photoUrl ? "Recapture" : "Capture Street View"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => fileRef.current?.click()}
-                      >
-                        Upload photo
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setPhotoApproved(false);
-                        toast.message("Street View is back — recapture or re-approve when ready");
-                      }}
-                    >
-                      Change photo
-                    </Button>
-                  )}
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void onPhotoSelected(file);
-                      e.target.value = "";
-                    }}
-                  />
-                </div>
-              </div>
-              {photoUrl && photoApproved ? (
-                <StreetViewMeasureOverlay
-                  imageUrl={photoUrl}
-                  measurements={measurements}
-                  selectedSegmentId={matchSegmentId}
-                  onSelectSegment={setMatchSegmentId}
-                  onChange={(next) => updateMeasurements(next)}
-                />
-              ) : photoUrl && !photoApproved ? (
-                <div className="flex min-h-0 flex-1 flex-col gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    Static captures can differ from the live Street View widget. Approve only if this
-                    photo shows the house clearly enough to match roof edges.
-                  </p>
-                  <div className="relative min-h-[240px] flex-1 overflow-hidden rounded-md border border-border bg-muted">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photoUrl}
-                      alt="Street View capture preview"
-                      className="absolute inset-0 h-full w-full object-contain"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        setPhotoApproved(true);
-                        toast.success("Photo approved — Street View closed; match pitch on the image");
-                      }}
-                    >
-                      Approve photo
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setPhotoUrl(null);
-                        setPhotoApproved(false);
-                      }}
-                    >
-                      Discard
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-                  Aim the Street View panel on the map, then capture — or upload a house photo — and
-                  approve it before pitch matching.
-                </div>
-              )}
-            </div>
+            ) : null}
           </div>
         </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-4 lg:flex-row", step !== 4 && "hidden")}>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <section className="space-y-3 rounded-lg border border-border bg-white p-4">
               <h3 className="text-sm font-semibold">AI lighting preview</h3>
-              <p className="text-xs text-muted-foreground">
-                Same street photo from step 1. Paint where lights go, then generate a preview.
-              </p>
               {photoUrl ? (
                 <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No street photo — go back to step 1 and capture one.
-                </p>
-              )}
+              ) : null}
               <Button
                 type="button"
                 className="w-full"
@@ -862,12 +988,6 @@ export function HolidayLightingQuoter({
           <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-[340px]">
             <section className="space-y-3 rounded-lg border border-border bg-white p-4">
               <h3 className="text-sm font-semibold">Quote builder</h3>
-              <p className="text-xs text-muted-foreground">
-                {totalFt.toFixed(1)} ft measured · {measurements.placements.length} trees/shrubs
-                {(measurements.strands ?? []).length > 0
-                  ? ` · ${(measurements.strands ?? []).length} strands`
-                  : ""}
-              </p>
 
               <div>
                 <label className="text-xs text-muted-foreground">Default light style</label>
@@ -911,9 +1031,7 @@ export function HolidayLightingQuoter({
                     ))}
                   </ul>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Save to refresh pricing.</p>
-              )}
+              ) : null}
 
               <Button
                 type="button"
@@ -953,7 +1071,6 @@ export function HolidayLightingQuoter({
             </section>
           </aside>
         </div>
-      )}
       <ConfirmDialog
         open={clearConfirmOpen}
         title="Clear this lighting quote?"

@@ -46,11 +46,7 @@ export function StrandBuilder({
   const strands = measurements.strands ?? [];
 
   if (resolved.length < 1) {
-    return (
-      <div className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        Finalize pitch (or mark flat) on rooflines before combining them into strands.
-      </div>
-    );
+    return null;
   }
 
   function togglePick(id: string) {
@@ -88,14 +84,11 @@ export function StrandBuilder({
     <div className="space-y-2 rounded-md border border-border bg-white p-2 text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-medium text-foreground">Strands</p>
-        <p className="text-muted-foreground">
-          Combine pitch-finalized segments into one quote line for installers.
-        </p>
       </div>
 
       {available.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-muted-foreground">Ungrouped (select 2+ to combine)</p>
+          <p className="text-muted-foreground">Ungrouped</p>
           <ul className="max-h-28 space-y-0.5 overflow-y-auto">
             {available.map((seg) => {
               const checked = picked.has(seg.id);
@@ -132,9 +125,7 @@ export function StrandBuilder({
             Combine into strand
           </Button>
         </div>
-      ) : (
-        <p className="text-muted-foreground">All finalized segments are in a strand.</p>
-      )}
+      ) : null}
 
       {strands.length > 0 ? (
         <ul className="space-y-2 border-t pt-2">

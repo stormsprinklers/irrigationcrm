@@ -31,6 +31,7 @@ type Props = {
   selectedSegmentId: string | null;
   onSelectSegment: (id: string | null) => void;
   onChange: (next: HolidayMeasurements) => void;
+  defaultLightStyleKey?: string;
 };
 
 function pathD(pts: StreetViewNormPoint[]) {
@@ -42,12 +43,19 @@ function gableRoofPoints(left: StreetViewNormPoint, right: StreetViewNormPoint, 
   return [left, peak, right];
 }
 
+function newSegmentId() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `seg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function StreetViewMeasureOverlay({
   imageUrl,
   measurements,
   selectedSegmentId,
   onSelectSegment,
   onChange,
+  defaultLightStyleKey,
 }: Props) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [drawMode, setDrawMode] = useState<DrawMode>("gable");
@@ -76,9 +84,50 @@ export function StreetViewMeasureOverlay({
     };
   }
 
+  function addRoofline(select = true) {
+    const id = newSegmentId();
+    const count = measurements.segments.filter((s) => s.kind === "roofline").length + 1;
+    onChange({
+      ...measurements,
+      segments: [
+        ...measurements.segments,
+        {
+          id,
+          label: `Roofline ${count}`,
+          kind: "roofline",
+          path: [],
+          lengthFt: 0,
+          horizontalLengthFt: 0,
+          lightStyleKey: defaultLightStyleKey,
+        },
+      ],
+    });
+    if (select) onSelectSegment(id);
+    return id;
+  }
+
   function onPointerDown(e: React.PointerEvent) {
-    if (!selectedSegmentId || reviewing) return;
-    if (selectedSegment?.flat) return;
+    if (reviewing) return;
+    let segmentId = selectedSegmentId;
+    let segments = measurements.segments;
+    if (!segmentId) {
+      segmentId = newSegmentId();
+      const count = segments.filter((s) => s.kind === "roofline").length + 1;
+      const created = {
+        id: segmentId,
+        label: `Roofline ${count}`,
+        kind: "roofline" as const,
+        path: [] as HolidayMeasurements["segments"][number]["path"],
+        lengthFt: 0,
+        horizontalLengthFt: 0,
+        lightStyleKey: defaultLightStyleKey,
+      };
+      segments = [...segments, created];
+      onChange({ ...measurements, segments });
+      onSelectSegment(segmentId);
+    }
+    const selected = segments.find((s) => s.id === segmentId);
+    if (selected?.flat) return;
     const pt = toNorm(e.clientX, e.clientY);
     if (!pt) return;
     const next = [...draft, pt];
@@ -151,22 +200,6 @@ export function StreetViewMeasureOverlay({
     return previewSegmentFromPoints(selectedSegment, draft.slice(0, needed));
   }, [reviewing, selectedSegment, draft, needed]);
 
-  const draftHint = !selectedSegmentId
-    ? "Select a satellite roofline above, then mark it on the photo."
-    : selectedSegment?.flat
-      ? "This segment is marked flat — billed at plan length. Undo flat to pitch-match."
-      : reviewing
-        ? "Review the constructed roof edges, then approve to update the billed length."
-        : drawMode === "single"
-          ? draft.length === 0
-            ? "1. Click one end of the roof edge."
-            : "2. Click the other end of the roof edge."
-          : draft.length === 0
-            ? "1. Click one end of the gable (eave)."
-            : draft.length === 1
-              ? "2. Click the other end of the gable (same span as the satellite segment)."
-              : "3. Click the peak tip — a rise line is drawn from the center of the eave span.";
-
   const horizontal = selectedSegment
     ? selectedSegment.horizontalLengthFt ?? selectedSegment.lengthFt
     : 0;
@@ -233,9 +266,10 @@ export function StreetViewMeasureOverlay({
             Clear match
           </Button>
         ) : null}
+        <Button type="button" size="sm" variant="outline" onClick={() => addRoofline()}>
+          Add roofline
+        </Button>
       </div>
-
-      <p className="text-xs text-muted-foreground">{draftHint}</p>
 
       {preview ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-2 py-1.5 text-xs">
@@ -266,7 +300,11 @@ export function StreetViewMeasureOverlay({
 
       <ul className="relative z-20 max-h-40 space-y-1 overflow-y-auto rounded-md border border-border bg-white p-2 text-xs shadow-sm">
         {matchableSegments.length === 0 ? (
-          <li className="text-muted-foreground">Draw a roofline on the satellite map first.</li>
+          <li>
+            <Button type="button" size="sm" variant="outline" onClick={() => addRoofline()}>
+              Add roofline
+            </Button>
+          </li>
         ) : (
           matchableSegments.map((seg) => {
             const matched = segmentPitchResolved(seg);
@@ -311,6 +349,7 @@ export function StreetViewMeasureOverlay({
                         {statusLabel}
                       </span>
                     </span>
+                    {plan > 0 || seg.pitchDeg != null || seg.flat ? (
                     <span className="font-mono text-[11px] text-muted-foreground">
                       Plan {plan.toFixed(1)} ft
                       {seg.flat
@@ -330,6 +369,7 @@ export function StreetViewMeasureOverlay({
                           : ` · true ${seg.lengthFt.toFixed(1)} ft`
                         : ""}
                     </span>
+                    ) : null}
                   </button>
                   {!seg.flat && !traces.some((t) => t.satelliteSegmentId === seg.id) ? (
                     <Button
@@ -393,9 +433,9 @@ export function StreetViewMeasureOverlay({
       <div
         className={cn(
           "relative z-0 w-full overflow-hidden rounded-md border border-border bg-muted",
-          selectedSegmentId && !reviewing && !selectedSegment?.flat
-            ? "cursor-crosshair"
-            : "cursor-default"
+          selectedSegment?.flat || reviewing
+            ? "cursor-default"
+            : "cursor-crosshair"
         )}
         style={{ aspectRatio: `${aspect}` }}
         onPointerDown={onPointerDown}

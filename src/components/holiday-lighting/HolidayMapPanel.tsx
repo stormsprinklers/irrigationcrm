@@ -33,6 +33,8 @@ type Props = {
   selectedStrandId?: string | null;
   /** When false, hide the live Street View panorama (keep mounted for recapture). */
   showStreetView?: boolean;
+  /** When false, hide the satellite map (keep mounted). */
+  showSatellite?: boolean;
 };
 
 export type StreetViewCapturePose = {
@@ -75,6 +77,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       onSelectSegment,
       selectedStrandId = null,
       showStreetView = true,
+      showSatellite = true,
     },
     ref
   ) {
@@ -164,13 +167,16 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             streetViewControl: true,
             fullscreenControl: false,
             mapTypeControl: true,
+            keyboardShortcuts: false,
           });
           const pano = new g.maps.StreetViewPanorama(panoRef.current, {
             position: start,
             pov: { heading: 0, pitch: 0 },
             zoom: 1,
             addressControl: false,
+            clickToGo: true,
           });
+          pano.set("keyboardShortcuts", false);
           map.setStreetView(pano);
           mapObj.current = map;
           panoObj.current = pano;
@@ -196,6 +202,22 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       mapObj.current.setZoom(20);
       panoObj.current?.setPosition(center);
     }, [center]);
+
+    useEffect(() => {
+      if (!ready) return;
+      const timer = window.setTimeout(() => {
+        const g = window.google;
+        if (!g) return;
+        if (mapObj.current) {
+          g.maps.event.trigger(mapObj.current, "resize");
+          if (center) mapObj.current.setCenter(center);
+        }
+        if (panoObj.current && center) {
+          panoObj.current.setPosition(center);
+        }
+      }, 80);
+      return () => window.clearTimeout(timer);
+    }, [ready, showStreetView, showSatellite, center]);
 
     useEffect(() => {
       redrawOverlays();
@@ -248,23 +270,42 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       if (draftPath.current.length < 2) return;
 
       const path = draftPath.current;
-      const segment: HolidayMeasurementSegment = {
-        id: newId(),
-        label: `Roofline ${measurements.segments.filter((s) => s.kind === "roofline").length + 1}`,
-        kind: "roofline",
-        path,
-        lengthFt: pathLengthFeet(path),
-        horizontalLengthFt: pathLengthFeet(path),
-        lightStyleKey: defaultLightStyleKey,
-      };
-      onChange({
-        ...measurements,
-        segments: [...measurements.segments, segment],
-      });
+      const lengthFt = pathLengthFeet(path);
+      const selected = activeSegmentId
+        ? measurements.segments.find((s) => s.id === activeSegmentId)
+        : null;
+
+      if (selected && selected.path.length < 2) {
+        onChange({
+          ...measurements,
+          segments: measurements.segments.map((s) =>
+            s.id === selected.id
+              ? { ...s, path, lengthFt, horizontalLengthFt: lengthFt }
+              : s
+          ),
+        });
+      } else {
+        const segment: HolidayMeasurementSegment = {
+          id: newId(),
+          label: `Roofline ${measurements.segments.filter((s) => s.kind === "roofline").length + 1}`,
+          kind: "roofline",
+          path,
+          lengthFt,
+          horizontalLengthFt: lengthFt,
+          lightStyleKey: defaultLightStyleKey,
+        };
+        onChange({
+          ...measurements,
+          segments: [...measurements.segments, segment],
+        });
+        selectSegment(segment.id);
+      }
       draftPath.current = [];
       draftLine.current?.setMap(null);
       draftLine.current = null;
-      selectSegment(segment.id);
+      if (selected && selected.path.length < 2) {
+        selectSegment(selected.id);
+      }
     }
 
     function clearDraft() {
@@ -367,8 +408,13 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const hasAny =
       measurements.segments.length > 0 || measurements.placements.length > 0;
 
+    const showDrawTools = showSatellite;
+    const mapVisible = showSatellite;
+    const panoVisible = showStreetView;
+
     return (
       <div className="flex h-full min-h-0 flex-col gap-2">
+        {showDrawTools ? (
         <div className="flex flex-wrap items-center gap-2">
           {(
             [
@@ -429,6 +475,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             </Button>
           ) : null}
         </div>
+        ) : null}
 
         {error ? (
           <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -439,14 +486,16 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
         <div
           className={cn(
             "relative z-0 grid min-h-0 flex-1 gap-2",
-            showStreetView ? "lg:grid-cols-2" : "grid-cols-1"
+            mapVisible && panoVisible ? "lg:grid-cols-2" : "grid-cols-1"
           )}
         >
           <div
             ref={mapRef}
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
-              !ready && "animate-pulse"
+              !ready && "animate-pulse",
+              !mapVisible && "hidden",
+              mapVisible && !panoVisible && "min-h-[520px]"
             )}
           />
           <div
@@ -454,9 +503,10 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
               !ready && "animate-pulse",
-              !showStreetView && "hidden"
+              !panoVisible && "hidden",
+              panoVisible && !mapVisible && "min-h-[520px]"
             )}
-            aria-hidden={!showStreetView}
+            aria-hidden={!panoVisible}
           />
         </div>
 
