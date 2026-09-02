@@ -17,7 +17,11 @@ export async function POST(request: NextRequest) {
           ? process.env.TWILIO_ANDROID_PUSH_CREDENTIAL_SID?.trim()
           : undefined;
 
-    const accounts = await listOperatedVoiceAccounts(user);
+    const accounts = await listOperatedVoiceAccounts({
+      userId: user.id,
+      email: user.email,
+      companyId: user.companyId,
+    });
     const identities = (accounts.length
       ? accounts
       : [

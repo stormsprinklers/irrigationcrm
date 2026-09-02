@@ -9,8 +9,12 @@ import {
   type ResolvedCallSession,
 } from "@/lib/voice/resolve-session";
 
+function operatedAccountInput(user: SessionUser) {
+  return { userId: user.id, email: user.email, companyId: user.companyId };
+}
+
 export async function getOperatedCallSession(user: SessionUser, sessionId: string) {
-  const accounts = await listOperatedVoiceAccounts(user);
+  const accounts = await listOperatedVoiceAccounts(operatedAccountInput(user));
   const companyIds = accounts.map((a) => a.companyId);
   const session = await prisma.callSession.findFirst({
     where: { id: sessionId, companyId: { in: companyIds } },
@@ -28,7 +32,7 @@ export async function resolveCallSessionForOperator(
   callSid: string | null | undefined,
   parentCallSid?: string | null
 ): Promise<(ResolvedCallSession & { companyId: string; operatorUserId: string }) | null> {
-  const accounts = await listOperatedVoiceAccounts(user);
+  const accounts = await listOperatedVoiceAccounts(operatedAccountInput(user));
   for (const account of accounts) {
     const session = await resolveCallSessionBySids(account.companyId, callSid, parentCallSid);
     if (!session) continue;
@@ -42,6 +46,6 @@ export async function resolveCallSessionForOperator(
 }
 
 export async function userOperatesCompany(user: SessionUser, companyId: string) {
-  const ids = await listOperatedCompanyIds(user);
+  const ids = await listOperatedCompanyIds(operatedAccountInput(user));
   return ids.includes(companyId);
 }
