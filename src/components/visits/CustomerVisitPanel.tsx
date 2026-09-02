@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 
@@ -54,12 +56,14 @@ type Props = {
   visitId?: string;
   jobAddress?: string | null;
   mapsUrl?: string | null;
+  onCustomerLinked?: () => Promise<void> | void;
 };
 
-export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl }: Props) {
+export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl, onCustomerLinked }: Props) {
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     if (!customer) return;
@@ -71,10 +75,44 @@ export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl }: P
       .finally(() => setLoadingHistory(false));
   }, [customer, visitId]);
 
+  async function linkCustomer(customerId: string) {
+    if (!visitId || !customerId || linking) return;
+    setLinking(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error ?? "Failed to link customer");
+        return;
+      }
+      await onCustomerLinked?.();
+    } finally {
+      setLinking(false);
+    }
+  }
+
   if (!customer) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        No customer linked to this visit.
+      <div className="rounded-lg border border-dashed p-4">
+        <h3 className="mb-1 text-sm font-semibold">Customer</h3>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Link a customer to this visit, then fill in the rest of the details.
+        </p>
+        {visitId ? (
+          <CustomerSearchPicker
+            value=""
+            onValueChange={(id) => {
+              void linkCustomer(id);
+            }}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">No customer linked to this visit.</p>
+        )}
+        {linking ? <p className="mt-2 text-xs text-muted-foreground">Linking…</p> : null}
       </div>
     );
   }

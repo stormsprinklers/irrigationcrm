@@ -9,12 +9,12 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GitMerge, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import type { CustomerDTO, CustomerListFilters } from "@/lib/customers/types";
+import { createDraftCustomer } from "@/lib/schedule/create-draft";
 
 const emptyFilters: CustomerListFilters = {
   search: "",
@@ -60,13 +60,7 @@ export default function CustomersPageContent() {
     status: "ACTIVE",
   }));
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    companyName: "",
-  });
+  const [creating, setCreating] = useState(false);
 
   const hasActiveFilters = useMemo(
     () => Object.values(filters).some((value) => value?.trim()),
@@ -136,19 +130,16 @@ export default function CustomersPageContent() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function createCustomer(e: React.FormEvent) {
-    e.preventDefault();
-    const res = await fetch("/api/customers", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newCustomer),
-    });
-    if (!res.ok) {
-      toast.error("Failed to create customer");
-      return;
+  async function createCustomer() {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const customer = await createDraftCustomer();
+      window.location.href = `/customers/${customer.id}?edit=1`;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create customer");
+      setCreating(false);
     }
-    const customer = await res.json();
-    window.location.href = `/customers/${customer.id}`;
   }
 
   return (
@@ -158,52 +149,12 @@ export default function CustomersPageContent() {
         title="All Customers"
         subtitle={loading ? "Loading..." : `${customers.length} records`}
         actions={
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          <Button size="sm" onClick={() => void createCustomer()} disabled={creating}>
             <Plus className="h-4 w-4" />
-            Create customer
+            {creating ? "Creating…" : "Create customer"}
           </Button>
         }
       />
-
-      {showCreate && (
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle className="text-base">New customer</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={createCustomer} className="grid gap-3 sm:grid-cols-2">
-              <Input
-                value={newCustomer.name}
-                onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-                placeholder="Name"
-                required
-              />
-              <Input
-                value={newCustomer.companyName}
-                onChange={(e) => setNewCustomer({ ...newCustomer, companyName: e.target.value })}
-                placeholder="Company (optional)"
-              />
-              <Input
-                value={newCustomer.phone}
-                onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-                placeholder="Phone"
-              />
-              <Input
-                value={newCustomer.email}
-                onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                placeholder="Email"
-                type="email"
-              />
-              <div className="sm:col-span-2 flex gap-2">
-                <Button type="submit">Create</Button>
-                <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="mb-4 space-y-3">
         <Input

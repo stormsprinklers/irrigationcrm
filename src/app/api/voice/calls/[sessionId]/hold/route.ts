@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CallSessionStatus } from "@prisma/client";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { prisma } from "@/lib/prisma";
+import { requireSessionUser } from "@/lib/api-auth";
+import { getOperatedCallSession } from "@/lib/voice/operated-session";
 import { toggleHold } from "@/lib/voice/conference";
 
 export async function POST(
@@ -14,10 +13,8 @@ export async function POST(
     const body = await request.json();
     const hold = Boolean(body.hold);
 
-    const session = await prisma.callSession.findFirst({
-      where: { id: sessionId, companyId: user.companyId },
-    });
-    if (!session) {
+    const found = await getOperatedCallSession(user, sessionId);
+    if (!found) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 

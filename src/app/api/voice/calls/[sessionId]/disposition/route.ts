@@ -3,6 +3,7 @@ import { CallDisposition } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { syncCallConversionFromLog } from "@/lib/voice/call-conversion";
+import { getOperatedCallSession } from "@/lib/voice/operated-session";
 
 const VALID_DISPOSITIONS: CallDisposition[] = [
   CallDisposition.BOOKED,
@@ -29,17 +30,17 @@ export async function PATCH(
       return badRequestResponse("Valid disposition required (BOOKED, NOT_BOOKED, NON_OPPORTUNITY)");
     }
 
-    const session = await prisma.callSession.findFirst({
-      where: { id: sessionId, companyId: user.companyId },
-    });
-    if (!session) {
+    const found = await getOperatedCallSession(user, sessionId);
+    if (!found) {
       return NextResponse.json({ error: "Call session not found" }, { status: 404 });
     }
+    const { session, operatorUserId } = found;
+    const companyId = session.companyId;
 
     let resolvedVisitId = visitId ?? null;
     if (disposition === CallDisposition.BOOKED && !resolvedVisitId) {
       const linkedVisit = await prisma.visit.findFirst({
-        where: { callSessionId: sessionId, companyId: user.companyId },
+        where: { callSessionId: sessionId, companyId },
         select: { id: true },
         orderBy: { createdAt: "desc" },
       });
@@ -47,7 +48,7 @@ export async function PATCH(
     }
 
     const callLog = await prisma.callLog.findFirst({
-      where: { sessionId, companyId: user.companyId },
+      where: { sessionId, companyId },
       orderBy: { startedAt: "desc" },
     });
 
@@ -60,8 +61,8 @@ export async function PATCH(
           dispositionNote: dispositionNote ?? null,
           visitId: resolvedVisitId,
           leadId: leadId ?? null,
-          handledByUserId: user.id,
-          userId: callLog.userId ?? session.assignedUserId ?? user.id,
+          handledByUserId: operatorUserId,
+          userId: callLog.userId ?? session.assignedUserId ?? operatorUserId,
           phoneNumberId: callLog.phoneNumberId ?? session.phoneNumberId,
         },
       });
@@ -69,7 +70,7 @@ export async function PATCH(
     } else {
       const created = await prisma.callLog.create({
         data: {
-          companyId: user.companyId,
+          companyId,
           scope: "EXTERNAL",
           direction: session.direction,
           fromNumber: session.fromNumber,
@@ -83,8 +84,8 @@ export async function PATCH(
           dispositionNote: dispositionNote ?? null,
           visitId: resolvedVisitId,
           leadId: leadId ?? null,
-          handledByUserId: user.id,
-          userId: session.assignedUserId ?? user.id,
+          handledByUserId: operatorUserId,
+          userId: session.assignedUserId ?? operatorUserId,
           endedAt: new Date(),
         },
       });

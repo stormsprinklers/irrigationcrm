@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { recordCallAnswered } from "@/lib/voice/call-conversion";
-import { resolveCallSessionBySids } from "@/lib/voice/resolve-session";
+import {
+  getOperatedCallSession,
+  resolveCallSessionForOperator,
+} from "@/lib/voice/operated-session";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,11 +16,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "callSid required" }, { status: 400 });
     }
 
-    const session = await resolveCallSessionBySids(
-      user.companyId,
-      callSid,
-      parentCallSid
-    );
+    const session = await resolveCallSessionForOperator(user, callSid, parentCallSid);
 
     if (!session) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,13 +41,23 @@ export async function PATCH(request: NextRequest) {
     };
 
     let sessionId = body.sessionId?.trim() || null;
-    if (!sessionId) {
-      const session = await resolveCallSessionBySids(
-        user.companyId,
-        body.callSid,
-        body.parentCallSid
-      );
+    let companyId = user.companyId;
+    let operatorUserId = user.id;
+
+    if (sessionId) {
+      const found = await getOperatedCallSession(user, sessionId);
+      if (!found) {
+        return NextResponse.json({ error: "sessionId or callSid required" }, { status: 400 });
+      }
+      companyId = found.session.companyId;
+      operatorUserId = found.operatorUserId;
+    } else {
+      const session = await resolveCallSessionForOperator(user, body.callSid, body.parentCallSid);
       sessionId = session?.id ?? null;
+      if (session) {
+        companyId = session.companyId;
+        operatorUserId = session.operatorUserId;
+      }
     }
 
     if (!sessionId) {
@@ -68,9 +77,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     const conversion = await recordCallAnswered({
-      companyId: user.companyId,
+      companyId,
       sessionId,
-      userId: user.id,
+      userId: operatorUserId,
     });
 
     return NextResponse.json({

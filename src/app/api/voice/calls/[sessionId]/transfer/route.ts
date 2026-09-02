@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AgentPresenceStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { getOperatedCallSession } from "@/lib/voice/operated-session";
 import {
   coldTransfer,
   externalPhoneTransfer,
@@ -28,12 +29,18 @@ export async function POST(
       return NextResponse.json({ error: "type required" }, { status: 400 });
     }
 
+    const found = await getOperatedCallSession(user, sessionId);
+    if (!found) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+    const companyId = found.session.companyId;
+
     if (mode === "external_number") {
       if (!phone?.trim()) {
         return NextResponse.json({ error: "phone is required" }, { status: 400 });
       }
       const session = await externalPhoneTransfer(
-        user.companyId,
+        companyId,
         sessionId,
         { phone: phone.trim(), displayName },
         type
@@ -46,7 +53,7 @@ export async function POST(
         return NextResponse.json({ error: "targetUserId required" }, { status: 400 });
       }
       const session = await externalPhoneTransfer(
-        user.companyId,
+        companyId,
         sessionId,
         { userId: targetUserId },
         type
@@ -61,7 +68,7 @@ export async function POST(
     const targetPresence = await prisma.agentPresence.findFirst({
       where: {
         userId: targetUserId,
-        companyId: user.companyId,
+        companyId,
         status: AgentPresenceStatus.AVAILABLE,
       },
     });
@@ -71,8 +78,8 @@ export async function POST(
 
     const session =
       type === "warm"
-        ? await warmTransfer(user.companyId, sessionId, targetUserId)
-        : await coldTransfer(user.companyId, sessionId, targetUserId);
+        ? await warmTransfer(companyId, sessionId, targetUserId)
+        : await coldTransfer(companyId, sessionId, targetUserId);
 
     return NextResponse.json(session);
   } catch (error) {

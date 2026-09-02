@@ -17,6 +17,7 @@ import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { localTimeParts } from "./hours-branch";
 import { renderIvrGather, renderIvrNode, type FlowContext, type IvrNodeConfig } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
+import { dialVoiceClient, voiceClientBrandFromCompany, type VoiceClientBrand } from "./client-dial";
 import {
   appendCompanyQueueEnqueue,
   markCallSessionQueued,
@@ -85,7 +86,14 @@ function resolvePostIvrDestination<
 
 async function dialAvailableAgents(
   response: InstanceType<typeof twilio.twiml.VoiceResponse>,
-  company: { id: string; recordCalls: boolean },
+  company: {
+    id: string;
+    name: string;
+    recordCalls: boolean;
+    brandPrimaryColor?: string | null;
+    brandSecondaryColor?: string | null;
+    brandPalette?: unknown;
+  },
   from: string,
   callSid?: string
 ) {
@@ -102,6 +110,7 @@ async function dialAvailableAgents(
     return;
   }
 
+  const brand = voiceClientBrandFromCompany(company);
   const dial = response.dial(
     inboundDialAttributes(company, {
       timeout: 30,
@@ -111,7 +120,7 @@ async function dialAvailableAgents(
     })
   );
   for (const identity of identities) {
-    dial.client({}, identity);
+    dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -185,12 +194,13 @@ async function dialAgentGroup(
   dial: ReturnType<twilio.twiml.VoiceResponse["dial"]>,
   companyId: string,
   groupId: string,
-  strategy: RingStrategy
+  strategy: RingStrategy,
+  brand: VoiceClientBrand
 ) {
   if (strategy === RingStrategy.ROUND_ROBIN) {
     const identity = await getNextRoundRobinAgent(companyId, groupId);
     if (identity) {
-      dial.client({}, identity);
+      dialVoiceClient(dial, identity, brand);
       return;
     }
   }
@@ -203,7 +213,7 @@ async function dialAgentGroup(
     for (const member of group?.members ?? []) {
       const presence = await prisma.agentPresence.findUnique({ where: { userId: member.userId } });
       if (presence?.status === AgentPresenceStatus.AVAILABLE) {
-        dial.client({}, voiceClientIdentity(companyId, member.userId));
+        dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
         return;
       }
     }
@@ -222,7 +232,7 @@ async function dialAgentGroup(
   });
 
   for (const identity of filtered.length ? filtered : identities) {
-    dial.client({}, identity);
+    dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -296,6 +306,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
     callSessionId,
     recordCalls: company.recordCalls,
     transcribeCalls: company.transcribeCalls,
+    clientBrand: voiceClientBrandFromCompany(company),
   });
 
   const callFlow = phoneRecord?.callFlow;

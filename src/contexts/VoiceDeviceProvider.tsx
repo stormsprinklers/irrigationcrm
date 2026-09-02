@@ -41,11 +41,35 @@ export type ActiveCallState = {
   transferring: boolean;
 };
 
+export type IncomingCallBrand = {
+  companyId: string | null;
+  companyName: string | null;
+  brandPrimary: string;
+  brandSoft: string;
+  isOtherCompany: boolean;
+};
+
+type IncomingInvite = {
+  call: Call;
+  callerInfo: CallerInfo | null;
+  brand: IncomingCallBrand;
+};
+
+type VoiceIdentityToken = {
+  token: string;
+  identity: string;
+  companyId: string;
+  companyName: string;
+  brandPrimary: string;
+  brandSoft: string;
+  primary: boolean;
+};
+
 type VoiceContextValue = {
   ready: boolean;
   error: string | null;
   activeCall: ActiveCallState | null;
-  incomingCall: { call: Call; callerInfo: CallerInfo | null } | null;
+  incomingCall: IncomingInvite | null;
   connect: (to: string, customerId?: string) => Promise<void>;
   acceptIncoming: () => void;
   rejectIncoming: () => void;
@@ -78,9 +102,31 @@ function inviteStillRinging(call: Call) {
   return status === "pending" || status === "ringing";
 }
 
-async function lookupCaller(phone: string): Promise<CallerInfo> {
+function readCallParam(call: Call, key: string): string | null {
+  const custom = call.customParameters?.get(key)?.trim();
+  if (custom) return custom;
+  const params = call.parameters as Record<string, string>;
+  const direct = params[key] ?? params[key.toLowerCase()];
+  return direct?.trim() || null;
+}
+
+function incomingBrandFromCall(call: Call, selectedCompanyId?: string | null): IncomingCallBrand {
+  const companyId = readCallParam(call, "companyId");
+  const companyName = readCallParam(call, "companyName");
+  return {
+    companyId,
+    companyName,
+    brandPrimary: readCallParam(call, "brandPrimary") || "#10B981",
+    brandSoft: readCallParam(call, "brandSoft") || "#D1FAE5",
+    isOtherCompany: Boolean(companyId && selectedCompanyId && companyId !== selectedCompanyId),
+  };
+}
+
+async function lookupCaller(phone: string, companyId?: string | null): Promise<CallerInfo> {
   try {
-    const res = await fetch(`/api/voice/caller-lookup?phone=${encodeURIComponent(phone)}`);
+    const qs = new URLSearchParams({ phone });
+    if (companyId) qs.set("companyId", companyId);
+    const res = await fetch(`/api/voice/caller-lookup?${qs.toString()}`);
     if (!res.ok) return { phone };
     const data = await res.json();
     return {
@@ -168,6 +214,8 @@ async function patchPresence(status: "AVAILABLE" | "ON_CALL" | "OFFLINE" | "AWAY
 export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const deviceRef = useRef<Device | null>(null);
+  const extraDevicesRef = useRef<Device[]>([]);
+  const deviceIdentityRef = useRef(new Map<Device, string>());
   const refreshingTokenRef = useRef<Promise<boolean> | null>(null);
   const recoveringTransportRef = useRef<Promise<boolean> | null>(null);
   const ringingInvitesRef = useRef(new Set<Call>());
@@ -175,20 +223,20 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{
-    call: Call;
-    callerInfo: CallerInfo | null;
-  } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<IncomingInvite | null>(null);
   const [wrapUpSessionId, setWrapUpSessionId] = useState<string | null>(null);
   const [wrapUpVisitId, setWrapUpVisitId] = useState<string | null>(null);
   const [wrapUpOpen, setWrapUpOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
   const activeCallRef = useRef<ActiveCallState | null>(null);
   activeCallRef.current = activeCall;
+  const selectedCompanyIdRef = useRef(session?.user?.companyId ?? null);
+  selectedCompanyIdRef.current = session?.user?.companyId ?? null;
 
   const bindCall = useCallback(
     async (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
-      const callerInfo = await lookupCaller(remoteNumber);
+      const brand = incomingBrandFromCall(call, selectedCompanyIdRef.current);
+      const callerInfo = await lookupCaller(remoteNumber, brand.companyId);
       const callSid = call.parameters.CallSid;
       const parentCallSid =
         (call.parameters as Record<string, string>).ParentCallSid ??
@@ -267,7 +315,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     setWrapUpVisitId(visitId);
   }, []);
 
-  const fetchVoiceToken = useCallback(async () => {
+  const fetchVoiceTokenPayload = useCallback(async () => {
     const res = await fetch("/api/inbox/voice/token", { method: "POST" });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -280,7 +328,26 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     if (!data.token || typeof data.token !== "string") {
       throw new Error("Voice token response was empty");
     }
-    return data.token as string;
+    const identities = Array.isArray(data.identities)
+      ? (data.identities as VoiceIdentityToken[]).filter(
+          (item) => item && typeof item.token === "string" && typeof item.identity === "string"
+        )
+      : [
+          {
+            token: data.token as string,
+            identity: typeof data.identity === "string" ? data.identity : "",
+            companyId: "",
+            companyName: "",
+            brandPrimary: "",
+            brandSoft: "",
+            primary: true,
+          },
+        ];
+    return {
+      token: data.token as string,
+      identity: typeof data.identity === "string" ? data.identity : "",
+      identities,
+    };
   }, []);
 
   const refreshDeviceToken = useCallback(
@@ -294,12 +361,26 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
       const run = (async () => {
         try {
-          const token = await fetchVoiceToken();
+          const payload = await fetchVoiceTokenPayload();
           const current = deviceRef.current;
           if (!current) return false;
-          current.updateToken(token);
+          current.updateToken(payload.token);
+          for (const extra of extraDevicesRef.current) {
+            const identity = deviceIdentityRef.current.get(extra);
+            const match = payload.identities.find((item) => item.identity === identity);
+            if (match) extra.updateToken(match.token);
+          }
           if (opts?.forceRegister || (opts?.reRegister && current.state !== "registered")) {
             await current.register();
+            for (const extra of extraDevicesRef.current) {
+              if (extra.state !== "registered") {
+                try {
+                  await extra.register();
+                } catch {
+                  // ignore — extra company lines are best-effort
+                }
+              }
+            }
           }
           setError(null);
           return true;
@@ -318,7 +399,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       refreshingTokenRef.current = run;
       return run;
     },
-    [fetchVoiceToken]
+    [fetchVoiceTokenPayload]
   );
 
   const recoverVoiceTransport = useCallback(
@@ -356,6 +437,20 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
           }
           try {
             await current.register();
+            for (const extra of extraDevicesRef.current) {
+              try {
+                if (extra.state === "registered") {
+                  await extra.unregister();
+                }
+              } catch {
+                // ignore
+              }
+              try {
+                await extra.register();
+              } catch {
+                // Other-company lines are best-effort
+              }
+            }
             setError(null);
             return true;
           } catch {
@@ -383,138 +478,181 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
 
     async function setup() {
       try {
-        const token = await fetchVoiceToken();
+        const payload = await fetchVoiceTokenPayload();
         if (cancelled) return;
 
-        // Refresh well before expiry so background-tab timer throttling
-        // cannot let the JWT expire before tokenWillExpire fires.
-        const device = new Device(token, {
-          closeProtection: true,
-          tokenRefreshMs: 5 * 60 * 1000,
-        });
-        deviceRef.current = device;
-
-        device.on("registered", () => {
-          setReady(true);
-          setError(null);
-          void patchPresence("AVAILABLE");
-          void ensureNotificationPermission();
-        });
-
-        device.on("unregistered", () => {
-          setReady(false);
-          // Skip if we intentionally bounced registration during transport recovery.
-          if (
-            cancelled ||
-            document.visibilityState === "hidden" ||
-            recoveringTransportRef.current
-          ) {
-            return;
-          }
-          void recoverVoiceTransport({ silent: true });
-        });
-
-        device.on("error", (err) => {
-          const message = err.message ?? "Voice device error";
-          const code = typeof err.code === "number" ? err.code : undefined;
-          const isTokenError =
-            /access.?token/i.test(message) ||
-            code === 20101 ||
-            code === 20104 ||
-            code === 31204 ||
-            code === 31205;
-          // 31009: signaling WS dropped (common after idle / background tabs).
-          const isTransportError =
-            code === 31009 ||
-            /no transport available/i.test(message) ||
-            /transport error/i.test(message);
-
-          // Idle-tab token/transport drops are expected — recover quietly.
-          // Never toast these; softphone readiness is enough signal if recovery fails.
-          if (isTokenError || isTransportError) {
-            void recoverVoiceTransport({ silent: true }).then((ok) => {
-              if (!ok && !cancelled) setError(message);
-            });
-            return;
-          }
-
-          setError(message);
-          if (document.visibilityState === "visible") {
-            toast.error(message);
-          }
-        });
-
-        device.on("incoming", (call) => {
-          if (activeCallRef.current) {
-            call.reject();
-            const from = call.parameters.From ?? "Unknown";
-            toast.message("Caller waiting in queue", {
-              description: `${formatPhoneDisplay(from) || from} will hold until you finish this call.`,
-              duration: 8000,
-            });
-            return;
-          }
-          const from = call.parameters.From ?? "Unknown";
-          ringingInvitesRef.current.add(call);
-          let callerLabel = formatPhoneDisplay(from) || from;
-
-          const endRinging = (missed: boolean) => {
-            if (!ringingInvitesRef.current.has(call)) return;
-            ringingInvitesRef.current.delete(call);
-            settleInviteRef.current.delete(call);
-            window.clearInterval(watch);
-            setIncomingCall((prev) => (prev?.call === call ? null : prev));
-            void closeIncomingCallBrowserNotification();
-            if (missed) {
-              toast("Missed call", { description: callerLabel, duration: 8000 });
-              void showMissedCallBrowserNotification({
-                title: "Missed call",
-                body: callerLabel,
+        const attachIncoming = (device: Device) => {
+          device.on("incoming", (call) => {
+            if (activeCallRef.current) {
+              call.reject();
+              const from = call.parameters.From ?? "Unknown";
+              toast.message("Caller waiting in queue", {
+                description: `${formatPhoneDisplay(from) || from} will hold until you finish this call.`,
+                duration: 8000,
               });
+              return;
             }
-          };
+            const from = call.parameters.From ?? "Unknown";
+            const brand = incomingBrandFromCall(call, selectedCompanyIdRef.current);
+            ringingInvitesRef.current.add(call);
+            let callerLabel = formatPhoneDisplay(from) || from;
 
-          settleInviteRef.current.set(call, endRinging);
+            const endRinging = (missed: boolean) => {
+              if (!ringingInvitesRef.current.has(call)) return;
+              ringingInvitesRef.current.delete(call);
+              settleInviteRef.current.delete(call);
+              window.clearInterval(watch);
+              setIncomingCall((prev) => (prev?.call === call ? null : prev));
+              void closeIncomingCallBrowserNotification();
+              if (missed) {
+                const missedTitle = brand.companyName
+                  ? `Missed call · ${brand.companyName}`
+                  : "Missed call";
+                toast(missedTitle, { description: callerLabel, duration: 8000 });
+                void showMissedCallBrowserNotification({
+                  title: missedTitle,
+                  body: callerLabel,
+                });
+              }
+            };
 
-          const watch = window.setInterval(() => {
-            if (!inviteStillRinging(call)) endRinging(true);
-          }, 400);
+            settleInviteRef.current.set(call, endRinging);
 
-          call.on("cancel", () => endRinging(true));
-          call.on("disconnect", () => {
-            if (ringingInvitesRef.current.has(call)) endRinging(true);
-          });
-          call.on("error", () => endRinging(true));
+            const watch = window.setInterval(() => {
+              if (!inviteStillRinging(call)) endRinging(true);
+            }, 400);
 
-          if (!inviteStillRinging(call)) {
-            endRinging(true);
-            return;
-          }
+            call.on("cancel", () => endRinging(true));
+            call.on("disconnect", () => {
+              if (ringingInvitesRef.current.has(call)) endRinging(true);
+            });
+            call.on("error", () => endRinging(true));
 
-          void lookupCaller(from).then((callerInfo) => {
-            if (!ringingInvitesRef.current.has(call) || !inviteStillRinging(call)) {
+            if (!inviteStillRinging(call)) {
               endRinging(true);
               return;
             }
-            if (callerInfo.name?.trim()) {
-              callerLabel = `${callerInfo.name.trim()} · ${formatPhoneDisplay(from) || from}`;
-            }
-            setIncomingCall({ call, callerInfo });
-            void showIncomingCallBrowserNotification({
-              title: "Incoming call",
-              body: callerLabel,
+
+            void lookupCaller(from, brand.companyId).then((callerInfo) => {
+              if (!ringingInvitesRef.current.has(call) || !inviteStillRinging(call)) {
+                endRinging(true);
+                return;
+              }
+              if (callerInfo.name?.trim()) {
+                callerLabel = `${callerInfo.name.trim()} · ${formatPhoneDisplay(from) || from}`;
+              }
+              setIncomingCall({ call, callerInfo, brand });
+              void showIncomingCallBrowserNotification({
+                title: brand.companyName?.trim()
+                  ? `Incoming · ${brand.companyName.trim()}`
+                  : "Incoming call",
+                body: callerLabel,
+              });
             });
           });
-        });
+        };
 
-        device.on("tokenWillExpire", () => {
-          void refreshDeviceToken({ silent: true });
-        });
+        const attachPrimaryTransport = (device: Device) => {
+          device.on("registered", () => {
+            setReady(true);
+            setError(null);
+            void patchPresence("AVAILABLE");
+            void ensureNotificationPermission();
+          });
 
-        await device.register();
+          device.on("unregistered", () => {
+            setReady(false);
+            if (
+              cancelled ||
+              document.visibilityState === "hidden" ||
+              recoveringTransportRef.current
+            ) {
+              return;
+            }
+            void recoverVoiceTransport({ silent: true });
+          });
+
+          device.on("error", (err) => {
+            const message = err.message ?? "Voice device error";
+            const code = typeof err.code === "number" ? err.code : undefined;
+            const isTokenError =
+              /access.?token/i.test(message) ||
+              code === 20101 ||
+              code === 20104 ||
+              code === 31204 ||
+              code === 31205;
+            const isTransportError =
+              code === 31009 ||
+              /no transport available/i.test(message) ||
+              /transport error/i.test(message);
+
+            if (isTokenError || isTransportError) {
+              void recoverVoiceTransport({ silent: true }).then((ok) => {
+                if (!ok && !cancelled) setError(message);
+              });
+              return;
+            }
+
+            setError(message);
+            if (document.visibilityState === "visible") {
+              toast.error(message);
+            }
+          });
+
+          device.on("tokenWillExpire", () => {
+            void refreshDeviceToken({ silent: true });
+          });
+        };
+
+        extraDevicesRef.current = [];
+        deviceIdentityRef.current.clear();
+
+        const primaryItem =
+          payload.identities.find((item) => item.primary) ?? payload.identities[0] ?? null;
+        const extraItems = payload.identities.filter(
+          (item) => item.identity !== (primaryItem?.identity ?? payload.identity)
+        );
+
+        const primaryDevice = new Device(primaryItem?.token ?? payload.token, {
+          closeProtection: true,
+          tokenRefreshMs: 5 * 60 * 1000,
+        });
+        deviceRef.current = primaryDevice;
+        if (primaryItem?.identity) {
+          deviceIdentityRef.current.set(primaryDevice, primaryItem.identity);
+        }
+        attachPrimaryTransport(primaryDevice);
+        attachIncoming(primaryDevice);
+        await primaryDevice.register();
+        if (cancelled) return;
+
+        for (const item of extraItems) {
+          try {
+            const extra = new Device(item.token, {
+              closeProtection: false,
+              tokenRefreshMs: 5 * 60 * 1000,
+            });
+            deviceIdentityRef.current.set(extra, item.identity);
+            extra.on("tokenWillExpire", () => {
+              void refreshDeviceToken({ silent: true });
+            });
+            extra.on("error", () => {
+              void refreshDeviceToken({ silent: true });
+            });
+            attachIncoming(extra);
+            await extra.register();
+            if (cancelled) {
+              extra.destroy();
+              break;
+            }
+            extraDevicesRef.current.push(extra);
+          } catch {
+            // Other-company lines are best-effort so the selected company still works.
+          }
+        }
 
         heartbeat = setInterval(() => {
-          void patchPresence(activeCall ? "ON_CALL" : "AVAILABLE");
+          void patchPresence(activeCallRef.current ? "ON_CALL" : "AVAILABLE");
         }, 30000);
       } catch (err) {
         if (!cancelled) {
@@ -541,12 +679,21 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       if (heartbeat) clearInterval(heartbeat);
       void patchPresence("OFFLINE");
+      for (const extra of extraDevicesRef.current) {
+        try {
+          extra.destroy();
+        } catch {
+          // ignore
+        }
+      }
+      extraDevicesRef.current = [];
+      deviceIdentityRef.current.clear();
       deviceRef.current?.destroy();
       deviceRef.current = null;
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionStatus, session?.user?.id, fetchVoiceToken, refreshDeviceToken, recoverVoiceTransport]);
+  }, [sessionStatus, session?.user?.id, fetchVoiceTokenPayload, refreshDeviceToken, recoverVoiceTransport]);
 
   const connect = useCallback(
     async (to: string, customerId?: string) => {

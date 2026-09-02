@@ -141,7 +141,7 @@ function buildVisitWhere(
 ): Prisma.VisitWhereInput {
   const where: Prisma.VisitWhereInput = {
     companyId,
-    status: { not: VisitStatus.CANCELLED },
+    status: { notIn: [VisitStatus.CANCELLED, VisitStatus.UNSCHEDULED] },
     startAt: { lt: end },
     endAt: { gt: start },
   };

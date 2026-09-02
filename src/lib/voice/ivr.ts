@@ -21,6 +21,11 @@ import {
   markCallSessionQueued,
   shouldQueueBecauseAgentsBusy,
 } from "./call-queue";
+import {
+  dialVoiceClient,
+  loadVoiceClientBrand,
+  type VoiceClientBrand,
+} from "./client-dial";
 
 export type IvrNodeConfig = {
   prompt?: string;
@@ -138,18 +143,24 @@ export type FlowContext = {
   callSessionId?: string;
   recordCalls: boolean;
   transcribeCalls: boolean;
+  clientBrand?: VoiceClientBrand;
 };
+
+async function brandOf(ctx: FlowContext): Promise<VoiceClientBrand> {
+  return ctx.clientBrand ?? loadVoiceClientBrand(ctx.companyId);
+}
 
 async function dialAgentGroup(
   dial: ReturnType<twilio.twiml.VoiceResponse["dial"]>,
   companyId: string,
   groupId: string,
-  strategy: RingStrategy
+  strategy: RingStrategy,
+  brand: VoiceClientBrand
 ) {
   if (strategy === RingStrategy.ROUND_ROBIN) {
     const identity = await getNextRoundRobinAgent(companyId, groupId);
     if (identity) {
-      dial.client({}, identity);
+      dialVoiceClient(dial, identity, brand);
       return;
     }
   }
@@ -162,7 +173,7 @@ async function dialAgentGroup(
     for (const member of group?.members ?? []) {
       const presence = await prisma.agentPresence.findUnique({ where: { userId: member.userId } });
       if (presence?.status === AgentPresenceStatus.AVAILABLE) {
-        dial.client({}, voiceClientIdentity(companyId, member.userId));
+        dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
         return;
       }
     }
@@ -181,7 +192,7 @@ async function dialAgentGroup(
   });
 
   for (const identity of filtered.length ? filtered : identities) {
-    dial.client({}, identity);
+    dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -329,12 +340,13 @@ export async function renderIvrNode(
       );
 
       if (group) {
-        await dialAgentGroup(dial, ctx.companyId, group.id, group.ringStrategy);
+        await dialAgentGroup(dial, ctx.companyId, group.id, group.ringStrategy, await brandOf(ctx));
       } else {
         const identities = await getAvailableAgentIdentities(ctx.companyId);
         if (identities.length) {
+          const brand = await brandOf(ctx);
           for (const identity of identities) {
-            dial.client({}, identity);
+            dialVoiceClient(dial, identity, brand);
           }
         } else {
           response.say("No agents are available. Please try again later.");
@@ -377,7 +389,7 @@ export async function renderIvrNode(
 
       // Rings every endpoint registered under this identity: the web softphone
       // and the user's iOS app (via VoIP push, even when the app is closed).
-      dial.client({}, voiceClientIdentity(ctx.companyId, targetUser.id));
+      dialVoiceClient(dial, voiceClientIdentity(ctx.companyId, targetUser.id), await brandOf(ctx));
       break;
     }
 

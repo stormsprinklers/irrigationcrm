@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireSessionUser } from "@/lib/api-auth";
+import { getOperatedCallSession } from "@/lib/voice/operated-session";
 import { completeWarmTransfer } from "@/lib/voice/conference";
 
 export async function POST(
@@ -9,7 +10,11 @@ export async function POST(
   try {
     const user = await requireSessionUser();
     const { sessionId } = await params;
-    const session = await completeWarmTransfer(user.companyId, sessionId);
+    const found = await getOperatedCallSession(user, sessionId);
+    if (!found) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+    const session = await completeWarmTransfer(found.session.companyId, sessionId);
     return NextResponse.json(session);
   } catch (error) {
     return NextResponse.json(

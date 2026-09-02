@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       const visits = await prisma.visit.findMany({
         where: {
           ...assigneeWhere,
-          status: { not: VisitStatus.CANCELLED },
+          status: { notIn: [VisitStatus.CANCELLED, VisitStatus.UNSCHEDULED] },
           startAt: { lt: end },
           endAt: { gt: start },
         },
@@ -99,6 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     const effectiveAssignee = isFieldRole(user.role) ? user.id : assignedUserId;
+    const nextStatus =
+      body.status === VisitStatus.UNSCHEDULED ? VisitStatus.UNSCHEDULED : VisitStatus.SCHEDULED;
 
     let zipForArea = zip ? String(zip) : null;
     if (propertyId) {
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
       if (property?.zip) zipForArea = property.zip;
     }
 
-    // Service area is derived from the job/property zip when possible.
+    // Service area is derived from the job/property zip when possible — never required.
     let resolvedServiceAreaId: string | null = null;
     if (zipForArea) {
       const area = await resolveServiceAreaByZip(user.companyId, zipForArea);
@@ -118,9 +120,6 @@ export async function POST(request: NextRequest) {
     if (!resolvedServiceAreaId && serviceAreaId) {
       resolvedServiceAreaId = String(serviceAreaId);
     }
-    if (!resolvedServiceAreaId && !zipForArea) {
-      return badRequestResponse("A property zip or service area is required");
-    }
 
     if (customerId) {
       const block = await getCustomerServiceBlock(user.companyId, customerId);
@@ -128,7 +127,7 @@ export async function POST(request: NextRequest) {
     }
 
     const assignmentError = validateScheduledVisitAssignment(
-      VisitStatus.SCHEDULED,
+      nextStatus,
       effectiveAssignee,
       isFieldRole(user.role) ? null : crewId
     );
@@ -171,7 +170,7 @@ export async function POST(request: NextRequest) {
         city: city ?? null,
         state: state ?? null,
         zip: zip ?? null,
-        status: VisitStatus.SCHEDULED,
+        status: nextStatus,
         callSessionId: callSessionId ?? null,
       },
       include: jobInclude,
@@ -217,7 +216,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
     }
 
-    if (visit.customerId) {
+    if (visit.customerId && nextStatus !== VisitStatus.UNSCHEDULED) {
       void onVisitTimeChanged({
         visitId: visit.id,
         companyId: user.companyId,

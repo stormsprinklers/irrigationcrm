@@ -431,6 +431,7 @@ export function VisitDetail({ visitId }: Props) {
         visitId={visit.id}
         jobAddress={jobAddress}
         mapsUrl={mapsUrl}
+        onCustomerLinked={load}
       />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -458,6 +459,7 @@ export function VisitDetail({ visitId }: Props) {
         <div className="space-y-6">
           <VisitScheduleSection
             visitId={visit.id}
+            title={visit.title}
             startAt={visit.startAt}
             endAt={visit.endAt}
             status={visit.status}

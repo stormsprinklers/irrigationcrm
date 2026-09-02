@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AgentPresenceStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { normalizePhone } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
-import { upsertPresence } from "@/lib/voice/presence";
+import { upsertPresenceForOperator } from "@/lib/voice/presence";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -13,7 +12,8 @@ export async function PATCH(request: NextRequest) {
     if (!status || !Object.values(AgentPresenceStatus).includes(status)) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
-    const presence = await upsertPresence(user.companyId, user.id, status);
+    await upsertPresenceForOperator(user, status);
+    const presence = await prisma.agentPresence.findUnique({ where: { userId: user.id } });
     return NextResponse.json(presence);
   } catch {
     return unauthorizedResponse();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -22,12 +22,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CreateCustomerVisitModal } from "@/components/customers/CreateCustomerVisitModal";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import {
   CustomerEmailAction,
   CustomerPhoneActions,
 } from "@/components/customers/CustomerContactActions";
-import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerNotesAttachmentsTab } from "@/components/customers/CustomerNotesAttachmentsTab";
 import { CustomerCallsTab } from "@/components/customers/CustomerCallsTab";
 import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPaymentMethodsSection";
@@ -57,6 +56,7 @@ import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAler
 import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
+import { createDraftVisit } from "@/lib/schedule/create-draft";
 
 const EMPTY_PROPERTY_FORM = {
   name: "",
@@ -201,7 +201,7 @@ export function CustomerProfile({ customerId }: Props) {
   >([]);
   const [enrollments, setEnrollments] = useState<EnrollmentDTO[]>([]);
   const [enrollOpen, setEnrollOpen] = useState(false);
-  const [visitOpen, setVisitOpen] = useState(false);
+  const [creatingVisit, setCreatingVisit] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeSearch, setMergeSearch] = useState("");
@@ -222,6 +222,7 @@ export function CustomerProfile({ customerId }: Props) {
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
+  const appliedEditQuery = useRef(false);
   const canViewComms = customer?.canViewCustomerComms !== false;
 
   useEffect(() => {
@@ -347,6 +348,32 @@ export function CustomerProfile({ customerId }: Props) {
     if (!customer) return;
     setDraftCustomer({ ...customer });
     setEditMode(true);
+  }
+
+  const startInEdit = searchParams.get("edit") === "1";
+  useEffect(() => {
+    if (appliedEditQuery.current || !startInEdit || !customer) return;
+    appliedEditQuery.current = true;
+    setDraftCustomer({ ...customer });
+    setEditMode(true);
+    router.replace(`/customers/${customer.id}`, { scroll: false });
+  }, [startInEdit, customer, router]);
+
+  async function addVisit() {
+    if (!customer || creatingVisit) return;
+    if (customer.doNotService) {
+      toast.error("This customer is marked DO NOT SERVICE and cannot be scheduled");
+      return;
+    }
+    setCreatingVisit(true);
+    try {
+      const visit = await createDraftVisit({ customerId: customer.id });
+      router.push(`/visits/${visit.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create visit");
+    } finally {
+      setCreatingVisit(false);
+    }
   }
 
   function cancelEditing() {
@@ -1298,9 +1325,9 @@ export function CustomerProfile({ customerId }: Props) {
 
         <TabsContent value="visits" className="space-y-4">
           <div className="flex justify-end">
-            <Button type="button" onClick={() => setVisitOpen(true)}>
+            <Button type="button" onClick={() => void addVisit()} disabled={creatingVisit}>
               <Plus className="h-4 w-4" />
-              Add visit
+              {creatingVisit ? "Creating…" : "Add visit"}
             </Button>
           </div>
           <Card>
@@ -1591,13 +1618,6 @@ export function CustomerProfile({ customerId }: Props) {
         </TabsContent>
         ) : null}
       </Tabs>
-
-      <CreateCustomerVisitModal
-        open={visitOpen}
-        onClose={() => setVisitOpen(false)}
-        customer={customer}
-        properties={properties}
-      />
 
       <ConfirmModal
         title="Delete customer?"

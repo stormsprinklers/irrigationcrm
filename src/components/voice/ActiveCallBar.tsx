@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Grid3x3,
   Mic,
@@ -10,6 +11,7 @@ import {
   Play,
   Plus,
   UserPlus,
+  UserRoundPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CallDialPad, isDtmfKey } from "@/components/voice/CallDialPad";
@@ -21,6 +23,7 @@ import { TransferDialog } from "@/components/voice/TransferDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { createDraftCustomer } from "@/lib/schedule/create-draft";
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -54,6 +57,7 @@ function CallActionButton({
 }
 
 export function ActiveCallBar() {
+  const router = useRouter();
   const {
     activeCall,
     disconnect,
@@ -66,6 +70,7 @@ export function ActiveCallBar() {
     setBookAppointmentOpen,
   } = useVoiceDevice();
   const [seconds, setSeconds] = useState(0);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [keypadOpen, setKeypadOpen] = useState(false);
   const [dtmfSent, setDtmfSent] = useState("");
@@ -149,6 +154,30 @@ export function ActiveCallBar() {
       : formatPhoneDisplay(activeCall.remoteNumber) ||
         (activeCall.direction === "inbound" ? "Incoming" : "Outbound");
 
+  const knownCustomerId = activeCall.callerInfo?.customerId;
+  const callerName = activeCall.callerInfo?.name;
+  const callerPhone = activeCall.remoteNumber || activeCall.callerInfo?.phone;
+
+  async function createCustomerFromCall() {
+    if (creatingCustomer) return;
+    if (knownCustomerId) {
+      router.push(`/customers/${knownCustomerId}?edit=1`);
+      return;
+    }
+    setCreatingCustomer(true);
+    try {
+      const created = await createDraftCustomer({
+        name: callerName,
+        phone: callerPhone,
+      });
+      router.push(`/customers/${created.id}?edit=1`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create customer");
+    } finally {
+      setCreatingCustomer(false);
+    }
+  }
+
   return (
     <>
       <div
@@ -226,6 +255,13 @@ export function ActiveCallBar() {
             onClick={openBookAppointment}
           >
             <Plus className="h-4 w-4" />
+          </CallActionButton>
+          <CallActionButton
+            label={knownCustomerId ? "Customer" : "New customer"}
+            ariaLabel={knownCustomerId ? "Open customer" : "New customer"}
+            onClick={() => void createCustomerFromCall()}
+          >
+            <UserRoundPlus className="h-4 w-4" />
           </CallActionButton>
           <CallActionButton
             label="Hang up"

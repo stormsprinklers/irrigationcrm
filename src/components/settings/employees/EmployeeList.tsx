@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm, type EmployeeRecord } from "./EmployeeForm";
 import { CrewManager } from "./CrewManager";
+import { SyncEmployeesFromCompanyModal } from "./SyncEmployeesFromCompanyModal";
 import { ROLE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { useSession } from "next-auth/react";
@@ -29,6 +30,7 @@ export function EmployeeList() {
   const [tab, setTab] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
   const [editing, setEditing] = useState<EmployeeRecord | null>(null);
   const [creating, setCreating] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -155,7 +157,14 @@ export function EmployeeList() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-56"
             />
-            {canManage ? <Button onClick={() => setCreating(true)}>Add employee</Button> : null}
+            {canManage ? (
+              <>
+                <Button variant="outline" onClick={() => setSyncOpen(true)}>
+                  From another company
+                </Button>
+                <Button onClick={() => setCreating(true)}>Add employee</Button>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -272,6 +281,14 @@ export function EmployeeList() {
 
       {canManage ? (
         <CrewManager employees={employees.filter((e) => e.status === "ACTIVE")} />
+      ) : null}
+
+      {canManage ? (
+        <SyncEmployeesFromCompanyModal
+          open={syncOpen}
+          onClose={() => setSyncOpen(false)}
+          onImported={() => void load()}
+        />
       ) : null}
     </div>
   );

@@ -92,7 +92,14 @@ export default function CustomerEstimatesPageInner() {
               <Plus className="h-4 w-4" />
               Create from visit
             </Button>
-          ) : undefined
+          ) : (
+            <Button size="sm" asChild>
+              <Link href="/estimates/new">
+                <Plus className="h-4 w-4" />
+                New estimate
+              </Link>
+            </Button>
+          )
         }
       />
       <div className="mb-4">

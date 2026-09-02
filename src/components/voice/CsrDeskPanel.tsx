@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calendar, Phone, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Calendar, Phone, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PhoneText } from "@/components/ui/PhoneText";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
@@ -17,6 +17,7 @@ import { TransferDialog } from "@/components/voice/TransferDialog";
 import { VoiceDialer } from "@/components/voice/VoiceDialer";
 import { CsrCallHistoryPanel } from "@/components/voice/CsrCallHistoryPanel";
 import { formatCallerVisitDate } from "@/lib/voice/caller-info";
+import { createCallDraftVisit, createDraftCustomer } from "@/lib/schedule/create-draft";
 import { cn } from "@/lib/utils";
 
 type QueueEntry = {
@@ -54,35 +55,17 @@ type CustomerDetail = {
   }>;
 };
 
-type FilterOptions = {
-  serviceAreas: { id: string; name: string }[];
-  employees: { id: string; name: string }[];
-};
-
-const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm";
-
-function defaultVisitTimes() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return { date: date.toISOString().slice(0, 10), startTime: "09:00", endTime: "11:00" };
-}
-
 export function CsrDeskPanel({
   onVisitBooked,
 }: {
   onVisitBooked?: (visitId: string) => void;
 }) {
+  const router = useRouter();
   const { ready, activeCall, disconnect, transfer, toggleHold, notifyVisitBooked } = useVoiceDevice();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
-  const [bookOpen, setBookOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [filterOptions, setFilterOptions] = useState<FilterOptions>({
-    serviceAreas: [],
-    employees: [],
-  });
-  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [needsScheduling, setNeedsScheduling] = useState<
     Array<{
       id: string;
@@ -92,19 +75,9 @@ export function CsrDeskPanel({
       installDurationDays: number | null;
     }>
   >([]);
-  const times = defaultVisitTimes();
-  const [visitForm, setVisitForm] = useState({
-    title: "Service call",
-    division: "SERVICE" as "SERVICE" | "INSTALL",
-    date: times.date,
-    startTime: times.startTime,
-    endTime: times.endTime,
-    serviceAreaId: "",
-    assignedUserId: "",
-  });
 
   const callerPhone = activeCall?.remoteNumber ?? activeCall?.callerInfo?.phone;
-  const customerId = activeCall?.callerInfo?.customerId ?? customer?.id;
+  const knownCustomerId = activeCall?.callerInfo?.customerId ?? customer?.id;
 
   useEffect(() => {
     fetch("/api/estimates/needs-scheduling")
@@ -187,64 +160,47 @@ export function CsrDeskPanel({
       .catch(() => setCustomer(null));
   }, [callerPhone]);
 
-  useEffect(() => {
-    if (!bookOpen) return;
-    fetch("/api/schedule/filters")
-      .then((r) => r.json())
-      .then((data) => {
-        setFilterOptions({
-          serviceAreas: data.serviceAreas ?? [],
-          employees: data.employees ?? [],
-        });
-        if (data.serviceAreas?.[0]?.id) {
-          setVisitForm((v) => ({ ...v, serviceAreaId: v.serviceAreaId || data.serviceAreas[0].id }));
-        }
-      })
-      .catch(() => toast.error("Failed to load schedule options"));
-  }, [bookOpen]);
-
-  async function submitVisit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!visitForm.serviceAreaId) {
-      toast.error("Service area required");
+  async function bookAppointment() {
+    if (!activeCall || creating) return;
+    if (customer?.doNotService || activeCall.callerInfo?.doNotService) {
+      toast.error("This customer is marked DO NOT SERVICE and cannot be scheduled");
       return;
     }
-    if (!visitForm.assignedUserId) {
-      toast.error("Assign a technician before scheduling this visit");
-      return;
-    }
-    setSaving(true);
-    const startAt = new Date(`${visitForm.date}T${visitForm.startTime}`);
-    const endAt = new Date(`${visitForm.date}T${visitForm.endTime}`);
+    setCreating(true);
     try {
-      const res = await fetch("/api/schedule/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: visitForm.title,
-          startAt: startAt.toISOString(),
-          endAt: endAt.toISOString(),
-          division: visitForm.division,
-          serviceAreaId: visitForm.serviceAreaId,
-          assignedUserId: visitForm.assignedUserId || null,
-          customerId: customerId || null,
-          callSessionId: activeCall?.sessionId ?? null,
-        }),
+      const visit = await createCallDraftVisit({
+        customerId: knownCustomerId,
+        callSessionId: activeCall.sessionId,
+        callerName: customer?.name ?? activeCall.callerInfo?.name,
+        callerPhone: callerPhone,
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to book");
-      }
-      const visit = await res.json();
-      if (visit.warning) toast.warning(visit.warning);
-      toast.success("Appointment booked");
-      setBookOpen(false);
       notifyVisitBooked(visit.id);
       onVisitBooked?.(visit.id);
+      router.push(`/visits/${visit.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to book");
+      toast.error(err instanceof Error ? err.message : "Failed to create appointment");
     } finally {
-      setSaving(false);
+      setCreating(false);
+    }
+  }
+
+  async function createCustomerFromCall() {
+    if (!activeCall || creating) return;
+    if (knownCustomerId) {
+      router.push(`/customers/${knownCustomerId}?edit=1`);
+      return;
+    }
+    setCreating(true);
+    try {
+      const created = await createDraftCustomer({
+        name: customer?.name ?? activeCall.callerInfo?.name,
+        phone: callerPhone,
+      });
+      router.push(`/customers/${created.id}?edit=1`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create customer");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -437,11 +393,19 @@ export function CsrDeskPanel({
         <div className="flex flex-col gap-2">
           <Button
             variant="outline"
-            disabled={!activeCall || customer?.doNotService}
-            onClick={() => setBookOpen(true)}
+            disabled={!activeCall || creating || customer?.doNotService}
+            onClick={() => void bookAppointment()}
           >
             <Calendar className="mr-2 h-4 w-4" />
-            Book appointment
+            {creating ? "Opening…" : "Book appointment"}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!activeCall || creating}
+            onClick={() => void createCustomerFromCall()}
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            {knownCustomerId ? "Open customer" : "New customer"}
           </Button>
           <Button
             variant="outline"
@@ -463,89 +427,6 @@ export function CsrDeskPanel({
         </div>
       </section>
       </div>
-
-      {bookOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold">Book appointment</h2>
-            <form onSubmit={submitVisit} className="mt-4 grid gap-3">
-              <Input
-                value={visitForm.title}
-                onChange={(e) => setVisitForm({ ...visitForm, title: e.target.value })}
-                placeholder="Visit title"
-                required
-              />
-              <select
-                value={visitForm.division}
-                onChange={(e) =>
-                  setVisitForm({
-                    ...visitForm,
-                    division: e.target.value as "SERVICE" | "INSTALL",
-                  })
-                }
-                className={selectClass}
-              >
-                <option value="SERVICE">Service</option>
-                <option value="INSTALL">Install</option>
-              </select>
-              <Input
-                type="date"
-                value={visitForm.date}
-                onChange={(e) => setVisitForm({ ...visitForm, date: e.target.value })}
-                required
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  type="time"
-                  value={visitForm.startTime}
-                  onChange={(e) => setVisitForm({ ...visitForm, startTime: e.target.value })}
-                  required
-                />
-                <Input
-                  type="time"
-                  value={visitForm.endTime}
-                  onChange={(e) => setVisitForm({ ...visitForm, endTime: e.target.value })}
-                  required
-                />
-              </div>
-              <select
-                value={visitForm.serviceAreaId}
-                onChange={(e) => setVisitForm({ ...visitForm, serviceAreaId: e.target.value })}
-                className={selectClass}
-                required
-              >
-                <option value="">Service area</option>
-                {filterOptions.serviceAreas.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={visitForm.assignedUserId}
-                onChange={(e) => setVisitForm({ ...visitForm, assignedUserId: e.target.value })}
-                className={selectClass}
-                required
-              >
-                <option value="">Assign technician (required)</option>
-                {filterOptions.employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setBookOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving}>
-                  {saving ? "Booking..." : "Book visit"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <TransferDialog
         open={transferOpen}

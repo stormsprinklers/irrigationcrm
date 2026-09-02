@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { userOperatesCompany } from "@/lib/voice/operated-session";
 import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 
 export async function GET(request: NextRequest) {
@@ -10,7 +11,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "phone required" }, { status: 400 });
     }
 
-    const result = await lookupCustomerByPhone(user.companyId, phone);
+    const requestedCompanyId = request.nextUrl.searchParams.get("companyId")?.trim() || null;
+    const companyId =
+      requestedCompanyId && (await userOperatesCompany(user, requestedCompanyId))
+        ? requestedCompanyId
+        : user.companyId;
+
+    const result = await lookupCustomerByPhone(companyId, phone);
     return NextResponse.json(result);
   } catch {
     return unauthorizedResponse();

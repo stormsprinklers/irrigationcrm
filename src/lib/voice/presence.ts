@@ -1,4 +1,5 @@
 import { AgentPresenceStatus } from "@prisma/client";
+import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
 import { prisma } from "@/lib/prisma";
 
 export async function upsertPresence(
@@ -9,8 +10,26 @@ export async function upsertPresence(
   return prisma.agentPresence.upsert({
     where: { userId },
     create: { userId, companyId, status, lastSeenAt: new Date() },
-    update: { status, lastSeenAt: new Date() },
+    update: { status, companyId, lastSeenAt: new Date() },
   });
+}
+
+/** Mark this person available/busy/offline on every company they can switch into. */
+export async function upsertPresenceForOperator(
+  user: { id: string; email: string; companyId: string },
+  status: AgentPresenceStatus
+) {
+  const accounts = await listOperatedVoiceAccounts({
+    userId: user.id,
+    email: user.email,
+    companyId: user.companyId,
+  });
+  const targets = accounts.length
+    ? accounts
+    : [{ userId: user.id, companyId: user.companyId, companyName: "", brandPrimary: "", brandSoft: "" }];
+  await Promise.all(
+    targets.map((account) => upsertPresence(account.companyId, account.userId, status))
+  );
 }
 
 export async function getAvailableAgentIdentities(companyId: string) {

@@ -185,11 +185,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       new Date(body.startAt).getTime() !== existing.startAt.getTime();
     const cancelled =
       body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
+    const becameScheduled =
+      existing.status === VisitStatus.UNSCHEDULED && nextStatus === VisitStatus.SCHEDULED;
 
     if (cancelled && existing.customerId) {
       void onVisitCancelled(id, user.companyId).catch(() => {});
-    } else if (startChanged && existing.customerId && body.status !== VisitStatus.CANCELLED) {
-      void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
+    } else if (existing.customerId && body.status !== VisitStatus.CANCELLED) {
+      if (becameScheduled) {
+        void onVisitTimeChanged({
+          visitId: id,
+          companyId: user.companyId,
+          isInitialSchedule: true,
+        }).catch(() => {});
+      } else if (startChanged) {
+        void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
+      }
     }
 
     const visit = await getVisitForCompany(user.companyId, id);

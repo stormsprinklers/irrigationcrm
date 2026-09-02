@@ -4,6 +4,7 @@ import { AgentPresenceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { appBaseUrl, voiceClientIdentity } from "@/lib/voice/identity";
+import { dialVoiceClient, voiceClientBrandFromCompany } from "@/lib/voice/client-dial";
 
 /**
  * Fallback human handoff when the AI node has no transferNodeId configured:
@@ -25,7 +26,14 @@ export async function POST(request: NextRequest) {
 
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { id: true, recordCalls: true, name: true },
+    select: {
+      id: true,
+      recordCalls: true,
+      name: true,
+      brandPrimaryColor: true,
+      brandSecondaryColor: true,
+      brandPalette: true,
+    },
   });
   if (!company) {
     response.say("I'm sorry, I could not reach an agent.");
@@ -54,8 +62,9 @@ export async function POST(request: NextRequest) {
     select: { userId: true },
   });
   if (presence.length) {
+    const brand = voiceClientBrandFromCompany(company);
     for (const row of presence) {
-      dial.client({}, voiceClientIdentity(company.id, row.userId));
+      dialVoiceClient(dial, voiceClientIdentity(company.id, row.userId), brand);
     }
   } else {
     response.say("No agents are available right now. Please leave a message after the tone.");

@@ -76,7 +76,15 @@ type FilterOptions = {
   };
 };
 
-export function ScheduleView() {
+export function ScheduleView({
+  embedded = false,
+  initialDate,
+  onSelectSlot,
+}: {
+  embedded?: boolean;
+  initialDate?: string;
+  onSelectSlot?: (slot: ScheduleSlotClick) => void;
+} = {}) {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const fieldRole = isFieldRole(session?.user?.role ?? "");
@@ -106,6 +114,16 @@ export function ScheduleView() {
   });
   const [loading, setLoading] = useState(true);
   const [quickAddSlot, setQuickAddSlot] = useState<ScheduleSlotClick | null>(null);
+
+  useEffect(() => {
+    if (!initialDate) return;
+    const day = startOfDay(new Date(`${initialDate}T12:00`));
+    if (Number.isNaN(day.getTime())) return;
+    setFocusDay(day);
+    setWeekStart(startOfWeek(day, { weekStartsOn: 0 }));
+    setMonthStart(startOfMonth(day));
+    setViewMode("day");
+  }, [initialDate]);
 
   useEffect(() => {
     if (searchParams.get("panel") === "team" && !fieldRole) {
@@ -333,7 +351,7 @@ export function ScheduleView() {
         onColorByChange={setColorBy}
       />
 
-      {panelMode === "jobs" && timeOffPending > 0 && !fieldRole ? (
+      {panelMode === "jobs" && timeOffPending > 0 && !fieldRole && !embedded ? (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950">
           <p>
             <span className="font-semibold">
@@ -430,11 +448,18 @@ export function ScheduleView() {
               setFocusDay(startOfDay(day));
               setViewMode("day");
             }}
-            onSlotClick={(slot) => setQuickAddSlot(slot)}
+            onSlotClick={(slot) => {
+              if (onSelectSlot) {
+                onSelectSlot(slot);
+                return;
+              }
+              setQuickAddSlot(slot);
+            }}
           />
         )}
       </div>
 
+      {onSelectSlot ? null : (
       <ScheduleQuickAddDialog
         open={quickAddSlot !== null}
         slot={quickAddSlot}
@@ -445,6 +470,7 @@ export function ScheduleView() {
           void loadData();
         }}
       />
+      )}
     </div>
   );
 }

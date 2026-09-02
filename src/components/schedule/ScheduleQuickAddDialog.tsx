@@ -26,7 +26,6 @@ type Props = {
 export function ScheduleQuickAddDialog({
   open,
   slot,
-  serviceAreas,
   employees,
   onClose,
   onCreated,
@@ -40,7 +39,6 @@ export function ScheduleQuickAddDialog({
   const [assignedUserName, setAssignedUserName] = useState("");
   const [crewId, setCrewId] = useState<string | null>(null);
   const [crewName, setCrewName] = useState<string | null>(null);
-  const [serviceAreaId, setServiceAreaId] = useState("");
   const [division, setDivision] = useState<"SERVICE" | "INSTALL">("SERVICE");
 
   useEffect(() => {
@@ -50,7 +48,6 @@ export function ScheduleQuickAddDialog({
     setCustomerId("");
     setCustomerName("");
     setSelectedCustomer(null);
-    setServiceAreaId(serviceAreas[0]?.id ?? "");
     setDivision("SERVICE");
     setCrewId(slot?.crewId ?? null);
     setCrewName(slot?.crewName ?? null);
@@ -60,7 +57,7 @@ export function ScheduleQuickAddDialog({
     const preassignedEmployee = employees.find((employee) => employee.id === preassignedId);
     setAssignedUserId(preassignedId);
     setAssignedUserName(preassignedEmployee?.name ?? slot?.assignedUserName ?? "");
-  }, [open, slot, serviceAreas, employees]);
+  }, [open, slot, employees]);
 
   if (!open || !slot) return null;
 
@@ -79,10 +76,6 @@ export function ScheduleQuickAddDialog({
       toast.error("This customer is marked DO NOT SERVICE");
       return;
     }
-    if (!serviceAreaId && !selectedCustomer?.zip) {
-      toast.error("Select a service area or use a customer with a zip code");
-      return;
-    }
 
     setSaving(true);
     try {
@@ -94,7 +87,6 @@ export function ScheduleQuickAddDialog({
           startAt: slot.startAt.toISOString(),
           endAt: slot.endAt.toISOString(),
           division,
-          serviceAreaId: serviceAreaId || undefined,
           assignedUserId: assignedUserId || undefined,
           crewId: crewId || undefined,
           customerId,
@@ -189,33 +181,16 @@ export function ScheduleQuickAddDialog({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Division</label>
-              <select
-                className={`${selectClassName} mt-1`}
-                value={division}
-                onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL")}
-              >
-                <option value="SERVICE">Service</option>
-                <option value="INSTALL">Install</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Service area</label>
-              <select
-                className={`${selectClassName} mt-1`}
-                value={serviceAreaId}
-                onChange={(e) => setServiceAreaId(e.target.value)}
-              >
-                <option value="">From customer zip</option>
-                {serviceAreas.map((area) => (
-                  <option key={area.id} value={area.id}>
-                    {area.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Division</label>
+            <select
+              className={`${selectClassName} mt-1`}
+              value={division}
+              onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL")}
+            >
+              <option value="SERVICE">Service</option>
+              <option value="INSTALL">Install</option>
+            </select>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

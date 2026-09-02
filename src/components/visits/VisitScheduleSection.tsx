@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import type { VisitStatus } from "@prisma/client";
 
@@ -22,6 +24,7 @@ type EmployeeOption = {
 
 type Props = {
   visitId: string;
+  title: string;
   startAt: string;
   endAt: string;
   status: string;
@@ -50,6 +53,14 @@ function toTimeInput(iso: string) {
   return `${hours}:${minutes}`;
 }
 
+function formatTimeLabel(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "Choose time";
+  const d = new Date();
+  d.setHours(hours, minutes, 0, 0);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function TechnicianAvatar({ employee }: { employee: EmployeeOption }) {
   return (
     <Avatar className="h-8 w-8 shrink-0">
@@ -68,6 +79,7 @@ function TechnicianAvatar({ employee }: { employee: EmployeeOption }) {
 
 export function VisitScheduleSection({
   visitId,
+  title,
   startAt,
   endAt,
   status,
@@ -75,19 +87,22 @@ export function VisitScheduleSection({
   canEdit,
   onUpdated,
 }: Props) {
+  const [visitTitle, setVisitTitle] = useState(title);
   const [date, setDate] = useState(toDateInput(startAt));
   const [startTime, setStartTime] = useState(toTimeInput(startAt));
   const [endTime, setEndTime] = useState(toTimeInput(endAt));
   const [assignedUserId, setAssignedUserId] = useState(assignedUser?.id ?? "");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [saving, setSaving] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   useEffect(() => {
+    setVisitTitle(title);
     setDate(toDateInput(startAt));
     setStartTime(toTimeInput(startAt));
     setEndTime(toTimeInput(endAt));
     setAssignedUserId(assignedUser?.id ?? "");
-  }, [startAt, endAt, assignedUser?.id]);
+  }, [title, startAt, endAt, assignedUser?.id]);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -123,8 +138,13 @@ export function VisitScheduleSection({
       return;
     }
 
+    if (!visitTitle.trim()) {
+      toast.error("Title is required");
+      return;
+    }
+
     const assignmentError = validateScheduledVisitAssignment(
-      status as VisitStatus,
+      "SCHEDULED" as VisitStatus,
       assignedUserId || null
     );
     if (assignmentError) {
@@ -138,9 +158,11 @@ export function VisitScheduleSection({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: visitTitle.trim(),
           startAt: nextStart.toISOString(),
           endAt: nextEnd.toISOString(),
           assignedUserId: assignedUserId || null,
+          status: "SCHEDULED",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -156,6 +178,23 @@ export function VisitScheduleSection({
     }
   }
 
+  function applyScheduleSlot(slot: ScheduleSlotClick) {
+    const durationMs = (() => {
+      const start = new Date(`${date}T${startTime}`);
+      const end = new Date(`${date}T${endTime}`);
+      const diff = end.getTime() - start.getTime();
+      return Number.isFinite(diff) && diff > 0 ? diff : 2 * 60 * 60 * 1000;
+    })();
+    const nextStart = slot.startAt;
+    const nextEnd = new Date(nextStart.getTime() + durationMs);
+    setDate(toDateInput(nextStart.toISOString()));
+    setStartTime(toTimeInput(nextStart.toISOString()));
+    setEndTime(toTimeInput(nextEnd.toISOString()));
+    if (slot.assignedUserId && slot.assignedUserId !== "__unassigned__") {
+      setAssignedUserId(slot.assignedUserId);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-border bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -166,27 +205,51 @@ export function VisitScheduleSection({
       {canEdit ? (
         <form onSubmit={handleSave} className="space-y-3">
           <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+            <Input
+              value={visitTitle}
+              onChange={(e) => setVisitTitle(e.target.value)}
+              placeholder="Visit title"
+              required
+            />
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Date</label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+            <button
+              type="button"
+              className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
+              onClick={() => setScheduleOpen(true)}
+            >
+              {date
+                ? new Date(`${date}T12:00`).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : "Choose date"}
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Start</label>
-              <Input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-              />
+              <button
+                type="button"
+                className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
+                onClick={() => setScheduleOpen(true)}
+              >
+                {formatTimeLabel(startTime)}
+              </button>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">End</label>
-              <Input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-              />
+              <button
+                type="button"
+                className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
+                onClick={() => setScheduleOpen(true)}
+              >
+                {formatTimeLabel(endTime)}
+              </button>
             </div>
           </div>
           <div>
@@ -211,8 +274,20 @@ export function VisitScheduleSection({
             </div>
           </div>
           <Button type="submit" size="sm" className="w-full" disabled={saving}>
-            {saving ? "Saving..." : "Save schedule"}
+            {saving ? "Saving..." : status === "UNSCHEDULED" ? "Save to schedule" : "Save schedule"}
           </Button>
+          {status === "UNSCHEDULED" ? (
+            <p className="text-xs text-muted-foreground">
+              This visit is not on the board yet. Click the date or time to check the full
+              schedule, then save.
+            </p>
+          ) : null}
+          <SchedulePeekModal
+            open={scheduleOpen}
+            date={date}
+            onClose={() => setScheduleOpen(false)}
+            onSelectSlot={applyScheduleSlot}
+          />
         </form>
       ) : (
         <dl className="space-y-2 text-sm">
