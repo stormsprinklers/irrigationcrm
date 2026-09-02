@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthMfaPurpose } from "@prisma/client";
 import { badRequestResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { startStaffMfaChallenge } from "@/lib/staff-auth";
+import { parseMfaChannel, startStaffMfaChallenge } from "@/lib/staff-auth";
 
 /** Resend MFA code for an in-progress mobile login challenge. */
 export async function POST(request: NextRequest) {
@@ -43,7 +43,11 @@ export async function POST(request: NextRequest) {
 
     const result = await startStaffMfaChallenge(
       existing.user,
-      AuthMfaPurpose.MOBILE_LOGIN
+      AuthMfaPurpose.MOBILE_LOGIN,
+      {
+        channel:
+          parseMfaChannel(body.channel) ?? parseMfaChannel(existing.channel),
+      }
     );
     if (!result.ok) {
       return NextResponse.json(
@@ -55,6 +59,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       challengeId: result.challengeId,
       phoneMasked: result.phoneMasked,
+      destinationMasked: result.destinationMasked,
+      channel: result.channel,
       ...(result.debugCode ? { debugCode: result.debugCode } : {}),
     });
   } catch (error) {

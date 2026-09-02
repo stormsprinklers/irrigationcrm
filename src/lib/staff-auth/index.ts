@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthSecret } from "@/lib/auth-secret";
 import { sendSms } from "@/lib/inbox/twilio";
 import { normalizePhone } from "@/lib/inbox/phone";
-import { getDefaultFromEmail, sendEmail } from "@/lib/inbox/email";
+import { getDefaultFromEmail, isEmailConfigured, sendEmail } from "@/lib/inbox/email";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { buildResetPasswordPath } from "@/lib/staff-auth/return-to";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
@@ -40,6 +40,56 @@ function maskPhone(phone: string) {
   const digits = phone.replace(/\D/g, "");
   if (digits.length < 4) return "***";
   return `•••-•••-${digits.slice(-4)}`;
+}
+
+function maskEmail(email: string) {
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.lastIndexOf("@");
+  if (at < 1) return "***";
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+
+export type MfaChannel = "SMS" | "EMAIL";
+
+export function parseMfaChannel(raw: unknown): MfaChannel | undefined {
+  const value = String(raw ?? "").trim().toUpperCase();
+  if (value === "EMAIL") return "EMAIL";
+  if (value === "SMS") return "SMS";
+  return undefined;
+}
+
+function mfaOtpCopy(purpose: AuthMfaPurpose) {
+  if (purpose === "EXPENSE_CARD_ADMIN") {
+    return {
+      sms: (code: string) =>
+        `Storm Sprinklers expense card verification code: ${code}. Expires in 10 minutes.`,
+      subject: "Storm Sprinklers expense card code",
+      label: "expense card verification",
+    };
+  }
+  if (purpose === "PHONE_NUMBER_RELEASE") {
+    return {
+      sms: (code: string) =>
+        `Storm Sprinklers phone number release code: ${code}. Expires in 10 minutes.`,
+      subject: "Storm Sprinklers phone number release code",
+      label: "phone number release",
+    };
+  }
+  if (purpose === "ACCOUNT_PASSWORD") {
+    return {
+      sms: (code: string) =>
+        `Storm Sprinklers password change code: ${code}. Expires in 10 minutes.`,
+      subject: "Storm Sprinklers password change code",
+      label: "password change",
+    };
+  }
+  return {
+    sms: (code: string) => `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
+    subject: "Storm Sprinklers login code",
+    label: "login",
+  };
 }
 
 /** Normalize employee phone to E.164 (US +1), same as inbox SMS. */
@@ -180,27 +230,53 @@ export type StartMfaResult =
       ok: true;
       challengeId: string;
       phoneMasked: string;
+      destinationMasked: string;
+      channel: MfaChannel;
       /** Only when STAFF_AUTH_EXPOSE_OTP=true (local/dev). */
       debugCode?: string;
     }
-  | { ok: false; error: string; code: "NO_PHONE" | "SMS_CONFIG" | "INVALID" };
+  | {
+      ok: false;
+      error: string;
+      code: "NO_PHONE" | "SMS_CONFIG" | "NO_EMAIL" | "EMAIL_CONFIG" | "INVALID";
+    };
 
-export async function startStaffMfaChallenge(
+function exposeOtp() {
+  return process.env.STAFF_AUTH_EXPOSE_OTP === "true";
+}
+
+function okMfa(
+  challengeId: string,
+  destinationMasked: string,
+  channel: MfaChannel,
+  code: string
+): StartMfaResult {
+  return {
+    ok: true,
+    challengeId,
+    phoneMasked: destinationMasked,
+    destinationMasked,
+    channel,
+    ...(exposeOtp() ? { debugCode: code } : {}),
+  };
+}
+
+async function sendSmsMfa(
   user: StaffAuthUser,
-  purpose: AuthMfaPurpose,
+  purpose: AuthMfaPurpose
 ): Promise<StartMfaResult> {
   const phone = normalizeStaffPhone(user.phone);
   if (!phone) {
     return {
       ok: false,
       error:
-        "Two-factor authentication is required. Ask an admin to add a mobile phone number to your employee profile.",
+        "Two-factor authentication is required. Ask an admin to add a mobile phone number to your employee profile, or use email instead.",
       code: "NO_PHONE",
     };
   }
 
   const from = await resolveSmsFromNumber(user.companyId);
-  if (!from && process.env.STAFF_AUTH_EXPOSE_OTP !== "true") {
+  if (!from && !exposeOtp()) {
     return {
       ok: false,
       error:
@@ -210,12 +286,15 @@ export async function startStaffMfaChallenge(
   }
 
   const code = String(randomInt(100000, 999999));
+  const destinationMasked = maskPhone(phone);
+  const copy = mfaOtpCopy(purpose);
   const challenge = await prisma.authMfaChallenge.create({
     data: {
       userId: user.id,
       purpose,
       codeHash: hashOpaque(code),
-      phoneMasked: maskPhone(phone),
+      phoneMasked: destinationMasked,
+      channel: "SMS",
       expiresAt: new Date(Date.now() + MFA_TTL_MS),
     },
   });
@@ -226,36 +305,109 @@ export async function startStaffMfaChallenge(
         companyId: user.companyId,
         from,
         to: phone,
-        body:
-          purpose === "EXPENSE_CARD_ADMIN"
-            ? `Storm Sprinklers expense card verification code: ${code}. Expires in 10 minutes.`
-            : purpose === "PHONE_NUMBER_RELEASE"
-              ? `Storm Sprinklers phone number release code: ${code}. Expires in 10 minutes.`
-              : purpose === "ACCOUNT_PASSWORD"
-                ? `Storm Sprinklers password change code: ${code}. Expires in 10 minutes.`
-                : `Storm Sprinklers login code: ${code}. Expires in 10 minutes.`,
+        body: copy.sms(code),
         bypassCommsFreeze: true,
       });
     } catch (err) {
       console.error("[staff-auth] SMS send failed", { from, to: phone, err });
-      if (process.env.STAFF_AUTH_EXPOSE_OTP !== "true") {
-        return {
-          ok: false,
-          error: twilioSendErrorMessage(err),
-          code: "SMS_CONFIG",
-        };
+      if (!exposeOtp()) {
+        return { ok: false, error: twilioSendErrorMessage(err), code: "SMS_CONFIG" };
       }
     }
   } else {
     console.warn(`[staff-auth] OTP for ${user.email} (no Twilio from): ${code}`);
   }
 
-  return {
-    ok: true,
-    challengeId: challenge.id,
-    phoneMasked: challenge.phoneMasked,
-    ...(process.env.STAFF_AUTH_EXPOSE_OTP === "true" ? { debugCode: code } : {}),
-  };
+  return okMfa(challenge.id, destinationMasked, "SMS", code);
+}
+
+async function sendEmailMfa(
+  user: StaffAuthUser,
+  purpose: AuthMfaPurpose
+): Promise<StartMfaResult> {
+  const to = user.email?.trim().toLowerCase();
+  if (!to) {
+    return {
+      ok: false,
+      error: "No email address is on this employee profile.",
+      code: "NO_EMAIL",
+    };
+  }
+
+  const from = getDefaultFromEmail();
+  if ((!from || !isEmailConfigured()) && !exposeOtp()) {
+    return {
+      ok: false,
+      error:
+        "Email two-factor authentication is not configured. Set TWILIO_FROM_EMAIL or use the SMS code.",
+      code: "EMAIL_CONFIG",
+    };
+  }
+
+  const code = String(randomInt(100000, 999999));
+  const destinationMasked = maskEmail(to);
+  const copy = mfaOtpCopy(purpose);
+  const challenge = await prisma.authMfaChallenge.create({
+    data: {
+      userId: user.id,
+      purpose,
+      codeHash: hashOpaque(code),
+      phoneMasked: destinationMasked,
+      channel: "EMAIL",
+      expiresAt: new Date(Date.now() + MFA_TTL_MS),
+    },
+  });
+
+  if (from && isEmailConfigured()) {
+    try {
+      await sendEmail({
+        from,
+        to: [to],
+        subject: copy.subject,
+        text: `Your Storm Sprinklers ${copy.label} code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, you can ignore this email.`,
+        html: `<p>Your Storm Sprinklers ${copy.label} code is <strong>${code}</strong>.</p><p>It expires in 10 minutes.</p><p>If you did not request this, you can ignore this email.</p>`,
+      });
+    } catch (err) {
+      console.error("[staff-auth] email OTP send failed", { to, err });
+      if (!exposeOtp()) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Could not send the email code.",
+          code: "EMAIL_CONFIG",
+        };
+      }
+    }
+  } else {
+    console.warn(`[staff-auth] email OTP for ${to} (email not configured): ${code}`);
+  }
+
+  return okMfa(challenge.id, destinationMasked, "EMAIL", code);
+}
+
+export async function startStaffMfaChallenge(
+  user: StaffAuthUser,
+  purpose: AuthMfaPurpose,
+  options?: { channel?: MfaChannel }
+): Promise<StartMfaResult> {
+  const requested = options?.channel;
+
+  if (requested === "EMAIL") {
+    return sendEmailMfa(user, purpose);
+  }
+  if (requested === "SMS") {
+    return sendSmsMfa(user, purpose);
+  }
+
+  const phone = normalizeStaffPhone(user.phone);
+  if (phone) {
+    const sms = await sendSmsMfa(user, purpose);
+    if (sms.ok) return sms;
+    const email = await sendEmailMfa(user, purpose);
+    if (email.ok) return email;
+    return sms;
+  }
+
+  return sendEmailMfa(user, purpose);
 }
 
 export type VerifyMfaResult =
@@ -334,6 +486,8 @@ export type BeginStaffLoginResult =
       mfaRequired: true;
       challengeId: string;
       phoneMasked: string;
+      destinationMasked: string;
+      channel: MfaChannel;
       debugCode?: string;
     }
   | {
@@ -342,7 +496,11 @@ export type BeginStaffLoginResult =
       mfaRequired?: never;
       companies: CompanyChoice[];
     }
-  | { ok: false; error: string; code: "NO_PHONE" | "SMS_CONFIG" | "INVALID" };
+  | {
+      ok: false;
+      error: string;
+      code: "NO_PHONE" | "SMS_CONFIG" | "NO_EMAIL" | "EMAIL_CONFIG" | "INVALID";
+    };
 
 export async function beginStaffPasswordLogin(
   email: string,
@@ -400,6 +558,8 @@ export async function beginStaffPasswordLogin(
     mfaRequired: true,
     challengeId: mfa.challengeId,
     phoneMasked: mfa.phoneMasked,
+    destinationMasked: mfa.destinationMasked,
+    channel: mfa.channel,
     ...(mfa.debugCode ? { debugCode: mfa.debugCode } : {}),
   };
 }

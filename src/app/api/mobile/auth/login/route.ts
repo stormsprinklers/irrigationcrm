@@ -63,6 +63,8 @@ export async function POST(request: NextRequest) {
       mfaRequired: true,
       challengeId: mfa.challengeId,
       phoneMasked: mfa.phoneMasked,
+      destinationMasked: mfa.destinationMasked,
+      channel: mfa.channel,
       ...(mfa.debugCode ? { debugCode: mfa.debugCode } : {}),
     });
   } catch (error) {

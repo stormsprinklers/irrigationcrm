@@ -1303,13 +1303,15 @@ model ExpenseCard {
   @@index([stripeCardId])
 }
 
-/// Short-lived SMS OTP challenge for staff sign-in (CRM, mobile, LMS).
+/// Short-lived OTP challenge for staff sign-in (CRM, mobile, LMS). SMS or email.
 model AuthMfaChallenge {
   id          String         @id @default(cuid())
   userId      String
   purpose     AuthMfaPurpose
   codeHash    String
   phoneMasked String
+  /// SMS or EMAIL. Destination is shown in phoneMasked (masked phone or email).
+  channel     String         @default("SMS")
   attempts    Int            @default(0)
   expiresAt   DateTime
   verifiedAt  DateTime?

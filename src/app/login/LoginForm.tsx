@@ -30,6 +30,7 @@ export default function LoginForm({ companyName }: { companyName?: string | null
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState("");
   const [phoneMasked, setPhoneMasked] = useState("");
+  const [mfaChannel, setMfaChannel] = useState<"SMS" | "EMAIL">("SMS");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,6 +57,8 @@ export default function LoginForm({ companyName }: { companyName?: string | null
         companies?: CompanyChoice[];
         challengeId?: string;
         phoneMasked?: string;
+        destinationMasked?: string;
+        channel?: "SMS" | "EMAIL";
         debugCode?: string;
         appleDemo?: boolean;
         user?: { id: string; companyId: string };
@@ -94,7 +97,9 @@ export default function LoginForm({ companyName }: { companyName?: string | null
         return;
       }
       setChallengeId(data.challengeId);
-      setPhoneMasked(data.phoneMasked ?? "");
+      const masked = data.destinationMasked ?? data.phoneMasked ?? "";
+      setPhoneMasked(masked);
+      setMfaChannel(data.channel === "EMAIL" ? "EMAIL" : "SMS");
       if (data.debugCode) setCode(data.debugCode);
       setStep("mfa");
     } catch (err) {
@@ -148,19 +153,25 @@ export default function LoginForm({ companyName }: { companyName?: string | null
     }
   }
 
-  async function resendCode() {
+  async function resendCode(channel?: "SMS" | "EMAIL") {
     setLoading(true);
     setError("");
     try {
       const res = await fetch("/api/auth/staff/mfa", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeId, purpose: "LOGIN" }),
+        body: JSON.stringify({
+          challengeId,
+          purpose: "LOGIN",
+          channel: channel ?? mfaChannel,
+        }),
       });
       const data = (await res.json()) as {
         error?: string;
         challengeId?: string;
         phoneMasked?: string;
+        destinationMasked?: string;
+        channel?: "SMS" | "EMAIL";
         debugCode?: string;
       };
       if (!res.ok || !data.challengeId) {
@@ -168,8 +179,9 @@ export default function LoginForm({ companyName }: { companyName?: string | null
         return;
       }
       setChallengeId(data.challengeId);
-      setPhoneMasked(data.phoneMasked ?? phoneMasked);
-      if (data.debugCode) setCode(data.debugCode);
+      setPhoneMasked(data.destinationMasked ?? data.phoneMasked ?? phoneMasked);
+      setMfaChannel(data.channel === "EMAIL" ? "EMAIL" : channel ?? mfaChannel);
+      setCode(data.debugCode ?? "");
     } catch {
       setError("Could not resend code");
     } finally {
@@ -296,7 +308,9 @@ export default function LoginForm({ companyName }: { companyName?: string | null
           {step === "mfa" ? (
             <form onSubmit={handleMfa} className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Enter the 6-digit code texted to {phoneMasked || "your phone"}.
+                {mfaChannel === "EMAIL"
+                  ? `Enter the 6-digit code emailed to ${phoneMasked || "your email"}.`
+                  : `Enter the 6-digit code texted to ${phoneMasked || "your phone"}.`}
               </p>
               <div>
                 <label className="mb-1 block text-sm font-medium" htmlFor="code">
@@ -338,6 +352,16 @@ export default function LoginForm({ companyName }: { companyName?: string | null
                   Resend code
                 </button>
               </div>
+              <button
+                type="button"
+                className="w-full text-center text-sm text-storm-medium-blue hover:underline"
+                onClick={() => void resendCode(mfaChannel === "EMAIL" ? "SMS" : "EMAIL")}
+                disabled={loading}
+              >
+                {mfaChannel === "EMAIL"
+                  ? "Text me a code instead"
+                  : "Email me a code instead"}
+              </button>
             </form>
           ) : null}
         </CardContent>

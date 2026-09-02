@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthMfaPurpose } from "@prisma/client";
 import {
   issueLmsAuthTicket,
+  parseMfaChannel,
   startStaffMfaChallenge,
   verifyStaffMfaChallenge,
 } from "@/lib/staff-auth";
@@ -101,7 +102,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Sign in again." }, { status: 401 });
     }
 
-    const result = await startStaffMfaChallenge(existing.user, purpose);
+    const result = await startStaffMfaChallenge(existing.user, purpose, {
+      channel:
+        parseMfaChannel(body.channel) ?? parseMfaChannel(existing.channel),
+    });
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
     }
@@ -109,6 +113,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       challengeId: result.challengeId,
       phoneMasked: result.phoneMasked,
+      destinationMasked: result.destinationMasked,
+      channel: result.channel,
       ...(result.debugCode ? { debugCode: result.debugCode } : {}),
     });
   } catch (error) {
