@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
+import { customerPortalVerifyUrl } from "@/lib/company/customer-url";
 import { PORTAL_LOGIN_RATE_LIMIT, PORTAL_LOGIN_TOKEN_TTL_MS } from "./constants";
 import { resolvePortalSlug } from "./company";
 
@@ -34,6 +35,7 @@ export async function requestPortalLoginLink(params: {
   sendgridFrom?: string | null;
   emailSenderName?: string | null;
   emailLogoUrl?: string | null;
+  customerBaseUrl?: string | null;
 }) {
   const email = normalizeEmail(params.email);
   const since = new Date(Date.now() - 60 * 60 * 1000);
@@ -66,8 +68,7 @@ export async function requestPortalLoginLink(params: {
     },
   });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const loginUrl = `${appUrl}/api/portal/auth/verify?token=${rawToken}&slug=${encodeURIComponent(params.slug)}`;
+  const loginUrl = customerPortalVerifyUrl(params, rawToken, params.slug);
 
   if (isEmailConfigured()) {
     await sendCompanyEmail(

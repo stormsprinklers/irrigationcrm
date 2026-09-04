@@ -4,6 +4,8 @@ import { sanitizeBrandPalette, type BrandPalette } from "@/lib/brand-palette";
 import {
   ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES,
 } from "@/lib/company/features";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { parseCustomerBaseUrlInput } from "@/lib/company/customer-url";
 import { companySettingsSelect, serializeCompanySettings } from "@/lib/company/types";
 import { countActiveMaintenanceEnrollments } from "@/lib/maintenance-plans/feature";
 import { prisma } from "@/lib/prisma";
@@ -21,6 +23,7 @@ export async function GET() {
     );
     return NextResponse.json({
       ...serializeCompanySettings(company),
+      appBaseUrl: getAppBaseUrl(),
       activeMaintenanceEnrollmentCount,
     });
   } catch {
@@ -93,6 +96,17 @@ export async function PATCH(request: NextRequest) {
       data.showStormAiFab = Boolean(data.showStormAiFab);
     }
 
+    if ("customerBaseUrl" in data) {
+      try {
+        data.customerBaseUrl = parseCustomerBaseUrlInput(data.customerBaseUrl);
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "Invalid customer domain" },
+          { status: 400 }
+        );
+      }
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data,
@@ -105,6 +119,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({
       ...serializeCompanySettings(company),
+      appBaseUrl: getAppBaseUrl(),
       activeMaintenanceEnrollmentCount,
     });
   } catch {

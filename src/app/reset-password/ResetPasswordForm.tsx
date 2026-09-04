@@ -30,7 +30,10 @@ export default function ResetPasswordForm() {
   const router = useRouter();
   const token = params.get("token") ?? "";
   const returnTo = useMemo(
-    () => sanitizeAuthReturnTo(params.get("returnTo")),
+    () =>
+      sanitizeAuthReturnTo(params.get("returnTo"), [
+        typeof window !== "undefined" ? window.location.origin : null,
+      ]),
     [params]
   );
   const [password, setPassword] = useState("");

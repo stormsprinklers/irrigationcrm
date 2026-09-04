@@ -12,8 +12,15 @@ export type ReceiptMediaItem = {
   mimeType: string;
 };
 
-export function receiptAttachmentPublicUrl(invoicePublicToken: string, attachmentId: string) {
-  const origin = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+export function receiptAttachmentPublicUrl(
+  invoicePublicToken: string,
+  attachmentId: string,
+  publicBaseUrl?: string | null
+) {
+  const origin = (publicBaseUrl?.trim() || process.env.NEXT_PUBLIC_APP_URL || "").replace(
+    /\/$/,
+    ""
+  );
   const path = `/api/public/invoices/${encodeURIComponent(invoicePublicToken)}/attachments/${encodeURIComponent(attachmentId)}`;
   return origin ? `${origin}${path}` : path;
 }
@@ -23,6 +30,7 @@ export function buildPaidReceiptExtras(params: {
   reviewUrl: string | null;
   invoicePublicToken: string;
   media: ReceiptMediaItem[];
+  publicBaseUrl?: string | null;
 }): { html: string; text: string } {
   const partsHtml: string[] = [];
   const partsText: string[] = [];
@@ -41,7 +49,11 @@ export function buildPaidReceiptExtras(params: {
     const cards = media
       .slice(0, 12)
       .map((item) => {
-        const url = receiptAttachmentPublicUrl(params.invoicePublicToken, item.id);
+        const url = receiptAttachmentPublicUrl(
+          params.invoicePublicToken,
+          item.id,
+          params.publicBaseUrl
+        );
         if (item.mimeType.startsWith("image/")) {
           return `<a href="${escapeHtml(url)}" style="display:block;margin:0 0 12px"><img src="${escapeHtml(url)}" alt="${escapeHtml(item.fileName)}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border-radius:8px;border:1px solid #e5e7eb" /></a>`;
         }

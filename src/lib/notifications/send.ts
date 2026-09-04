@@ -3,6 +3,7 @@ import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
 import { getOutboundCommsState, DEFAULT_OUTBOUND_FREEZE_REASON } from "@/lib/communications/outbound-guard";
 import { resolvePortalSlug } from "@/lib/portal/company";
@@ -155,6 +156,7 @@ export async function sendOperationalNotification(params: {
       privacyPolicyUrl: true,
       portalSlug: true,
       bookingSlug: true,
+      customerBaseUrl: true,
       notifyVisitScheduled: true,
       notifyVisitTimeUpdated: true,
       notifyVisitCancelled: true,
@@ -241,7 +243,11 @@ export async function sendOperationalNotification(params: {
     });
     result.deliveryIds.push(delivery.id);
 
-    const urlMap = await buildTrackedUrlMap(delivery.id, linkPlaceholders);
+    const urlMap = await buildTrackedUrlMap(
+      delivery.id,
+      linkPlaceholders,
+      getCustomerBaseUrl(company)
+    );
 
     let body = renderTemplate(rule.template.body, renderContext);
     body = injectTrackedUrlsInText(body, urlMap);
@@ -282,7 +288,8 @@ export async function sendOperationalNotification(params: {
             messagingPreferencesUrlWithSlug(
               params.recipient.customerId,
               params.companyId,
-              portalSlug
+              portalSlug,
+              company.customerBaseUrl
             )
           );
         }
@@ -359,7 +366,11 @@ export async function sendOperationalNotification(params: {
       });
       result.deliveryIds.push(delivery.id);
 
-      const urlMap = await buildTrackedUrlMap(delivery.id, linkPlaceholders);
+      const urlMap = await buildTrackedUrlMap(
+        delivery.id,
+        linkPlaceholders,
+        getCustomerBaseUrl(company)
+      );
 
       const body = injectTrackedUrlsInText(
         options.textAppend

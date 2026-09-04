@@ -1,14 +1,19 @@
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-export function rewriteTrackedLinks(html: string, recipientId: string) {
+export function rewriteTrackedLinks(
+  html: string,
+  recipientId: string,
+  publicBaseUrl?: string | null
+) {
   if (!html) return html;
+  const base = (publicBaseUrl?.trim() || APP_URL()).replace(/\/$/, "");
   return html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>/gi,
     (match, before, url, after) => {
       if (url.startsWith("mailto:") || url.startsWith("#") || url.includes("/api/marketing/track/click")) {
         return match;
       }
-      const tracked = `${APP_URL()}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;
+      const tracked = `${base}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;
       return `<a ${before}href="${tracked}"${after}>`;
     }
   );

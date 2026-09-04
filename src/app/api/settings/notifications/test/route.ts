@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { customerPortalHomeUrl } from "@/lib/company/customer-url";
 import { buildNotificationContext } from "@/lib/notifications/context";
 import { sendOperationalNotification } from "@/lib/notifications/send";
 import { prisma } from "@/lib/prisma";
@@ -31,7 +32,7 @@ export async function POST() {
         zip: "80202",
       },
       technician: { name: dbUser.name, websiteTeamSlug: dbUser.websiteTeamSlug },
-      portalUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/portal/${company.portalSlug ?? company.bookingSlug ?? "demo"}`,
+      portalUrl: customerPortalHomeUrl(company),
     });
 
     const result = await sendOperationalNotification({
@@ -45,7 +46,7 @@ export async function POST() {
       context,
       options: {
         linkPlaceholders: {
-          portal: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/portal/${company.portalSlug ?? company.bookingSlug ?? ""}`,
+          portal: customerPortalHomeUrl(company),
           review: company.googleReviewUrl ?? undefined,
         },
       },

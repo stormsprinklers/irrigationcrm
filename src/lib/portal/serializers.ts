@@ -260,7 +260,6 @@ export function serializePortalEstimate(estimate: {
       estimate.depositAmount != null ? toNumber(estimate.depositAmount as never) : null,
     hasDesign,
     hasHolidayLighting,
-    holidayStrandMap,
     holidayPreviewImageUrl,
     holidayPreviewDisclaimer,
     designProjectId: estimate.designProjectId ?? null,

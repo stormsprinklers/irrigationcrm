@@ -1,6 +1,7 @@
 import { EstimateStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { customerEstimateUrl } from "@/lib/company/customer-url";
 import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
 import { cancelPendingJobsForEstimate, scheduleEstimateFollowUpJob } from "./jobs";
@@ -22,11 +23,11 @@ async function buildEstimateFollowUpPayload(estimateId: string, companyId: strin
   });
   if (!estimate?.customer) return null;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const portalSlug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
-  const estimateUrl = portalSlug
-    ? `${appUrl}/portal/${portalSlug}/estimates/${estimate.publicToken}`
-    : `${appUrl}/estimates/${estimate.id}`;
+  const estimateUrl = customerEstimateUrl(
+    estimate.company,
+    estimate.publicToken,
+    estimate.id
+  );
 
   const context = buildNotificationContext({
     company: estimate.company,

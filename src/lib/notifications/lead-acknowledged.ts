@@ -1,5 +1,5 @@
 import type { Lead } from "@prisma/client";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { customerBookingUrl } from "@/lib/company/customer-url";
 import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { formatCustomerAddress } from "@/lib/notifications/context";
 import { sendOperationalNotification } from "@/lib/notifications/send";
@@ -35,6 +35,7 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
       bookingSlug: true,
       onlineBookingEnabled: true,
       phone: true,
+      customerBaseUrl: true,
     },
   });
   if (!company) return;
@@ -48,11 +49,8 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
       ? `Estimated range: ${soft.label}`
       : "";
 
-  const appBase = getAppBaseUrl();
   const bookingLink =
-    company.onlineBookingEnabled && company.bookingSlug
-      ? `${appBase}/book/${company.bookingSlug}`
-      : "";
+    company.onlineBookingEnabled ? customerBookingUrl(company) ?? "" : "";
 
   await sendOperationalNotification({
     companyId,

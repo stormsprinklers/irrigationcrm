@@ -38,6 +38,7 @@ export const companySettingsSelect = {
   portalShowInvoices: true,
   portalShowEstimates: true,
   portalShowJobs: true,
+  customerBaseUrl: true,
   portalSlug: true,
   portalRescheduleLeadHours: true,
   portalCancelLeadHours: true,
@@ -125,6 +126,7 @@ export type CompanySettingsDTO = {
   portalShowInvoices: boolean;
   portalShowEstimates: boolean;
   portalShowJobs: boolean;
+  customerBaseUrl: string | null;
   portalSlug: string | null;
   portalRescheduleLeadHours: number;
   portalCancelLeadHours: number;
@@ -170,6 +172,7 @@ export type CompanySettingsDTO = {
   notifyLeadCreated: boolean;
   showStormAiFab: boolean;
   monthlyRevenueTarget: number | null;
+  appBaseUrl?: string;
 };
 
 export function serializeCompanySettings(

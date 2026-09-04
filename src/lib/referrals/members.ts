@@ -5,7 +5,6 @@ import { getOrCreateReferralProgramSettings } from "./settings";
 export async function enrollReferralMember(params: {
   companyId: string;
   customerId: string;
-  origin?: string | null;
 }) {
   const settings = await getOrCreateReferralProgramSettings(params.companyId);
   if (!settings.enabled) {
@@ -20,7 +19,7 @@ export async function enrollReferralMember(params: {
 
   const company = await prisma.company.findUnique({
     where: { id: params.companyId },
-    select: { portalSlug: true },
+    select: { portalSlug: true, customerBaseUrl: true },
   });
   if (!company?.portalSlug) {
     throw new Error("Set a customer portal slug before enrolling referrers");
@@ -35,7 +34,7 @@ export async function enrollReferralMember(params: {
       shareUrl: buildReferralShareUrl({
         portalSlug: company.portalSlug,
         memberToken: existing.token,
-        origin: params.origin,
+        customerBaseUrl: company.customerBaseUrl,
       }),
       created: false,
     };
@@ -61,7 +60,7 @@ export async function enrollReferralMember(params: {
     shareUrl: buildReferralShareUrl({
       portalSlug: company.portalSlug,
       memberToken: member.token,
-      origin: params.origin,
+      customerBaseUrl: company.customerBaseUrl,
     }),
     created: true,
   };

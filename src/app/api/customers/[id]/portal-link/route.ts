@@ -29,6 +29,7 @@ export async function POST(_request: Request, { params }: Params) {
         sendgridFrom: true,
         emailSenderName: true,
         emailLogoUrl: true,
+        customerBaseUrl: true,
       },
     });
     if (!company?.portalEnabled) {
@@ -50,6 +51,7 @@ export async function POST(_request: Request, { params }: Params) {
       sendgridFrom: company.sendgridFrom,
       emailSenderName: company.emailSenderName,
       emailLogoUrl: company.emailLogoUrl,
+      customerBaseUrl: company.customerBaseUrl,
     });
 
     return NextResponse.json({ ok: true });

@@ -24,6 +24,7 @@ export type CompanyBrand = {
   irrigationFeaturesEnabled: boolean;
   holidayLightingFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
+  customerBaseUrl: string | null;
 };
 
 type CompanyBrandContextValue = {
@@ -71,6 +72,7 @@ const fallbackBrand: CompanyBrand = {
   irrigationFeaturesEnabled: true,
   holidayLightingFeaturesEnabled: false,
   maintenancePlansFeaturesEnabled: true,
+  customerBaseUrl: null,
 };
 
 export function CompanyBrandProvider({ children }: { children: React.ReactNode }) {
@@ -104,6 +106,7 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         irrigationFeaturesEnabled: resolveIrrigationFeatures(data),
         holidayLightingFeaturesEnabled: resolveHolidayFeatures(data),
         maintenancePlansFeaturesEnabled: resolveMaintenanceFeatures(data),
+        customerBaseUrl: typeof data.customerBaseUrl === "string" ? data.customerBaseUrl : null,
       });
       applyBrandCss(palette);
     } finally {

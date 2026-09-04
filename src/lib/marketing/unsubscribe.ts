@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { getAuthSecret } from "@/lib/auth-secret";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
 import { resolvePortalSlug } from "@/lib/portal/company";
 
@@ -52,29 +52,37 @@ export const verifyMarketingUnsubscribeToken = verifyMessagingPreferencesToken;
 export async function messagingPreferencesUrl(customerId: string, companyId: string) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { portalSlug: true, bookingSlug: true },
+    select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true },
   });
   const slug = company ? resolvePortalSlug(company) : null;
   const token = createMessagingPreferencesToken(customerId, companyId);
+  const base = getCustomerBaseUrl(company);
   if (!slug) {
-    return `${getAppBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+    return `${base}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
   }
-  return `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+  return `${base}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
 }
 
 /** Sync helper when slug is already known. */
 export function messagingPreferencesUrlWithSlug(
   customerId: string,
   companyId: string,
-  slug: string
+  slug: string,
+  publicBaseUrl?: string | null
 ) {
   const token = createMessagingPreferencesToken(customerId, companyId);
-  return `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+  const base = getCustomerBaseUrl({ customerBaseUrl: publicBaseUrl ?? null });
+  return `${base}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
 }
 
-export function marketingUnsubscribeUrl(customerId: string, companyId: string) {
+export function marketingUnsubscribeUrl(
+  customerId: string,
+  companyId: string,
+  publicBaseUrl?: string | null
+) {
   const token = createMessagingPreferencesToken(customerId, companyId);
-  return `${getAppBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+  const base = getCustomerBaseUrl({ customerBaseUrl: publicBaseUrl ?? null });
+  return `${base}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
 /** Append a preferences footer to marketing campaign HTML. */

@@ -25,12 +25,16 @@ export async function GET(_request: Request, { params }: Params) {
 
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { portalSlug: true },
+      select: { portalSlug: true, customerBaseUrl: true },
     });
 
     const shareUrl =
       company?.portalSlug
-        ? buildReferralShareUrl({ portalSlug: company.portalSlug, memberToken: member.token })
+        ? buildReferralShareUrl({
+            portalSlug: company.portalSlug,
+            memberToken: member.token,
+            customerBaseUrl: company.customerBaseUrl,
+          })
         : null;
 
     return NextResponse.json({

@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         state: true,
         zip: true,
         bookingSlug: true,
-        websiteBaseUrl: true,
+        customerBaseUrl: true,
         privacyPolicyUrl: true,
         termsOfServiceUrl: true,
         campaignCtaLinks: true,
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const allowedLinks = resolveCampaignAllowedLinks({
       campaignCtaLinks: company.campaignCtaLinks,
       bookingSlug: company.bookingSlug,
-      websiteBaseUrl: company.websiteBaseUrl,
+      customerBaseUrl: company.customerBaseUrl,
       privacyPolicyUrl: company.privacyPolicyUrl,
       termsOfServiceUrl: company.termsOfServiceUrl,
     });
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       logoUrl,
       companyPhone: company.phone,
       companyEmail: company.supportEmail,
-      companyWebsite: company.website ?? company.websiteBaseUrl,
+      companyWebsite: company.website,
       companyAddress: company.address,
       companyCity: company.city,
       companyState: company.state,

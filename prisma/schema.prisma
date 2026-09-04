@@ -578,6 +578,8 @@ model Company {
   portalShowInvoices       Boolean  @default(true)
   portalShowEstimates      Boolean  @default(true)
   portalShowJobs           Boolean  @default(true)
+  /// Public origin for customer links (estimates, portal, pay). Staff CRM still works on any attached host.
+  customerBaseUrl          String?
   portalSlug               String?
   portalRescheduleLeadHours Int     @default(24)
   portalCancelLeadHours    Int      @default(24)

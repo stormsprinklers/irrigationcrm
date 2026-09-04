@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { customerPublicUrl } from "@/lib/company/customer-url";
 
 export function generateReferralToken() {
   return randomBytes(16).toString("hex");
@@ -8,10 +8,12 @@ export function generateReferralToken() {
 export function buildReferralShareUrl(params: {
   portalSlug: string;
   memberToken: string;
-  origin?: string | null;
+  customerBaseUrl?: string | null;
 }) {
-  const base = getAppBaseUrl(params.origin);
-  return `${base}/refer/${params.portalSlug}/${params.memberToken}`;
+  return customerPublicUrl(
+    { customerBaseUrl: params.customerBaseUrl },
+    `/refer/${params.portalSlug}/${params.memberToken}`
+  );
 }
 
 export function isDepositInvoice(invoiceNumber: string) {

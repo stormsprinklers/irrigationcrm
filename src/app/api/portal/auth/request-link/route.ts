@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       sendgridFrom: company.sendgridFrom,
       emailSenderName: company.emailSenderName,
       emailLogoUrl: company.emailLogoUrl,
+      customerBaseUrl: company.customerBaseUrl,
     });
 
     return NextResponse.json({

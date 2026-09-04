@@ -1,6 +1,7 @@
 import { ReferralRewardStatus, ReferralSubmissionStatus } from "@prisma/client";
 import { getStripeClient } from "@/lib/stripe/client";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
 
 export async function verifyCompanyStripeConnect(companyId: string) {
@@ -72,7 +73,13 @@ export async function createReferrerConnectLink(params: {
   if (!member) throw new Error("Not enrolled in referrals");
 
   const stripe = getStripeClient();
-  const base = getAppBaseUrl(params.origin);
+  const company = await prisma.company.findUnique({
+    where: { id: params.companyId },
+    select: { customerBaseUrl: true },
+  });
+  const base = company?.customerBaseUrl?.trim()
+    ? getCustomerBaseUrl(company)
+    : getAppBaseUrl(params.origin);
 
   let accountId = member.stripeConnectAccountId;
   if (!accountId) {

@@ -103,11 +103,16 @@ export async function syncVisitInvoice(params: {
   const serialized = await getInvoiceForCompany(params.companyId, invoice.id);
   if (!serialized) return { ok: false, error: "Invoice not found", status: 404 };
 
+  const company = await prisma.company.findUnique({
+    where: { id: params.companyId },
+    select: { customerBaseUrl: true },
+  });
+
   return {
     ok: true,
     invoiceId: invoice.id,
     balanceDue,
-    payLink: getInvoicePayUrl(invoice.publicToken),
+    payLink: getInvoicePayUrl(invoice.publicToken, company),
     invoice: serialized,
   };
 }

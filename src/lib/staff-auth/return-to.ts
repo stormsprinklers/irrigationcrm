@@ -2,7 +2,10 @@
  * Allowlist destinations after password reset / forgot-password "back" links.
  * Relative paths stay on CRM; absolute URLs must match configured spoke origins.
  */
-export function sanitizeAuthReturnTo(raw: string | null | undefined): string | null {
+export function sanitizeAuthReturnTo(
+  raw: string | null | undefined,
+  extraOrigins: Array<string | null | undefined> = []
+): string | null {
   if (!raw?.trim()) return null;
   const value = raw.trim();
 
@@ -27,6 +30,7 @@ export function sanitizeAuthReturnTo(raw: string | null | undefined): string | n
     process.env.NEXT_PUBLIC_LMS_URL,
     process.env.LMS_INTEGRATION_URL,
     process.env.NEXT_PUBLIC_DESIGN_URL,
+    ...extraOrigins,
   ]
     .map((u) => {
       try {

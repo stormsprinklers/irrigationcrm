@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolvePortalSlug } from "@/lib/portal/company";
 import { verifyMessagingPreferencesToken } from "@/lib/marketing/unsubscribe";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 
 /** Legacy marketing unsubscribe URL — redirect to portal preferences. */
 export async function GET(request: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const company = await prisma.company.findUnique({
     where: { id: verified.companyId },
-    select: { portalSlug: true, bookingSlug: true },
+    select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true },
   });
   const slug = company ? resolvePortalSlug(company) : null;
   if (!slug) {
@@ -33,6 +33,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const url = `${getAppBaseUrl()}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
+  const url = `${getCustomerBaseUrl(company)}/portal/${slug}/preferences?token=${encodeURIComponent(token)}`;
   return NextResponse.redirect(url);
 }

@@ -1,5 +1,6 @@
 import { VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { customerPortalHomeUrl, customerSurveyUrl } from "@/lib/company/customer-url";
 import { buildNotificationContext } from "./context";
 import { scheduleNotificationJob } from "./jobs";
 import { sendOperationalNotification } from "./send";
@@ -27,11 +28,8 @@ export async function notifyVisitEvent(params: {
     params.event === "FEEDBACK_SURVEY"
       ? await createFeedbackSurveyToken(visit.id)
       : null;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const portalSlug = company.portalSlug ?? company.bookingSlug;
-  const surveyUrl = surveyToken && portalSlug
-    ? `${appUrl}/portal/${portalSlug}/feedback/${surveyToken}`
-    : null;
+  const surveyUrl = surveyToken ? customerSurveyUrl(company, surveyToken) : null;
+  const portalHome = customerPortalHomeUrl(company);
 
   const context = buildNotificationContext({
     company: {
@@ -39,6 +37,7 @@ export async function notifyVisitEvent(params: {
       timezone: company.timezone,
       portalSlug: company.portalSlug,
       bookingSlug: company.bookingSlug,
+      customerBaseUrl: company.customerBaseUrl,
       googleReviewUrl: company.googleReviewUrl,
       websiteBaseUrl: company.websiteBaseUrl,
       arrivalWindowHours: company.arrivalWindowHours,
@@ -60,7 +59,7 @@ export async function notifyVisitEvent(params: {
 
   const linkPlaceholders: Record<string, string> = {};
   if (company.googleReviewUrl) linkPlaceholders.review = company.googleReviewUrl;
-  if (portalSlug) linkPlaceholders.portal = `${appUrl}/portal/${portalSlug}`;
+  if (portalHome) linkPlaceholders.portal = portalHome;
   if (surveyUrl) linkPlaceholders.survey = surveyUrl;
   if (visit.assignedUser?.websiteTeamSlug) {
     const base =

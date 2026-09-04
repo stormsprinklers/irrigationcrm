@@ -21,8 +21,8 @@ export default function SettingsCustomerPortalPage() {
   }
 
   const portalSlug = company.portalSlug ?? company.bookingSlug ?? "";
-  const appUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const portalUrl = portalSlug ? `${appUrl}/portal/${portalSlug}` : "";
+  const publicOrigin = (company.customerBaseUrl || company.appBaseUrl || "").replace(/\/$/, "");
+  const portalUrl = portalSlug && publicOrigin ? `${publicOrigin}/portal/${portalSlug}` : "";
 
   const toggles = [
     { key: "portalShowJobs" as const, label: "Show visits" },
@@ -66,6 +66,22 @@ export default function SettingsCustomerPortalPage() {
             />
             Enable customer portal
           </label>
+
+          <div>
+            <label className="text-sm font-medium">Public customer domain</label>
+            <p className="mb-1 text-xs text-muted-foreground">
+              Origin used on estimate, portal, pay, booking, and login links for this company.
+              Staff can use the full CRM at this host or the default CRM host. Leave blank to use{" "}
+              {company.appBaseUrl || "the default CRM URL"}. Attach the hostname on the CRM
+              Vercel project (for example <span className="font-mono">portal.utah.christmas</span>
+              ) — not the marketing website apex.
+            </p>
+            <Input
+              value={company.customerBaseUrl ?? ""}
+              onChange={(e) => setCompany({ ...company, customerBaseUrl: e.target.value || null })}
+              placeholder={company.appBaseUrl || "https://portal.utah.christmas"}
+            />
+          </div>
 
           <div>
             <label className="text-sm font-medium">Portal URL slug (optional)</label>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import {
   createCardSetupCheckoutSession,
   ensureStripeCustomer,
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   }
 
   const slug = resolvePortalSlug(ctx.company);
-  const appUrl = getAppBaseUrl(request.nextUrl.origin);
+  const appUrl = getCustomerBaseUrl(ctx.company);
   const baseReturn =
     body.returnPath?.startsWith(`/portal/${slug}`)
       ? body.returnPath.split("?")[0]

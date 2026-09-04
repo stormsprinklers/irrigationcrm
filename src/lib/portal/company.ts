@@ -16,6 +16,7 @@ export const portalCompanySelect = {
   bookingLeadTimeHours: true,
   portalEnabled: true,
   portalSlug: true,
+  customerBaseUrl: true,
   portalShowInvoices: true,
   portalShowEstimates: true,
   portalShowJobs: true,
@@ -52,6 +53,7 @@ export type PortalCompany = {
   bookingLeadTimeHours: number;
   portalEnabled: boolean;
   portalSlug: string | null;
+  customerBaseUrl: string | null;
   portalShowInvoices: boolean;
   portalShowEstimates: boolean;
   portalShowJobs: boolean;
@@ -72,8 +74,11 @@ export type PortalCompany = {
   privacyPolicyUrl: string | null;
 };
 
-export function resolvePortalSlug(company: { portalSlug: string | null; bookingSlug: string | null }) {
-  return company.portalSlug ?? company.bookingSlug;
+export function resolvePortalSlug(company: {
+  portalSlug?: string | null;
+  bookingSlug?: string | null;
+}) {
+  return company.portalSlug ?? company.bookingSlug ?? null;
 }
 
 export async function getCompanyByPortalSlug(slug: string) {

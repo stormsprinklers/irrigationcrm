@@ -251,13 +251,6 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                     <HolidayLightingPlanSection
                       designExportMetadata={estimate.designExportMetadata}
                       mode="customer"
-                      priceField={
-                        activeOption?.label?.toLowerCase().includes("lease")
-                          ? "leaseTotal"
-                          : "purchaseTotal"
-                      }
-                      title="Strand layout"
-                      description="Color-coded strands with label and cost."
                     />
                   </div>
                 ) : null}

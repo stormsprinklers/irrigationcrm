@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { AppNotificationType, type ApplicantStage, type JobApplicant, Prisma } from "@prisma/client";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { stageFromAiScore, stageNeedsBookingInvite } from "@/lib/hiring/permissions";
 import {
   scoreApplicantAnswers,
@@ -97,6 +98,7 @@ export async function sendHiringBookingInvite(applicantId: string) {
           sendgridFrom: true,
           emailSenderName: true,
           emailLogoUrl: true,
+          customerBaseUrl: true,
         },
       },
     },
@@ -105,8 +107,7 @@ export async function sendHiringBookingInvite(applicantId: string) {
   if (!stageNeedsBookingInvite(applicant.stage)) return;
 
   const token = await ensureBookingToken(applicant.id);
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const bookUrl = `${appUrl.replace(/\/$/, "")}/book/hiring/${token}`;
+  const bookUrl = `${getCustomerBaseUrl(applicant.company)}/book/hiring/${token}`;
   const roleLabel = applicant.jobTitle || applicant.jobSlug;
 
   try {

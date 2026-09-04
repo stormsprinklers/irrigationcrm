@@ -76,6 +76,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             timezone: true,
             portalSlug: true,
             bookingSlug: true,
+            customerBaseUrl: true,
           },
         },
       },
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         trackUrl = buildLiveTrackUrl({
           portalSlug: visit.company.portalSlug,
           bookingSlug: visit.company.bookingSlug,
+          customerBaseUrl: visit.company.customerBaseUrl,
           token: activated.liveTrackToken,
         });
       }

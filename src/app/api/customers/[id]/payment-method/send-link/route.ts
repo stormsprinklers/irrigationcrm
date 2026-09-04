@@ -12,6 +12,7 @@ import {
   ensureStripeCustomer,
 } from "@/lib/customers/stripe";
 import { prisma } from "@/lib/prisma";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { z } from "zod";
 
 type Params = { params: Promise<{ id: string }> };
@@ -55,13 +56,14 @@ export async function POST(request: NextRequest, { params }: Params) {
         emailSenderName: true,
         emailLogoUrl: true,
         twilioPhone: true,
+        customerBaseUrl: true,
       },
     });
 
     const stripeCustomerId = await ensureStripeCustomer(customer, user.companyId);
     if (!stripeCustomerId) return badRequestResponse("Failed to create Stripe customer");
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+    const appUrl = getCustomerBaseUrl(company);
     const session = await createCardSetupCheckoutSession({
       customerId: customer.id,
       companyId: user.companyId,

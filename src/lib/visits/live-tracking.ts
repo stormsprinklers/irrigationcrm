@@ -12,6 +12,7 @@ import {
   resolveVisitDestination,
 } from "@/lib/maps/eta";
 import { resolvePortalSlug } from "@/lib/portal/company";
+import { customerLiveTrackUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
 import { publicTechnicianPhotoUrl } from "@/lib/notifications/technician-photo";
 import { formatTimeInTimezone } from "@/lib/notifications/timezone";
@@ -28,14 +29,16 @@ export function buildLiveTrackUrl(params: {
   portalSlug: string | null;
   bookingSlug: string | null;
   token: string;
+  customerBaseUrl?: string | null;
 }) {
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-  const slug = resolvePortalSlug({
-    portalSlug: params.portalSlug,
-    bookingSlug: params.bookingSlug,
-  });
-  if (!appUrl || !slug || !params.token) return null;
-  return `${appUrl}/portal/${slug}/track/${params.token}`;
+  return customerLiveTrackUrl(
+    {
+      portalSlug: params.portalSlug,
+      bookingSlug: params.bookingSlug,
+      customerBaseUrl: params.customerBaseUrl,
+    },
+    params.token
+  );
 }
 
 /** Ensure a visit has a public track token; activate live tracking. */
@@ -70,7 +73,7 @@ export async function activateLiveTracking(params: {
     select: {
       id: true,
       liveTrackToken: true,
-      company: { select: { portalSlug: true, bookingSlug: true } },
+      company: { select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true } },
     },
   });
 }

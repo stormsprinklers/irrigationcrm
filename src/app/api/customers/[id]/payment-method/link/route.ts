@@ -7,6 +7,7 @@ import {
   ensureStripeCustomer,
 } from "@/lib/customers/stripe";
 import { prisma } from "@/lib/prisma";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,7 +29,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     const stripeCustomerId = await ensureStripeCustomer(customer, user.companyId);
     if (!stripeCustomerId) return badRequestResponse("Failed to create Stripe customer");
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
+    const company = await prisma.company.findUnique({
+      where: { id: user.companyId },
+      select: { customerBaseUrl: true },
+    });
+    const appUrl = getCustomerBaseUrl(company);
     const body = (await request.json().catch(() => ({}))) as {
       mobileReturn?: boolean;
       platform?: string;

@@ -22,7 +22,7 @@ export async function deliverInvoice(params: {
   const balanceDue = Math.max(0, toNumber(invoice.total) - paid);
   if (balanceDue <= 0) return { error: "Invoice has no balance due", status: 400 as const };
 
-  const payUrl = getInvoicePayUrl(invoice.publicToken);
+  const payUrl = getInvoicePayUrl(invoice.publicToken, invoice.company);
 
   const { emailSent, smsSent } = await notifyInvoiceViaTemplates({
     invoiceId: params.invoiceId,

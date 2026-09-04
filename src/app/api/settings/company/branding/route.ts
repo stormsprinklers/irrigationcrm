@@ -26,6 +26,7 @@ export async function GET() {
         irrigationFeaturesEnabled: true,
         holidayLightingFeaturesEnabled: true,
         maintenancePlansFeaturesEnabled: true,
+        customerBaseUrl: true,
       },
     });
     if (!company) {

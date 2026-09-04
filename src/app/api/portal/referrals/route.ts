@@ -38,6 +38,7 @@ export async function GET() {
       ? buildReferralShareUrl({
           portalSlug: ctx.company.portalSlug,
           memberToken: member.token,
+          customerBaseUrl: ctx.company.customerBaseUrl,
         })
       : null;
 
@@ -86,7 +87,6 @@ export async function POST(request: NextRequest) {
     const enrolled = await enrollReferralMember({
       companyId: ctx.companyId,
       customerId: ctx.customerId,
-      origin: request.nextUrl.origin,
     });
     member = enrolled.member;
   }

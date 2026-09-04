@@ -186,7 +186,7 @@ export async function handleInvoicePaymentFailure(params: {
   const amount = params.amount != null && params.amount > 0 ? params.amount : balanceDue;
   if (amount <= 0) return;
 
-  const retryUrl = getInvoicePayUrl(invoice.publicToken);
+  const retryUrl = getInvoicePayUrl(invoice.publicToken, invoice.company);
 
   const companyFlags = invoice.company as {
     notifyInvoicePaymentFailed?: boolean;

@@ -49,7 +49,7 @@ export async function notifyInvoiceViaTemplates(params: {
         ? toNumber(invoice.total)
         : balanceDue;
 
-  const payUrl = params.payUrlOverride?.trim() || getInvoicePayUrl(invoice.publicToken);
+  const payUrl = params.payUrlOverride?.trim() || getInvoicePayUrl(invoice.publicToken, invoice.company);
 
   let customerWorkSummary: string | null = null;
   if (params.event === "INVOICE_PAID_RECEIPT" && invoice.visit?.workSummary?.trim()) {
@@ -99,6 +99,7 @@ export async function notifyInvoiceViaTemplates(params: {
           workSummary: customerWorkSummary,
           reviewUrl: invoice.company.googleReviewUrl?.trim() || null,
           invoicePublicToken: invoice.publicToken,
+          publicBaseUrl: invoice.company.customerBaseUrl,
           media: (invoice.visit?.attachments ?? []).map((item) => ({
             id: item.id,
             fileName: item.fileName,

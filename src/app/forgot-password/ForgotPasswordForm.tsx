@@ -13,7 +13,10 @@ import { sanitizeAuthReturnTo } from "@/lib/staff-auth/return-to";
 export default function ForgotPasswordForm() {
   const searchParams = useSearchParams();
   const returnTo = useMemo(
-    () => sanitizeAuthReturnTo(searchParams.get("returnTo")),
+    () =>
+      sanitizeAuthReturnTo(searchParams.get("returnTo"), [
+        typeof window !== "undefined" ? window.location.origin : null,
+      ]),
     [searchParams]
   );
   const [email, setEmail] = useState("");

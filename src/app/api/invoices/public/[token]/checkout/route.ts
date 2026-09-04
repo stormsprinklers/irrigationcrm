@@ -30,6 +30,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       customer: true,
       visit: { select: { title: true } },
       payments: true,
+      company: { select: { customerBaseUrl: true } },
     },
   });
 
@@ -46,7 +47,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invoice cannot be paid" }, { status: 400 });
   }
 
-  const payUrl = getInvoicePayUrl(token);
+  const payUrl = getInvoicePayUrl(token, invoice.company);
 
   try {
     const session = await createInvoiceCheckoutSession({

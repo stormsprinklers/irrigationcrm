@@ -2,6 +2,7 @@ import { EstimateStatus, Prisma } from "@prisma/client";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { ensureEstimateOptions, serializeOption } from "@/lib/estimates/options";
 import { estimateOptionPhotoUrl } from "@/lib/blob/urls";
+import { customerEstimateUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { EstimateDTO, EstimateListItem } from "./types";
@@ -247,10 +248,12 @@ export async function getEstimateForCompany(companyId: string, estimateId: strin
   const notes = await attachNoteAuthors(refreshed.notes);
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { portalSlug: true, bookingSlug: true, estimateFinancingUrl: true },
+    select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true, estimateFinancingUrl: true },
   });
   const slug = company?.portalSlug ?? company?.bookingSlug ?? null;
-  const portalPath = slug ? `/portal/${slug}/estimates/${refreshed.publicToken}` : null;
+  const portalPath = slug
+    ? customerEstimateUrl(company, refreshed.publicToken)
+    : null;
   return serializeEstimate(refreshed, notes, portalPath, company?.estimateFinancingUrl ?? null);
 }
 

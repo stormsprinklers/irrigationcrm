@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { customerEstimateUrl } from "@/lib/company/customer-url";
 import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
 import { sendOperationalNotification, type SendResult } from "./send";
@@ -25,11 +26,11 @@ export async function notifyEstimateViaTemplates(
     return { emailSent: false, smsSent: false, skipped: ["no customer"], deliveryIds: [] };
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const portalSlug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
-  const estimateUrl = portalSlug
-    ? `${appUrl}/portal/${portalSlug}/estimates/${estimate.publicToken}`
-    : `${appUrl}/estimates/${estimate.id}`;
+  const estimateUrl = customerEstimateUrl(
+    estimate.company,
+    estimate.publicToken,
+    estimate.id
+  );
 
   const context = buildNotificationContext({
     company: estimate.company,
@@ -87,7 +88,7 @@ export async function notifyEstimateViaTemplates(
   });
 }
 
-/** Staff-facing portal path for the customer estimate page. */
+/** Customer-facing estimate URL for the sending company. */
 export async function getEstimateCustomerPortalPath(
   companyId: string,
   estimateId: string
@@ -96,11 +97,11 @@ export async function getEstimateCustomerPortalPath(
     where: { id: estimateId, companyId },
     select: {
       publicToken: true,
-      company: { select: { portalSlug: true, bookingSlug: true } },
+      company: { select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true } },
     },
   });
   if (!estimate) return null;
   const slug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
   if (!slug) return null;
-  return `/portal/${slug}/estimates/${estimate.publicToken}`;
+  return customerEstimateUrl(estimate.company, estimate.publicToken);
 }

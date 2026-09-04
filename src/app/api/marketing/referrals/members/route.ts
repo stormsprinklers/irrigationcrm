@@ -17,7 +17,6 @@ export async function POST(request: NextRequest) {
     const result = await enrollReferralMember({
       companyId: user.companyId,
       customerId,
-      origin: request.nextUrl.origin,
     });
 
     return NextResponse.json({

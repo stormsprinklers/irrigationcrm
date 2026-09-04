@@ -10,9 +10,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
     const returnTo = sanitizeAuthReturnTo(
-      body.returnTo != null ? String(body.returnTo) : null
+      body.returnTo != null ? String(body.returnTo) : null,
+      [request.nextUrl.origin]
     );
-    await requestPasswordReset(email, returnTo);
+    await requestPasswordReset(email, returnTo, request.nextUrl.origin);
     return NextResponse.json({
       ok: true,
       message: "If an account exists for that email, a reset link has been sent.",

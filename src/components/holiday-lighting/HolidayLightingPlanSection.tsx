@@ -30,20 +30,21 @@ export function HolidayLightingPlanSection({
       ? designExportMetadata.previewImageUrl
       : null;
 
-  if (!strandMap && !previewUrl) return null;
+  const showMap = mode === "installer";
+  if (!previewUrl && !(showMap && strandMap)) return null;
 
   return (
     <section className="space-y-3 rounded-lg border border-border bg-white p-4">
       <div>
         <h3 className="font-medium">
-          {title ?? (mode === "installer" ? "Holiday install map" : "Holiday lighting layout")}
+          {title ?? (mode === "installer" ? "Holiday install map" : "Lighting preview")}
         </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {description ??
-            (mode === "installer"
-              ? "Color-coded strands with label, cost, and linear feet including error margin."
-              : "Color-coded strands with label and cost so you can tell which is which.")}
-        </p>
+        {mode === "installer" || description ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            {description ??
+              "Color-coded strands with label, cost, and linear feet including error margin."}
+          </p>
+        ) : null}
       </div>
       {previewUrl ? (
         <div className="space-y-1">
@@ -60,7 +61,7 @@ export function HolidayLightingPlanSection({
           </p>
         </div>
       ) : null}
-      {strandMap ? (
+      {showMap && strandMap ? (
         <HolidayStrandMapViewer map={strandMap} mode={mode} priceField={priceField} />
       ) : null}
     </section>

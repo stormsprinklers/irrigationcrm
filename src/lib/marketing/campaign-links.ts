@@ -1,4 +1,4 @@
-import { getAppBaseUrl } from "@/lib/app-url";
+import { customerPublicUrl } from "@/lib/company/customer-url";
 
 export type CampaignCustomLink = {
   id: string;
@@ -43,23 +43,20 @@ export function parseCampaignCtaLinks(raw: unknown): CampaignCtaLinksStored {
 export function resolveBookingUrl(params: {
   bookingUrlOverride?: string | null;
   bookingSlug?: string | null;
-  websiteBaseUrl?: string | null;
+  customerBaseUrl?: string | null;
 }): string | null {
   const override = params.bookingUrlOverride?.trim();
   if (override) return override;
   const slug = params.bookingSlug?.trim();
   if (!slug) return null;
-  const base =
-    params.websiteBaseUrl?.trim().replace(/\/$/, "") ||
-    getAppBaseUrl();
-  return `${base}/book/${slug}`;
+  return customerPublicUrl({ customerBaseUrl: params.customerBaseUrl }, `/book/${slug}`);
 }
 
 /** Flatten built-in + custom links for AI and UI. */
 export function resolveCampaignAllowedLinks(params: {
   campaignCtaLinks?: unknown;
   bookingSlug?: string | null;
-  websiteBaseUrl?: string | null;
+  customerBaseUrl?: string | null;
   privacyPolicyUrl?: string | null;
   termsOfServiceUrl?: string | null;
 }): CampaignAllowedLink[] {
@@ -69,7 +66,7 @@ export function resolveCampaignAllowedLinks(params: {
   const bookingUrl = resolveBookingUrl({
     bookingUrlOverride: stored.bookingUrl,
     bookingSlug: params.bookingSlug,
-    websiteBaseUrl: params.websiteBaseUrl,
+    customerBaseUrl: params.customerBaseUrl,
   });
   if (bookingUrl) {
     links.push({ key: "booking", label: "Booking", url: bookingUrl, builtin: true });

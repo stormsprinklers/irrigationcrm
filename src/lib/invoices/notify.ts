@@ -21,10 +21,11 @@ type InvoiceNotifyParams = {
   balanceDue: number;
   publicToken: string;
   kind: "send" | "remind";
+  customerBaseUrl?: string | null;
 };
 
 export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
-  const payUrl = getInvoicePayUrl(params.publicToken);
+  const payUrl = getInvoicePayUrl(params.publicToken, params);
   const amount = formatCurrency(params.balanceDue);
 
   const subject =
@@ -97,10 +98,11 @@ type InvoiceReceiptParams = {
   invoiceNumber: string;
   amount: number;
   publicToken: string;
+  customerBaseUrl?: string | null;
 };
 
 export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
-  const payUrl = getInvoicePayUrl(params.publicToken);
+  const payUrl = getInvoicePayUrl(params.publicToken, params);
   const amountFormatted = formatCurrency(params.amount);
 
   const subject = `Receipt — Invoice ${params.invoiceNumber}`;

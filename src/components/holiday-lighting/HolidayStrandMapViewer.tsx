@@ -74,7 +74,7 @@ function featureSubtitle(feature: HolidayStrandMapFeature, mode: Mode, priceFiel
     }
     return `${feature.lengthFtWithMargin.toFixed(1)} ft (incl. margin) · ${price}`;
   }
-  return `${feature.lightStyleLabel} · ${price}`;
+  return feature.lightStyleLabel;
 }
 
 export function HolidayStrandMapViewer({
@@ -160,7 +160,9 @@ export function HolidayStrandMapViewer({
       </div>
 
       <ul className="mt-3 space-y-2">
-        {map.features.map((feature) => (
+        {map.features.map((feature) => {
+          const subtitle = featureSubtitle(feature, mode, priceField);
+          return (
           <li
             key={feature.id}
             className="flex items-start gap-3 rounded-md border border-border bg-white px-3 py-2 text-sm"
@@ -174,9 +176,7 @@ export function HolidayStrandMapViewer({
               <p className="font-semibold" style={{ color: feature.color }}>
                 {feature.label}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {featureSubtitle(feature, mode, priceField)}
-              </p>
+              {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
               {mode === "installer" && feature.kind !== "placement" ? (
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   Measured {feature.lengthFt.toFixed(1)} ft · margin {map.marginPct}% →{" "}
@@ -184,9 +184,12 @@ export function HolidayStrandMapViewer({
                 </p>
               ) : null}
             </div>
-            <p className="shrink-0 font-medium">{money(feature[priceField])}</p>
+            {mode === "installer" ? (
+              <p className="shrink-0 font-medium">{money(feature[priceField])}</p>
+            ) : null}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

@@ -603,7 +603,11 @@ export async function verifyLmsAuthTicket(ticket: string) {
   };
 }
 
-export async function requestPasswordReset(email: string, returnTo?: string | null) {
+export async function requestPasswordReset(
+  email: string,
+  returnTo?: string | null,
+  requestOrigin?: string | null
+) {
   const users = await findActiveStaffAccountsByEmail(email);
   // Always return success wording to avoid account enumeration.
   if (!users.length) return { ok: true as const };
@@ -620,7 +624,7 @@ export async function requestPasswordReset(email: string, returnTo?: string | nu
     },
   });
 
-  const base = getAppBaseUrl();
+  const base = (requestOrigin?.trim() || getAppBaseUrl()).replace(/\/$/, "");
   const resetUrl = `${base}${buildResetPasswordPath(raw, returnTo)}`;
   const from = getDefaultFromEmail();
   if (!from) {

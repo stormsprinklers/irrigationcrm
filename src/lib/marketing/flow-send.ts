@@ -29,6 +29,7 @@ export async function sendCampaignMessage(params: {
       name: string;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
+      customerBaseUrl?: string | null;
     };
   };
   customer: {
@@ -108,9 +109,9 @@ export async function sendCampaignMessage(params: {
     let rawHtml = bodyHtml ?? `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`;
     rawHtml = appendMarketingUnsubscribeFooter(
       rawHtml,
-      marketingUnsubscribeUrl(customer.id, campaign.companyId)
+      marketingUnsubscribeUrl(customer.id, campaign.companyId, campaign.company.customerBaseUrl)
     );
-    const html = rewriteTrackedLinks(rawHtml, recipient.id);
+    const html = rewriteTrackedLinks(rawHtml, recipient.id, campaign.company.customerBaseUrl);
 
     const response = await sendCompanyEmail(
       {

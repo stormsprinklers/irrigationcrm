@@ -1,5 +1,5 @@
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
-import { resolvePortalSlug } from "@/lib/portal/company";
+import { customerPortalHomeUrl, customerEstimateUrl } from "@/lib/company/customer-url";
 import { formatArrivalWindow, formatVisitDate } from "./arrival-window";
 import { firstNameFromName, splitCustomerName } from "./name-utils";
 import type { TemplateContext } from "./templates";
@@ -12,6 +12,7 @@ type CompanySlice = {
   timezone?: string | null;
   portalSlug?: string | null;
   bookingSlug?: string | null;
+  customerBaseUrl?: string | null;
   googleReviewUrl?: string | null;
   websiteBaseUrl?: string | null;
   arrivalWindowHours?: number | null;
@@ -99,7 +100,6 @@ export function buildNotificationContext(params: {
   estimateUrl?: string | null;
   trackUrl?: string | null;
 }): TemplateContext {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const websiteBase =
     params.company.websiteBaseUrl?.replace(/\/$/, "") ??
     process.env.NEXT_PUBLIC_WEBSITE_URL?.replace(/\/$/, "") ??
@@ -118,11 +118,7 @@ export function buildNotificationContext(params: {
   const startAt = params.visit?.startAt;
   const timezone = params.company.timezone;
 
-  const portalSlug = resolvePortalSlug({
-    portalSlug: params.company.portalSlug ?? null,
-    bookingSlug: params.company.bookingSlug ?? null,
-  });
-  const portalHome = portalSlug ? `${appUrl}/portal/${portalSlug}` : appUrl;
+  const portalHome = customerPortalHomeUrl(params.company);
 
   const technicianFirst = params.technician ? firstNameFromName(params.technician.name) : "";
   const aboutTechnician =
@@ -130,11 +126,13 @@ export function buildNotificationContext(params: {
       ? `${websiteBase}/team/${params.technician.websiteTeamSlug}`
       : "";
 
-  const invoiceLink = params.invoice ? getInvoicePayUrl(params.invoice.publicToken) : "";
+  const invoiceLink = params.invoice
+    ? getInvoicePayUrl(params.invoice.publicToken, params.company)
+    : "";
   const estimateLink =
     params.estimateUrl ??
-    (params.estimate && portalSlug
-      ? `${appUrl}/portal/${portalSlug}/estimates/${params.estimate.publicToken}`
+    (params.estimate
+      ? customerEstimateUrl(params.company, params.estimate.publicToken)
       : "");
 
   const etaMinutes =

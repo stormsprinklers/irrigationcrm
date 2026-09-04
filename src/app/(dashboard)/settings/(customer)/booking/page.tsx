@@ -90,8 +90,11 @@ export default function SettingsBookingPage() {
     );
   }
 
+  const publicOrigin = (company.customerBaseUrl || company.appBaseUrl || "").replace(/\/$/, "");
   const publicUrl = company.bookingSlug
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/book/${company.bookingSlug}`
+    ? publicOrigin
+      ? `${publicOrigin}/book/${company.bookingSlug}`
+      : `/book/${company.bookingSlug}`
     : "Set a slug to generate URL";
 
   const divisionWindows = parseDivisionBookingWindows(company.divisionBookingWindows);
@@ -150,6 +153,10 @@ export default function SettingsBookingPage() {
             onChange={(e) => setCompany({ ...company, bookingSlug: e.target.value })}
             placeholder="storm-sprinklers"
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Public booking URL uses this company&apos;s customer domain (Settings → Customer
+            portal).
+          </p>
         </div>
         <div>
           <label className="text-sm text-muted-foreground">Lead time (hours)</label>

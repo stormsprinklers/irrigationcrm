@@ -39,7 +39,8 @@ export function templateContextWithTrackedPlaceholders(
 
 export async function buildTrackedUrlMap(
   deliveryId: string,
-  linkPlaceholders: Partial<Record<TrackedLinkKind, string>>
+  linkPlaceholders: Partial<Record<TrackedLinkKind, string>>,
+  publicBaseUrl?: string | null
 ): Promise<Record<string, string>> {
   const urlMap: Record<string, string> = {};
 
@@ -49,6 +50,7 @@ export async function buildTrackedUrlMap(
       deliveryId,
       kind: kind as TrackedLinkKind,
       destinationUrl: dest,
+      publicBaseUrl,
     });
     const contextKey = TRACKED_LINK_CONTEXT_KEYS[kind as TrackedLinkKind];
     if (contextKey) {
@@ -63,6 +65,7 @@ export async function createTrackedLink(params: {
   deliveryId: string;
   kind: TrackedLinkKind;
   destinationUrl: string;
+  publicBaseUrl?: string | null;
 }): Promise<string> {
   const token = randomBytes(12).toString("base64url");
   await prisma.trackedLink.create({
@@ -73,7 +76,8 @@ export async function createTrackedLink(params: {
       token,
     },
   });
-  return `${APP_URL()}/api/track/l/${token}`;
+  const base = (params.publicBaseUrl?.trim() || APP_URL()).replace(/\/$/, "");
+  return `${base}/api/track/l/${token}`;
 }
 
 export async function recordTrackedLinkClick(token: string): Promise<string | null> {

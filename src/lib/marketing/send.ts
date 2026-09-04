@@ -136,6 +136,7 @@ async function sendToRecipient(
       name: string;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
+      customerBaseUrl?: string | null;
     };
   },
   recipient: {
@@ -250,7 +251,11 @@ async function sendToRecipient(
     bodyHtml ?? `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`;
 
   if (recipient.customerId) {
-    const unsubUrl = marketingUnsubscribeUrl(recipient.customerId, campaign.companyId);
+    const unsubUrl = marketingUnsubscribeUrl(
+      recipient.customerId,
+      campaign.companyId,
+      campaign.company.customerBaseUrl
+    );
     rawHtml = appendMarketingUnsubscribeFooter(rawHtml, unsubUrl);
   } else {
     rawHtml = appendMarketingUnsubscribeFooter(
@@ -259,7 +264,7 @@ async function sendToRecipient(
     );
   }
 
-  const html = rewriteTrackedLinks(rawHtml, recipient.id);
+  const html = rewriteTrackedLinks(rawHtml, recipient.id, campaign.company.customerBaseUrl);
 
   const response = await sendCompanyEmail(branding, {
     companyId: campaign.companyId,

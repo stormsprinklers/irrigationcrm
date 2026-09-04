@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { canAccessInvoices, canIssueRefunds } from "@/lib/invoices/permissions";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
@@ -45,6 +46,7 @@ type InvoiceRow = {
 export default function CustomerInvoicesPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+  const { brand } = useCompanyBrand();
   const role = session?.user?.role ?? "TECH";
   const canView = canAccessInvoices(role);
   const canRefund = canIssueRefunds(role);
@@ -80,11 +82,12 @@ export default function CustomerInvoicesPage() {
     if (action === "copy") {
       const invoice = invoices.find((inv) => inv.id === id);
       if (!invoice) return;
-      const payBase =
-        (process.env.NEXT_PUBLIC_PAY_URL || process.env.NEXT_PUBLIC_APP_URL || window.location.origin).replace(
-          /\/$/,
-          ""
-        );
+      const payBase = (
+        brand.customerBaseUrl ||
+        process.env.NEXT_PUBLIC_PAY_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        window.location.origin
+      ).replace(/\/$/, "");
       const payLink = `${payBase}/pay/${invoice.publicToken}`;
       await navigator.clipboard.writeText(payLink);
       toast.success("Pay link copied");
