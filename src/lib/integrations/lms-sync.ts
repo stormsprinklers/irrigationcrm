@@ -1,5 +1,5 @@
 import type { User } from "@prisma/client";
-import { EmployeeStatus, UserRole } from "@prisma/client";
+import { EmployeeStatus, Prisma, UserRole } from "@prisma/client";
 import { fetchBlobBytes } from "@/lib/blob/download";
 import { prisma } from "@/lib/prisma";
 
@@ -28,6 +28,30 @@ function lmsHeaders(extra?: HeadersInit): HeadersInit {
 
 export function isLmsSyncConfigured() {
   return Boolean(LMS_BASE && LMS_KEY);
+}
+
+async function markEmployeeLmsSynced(employeeId: string, lmsUserId?: string) {
+  const syncedAt = new Date();
+  try {
+    await prisma.user.update({
+      where: { id: employeeId },
+      data: {
+        ...(lmsUserId ? { lmsUserId } : {}),
+        lmsSyncStatus: "synced",
+        lmsLastSyncedAt: syncedAt,
+      },
+    });
+  } catch (err) {
+    // Same person on another company already holds this LMS id (legacy global unique).
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      await prisma.user.update({
+        where: { id: employeeId },
+        data: { lmsSyncStatus: "synced", lmsLastSyncedAt: syncedAt },
+      });
+      return;
+    }
+    throw err;
+  }
 }
 
 async function photoPayload(photoUrl: string | null) {
@@ -93,14 +117,7 @@ export async function pushEmployeeToLms(employee: SyncEmployee): Promise<LmsSync
     }
 
     const data = (await res.json()) as { lmsUserId?: string };
-    await prisma.user.update({
-      where: { id: employee.id },
-      data: {
-        lmsUserId: data.lmsUserId ?? undefined,
-        lmsSyncStatus: "synced",
-        lmsLastSyncedAt: new Date(),
-      },
-    });
+    await markEmployeeLmsSynced(employee.id, data.lmsUserId);
     return { ok: true, lmsUserId: data.lmsUserId };
   } catch (err) {
     await prisma.user.update({

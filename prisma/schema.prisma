@@ -986,7 +986,7 @@ model User {
   timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
   reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
   createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
-  lmsUserId              String?              @unique
+  lmsUserId              String?
   lmsSyncStatus          String?
   lmsLastSyncedAt        DateTime?
   socialPostSubmissions  SocialPostSubmission[] @relation("SocialSubmissionAuthor")
@@ -1016,7 +1016,9 @@ model User {
   techAssistSessions       TechAssistSession[]
 
   @@unique([companyId, email])
+  @@unique([companyId, lmsUserId])
   @@index([email])
+  @@index([lmsUserId])
 }
 
 /// Bidirectional link between staff users on different companies (same person).

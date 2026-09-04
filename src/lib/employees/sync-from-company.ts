@@ -1,4 +1,4 @@
-import { EmployeeStatus } from "@prisma/client";
+import { EmployeeStatus, Prisma } from "@prisma/client";
 import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
 import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { REVIEW_ALIAS_ROLES, generateReviewNameAliases } from "@/lib/google-business/review-aliases";
@@ -206,32 +206,50 @@ export async function syncEmployeesFromCompany(params: {
     }
 
     const pay = resolveCreateEmployeePay(user.role, {}, company);
-    const createdUser = await prisma.user.create({
-      data: {
-        companyId: params.targetCompanyId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        name: user.name,
-        email,
-        phone: user.phone,
-        role: user.role,
-        title: user.title,
-        status: user.status,
-        division: user.division,
-        color: user.color,
-        photoUrl: user.photoUrl,
-        address: user.address,
-        city: user.city,
-        state: user.state,
-        zip: user.zip,
-        birthDate: user.birthDate,
-        passwordHash: user.passwordHash,
-        payType: pay.payType,
-        hourlyRate: pay.hourlyRate,
-        commissionPercent: pay.commissionPercent,
-        tags: [...user.tags.filter((tag) => !tag.startsWith("imported-from:")), importedFromTag(user.id)],
-      },
-    });
+    const createData = {
+      companyId: params.targetCompanyId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      name: user.name,
+      email,
+      phone: user.phone,
+      role: user.role,
+      title: user.title,
+      status: user.status,
+      division: user.division,
+      color: user.color,
+      photoUrl: user.photoUrl,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      zip: user.zip,
+      birthDate: user.birthDate,
+      passwordHash: user.passwordHash,
+      payType: pay.payType,
+      hourlyRate: pay.hourlyRate,
+      commissionPercent: pay.commissionPercent,
+      lmsUserId: user.lmsUserId,
+      lmsSyncStatus: user.lmsUserId ? user.lmsSyncStatus : undefined,
+      lmsLastSyncedAt: user.lmsUserId ? user.lmsLastSyncedAt : undefined,
+      tags: [...user.tags.filter((tag) => !tag.startsWith("imported-from:")), importedFromTag(user.id)],
+    };
+
+    let createdUser;
+    try {
+      createdUser = await prisma.user.create({ data: createData });
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
+        throw err;
+      }
+      createdUser = await prisma.user.create({
+        data: {
+          ...createData,
+          lmsUserId: null,
+          lmsSyncStatus: undefined,
+          lmsLastSyncedAt: undefined,
+        },
+      });
+    }
 
     await ensureBidirectionalAccountLink(user.id, createdUser.id);
 
