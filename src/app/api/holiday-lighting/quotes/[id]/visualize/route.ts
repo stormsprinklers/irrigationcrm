@@ -7,6 +7,7 @@ import {
 } from "@/lib/api-auth";
 import { assertHolidayLightingEnabled } from "@/lib/holiday-lighting/catalog";
 import { saveHolidayPreviewBlob } from "@/lib/holiday-lighting/create-estimate";
+import { parseHolidayCatalog } from "@/lib/holiday-lighting/types";
 import { requireOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
 
@@ -15,28 +16,31 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
-const PROMPT = `You are given TWO images of the same residential property:
+function lightingPrompt(styleLabel: string) {
+  return `You are given TWO images of the same residential property:
 
-IMAGE 1 — PROPERTY (clean): usually a Google Street View / Maps capture of the house. Use this as the geometric base for the final image — same architecture, camera angle, windows, driveway, landscaping, and layout.
+IMAGE 1 — PROPERTY (clean): a photo of the house (uploaded or Google Street View). Use this as the geometric base — same architecture, camera angle, windows, driveway, landscaping, and layout.
 
-IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights painted on top (typically warm translucent gold/amber strokes). Those painted brushstrokes are the ONLY places that should receive *holiday / Christmas* lighting.
+IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights. Those painted strokes are the ONLY places that should receive holiday lighting.
 
 Instructions — holiday lights:
-- Add professional warm-white commercial-grade C9-style LED Christmas lights strictly inside the brush-marked regions from IMAGE 2 (rooflines, gables, eaves, trees, bushes, etc. where marked).
-- Do NOT invent extra holiday lighting, Christmas decorations, lit garlands, or C9 strands anywhere that is not marked in IMAGE 2.
-- Replace the brushstroke paint itself with realistic installed lights (evenly spaced, neatly clipped, soft evening glow). The paint marks are placement guides only — they must not remain visible in the final image.
+- Add professional ${styleLabel} C9-style LED Christmas lights strictly inside the brush-marked regions from IMAGE 2.
+- Match the requested color: ${styleLabel}.
+- Do NOT invent extra holiday lighting anywhere that is not marked.
+- Replace the brushstroke paint with realistic installed lights (evenly spaced, neatly clipped, soft evening glow).
 
-Instructions — normal property lighting (allowed / encouraged):
-- A realistic nighttime home may have ordinary lights on: porch / entry lights, garage coach lights, path or landscape accent lights, and warm interior lights visible through windows.
-- Keep or tastefully add those everyday lights where they would naturally belong on this house. They are not holiday lighting.
-- Do not turn the whole house into a dark silhouette; the scene should feel lived-in and inviting at dusk/night.
+Instructions — atmosphere:
+- Night / dusk scene with a little fresh snow on the roof, lawn, and shrubs.
+- Add a tasteful holiday wreath on the front door if a door is visible.
+- Keep ordinary porch, garage, and interior window lights on so the home feels lived-in.
 
 Instructions — image quality:
-- Beautify IMAGE 1 from a grainy / compressed Maps photo into a clean professional real-estate night photograph: reduce grain and compression artifacts, refine sharpness and color, and improve night exposure and contrast.
-- Preserve the real house, viewpoint, and proportions — do not redesign the architecture, invent buildings, or change the property identity.
-- Do not add people, cars, text, logos, or watermarks.
+- Beautify IMAGE 1 into a clean professional real-estate night photograph.
+- Preserve the real house, viewpoint, and proportions.
+- Do not add people, extra cars, text, logos, or watermarks.
 
-Output one photorealistic dusk/night preview of this exact property: holiday lights only where marked, everyday house lights welcome, and a polished professional photo look.`;
+Output one photorealistic dusk/night preview of this exact property.`;
+}
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { holidayLightingFeaturesEnabled: true },
+      select: { holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
     });
     assertHolidayLightingEnabled(company ?? {});
 
@@ -75,9 +79,16 @@ export async function POST(request: NextRequest, { params }: Params) {
       return badRequestResponse("Image files must be under 8MB each");
     }
 
+    const catalog = parseHolidayCatalog(company?.holidayLightingCatalog);
+    const styleKey = String(form.get("lightStyle") ?? "");
+    const styleLabel =
+      catalog.lightStyles.find((s) => s.key === styleKey)?.label ??
+      catalog.lightStyles[0]?.label ??
+      "warm white";
+
     const outbound = new FormData();
     outbound.append("model", "gpt-image-1");
-    outbound.append("prompt", PROMPT);
+    outbound.append("prompt", lightingPrompt(styleLabel));
     outbound.append("size", "1024x1024");
     outbound.append("input_fidelity", "high");
     // First image = clean property (high-fidelity base). Second = brush-marked guide.

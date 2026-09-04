@@ -46,12 +46,19 @@ export function HolidayLightingPlanSection({
         </p>
       </div>
       {previewUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={blobProxyUrl(previewUrl) ?? previewUrl}
-          alt="Lighting preview"
-          className="max-h-72 w-full rounded-md border border-border object-cover"
-        />
+        <div className="space-y-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={blobProxyUrl(previewUrl) ?? previewUrl}
+            alt="Lighting preview"
+            className="max-h-72 w-full rounded-md border border-border object-cover"
+          />
+          <p className="text-xs text-muted-foreground">
+            {typeof designExportMetadata?.previewDisclaimer === "string"
+              ? designExportMetadata.previewDisclaimer
+              : "This preview is AI generated and is not a guarantee of exact light placement."}
+          </p>
+        </div>
       ) : null}
       {strandMap ? (
         <HolidayStrandMapViewer map={strandMap} mode={mode} priceField={priceField} />

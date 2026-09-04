@@ -21,7 +21,7 @@ export async function loadHolidayPriceLookup(companyId: string): Promise<PriceLo
       category: { companyId },
       sku: { not: null },
     },
-    select: { id: true, name: true, sku: true, unitPrice: true },
+    select: { id: true, name: true, sku: true, unitPrice: true, unitCost: true },
   });
   const map: PriceLookup = new Map();
   for (const item of items) {
@@ -30,6 +30,7 @@ export async function loadHolidayPriceLookup(companyId: string): Promise<PriceLo
       id: item.id,
       name: item.name,
       unitPrice: Number(item.unitPrice),
+      unitCost: item.unitCost != null ? Number(item.unitCost) : null,
     });
   }
   return map;

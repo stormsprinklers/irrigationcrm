@@ -15,21 +15,19 @@ import {
   PaintCanvas,
   type PaintCanvasHandle,
 } from "@/components/holiday-lighting/PaintCanvas";
-import { StreetViewMeasureOverlay } from "@/components/holiday-lighting/StreetViewMeasureOverlay";
-import { StrandBuilder } from "@/components/holiday-lighting/StrandBuilder";
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
-import { refreshPitchCorrections } from "@/lib/holiday-lighting/pitch-match";
 import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import { pruneStrands } from "@/lib/holiday-lighting/strands";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   DEFAULT_HOLIDAY_SELECTIONS,
   EMPTY_HOLIDAY_MEASUREMENTS,
+  HOLIDAY_PREVIEW_DISCLAIMER,
   applyHolidayCatalogPolicy,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
@@ -71,13 +69,14 @@ type Props = {
   initialZip?: string | null;
 };
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 const WIZARD_STEPS: Array<{ id: WizardStep; label: string }> = [
-  { id: 1, label: "Street View" },
-  { id: 2, label: "Selections" },
-  { id: 3, label: "Satellite" },
-  { id: 4, label: "Quote" },
+  { id: 1, label: "Location" },
+  { id: 2, label: "Measure" },
+  { id: 3, label: "Lights" },
+  { id: 4, label: "Preview" },
+  { id: 5, label: "Quote" },
 ];
 
 function money(n: number) {
@@ -156,8 +155,8 @@ export function HolidayLightingQuoter({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoApproved, setPhotoApproved] = useState(false);
   const [estimate, setEstimate] = useState<QuoteRecord["estimate"]>(null);
-  const [matchSegmentId, setMatchSegmentId] = useState<string | null>(null);
-  const [selectedStrandId, setSelectedStrandId] = useState<string | null>(null);
+  const [previewSource, setPreviewSource] = useState<"choose" | "street" | "upload">("choose");
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
 
@@ -352,7 +351,7 @@ export function HolidayLightingQuoter({
   }
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
-    const refreshed = pruneStrands(refreshPitchCorrections(next));
+    const refreshed = pruneStrands(next);
     setMeasurements(refreshed);
     void save({ measurements: refreshed }, { quiet });
   }
@@ -578,8 +577,8 @@ export function HolidayLightingQuoter({
 
   async function goNext() {
     if (step === 1) {
-      if (!photoUrl || !photoApproved) {
-        toast.error("Capture or upload a photo and approve it first");
+      if (!address.trim() && !customerId) {
+        toast.error("Enter an address or pick a customer");
         return;
       }
       await save(undefined, { quiet: true });
@@ -587,17 +586,22 @@ export function HolidayLightingQuoter({
       return;
     }
     if (step === 2) {
+      if (measurements.segments.length === 0 && measurements.placements.length === 0) {
+        toast.error("Draw rooflines or mark trees and bushes on the satellite map");
+        return;
+      }
       await save(undefined, { quiet: true });
       setStep(3);
       return;
     }
     if (step === 3) {
-      if (!measurements.segments.some((s) => s.kind === "roofline" && s.path.length >= 2)) {
-        toast.error("Draw each roofline on the satellite map");
-        return;
-      }
       await save(undefined, { quiet: true });
       setStep(4);
+      return;
+    }
+    if (step === 4) {
+      await save(undefined, { quiet: true });
+      setStep(5);
     }
   }
 
@@ -619,6 +623,7 @@ export function HolidayLightingQuoter({
       const form = new FormData();
       form.set("clean", exported.cleanBlob, "property.png");
       form.set("marked", exported.markedBlob, "property-marked.png");
+      form.set("lightStyle", selections.defaultLightStyleKey);
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
         method: "POST",
         body: form,
@@ -660,8 +665,7 @@ export function HolidayLightingQuoter({
 
   async function clearQuoteWork() {
     setMeasurements(EMPTY_HOLIDAY_MEASUREMENTS);
-    setMatchSegmentId(null);
-    setSelectedStrandId(null);
+    setSelectedSegmentId(null);
     setPhotoUrl(null);
     setPhotoApproved(false);
     setPreviewUrl(null);
@@ -678,18 +682,6 @@ export function HolidayLightingQuoter({
     );
     toast.success("Quote measurements cleared");
   }
-
-  useEffect(() => {
-    if (step !== 3) return;
-    const unmatched = measurements.segments.find(
-      (s) => s.kind === "roofline" && s.path.length < 2
-    );
-    if (!unmatched) return;
-    const current = measurements.segments.find((s) => s.id === matchSegmentId);
-    if (!matchSegmentId || (current && current.path.length >= 2)) {
-      setMatchSegmentId(unmatched.id);
-    }
-  }, [step, measurements.segments, matchSegmentId]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -739,7 +731,7 @@ export function HolidayLightingQuoter({
               Back
             </Button>
           ) : null}
-          {step < 4 ? (
+          {step < 5 ? (
             <Button type="button" onClick={() => void goNext()}>
               Continue
               <ArrowRight className="ml-1.5 h-4 w-4" />
@@ -748,333 +740,382 @@ export function HolidayLightingQuoter({
         </div>
       </div>
 
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", step > 3 && "hidden")}>
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
-            <CustomerSearchPicker
-              compact
-              className="w-full min-w-[180px] sm:w-56"
-              value={customerId}
-              selectedName={customerName}
-              onValueChange={onCustomerPicked}
-              onCustomerSelect={onCustomerSelect}
-              placeholder="Customer…"
-            />
-            {properties.length > 0 ? (
-              <select
-                className="h-9 min-w-[140px] max-w-[220px] flex-1 rounded-md border border-input bg-background px-2 text-sm sm:flex-none"
-                value={propertyId}
-                onChange={(e) => {
-                  const next = properties.find((p) => p.id === e.target.value);
-                  if (next) applyProperty(next);
-                  else {
-                    setPropertyId("");
-                    void save({ propertyId: null }, { quiet: true });
-                  }
-                }}
-                aria-label="Property"
-              >
-                <option value="">Property…</option>
-                {properties.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name || p.address || "Property"}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <div className="min-w-[220px] flex-[2]">
-              <AddressAutocompleteInput
-                value={addressQuery}
-                onChange={(value) => {
-                  setAddressQuery(value);
-                  setAddress(value);
-                  setCity("");
-                  setState("");
-                  setZip("");
-                }}
-                onResolved={applyResolvedAddress}
-                onBlur={() =>
-                  void geocode({
-                    address: city.trim() || zip.trim() ? address : addressQuery,
-                    city,
-                    state,
-                    zip,
-                  })
-                }
-                placeholder="Address, city, state, ZIP…"
-              />
-            </div>
-          </div>
-
-          <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 2 && "hidden")}>
-            {step === 2 && photoUrl && photoApproved ? (
-              <StreetViewMeasureOverlay
-                imageUrl={photoUrl}
-                measurements={measurements}
-                selectedSegmentId={matchSegmentId}
-                onSelectSegment={setMatchSegmentId}
-                defaultLightStyleKey={selections.defaultLightStyleKey}
-                onChange={(next) => updateMeasurements(next)}
-              />
-            ) : null}
-          </div>
-
-          <div
-            className={cn(
-              "relative z-0 flex min-h-0 flex-1 flex-col gap-2",
-              step !== 1 && step !== 3 && "hidden"
-            )}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
+        <CustomerSearchPicker
+          compact
+          className="w-full min-w-[180px] sm:w-56"
+          value={customerId}
+          selectedName={customerName}
+          onValueChange={onCustomerPicked}
+          onCustomerSelect={onCustomerSelect}
+          placeholder="Customer…"
+        />
+        {properties.length > 0 ? (
+          <select
+            className="h-9 min-w-[140px] max-w-[220px] flex-1 rounded-md border border-input bg-background px-2 text-sm sm:flex-none"
+            value={propertyId}
+            onChange={(e) => {
+              const next = properties.find((p) => p.id === e.target.value);
+              if (next) applyProperty(next);
+              else {
+                setPropertyId("");
+                void save({ propertyId: null }, { quiet: true });
+              }
+            }}
+            aria-label="Property"
           >
-            {step === 1 ? (
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {!photoApproved ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={capturing}
-                      onClick={() => void captureStreetView()}
-                    >
-                      {capturing ? "Capturing…" : photoUrl ? "Recapture" : "Capture Street View"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fileRef.current?.click()}
-                    >
-                      Upload photo
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPhotoApproved(false)}
-                  >
-                    Change photo
-                  </Button>
-                )}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void onPhotoSelected(file);
-                    e.target.value = "";
-                  }}
-                />
-              </div>
-            ) : null}
+            <option value="">Property…</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || p.address || "Property"}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="min-w-[220px] flex-[2]">
+          <AddressAutocompleteInput
+            value={addressQuery}
+            onChange={(value) => {
+              setAddressQuery(value);
+              setAddress(value);
+              setCity("");
+              setState("");
+              setZip("");
+            }}
+            onResolved={applyResolvedAddress}
+            onBlur={() =>
+              void geocode({
+                address: city.trim() || zip.trim() ? address : addressQuery,
+                city,
+                state,
+                zip,
+              })
+            }
+            placeholder="Address, city, state, ZIP…"
+          />
+        </div>
+      </div>
 
-            {step === 1 && photoUrl && !photoApproved ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoUrl}
-                  alt="Capture preview"
-                  className="h-16 w-24 rounded object-cover"
-                />
-                <Button type="button" size="sm" onClick={() => setPhotoApproved(true)}>
-                  Approve photo
-                </Button>
+      {step === 1 ? (
+        <p className="text-sm text-muted-foreground">
+          Pick a customer or enter the property address, then continue to measure the home from
+          satellite.
+        </p>
+      ) : null}
+
+      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 2 && step !== 4 && "hidden")}>
+        {step === 2 ? (
+          <p className="text-sm text-muted-foreground">
+            Draw linear rooflines on satellite. Mark any line that includes a peak to bill it at
+            1.5×. Click trees and bushes and set small, medium, or large.
+          </p>
+        ) : null}
+        {step === 4 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={previewSource === "upload" ? "default" : "outline"}
+              onClick={() => {
+                setPreviewSource("upload");
+                fileRef.current?.click();
+              }}
+            >
+              Upload photo for preview
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={previewSource === "street" ? "default" : "outline"}
+              onClick={() => setPreviewSource("street")}
+            >
+              Find on Google Street View
+            </Button>
+            {previewSource === "street" ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={capturing}
+                onClick={() => void captureStreetView()}
+              >
+                {capturing ? "Capturing…" : "Capture this view"}
+              </Button>
+            ) : null}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setPreviewSource("upload");
+                  void onPhotoSelected(file);
+                }
+                e.target.value = "";
+              }}
+            />
+          </div>
+        ) : null}
+        {step === 4 && photoUrl && !photoApproved ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt="Capture preview" className="h-16 w-24 rounded object-cover" />
+            <Button type="button" size="sm" onClick={() => setPhotoApproved(true)}>
+              Use this photo
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPhotoUrl(null);
+                setPhotoApproved(false);
+              }}
+            >
+              Discard
+            </Button>
+          </div>
+        ) : null}
+        <HolidayMapPanel
+          ref={mapPanelRef}
+          center={center}
+          measurements={measurements}
+          defaultLightStyleKey={selections.defaultLightStyleKey}
+          onSelectSegment={setSelectedSegmentId}
+          selectedSegmentId={selectedSegmentId}
+          showStreetView={step === 4 && previewSource === "street"}
+          showSatellite={step === 2}
+          onChange={(next) => {
+            const segments = next.segments.map((seg) => {
+              const prev = measurements.segments.find((s) => s.id === seg.id);
+              if (!prev) {
+                return {
+                  ...seg,
+                  horizontalLengthFt: seg.horizontalLengthFt ?? seg.lengthFt,
+                };
+              }
+              const pathChanged = JSON.stringify(prev.path) !== JSON.stringify(seg.path);
+              if (pathChanged) {
+                return { ...seg, horizontalLengthFt: seg.lengthFt, hasPeak: prev.hasPeak };
+              }
+              return {
+                ...seg,
+                horizontalLengthFt: prev.horizontalLengthFt ?? seg.lengthFt,
+                hasPeak: seg.hasPeak ?? prev.hasPeak,
+              };
+            });
+            updateMeasurements({ ...next, segments });
+          }}
+        />
+      </div>
+
+      {step === 3 ? (
+        <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
+          <h3 className="text-sm font-semibold">Light color</h3>
+          <div>
+            <label className="text-xs text-muted-foreground">Color</label>
+            <select
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={selections.defaultLightStyleKey}
+              onChange={(e) => {
+                const next = applyHolidayCatalogPolicy(
+                  { ...selections, defaultLightStyleKey: e.target.value },
+                  catalog
+                );
+                setSelections(next);
+                void save({ selections: next }, { quiet: true });
+              }}
+            >
+              {catalog.lightStyles.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {pricing ? (
+            <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
+              <div>
+                <div className="flex justify-between">
+                  <span>Buy Lights</span>
+                  <span className="font-semibold">{money(pricing.year1Total)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Future years: {money(pricing.reinstallTotal)}
+                </p>
+              </div>
+              <div>
+                <div className="flex justify-between">
+                  <span>
+                    Lease Lights{" "}
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                      Most popular
+                    </span>
+                  </span>
+                  <span className="font-semibold">{money(pricing.leaseTotal)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">No commitments</p>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Permanent Lights</span>
+                <span>{money(pricing.permanentTotal)}</span>
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {step === 4 && photoApproved && photoUrl ? (
+        <section className="space-y-3 rounded-lg border border-border bg-white p-4">
+          <h3 className="text-sm font-semibold">AI lighting preview</h3>
+          <p className="text-xs text-muted-foreground">
+            Paint where lights should go. We&apos;ll generate a night photo with{" "}
+            {catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey)?.label ??
+              "your lights"}
+            , a little snow, and a wreath on the door.
+          </p>
+          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+          <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
+            {visualizing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate night preview
+              </>
+            )}
+          </Button>
+          {previewUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={blobProxyUrl(previewUrl) ?? previewUrl}
+                alt="Lighting preview"
+                className="w-full max-w-xl rounded-md border border-border"
+              />
+              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {step === 5 ? (
+        <div className="flex max-w-xl flex-col gap-4">
+          {previewUrl ? (
+            <section className="space-y-2 rounded-lg border border-border bg-white p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={blobProxyUrl(previewUrl) ?? previewUrl}
+                alt="Lighting preview"
+                className="w-full rounded-md border border-border"
+              />
+              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
+            </section>
+          ) : null}
+          <section className="space-y-3 rounded-lg border border-border bg-white p-4">
+            <h3 className="text-sm font-semibold">Quote</h3>
+            {pricing ? (
+              <div className="space-y-3 text-sm">
+                <div>
+                  <div className="flex justify-between">
+                    <span>Buy Lights</span>
+                    <span className="font-semibold">{money(pricing.year1Total)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Future years: {money(pricing.reinstallTotal)}. Front-loads the cost so you own
+                    the lights and pay less later. Includes installation, take-down, and bulb
+                    replacements during the season.
+                  </p>
+                </div>
+                <div>
+                  <div className="flex justify-between">
+                    <span>
+                      Lease Lights{" "}
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                        Most popular
+                      </span>
+                    </span>
+                    <span className="font-semibold">{money(pricing.leaseTotal)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    No commitments. Lower up front, can cost more long-term, and you can change
+                    colors and design each year. Includes installation, take-down, and bulb
+                    replacements during the season.
+                  </p>
+                </div>
+                <div>
+                  <div className="flex justify-between">
+                    <span>Permanent Lights</span>
+                    <span className="font-semibold">{money(pricing.permanentTotal)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Fit your vibe year-round. Highest up-front cost, then change colors with an
+                    app for teams, causes, and holidays — not just Christmas.
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {Math.round(pricing.billedLengthFt)} ft billed
+                  {pricing.placementCount
+                    ? ` · ${pricing.placementCount} trees/bushes`
+                    : ""}
+                  {pricing.year1MinimumApplied ? " · buy first-year minimum applied" : ""}
+                </p>
+                {pricing.year1Total > 0 && pricing.leaseTotal <= 0 ? (
+                  <p className="text-xs text-amber-800">
+                    Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
+                    lighting before sending this quote.
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Save measurements to see pricing.</p>
+            )}
+            <Button
+              type="button"
+              className="w-full"
+              disabled={creating || !customerId}
+              onClick={() => void createEstimate()}
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                "Create branded estimate"
+              )}
+            </Button>
+            {!customerId ? (
+              <p className="text-xs text-amber-700">Select a customer to create an estimate.</p>
+            ) : null}
+            {estimate ? (
+              <div className="space-y-2">
                 <Button
                   type="button"
-                  size="sm"
                   variant="outline"
-                  onClick={() => {
-                    setPhotoUrl(null);
-                    setPhotoApproved(false);
-                  }}
+                  className="w-full"
+                  onClick={() => setSendDialogOpen(true)}
                 >
-                  Discard
+                  Preview &amp; send estimate
+                </Button>
+                <Button type="button" variant="outline" className="w-full" asChild>
+                  <Link href={`/estimates/${estimate.id}`}>
+                    Open {estimate.estimateNumber ?? "estimate"}
+                  </Link>
                 </Button>
               </div>
             ) : null}
-
-            <HolidayMapPanel
-              ref={mapPanelRef}
-              center={center}
-              measurements={measurements}
-              defaultLightStyleKey={selections.defaultLightStyleKey}
-              onSelectSegment={(id) => {
-                setMatchSegmentId(id);
-                if (id) setSelectedStrandId(null);
-              }}
-              selectedSegmentId={matchSegmentId}
-              selectedStrandId={selectedStrandId}
-              showStreetView={step === 1}
-              showSatellite={step === 3}
-              onChange={(next) => {
-                const segments = next.segments.map((seg) => {
-                  const prev = measurements.segments.find((s) => s.id === seg.id);
-                  if (!prev) {
-                    return {
-                      ...seg,
-                      horizontalLengthFt: seg.horizontalLengthFt ?? seg.lengthFt,
-                    };
-                  }
-                  const pathChanged =
-                    JSON.stringify(prev.path) !== JSON.stringify(seg.path);
-                  if (pathChanged) {
-                    return { ...seg, horizontalLengthFt: seg.lengthFt };
-                  }
-                  return {
-                    ...seg,
-                    horizontalLengthFt: prev.horizontalLengthFt ?? seg.lengthFt,
-                  };
-                });
-                updateMeasurements({
-                  ...next,
-                  segments,
-                  streetTraces: (measurements.streetTraces ?? []).filter((t) =>
-                    segments.some((s) => s.id === t.satelliteSegmentId)
-                  ),
-                });
-              }}
-            />
-            {step === 3 ? (
-              <StrandBuilder
-                measurements={measurements}
-                selectedStrandId={selectedStrandId}
-                onSelectStrand={(id) => {
-                  setSelectedStrandId(id);
-                  if (id) setMatchSegmentId(null);
-                }}
-                onChange={(next) => updateMeasurements(next)}
-              />
-            ) : null}
-          </div>
+          </section>
         </div>
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-4 lg:flex-row", step !== 4 && "hidden")}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-            <section className="space-y-3 rounded-lg border border-border bg-white p-4">
-              <h3 className="text-sm font-semibold">AI lighting preview</h3>
-              {photoUrl ? (
-                <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
-              ) : null}
-              <Button
-                type="button"
-                className="w-full"
-                disabled={visualizing || !photoUrl}
-                onClick={() => void runVisualize()}
-              >
-                {visualizing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Generating…
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate AI preview
-                  </>
-                )}
-              </Button>
-              {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={blobProxyUrl(previewUrl) ?? previewUrl}
-                  alt="Lighting preview"
-                  className="w-full rounded-md border border-border"
-                />
-              ) : null}
-            </section>
-          </div>
-
-          <aside className="flex w-full shrink-0 flex-col gap-4 lg:w-[340px]">
-            <section className="space-y-3 rounded-lg border border-border bg-white p-4">
-              <h3 className="text-sm font-semibold">Quote builder</h3>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Default light style</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={selections.defaultLightStyleKey}
-                  onChange={(e) => {
-                    const next = applyHolidayCatalogPolicy(
-                      { ...selections, defaultLightStyleKey: e.target.value },
-                      catalog
-                    );
-                    setSelections(next);
-                    void save({ selections: next }, { quiet: true });
-                  }}
-                >
-                  {catalog.lightStyles.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {pricing ? (
-                <div className="space-y-1 rounded-md bg-muted/40 p-3 text-sm">
-                  <div className="flex justify-between">
-                    <span>Purchase</span>
-                    <span className="font-semibold">{money(pricing.purchaseTotal)}</span>
-                  </div>
-                  {selections.includeLease ? (
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Lease (season)</span>
-                      <span>{money(pricing.leaseTotal)}</span>
-                    </div>
-                  ) : null}
-                  <ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-muted-foreground">
-                    {pricing.lines.map((line) => (
-                      <li key={line.key}>
-                        {line.name}: {line.staffDetail}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <Button
-                type="button"
-                className="w-full"
-                disabled={creating || !customerId}
-                onClick={() => void createEstimate()}
-              >
-                {creating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating…
-                  </>
-                ) : (
-                  "Create branded estimate"
-                )}
-              </Button>
-              {!customerId ? (
-                <p className="text-xs text-amber-700">Select a customer to create an estimate.</p>
-              ) : null}
-              {estimate ? (
-                <div className="space-y-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setSendDialogOpen(true)}
-                  >
-                    Preview &amp; send estimate
-                  </Button>
-                  <Button type="button" variant="outline" className="w-full" asChild>
-                    <Link href={`/estimates/${estimate.id}`}>
-                      Open {estimate.estimateNumber ?? "estimate"}
-                    </Link>
-                  </Button>
-                </div>
-              ) : null}
-            </section>
-          </aside>
-        </div>
+      ) : null}
       <ConfirmDialog
         open={clearConfirmOpen}
         title="Clear this lighting quote?"
-        description="This removes all rooflines, trees/shrubs, strands, street-view pitch matches, the captured photo, and any AI preview. Customer and address are kept."
+        description="This removes all rooflines, trees/bushes, the captured photo, and any AI preview. Customer and address are kept."
         confirmLabel="Clear everything"
         confirmVariant="destructive"
         onConfirm={() => void clearQuoteWork()}

@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { billedSegmentLengthFt } from "@/lib/holiday-lighting/pitch-match";
 import { pathLengthFeet } from "@/lib/holiday-lighting/geo";
 import { loadGoogleMaps } from "@/lib/holiday-lighting/load-maps";
 import { holidayStrandColorAt } from "@/lib/holiday-lighting/strand-map";
@@ -52,7 +53,7 @@ export type HolidayMapPanelHandle = {
 
 type DrawMode = "select" | "roofline" | "treeShrub";
 
-const TREE_SIZES: HolidayTreeSize[] = ["small", "medium", "large", "xl"];
+const TREE_SIZES: HolidayTreeSize[] = ["small", "medium", "large"];
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -94,6 +95,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [error, setError] = useState<string | null>(null);
     const [mode, setMode] = useState<DrawMode>("roofline");
     const [treeSize, setTreeSize] = useState<HolidayTreeSize>("medium");
+    const [placementKind, setPlacementKind] = useState<"tree" | "bush">("tree");
     const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
       selectedSegmentId ?? null
     );
@@ -102,6 +104,8 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     modeRef.current = mode;
     const treeSizeRef = useRef(treeSize);
     treeSizeRef.current = treeSize;
+    const placementKindRef = useRef(placementKind);
+    placementKindRef.current = placementKind;
     const measurementsRef = useRef(measurements);
     measurementsRef.current = measurements;
 
@@ -230,13 +234,14 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
 
       if (currentMode === "treeShrub") {
         const size = treeSizeRef.current;
+        const kind = placementKindRef.current;
         const count =
-          measurementsRef.current.placements.filter((p) => p.kind === "tree").length + 1;
+          measurementsRef.current.placements.filter((p) => p.kind === kind).length + 1;
         const placement: HolidayMeasurementPlacement = {
           id: newId(),
-          kind: "tree",
+          kind,
           size,
-          label: `Tree/Shrub ${count}`,
+          label: `${kind === "bush" ? "Bush" : "Tree"} ${count}`,
           latLng,
         };
         onChange({
@@ -419,7 +424,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           {(
             [
               ["roofline", "Draw roofline"],
-              ["treeShrub", "Tree/Shrub"],
+              ["treeShrub", "Trees & bushes"],
               ["select", "Select"],
             ] as const
           ).map(([id, label]) => (
@@ -448,7 +453,20 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           ) : null}
           {mode === "treeShrub" ? (
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-xs text-muted-foreground">Size:</span>
+              <span className="text-xs text-muted-foreground">Mark:</span>
+              {(["tree", "bush"] as const).map((kind) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  size="sm"
+                  variant={placementKind === kind ? "default" : "outline"}
+                  className="h-7 px-2 text-xs capitalize"
+                  onClick={() => setPlacementKind(kind)}
+                >
+                  {kind}
+                </Button>
+              ))}
+              <span className="ml-2 text-xs text-muted-foreground">Size:</span>
               {TREE_SIZES.map((size) => (
                 <Button
                   key={size}
@@ -520,8 +538,24 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   onChange={(e) => renameActive(e.target.value)}
                 />
                 <span className="font-mono text-xs text-muted-foreground">
-                  {active.lengthFt.toFixed(1)} ft
+                  {billedSegmentLengthFt(active).toFixed(1)} ft
+                  {active.hasPeak ? " (peak 1.5×)" : ""}
                 </span>
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(active.hasPeak)}
+                    onChange={(e) => {
+                      onChange({
+                        ...measurements,
+                        segments: measurements.segments.map((s) =>
+                          s.id === active.id ? { ...s, hasPeak: e.target.checked } : s
+                        ),
+                      });
+                    }}
+                  />
+                  Peak (1.5×)
+                </label>
                 <Button
                   type="button"
                   size="sm"
@@ -540,9 +574,25 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   return (
                     <>
                       <span className="text-sm font-medium">{placement.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {treeShrubSizeLabel(placement.size)}
-                      </span>
+                      {TREE_SIZES.map((size) => (
+                        <Button
+                          key={size}
+                          type="button"
+                          size="sm"
+                          variant={placement.size === size ? "default" : "outline"}
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            onChange({
+                              ...measurements,
+                              placements: measurements.placements.map((x) =>
+                                x.id === placement.id ? { ...x, size } : x
+                              ),
+                            });
+                          }}
+                        >
+                          {treeShrubSizeLabel(size)}
+                        </Button>
+                      ))}
                       <Button
                         type="button"
                         size="sm"

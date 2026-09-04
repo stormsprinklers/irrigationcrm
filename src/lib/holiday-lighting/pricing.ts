@@ -1,19 +1,20 @@
 import type {
   HolidayLightingCatalog,
-  HolidayMeasurementSegment,
   HolidayMeasurements,
   HolidayQuoteSelections,
 } from "./types";
+import { findPlacementCatalogItem } from "./types";
 import { billedSegmentLengthFt } from "./pitch-match";
-import { billedStrandLengthFt, segmentIdsInAnyStrand } from "./strands";
 
-export type PriceLookup = Map<string, { id: string; name: string; unitPrice: number }>;
+export type PriceLookup = Map<
+  string,
+  { id: string; name: string; unitPrice: number; unitCost: number | null }
+>;
 
 export type HolidayPricedLine = {
   key: string;
   name: string;
   description: string;
-  /** Staff-only breakdown. */
   staffDetail: string;
   purchaseTotal: number;
   leaseTotal: number;
@@ -22,11 +23,19 @@ export type HolidayPricedLine = {
 
 export type HolidayPricingResult = {
   lines: HolidayPricedLine[];
+  billedLengthFt: number;
+  placementCount: number;
+  year1Total: number;
+  reinstallTotal: number;
+  leaseTotal: number;
+  permanentTotal: number;
+  year1MinimumApplied: boolean;
+  permanentMinimumApplied: boolean;
+  /** Alias of year1Total for older UI. */
+  purchaseTotal: number;
   purchaseSubtotal: number;
   leaseSubtotal: number;
   marginPct: number;
-  purchaseTotal: number;
-  leaseTotal: number;
 };
 
 function money(n: number) {
@@ -38,55 +47,18 @@ function lookup(prices: PriceLookup, sku: string | undefined) {
   return prices.get(sku) ?? null;
 }
 
-function priceRooflineLength(params: {
-  catalog: HolidayLightingCatalog;
-  selections: HolidayQuoteSelections;
-  prices: PriceLookup;
-  styleKey: string;
-  lengthFt: number;
-  key: string;
-  name: string;
-  description: string;
-  staffDetail: string;
-}): HolidayPricedLine | null {
-  const { catalog, selections, prices, styleKey, lengthFt, key, name, description, staffDetail } =
-    params;
-  if (lengthFt <= 0) return null;
-  const style =
-    catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
-  if (!style) return null;
-
-  const parts = lookup(prices, style.partsSku);
-  const install = lookup(prices, style.installSku);
-  const leaseFt = lookup(prices, style.leaseSku);
-  const partsRate = parts?.unitPrice ?? 5;
-  const installRate = install?.unitPrice ?? 7;
-  const leaseRate = leaseFt?.unitPrice ?? partsRate + installRate * 0.65;
-  const purchase = lengthFt * (partsRate + installRate);
-  const lease = lengthFt * leaseRate;
-
-  return {
-    key,
-    name: `${style.label} ${name}`,
-    description,
-    staffDetail: `${staffDetail} × ($${partsRate.toFixed(2)} parts + $${installRate.toFixed(2)} install)`,
-    purchaseTotal: money(purchase),
-    leaseTotal: money(lease),
-    priceBookItemId: parts?.id ?? install?.id ?? null,
-  };
+function rate(prices: PriceLookup, sku: string | undefined) {
+  return lookup(prices, sku)?.unitPrice ?? 0;
 }
 
-function segmentPitchNote(segment: HolidayMeasurementSegment, lengthFt: number): string {
-  if (segment.flat) return " · flat (plan length)";
-  if (segment.pitchDeg == null) return "";
-  if (segment.pitchDegRight != null) {
-    return ` · ${segment.pitchDeg}°/${segment.pitchDegRight}° from plan ${Number(
-      segment.horizontalLengthFt ?? lengthFt
-    ).toFixed(1)} ft`;
-  }
-  return ` · ${segment.pitchDeg}° from plan ${Number(
-    segment.horizontalLengthFt ?? lengthFt
-  ).toFixed(1)} ft`;
+function itemId(prices: PriceLookup, sku: string | undefined) {
+  return lookup(prices, sku)?.id ?? null;
+}
+
+export function totalBilledLengthFt(measurements: HolidayMeasurements) {
+  return money(
+    measurements.segments.reduce((sum, segment) => sum + billedSegmentLengthFt(segment), 0)
+  );
 }
 
 export function computeHolidayQuotePricing(params: {
@@ -96,126 +68,173 @@ export function computeHolidayQuotePricing(params: {
   prices: PriceLookup;
 }): HolidayPricingResult {
   const { catalog, measurements, selections, prices } = params;
+  const style =
+    catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
+    catalog.lightStyles[0];
+  const defaults = catalog.quoteDefaults;
+  const billedLengthFt = totalBilledLengthFt(measurements);
+
+  const year1Rate = rate(prices, style?.temporaryYear1Sku);
+  const reinstallRate = rate(prices, style?.temporaryReinstallSku);
+  const leaseRate = rate(prices, style?.leaseSku);
+  const permanentRate = rate(prices, style?.permanentSku);
+
+  let placementsYear1 = 0;
+  let placementsReinstall = 0;
+  let placementsLease = 0;
+  let placementsPermanent = 0;
   const lines: HolidayPricedLine[] = [];
-  const groupedIds = segmentIdsInAnyStrand(measurements);
-
-  for (const strand of measurements.strands ?? []) {
-    const members = strand.segmentIds
-      .map((id) => measurements.segments.find((s) => s.id === id))
-      .filter((s): s is HolidayMeasurementSegment => !!s);
-    if (!members.length) continue;
-
-    const lengthFt = billedStrandLengthFt(strand, measurements.segments);
-    const styleKey =
-      strand.lightStyleKey ??
-      members[0]?.lightStyleKey ??
-      selections.defaultLightStyleKey;
-    const memberDetail = members
-      .map((m) => `${m.label} ${billedSegmentLengthFt(m).toFixed(1)} ft`)
-      .join("; ");
-
-    const line = priceRooflineLength({
-      catalog,
-      selections,
-      prices,
-      styleKey,
-      lengthFt,
-      key: strand.id,
-      name: `strand — ${strand.label}`,
-      description: `Approx. ${Math.round(lengthFt)} linear ft (${members.length} segments)`,
-      staffDetail: `${lengthFt.toFixed(1)} ft strand [${memberDetail}]`,
-    });
-    if (line) lines.push(line);
-  }
 
   for (const segment of measurements.segments) {
-    if (groupedIds.has(segment.id)) continue;
-
-    const styleKey = segment.lightStyleKey ?? selections.defaultLightStyleKey;
     const lengthFt = billedSegmentLengthFt(segment);
-
-    if (segment.kind === "peak") {
-      const style =
-        catalog.lightStyles.find((s) => s.key === styleKey) ?? catalog.lightStyles[0];
-      if (!style) continue;
-      const peak = lookup(prices, catalog.peakSku);
-      const peakLease = lookup(prices, catalog.peakLeaseSku);
-      const purchase = peak?.unitPrice ?? 175;
-      const lease = peakLease?.unitPrice ?? purchase * 0.7;
-      lines.push({
-        key: segment.id,
-        name: `${style.label} peak / dormer — ${segment.label}`,
-        description: `Accent lighting on ${segment.label}`,
-        staffDetail: `Peak flat rate`,
-        purchaseTotal: money(purchase),
-        leaseTotal: money(lease),
-        priceBookItemId: peak?.id ?? null,
-      });
-      continue;
-    }
-
     if (lengthFt <= 0) continue;
-    const line = priceRooflineLength({
-      catalog,
-      selections,
-      prices,
-      styleKey,
-      lengthFt,
+    const plan = Number(segment.horizontalLengthFt ?? segment.lengthFt) || 0;
+    lines.push({
       key: segment.id,
-      name: `${segment.kind} — ${segment.label}`,
-      description: `Approx. ${Math.round(lengthFt)} linear ft`,
-      staffDetail: `${lengthFt.toFixed(1)} ft${segmentPitchNote(segment, lengthFt)}`,
+      name: segment.label,
+      description: `${Math.round(lengthFt)} ft${segment.hasPeak ? " including peak" : ""}`,
+      staffDetail: segment.hasPeak
+        ? `${plan.toFixed(1)} ft × 1.5 peak = ${lengthFt.toFixed(1)} ft`
+        : `${lengthFt.toFixed(1)} ft`,
+      purchaseTotal: money(lengthFt * year1Rate),
+      leaseTotal: money(lengthFt * leaseRate),
+      priceBookItemId: itemId(prices, style?.temporaryYear1Sku),
     });
-    if (line) lines.push(line);
   }
 
   for (const placement of measurements.placements) {
-    const catalogItem =
-      catalog.placements.find(
-        (p) => p.kind === placement.kind && p.size === placement.size
-      ) ??
-      catalog.placements.find((p) => p.kind === placement.kind) ??
-      null;
+    const catalogItem = findPlacementCatalogItem(catalog, placement);
     if (!catalogItem) continue;
     const item = lookup(prices, catalogItem.sku);
     const leaseItem = lookup(prices, catalogItem.leaseSku);
-    const purchase = item?.unitPrice ?? 0;
-    const lease = leaseItem?.unitPrice ?? purchase * 0.7;
+    const amount = item?.unitPrice ?? 0;
+    const leaseAmount =
+      leaseItem && leaseItem.unitPrice > 0 ? leaseItem.unitPrice : amount;
+    placementsYear1 += amount;
+    placementsReinstall += amount;
+    placementsLease += leaseAmount;
+    placementsPermanent += amount;
     lines.push({
       key: placement.id,
       name: `${catalogItem.label} — ${placement.label}`,
       description: placement.label,
-      staffDetail: `Each @ $${purchase.toFixed(2)}`,
-      purchaseTotal: money(purchase),
-      leaseTotal: money(lease),
+      staffDetail: `Each @ $${amount.toFixed(2)}`,
+      purchaseTotal: money(amount),
+      leaseTotal: money(leaseAmount),
       priceBookItemId: item?.id ?? null,
     });
   }
 
-  const purchaseSubtotal = money(lines.reduce((s, l) => s + l.purchaseTotal, 0));
-  const leaseSubtotal = money(lines.reduce((s, l) => s + l.leaseTotal, 0));
-  const marginPct = selections.marginPct;
-  const factor = 1 + marginPct / 100;
+  const year1BeforeMin = money(billedLengthFt * year1Rate + placementsYear1);
+  const reinstallTotal = money(billedLengthFt * reinstallRate + placementsReinstall);
+  const leaseTotal = money(billedLengthFt * leaseRate + placementsLease);
+  const permanentBeforeMin = money(billedLengthFt * permanentRate + placementsPermanent);
+  const year1Min = defaults?.temporaryYear1Minimum ?? 0;
+  const permMin = defaults?.permanentYear1Minimum ?? 0;
+  const year1Total = money(Math.max(year1BeforeMin, year1Min));
+  const permanentTotal = money(Math.max(permanentBeforeMin, permMin));
 
   return {
     lines,
-    purchaseSubtotal,
-    leaseSubtotal,
-    marginPct,
-    purchaseTotal: money(purchaseSubtotal * factor),
-    leaseTotal: money(leaseSubtotal * factor),
+    billedLengthFt,
+    placementCount: measurements.placements.length,
+    year1Total,
+    reinstallTotal,
+    leaseTotal,
+    permanentTotal,
+    year1MinimumApplied: year1Total > year1BeforeMin,
+    permanentMinimumApplied: permanentTotal > permanentBeforeMin,
+    purchaseTotal: year1Total,
+    purchaseSubtotal: year1BeforeMin,
+    leaseSubtotal: leaseTotal,
+    marginPct: 0,
   };
 }
 
-/** Apply margin proportionally so customer line totals sum to option total. */
+/** @deprecated Customer quotes use a single flat total per option. */
 export function applyMarginToLines(
   lines: HolidayPricedLine[],
   field: "purchaseTotal" | "leaseTotal",
-  marginPct: number
+  _marginPct: number
 ): Array<HolidayPricedLine & { customerTotal: number }> {
-  const factor = 1 + marginPct / 100;
   return lines.map((line) => ({
     ...line,
-    customerTotal: money(line[field] * factor),
+    customerTotal: money(line[field]),
   }));
+}
+
+export function holidayOptionSummary(params: {
+  billedLengthFt: number;
+  placementCount: number;
+  styleLabel: string;
+}) {
+  const feet = `${Math.round(params.billedLengthFt)} ft of ${params.styleLabel} roofline lighting`;
+  const plants =
+    params.placementCount > 0
+      ? ` plus ${params.placementCount} tree${params.placementCount === 1 ? "" : "s"}/bush${params.placementCount === 1 ? "" : "es"}`
+      : "";
+  return `${feet}${plants}.`;
+}
+
+function formatHolidayMoney(n: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+export const HOLIDAY_BUY_DETAIL =
+  "Purchasing lights front-loads the cost, but allows you to own the lights so you pay less in future years. This includes installation and take-down as well as any bulb replacements during the season.";
+
+export const HOLIDAY_LEASE_DETAIL =
+  "Leasing lights is less up front cost but can be more costly long-term. This lets you change the colors and design each year to fit your preferences. This includes installation and take-down as well as any bulb replacements during the season.";
+
+export const HOLIDAY_PERMANENT_DETAIL =
+  "Permanent Lights are the most costly up-front, but then you have them year-round: change the color with an app to show support for your favorite team, raise awareness for a cause you care about, and celebrate holidays like Halloween, Thanksgiving, Valentine's Day, and 4th of July with festive lights — not just Christmas.";
+
+/** @deprecated Use HOLIDAY_LEASE_DETAIL. */
+export const HOLIDAY_LEASE_INCLUDED = HOLIDAY_LEASE_DETAIL;
+
+function packageDescription(tagline: string, detail: string, summary: string) {
+  return `${tagline}\n\n${detail} ${summary}`.trim();
+}
+
+export function holidayCustomerPackages(params: {
+  year1Total: number;
+  reinstallTotal: number;
+  leaseTotal: number;
+  permanentTotal: number;
+  summary: string;
+}) {
+  const futureYears = `Future Years: ${formatHolidayMoney(params.reinstallTotal)}`;
+  return [
+    {
+      letter: "A" as const,
+      label: "Buy Lights",
+      tagline: futureYears,
+      popular: false,
+      description: packageDescription(futureYears, HOLIDAY_BUY_DETAIL, params.summary),
+      total: params.year1Total,
+      sortOrder: 0,
+    },
+    {
+      letter: "B" as const,
+      label: "Lease Lights",
+      tagline: "No Commitments!",
+      popular: true,
+      description: packageDescription("No Commitments!", HOLIDAY_LEASE_DETAIL, params.summary),
+      total: params.leaseTotal,
+      sortOrder: 1,
+    },
+    {
+      letter: "C" as const,
+      label: "Permanent Lights",
+      tagline: "Fit Your Vibe Year-Round",
+      popular: false,
+      description: packageDescription(
+        "Fit Your Vibe Year-Round",
+        HOLIDAY_PERMANENT_DETAIL,
+        params.summary
+      ),
+      total: params.permanentTotal,
+      sortOrder: 2,
+    },
+  ];
 }

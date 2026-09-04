@@ -5,7 +5,8 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { assertHolidayLightingEnabled } from "@/lib/holiday-lighting/catalog";
+import { assertHolidayLightingEnabled, loadHolidayCatalog } from "@/lib/holiday-lighting/catalog";
+import { ensureHolidayPriceBookItems } from "@/lib/holiday-lighting/price-book";
 import {
   EMPTY_HOLIDAY_MEASUREMENTS,
   applyHolidayCatalogPolicy,
@@ -13,7 +14,6 @@ import {
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "@/lib/holiday-lighting/types";
-import { loadHolidayCatalog } from "@/lib/holiday-lighting/catalog";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const catalog = await loadHolidayCatalog(user.companyId);
+    await ensureHolidayPriceBookItems(user.companyId, catalog);
     const quote = await prisma.holidayLightingQuote.create({
       data: {
         companyId: user.companyId,

@@ -100,7 +100,7 @@ export function buildHolidayStrandMap(params: {
   address?: string;
 }): HolidayStrandMap {
   const { measurements, selections, catalog, pricedLines, address } = params;
-  const marginPct = selections.marginPct;
+  const marginPct = selections.marginPct ?? 0;
   const features: HolidayStrandMapFeature[] = [];
   const groupedIds = segmentIdsInAnyStrand(measurements);
   const allPoints: HolidayLatLng[] = [];

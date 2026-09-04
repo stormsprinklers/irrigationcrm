@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 export type PresentOption = {
   id: string;
+  letter?: string | null;
   label: string;
   description: string | null;
   photoUrl: string | null;
@@ -15,6 +16,8 @@ export type PresentOption = {
   discountTotal?: number;
   tax?: number;
   declinedAt?: string | null;
+  sortOrder?: number;
+  popular?: boolean;
 };
 
 export type PresentLineItem = {
@@ -47,12 +50,72 @@ function approxDescriptionLines(text: string) {
   }, 0);
 }
 
-export function rankPresentOptions<T extends { id: string; total: number; declinedAt?: string | null }>(
-  options: T[]
-) {
-  return [...options]
-    .filter((option) => !option.declinedAt)
-    .sort((a, b) => b.total - a.total || 0);
+function splitPresentCopy(description: string | null) {
+  const text = description?.trim() ?? "";
+  if (!text) return { tagline: null as string | null, detail: "" };
+  const i = text.indexOf("\n\n");
+  if (i === -1) return { tagline: null as string | null, detail: text };
+  const tagline = text.slice(0, i).trim();
+  const detail = text.slice(i + 2).trim();
+  if (!tagline || !detail) return { tagline: null as string | null, detail: text };
+  return { tagline, detail };
+}
+
+function isHolidayPackageLabel(label: string) {
+  return /^(Buy Lights|Lease Lights|Permanent Lights)$/i.test(label.trim());
+}
+
+export function isMostPopularPresentOption(option: {
+  popular?: boolean;
+  label: string;
+  letter?: string | null;
+}) {
+  if (option.popular) return true;
+  return option.label.trim() === "Lease Lights";
+}
+
+export function presentCardsOrder(
+  options: Array<{ popular?: boolean; label: string }>
+): "price" | "saved" {
+  if (options.some((option) => option.popular || isHolidayPackageLabel(option.label))) {
+    return "saved";
+  }
+  return "price";
+}
+
+export function rankPresentOptions<
+  T extends {
+    id: string;
+    total: number;
+    declinedAt?: string | null;
+    sortOrder?: number;
+    popular?: boolean;
+    label?: string;
+  },
+>(options: T[], order: "price" | "saved" = "price") {
+  const active = [...options].filter((option) => !option.declinedAt);
+  if (order === "saved") {
+    return active.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || 0);
+  }
+  return active.sort((a, b) => b.total - a.total || 0);
+}
+
+export function defaultPresentOptionId<
+  T extends {
+    id: string;
+    total: number;
+    declinedAt?: string | null;
+    sortOrder?: number;
+    popular?: boolean;
+    label: string;
+    letter?: string | null;
+  },
+>(options: T[]) {
+  const order = presentCardsOrder(options);
+  const ranked = rankPresentOptions(options, order);
+  return (
+    ranked.find((option) => isMostPopularPresentOption(option))?.id ?? ranked[0]?.id ?? null
+  );
 }
 
 function optionLineItems(optionId: string, lineItems: PresentLineItem[]) {
@@ -113,15 +176,21 @@ export function EstimateOptionPresentCards({
   onRename?: (optionId: string, label: string) => void;
   decidingId?: string | null;
 }) {
-  const ranked = useMemo(() => rankPresentOptions(options), [options]);
+  const order = useMemo(() => presentCardsOrder(options), [options]);
+  const ranked = useMemo(() => rankPresentOptions(options, order), [options, order]);
   const [start, setStart] = useState(0);
-  const [internalSelected, setInternalSelected] = useState<string | null>(ranked[0]?.id ?? null);
+  const [internalSelected, setInternalSelected] = useState<string | null>(
+    defaultPresentOptionId(options)
+  );
   const pageSize = 3;
   const visible = ranked.slice(start, start + pageSize);
   const selected = selectedId ?? internalSelected ?? ranked[0]?.id ?? null;
   const selectedOption = ranked.find((option) => option.id === selected) ?? ranked[0] ?? null;
   const clampLines = useMemo(() => {
-    const lines = ranked.map((option) => approxDescriptionLines(option.description ?? ""));
+    const lines = ranked.map((option) => {
+      const { tagline, detail } = splitPresentCopy(option.description ?? "");
+      return approxDescriptionLines(tagline ? tagline : detail);
+    });
     if (!lines.length) return 2;
     return Math.max(1, Math.min(...lines));
   }, [ranked]);
@@ -143,8 +212,14 @@ export function EstimateOptionPresentCards({
     ? optionTotals(selectedOption, selectedItems, selectedDiscountRows)
     : null;
   const selectedDescription = selectedOption?.description?.trim() ?? "";
-  const showFullDescription =
-    Boolean(selectedDescription) && approxDescriptionLines(selectedDescription) > clampLines;
+  const selectedCopy = splitPresentCopy(selectedDescription);
+  const showFullDescription = selectedCopy.tagline
+    ? Boolean(selectedCopy.detail)
+    : Boolean(selectedCopy.detail) && approxDescriptionLines(selectedCopy.detail) > clampLines;
+  const hideDuplicateLineItems =
+    Boolean(selectedCopy.tagline) &&
+    selectedItems.length === 1 &&
+    selectedItems[0]?.name === selectedOption?.label;
 
   return (
     <div className="space-y-4">
@@ -157,6 +232,10 @@ export function EstimateOptionPresentCards({
         <div className="flex items-stretch gap-4">
           {visible.map((option) => {
             const isSelected = option.id === selected;
+            const popular = isMostPopularPresentOption(option);
+            const { tagline, detail } = splitPresentCopy(option.description ?? "");
+            const cardCopy = tagline ?? detail;
+            const hasMore = Boolean(tagline ? detail : approxDescriptionLines(detail) > clampLines);
             return (
               <article
                 key={option.id}
@@ -170,13 +249,22 @@ export function EstimateOptionPresentCards({
                   }
                 }}
                 className={cn(
-                  "flex min-w-[240px] max-w-sm flex-1 cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-shadow",
+                  "relative flex min-w-[240px] max-w-sm flex-1 cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-shadow",
                   isSelected
                     ? "border-[#4C9BC8] ring-2 ring-[#4C9BC8]"
-                    : "border-border hover:border-[#4C9BC8]/50"
+                    : popular
+                      ? "border-amber-400 hover:border-amber-500"
+                      : "border-border hover:border-[#4C9BC8]/50"
                 )}
               >
-                <div className="flex items-center justify-between gap-2 px-4 pt-4">
+                {popular ? (
+                  <div className="px-4 pt-3">
+                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                      Most popular
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex items-start justify-between gap-3 px-4 pt-3">
                   {canRename ? (
                     <input
                       className="w-full bg-transparent text-lg font-semibold outline-none"
@@ -195,7 +283,11 @@ export function EstimateOptionPresentCards({
                   ) : (
                     <h3 className="text-lg font-semibold">{option.label}</h3>
                   )}
+                  <p className="shrink-0 text-lg font-semibold">{formatCurrency(option.total)}</p>
                 </div>
+                {tagline ? (
+                  <p className="px-4 pt-1 text-sm font-medium text-foreground">{tagline}</p>
+                ) : null}
                 <div className="relative mt-3 h-40 w-full overflow-hidden bg-muted">
                   {option.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -210,7 +302,7 @@ export function EstimateOptionPresentCards({
                   ) : null}
                 </div>
                 <div className="flex flex-1 flex-col px-4 py-3">
-                  {option.description ? (
+                  {!tagline && cardCopy ? (
                     <p
                       className="overflow-hidden whitespace-pre-wrap text-sm text-muted-foreground"
                       style={{
@@ -219,20 +311,19 @@ export function EstimateOptionPresentCards({
                         WebkitLineClamp: clampLines,
                       }}
                     >
-                      {option.description}
+                      {cardCopy}
                     </p>
-                  ) : (
+                  ) : !tagline ? (
                     <p className="text-sm text-muted-foreground">&nbsp;</p>
-                  )}
-                  {option.description && approxDescriptionLines(option.description) > clampLines ? (
-                    <span className="mt-1 inline-flex items-center gap-0.5 text-sm font-medium text-[#4C9BC8]">
-                      … More
+                  ) : null}
+                  {hasMore ? (
+                    <span className="inline-flex items-center gap-0.5 text-sm font-medium text-[#4C9BC8]">
+                      {isSelected ? "Details below" : "More"}
                       <ChevronDown className="h-4 w-4" />
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-auto flex items-center justify-between gap-2 px-4 pb-4">
-                  <p className="font-semibold">{formatCurrency(option.total)} total</p>
+                <div className="mt-auto flex items-center justify-end gap-2 px-4 pb-4">
                   <span className="text-sm font-medium text-[#4C9BC8]">
                     {isSelected ? "Selected" : "View option"}
                   </span>
@@ -246,9 +337,14 @@ export function EstimateOptionPresentCards({
       {selectedOption && totals ? (
         <div className="space-y-3 rounded-xl border bg-white px-4 py-4 shadow-sm">
           {showFullDescription ? (
-            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{selectedDescription}</p>
+            <div className="space-y-2">
+              {selectedCopy.tagline ? (
+                <p className="text-sm font-medium">{selectedCopy.tagline}</p>
+              ) : null}
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">{selectedCopy.detail}</p>
+            </div>
           ) : null}
-          {selectedItems.length ? (
+          {hideDuplicateLineItems ? null : selectedItems.length ? (
             <ul className="space-y-3">
               {selectedItems.map((item, index) => (
                 <li key={`${item.name}-${index}`} className="flex justify-between gap-3 text-sm">

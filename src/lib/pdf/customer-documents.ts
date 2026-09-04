@@ -131,6 +131,15 @@ async function renderEstimatePdf(
   }
   pdf.addRule();
 
+  if (view.hasHolidayLighting) {
+    pdf.addMuted(
+      view.holidayPreviewDisclaimer ||
+        "This preview is AI generated and is not a guarantee of exact light placement."
+    );
+    pdf.addMuted("The lighting preview is included on the online proposal.");
+    pdf.addRule();
+  }
+
   const options = view.options ?? [];
   const items = view.lineItems ?? [];
   const discounts = view.discounts ?? [];
@@ -182,7 +191,7 @@ async function renderEstimatePdf(
     pdf.addRule();
   }
 
-  if (view.hasDesign || view.hasHolidayLighting) {
+  if (view.hasDesign && !view.hasHolidayLighting) {
     pdf.addMuted("A design preview is included on the online proposal.");
   }
 

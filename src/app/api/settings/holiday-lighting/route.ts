@@ -4,9 +4,11 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
+import { assertHolidayLightingEnabled } from "@/lib/holiday-lighting/catalog";
 import {
-  assertHolidayLightingEnabled,
-} from "@/lib/holiday-lighting/catalog";
+  ensureHolidayPriceBookItems,
+  updateHolidayPriceBookPrices,
+} from "@/lib/holiday-lighting/price-book";
 import { parseHolidayCatalog } from "@/lib/holiday-lighting/types";
 import { prisma } from "@/lib/prisma";
 
@@ -19,9 +21,11 @@ export async function GET() {
     });
     assertHolidayLightingEnabled(company ?? {});
     const catalog = parseHolidayCatalog(company?.holidayLightingCatalog);
+    const prices = await ensureHolidayPriceBookItems(user.companyId, catalog);
     return NextResponse.json({
       catalog,
       defaults: catalog.quoteDefaults,
+      prices,
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
@@ -50,7 +54,13 @@ export async function PATCH(request: NextRequest) {
       data: { holidayLightingCatalog: catalog },
       select: { holidayLightingCatalog: true },
     });
-    return NextResponse.json({ catalog: parseHolidayCatalog(updated.holidayLightingCatalog) });
+    const parsed = parseHolidayCatalog(updated.holidayLightingCatalog);
+    await ensureHolidayPriceBookItems(user.companyId, parsed);
+    if (Array.isArray(body.prices)) {
+      await updateHolidayPriceBookPrices(user.companyId, body.prices);
+    }
+    const prices = await ensureHolidayPriceBookItems(user.companyId, parsed);
+    return NextResponse.json({ catalog: parsed, prices });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);

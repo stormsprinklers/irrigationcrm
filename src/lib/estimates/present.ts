@@ -246,6 +246,11 @@ export async function prepareEstimatePresentation(params: {
   const usedBlobUrls = new Set<string>();
   const usedTitles = new Set<string>();
   const optionCount = estimate.options.length;
+  const isHolidayQuote =
+    estimate.designExportMetadata &&
+    typeof estimate.designExportMetadata === "object" &&
+    (estimate.designExportMetadata as Record<string, unknown>).source ===
+      "holiday-lighting-quote";
 
   const photoKey = (option: { photoAssetId: string | null; photoUrl: string | null }) =>
     option.photoAssetId || option.photoUrl;
@@ -255,6 +260,7 @@ export async function prepareEstimatePresentation(params: {
     const uniqueItems = distinctiveItemNames(option.id, optionCount, estimate.lineItems);
     const hasPhoto = Boolean(option.photoUrl);
     const duplicatePhoto =
+      !isHolidayQuote &&
       Boolean(photoKey(option)) &&
       ((option.photoAssetId && usedAssetIds.has(option.photoAssetId)) ||
         (option.photoUrl && usedBlobUrls.has(option.photoUrl)));

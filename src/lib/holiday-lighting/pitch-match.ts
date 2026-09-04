@@ -10,6 +10,7 @@ import type {
   StreetViewNormPoint,
   StreetViewRoofTrace,
 } from "@/lib/holiday-lighting/types";
+import { PEAK_LENGTH_MULTIPLIER } from "@/lib/holiday-lighting/types";
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -119,23 +120,16 @@ export function refreshPitchCorrections(
   };
 }
 
-/** Length used for pricing: single slope or sum of gable legs. */
+/** Length used for pricing: satellite plan length, ×1.5 when marked as a peak. */
 export function billedSegmentLengthFt(segment: HolidayMeasurementSegment): number {
-  if (segment.flat) {
-    return Math.max(0, Number(segment.horizontalLengthFt ?? segment.lengthFt) || 0);
-  }
-  const left = Math.max(0, Number(segment.lengthFt) || 0);
-  const right = Math.max(0, Number(segment.lengthFtRight) || 0);
-  if (segment.lengthFtRight != null && segment.pitchDegRight != null) {
-    return Math.round((left + right) * 10) / 10;
-  }
-  return left;
+  const plan = Math.max(0, Number(segment.horizontalLengthFt ?? segment.lengthFt) || 0);
+  const billed = segment.hasPeak ? plan * PEAK_LENGTH_MULTIPLIER : plan;
+  return Math.round(billed * 10) / 10;
 }
 
-/** Pitch match complete: street-view approved, or marked flat. */
+/** Linear measurements are ready once a path is drawn. */
 export function segmentPitchResolved(segment: HolidayMeasurementSegment): boolean {
-  if (segment.flat) return true;
-  return segment.pitchDeg != null;
+  return (segment.path?.length ?? 0) >= 2 || (Number(segment.lengthFt) || 0) > 0;
 }
 
 /** Mark a segment as flat (plan length = billed length). Clears any street-view match. */

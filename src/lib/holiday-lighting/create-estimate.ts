@@ -4,9 +4,10 @@ import { computeEstimateExpiry } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { loadHolidayPriceLookup } from "./catalog";
-import { applyMarginToLines, computeHolidayQuotePricing } from "./pricing";
+import { computeHolidayQuotePricing, holidayCustomerPackages, holidayOptionSummary } from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
 import {
+  HOLIDAY_PREVIEW_DISCLAIMER,
   applyHolidayCatalogPolicy,
   parseHolidayCatalog,
   parseHolidayMeasurements,
@@ -41,16 +42,23 @@ export async function createEstimateFromHolidayQuote(params: {
     prices,
   });
 
-  if (priced.lines.length === 0) {
-    throw new Error("Add measurements or placements before creating an estimate");
+  if (priced.billedLengthFt <= 0 && priced.placementCount <= 0) {
+    throw new Error("Add measurements or trees before creating an estimate");
   }
 
   const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
   const estimateNumber = await allocateEstimateNumber(params.companyId);
-
   const address = [quote.address, quote.city, quote.state, quote.zip]
     .filter(Boolean)
     .join(", ");
+  const style =
+    catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
+    catalog.lightStyles[0];
+  const summary = holidayOptionSummary({
+    billedLengthFt: priced.billedLengthFt,
+    placementCount: priced.placementCount,
+    styleLabel: style?.label ?? "holiday",
+  });
   const strandMap = buildHolidayStrandMap({
     measurements,
     selections,
@@ -74,88 +82,68 @@ export async function createEstimateFromHolidayQuote(params: {
         source: "holiday-lighting-quote",
         quoteId: quote.id,
         previewImageUrl: quote.previewImageUrl,
+        previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
         address,
-        marginPct: selections.marginPct,
+        billedLengthFt: priced.billedLengthFt,
+        year1Total: priced.year1Total,
+        reinstallTotal: priced.reinstallTotal,
+        leaseTotal: priced.leaseTotal,
+        permanentTotal: priced.permanentTotal,
+        installKind: selections.installKind,
+        lightStyleKey: selections.defaultLightStyleKey,
         strandMap,
       },
     },
   });
 
-  const purchaseOption = await prisma.estimateOption.create({
-    data: {
-      estimateId: estimate.id,
-      letter: selections.includeLease ? "A" : null,
-      label: "Purchase",
-      sortOrder: 0,
-    },
+  const packages = holidayCustomerPackages({
+    year1Total: priced.year1Total,
+    reinstallTotal: priced.reinstallTotal,
+    leaseTotal: priced.leaseTotal,
+    permanentTotal: priced.permanentTotal,
+    summary,
   });
 
-  const purchaseLines = applyMarginToLines(priced.lines, "purchaseTotal", priced.marginPct);
-  await prisma.estimateLineItem.createMany({
-    data: purchaseLines.map((line, index) => ({
-      estimateId: estimate.id,
-      optionId: purchaseOption.id,
-      priceBookItemId: line.priceBookItemId ?? null,
-      name: line.name,
-      description: line.description,
-      quantity: 1,
-      unitPrice: line.customerTotal,
-      unit: "each",
-      total: line.customerTotal,
-      sortOrder: index,
-    })),
-  });
-
-  let leaseOptionId: string | null = null;
-  let leaseTotal = 0;
-  if (selections.includeLease) {
-    const leaseOption = await prisma.estimateOption.create({
+  const createdOptions = [];
+  for (const pack of packages) {
+    const option = await prisma.estimateOption.create({
       data: {
         estimateId: estimate.id,
-        letter: "B",
-        label: "Lease (season)",
-        sortOrder: 1,
+        letter: pack.letter,
+        label: pack.label,
+        description: pack.description,
+        sortOrder: pack.sortOrder,
+        subtotal: pack.total,
+        total: pack.total,
+        photoUrl: quote.previewImageUrl,
       },
     });
-    leaseOptionId = leaseOption.id;
-    const leaseLines = applyMarginToLines(priced.lines, "leaseTotal", priced.marginPct);
-    leaseTotal = leaseLines.reduce((s, l) => s + l.customerTotal, 0);
-    await prisma.estimateLineItem.createMany({
-      data: leaseLines.map((line, index) => ({
+    await prisma.estimateLineItem.create({
+      data: {
         estimateId: estimate.id,
-        optionId: leaseOption.id,
-        priceBookItemId: line.priceBookItemId ?? null,
-        name: line.name,
-        description: `${line.description} · Seasonal lease`,
+        optionId: option.id,
+        name: pack.label,
+        description: pack.tagline,
         quantity: 1,
-        unitPrice: line.customerTotal,
+        unitPrice: pack.total,
         unit: "each",
-        total: line.customerTotal,
-        sortOrder: index,
-      })),
+        total: pack.total,
+        sortOrder: 0,
+      },
     });
+    createdOptions.push({ ...pack, id: option.id });
   }
 
-  const purchaseTotal = purchaseLines.reduce((s, l) => s + l.customerTotal, 0);
-
-  await prisma.estimateOption.update({
-    where: { id: purchaseOption.id },
-    data: { subtotal: purchaseTotal, total: purchaseTotal },
-  });
-  if (leaseOptionId) {
-    await prisma.estimateOption.update({
-      where: { id: leaseOptionId },
-      data: { subtotal: leaseTotal, total: leaseTotal },
-    });
-  }
+  const selected = createdOptions.find((o) => o.letter === "B") ?? createdOptions[0];
+  const selectedTotal = selected?.total ?? priced.leaseTotal;
 
   await prisma.estimate.update({
     where: { id: estimate.id },
     data: {
-      selectedOptionId: purchaseOption.id,
-      subtotal: purchaseTotal,
-      total: purchaseTotal,
-      premiumOptionTotal: selections.includeLease ? leaseTotal : null,
+      selectedOptionId: selected?.id ?? createdOptions[0]?.id,
+      subtotal: selectedTotal,
+      total: selectedTotal,
+      premiumOptionTotal: priced.permanentTotal,
     },
   });
 
@@ -170,7 +158,7 @@ export async function createEstimateFromHolidayQuote(params: {
         },
       });
     } catch {
-      // Attachment schema may require extra fields — preview still lives on designExportMetadata.
+      // Preview still lives on designExportMetadata.
     }
   }
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { EstimateOptionPresentCards, rankPresentOptions } from "@/components/estimates/EstimateOptionPresentCards";
+import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
 
 type EstimateLike = {
   id: string;
@@ -13,6 +13,7 @@ type EstimateLike = {
   selectedOptionId?: string | null;
   options: Array<{
     id: string;
+    letter?: string | null;
     label: string;
     description: string | null;
     photoUrl: string | null;
@@ -20,6 +21,8 @@ type EstimateLike = {
     subtotal?: number;
     discountTotal?: number;
     declinedAt?: string | null;
+    sortOrder?: number;
+    popular?: boolean;
   }>;
   lineItems: Array<{
     optionId?: string | null;
@@ -67,10 +70,10 @@ export function EstimatePresentMode({
         const data = (await res.json().catch(() => ({}))) as EstimateLike & { error?: string };
         if (!res.ok) throw new Error(data.error ?? "Could not prepare presentation");
         if (!cancelled) {
-          const highestId = rankPresentOptions(data.options ?? [])[0]?.id ?? null;
+          const defaultId = defaultPresentOptionId(data.options ?? []);
           setEstimate({
             ...data,
-            selectedOptionId: highestId ?? data.selectedOptionId ?? null,
+            selectedOptionId: defaultId ?? data.selectedOptionId ?? null,
           });
         }
       })
@@ -204,7 +207,7 @@ export function EstimatePresentMode({
             discounts={estimate.discounts}
             canDecide={estimate.status !== "APPROVED" && estimate.status !== "CONVERTED"}
             canRename={estimate.status !== "CONVERTED"}
-            selectedId={estimate.selectedOptionId ?? rankPresentOptions(estimate.options)[0]?.id ?? null}
+            selectedId={estimate.selectedOptionId ?? defaultPresentOptionId(estimate.options)}
             onSelect={(optionId) => {
               setEstimate((prev) => (prev ? { ...prev, selectedOptionId: optionId } : prev));
             }}

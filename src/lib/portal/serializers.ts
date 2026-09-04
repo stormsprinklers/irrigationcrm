@@ -1,5 +1,6 @@
 import type { VisitStatus } from "@prisma/client";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
+import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { toNumber } from "@/lib/visits/totals";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
@@ -177,6 +178,12 @@ export function serializePortalEstimate(estimate: {
   const holidayStrandMap = holidayStrandMapFromMetadata(meta);
   const holidayPreviewImageUrl =
     typeof meta?.previewImageUrl === "string" ? meta.previewImageUrl : null;
+  const holidayPreviewDisclaimer =
+    typeof meta?.previewDisclaimer === "string"
+      ? meta.previewDisclaimer
+      : holidayPreviewImageUrl
+        ? HOLIDAY_PREVIEW_DISCLAIMER
+        : null;
   const hasHolidayLighting = Boolean(holidayStrandMap || holidayPreviewImageUrl);
   const optionCount = estimate.options?.length ?? 0;
   const options = (estimate.options ?? []).map((option) => {
@@ -191,6 +198,7 @@ export function serializePortalEstimate(estimate: {
       photoUrl: estimateOptionPhotoUrl(option.photoUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
+      popular: hasHolidayLighting && (option.letter === "B" || option.label === "Lease Lights"),
       subtotal: toNumber(option.subtotal as never),
       discountTotal: toNumber(option.discountTotal as never),
       total: toNumber(option.total as never),
@@ -254,6 +262,7 @@ export function serializePortalEstimate(estimate: {
     hasHolidayLighting,
     holidayStrandMap,
     holidayPreviewImageUrl,
+    holidayPreviewDisclaimer,
     designProjectId: estimate.designProjectId ?? null,
     premiumOptionTotal:
       estimate.premiumOptionTotal != null

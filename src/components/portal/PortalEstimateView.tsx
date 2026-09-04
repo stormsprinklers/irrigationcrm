@@ -6,11 +6,9 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
-import { EstimateOptionPresentCards, rankPresentOptions } from "@/components/estimates/EstimateOptionPresentCards";
+import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
-import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
 import { PortalShell } from "./PortalShell";
-import type { HolidayStrandMap } from "@/lib/holiday-lighting/strand-map";
 
 type LineItem = {
   optionId?: string | null;
@@ -44,17 +42,20 @@ type Estimate = {
   depositRequired: boolean;
   hasDesign: boolean;
   hasHolidayLighting?: boolean;
-  holidayStrandMap?: HolidayStrandMap | null;
   holidayPreviewImageUrl?: string | null;
+  holidayPreviewDisclaimer?: string | null;
   premiumOptionTotal: number | null;
   warrantyText?: string | null;
   options: Array<{
     id: string;
+    letter?: string | null;
     label: string;
     displayNumber: string;
     description: string | null;
     photoUrl: string | null;
     declinedAt?: string | null;
+    sortOrder?: number;
+    popular?: boolean;
     subtotal: number;
     discountTotal: number;
     total: number;
@@ -141,15 +142,15 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         setEstimate(estData.estimate);
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
-        const highestId = rankPresentOptions(estData.estimate.options ?? [])[0]?.id ?? null;
+        const defaultId = defaultPresentOptionId(estData.estimate.options ?? []);
         const alreadyChosen =
           estData.estimate.status === "APPROVED" ||
           estData.estimate.status === "CONVERTED" ||
           Boolean(estData.estimate.signedAt);
         setSelectedOptionId(
           alreadyChosen
-            ? estData.estimate.selectedOptionId ?? highestId
-            : highestId
+            ? estData.estimate.selectedOptionId ?? defaultId
+            : defaultId
         );
 
         if (estData.estimate?.hasDesign) {
@@ -372,6 +373,24 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
           ) : null}
         </div>
 
+        {estimate.holidayPreviewImageUrl ? (
+          <section className="space-y-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                blobProxyUrl(estimate.holidayPreviewImageUrl) ??
+                estimate.holidayPreviewImageUrl
+              }
+              alt="Lighting preview"
+              className="w-full rounded-lg border border-border object-cover"
+            />
+            <p className="text-xs text-muted-foreground">
+              {estimate.holidayPreviewDisclaimer ??
+                "This preview is AI generated and is not a guarantee of exact light placement."}
+            </p>
+          </section>
+        ) : null}
+
         {(tech || estimate.visit?.startAt) && (
           <section className="rounded-lg border bg-white p-4">
             <div className="flex items-start gap-3">
@@ -419,39 +438,6 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
               Click each zone to see sprinkler head locations.
             </p>
             <DesignZoneViewer snapshot={designSnapshot as never} />
-          </section>
-        ) : null}
-
-        {estimate.hasHolidayLighting ? (
-          <section className="space-y-3">
-            <div>
-              <h2 className="text-sm font-medium">Holiday lighting layout</h2>
-              <p className="text-xs text-muted-foreground">
-                Color-coded strands match the estimate options below.
-              </p>
-            </div>
-            {estimate.holidayPreviewImageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={
-                  blobProxyUrl(estimate.holidayPreviewImageUrl) ??
-                  estimate.holidayPreviewImageUrl
-                }
-                alt="Lighting preview"
-                className="w-full rounded-lg border border-border object-cover"
-              />
-            ) : null}
-            {estimate.holidayStrandMap ? (
-              <HolidayStrandMapViewer
-                map={estimate.holidayStrandMap}
-                mode="customer"
-                priceField={
-                  activeOption?.label?.toLowerCase().includes("lease")
-                    ? "leaseTotal"
-                    : "purchaseTotal"
-                }
-              />
-            ) : null}
           </section>
         ) : null}
 
