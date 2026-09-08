@@ -80,13 +80,14 @@ export function zonedWallTimeToUtc(
   return new Date(utcMs);
 }
 
-export function startOfZonedDay(date: Date, timeZone: string): Date {
-  const parts = getZonedParts(date, timeZone);
-  return zonedWallTimeToUtc(timeZone, parts.year, parts.month, parts.day, 0, 0, 0);
+export function startOfZonedDay(date: Date, timeZone?: string | null): Date {
+  const tz = resolveNotificationTimezone(timeZone);
+  const parts = getZonedParts(date, tz);
+  return zonedWallTimeToUtc(tz, parts.year, parts.month, parts.day, 0, 0, 0);
 }
 
 /** Add whole calendar days in the given timezone (DST-safe). */
-export function addZonedDays(date: Date, days: number, timeZone: string): Date {
+export function addZonedDays(date: Date, days: number, timeZone?: string | null): Date {
   return addZonedCalendarDays(date, days, timeZone, { keepTime: false });
 }
 
@@ -97,14 +98,15 @@ export function addZonedDays(date: Date, days: number, timeZone: string): Date {
 export function addZonedCalendarDays(
   date: Date,
   days: number,
-  timeZone: string,
+  timeZone?: string | null,
   options: { keepTime?: boolean } = {}
 ): Date {
-  const parts = getZonedParts(date, timeZone);
+  const tz = resolveNotificationTimezone(timeZone);
+  const parts = getZonedParts(date, tz);
   const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
   const keepTime = options.keepTime !== false;
   return zonedWallTimeToUtc(
-    timeZone,
+    tz,
     shifted.getUTCFullYear(),
     shifted.getUTCMonth() + 1,
     shifted.getUTCDate(),

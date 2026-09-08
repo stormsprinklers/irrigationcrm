@@ -537,7 +537,7 @@ export async function processDripSends() {
       });
     } else {
       const nextSendAt = clampToAutomatedSendWindow(
-        addZonedCalendarDays(now, nextStep.delayDays ?? 0, companyTz ?? "America/Denver", {
+        addZonedCalendarDays(now, nextStep.delayDays ?? 0, companyTz, {
           keepTime: true,
         }),
         companyTz

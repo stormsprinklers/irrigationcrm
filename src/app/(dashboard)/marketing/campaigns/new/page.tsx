@@ -9,13 +9,16 @@ export default function NewMarketingCampaignPage() {
   const router = useRouter();
 
   return (
-    <ContentArea className="max-w-6xl">
+    <ContentArea className="flex h-full max-w-none flex-col overflow-y-auto">
       <PageHeader
+        className="shrink-0"
         breadcrumb={["Marketing", "Campaigns", "New"]}
         title="New campaign"
         subtitle="Target customers, generate branded emails with AI, and send or schedule."
       />
-      <CampaignWizard onSaved={(id) => router.push(`/marketing/campaigns/${id}`)} />
+      <div className="min-h-0 flex-1">
+        <CampaignWizard onSaved={(id) => router.push(`/marketing/campaigns/${id}`)} />
+      </div>
     </ContentArea>
   );
 }

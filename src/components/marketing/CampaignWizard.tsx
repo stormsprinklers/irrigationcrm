@@ -165,8 +165,10 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       ? ["Setup", "Audience", "Automation", "Review"]
       : ["Setup", "Audience", "Content", "Review"];
 
+  const canvasMode = step === 3 && form.type === "DRIP";
+
   return (
-    <div className="space-y-6">
+    <div className={cn("flex min-h-0 flex-col gap-4", canvasMode && "h-full")}>
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         {stepLabels.map((label, index) => (
           <span key={label} className={step >= index + 1 ? "font-medium text-foreground" : ""}>
@@ -330,7 +332,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       )}
 
       {step === 3 && form.type === "DRIP" && (
-        <div className="space-y-4 rounded-lg border bg-white p-6">
+        <div className="flex h-[calc(100dvh-12rem)] min-h-[36rem] flex-col overflow-hidden rounded-lg border bg-white">
           <CampaignFlowEditor
             nodes={form.flowNodes}
             onChange={(flowNodes) => update("flowNodes", flowNodes)}
@@ -339,7 +341,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
             startAt={form.dripSettings.startAt}
             onSettingsChange={(dripSettings) => update("dripSettings", dripSettings)}
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-border px-4 py-3">
             <Button type="button" variant="outline" onClick={() => setStep(2)}>
               Back
             </Button>

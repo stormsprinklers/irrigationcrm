@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Clock,
   GitBranch,
   Mail,
   MessageSquare,
-  Plus,
   Tag,
   Trash2,
   X,
@@ -18,14 +17,18 @@ import { Input } from "@/components/ui/input";
 import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { IfElseBranchEditor } from "@/components/marketing/IfElseBranchEditor";
+import { BranchFork, PanCanvas, VerticalConnector } from "@/components/flow-canvas/PanCanvas";
 import type { CampaignFlowNodeInput, CampaignFlowNodeType } from "@/lib/marketing/types";
 import {
+  IF_ELSE_MAX_BRANCHES,
   branchPreview,
   defaultIfElseConfig,
+  emptyIfElseBranch,
   ifElseSummary,
   parseIfElseConfig,
   scrubIfElseNextIds,
 } from "@/lib/marketing/if-else";
+import { cn } from "@/lib/utils";
 import {
   parseWaitConfig,
   waitSummary,
@@ -54,28 +57,73 @@ type Props = {
 
 const NODE_META: Record<
   CampaignFlowNodeType,
-  { label: string; icon: typeof Mail; blurb: string }
+  {
+    label: string;
+    icon: typeof Mail;
+    blurb: string;
+    tone: string;
+    iconTone: string;
+  }
 > = {
   TRIGGER: {
     label: "Enrollment trigger",
     icon: Zap,
     blurb: "When someone enters this campaign",
+    tone: "border-amber-200",
+    iconTone: "bg-amber-100 text-amber-700",
   },
-  WAIT: { label: "Wait", icon: Clock, blurb: "Time, date, reply, or email action" },
-  SEND_EMAIL: { label: "Send email", icon: Mail, blurb: "Email this customer" },
-  SEND_SMS: { label: "Send SMS", icon: MessageSquare, blurb: "Text this customer" },
+  WAIT: {
+    label: "Wait",
+    icon: Clock,
+    blurb: "Time, date, reply, or email action",
+    tone: "border-slate-200",
+    iconTone: "bg-slate-100 text-slate-700",
+  },
+  SEND_EMAIL: {
+    label: "Send email",
+    icon: Mail,
+    blurb: "Email this customer",
+    tone: "border-sky-200",
+    iconTone: "bg-sky-100 text-sky-700",
+  },
+  SEND_SMS: {
+    label: "Send SMS",
+    icon: MessageSquare,
+    blurb: "Text this customer",
+    tone: "border-emerald-200",
+    iconTone: "bg-emerald-100 text-emerald-700",
+  },
   ADD_TAG: {
     label: "Add tag",
     icon: Tag,
     blurb: "Apply a tag to this customer",
+    tone: "border-violet-200",
+    iconTone: "bg-violet-100 text-violet-700",
   },
   BRANCH: {
     label: "If/Else",
     icon: GitBranch,
     blurb: "Fork the contact journey through this workflow based on conditions",
+    tone: "border-orange-200",
+    iconTone: "bg-orange-100 text-orange-700",
   },
-  EXIT: { label: "Exit", icon: Trash2, blurb: "Leave the campaign" },
+  EXIT: {
+    label: "Exit",
+    icon: Trash2,
+    blurb: "Leave the campaign",
+    tone: "border-rose-200",
+    iconTone: "bg-rose-100 text-rose-700",
+  },
 };
+
+const ADDABLE_TYPES: CampaignFlowNodeType[] = [
+  "WAIT",
+  "SEND_EMAIL",
+  "SEND_SMS",
+  "ADD_TAG",
+  "BRANCH",
+  "EXIT",
+];
 
 function newId() {
   return `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -117,6 +165,98 @@ function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
   }
 }
 
+type FlowEdge = {
+  key: string;
+  label: string;
+  nextId: string;
+  kind: "linear" | "branch" | "none";
+};
+
+function ensureNodeId(node: CampaignFlowNodeInput): string {
+  return node.id || `tmp-${node.sortOrder}`;
+}
+
+function linearNext(nodes: CampaignFlowNodeInput[], nodeId: string) {
+  const idx = nodes.findIndex((n) => ensureNodeId(n) === nodeId);
+  if (idx < 0) return null;
+  return nodes[idx + 1] ?? null;
+}
+
+function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput[]): FlowEdge[] {
+  if (node.type === "EXIT") return [];
+  if (node.type === "BRANCH") {
+    const parsed = parseIfElseConfig(node.config);
+    return [
+      ...parsed.branches.map((branch, index) => ({
+        key: branch.id,
+        label: branchPreview(branch) || `Branch ${index + 1}`,
+        nextId: branch.nextId,
+        kind: "branch" as const,
+      })),
+      {
+        key: "none",
+        label: "None",
+        nextId: parsed.noneNextId,
+        kind: "none" as const,
+      },
+    ];
+  }
+  const next = linearNext(nodes, ensureNodeId(node));
+  return [
+    {
+      key: "continue",
+      label: "Continue",
+      nextId: next ? ensureNodeId(next) : "",
+      kind: "linear",
+    },
+  ];
+}
+
+function nodeCardSummary(node: CampaignFlowNodeInput, timezone: string) {
+  if (node.type === "WAIT") return waitSummary(node.config, timezone);
+  if (node.type === "BRANCH") return ifElseSummary(node.config);
+  if (node.type === "ADD_TAG") return addTagSummary(node.config);
+  if (node.type === "SEND_EMAIL") {
+    const subject = String(node.config.subject ?? "").trim();
+    return subject || NODE_META.SEND_EMAIL.blurb;
+  }
+  if (node.type === "SEND_SMS") {
+    const body = String(node.config.bodyText ?? "").trim();
+    return body ? body.slice(0, 72) : NODE_META.SEND_SMS.blurb;
+  }
+  if (node.type === "TRIGGER") {
+    const kind = String(node.config.kind ?? "manual_audience");
+    if (kind === "job_completed") return "When a visit is completed";
+    if (kind === "form_no_booking") return "Form filled, no appointment";
+    if (kind === "city") return "Customer city matches";
+    return "When the campaign is activated";
+  }
+  return NODE_META[node.type].blurb;
+}
+
+function AddStepMenu({
+  onPick,
+}: {
+  onPick: (type: CampaignFlowNodeType) => void;
+}) {
+  return (
+    <div className="mt-2 flex max-w-[16rem] flex-wrap justify-center gap-1">
+      {ADDABLE_TYPES.map((type) => (
+        <Button
+          key={type}
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7 px-2 text-xs"
+          onClick={() => onPick(type)}
+        >
+          + {NODE_META[type].label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 export function CampaignFlowEditor({
   nodes,
   onChange,
@@ -125,8 +265,8 @@ export function CampaignFlowEditor({
   startAt,
   onSettingsChange,
 }: Props) {
-  const [expanded, setExpanded] = useState<number | null>(nodes.length ? 0 : null);
-  const [addOpen, setAddOpen] = useState(false);
+  const [selectionId, setSelectionId] = useState<string | null>(nodes[0] ? ensureNodeId(nodes[0]) : null);
+  const [zoom, setZoom] = useState(1);
   const [timezone, setTimezone] = useState("America/Denver");
 
   useEffect(() => {
@@ -140,43 +280,284 @@ export function CampaignFlowEditor({
       .catch(() => {});
   }, []);
 
-  function setConfig(index: number, config: Record<string, unknown>) {
-    onChange(nodes.map((n, i) => (i === index ? { ...n, config } : n)));
+  const byId = useMemo(() => {
+    const map = new Map<string, CampaignFlowNodeInput>();
+    for (const node of nodes) map.set(ensureNodeId(node), node);
+    return map;
+  }, [nodes]);
+
+  const startId =
+    nodes.find((n) => n.type === "TRIGGER") ? ensureNodeId(nodes.find((n) => n.type === "TRIGGER")!) : nodes[0] ? ensureNodeId(nodes[0]) : null;
+
+  const primaryParent = useMemo(() => {
+    const parent = new Map<string, string>();
+    if (!startId) return parent;
+    const queue = [startId];
+    const seen = new Set<string>();
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const node = byId.get(id);
+      if (!node) continue;
+      for (const edge of outgoingEdges(node, nodes)) {
+        if (!edge.nextId || !byId.has(edge.nextId)) continue;
+        if (!parent.has(edge.nextId)) {
+          parent.set(edge.nextId, id);
+          queue.push(edge.nextId);
+        }
+      }
+    }
+    return parent;
+  }, [byId, nodes, startId]);
+
+  const reachable = useMemo(() => {
+    const seen = new Set<string>();
+    const walk = (id: string | null) => {
+      if (!id || seen.has(id)) return;
+      const node = byId.get(id);
+      if (!node) return;
+      seen.add(id);
+      for (const edge of outgoingEdges(node, nodes)) walk(edge.nextId || null);
+    };
+    walk(startId);
+    return seen;
+  }, [byId, nodes, startId]);
+
+  const orphans = nodes.filter((n) => !reachable.has(ensureNodeId(n)));
+  const selected = selectionId ? byId.get(selectionId) ?? null : null;
+
+  function reindex(list: CampaignFlowNodeInput[]) {
+    return list.map((n, i) => ({ ...n, sortOrder: i }));
   }
 
-  function addNode(type: CampaignFlowNodeType) {
-    const next: CampaignFlowNodeInput = {
+  function setConfigFor(id: string, config: Record<string, unknown>) {
+    onChange(nodes.map((n) => (ensureNodeId(n) === id ? { ...n, config } : n)));
+  }
+
+  function removeNode(id: string) {
+    const next = reindex(
+      nodes
+        .filter((n) => ensureNodeId(n) !== id)
+        .map((n) => ({ ...n, config: scrubIfElseNextIds(n.config, id) }))
+    );
+    onChange(next);
+    setSelectionId((prev) => (prev === id ? next[0] ? ensureNodeId(next[0]) : null : prev));
+  }
+
+  function insertAfter(parentId: string, type: CampaignFlowNodeType) {
+    const idx = nodes.findIndex((n) => ensureNodeId(n) === parentId);
+    if (idx < 0) return;
+    const child: CampaignFlowNodeInput = {
+      id: newId(),
+      type,
+      sortOrder: idx + 1,
+      config: defaultConfig(type),
+    };
+    onChange(reindex([...nodes.slice(0, idx + 1), child, ...nodes.slice(idx + 1)]));
+    setSelectionId(child.id);
+  }
+
+  function addFromBranch(
+    parentId: string,
+    edgeKey: string,
+    type: CampaignFlowNodeType
+  ) {
+    const parent = byId.get(parentId);
+    if (!parent || parent.type !== "BRANCH") return;
+    const child: CampaignFlowNodeInput = {
       id: newId(),
       type,
       sortOrder: nodes.length,
       config: defaultConfig(type),
     };
-    onChange([...nodes, next]);
-    setExpanded(nodes.length);
-    setAddOpen(false);
+    const parsed = parseIfElseConfig(parent.config);
+    const nextConfig =
+      edgeKey === "none"
+        ? { ...parsed, noneNextId: child.id! }
+        : {
+            ...parsed,
+            branches: parsed.branches.map((branch) =>
+              branch.id === edgeKey ? { ...branch, nextId: child.id! } : branch
+            ),
+          };
+    onChange(
+      reindex(
+        nodes
+          .map((n) => (ensureNodeId(n) === parentId ? { ...n, config: nextConfig } : n))
+          .concat(child)
+      )
+    );
+    setSelectionId(child.id);
   }
 
-  function removeNode(index: number) {
-    const removed = nodes[index];
-    const next = nodes
-      .filter((_, i) => i !== index)
-      .map((n, i) => ({
-        ...n,
-        sortOrder: i,
-        config: scrubIfElseNextIds(n.config, removed.id ?? ""),
-      }));
-    onChange(next);
-    setExpanded(null);
+  function addIfElseBranch(parentId: string) {
+    const parent = byId.get(parentId);
+    if (!parent || parent.type !== "BRANCH") return;
+    const parsed = parseIfElseConfig(parent.config);
+    if (parsed.branches.length >= IF_ELSE_MAX_BRANCHES) return;
+    setConfigFor(parentId, { ...parsed, branches: [...parsed.branches, emptyIfElseBranch()] });
   }
+
+  function renderJump(nextId: string) {
+    const target = byId.get(nextId);
+    if (!target) return null;
+    return (
+      <div className="mt-1 flex flex-col items-center">
+        <VerticalConnector />
+        <button
+          type="button"
+          className="max-w-[14rem] rounded-full border border-dashed border-sky-400 bg-sky-50/80 px-3 py-1.5 text-center text-xs font-medium text-sky-900 hover:bg-sky-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectionId(nextId);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          → {NODE_META[target.type].label}
+        </button>
+      </div>
+    );
+  }
+
+  function renderNode(
+    nodeId: string,
+    pathSeen: Set<string>,
+    rendered: Set<string>
+  ): ReactNode {
+    const node = byId.get(nodeId);
+    if (!node) return null;
+    if (pathSeen.has(nodeId) || rendered.has(nodeId)) return null;
+    rendered.add(nodeId);
+    const nextSeen = new Set(pathSeen);
+    nextSeen.add(nodeId);
+    const meta = NODE_META[node.type];
+    const Icon = meta.icon;
+    const selectedCard = selectionId === nodeId;
+    const edges = outgoingEdges(node, nodes);
+
+    return (
+      <div key={nodeId} className="relative z-[1] flex w-max flex-col items-center">
+        <button
+          type="button"
+          className={cn(
+            "relative z-[1] w-64 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
+            meta.tone,
+            selectedCard && "ring-2 ring-primary ring-offset-2"
+          )}
+          onClick={() => setSelectionId(nodeId)}
+        >
+          <span className="flex items-start gap-3">
+            <span
+              className={cn(
+                "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                meta.iconTone
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {meta.label}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                {nodeCardSummary(node, timezone)}
+              </span>
+            </span>
+          </span>
+        </button>
+
+        {node.type === "EXIT" ? null : edges.length === 1 && edges[0].kind === "linear" ? (
+          <div className="flex w-max flex-col items-center">
+            {edges[0].nextId && byId.has(edges[0].nextId) ? (
+              primaryParent.get(edges[0].nextId) === nodeId ? (
+                <>
+                  <VerticalConnector taller />
+                  {renderNode(edges[0].nextId, nextSeen, rendered)}
+                </>
+              ) : (
+                renderJump(edges[0].nextId)
+              )
+            ) : (
+              <>
+                <VerticalConnector />
+                <AddStepMenu onPick={(type) => insertAfter(nodeId, type)} />
+              </>
+            )}
+          </div>
+        ) : (
+          <BranchFork
+            columns={
+              [
+                ...edges.map((edge) => (
+                  <div key={edge.key} className="flex w-max flex-col items-center">
+                    <button
+                      type="button"
+                      className={cn(
+                        "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium",
+                        edge.kind === "none"
+                          ? "border-border bg-muted/50"
+                          : "border-sky-200 bg-sky-50 text-sky-900"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectionId(nodeId);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      {edge.label}
+                    </button>
+                    {edge.nextId && byId.has(edge.nextId) ? (
+                      primaryParent.get(edge.nextId) === nodeId ? (
+                        <>
+                          <VerticalConnector />
+                          {renderNode(edge.nextId, nextSeen, rendered)}
+                        </>
+                      ) : (
+                        renderJump(edge.nextId)
+                      )
+                    ) : (
+                      <>
+                        <VerticalConnector />
+                        <AddStepMenu onPick={(type) => addFromBranch(nodeId, edge.key, type)} />
+                      </>
+                    )}
+                  </div>
+                )),
+                node.type === "BRANCH" &&
+                parseIfElseConfig(node.config).branches.length < IF_ELSE_MAX_BRANCHES ? (
+                  <div key="add-branch" className="flex w-max flex-col items-center">
+                    <button
+                      type="button"
+                      className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addIfElseBranch(nodeId);
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      + Add branch
+                    </button>
+                  </div>
+                ) : null,
+              ].filter((column): column is ReactNode => column != null)
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
+  const treeRendered = new Set<string>();
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-3">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
         <div>
-          <label className="text-sm font-medium">Emails per day</label>
+          <label className="text-xs font-medium text-muted-foreground">Emails per day</label>
           <Input
             type="number"
-            className="mt-1"
+            className="mt-1 h-8"
             value={emailsPerDay}
             onChange={(e) =>
               onSettingsChange({
@@ -188,10 +569,10 @@ export function CampaignFlowEditor({
           />
         </div>
         <div>
-          <label className="text-sm font-medium">SMS per day</label>
+          <label className="text-xs font-medium text-muted-foreground">SMS per day</label>
           <Input
             type="number"
-            className="mt-1"
+            className="mt-1 h-8"
             value={smsPerDay}
             onChange={(e) =>
               onSettingsChange({
@@ -203,10 +584,10 @@ export function CampaignFlowEditor({
           />
         </div>
         <div>
-          <label className="text-sm font-medium">Start date</label>
+          <label className="text-xs font-medium text-muted-foreground">Start date ({timezone})</label>
           <Input
             type="date"
-            className="mt-1"
+            className="mt-1 h-8"
             value={campaignStartDateInputValue(startAt, timezone)}
             onChange={(e) =>
               onSettingsChange({
@@ -216,139 +597,106 @@ export function CampaignFlowEditor({
               })
             }
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {timezone} calendar date. Enrollment starts at 5:00 AM that morning
-            (sends stay inside 5:00 AM–9:00 PM).
-          </p>
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Build an automation path: trigger → wait → send → if/else. Wait can be a set
-        period of time, a specific date and time, a customer reply, or an email open/click.
-      </p>
-
-      <div className="flex flex-col items-stretch gap-0">
-        {nodes.map((node, index) => {
-          const meta = NODE_META[node.type];
-          const Icon = meta.icon;
-          const isOpen = expanded === index;
-          return (
-            <div key={node.id ?? index} className="flex flex-col items-center">
-              {index > 0 ? <div className="h-4 w-px bg-border" /> : null}
-              <div className="w-full max-w-2xl rounded-lg border bg-white shadow-sm">
-                <div className="flex items-center gap-3 p-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <button
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <PanCanvas zoom={zoom} onZoomChange={setZoom}>
+            <div className="relative flex flex-col items-center">
+              <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
+                <p className="text-sm font-semibold">Campaign start</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Contacts begin at the enrollment trigger, then follow this path.
+                </p>
+              </div>
+              {startId ? (
+                <>
+                  <VerticalConnector taller />
+                  {renderNode(startId, new Set(), treeRendered)}
+                </>
+              ) : (
+                <div className="mt-4 flex flex-col items-center">
+                  <VerticalConnector />
+                  <Button
                     type="button"
-                    className="flex-1 text-left"
-                    onClick={() => setExpanded(isOpen ? null : index)}
+                    variant="outline"
+                    onClick={() => {
+                      const node: CampaignFlowNodeInput = {
+                        id: newId(),
+                        type: "TRIGGER",
+                        sortOrder: 0,
+                        config: defaultConfig("TRIGGER"),
+                      };
+                      onChange([node]);
+                      setSelectionId(node.id!);
+                    }}
                   >
-                    <p className="text-sm font-semibold">
-                      {index + 1}. {meta.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {node.type === "WAIT"
-                        ? waitSummary(node.config, timezone)
-                        : node.type === "BRANCH"
-                          ? ifElseSummary(node.config)
-                          : node.type === "ADD_TAG"
-                            ? addTagSummary(node.config)
-                            : meta.blurb}
-                    </p>
-                  </button>
+                    Add enrollment trigger
+                  </Button>
+                </div>
+              )}
+              {orphans.length > 0 ? (
+                <div className="mt-8 w-full max-w-5xl rounded-lg border border-dashed border-border p-4">
+                  <p className="mb-3 text-sm font-medium">Unused steps</p>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Not reachable from the start. Connect them from If/Else, or delete them.
+                  </p>
+                  <div className="flex flex-col items-center gap-4">
+                    {orphans.map((node) =>
+                      renderNode(ensureNodeId(node), new Set(), treeRendered)
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </PanCanvas>
+        </div>
+
+        {selected ? (
+          <aside className="flex w-[min(28rem,46vw)] shrink-0 flex-col border-l border-border bg-background">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {NODE_META[selected.type].label}
+                </p>
+                <h3 className="font-semibold text-foreground">Edit step</h3>
+              </div>
+              <div className="flex items-center gap-1">
+                {selected.type !== "TRIGGER" || nodes.length > 1 ? (
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    onClick={() => removeNode(index)}
+                    aria-label="Delete step"
+                    onClick={() => removeNode(ensureNodeId(selected))}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                </div>
-                {isOpen ? (
-                  <div className="border-t p-4">
-                    <NodeConfigEditor
-                      node={node}
-                      allNodes={nodes}
-                      otherNodes={nodes.filter((_, i) => i !== index)}
-                      timezone={timezone}
-                      onConfigChange={(config) => setConfig(index, config)}
-                    />
-                  </div>
                 ) : null}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Close"
+                  onClick={() => setSelectionId(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-          );
-        })}
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <NodeConfigEditor
+                node={selected}
+                allNodes={nodes}
+                otherNodes={nodes.filter((n) => ensureNodeId(n) !== ensureNodeId(selected))}
+                timezone={timezone}
+                onConfigChange={(config) => setConfigFor(ensureNodeId(selected), config)}
+              />
+            </div>
+          </aside>
+        ) : null}
       </div>
-
-      {addOpen ? (
-        <div className="rounded-lg border bg-white p-2 shadow-sm">
-          <div className="mb-1 flex items-center justify-between px-1">
-            <span className="text-xs font-medium text-muted-foreground">Add step</span>
-            <button type="button" onClick={() => setAddOpen(false)} className="text-xs">
-              Close
-            </button>
-          </div>
-          <div className="grid gap-1">
-            {(Object.keys(NODE_META) as CampaignFlowNodeType[]).map((type) => {
-              const meta = NODE_META[type];
-              const Icon = meta.icon;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => addNode(type)}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                >
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{meta.label}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{meta.blurb}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <Button type="button" variant="outline" onClick={() => setAddOpen(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Add step
-        </Button>
-      )}
-
-      {nodes.some((n) => n.type === "BRANCH") ? (
-        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">If/Else branches</p>
-          <div className="mt-3 space-y-3">
-            {nodes
-              .filter((n) => n.type === "BRANCH")
-              .map((n) => {
-                const parsed = parseIfElseConfig(n.config);
-                return (
-                  <div key={n.id} className="rounded-md border bg-muted/20 p-3">
-                    <div className="space-y-2 text-xs">
-                      {parsed.branches.map((branch, index) => (
-                        <div key={branch.id} className="rounded bg-emerald-50 p-2 text-emerald-900">
-                          Branch {index + 1}: {branchPreview(branch)} →{" "}
-                          {labelForId(branch.nextId, nodes) || "exit"}
-                        </div>
-                      ))}
-                      <div className="rounded bg-slate-100 p-2 text-slate-700">
-                        None → {labelForId(parsed.noneNextId, nodes) || "exit"}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-          <p className="mt-2 text-xs">
-            The first matching branch wins. If none match, the contact follows None.
-          </p>
-        </div>
-      ) : null}
     </div>
   );
 }
