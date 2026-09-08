@@ -485,61 +485,61 @@ export function CampaignFlowEditor({
           </div>
         ) : (
           <BranchFork
-            columns={
-              [
-                ...edges.map((edge) => (
-                  <div key={edge.key} className="flex w-max flex-col items-center">
-                    <button
-                      type="button"
-                      className={cn(
-                        "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium",
-                        edge.kind === "none"
-                          ? "border-border bg-muted/50"
-                          : "border-sky-200 bg-sky-50 text-sky-900"
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectionId(nodeId);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      {edge.label}
-                    </button>
-                    {edge.nextId && byId.has(edge.nextId) ? (
-                      primaryParent.get(edge.nextId) === nodeId ? (
-                        <>
-                          <VerticalConnector />
-                          {renderNode(edge.nextId, nextSeen, rendered)}
-                        </>
-                      ) : (
-                        renderJump(edge.nextId)
-                      )
-                    ) : (
+            columns={[
+              ...edges.map((edge) => (
+                <div key={edge.key} className="flex w-max flex-col items-center">
+                  <button
+                    type="button"
+                    className={cn(
+                      "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium",
+                      edge.kind === "none"
+                        ? "border-border bg-muted/50"
+                        : "border-sky-200 bg-sky-50 text-sky-900"
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectionId(nodeId);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    {edge.label}
+                  </button>
+                  {edge.nextId && byId.has(edge.nextId) ? (
+                    primaryParent.get(edge.nextId) === nodeId ? (
                       <>
                         <VerticalConnector />
-                        <AddStepMenu onPick={(type) => addFromBranch(nodeId, edge.key, type)} />
+                        {renderNode(edge.nextId, nextSeen, rendered)}
                       </>
-                    )}
-                  </div>
-                )),
-                node.type === "BRANCH" &&
-                parseIfElseConfig(node.config).branches.length < IF_ELSE_MAX_BRANCHES ? (
-                  <div key="add-branch" className="flex w-max flex-col items-center">
-                    <button
-                      type="button"
-                      className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addIfElseBranch(nodeId);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                    >
-                      + Add branch
-                    </button>
-                  </div>
-                ) : null,
-              ].filter((column): column is ReactNode => column != null)
-            }
+                    ) : (
+                      renderJump(edge.nextId)
+                    )
+                  ) : (
+                    <>
+                      <VerticalConnector />
+                      <AddStepMenu onPick={(type) => addFromBranch(nodeId, edge.key, type)} />
+                    </>
+                  )}
+                </div>
+              )),
+              ...(node.type === "BRANCH" &&
+              parseIfElseConfig(node.config).branches.length < IF_ELSE_MAX_BRANCHES
+                ? [
+                    <div key="add-branch" className="flex w-max flex-col items-center">
+                      <button
+                        type="button"
+                        className="mb-1 max-w-[14rem] rounded-full border border-dashed border-sky-300 bg-sky-50/50 px-3 py-1.5 text-center text-xs font-medium text-sky-800 hover:bg-sky-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addIfElseBranch(nodeId);
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        + Add branch
+                      </button>
+                    </div>,
+                  ]
+                : []),
+            ]}
           />
         )}
       </div>
