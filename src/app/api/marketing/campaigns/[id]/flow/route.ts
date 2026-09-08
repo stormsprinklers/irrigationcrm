@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { isCampaignEditable } from "@/lib/marketing/campaign-lifecycle";
 import { saveCampaignFlowNodes } from "@/lib/marketing/flow-engine";
 import type { CampaignFlowNodeInput } from "@/lib/marketing/types";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,12 @@ export async function PUT(
     });
     if (!campaign) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (!isCampaignEditable(campaign.status)) {
+      return NextResponse.json(
+        { error: "This campaign is closed and can no longer be edited. Duplicate it to make a new one." },
+        { status: 409 }
+      );
     }
 
     const body = await request.json();

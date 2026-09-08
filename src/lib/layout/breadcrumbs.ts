@@ -65,6 +65,7 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
     Overview: node("/marketing"),
     Campaigns: node("/marketing/campaigns", kids({
       New: node("/marketing/campaigns/new"),
+      Edit: node("/marketing/campaigns"),
     })),
     "Social Media": node("/marketing/social"),
     SEO: node("/marketing/seo"),

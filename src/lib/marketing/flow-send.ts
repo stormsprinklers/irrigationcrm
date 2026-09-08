@@ -13,6 +13,7 @@ import {
 } from "@/lib/marketing/sender";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { prisma } from "@/lib/prisma";
+import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 
 /** Send one marketing message for a flow enrollment and record a CampaignRecipient. */
 export async function sendCampaignMessage(params: {
@@ -27,15 +28,28 @@ export async function sendCampaignMessage(params: {
       twilioPhone: string | null;
       marketingTwilioPhone?: string | null;
       name: string;
+      phone?: string | null;
+      timezone?: string | null;
+      portalSlug?: string | null;
+      bookingSlug?: string | null;
+      customerBaseUrl?: string | null;
+      googleReviewUrl?: string | null;
+      websiteBaseUrl?: string | null;
+      termsOfServiceUrl?: string | null;
+      privacyPolicyUrl?: string | null;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
-      customerBaseUrl?: string | null;
     };
   };
   customer: {
     id: string;
     email: string | null;
     phone: string | null;
+    name?: string | null;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
     marketingEmailOptOut?: boolean;
     marketingSmsOptOut?: boolean;
     doNotService?: boolean;
@@ -44,8 +58,19 @@ export async function sendCampaignMessage(params: {
   subject: string;
   bodyText: string;
   bodyHtml: string | null;
+  flowNodeId?: string;
 }) {
-  const { campaign, customer, channel, subject, bodyText, bodyHtml } = params;
+  const { campaign, customer, channel } = params;
+  const personalized = renderMarketingMergeFields({
+    company: campaign.company,
+    customer,
+    subject: params.subject,
+    bodyText: params.bodyText,
+    bodyHtml: params.bodyHtml,
+  });
+  const subject = personalized.subject;
+  const bodyText = personalized.bodyText;
+  const bodyHtml = personalized.bodyHtml;
 
   if (customer.doNotService) {
     return false;
@@ -67,6 +92,8 @@ export async function sendCampaignMessage(params: {
       email: customer.email,
       phone: customer.phone,
       status: "pending",
+      flowNodeId: params.flowNodeId ?? null,
+      channel,
     },
   });
 

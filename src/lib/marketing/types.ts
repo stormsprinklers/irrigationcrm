@@ -17,6 +17,7 @@ export type CampaignFlowNodeType =
   | "WAIT"
   | "SEND_EMAIL"
   | "SEND_SMS"
+  | "ADD_TAG"
   | "BRANCH"
   | "EXIT";
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Plus } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { CampaignLifecycleActions } from "@/components/marketing/CampaignLifecycleActions";
 import { MarketingMetricGrid } from "@/components/marketing/MarketingMetricGrid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,14 +52,21 @@ type InsightsData = {
 export default function MarketingCampaignsPage() {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [includeArchived, setIncludeArchived] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/marketing/insights")
+  const load = useCallback(() => {
+    setLoading(true);
+    const qs = includeArchived ? "?includeArchived=1" : "";
+    fetch(`/api/marketing/insights${qs}`)
       .then((r) => r.json())
       .then(setData)
       .catch(() => toast.error("Failed to load campaigns"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [includeArchived]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const summary = data?.summary;
   const campaigns = data?.campaigns ?? [];
@@ -93,6 +101,16 @@ export default function MarketingCampaignsPage() {
       />
 
       <div className="rounded-lg border border-border bg-white">
+        <div className="flex items-center justify-end border-b px-4 py-2">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(e) => setIncludeArchived(e.target.checked)}
+            />
+            Show archived
+          </label>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -105,19 +123,22 @@ export default function MarketingCampaignsPage() {
               <TableHead>Open %</TableHead>
               <TableHead>Click %</TableHead>
               <TableHead>Sent</TableHead>
+              <TableHead className="w-12 text-right"> </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-muted-foreground">
+                <TableCell colSpan={10} className="text-muted-foreground">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : campaigns.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-muted-foreground">
-                  No campaigns yet. Create your first marketing campaign.
+                <TableCell colSpan={10} className="text-muted-foreground">
+                  {includeArchived
+                    ? "No archived campaigns."
+                    : "No campaigns yet. Create your first marketing campaign."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -136,7 +157,11 @@ export default function MarketingCampaignsPage() {
                   <TableCell>
                     <Badge
                       variant={
-                        c.status === "COMPLETED" || c.status === "ACTIVE" ? "default" : "secondary"
+                        c.status === "COMPLETED" || c.status === "ACTIVE"
+                          ? "default"
+                          : c.status === "ARCHIVED"
+                            ? "outline"
+                            : "secondary"
                       }
                     >
                       {c.status}
@@ -148,6 +173,9 @@ export default function MarketingCampaignsPage() {
                   <TableCell>{c.clickRate != null ? `${c.clickRate}%` : "—"}</TableCell>
                   <TableCell>
                     {c.sentAt ? format(new Date(c.sentAt), "MMM d, yyyy") : "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <CampaignLifecycleActions campaign={c} onChanged={load} />
                   </TableCell>
                 </TableRow>
               ))

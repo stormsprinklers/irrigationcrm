@@ -459,6 +459,7 @@ enum CampaignStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  ARCHIVED
 }
 
 enum CampaignType {
@@ -483,6 +484,7 @@ enum CampaignFlowNodeType {
   WAIT
   SEND_EMAIL
   SEND_SMS
+  ADD_TAG
   BRANCH
   EXIT
 }
@@ -2173,17 +2175,20 @@ model CampaignEnrollmentEvent {
 }
 
 model CampaignRecipient {
-  id                String    @id @default(cuid())
+  id                String           @id @default(cuid())
   campaignId        String
   customerId        String?
   email             String?
   phone             String?
-  status            String    @default("pending")
+  status            String           @default("pending")
+  /// SEND_EMAIL / SEND_SMS node that produced this send (automations).
+  flowNodeId        String?
+  channel           CampaignChannel?
   sentAt            DateTime?
   deliveredAt       DateTime?
   openedAt          DateTime?
   clickedAt         DateTime?
-  clickCount        Int       @default(0)
+  clickCount        Int              @default(0)
   error             String?
   sendgridMessageId String?
   twilioMessageSid  String?
@@ -2192,6 +2197,8 @@ model CampaignRecipient {
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([campaignId, status])
+  @@index([campaignId, customerId])
+  @@index([flowNodeId])
   @@index([twilioMessageSid])
 }
 

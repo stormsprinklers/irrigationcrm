@@ -6,6 +6,10 @@ type RecipientRow = {
   clickCount?: number;
 };
 
+export type CampaignStatsJson = CampaignStats & {
+  linkClicks?: Record<string, number>;
+};
+
 export function buildCampaignStats(recipients: RecipientRow[]): CampaignStats {
   const total = recipients.length;
   const delivered = recipients.filter((r) => r.status === "delivered").length;
@@ -21,4 +25,26 @@ export function buildCampaignStats(recipients: RecipientRow[]): CampaignStats {
 export function rate(numerator: number, denominator: number) {
   if (denominator <= 0) return 0;
   return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+export function rateOrNull(numerator: number, denominator: number): number | null {
+  if (denominator <= 0) return null;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+export function mergeCampaignStatsJson(
+  existing: unknown,
+  next: CampaignStats,
+  extraClickUrl?: string
+): CampaignStatsJson {
+  const prev = existing && typeof existing === "object" ? (existing as Record<string, unknown>) : {};
+  const linkClicks: Record<string, number> = {
+    ...((prev.linkClicks && typeof prev.linkClicks === "object"
+      ? prev.linkClicks
+      : {}) as Record<string, number>),
+  };
+  if (extraClickUrl) {
+    linkClicks[extraClickUrl] = (linkClicks[extraClickUrl] ?? 0) + 1;
+  }
+  return Object.keys(linkClicks).length > 0 ? { ...next, linkClicks } : next;
 }

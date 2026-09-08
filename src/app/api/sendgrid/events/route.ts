@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildCampaignStats } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 import { validateEmailWebhook } from "@/lib/inbox/email";
 
@@ -57,17 +56,25 @@ export async function POST(request: NextRequest) {
       error?: string | null;
       deliveredAt?: Date;
       openedAt?: Date;
+      clickedAt?: Date;
+      clickCount?: { increment: number };
     } = {};
+    let trackedKind: "opened" | "clicked" | null = null;
 
     if (eventName === "delivered") {
       update.status = "delivered";
       update.deliveredAt = new Date();
     } else if (eventName === "open" || eventName === "opened") {
       update.openedAt = new Date();
+      trackedKind = "opened";
       if (recipient.status === "sent") {
         update.status = "delivered";
         update.deliveredAt = recipient.deliveredAt ?? new Date();
       }
+    } else if (eventName === "click" || eventName === "clicked") {
+      update.clickedAt = recipient.clickedAt ?? new Date();
+      update.clickCount = { increment: 1 };
+      trackedKind = "clicked";
     } else if (eventName === "bounce" || eventName === "dropped" || eventName === "failed") {
       update.status = "failed";
       update.error = eventName === "bounce" ? "Bounced" : recipient.error;
@@ -84,11 +91,28 @@ export async function POST(request: NextRequest) {
       where: { campaignId: recipient.campaignId },
       select: { status: true, openedAt: true, clickCount: true },
     });
-    const stats = buildCampaignStats(all);
+    const current = await prisma.campaign.findUnique({
+      where: { id: recipient.campaignId },
+      select: { statsJson: true },
+    });
+    const { buildCampaignStats, mergeCampaignStatsJson } = await import("@/lib/marketing/stats");
+    const stats = mergeCampaignStatsJson(current?.statsJson, buildCampaignStats(all));
     await prisma.campaign.update({
       where: { id: recipient.campaignId },
       data: { statsJson: stats },
     });
+
+    if (trackedKind && recipient.customerId) {
+      void import("@/lib/marketing/flow-engine")
+        .then(({ advanceWaitOnTrackedAction }) =>
+          advanceWaitOnTrackedAction({
+            campaignId: recipient.campaignId,
+            customerId: recipient.customerId!,
+            kind: trackedKind!,
+          })
+        )
+        .catch((err) => console.error("Campaign wait action check failed", err));
+    }
   }
 
   return NextResponse.json({ ok: true });

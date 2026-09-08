@@ -79,8 +79,12 @@ export async function POST(request: NextRequest) {
         where: { campaignId: recipient.campaignId },
         select: { status: true, openedAt: true, clickCount: true },
       });
-      const { buildCampaignStats } = await import("@/lib/marketing/stats");
-      const stats = buildCampaignStats(all);
+      const current = await prisma.campaign.findUnique({
+        where: { id: recipient.campaignId },
+        select: { statsJson: true },
+      });
+      const { buildCampaignStats, mergeCampaignStatsJson } = await import("@/lib/marketing/stats");
+      const stats = mergeCampaignStatsJson(current?.statsJson, buildCampaignStats(all));
       await prisma.campaign.update({
         where: { id: recipient.campaignId },
         data: { statsJson: stats },

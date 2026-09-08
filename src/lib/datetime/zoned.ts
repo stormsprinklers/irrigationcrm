@@ -87,16 +87,30 @@ export function startOfZonedDay(date: Date, timeZone: string): Date {
 
 /** Add whole calendar days in the given timezone (DST-safe). */
 export function addZonedDays(date: Date, days: number, timeZone: string): Date {
+  return addZonedCalendarDays(date, days, timeZone, { keepTime: false });
+}
+
+/**
+ * Add whole calendar days in `timeZone`, keeping the local hour/minute/second.
+ * DST-safe (e.g. 1 day from 9:00 AM stays 9:00 AM the next local day).
+ */
+export function addZonedCalendarDays(
+  date: Date,
+  days: number,
+  timeZone: string,
+  options: { keepTime?: boolean } = {}
+): Date {
   const parts = getZonedParts(date, timeZone);
   const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  const keepTime = options.keepTime !== false;
   return zonedWallTimeToUtc(
     timeZone,
     shifted.getUTCFullYear(),
     shifted.getUTCMonth() + 1,
     shifted.getUTCDate(),
-    0,
-    0,
-    0
+    keepTime ? parts.hour : 0,
+    keepTime ? parts.minute : 0,
+    keepTime ? parts.second : 0
   );
 }
 

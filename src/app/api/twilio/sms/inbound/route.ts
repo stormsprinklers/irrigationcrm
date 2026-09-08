@@ -276,6 +276,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (customer?.id && trimmedBody) {
+      void import("@/lib/marketing/flow-engine")
+        .then(({ advanceWaitOnCustomerReply }) =>
+          advanceWaitOnCustomerReply({
+            companyId: company.id,
+            customerId: customer.id,
+            text: trimmedBody,
+          })
+        )
+        .catch((err) => console.error("Campaign wait reply check failed", err));
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Twilio SMS inbound handler error", error);

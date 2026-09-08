@@ -1,5 +1,9 @@
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
-import { customerPortalHomeUrl, customerEstimateUrl } from "@/lib/company/customer-url";
+import {
+  customerBookingUrl,
+  customerEstimateUrl,
+  customerPortalHomeUrl,
+} from "@/lib/company/customer-url";
 import { formatArrivalWindow, formatVisitDate } from "./arrival-window";
 import { firstNameFromName, splitCustomerName } from "./name-utils";
 import type { TemplateContext } from "./templates";
@@ -9,6 +13,7 @@ export const EN_ROUTE_ETA_FALLBACK = "They'll be there soon";
 
 type CompanySlice = {
   name: string;
+  phone?: string | null;
   timezone?: string | null;
   portalSlug?: string | null;
   bookingSlug?: string | null;
@@ -150,6 +155,8 @@ export function buildNotificationContext(params: {
     customer_address: visitAddress,
     technician_first_name: technicianFirst,
     company_name: params.company.name,
+    company_phone: params.company.phone?.trim() ?? "",
+    booking_link: customerBookingUrl(params.company) ?? "",
     terms_of_service_url: params.company.termsOfServiceUrl?.trim() ?? "",
     privacy_policy_url: params.company.privacyPolicyUrl?.trim() ?? "",
     visit_date: startAt ? formatVisitDate(startAt, timezone) : "",

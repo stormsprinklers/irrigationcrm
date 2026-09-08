@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CampaignStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  archiveCampaign,
+  assertCampaignEditable,
+  unarchiveCampaign,
+} from "@/lib/marketing/campaign-actions";
+import { isCampaignEditable } from "@/lib/marketing/campaign-lifecycle";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -37,11 +44,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     let flowMetrics = null;
+    let performance = null;
     try {
       const { getCampaignFlowMetrics } = await import("@/lib/marketing/flow-engine");
       flowMetrics = await getCampaignFlowMetrics(id);
     } catch {
       flowMetrics = null;
+    }
+    try {
+      const { getCampaignPerformance } = await import("@/lib/marketing/campaign-performance");
+      performance = await getCampaignPerformance(id);
+    } catch {
+      performance = null;
     }
 
     return NextResponse.json({
@@ -53,6 +67,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       createdAt: campaign.createdAt.toISOString(),
       updatedAt: campaign.updatedAt.toISOString(),
       flowMetrics,
+      performance,
       recipients: campaign.recipients.map((r) => ({
         ...r,
         sentAt: r.sentAt?.toISOString() ?? null,
@@ -65,8 +80,14 @@ export async function GET(_request: NextRequest, { params }: Params) {
         nextSendAt: e.nextSendAt.toISOString(),
       })),
     });
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not load campaign" },
+      { status: 500 }
+    );
   }
 }
 
@@ -81,9 +102,32 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    if (body.status === "ARCHIVED") {
+      const archived = await archiveCampaign(user.companyId, id);
+      return NextResponse.json(archived);
+    }
+    if (body.status === "DRAFT" && existing.status === CampaignStatus.ARCHIVED) {
+      const restored = await unarchiveCampaign(user.companyId, id);
+      return NextResponse.json(restored);
+    }
+
+    if (!isCampaignEditable(existing.status)) {
+      try {
+        assertCampaignEditable(existing.status);
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Campaign is closed" },
+          { status: 409 }
+        );
+      }
+    }
+
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = String(body.name);
-    if (body.type !== undefined) data.type = body.type;
+    if (body.type !== undefined && existing.status === CampaignStatus.DRAFT) data.type = body.type;
+    if (body.channel !== undefined && existing.status === CampaignStatus.DRAFT) {
+      data.channel = body.channel;
+    }
     if (body.subject !== undefined) data.subject = body.subject;
     if (body.bodyText !== undefined) data.bodyText = String(body.bodyText);
     if (body.bodyHtml !== undefined) data.bodyHtml = body.bodyHtml;
@@ -102,8 +146,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json(campaign);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not update campaign" },
+      { status: 500 }
+    );
   }
 }
 
@@ -119,7 +169,13 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
     await prisma.campaign.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not delete campaign" },
+      { status: 500 }
+    );
   }
 }

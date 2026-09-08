@@ -13,9 +13,10 @@ import {
   clampToAutomatedSendWindow,
   isWithinAutomatedSendWindow,
 } from "@/lib/communications/send-window";
+import { addZonedCalendarDays, startOfZonedDay } from "@/lib/datetime/zoned";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
-import { buildCampaignStats } from "@/lib/marketing/stats";
+import { buildCampaignStats, mergeCampaignStatsJson } from "@/lib/marketing/stats";
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
 import {
   appendMarketingUnsubscribeFooter,
@@ -26,6 +27,7 @@ import {
   resolveMarketingSmsFrom,
 } from "@/lib/marketing/sender";
 import { prisma } from "@/lib/prisma";
+import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 
 const BATCH_SIZE = 50;
 
@@ -102,16 +104,23 @@ export async function buildCampaignRecipients(campaignId: string) {
       email: entry.email ?? null,
       phone: entry.phone ?? null,
       status: "pending",
+      channel: campaign.channel,
     })),
   });
 }
 
 async function refreshCampaignStats(campaignId: string) {
-  const all = await prisma.campaignRecipient.findMany({
-    where: { campaignId },
-    select: { status: true, openedAt: true, clickCount: true },
-  });
-  const stats = buildCampaignStats(all);
+  const [all, campaign] = await Promise.all([
+    prisma.campaignRecipient.findMany({
+      where: { campaignId },
+      select: { status: true, openedAt: true, clickCount: true },
+    }),
+    prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { statsJson: true },
+    }),
+  ]);
+  const stats = mergeCampaignStatsJson(campaign?.statsJson, buildCampaignStats(all));
   await prisma.campaign.update({
     where: { id: campaignId },
     data: { statsJson: stats },
@@ -134,9 +143,17 @@ async function sendToRecipient(
       twilioPhone: string | null;
       marketingTwilioPhone?: string | null;
       name: string;
+      phone?: string | null;
+      timezone?: string | null;
+      portalSlug?: string | null;
+      bookingSlug?: string | null;
+      customerBaseUrl?: string | null;
+      googleReviewUrl?: string | null;
+      websiteBaseUrl?: string | null;
+      termsOfServiceUrl?: string | null;
+      privacyPolicyUrl?: string | null;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
-      customerBaseUrl?: string | null;
     };
   },
   recipient: {
@@ -153,9 +170,9 @@ async function sendToRecipient(
   }
 ) {
   const channel = content?.channel ?? campaign.channel;
-  const subject = content?.subject ?? campaign.subject ?? campaign.name;
-  const bodyText = content?.bodyText ?? campaign.bodyText;
-  const bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
+  let subject = content?.subject ?? campaign.subject ?? campaign.name;
+  let bodyText = content?.bodyText ?? campaign.bodyText;
+  let bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
   const fromEmail = resolveMarketingEmailFrom(campaign.company);
   const branding = {
     companyName: campaign.company.name,
@@ -165,39 +182,54 @@ async function sendToRecipient(
   };
   const fromPhone = resolveMarketingSmsFrom(campaign.company);
 
-  if (recipient.customerId && channel === CampaignChannel.EMAIL) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: recipient.customerId, companyId: campaign.companyId },
-      select: { marketingEmailOptOut: true, doNotService: true },
-    });
-    if (customer?.doNotService || customer?.marketingEmailOptOut) {
-      await prisma.campaignRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          status: "opt_out",
-          error: customer.doNotService ? "Do not service" : "Marketing email opt-out",
+  const customerRecord = recipient.customerId
+    ? await prisma.customer.findFirst({
+        where: { id: recipient.customerId, companyId: campaign.companyId },
+        select: {
+          name: true,
+          address: true,
+          city: true,
+          state: true,
+          zip: true,
+          marketingEmailOptOut: true,
+          marketingSmsOptOut: true,
+          doNotService: true,
         },
-      });
-      return false;
-    }
+      })
+    : null;
+
+  if (customerRecord?.doNotService) {
+    await prisma.campaignRecipient.update({
+      where: { id: recipient.id },
+      data: { status: "opt_out", error: "Do not service" },
+    });
+    return false;
+  }
+  if (recipient.customerId && channel === CampaignChannel.EMAIL && customerRecord?.marketingEmailOptOut) {
+    await prisma.campaignRecipient.update({
+      where: { id: recipient.id },
+      data: { status: "opt_out", error: "Marketing email opt-out" },
+    });
+    return false;
+  }
+  if (recipient.customerId && channel === CampaignChannel.SMS && customerRecord?.marketingSmsOptOut) {
+    await prisma.campaignRecipient.update({
+      where: { id: recipient.id },
+      data: { status: "opt_out", error: "Marketing SMS opt-out" },
+    });
+    return false;
   }
 
-  if (recipient.customerId && channel === CampaignChannel.SMS) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: recipient.customerId, companyId: campaign.companyId },
-      select: { marketingSmsOptOut: true, doNotService: true },
-    });
-    if (customer?.doNotService || customer?.marketingSmsOptOut) {
-      await prisma.campaignRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          status: "opt_out",
-          error: customer.doNotService ? "Do not service" : "Marketing SMS opt-out",
-        },
-      });
-      return false;
-    }
-  }
+  const personalized = renderMarketingMergeFields({
+    company: campaign.company,
+    customer: customerRecord,
+    subject,
+    bodyText,
+    bodyHtml,
+  });
+  subject = personalized.subject;
+  bodyText = personalized.bodyText;
+  bodyHtml = personalized.bodyHtml;
 
   const blocked = await isContactBlocked(
     campaign.companyId,
@@ -382,15 +414,8 @@ export async function activateDripCampaign(campaignId: string) {
   return activateFlowCampaign(campaignId);
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
 export async function processDripSends() {
   const now = new Date();
-  const dayStart = startOfDay(now);
 
   const enrollments = await prisma.campaignEnrollment.findMany({
     where: {
@@ -448,7 +473,7 @@ export async function processDripSends() {
     const todaySent = await prisma.campaignRecipient.count({
       where: {
         campaignId: campaign.id,
-        sentAt: { gte: dayStart },
+        sentAt: { gte: startOfZonedDay(now, companyTz) },
         ...(step.channel === CampaignChannel.EMAIL
           ? { email: { not: null } }
           : { phone: { not: null } }),
@@ -484,6 +509,7 @@ export async function processDripSends() {
           email: enrollment.customer.email,
           phone: enrollment.customer.phone,
           status: "pending",
+          channel: step.channel,
         },
       });
     }
@@ -511,11 +537,9 @@ export async function processDripSends() {
       });
     } else {
       const nextSendAt = clampToAutomatedSendWindow(
-        (() => {
-          const d = new Date(now);
-          d.setDate(d.getDate() + (nextStep.delayDays ?? 0));
-          return d;
-        })(),
+        addZonedCalendarDays(now, nextStep.delayDays ?? 0, companyTz ?? "America/Denver", {
+          keepTime: true,
+        }),
         companyTz
       );
       await prisma.campaignEnrollment.update({

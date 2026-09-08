@@ -141,5 +141,17 @@ export async function POST(request: NextRequest) {
     subject,
   }).catch((err) => console.error("In-app notification failed for inbound email", err));
 
+  if (customer?.id) {
+    void import("@/lib/marketing/flow-engine")
+      .then(({ advanceWaitOnCustomerReply }) =>
+        advanceWaitOnCustomerReply({
+          companyId: company.id,
+          customerId: customer.id,
+          text: `${subject}\n${text ?? ""}`,
+        })
+      )
+      .catch((err) => console.error("Campaign wait reply check failed", err));
+  }
+
   return NextResponse.json({ ok: true });
 }

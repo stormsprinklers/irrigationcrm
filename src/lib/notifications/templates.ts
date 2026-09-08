@@ -19,36 +19,82 @@ export const NOTIFICATION_EVENTS = [
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
+export const MERGE_FIELD_FOLDER_THRESHOLD = 20;
+
 export const MERGE_FIELDS = [
-  { token: "{customer_first_name}", label: "Customer first name" },
-  { token: "{customer_last_name}", label: "Customer last name" },
-  { token: "{customer_address}", label: "Customer address" },
-  { token: "{technician_first_name}", label: "Technician first name" },
-  { token: "{company_name}", label: "Company name" },
-  { token: "{terms_of_service_url}", label: "Terms of service URL" },
-  { token: "{privacy_policy_url}", label: "Privacy policy URL" },
-  { token: "{visit_date}", label: "Visit date" },
-  { token: "{visit_arrival_window}", label: "Arrival window" },
-  { token: "{visit_title}", label: "Visit title" },
-  { token: "{invoice_amount}", label: "Invoice amount" },
-  { token: "{invoice_number}", label: "Invoice number" },
-  { token: "{estimate_amount}", label: "Estimate amount" },
-  { token: "{review_link}", label: "Review link" },
-  { token: "{technician_eta}", label: "Technician ETA" },
-  { token: "{portal_link}", label: "Portal link" },
-  { token: "{track_link}", label: "Live track link" },
-  { token: "{invoice_link}", label: "Invoice link" },
-  { token: "{about_technician_link}", label: "About technician link" },
-  { token: "{estimate_link}", label: "Estimate link" },
-  { token: "{survey_link}", label: "Survey link" },
-  { token: "{work_summary}", label: "Work summary" },
-  { token: "{booking_link}", label: "Booking link" },
-  { token: "{meeting_link}", label: "Google Meet link" },
-  { token: "{estimate_range}", label: "Estimate range" },
-  { token: "{company_phone}", label: "Company phone" },
+  { token: "{customer_first_name}", label: "Customer first name", group: "Contact info" },
+  { token: "{customer_last_name}", label: "Customer last name", group: "Contact info" },
+  { token: "{customer_address}", label: "Customer address", group: "Contact info" },
+  { token: "{company_name}", label: "Company name", group: "Company" },
+  { token: "{company_phone}", label: "Company phone", group: "Company" },
+  { token: "{terms_of_service_url}", label: "Terms of service URL", group: "Company" },
+  { token: "{privacy_policy_url}", label: "Privacy policy URL", group: "Company" },
+  { token: "{visit_date}", label: "Visit date", group: "Visit" },
+  { token: "{visit_arrival_window}", label: "Arrival window", group: "Visit" },
+  { token: "{visit_title}", label: "Visit title", group: "Visit" },
+  { token: "{technician_first_name}", label: "Technician first name", group: "Visit" },
+  { token: "{technician_eta}", label: "Technician ETA", group: "Visit" },
+  { token: "{work_summary}", label: "Work summary", group: "Visit" },
+  { token: "{invoice_amount}", label: "Invoice amount", group: "Invoices & estimates" },
+  { token: "{invoice_number}", label: "Invoice number", group: "Invoices & estimates" },
+  { token: "{invoice_link}", label: "Invoice link", group: "Invoices & estimates" },
+  { token: "{estimate_amount}", label: "Estimate amount", group: "Invoices & estimates" },
+  { token: "{estimate_link}", label: "Estimate link", group: "Invoices & estimates" },
+  { token: "{estimate_range}", label: "Estimate range", group: "Invoices & estimates" },
+  { token: "{review_link}", label: "Review link", group: "Links" },
+  { token: "{portal_link}", label: "Portal link", group: "Links" },
+  { token: "{track_link}", label: "Live track link", group: "Links" },
+  { token: "{about_technician_link}", label: "About technician link", group: "Links" },
+  { token: "{survey_link}", label: "Survey link", group: "Links" },
+  { token: "{booking_link}", label: "Booking link", group: "Links" },
+  { token: "{meeting_link}", label: "Google Meet link", group: "Links" },
 ] as const;
 
 export const MERGE_FIELD_HINTS = MERGE_FIELDS.map((field) => field.token);
+
+export type MergeFieldItem = {
+  token: string;
+  label: string;
+  group: string;
+};
+
+export type MergeFieldFolder = {
+  label: string;
+  items: Array<{ token: string; label: string }>;
+};
+
+export function organizeMergeFields(
+  fields: readonly MergeFieldItem[] = MERGE_FIELDS,
+  threshold = MERGE_FIELD_FOLDER_THRESHOLD
+):
+  | { mode: "flat"; items: readonly MergeFieldItem[] }
+  | { mode: "folders"; folders: MergeFieldFolder[] } {
+  if (fields.length <= threshold) {
+    return { mode: "flat", items: fields };
+  }
+  const order: string[] = [];
+  const map = new Map<string, Array<{ token: string; label: string }>>();
+  for (const field of fields) {
+    if (!map.has(field.group)) {
+      map.set(field.group, []);
+      order.push(field.group);
+    }
+    map.get(field.group)!.push({ token: field.token, label: field.label });
+  }
+  return {
+    mode: "folders",
+    folders: order.map((label) => ({ label, items: map.get(label)! })),
+  };
+}
+
+export function insertTokenAt(value: string, token: string, start: number, end = start) {
+  const s = Math.max(0, Math.min(start, value.length));
+  const e = Math.max(s, Math.min(end, value.length));
+  return {
+    next: `${value.slice(0, s)}${token}${value.slice(e)}`,
+    caret: s + token.length,
+  };
+}
 
 export const EVENT_LABELS: Record<NotificationEvent, string> = {
   VISIT_SCHEDULED: "Visit scheduled",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Bold, Italic, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,11 @@ type Props = {
   mobilePreview: boolean;
   onHtmlChange: (html: string) => void;
   className?: string;
+  onFocusEditor?: () => void;
+};
+
+export type EditableEmailPreviewHandle = {
+  insertText: (text: string) => void;
 };
 
 const EDITOR_SCRIPT = `
@@ -68,6 +73,9 @@ const EDITOR_SCRIPT = `
 
   document.addEventListener('input', notify);
   document.addEventListener('keyup', notify);
+  document.addEventListener('focusin', function() {
+    window.parent.postMessage({ type: 'email-editor-focus' }, '*');
+  });
   document.addEventListener('mouseup', function() {
     var sel = window.getSelection();
     window.parent.postMessage({
@@ -92,6 +100,13 @@ const EDITOR_SCRIPT = `
           } else {
             document.execCommand('createLink', false, data.href || '#');
           }
+        } else if (data.command === 'insertText') {
+          var sel = window.getSelection();
+          if (!sel || !sel.rangeCount) {
+            var first = document.querySelector('[contenteditable="true"]');
+            if (first) first.focus();
+          }
+          document.execCommand('insertText', false, data.value || '');
         } else {
           document.execCommand(data.command, false, data.value || null);
         }
@@ -130,7 +145,11 @@ function injectEditor(html: string): string {
   return `${html}${script}`;
 }
 
-export function EditableEmailPreview({ html, mobilePreview, onHtmlChange, className }: Props) {
+export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props>(
+  function EditableEmailPreview(
+    { html, mobilePreview, onHtmlChange, className, onFocusEditor },
+    ref
+  ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const applyingRef = useRef(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string; text: string } | null>(null);
@@ -158,6 +177,9 @@ export function EditableEmailPreview({ html, mobilePreview, onHtmlChange, classN
         applyingRef.current = true;
         onHtmlChange(data.html);
       }
+      if (data.type === "email-editor-focus") {
+        onFocusEditor?.();
+      }
       if (data.type === "email-editor-link") {
         setLinkHref(String(data.href ?? ""));
         setLinkDialog({ href: String(data.href ?? ""), text: String(data.text ?? "") });
@@ -173,7 +195,7 @@ export function EditableEmailPreview({ html, mobilePreview, onHtmlChange, classN
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [onHtmlChange]);
+  }, [onHtmlChange, onFocusEditor]);
 
   function sendCommand(command: string, value?: string) {
     iframeRef.current?.contentWindow?.postMessage(
@@ -182,6 +204,12 @@ export function EditableEmailPreview({ html, mobilePreview, onHtmlChange, classN
     );
     iframeRef.current?.contentWindow?.focus();
   }
+
+  useImperativeHandle(ref, () => ({
+    insertText(text: string) {
+      sendCommand("insertText", text);
+    },
+  }));
 
   function saveLink() {
     iframeRef.current?.contentWindow?.postMessage(
@@ -292,7 +320,9 @@ export function EditableEmailPreview({ html, mobilePreview, onHtmlChange, classN
       ) : null}
     </div>
   );
-}
+});
+
+EditableEmailPreview.displayName = "EditableEmailPreview";
 
 function emptyPreview() {
   return `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;padding:24px;color:#6b7280">Select a template to start, or paste HTML below.</body></html>`;

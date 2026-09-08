@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CampaignChannel } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { isCampaignEditable } from "@/lib/marketing/campaign-lifecycle";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -42,6 +43,12 @@ export async function PUT(request: NextRequest, { params }: Params) {
       where: { id, companyId: user.companyId },
     });
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!isCampaignEditable(campaign.status)) {
+      return NextResponse.json(
+        { error: "This campaign is closed and can no longer be edited. Duplicate it to make a new one." },
+        { status: 409 }
+      );
+    }
 
     await prisma.$transaction([
       prisma.campaignStep.deleteMany({ where: { campaignId: id } }),

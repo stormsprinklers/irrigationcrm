@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { CampaignLifecycleActions } from "@/components/marketing/CampaignLifecycleActions";
+import { CampaignPerformanceDashboard } from "@/components/marketing/CampaignPerformanceDashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +18,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { CampaignPerformance } from "@/lib/marketing/campaign-performance";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+
+function flowNodeTypeLabel(type: string) {
+  switch (type) {
+    case "TRIGGER":
+      return "Enrollment trigger";
+    case "WAIT":
+      return "Wait";
+    case "SEND_EMAIL":
+      return "Send email";
+    case "SEND_SMS":
+      return "Send SMS";
+    case "ADD_TAG":
+      return "Add tag";
+    case "BRANCH":
+      return "If/Else";
+    case "EXIT":
+      return "Exit";
+    default:
+      return type;
+  }
+}
 
 type CampaignDetail = {
   id: string;
@@ -81,10 +105,12 @@ type CampaignDetail = {
     clickedAt: string | null;
     clickCount: number;
   }>;
+  performance?: CampaignPerformance | null;
 };
 
 export default function MarketingCampaignDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,9 +119,15 @@ export default function MarketingCampaignDetailPage() {
   function load() {
     setLoading(true);
     fetch(`/api/marketing/campaigns/${id}`)
-      .then((r) => r.json())
-      .then((data) => setCampaign(data))
-      .catch(() => toast.error("Failed to load campaign"))
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error ?? "Failed to load campaign");
+        setCampaign(data);
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load campaign");
+        setCampaign(null);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -123,7 +155,7 @@ export default function MarketingCampaignDetailPage() {
     }
   }
 
-  if (loading || !campaign) {
+  if (loading) {
     return (
       <ContentArea>
         <PageHeader breadcrumb={["Marketing", "Campaigns"]} title="Campaign" />
@@ -132,10 +164,26 @@ export default function MarketingCampaignDetailPage() {
     );
   }
 
+  if (!campaign) {
+    return (
+      <ContentArea>
+        <PageHeader breadcrumb={["Marketing", "Campaigns"]} title="Campaign not found" />
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/marketing/campaigns">Back to campaigns</Link>
+        </Button>
+      </ContentArea>
+    );
+  }
+
   const stats = campaign.statsJson ?? {};
   const delivered = stats.delivered ?? 0;
   const opened = stats.opened ?? 0;
   const clicked = stats.clicked ?? 0;
+  const canSendOrActivate =
+    campaign.status !== "COMPLETED" &&
+    campaign.status !== "SENDING" &&
+    campaign.status !== "CANCELLED" &&
+    campaign.status !== "ARCHIVED";
 
   return (
     <ContentArea>
@@ -143,51 +191,65 @@ export default function MarketingCampaignDetailPage() {
         breadcrumb={["Marketing", "Campaigns", campaign.name]}
         title={campaign.name}
         actions={
-          campaign.status !== "COMPLETED" && campaign.status !== "SENDING" ? (
-            campaign.type === "DRIP" ? (
-              campaign.status !== "ACTIVE" ? (
-                <Button size="sm" onClick={() => runAction("activate")} disabled={acting}>
-                  {acting ? "Activating..." : "Activate automation"}
+          <div className="flex flex-wrap items-center gap-2">
+            <CampaignLifecycleActions
+              campaign={campaign}
+              variant="buttons"
+              onChanged={load}
+              onDeleted={() => router.push("/marketing/campaigns")}
+            />
+            {canSendOrActivate ? (
+              campaign.type === "DRIP" ? (
+                campaign.status !== "ACTIVE" ? (
+                  <Button size="sm" onClick={() => runAction("activate")} disabled={acting}>
+                    {acting ? "Activating..." : "Activate automation"}
+                  </Button>
+                ) : null
+              ) : campaign.status === "DRAFT" || campaign.status === "SCHEDULED" ? (
+                <Button size="sm" onClick={() => runAction("send")} disabled={acting}>
+                  {acting ? "Sending..." : "Send now"}
                 </Button>
               ) : null
-            ) : (
-              <Button size="sm" onClick={() => runAction("send")} disabled={acting}>
-                {acting ? "Sending..." : "Send now"}
-              </Button>
-            )
-          ) : undefined
+            ) : null}
+          </div>
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          { label: "Sent", value: stats.sent ?? 0 },
-          { label: "Delivered", value: delivered },
-          { label: "Opened", value: opened },
-          { label: "Clicked", value: clicked },
-          { label: "Failed", value: stats.failed ?? 0 },
-          { label: "Pending", value: stats.pending ?? 0 },
-        ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-border bg-white p-4">
-            <p className="text-2xl font-semibold">{s.value}</p>
-            <p className="text-sm text-muted-foreground">{s.label}</p>
+      {campaign.performance ? (
+        <CampaignPerformanceDashboard performance={campaign.performance} />
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              { label: "Sent", value: stats.sent ?? 0 },
+              { label: "Delivered", value: delivered },
+              { label: "Opened", value: opened },
+              { label: "Clicked", value: clicked },
+              { label: "Failed", value: stats.failed ?? 0 },
+              { label: "Pending", value: stats.pending ?? 0 },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg border border-border bg-white p-4">
+                <p className="text-2xl font-semibold">{s.value}</p>
+                <p className="text-sm text-muted-foreground">{s.label}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {delivered > 0 && campaign.channel === "EMAIL" && (
-        <div className="mb-6 grid grid-cols-3 gap-4">
-          {[
-            { label: "Delivery rate", value: `${Math.round((delivered / (stats.total ?? delivered)) * 100)}%` },
-            { label: "Open rate", value: `${Math.round((opened / delivered) * 100)}%` },
-            { label: "Click rate", value: `${Math.round((clicked / delivered) * 100)}%` },
-          ].map((s) => (
-            <div key={s.label} className="rounded-lg border bg-muted/20 p-4">
-              <p className="text-xl font-semibold">{s.value}</p>
-              <p className="text-sm text-muted-foreground">{s.label}</p>
+          {delivered > 0 && campaign.channel === "EMAIL" && (
+            <div className="mb-6 grid grid-cols-3 gap-4">
+              {[
+                { label: "Delivery rate", value: `${Math.round((delivered / (stats.total ?? delivered)) * 100)}%` },
+                { label: "Open rate", value: `${Math.round((opened / delivered) * 100)}%` },
+                { label: "Click rate", value: `${Math.round((clicked / delivered) * 100)}%` },
+              ].map((s) => (
+                <div key={s.label} className="rounded-lg border bg-muted/20 p-4">
+                  <p className="text-xl font-semibold">{s.value}</p>
+                  <p className="text-sm text-muted-foreground">{s.label}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       <div className="mb-6 rounded-lg border border-border bg-white p-4">
@@ -286,7 +348,7 @@ export default function MarketingCampaignDetailPage() {
                         <TableCell>{e.status}</TableCell>
                         <TableCell>
                           {node
-                            ? `#${node.sortOrder + 1} ${node.type}`
+                            ? `#${node.sortOrder + 1} ${flowNodeTypeLabel(node.type)}`
                             : e.currentNodeId ?? "—"}
                         </TableCell>
                         <TableCell>
@@ -316,7 +378,7 @@ export default function MarketingCampaignDetailPage() {
           <ol className="space-y-2 text-sm">
             {campaign.flowNodes!.map((node, i) => (
               <li key={node.id}>
-                Step {i + 1}: {node.type}
+                Step {i + 1}: {flowNodeTypeLabel(node.type)}
               </li>
             ))}
           </ol>

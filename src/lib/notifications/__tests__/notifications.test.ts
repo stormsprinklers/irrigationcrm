@@ -4,7 +4,12 @@ import { EstimateStatus } from "@prisma/client";
 import { formatArrivalWindow } from "../arrival-window";
 import { isEstimateOpenForFollowUp } from "../estimate-followup";
 import { splitCustomerName } from "../name-utils";
-import { renderTemplate } from "../templates";
+import {
+  MERGE_FIELDS,
+  insertTokenAt,
+  organizeMergeFields,
+  renderTemplate,
+} from "../templates";
 import { buildNotificationContext, buildEnRouteContext, EN_ROUTE_ETA_FALLBACK } from "../context";
 import { buildPaidReceiptExtras } from "../receipt-extras";
 import {
@@ -149,4 +154,42 @@ test("paid receipt extras include summary, review placeholder, and photo markup"
   assert.match(html, /tok_abc/);
   assert.match(html, /att1/);
   assert.match(text, /Leave a review: \{review_link\}/);
+});
+
+test("organizeMergeFields uses folders when there are more than 20 variables", () => {
+  const organized = organizeMergeFields(MERGE_FIELDS);
+  assert.equal(organized.mode, "folders");
+  if (organized.mode !== "folders") return;
+  const labels = organized.folders.map((folder) => folder.label);
+  assert.deepEqual(labels, [
+    "Contact info",
+    "Company",
+    "Visit",
+    "Invoices & estimates",
+    "Links",
+  ]);
+  assert.equal(
+    organized.folders.reduce((sum, folder) => sum + folder.items.length, 0),
+    MERGE_FIELDS.length
+  );
+});
+
+test("insertTokenAt replaces the selected range", () => {
+  const { next, caret } = insertTokenAt("Hi  there", "{customer_first_name}", 3, 3);
+  assert.equal(next, "Hi {customer_first_name} there");
+  assert.equal(caret, 3 + "{customer_first_name}".length);
+});
+
+test("buildNotificationContext fills company phone and booking link", () => {
+  const ctx = buildNotificationContext({
+    company: {
+      name: "Storm Sprinklers",
+      phone: "385-555-0100",
+      bookingSlug: "storm",
+      customerBaseUrl: "https://portal.example.com",
+    },
+    customer: { name: "Jane Doe" },
+  });
+  assert.equal(ctx.company_phone, "385-555-0100");
+  assert.equal(ctx.booking_link, "https://portal.example.com/book/storm");
 });

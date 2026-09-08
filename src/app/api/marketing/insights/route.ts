@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CampaignType } from "@prisma/client";
+import { CampaignStatus, CampaignType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { buildCampaignStats } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
+    const includeArchived = request.nextUrl.searchParams.get("includeArchived") === "1";
 
     const campaigns = await prisma.campaign.findMany({
-      where: { companyId: user.companyId },
+      where: {
+        companyId: user.companyId,
+        ...(includeArchived ? {} : { status: { not: CampaignStatus.ARCHIVED } }),
+      },
       include: {
         recipients: {
           select: { status: true, openedAt: true, clickCount: true },

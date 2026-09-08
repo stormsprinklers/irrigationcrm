@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useCompanySettings } from "@/components/settings/useCompanySettings";
+import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import {
   EVENT_LABELS,
-  MERGE_FIELDS,
   NOTIFICATION_EVENTS,
   type NotificationEvent,
 } from "@/lib/notifications/templates";
@@ -147,6 +147,9 @@ export default function SettingsNotificationsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({ subject: "", body: "" });
   const [testSending, setTestSending] = useState(false);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const lastFieldRef = useRef<"subject" | "body">("body");
 
   useEffect(() => {
     if (!company) return;
@@ -196,8 +199,15 @@ export default function SettingsNotificationsPage() {
     setRules((prev) => prev.map((r) => (r.id === id ? updated : r)));
   }
 
-  function insertMergeField(field: string) {
-    setEditDraft((prev) => ({ ...prev, body: `${prev.body}${field}` }));
+  function insertMergeField(token: string) {
+    const field = lastFieldRef.current;
+    if (field === "subject") {
+      const { next } = applyTokenToInput(subjectRef.current, editDraft.subject, token);
+      setEditDraft((prev) => ({ ...prev, subject: next }));
+      return;
+    }
+    const { next } = applyTokenToInput(bodyRef.current, editDraft.body, token);
+    setEditDraft((prev) => ({ ...prev, body: next }));
   }
 
   async function sendTest() {
@@ -371,6 +381,7 @@ export default function SettingsNotificationsPage() {
                           onClick={() => {
                             setEditingId(tpl.id);
                             setEditDraft({ subject: tpl.subject ?? "", body: tpl.body });
+                            lastFieldRef.current = tpl.channel === "EMAIL" ? "subject" : "body";
                           }}
                         >
                           Edit
@@ -379,33 +390,27 @@ export default function SettingsNotificationsPage() {
                     </div>
                     {editingId === tpl.id ? (
                       <div className="space-y-3">
-                        <div className="flex flex-wrap gap-1">
-                          {MERGE_FIELDS.map((field) => (
-                            <Button
-                              key={field.token}
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2 text-xs"
-                              title={field.label}
-                              onClick={() => insertMergeField(field.token)}
-                            >
-                              {field.token}
-                            </Button>
-                          ))}
-                        </div>
+                        <InsertVariableButton onInsert={insertMergeField} />
                         {tpl.channel === "EMAIL" && (
                           <Input
+                            ref={subjectRef}
                             placeholder="Subject"
                             value={editDraft.subject}
+                            onFocus={() => {
+                              lastFieldRef.current = "subject";
+                            }}
                             onChange={(e) =>
                               setEditDraft({ ...editDraft, subject: e.target.value })
                             }
                           />
                         )}
                         <textarea
+                          ref={bodyRef}
                           className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
                           value={editDraft.body}
+                          onFocus={() => {
+                            lastFieldRef.current = "body";
+                          }}
                           onChange={(e) =>
                             setEditDraft({ ...editDraft, body: e.target.value })
                           }

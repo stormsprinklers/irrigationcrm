@@ -4,6 +4,8 @@ import {
   CampaignFlowNodeType,
   CampaignStatus,
   CampaignType,
+  EmailFolder,
+  MessageDirection,
   Prisma,
 } from "@prisma/client";
 import {
@@ -15,6 +17,26 @@ import { prisma } from "@/lib/prisma";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import type { AudienceFilters, CampaignFlowNodeInput, DripSettings } from "@/lib/marketing/types";
 import { sendCampaignMessage } from "@/lib/marketing/flow-send";
+import { mergeCustomerTags, parseAddTagConfig } from "@/lib/marketing/add-tag";
+import { parseCampaignInstant } from "@/lib/marketing/campaign-time";
+import { startOfZonedDay } from "@/lib/datetime/zoned";
+import {
+  matchingReplyKeyword,
+  nextWaitCheckAt,
+  parseBranchWaitMs,
+  parseWaitConfig,
+  recipientMatchesWaitAction,
+  waitTimeoutAt,
+  type WaitAction,
+} from "@/lib/marketing/wait-config";
+import {
+  branchMatches,
+  isLegacyReactionBranch,
+  parseIfElseConfig,
+  pickIfElseNextId,
+  remapFlowNextIds,
+} from "@/lib/marketing/if-else";
+import { loadIfElseContact } from "@/lib/marketing/if-else-contact";
 
 type FlowNodeRow = {
   id: string;
@@ -54,7 +76,7 @@ export function stepsToFlowNodes(
         id: `legacy-wait-${step.sortOrder}`,
         type: "WAIT",
         sortOrder: order++,
-        config: { mode: "delay", delayHours: (step.delayDays ?? 0) * 24 },
+        config: { mode: "delay", delayAmount: step.delayDays ?? 0, delayUnit: "days" },
       });
     }
     nodes.push({
@@ -79,6 +101,7 @@ export async function saveCampaignFlowNodes(
   if (nodes.length === 0) return [];
 
   const created = [];
+  const idMap = new Map<string, string>();
   for (const [index, node] of nodes.entries()) {
     const useId =
       node.id && !node.id.startsWith("tmp-") && !node.id.startsWith("legacy-")
@@ -93,9 +116,25 @@ export async function saveCampaignFlowNodes(
         sortOrder: index,
       },
     });
+    if (node.id) idMap.set(node.id, row.id);
     created.push(row);
   }
-  return created;
+
+  const remapped = [];
+  for (const row of created) {
+    const config = remapFlowNextIds(asConfig(row.config), idMap);
+    const needsUpdate = JSON.stringify(config) !== JSON.stringify(row.config);
+    if (needsUpdate) {
+      const updated = await prisma.campaignFlowNode.update({
+        where: { id: row.id },
+        data: { config: config as Prisma.InputJsonValue },
+      });
+      remapped.push(updated);
+    } else {
+      remapped.push(row);
+    }
+  }
+  return remapped;
 }
 
 export async function activateFlowCampaign(campaignId: string) {
@@ -140,7 +179,9 @@ export async function activateFlowCampaign(campaignId: string) {
   }
 
   const startAt = clampToAutomatedSendWindow(
-    dripSettings.startAt ? new Date(dripSettings.startAt) : new Date(),
+    dripSettings.startAt
+      ? parseCampaignInstant(dripSettings.startAt, campaign.company.timezone) ?? new Date()
+      : new Date(),
     campaign.company.timezone
   );
   const entryNode =
@@ -167,6 +208,263 @@ export async function activateFlowCampaign(campaignId: string) {
   });
 
   return { enrolled: customers.length };
+}
+
+function eventMeta(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+async function completeWaitAndAdvance(params: {
+  enrollmentId: string;
+  timezone: string | null;
+  node: FlowNodeRow;
+  nodes: FlowNodeRow[];
+  reason: "timeout" | "reply" | "action";
+  matched?: string | null;
+}) {
+  await logEvent(params.enrollmentId, params.node.id, "wait_completed", {
+    reason: params.reason,
+    matched: params.matched ?? null,
+  });
+  const next = nextLinearNode(params.nodes, params.node.id);
+  if (!next) {
+    await prisma.campaignEnrollment.update({
+      where: { id: params.enrollmentId },
+      data: { status: CampaignEnrollmentStatus.COMPLETED },
+    });
+    return;
+  }
+  await prisma.campaignEnrollment.update({
+    where: { id: params.enrollmentId },
+    data: {
+      currentNodeId: next.id,
+      nextSendAt: clampToAutomatedSendWindow(new Date(), params.timezone),
+    },
+  });
+}
+
+async function customerReplyMatch(params: {
+  companyId: string;
+  customerId: string;
+  since: Date;
+  keywords: string[];
+}): Promise<string | null> {
+  const messages = await prisma.message.findMany({
+    where: {
+      direction: MessageDirection.INBOUND,
+      sentAt: { gte: params.since },
+      conversation: {
+        companyId: params.companyId,
+        customerId: params.customerId,
+      },
+    },
+    select: { body: true },
+    orderBy: { sentAt: "desc" },
+    take: 40,
+  });
+  for (const message of messages) {
+    const hit = matchingReplyKeyword(message.body, params.keywords);
+    if (hit) return hit;
+  }
+
+  const emails = await prisma.emailMessage.findMany({
+    where: {
+      companyId: params.companyId,
+      customerId: params.customerId,
+      folder: EmailFolder.INBOX,
+      createdAt: { gte: params.since },
+    },
+    select: { subject: true, bodyText: true },
+    orderBy: { createdAt: "desc" },
+    take: 40,
+  });
+  for (const email of emails) {
+    const hit = matchingReplyKeyword(
+      `${email.subject ?? ""}\n${email.bodyText ?? ""}`,
+      params.keywords
+    );
+    if (hit) return hit;
+  }
+  return null;
+}
+
+async function customerActionMatch(params: {
+  campaignId: string;
+  customerId: string;
+  action: WaitAction;
+}): Promise<string | null> {
+  const recent = await prisma.campaignRecipient.findFirst({
+    where: {
+      campaignId: params.campaignId,
+      customerId: params.customerId,
+      status: { in: ["sent", "delivered"] },
+    },
+    orderBy: { sentAt: "desc" },
+  });
+  if (!recipientMatchesWaitAction(recent, params.action)) return null;
+  if (params.action === "clicked") return "clicked";
+  if (params.action === "opened_or_clicked") {
+    if (recent?.clickedAt || (recent?.clickCount ?? 0) > 0) return "clicked";
+    return "opened";
+  }
+  return "opened";
+}
+
+export async function advanceWaitOnCustomerReply(params: {
+  companyId: string;
+  customerId: string;
+  text: string;
+}): Promise<{ advanced: number }> {
+  const matchedPreview = matchingReplyKeyword(params.text, []);
+  if (!matchedPreview) return { advanced: 0 };
+
+  const enrollments = await prisma.campaignEnrollment.findMany({
+    where: {
+      customerId: params.customerId,
+      status: CampaignEnrollmentStatus.ACTIVE,
+      campaign: {
+        companyId: params.companyId,
+        status: CampaignStatus.ACTIVE,
+        type: CampaignType.DRIP,
+      },
+    },
+    include: {
+      campaign: {
+        include: {
+          company: { select: { timezone: true } },
+          flowNodes: { orderBy: { sortOrder: "asc" } },
+        },
+      },
+    },
+    take: 20,
+  });
+
+  let advanced = 0;
+  for (const enrollment of enrollments) {
+    const nodes = enrollment.campaign.flowNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      config: asConfig(n.config),
+      sortOrder: n.sortOrder,
+    }));
+    const node = findNode(nodes, enrollment.currentNodeId);
+    if (!node || node.type !== CampaignFlowNodeType.WAIT) continue;
+
+    const wait = parseWaitConfig(node.config);
+    if (!wait.usesReply) continue;
+
+    const keywordHit = matchingReplyKeyword(params.text, wait.keywords);
+    if (!keywordHit) continue;
+
+    const waited = await prisma.campaignEnrollmentEvent.findFirst({
+      where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "wait_started" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!waited) continue;
+
+    const alreadyDone = await prisma.campaignEnrollmentEvent.findFirst({
+      where: {
+        enrollmentId: enrollment.id,
+        nodeId: node.id,
+        eventType: "wait_completed",
+        createdAt: { gte: waited.createdAt },
+      },
+    });
+    if (alreadyDone) continue;
+
+    await completeWaitAndAdvance({
+      enrollmentId: enrollment.id,
+      timezone: enrollment.campaign.company.timezone,
+      node,
+      nodes,
+      reason: "reply",
+      matched: keywordHit,
+    });
+    advanced += 1;
+  }
+
+  return { advanced };
+}
+
+export async function advanceWaitOnTrackedAction(params: {
+  campaignId: string;
+  customerId: string;
+  kind: "opened" | "clicked";
+}): Promise<{ advanced: number }> {
+  const enrollments = await prisma.campaignEnrollment.findMany({
+    where: {
+      customerId: params.customerId,
+      campaignId: params.campaignId,
+      status: CampaignEnrollmentStatus.ACTIVE,
+      campaign: {
+        status: CampaignStatus.ACTIVE,
+        type: CampaignType.DRIP,
+      },
+    },
+    include: {
+      campaign: {
+        include: {
+          company: { select: { timezone: true } },
+          flowNodes: { orderBy: { sortOrder: "asc" } },
+        },
+      },
+    },
+    take: 20,
+  });
+
+  let advanced = 0;
+  for (const enrollment of enrollments) {
+    const nodes = enrollment.campaign.flowNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      config: asConfig(n.config),
+      sortOrder: n.sortOrder,
+    }));
+    const node = findNode(nodes, enrollment.currentNodeId);
+    if (!node || node.type !== CampaignFlowNodeType.WAIT) continue;
+
+    const wait = parseWaitConfig(node.config);
+    if (!wait.usesAction) continue;
+    if (wait.action === "opened" && params.kind !== "opened") continue;
+    if (wait.action === "clicked" && params.kind !== "clicked") continue;
+
+    const waited = await prisma.campaignEnrollmentEvent.findFirst({
+      where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "wait_started" },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!waited) continue;
+
+    const alreadyDone = await prisma.campaignEnrollmentEvent.findFirst({
+      where: {
+        enrollmentId: enrollment.id,
+        nodeId: node.id,
+        eventType: "wait_completed",
+        createdAt: { gte: waited.createdAt },
+      },
+    });
+    if (alreadyDone) continue;
+
+    const hit = await customerActionMatch({
+      campaignId: params.campaignId,
+      customerId: params.customerId,
+      action: wait.action,
+    });
+    if (!hit) continue;
+
+    await completeWaitAndAdvance({
+      enrollmentId: enrollment.id,
+      timezone: enrollment.campaign.company.timezone,
+      node,
+      nodes,
+      reason: "action",
+      matched: hit,
+    });
+    advanced += 1;
+  }
+
+  return { advanced };
 }
 
 async function logEvent(
@@ -231,8 +529,7 @@ export async function processFlowEnrollments(limit = 40) {
 
     // Daily rate limits
     const settings = (enrollment.campaign.dripSettings ?? {}) as DripSettings;
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDay = startOfZonedDay(new Date(), companyTz);
     const sentToday = await prisma.campaignRecipient.count({
       where: {
         campaignId: enrollment.campaignId,
@@ -252,22 +549,22 @@ export async function processFlowEnrollments(limit = 40) {
     }
 
     if (node.type === CampaignFlowNodeType.WAIT) {
+      const wait = parseWaitConfig(node.config);
       const waited = await prisma.campaignEnrollmentEvent.findFirst({
         where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "wait_started" },
         orderBy: { createdAt: "desc" },
       });
 
       if (!waited) {
-        const mode = String(node.config.mode ?? "delay");
-        let when = new Date();
-        if (mode === "date" && node.config.sendAt) {
-          when = new Date(String(node.config.sendAt));
-        } else {
-          const hours = Number(node.config.delayHours ?? 0);
-          when = new Date(Date.now() + hours * 60 * 60 * 1000);
-        }
-        when = clampToAutomatedSendWindow(when, companyTz);
-        await logEvent(enrollment.id, node.id, "wait_started", { when: when.toISOString() });
+        const now = new Date();
+        const until = waitTimeoutAt(wait, now, companyTz);
+        const when = nextWaitCheckAt(wait, until, now);
+        await logEvent(enrollment.id, node.id, "wait_started", {
+          until: until?.toISOString() ?? null,
+          mode: wait.mode,
+          keywords: wait.keywords,
+          action: wait.action,
+        });
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
           data: { nextSendAt: when },
@@ -276,22 +573,98 @@ export async function processFlowEnrollments(limit = 40) {
         continue;
       }
 
-      const next = nextLinearNode(nodes, node.id);
-      await logEvent(enrollment.id, node.id, "wait_completed");
-      if (!next) {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: { status: CampaignEnrollmentStatus.COMPLETED },
-        });
-      } else {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            currentNodeId: next.id,
-            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
-          },
-        });
+      const alreadyDone = await prisma.campaignEnrollmentEvent.findFirst({
+        where: {
+          enrollmentId: enrollment.id,
+          nodeId: node.id,
+          eventType: "wait_completed",
+          createdAt: { gte: waited.createdAt },
+        },
+      });
+      if (alreadyDone) {
+        const next = nextLinearNode(nodes, node.id);
+        if (!next) {
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: { status: CampaignEnrollmentStatus.COMPLETED },
+          });
+        } else {
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: {
+              currentNodeId: next.id,
+              nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+            },
+          });
+        }
+        processed++;
+        continue;
       }
+
+      const meta = eventMeta(waited.meta);
+      const until =
+        typeof meta.until === "string" && meta.until
+          ? new Date(meta.until)
+          : waitTimeoutAt(wait, waited.createdAt, companyTz);
+      const now = new Date();
+
+      if (wait.usesReply) {
+        const hit = await customerReplyMatch({
+          companyId: enrollment.campaign.companyId,
+          customerId: enrollment.customerId,
+          since: waited.createdAt,
+          keywords: wait.keywords,
+        });
+        if (hit) {
+          await completeWaitAndAdvance({
+            enrollmentId: enrollment.id,
+            timezone: companyTz,
+            node,
+            nodes,
+            reason: "reply",
+            matched: hit,
+          });
+          processed++;
+          continue;
+        }
+      }
+
+      if (wait.usesAction) {
+        const hit = await customerActionMatch({
+          campaignId: enrollment.campaignId,
+          customerId: enrollment.customerId,
+          action: wait.action,
+        });
+        if (hit) {
+          await completeWaitAndAdvance({
+            enrollmentId: enrollment.id,
+            timezone: companyTz,
+            node,
+            nodes,
+            reason: "action",
+            matched: hit,
+          });
+          processed++;
+          continue;
+        }
+      }
+
+      if (wait.hasTimeout && until && now.getTime() >= until.getTime()) {
+        await completeWaitAndAdvance({
+          enrollmentId: enrollment.id,
+          timezone: companyTz,
+          node,
+          nodes,
+          reason: "timeout",
+        });
+        processed++;
+        continue;
+      }
+
+      await prisma.campaignEnrollment.update({
+        where: { id: enrollment.id },
+        data: { nextSendAt: nextWaitCheckAt(wait, until, now) },
+      });
       processed++;
       continue;
     }
@@ -337,6 +710,7 @@ export async function processFlowEnrollments(limit = 40) {
         subject: String(node.config.subject ?? enrollment.campaign.subject ?? ""),
         bodyText: String(node.config.bodyText ?? ""),
         bodyHtml: (node.config.bodyHtml as string | undefined) ?? null,
+        flowNodeId: node.id,
       });
 
       await logEvent(enrollment.id, node.id, ok ? "sent" : "send_failed");
@@ -360,47 +734,117 @@ export async function processFlowEnrollments(limit = 40) {
       continue;
     }
 
-    if (node.type === CampaignFlowNodeType.BRANCH) {
-      const waitHours = Number(node.config.waitHours ?? 48);
-      const entered = await prisma.campaignEnrollmentEvent.findFirst({
-        where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
-        orderBy: { createdAt: "desc" },
+    if (node.type === CampaignFlowNodeType.ADD_TAG) {
+      const tags = parseAddTagConfig(node.config);
+      const customer = await prisma.customer.findFirst({
+        where: { id: enrollment.customerId, companyId: enrollment.campaign.companyId },
+        select: { id: true, tags: true },
       });
+      if (customer && tags.length > 0) {
+        const nextTags = mergeCustomerTags(customer.tags, tags);
+        if (nextTags.length !== customer.tags.length) {
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { tags: nextTags },
+          });
+        }
+      }
 
-      if (!entered) {
-        await logEvent(enrollment.id, node.id, "branch_wait");
+      await logEvent(enrollment.id, node.id, "tag_added", { tags });
+
+      const next = nextLinearNode(nodes, node.id);
+      if (!next) {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: { status: CampaignEnrollmentStatus.COMPLETED },
+        });
+      } else {
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
           data: {
-            nextSendAt: new Date(Date.now() + waitHours * 60 * 60 * 1000),
+            currentNodeId: next.id,
+            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
           },
         });
+      }
+      processed++;
+      continue;
+    }
+
+    if (node.type === CampaignFlowNodeType.BRANCH) {
+      if (isLegacyReactionBranch(node.config)) {
+        const entered = await prisma.campaignEnrollmentEvent.findFirst({
+          where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (!entered) {
+          await logEvent(enrollment.id, node.id, "branch_wait");
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: {
+              nextSendAt: new Date(Date.now() + parseBranchWaitMs(node.config)),
+            },
+          });
+          processed++;
+          continue;
+        }
+
+        const metric = String(node.config.metric ?? "opened");
+        const recent = await prisma.campaignRecipient.findFirst({
+          where: {
+            campaignId: enrollment.campaignId,
+            customerId: enrollment.customerId,
+            status: { in: ["sent", "delivered"] },
+          },
+          orderBy: { sentAt: "desc" },
+        });
+
+        const yes =
+          metric === "clicked"
+            ? Boolean(recent?.clickedAt || (recent?.clickCount ?? 0) > 0)
+            : Boolean(recent?.openedAt);
+
+        const targetId = yes
+          ? String(node.config.yesNextId ?? "")
+          : String(node.config.noNextId ?? "");
+        const target = findNode(nodes, targetId) ?? (yes ? nextLinearNode(nodes, node.id) : null);
+
+        await logEvent(enrollment.id, node.id, yes ? "branch_yes" : "branch_no", {
+          metric,
+        });
+
+        if (!target) {
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: { status: CampaignEnrollmentStatus.COMPLETED },
+          });
+        } else {
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: {
+              currentNodeId: target.id,
+              nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+            },
+          });
+        }
         processed++;
         continue;
       }
 
-      const metric = String(node.config.metric ?? "opened");
-      const recent = await prisma.campaignRecipient.findFirst({
-        where: {
-          campaignId: enrollment.campaignId,
-          customerId: enrollment.customerId,
-          status: { in: ["sent", "delivered"] },
-        },
-        orderBy: { sentAt: "desc" },
-      });
+      const parsed = parseIfElseConfig(node.config);
+      const contact = await loadIfElseContact(
+        enrollment.campaign.companyId,
+        enrollment.customerId
+      );
+      const matched = contact
+        ? parsed.branches.find((branch) => branchMatches(contact, branch))
+        : undefined;
+      const targetId = contact ? pickIfElseNextId(contact, parsed) : parsed.noneNextId;
+      const target = findNode(nodes, targetId);
 
-      const yes =
-        metric === "clicked"
-          ? Boolean(recent?.clickedAt || (recent?.clickCount ?? 0) > 0)
-          : Boolean(recent?.openedAt);
-
-      const targetId = yes
-        ? String(node.config.yesNextId ?? "")
-        : String(node.config.noNextId ?? "");
-      const target = findNode(nodes, targetId) ?? (yes ? nextLinearNode(nodes, node.id) : null);
-
-      await logEvent(enrollment.id, node.id, yes ? "branch_yes" : "branch_no", {
-        metric,
+      await logEvent(enrollment.id, node.id, matched ? "branch_yes" : "branch_none", {
+        branchId: matched?.id ?? "none",
       });
 
       if (!target) {
@@ -418,6 +862,7 @@ export async function processFlowEnrollments(limit = 40) {
         });
       }
       processed++;
+      continue;
     }
   }
 

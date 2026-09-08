@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CampaignChannel, CampaignType } from "@prisma/client";
 import { Info } from "lucide-react";
 import { toast } from "sonner";
 import { AudienceBuilder } from "@/components/marketing/AudienceBuilder";
 import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
 import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
+import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type {
@@ -16,7 +17,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 type Props = {
-  initial?: Partial<CampaignFormState> & { id?: string };
+  initial?: Partial<CampaignFormState> & { id?: string; status?: string };
   onSaved: (campaignId: string) => void;
 };
 
@@ -46,6 +47,10 @@ export function CampaignWizard({ initial, onSaved }: Props) {
     flowNodes: initial?.flowNodes ?? [],
   });
   const campaignId = initial?.id;
+  const existingStatus = initial?.status;
+  const lockType = Boolean(campaignId && existingStatus && existingStatus !== "DRAFT");
+  const alreadyLive = existingStatus === "ACTIVE";
+  const smsRef = useRef<HTMLTextAreaElement>(null);
 
   function update<K extends keyof CampaignFormState>(key: K, value: CampaignFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -121,7 +126,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
         });
       }
 
-      toast.success("Draft saved");
+      toast.success(campaignId ? "Campaign saved" : "Draft saved");
       return id;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
@@ -191,19 +196,21 @@ export function CampaignWizard({ initial, onSaved }: Props) {
                     type: "DRIP" as CampaignType,
                     title: "Automation",
                     description:
-                      "A multi-step sequence with waits and branches (opened email? clicked link?). Enroll from your audience or from triggers like a completed visit.",
+                      "A multi-step sequence with waits and If/Else branches based on customer conditions. Enroll from your audience or from triggers like a completed visit.",
                   },
                 ] as const
               ).map((option) => (
                 <button
                   key={option.type}
                   type="button"
+                  disabled={lockType}
                   onClick={() => update("type", option.type)}
                   className={cn(
                     "rounded-lg border p-4 text-left transition-colors",
                     form.type === option.type
                       ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "border-border hover:bg-muted/40"
+                      : "border-border hover:bg-muted/40",
+                    lockType && "cursor-not-allowed opacity-70"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -224,6 +231,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
                 <Button
                   key={channel}
                   type="button"
+                  disabled={lockType}
                   variant={form.channel === channel ? "default" : "outline"}
                   onClick={() => update("channel", channel)}
                 >
@@ -290,8 +298,17 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       {step === 3 && form.type === "BLAST" && form.channel === "SMS" && (
         <div className="space-y-4 rounded-lg border bg-white p-6">
           <div>
-            <label className="text-sm font-medium">SMS message</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium">SMS message</label>
+              <InsertVariableButton
+                onInsert={(token) => {
+                  const { next } = applyTokenToInput(smsRef.current, form.bodyText, token);
+                  update("bodyText", next);
+                }}
+              />
+            </div>
             <textarea
+              ref={smsRef}
               className="mt-1 min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
               value={form.bodyText}
               onChange={(e) => update("bodyText", e.target.value)}
@@ -384,7 +401,18 @@ export function CampaignWizard({ initial, onSaved }: Props) {
             <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
               Save draft
             </Button>
-            {form.type === "DRIP" ? (
+            {alreadyLive ? (
+              <Button
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  const id = (await saveDraft()) ?? campaignId;
+                  if (id) onSaved(id);
+                }}
+              >
+                {saving ? "Saving..." : "Save changes"}
+              </Button>
+            ) : form.type === "DRIP" ? (
               <Button type="button" disabled={saving} onClick={() => finish("activate")}>
                 {saving ? "Activating..." : "Activate automation"}
               </Button>

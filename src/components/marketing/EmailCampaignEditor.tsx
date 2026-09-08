@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
+  ChevronDown,
   ImagePlus,
   Loader2,
   Maximize2,
   Minimize2,
   Monitor,
   Plus,
+  Send,
   Smartphone,
   Sparkles,
   Trash2,
@@ -21,7 +23,8 @@ import {
   MediaLibraryPicker,
   type MediaLibraryItem,
 } from "@/components/media/MediaLibraryPicker";
-import { EditableEmailPreview } from "@/components/marketing/EditableEmailPreview";
+import { EditableEmailPreview, type EditableEmailPreviewHandle } from "@/components/marketing/EditableEmailPreview";
+import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
@@ -114,6 +117,13 @@ function EmailCampaignEditorInner({
     emailLogoUrl: null,
   });
   const [templateSeeded, setTemplateSeeded] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [testTo, setTestTo] = useState("");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [htmlSourceOpen, setHtmlSourceOpen] = useState(false);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<EditableEmailPreviewHandle>(null);
 
   useEffect(() => {
     setHtmlDraft(bodyHtml);
@@ -148,6 +158,16 @@ function EmailCampaignEditorInner({
   function applyHtml(next: string) {
     setHtmlDraft(next);
     onBodyChange(next, htmlToPlainText(next));
+  }
+
+  function insertIntoSubject(token: string) {
+    const { next } = applyTokenToInput(subjectRef.current, subject, token);
+    onSubjectChange(next);
+  }
+
+  function insertIntoHtml(token: string) {
+    const { next } = applyTokenToInput(htmlRef.current, htmlDraft, token);
+    applyHtml(next);
   }
 
   const applyTemplate = useCallback(
@@ -250,6 +270,37 @@ function EmailCampaignEditorInner({
     }
   }
 
+  async function sendTestEmail() {
+    const to = testTo.trim();
+    if (!to) {
+      toast.error("Enter an email address");
+      return;
+    }
+    if (!subject.trim() && !htmlDraft.trim()) {
+      toast.error("Add a subject or email body first");
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const res = await fetch("/api/marketing/campaigns/test-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject,
+          bodyHtml: htmlDraft,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to send test email");
+      toast.success(`Test email sent to ${to}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send test email");
+    } finally {
+      setSendingTest(false);
+    }
+  }
+
   const hasExistingHtml = Boolean(htmlDraft.trim());
 
   return (
@@ -270,19 +321,72 @@ function EmailCampaignEditorInner({
             .
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? (
-            <>
-              <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
-              Exit fullscreen
-            </>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {testOpen ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="email"
+                autoFocus
+                className="h-8 w-56"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="you@example.com"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void sendTestEmail();
+                  }
+                  if (e.key === "Escape") setTestOpen(false);
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                disabled={sendingTest}
+                onClick={() => void sendTestEmail()}
+              >
+                {sendingTest ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    Sending…
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-1.5 h-3.5 w-3.5" />
+                    Send
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={sendingTest}
+                onClick={() => setTestOpen(false)}
+              >
+                Cancel
+              </Button>
+            </div>
           ) : (
-            <>
-              <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
-              Expand editor
-            </>
+            <Button type="button" variant="outline" size="sm" onClick={() => setTestOpen(true)}>
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              Send test email
+            </Button>
           )}
-        </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? (
+              <>
+                <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
+                Exit fullscreen
+              </>
+            ) : (
+              <>
+                <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
+                Expand editor
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       <div
@@ -375,8 +479,16 @@ function EmailCampaignEditorInner({
             )}
           </Button>
           <div>
-            <label className="text-xs text-muted-foreground">Subject</label>
-            <Input className="mt-1" value={subject} onChange={(e) => onSubjectChange(e.target.value)} />
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-xs text-muted-foreground">Subject</label>
+              <InsertVariableButton onInsert={insertIntoSubject} />
+            </div>
+            <Input
+              ref={subjectRef}
+              className="mt-1"
+              value={subject}
+              onChange={(e) => onSubjectChange(e.target.value)}
+            />
           </div>
 
           <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
@@ -487,6 +599,9 @@ function EmailCampaignEditorInner({
                 </p>
               </div>
               <div className="flex gap-1">
+                <InsertVariableButton
+                  onInsert={(token) => previewRef.current?.insertText(token)}
+                />
                 <Button
                   type="button"
                   size="sm"
@@ -508,6 +623,7 @@ function EmailCampaignEditorInner({
               </div>
             </div>
             <EditableEmailPreview
+              ref={previewRef}
               html={htmlDraft}
               mobilePreview={mobilePreview}
               onHtmlChange={applyHtml}
@@ -515,30 +631,49 @@ function EmailCampaignEditorInner({
           </div>
 
           <div className="flex flex-col rounded-lg border bg-white">
-            <div className="flex items-center justify-between border-b px-3 py-2">
-              <h3 className="text-sm font-semibold">HTML source</h3>
-              <div className="flex gap-1">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setMediaOpen(true)}>
-                  Insert image
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={!htmlDraft}
-                  onClick={() => applyHtml("")}
-                >
-                  Clear
-                </Button>
-              </div>
+            <div className="flex items-center justify-between px-3 py-2">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-left"
+                onClick={() => setHtmlSourceOpen((open) => !open)}
+                aria-expanded={htmlSourceOpen}
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 text-muted-foreground transition-transform",
+                    !htmlSourceOpen && "-rotate-90"
+                  )}
+                />
+                <h3 className="text-sm font-semibold">HTML source</h3>
+              </button>
+              {htmlSourceOpen ? (
+                <div className="flex gap-1">
+                  <InsertVariableButton onInsert={insertIntoHtml} />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setMediaOpen(true)}>
+                    Insert image
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!htmlDraft}
+                    onClick={() => applyHtml("")}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              ) : null}
             </div>
-            <textarea
-              className="min-h-[160px] max-h-[240px] resize-y bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
-              value={htmlDraft}
-              onChange={(e) => applyHtml(e.target.value)}
-              spellCheck={false}
-              placeholder="Paste a full email HTML document here…"
-            />
+            {htmlSourceOpen ? (
+              <textarea
+                ref={htmlRef}
+                className="min-h-[160px] max-h-[240px] resize-y border-t bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
+                value={htmlDraft}
+                onChange={(e) => applyHtml(e.target.value)}
+                spellCheck={false}
+                placeholder="Paste a full email HTML document here…"
+              />
+            ) : null}
           </div>
         </div>
       </div>
