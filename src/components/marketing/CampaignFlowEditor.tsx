@@ -129,6 +129,14 @@ function newId() {
   return `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createNode(
+  type: CampaignFlowNodeType,
+  sortOrder: number
+): CampaignFlowNodeInput & { id: string } {
+  const id = newId();
+  return { id, type, sortOrder, config: defaultConfig(type) };
+}
+
 function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
   switch (type) {
     case "TRIGGER":
@@ -348,12 +356,7 @@ export function CampaignFlowEditor({
   function insertAfter(parentId: string, type: CampaignFlowNodeType) {
     const idx = nodes.findIndex((n) => ensureNodeId(n) === parentId);
     if (idx < 0) return;
-    const child: CampaignFlowNodeInput = {
-      id: newId(),
-      type,
-      sortOrder: idx + 1,
-      config: defaultConfig(type),
-    };
+    const child = createNode(type, idx + 1);
     onChange(reindex([...nodes.slice(0, idx + 1), child, ...nodes.slice(idx + 1)]));
     setSelectionId(child.id);
   }
@@ -365,20 +368,15 @@ export function CampaignFlowEditor({
   ) {
     const parent = byId.get(parentId);
     if (!parent || parent.type !== "BRANCH") return;
-    const child: CampaignFlowNodeInput = {
-      id: newId(),
-      type,
-      sortOrder: nodes.length,
-      config: defaultConfig(type),
-    };
+    const child = createNode(type, nodes.length);
     const parsed = parseIfElseConfig(parent.config);
     const nextConfig =
       edgeKey === "none"
-        ? { ...parsed, noneNextId: child.id! }
+        ? { ...parsed, noneNextId: child.id }
         : {
             ...parsed,
             branches: parsed.branches.map((branch) =>
-              branch.id === edgeKey ? { ...branch, nextId: child.id! } : branch
+              branch.id === edgeKey ? { ...branch, nextId: child.id } : branch
             ),
           };
     onChange(
@@ -622,14 +620,9 @@ export function CampaignFlowEditor({
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      const node: CampaignFlowNodeInput = {
-                        id: newId(),
-                        type: "TRIGGER",
-                        sortOrder: 0,
-                        config: defaultConfig("TRIGGER"),
-                      };
+                      const node = createNode("TRIGGER", 0);
                       onChange([node]);
-                      setSelectionId(node.id!);
+                      setSelectionId(node.id);
                     }}
                   >
                     Add enrollment trigger
