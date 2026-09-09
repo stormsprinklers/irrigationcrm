@@ -9,14 +9,18 @@ import {
   Prisma,
 } from "@prisma/client";
 import {
-  clampToAutomatedSendWindow,
-  isWithinAutomatedSendWindow,
+  clampToCampaignSendWindow,
+  isWithinCampaignSendWindow,
   nextLocalMorningAtHour,
 } from "@/lib/communications/send-window";
 import { prisma } from "@/lib/prisma";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import type { AudienceFilters, CampaignFlowNodeInput, DripSettings } from "@/lib/marketing/types";
 import { sendCampaignMessage } from "@/lib/marketing/flow-send";
+import {
+  notifyAdminsCampaignQuietHours,
+  scheduleOrHoldCampaignSend,
+} from "@/lib/marketing/quiet-hours-notify";
 import { mergeCustomerTags, parseAddTagConfig } from "@/lib/marketing/add-tag";
 import { parseCampaignInstant } from "@/lib/marketing/campaign-time";
 import { startOfZonedDay } from "@/lib/datetime/zoned";
@@ -178,12 +182,16 @@ export async function activateFlowCampaign(campaignId: string) {
     );
   }
 
-  const startAt = clampToAutomatedSendWindow(
-    dripSettings.startAt
-      ? parseCampaignInstant(dripSettings.startAt, campaign.company.timezone) ?? new Date()
-      : new Date(),
-    campaign.company.timezone
-  );
+  const intendedStart = dripSettings.startAt
+    ? parseCampaignInstant(dripSettings.startAt, campaign.company.timezone) ?? new Date()
+    : new Date();
+  const startAt = await scheduleOrHoldCampaignSend({
+    companyId: campaign.companyId,
+    campaignId,
+    campaignName: campaign.name,
+    timeZone: campaign.company.timezone,
+    when: intendedStart,
+  });
   const entryNode =
     flowNodes.find((n) => n.type !== CampaignFlowNodeType.TRIGGER) ?? flowNodes[0];
 
@@ -207,7 +215,10 @@ export async function activateFlowCampaign(campaignId: string) {
     data: { status: CampaignStatus.ACTIVE },
   });
 
-  return { enrolled: customers.length };
+  return {
+    enrolled: customers.length,
+    deferredForQuietHours: startAt.getTime() > intendedStart.getTime() + 1000,
+  };
 }
 
 function eventMeta(value: unknown): Record<string, unknown> {
@@ -236,11 +247,23 @@ async function completeWaitAndAdvance(params: {
     });
     return;
   }
+  const enrollment = await prisma.campaignEnrollment.findUnique({
+    where: { id: params.enrollmentId },
+    include: { campaign: { select: { id: true, name: true, companyId: true } } },
+  });
+  const nextSendAt = enrollment
+    ? await scheduleOrHoldCampaignSend({
+        companyId: enrollment.campaign.companyId,
+        campaignId: enrollment.campaign.id,
+        campaignName: enrollment.campaign.name,
+        timeZone: params.timezone,
+      })
+    : clampToCampaignSendWindow(new Date(), params.timezone);
   await prisma.campaignEnrollment.update({
     where: { id: params.enrollmentId },
     data: {
       currentNodeId: next.id,
-      nextSendAt: clampToAutomatedSendWindow(new Date(), params.timezone),
+      nextSendAt,
     },
   });
 }
@@ -515,6 +538,7 @@ export async function processFlowEnrollments(limit = 40) {
   });
 
   let processed = 0;
+  const quietHoursNotified = new Set<string>();
 
   for (const enrollment of due) {
     const nodes = enrollment.campaign.flowNodes.map((n) => ({
@@ -593,7 +617,12 @@ export async function processFlowEnrollments(limit = 40) {
             where: { id: enrollment.id },
             data: {
               currentNodeId: next.id,
-              nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+              nextSendAt: await scheduleOrHoldCampaignSend({
+                companyId: enrollment.campaign.companyId,
+                campaignId: enrollment.campaignId,
+                campaignName: enrollment.campaign.name,
+                timeZone: companyTz,
+              }),
             },
           });
         }
@@ -683,13 +712,23 @@ export async function processFlowEnrollments(limit = 40) {
       node.type === CampaignFlowNodeType.SEND_EMAIL ||
       node.type === CampaignFlowNodeType.SEND_SMS
     ) {
-      if (!isWithinAutomatedSendWindow(new Date(), companyTz)) {
+      if (!isWithinCampaignSendWindow(new Date(), companyTz)) {
+        const now = new Date();
+        const resumeAt = clampToCampaignSendWindow(now, companyTz);
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
-          data: {
-            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
-          },
+          data: { nextSendAt: resumeAt },
         });
+        if (!quietHoursNotified.has(enrollment.campaignId)) {
+          quietHoursNotified.add(enrollment.campaignId);
+          await notifyAdminsCampaignQuietHours({
+            companyId: enrollment.campaign.companyId,
+            campaignId: enrollment.campaignId,
+            campaignName: enrollment.campaign.name,
+            resumeAt,
+            timeZone: companyTz,
+          });
+        }
         continue;
       }
 
@@ -726,7 +765,12 @@ export async function processFlowEnrollments(limit = 40) {
           where: { id: enrollment.id },
           data: {
             currentNodeId: next.id,
-            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+            nextSendAt: await scheduleOrHoldCampaignSend({
+                companyId: enrollment.campaign.companyId,
+                campaignId: enrollment.campaignId,
+                campaignName: enrollment.campaign.name,
+                timeZone: companyTz,
+              }),
           },
         });
       }
@@ -763,7 +807,12 @@ export async function processFlowEnrollments(limit = 40) {
           where: { id: enrollment.id },
           data: {
             currentNodeId: next.id,
-            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+            nextSendAt: await scheduleOrHoldCampaignSend({
+                companyId: enrollment.campaign.companyId,
+                campaignId: enrollment.campaignId,
+                campaignName: enrollment.campaign.name,
+                timeZone: companyTz,
+              }),
           },
         });
       }
@@ -824,7 +873,12 @@ export async function processFlowEnrollments(limit = 40) {
             where: { id: enrollment.id },
             data: {
               currentNodeId: target.id,
-              nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+              nextSendAt: await scheduleOrHoldCampaignSend({
+                companyId: enrollment.campaign.companyId,
+                campaignId: enrollment.campaignId,
+                campaignName: enrollment.campaign.name,
+                timeZone: companyTz,
+              }),
             },
           });
         }
@@ -857,7 +911,12 @@ export async function processFlowEnrollments(limit = 40) {
           where: { id: enrollment.id },
           data: {
             currentNodeId: target.id,
-            nextSendAt: clampToAutomatedSendWindow(new Date(), companyTz),
+            nextSendAt: await scheduleOrHoldCampaignSend({
+                companyId: enrollment.campaign.companyId,
+                campaignId: enrollment.campaignId,
+                campaignName: enrollment.campaign.name,
+                timeZone: companyTz,
+              }),
           },
         });
       }
@@ -988,7 +1047,12 @@ export async function processCampaignTriggers(companyId?: string) {
           campaignId: campaign.id,
           customerId,
           currentNodeId: entry.id,
-          nextSendAt: clampToAutomatedSendWindow(new Date(), campaign.company.timezone),
+          nextSendAt: await scheduleOrHoldCampaignSend({
+            companyId: campaign.companyId,
+            campaignId: campaign.id,
+            campaignName: campaign.name,
+            timeZone: campaign.company.timezone,
+          }),
           status: CampaignEnrollmentStatus.ACTIVE,
         },
       });

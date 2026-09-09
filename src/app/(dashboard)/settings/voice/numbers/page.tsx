@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { vanityLettersToDigits } from "@/lib/twilio/vanity";
+import { Lock, Unlock } from "lucide-react";
 
 type PhoneNumberRow = {
   id: string;
@@ -34,12 +35,17 @@ type PhoneNumberRow = {
   callFlowId: string | null;
   assignedUserId: string | null;
   twilioSid: string | null;
+  assignmentLocked?: boolean;
   callFlow?: { id: string; name: string } | null;
   assignedUser?: { id: string; name: string } | null;
   company?: { id: string; name: string } | null;
 };
 
-type CompanyOption = { id: string; name: string };
+type CompanyOption = {
+  id: string;
+  name: string;
+  a2pMessagingServiceSid?: string | null;
+};
 
 type CallFlowOption = { id: string; name: string };
 type EmployeeOption = { id: string; name: string };
@@ -57,7 +63,14 @@ type A2pNumberStatus = {
   companyName: string;
   isPrimary: boolean;
   twilioSid: string | null;
+  assignmentLocked?: boolean;
   onMessagingService: boolean;
+  messagingServiceSid?: string | null;
+  messagingServiceName?: string | null;
+  campaignLabel?: string | null;
+  campaignUsecase?: string | null;
+  campaignStatus?: string | null;
+  campaignId?: string | null;
 };
 
 type A2pStatus = {
@@ -78,12 +91,55 @@ type A2pStatus = {
     name: string;
     phoneNumberCount: number;
     twilioPhone: string | null;
+    a2pMessagingServiceSid?: string | null;
   }>;
   numbers: A2pNumberStatus[];
   twilioLinkedCount: number;
   missingOnServiceCount: number;
   missingPrimaryCount: number;
 };
+
+function campaignOptionLabel(s: { sid: string; friendlyName: string | null }) {
+  return s.friendlyName?.trim() || s.sid;
+}
+
+function CampaignSelect({
+  value,
+  services,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  services: Array<{ sid: string; friendlyName: string | null }>;
+  disabled?: boolean;
+  onChange: (sid: string) => void;
+}) {
+  const options = [...services];
+  if (value && !options.some((s) => s.sid === value)) {
+    options.unshift({ sid: value, friendlyName: "Current campaign" });
+  }
+  return (
+    <select
+      className="h-9 w-full min-w-[170px] rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+      value={value}
+      disabled={disabled}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (!next || next === value) return;
+        onChange(next);
+      }}
+    >
+      <option value="" disabled={Boolean(value)}>
+        {value ? "Current campaign" : "No campaign"}
+      </option>
+      {options.map((s) => (
+        <option key={s.sid} value={s.sid}>
+          {campaignOptionLabel(s)}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 const NUMBER_TYPES = [
   { value: "PRIMARY", label: "Primary" },
@@ -126,6 +182,12 @@ export default function VoiceNumbersPage() {
   const [mfaCode, setMfaCode] = useState("");
   const [mfaPhone, setMfaPhone] = useState("");
   const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [assignmentToken, setAssignmentToken] = useState<string | null>(null);
+  const [assignmentMfaChallengeId, setAssignmentMfaChallengeId] = useState<string | null>(null);
+  const [assignmentMfaCode, setAssignmentMfaCode] = useState("");
+  const [assignmentMfaPhone, setAssignmentMfaPhone] = useState("");
+  const [assignmentMfaBusy, setAssignmentMfaBusy] = useState(false);
+  const [savingCompanyCampaignId, setSavingCompanyCampaignId] = useState<string | null>(null);
 
   const digitPreview = useMemo(
     () => vanityLettersToDigits(containsPattern),
@@ -200,6 +262,29 @@ export default function VoiceNumbersPage() {
       })
       .catch(() => toast.error("Failed to load A2P status"));
   }, [tab]);
+
+  async function saveCompanyCampaign(companyId: string, messagingServiceSid: string) {
+    setSavingCompanyCampaignId(companyId);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/a2p", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          messagingServiceSid: messagingServiceSid.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to save company campaign");
+        return;
+      }
+      setA2pStatus(data);
+      toast.success("Company campaign saved");
+    } finally {
+      setSavingCompanyCampaignId(null);
+    }
+  }
 
   async function saveA2pMessagingService() {
     setA2pSavingService(true);
@@ -301,6 +386,58 @@ export default function VoiceNumbersPage() {
     setMfaChallengeId(null);
     setMfaCode("");
     toast.success("Verified — you can release numbers for 10 minutes");
+  }
+
+  async function startAssignmentMfa() {
+    setAssignmentMfaBusy(true);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/assignment-mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to start 2FA");
+        return;
+      }
+      setAssignmentMfaChallengeId(data.challengeId);
+      setAssignmentMfaPhone(data.phoneMasked ?? "");
+      setAssignmentMfaCode(data.debugCode ?? "");
+      toast.success(`Verification code sent to ${data.phoneMasked}`);
+    } finally {
+      setAssignmentMfaBusy(false);
+    }
+  }
+
+  async function verifyAssignmentMfa() {
+    if (!assignmentMfaChallengeId || !assignmentMfaCode.trim()) {
+      toast.error("Enter the verification code");
+      return;
+    }
+    setAssignmentMfaBusy(true);
+    try {
+      const res = await fetch("/api/settings/voice/numbers/assignment-mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify",
+          challengeId: assignmentMfaChallengeId,
+          code: assignmentMfaCode.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Invalid code");
+        return;
+      }
+      setAssignmentToken(data.actionToken);
+      setAssignmentMfaChallengeId(null);
+      setAssignmentMfaCode("");
+      toast.success("Verified — company and campaign can be edited for 10 minutes");
+    } finally {
+      setAssignmentMfaBusy(false);
+    }
   }
 
   function addAreaCode() {
@@ -440,23 +577,65 @@ export default function VoiceNumbersPage() {
   const showCompanyColumn = companies.length > 1;
   const sortedNumbers = numbers;
 
-  async function updateNumber(id: string, patch: Partial<PhoneNumberRow> & { companyId?: string }) {
+  async function updateNumber(
+    id: string,
+    patch: Partial<PhoneNumberRow> & {
+      companyId?: string;
+      messagingServiceSid?: string;
+      assignmentLocked?: boolean;
+    }
+  ) {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const needsUnlock =
+      patch.companyId !== undefined ||
+      patch.messagingServiceSid !== undefined ||
+      patch.assignmentLocked === false;
+    if (needsUnlock && assignmentToken) {
+      headers["x-phone-assignment-mfa"] = assignmentToken;
+    }
     const res = await fetch(`/api/settings/voice/numbers/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(patch),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (res.status === 401 && needsUnlock) {
+        setAssignmentToken(null);
+        toast.error(
+          typeof data.error === "string"
+            ? data.error
+            : "2FA required to change a locked assignment"
+        );
+        return "mfa";
+      }
       toast.error(typeof data.error === "string" ? data.error : "Update failed");
-      return;
+      return "error";
     }
-    if (patch.companyId && patch.companyId !== sessionCompanyId) {
+    if (patch.assignmentLocked === true) {
+      toast.success("Company and campaign locked");
+    } else if (patch.assignmentLocked === false) {
+      toast.success("Assignment unlocked");
+    } else if (patch.messagingServiceSid) {
+      toast.success("Campaign updated");
+    } else if (patch.companyId && patch.companyId !== sessionCompanyId) {
       toast.success("Moved to the other company — switch accounts to manage it there");
     } else if (patch.companyId) {
       toast.success("Company updated");
     }
     load();
+    return "ok";
+  }
+
+  async function lockAllAssignments() {
+    const unlocked = numbers.filter((n) => !n.assignmentLocked);
+    if (!unlocked.length) {
+      toast.success("All numbers are already locked");
+      return;
+    }
+    for (const n of unlocked) {
+      await updateNumber(n.id, { assignmentLocked: true });
+    }
   }
 
   async function releaseNumberWithMfa(id: string) {
@@ -500,7 +679,7 @@ export default function VoiceNumbersPage() {
   }
 
   return (
-    <ContentArea className={showCompanyColumn ? "max-w-6xl" : "max-w-4xl"}>
+    <ContentArea className="max-w-7xl">
       <PageHeader
         breadcrumb={["Settings", "Voice", "Numbers"]}
         title="Phone numbers"
@@ -538,12 +717,12 @@ export default function VoiceNumbersPage() {
       ) : tab === "a2p" ? (
         <div className="space-y-4 rounded-lg border border-border bg-white p-6">
           <div>
-            <h3 className="font-semibold">Shared A2P / 10DLC campaign</h3>
+            <h3 className="font-semibold">A2P / 10DLC campaigns</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Choose the Twilio Messaging Service that holds your approved A2P campaign. One service
-              covers every phone number across businesses you operate (for example Storm Sprinklers
-              and Chestnut &amp; Cheer). New purchases, ports, and transfers attach to this service
-              automatically.
+              Each company can use its own Twilio Messaging Service (A2P campaign). Assign a campaign
+              here as the default for new numbers, then assign and lock individual numbers on Your
+              numbers. A shared fallback below is used only when a company has no campaign of its
+              own.
             </p>
           </div>
           {!a2pStatus ? (
@@ -552,7 +731,9 @@ export default function VoiceNumbersPage() {
             <>
               <div className="space-y-3 rounded-md border border-border bg-muted/30 px-3 py-3 text-sm">
                 <div>
-                  <label className="mb-1 block text-xs font-medium">Messaging Service</label>
+                  <label className="mb-1 block text-xs font-medium">
+                    Shared fallback Messaging Service
+                  </label>
                   {a2pStatus.servicesError ? (
                     <p className="text-amber-800">
                       Could not list Twilio Messaging Services: {a2pStatus.servicesError}
@@ -653,33 +834,65 @@ export default function VoiceNumbersPage() {
               {a2pStatus.missingPrimaryCount > 0 ? (
                 <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
                   <p>
-                    A Primary number is missing from the shared Messaging Service. That causes US
-                    A2P 10DLC send failures for that company.
+                    A Primary number is not on its company&apos;s A2P campaign. That causes US A2P
+                    10DLC send failures for that company.
                   </p>
                   {canManageA2p ? (
                     <Button
                       type="button"
                       onClick={() => void syncA2p()}
-                      disabled={!a2pStatus.configured || a2pSyncing || Boolean(a2pStatus.listError)}
+                      disabled={
+                        a2pSyncing ||
+                        Boolean(a2pStatus.listError) ||
+                        !(
+                          a2pStatus.configured ||
+                          a2pStatus.companies.some((c) => c.a2pMessagingServiceSid)
+                        )
+                      }
                     >
                       {a2pSyncing
                         ? "Attaching…"
-                        : "Attach all my businesses’ numbers to A2P"}
+                        : "Attach unlocked numbers to each company’s campaign"}
                     </Button>
                   ) : null}
                 </div>
               ) : null}
-              <ul className="space-y-1 text-sm">
-                {a2pStatus.companies.map((c) => (
-                  <li key={c.id} className="flex justify-between gap-2 border-b border-border/60 py-2">
-                    <span className="font-medium">{c.name}</span>
-                    <span className="text-muted-foreground">
-                      {c.phoneNumberCount} number{c.phoneNumberCount === 1 ? "" : "s"}
-                      {c.twilioPhone ? ` · Primary ${formatPhoneDisplay(c.twilioPhone)}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Business</TableHead>
+                      <TableHead>Default campaign</TableHead>
+                      <TableHead className="text-right">Numbers</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {a2pStatus.companies.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <div className="font-medium">{c.name}</div>
+                          {c.twilioPhone ? (
+                            <div className="text-xs text-muted-foreground">
+                              Primary {formatPhoneDisplay(c.twilioPhone)}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <CampaignSelect
+                            value={c.a2pMessagingServiceSid ?? ""}
+                            services={a2pStatus.availableServices ?? []}
+                            disabled={!canManageA2p || savingCompanyCampaignId === c.id}
+                            onChange={(sid) => void saveCompanyCampaign(c.id, sid)}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {c.phoneNumberCount} number{c.phoneNumberCount === 1 ? "" : "s"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               {Array.isArray(a2pStatus.numbers) && a2pStatus.numbers.length > 0 ? (
                 <div className="overflow-x-auto rounded-md border border-border">
                   <Table>
@@ -688,7 +901,7 @@ export default function VoiceNumbersPage() {
                         <TableHead>Business</TableHead>
                         <TableHead>Number</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>On campaign</TableHead>
+                        <TableHead>Campaign</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -704,12 +917,25 @@ export default function VoiceNumbersPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {!n.twilioSid ? (
-                              <span className="text-amber-800">No Twilio SID</span>
-                            ) : n.onMessagingService ? (
-                              <span className="text-green-700">Yes</span>
+                            {n.twilioSid ? (
+                              <div className="space-y-1">
+                                <CampaignSelect
+                                  value={n.messagingServiceSid ?? ""}
+                                  services={a2pStatus.availableServices ?? []}
+                                  disabled={
+                                    !canManageA2p ||
+                                    (Boolean(n.assignmentLocked) && !assignmentToken)
+                                  }
+                                  onChange={(sid) =>
+                                    void updateNumber(n.id, { messagingServiceSid: sid })
+                                  }
+                                />
+                                {n.assignmentLocked ? (
+                                  <p className="text-[11px] text-muted-foreground">Locked</p>
+                                ) : null}
+                              </div>
                             ) : (
-                              <span className="font-medium text-amber-800">No</span>
+                              <span className="text-muted-foreground">No Twilio SID</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -722,12 +948,19 @@ export default function VoiceNumbersPage() {
                 <Button
                   type="button"
                   onClick={() => void syncA2p()}
-                  disabled={!a2pStatus.configured || a2pSyncing || Boolean(a2pStatus.listError)}
+                  disabled={
+                    a2pSyncing ||
+                    Boolean(a2pStatus.listError) ||
+                    !(
+                      a2pStatus.configured ||
+                      a2pStatus.companies.some((c) => c.a2pMessagingServiceSid)
+                    )
+                  }
                 >
                   {a2pSyncing
                     ? "Syncing…"
                     : a2pStatus.missingOnServiceCount > 0
-                      ? "Attach all my businesses’ numbers to A2P"
+                      ? "Attach unlocked numbers to each company’s campaign"
                       : "Re-sync A2P attachments"}
                 </Button>
               ) : (
@@ -736,9 +969,9 @@ export default function VoiceNumbersPage() {
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                A number can only sit in one Messaging Service Sender Pool. If attach fails because
-                it&apos;s on another service, sync will try to move it to this shared campaign
-                automatically.
+                A number can only sit in one Messaging Service Sender Pool. Sync skips locked
+                numbers so a 2FA lock is not overwritten. Assign and lock individual numbers on
+                Your numbers.
               </p>
             </>
           )}
@@ -1005,13 +1238,93 @@ export default function VoiceNumbersPage() {
                 Edit title, company, type, and call flow inline. Texts to any of these numbers land in
                 this company&apos;s SMS inbox so nothing is missed; replies always send from Primary.
                 Primary is also the default outbound caller ID. “SMS capable” only means Twilio
-                supports SMS on the line — US texts also need the number on your A2P Messaging
-                Service (Campaign column / A2P campaign tab).
+                supports SMS on the line — US texts also need the number on that company’s A2P
+                campaign (Campaign column). Assign the campaign, then lock company and campaign so
+                they cannot be changed without 2FA.
                 {showCompanyColumn
                   ? " Use the Company column to move a number to another business you operate; it will leave this list and appear under that company."
                   : ""}
               </p>
             </div>
+            {canManageA2p ? (
+              <div className="space-y-3 rounded-md border border-border bg-muted/20 px-3 py-3">
+                {assignmentToken ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-green-800">
+                      Company and campaign edits are unlocked for about 10 minutes.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAssignmentToken(null);
+                        setAssignmentMfaChallengeId(null);
+                        setAssignmentMfaCode("");
+                      }}
+                    >
+                      Relock now
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        Locked company and campaign fields stay read-only until you unlock with 2FA.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void lockAllAssignments()}
+                        >
+                          Lock all
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => void startAssignmentMfa()}
+                          disabled={assignmentMfaBusy}
+                        >
+                          Unlock with 2FA
+                        </Button>
+                      </div>
+                    </div>
+                    {assignmentMfaChallengeId ? (
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium">
+                            Code sent to {assignmentMfaPhone}
+                          </label>
+                          <Input
+                            value={assignmentMfaCode}
+                            onChange={(e) => setAssignmentMfaCode(e.target.value)}
+                            className="w-40"
+                            inputMode="numeric"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={() => void verifyAssignmentMfa()}
+                          disabled={assignmentMfaBusy}
+                        >
+                          Verify
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void startAssignmentMfa()}
+                          disabled={assignmentMfaBusy}
+                        >
+                          Resend
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            ) : null}
             <div className="rounded-lg border border-border bg-white">
               <Table>
                 <TableHeader>
@@ -1025,9 +1338,13 @@ export default function VoiceNumbersPage() {
                     <TableHead title="Twilio SMS capability — not the same as A2P campaign approval.">
                       SMS
                     </TableHead>
-                    <TableHead title="Whether this number is on your shared A2P / 10DLC Messaging Service.">
+                    <TableHead
+                      className="min-w-[180px]"
+                      title="The Twilio A2P / 10DLC campaign this number is on. Each company can use a different campaign."
+                    >
                       Campaign
                     </TableHead>
+                    <TableHead className="w-[88px]">Lock</TableHead>
                     <TableHead className="min-w-[150px]">Call flow</TableHead>
                     <TableHead className="min-w-[140px]">Source / agent</TableHead>
                     <TableHead>Linked</TableHead>
@@ -1037,6 +1354,8 @@ export default function VoiceNumbersPage() {
                 <TableBody>
                   {sortedNumbers.map((n) => {
                     const onCurrentCompany = n.companyId === sessionCompanyId;
+                    const assignmentDisabled = Boolean(n.assignmentLocked) && !assignmentToken;
+                    const a2pRow = a2pStatus?.numbers?.find((row) => row.id === n.id);
                     return (
                     <TableRow key={n.id}>
                       <TableCell>
@@ -1052,12 +1371,19 @@ export default function VoiceNumbersPage() {
                       {showCompanyColumn ? (
                         <TableCell>
             <select
-                            className="h-9 w-full min-w-[150px] rounded-md border border-input bg-background px-2 text-sm"
+                            className="h-9 w-full min-w-[150px] rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
                             value={n.companyId}
+                            disabled={!canManageA2p || assignmentDisabled}
                             onChange={(e) => {
                               const next = e.target.value;
                               if (next === n.companyId) return;
-                              void updateNumber(n.id, { companyId: next });
+                              const company = companies.find((c) => c.id === next);
+                              void updateNumber(n.id, {
+                                companyId: next,
+                                ...(company?.a2pMessagingServiceSid
+                                  ? { messagingServiceSid: company.a2pMessagingServiceSid }
+                                  : {}),
+                              });
                             }}
                           >
                             {companies.map((c) => (
@@ -1136,34 +1462,62 @@ export default function VoiceNumbersPage() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const a2pRow = a2pStatus?.numbers?.find(
-                            (row) => row.id === n.id
-                          );
-                          if (!a2pStatus?.configured) {
-                            return (
-                              <span className="text-xs text-muted-foreground">Not set up</span>
-                            );
-                          }
                           if (!n.twilioSid) {
                             return <span className="text-xs text-muted-foreground">—</span>;
                           }
-                          if (a2pRow?.onMessagingService) {
-                            return (
-                              <Badge variant="outline" className="border-green-300 text-green-800">
-                                On campaign
-                              </Badge>
-                            );
+                          if (!a2pStatus) {
+                            return <span className="text-xs text-muted-foreground">—</span>;
                           }
                           return (
-                            <Badge
-                              variant="outline"
-                              className="border-amber-300 text-amber-900"
-                              title="Attach via the A2P campaign tab — SMS capable alone is not enough for US 10DLC."
-                            >
-                              Not on campaign
-                            </Badge>
+                            <CampaignSelect
+                              value={a2pRow?.messagingServiceSid ?? ""}
+                              services={a2pStatus.availableServices ?? []}
+                              disabled={!canManageA2p || assignmentDisabled}
+                              onChange={(sid) =>
+                                void updateNumber(n.id, { messagingServiceSid: sid })
+                              }
+                            />
                           );
                         })()}
+                      </TableCell>
+                      <TableCell>
+                        {canManageA2p ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1"
+                            disabled={n.assignmentLocked && !assignmentToken}
+                            onClick={() => {
+                              if (n.assignmentLocked && !assignmentToken) {
+                                void startAssignmentMfa();
+                                return;
+                              }
+                              void updateNumber(n.id, {
+                                assignmentLocked: !n.assignmentLocked,
+                              });
+                            }}
+                          >
+                            {n.assignmentLocked ? (
+                              <>
+                                <Lock className="h-3.5 w-3.5" />
+                                Locked
+                              </>
+                            ) : (
+                              <>
+                                <Unlock className="h-3.5 w-3.5" />
+                                Lock
+                              </>
+                            )}
+                          </Button>
+                        ) : n.assignmentLocked ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <Lock className="h-3.5 w-3.5" />
+                            Locked
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {onCurrentCompany ? (
@@ -1219,7 +1573,7 @@ export default function VoiceNumbersPage() {
                   {!sortedNumbers.length ? (
                     <TableRow className="hover:bg-transparent">
                       <TableCell
-                        colSpan={showCompanyColumn ? 9 : 8}
+                        colSpan={showCompanyColumn ? 11 : 10}
                         className="py-8 text-center text-muted-foreground"
                       >
                         No phone numbers yet. Add one below or buy from Twilio.

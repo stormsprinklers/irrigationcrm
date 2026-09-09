@@ -23,6 +23,14 @@ function serializeReview(
     assignments: Array<{ share: { toNumber?: () => number } | number; user: { id: string; name: string } }>;
   }
 ) {
+  const assignments =
+    review.status === GbpReviewAssignStatus.UNKNOWN && review.assignments.length === 0
+      ? [{ userId: "__unknown__", name: "Unknown", share: 0 }]
+      : review.assignments.map((row) => ({
+          userId: row.user.id,
+          name: row.user.name,
+          share: typeof row.share === "number" ? row.share : Number(row.share),
+        }));
   return {
     id: review.id,
     reviewId: review.reviewId,
@@ -31,11 +39,7 @@ function serializeReview(
     starRating: review.starRating,
     createTime: review.createTime?.toISOString() ?? null,
     status: review.status,
-    assignments: review.assignments.map((row) => ({
-      userId: row.user.id,
-      name: row.user.name,
-      share: typeof row.share === "number" ? row.share : Number(row.share),
-    })),
+    assignments,
   };
 }
 
@@ -49,7 +53,10 @@ export async function GET() {
         orderBy: { createTime: "desc" },
       }),
       prisma.gbpReview.findMany({
-        where: { companyId: user.companyId, status: GbpReviewAssignStatus.ASSIGNED },
+        where: {
+          companyId: user.companyId,
+          status: { in: [GbpReviewAssignStatus.ASSIGNED, GbpReviewAssignStatus.UNKNOWN] },
+        },
         include: { assignments: { include: { user: { select: { id: true, name: true } } } } },
       }),
       prisma.user.findMany({
@@ -81,11 +88,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const reviewId = String(body.reviewId ?? "").trim();
+    const unknown = body.unknown === true;
     const userIds = Array.isArray(body.userIds) ? body.userIds.map(String) : [];
     if (!reviewId) return badRequestResponse("reviewId is required");
-    if (!userIds.length) return badRequestResponse("Select at least one technician");
+    if (!unknown && !userIds.length) return badRequestResponse("Select at least one technician, or Unknown");
 
-    const updated = await manuallyAssignGbpReview(user.companyId, reviewId, userIds);
+    const updated = await manuallyAssignGbpReview(user.companyId, reviewId, userIds, { unknown });
     if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     return NextResponse.json(serializeReview(updated));

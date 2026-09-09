@@ -1,10 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { CampaignChannel, CampaignType } from "@prisma/client";
-import { Info } from "lucide-react";
+import type { CampaignChannel } from "@prisma/client";
 import { toast } from "sonner";
-import { AudienceBuilder } from "@/components/marketing/AudienceBuilder";
 import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
 import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
@@ -14,16 +12,29 @@ import type {
   CampaignFlowNodeInput,
   CampaignFormState,
 } from "@/lib/marketing/types";
-import { cn } from "@/lib/utils";
 
 type Props = {
   initial?: Partial<CampaignFormState> & { id?: string; status?: string };
   onSaved: (campaignId: string) => void;
 };
 
+function defaultTriggerNode(): CampaignFlowNodeInput {
+  return {
+    id: "tmp-trigger",
+    type: "TRIGGER",
+    sortOrder: 0,
+    config: {
+      kind: "manual_audience",
+      priceBookItemIds: [],
+      cities: [],
+      formNoBookingDays: 7,
+    },
+  };
+}
+
 const defaultForm: CampaignFormState = {
   name: "",
-  type: "BLAST",
+  type: "DRIP",
   channel: "EMAIL",
   subject: "",
   bodyText: "",
@@ -32,25 +43,30 @@ const defaultForm: CampaignFormState = {
   audienceFilters: {},
   dripSettings: { emailsPerDay: 50, smsPerDay: 50 },
   steps: [],
-  flowNodes: [],
+  flowNodes: [defaultTriggerNode()],
 };
 
 export function CampaignWizard({ initial, onSaved }: Props) {
-  const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<CampaignFormState>({
     ...defaultForm,
     ...initial,
+    type: initial?.type === "BLAST" ? "BLAST" : "DRIP",
     audienceFilters: initial?.audienceFilters ?? {},
     dripSettings: { ...defaultForm.dripSettings, ...initial?.dripSettings },
     steps: initial?.steps ?? [],
-    flowNodes: initial?.flowNodes ?? [],
+    flowNodes:
+      initial?.flowNodes && initial.flowNodes.length > 0
+        ? initial.flowNodes
+        : initial?.id
+          ? initial.flowNodes ?? []
+          : [defaultTriggerNode()],
   });
   const campaignId = initial?.id;
   const existingStatus = initial?.status;
-  const lockType = Boolean(campaignId && existingStatus && existingStatus !== "DRAFT");
   const alreadyLive = existingStatus === "ACTIVE";
   const smsRef = useRef<HTMLTextAreaElement>(null);
+  const isBlast = form.type === "BLAST";
 
   function update<K extends keyof CampaignFormState>(key: K, value: CampaignFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -61,12 +77,12 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       toast.error("Campaign name is required");
       return null;
     }
-    if (!form.bodyText.trim() && form.type === "BLAST" && form.channel === "SMS") {
+    if (isBlast && !form.bodyText.trim() && form.channel === "SMS") {
       toast.error("Message is required");
       return null;
     }
-    if (form.type === "DRIP" && form.flowNodes.length === 0 && form.steps.length === 0) {
-      toast.error("Add at least one automation step");
+    if (!isBlast && form.flowNodes.length === 0 && form.steps.length === 0) {
+      toast.error("Add at least one campaign step");
       return null;
     }
 
@@ -74,15 +90,15 @@ export function CampaignWizard({ initial, onSaved }: Props) {
     try {
       const payload = {
         name: form.name,
-        type: form.type,
+        type: isBlast ? "BLAST" : "DRIP",
         channel: form.channel,
         subject: form.subject || null,
         bodyText: form.bodyText || form.name,
         bodyHtml: form.bodyHtml || null,
         aiPrompt: form.aiPrompt || null,
         audienceFilters: form.audienceFilters,
-        dripSettings: form.type === "DRIP" ? form.dripSettings : null,
-        steps: form.type === "DRIP" ? form.steps : undefined,
+        dripSettings: isBlast ? null : form.dripSettings,
+        steps: isBlast ? undefined : form.steps,
       };
 
       const url = campaignId ? `/api/marketing/campaigns/${campaignId}` : "/api/marketing/campaigns";
@@ -97,7 +113,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
 
       const id = (data.id ?? campaignId) as string;
 
-      if (form.type === "DRIP" && form.flowNodes.length > 0) {
+      if (!isBlast && form.flowNodes.length > 0) {
         const flowRes = await fetch(`/api/marketing/campaigns/${id}/flow`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -109,7 +125,12 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           update(
             "flowNodes",
             flowData.nodes.map(
-              (n: { id: string; type: CampaignFlowNodeInput["type"]; config: Record<string, unknown>; sortOrder: number }) => ({
+              (n: {
+                id: string;
+                type: CampaignFlowNodeInput["type"];
+                config: Record<string, unknown>;
+                sortOrder: number;
+              }) => ({
                 id: n.id,
                 type: n.type,
                 config: (n.config ?? {}) as Record<string, unknown>,
@@ -118,7 +139,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
             )
           );
         }
-      } else if (form.type === "DRIP" && form.steps.length > 0) {
+      } else if (!isBlast && form.steps.length > 0) {
         await fetch(`/api/marketing/campaigns/${id}/steps`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -150,7 +171,11 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Action failed");
       toast.success(
-        action === "activate" ? "Automation activated" : "Campaign sent"
+        data.deferredForQuietHours
+          ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
+          : action === "activate"
+            ? "Campaign activated"
+            : "Campaign sent"
       );
       onSaved(id);
     } catch (err) {
@@ -160,118 +185,20 @@ export function CampaignWizard({ initial, onSaved }: Props) {
     }
   }
 
-  const stepLabels =
-    form.type === "DRIP"
-      ? ["Setup", "Audience", "Automation", "Review"]
-      : ["Setup", "Audience", "Content", "Review"];
-
-  const canvasMode = step === 3 && form.type === "DRIP";
-
-  return (
-    <div className={cn("flex min-h-0 flex-col gap-4", canvasMode && "h-full")}>
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {stepLabels.map((label, index) => (
-          <span key={label} className={step >= index + 1 ? "font-medium text-foreground" : ""}>
-            {index + 1}. {label}
-          </span>
-        ))}
-      </div>
-
-      {step === 1 && (
+  if (isBlast) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          This is a one-time send created before campaigns used the builder. New campaigns use the
+          campaign builder.
+        </div>
         <div className="space-y-4 rounded-lg border bg-white p-6">
           <div>
             <label className="text-sm font-medium">Campaign name</label>
             <Input className="mt-1" value={form.name} onChange={(e) => update("name", e.target.value)} />
           </div>
-          <div>
-            <label className="text-sm font-medium">Campaign type</label>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              {(
-                [
-                  {
-                    type: "BLAST" as CampaignType,
-                    title: "Blast",
-                    description:
-                      "Send one email or SMS to your whole audience right away (or on a schedule). Best for announcements and one-time offers.",
-                  },
-                  {
-                    type: "DRIP" as CampaignType,
-                    title: "Automation",
-                    description:
-                      "A multi-step sequence with waits and If/Else branches based on customer conditions. Enroll from your audience or from triggers like a completed visit.",
-                  },
-                ] as const
-              ).map((option) => (
-                <button
-                  key={option.type}
-                  type="button"
-                  disabled={lockType}
-                  onClick={() => update("type", option.type)}
-                  className={cn(
-                    "rounded-lg border p-4 text-left transition-colors",
-                    form.type === option.type
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "border-border hover:bg-muted/40",
-                    lockType && "cursor-not-allowed opacity-70"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">{option.title}</span>
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {option.description}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Primary channel</label>
-            <div className="mt-2 flex gap-2">
-              {(["EMAIL", "SMS"] as CampaignChannel[]).map((channel) => (
-                <Button
-                  key={channel}
-                  type="button"
-                  disabled={lockType}
-                  variant={form.channel === channel ? "default" : "outline"}
-                  onClick={() => update("channel", channel)}
-                >
-                  {channel}
-                </Button>
-              ))}
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Automations can still mix email and SMS steps. This sets the default audience
-              contact method.
-            </p>
-          </div>
-          <Button type="button" disabled={!form.name.trim()} onClick={() => setStep(2)}>
-            Continue
-          </Button>
         </div>
-      )}
-
-      {step === 2 && (
-        <div className="rounded-lg border bg-white p-6">
-          <AudienceBuilder
-            channel={form.channel}
-            filters={form.audienceFilters}
-            onChange={(filters) => update("audienceFilters", filters)}
-          />
-          <div className="mt-4 flex gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button type="button" onClick={() => setStep(3)}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && form.type === "BLAST" && form.channel === "EMAIL" && (
-        <div className="space-y-4">
+        {form.channel === "EMAIL" ? (
           <EmailCampaignEditor
             subject={form.subject}
             bodyHtml={form.bodyHtml}
@@ -283,23 +210,8 @@ export function CampaignWizard({ initial, onSaved }: Props) {
               update("bodyText", bodyText);
             }}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(2)}>
-              Back
-            </Button>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
-              Save draft
-            </Button>
-            <Button type="button" onClick={() => setStep(4)}>
-              Review
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && form.type === "BLAST" && form.channel === "SMS" && (
-        <div className="space-y-4 rounded-lg border bg-white p-6">
-          <div>
+        ) : (
+          <div className="space-y-4 rounded-lg border bg-white p-6">
             <div className="flex items-center justify-between gap-2">
               <label className="text-sm font-medium">SMS message</label>
               <InsertVariableButton
@@ -317,115 +229,91 @@ export function CampaignWizard({ initial, onSaved }: Props) {
               placeholder="Your SMS message. Reply STOP to opt out will be appended."
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(2)}>
-              Back
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
+            Save draft
+          </Button>
+          {alreadyLive ? null : (
+            <Button type="button" disabled={saving} onClick={() => finish("send")}>
+              {saving ? "Sending..." : "Send now"}
             </Button>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
-              Save draft
-            </Button>
-            <Button type="button" onClick={() => setStep(4)}>
-              Review
-            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-white">
+      <div className="flex shrink-0 flex-wrap items-end gap-3 border-b border-border px-4 py-3">
+        <div className="min-w-[12rem] flex-1">
+          <label className="text-xs font-medium text-muted-foreground">Campaign name</label>
+          <Input
+            className="mt-1 h-8"
+            value={form.name}
+            onChange={(e) => update("name", e.target.value)}
+            placeholder="Spring follow-up"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground">Primary channel</label>
+          <div className="mt-1 flex gap-1">
+            {(["EMAIL", "SMS"] as CampaignChannel[]).map((channel) => (
+              <Button
+                key={channel}
+                type="button"
+                size="sm"
+                className="h-8"
+                variant={form.channel === channel ? "default" : "outline"}
+                onClick={() => update("channel", channel)}
+              >
+                {channel}
+              </Button>
+            ))}
           </div>
         </div>
-      )}
-
-      {step === 3 && form.type === "DRIP" && (
-        <div className="flex h-[calc(100dvh-12rem)] min-h-[36rem] flex-col overflow-hidden rounded-lg border bg-white">
-          <CampaignFlowEditor
-            nodes={form.flowNodes}
-            onChange={(flowNodes) => update("flowNodes", flowNodes)}
-            emailsPerDay={form.dripSettings.emailsPerDay ?? 50}
-            smsPerDay={form.dripSettings.smsPerDay ?? 50}
-            startAt={form.dripSettings.startAt}
-            onSettingsChange={(dripSettings) => update("dripSettings", dripSettings)}
-          />
-          <div className="flex shrink-0 flex-wrap gap-2 border-t border-border px-4 py-3">
-            <Button type="button" variant="outline" onClick={() => setStep(2)}>
-              Back
-            </Button>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
-              Save draft
-            </Button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => saveDraft()}>
+            Save draft
+          </Button>
+          {alreadyLive ? (
             <Button
               type="button"
-              disabled={form.flowNodes.length === 0}
-              onClick={() => setStep(4)}
+              size="sm"
+              disabled={saving}
+              onClick={async () => {
+                const id = (await saveDraft()) ?? campaignId;
+                if (id) onSaved(id);
+              }}
             >
-              Review
+              {saving ? "Saving..." : "Save changes"}
             </Button>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="space-y-4 rounded-lg border bg-white p-6">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">Name</dt>
-              <dd className="font-medium">{form.name}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Type</dt>
-              <dd className="font-medium">
-                {form.type === "DRIP" ? "Automation" : "Blast"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Channel</dt>
-              <dd className="font-medium">{form.channel}</dd>
-            </div>
-            {form.type === "BLAST" && form.channel === "EMAIL" && (
-              <div>
-                <dt className="text-muted-foreground">Subject</dt>
-                <dd className="font-medium">{form.subject || "—"}</dd>
-              </div>
-            )}
-            {form.type === "DRIP" && (
-              <div>
-                <dt className="text-muted-foreground">Automation steps</dt>
-                <dd className="font-medium">{form.flowNodes.length}</dd>
-              </div>
-            )}
-          </dl>
-
-          {form.type === "BLAST" && form.channel === "EMAIL" && form.bodyHtml && (
-            <div className="overflow-hidden rounded border">
-              <iframe title="Review" className="h-80 w-full" srcDoc={form.bodyHtml} />
-            </div>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving || form.flowNodes.length === 0}
+              onClick={() => finish("activate")}
+            >
+              {saving ? "Activating..." : "Activate campaign"}
+            </Button>
           )}
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => setStep(3)}>
-              Back
-            </Button>
-            <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
-              Save draft
-            </Button>
-            {alreadyLive ? (
-              <Button
-                type="button"
-                disabled={saving}
-                onClick={async () => {
-                  const id = (await saveDraft()) ?? campaignId;
-                  if (id) onSaved(id);
-                }}
-              >
-                {saving ? "Saving..." : "Save changes"}
-              </Button>
-            ) : form.type === "DRIP" ? (
-              <Button type="button" disabled={saving} onClick={() => finish("activate")}>
-                {saving ? "Activating..." : "Activate automation"}
-              </Button>
-            ) : (
-              <Button type="button" disabled={saving} onClick={() => finish("send")}>
-                {saving ? "Sending..." : "Send now"}
-              </Button>
-            )}
-          </div>
         </div>
-      )}
+      </div>
+      <div className="min-h-0 flex-1">
+        <CampaignFlowEditor
+          nodes={form.flowNodes}
+          onChange={(flowNodes) => update("flowNodes", flowNodes)}
+          emailsPerDay={form.dripSettings.emailsPerDay ?? 50}
+          smsPerDay={form.dripSettings.smsPerDay ?? 50}
+          startAt={form.dripSettings.startAt}
+          channel={form.channel}
+          audienceFilters={form.audienceFilters}
+          onAudienceChange={(audienceFilters) => update("audienceFilters", audienceFilters)}
+          onSettingsChange={(dripSettings) => update("dripSettings", dripSettings)}
+        />
+      </div>
     </div>
   );
 }

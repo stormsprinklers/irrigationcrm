@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   clampToAutomatedSendWindow,
+  clampToCampaignSendWindow,
   isWithinAutomatedSendWindow,
+  isWithinCampaignSendWindow,
   nextAutomatedSendWindowStart,
+  nextCampaignSendWindowStart,
 } from "../send-window";
 
 const TZ = "America/Denver";
@@ -48,4 +51,41 @@ test("nextAutomatedSendWindowStart from early morning is same-day 5am", () => {
 test("clampToAutomatedSendWindow leaves daytime unchanged", () => {
   const at = new Date("2026-06-24T18:00:00.000Z"); // noon MDT
   assert.equal(clampToAutomatedSendWindow(at, TZ).toISOString(), at.toISOString());
+});
+
+test("campaign window blocks 9pm–8am and resumes at 8am", () => {
+  // 7:59 AM MDT = 13:59 UTC — still quiet hours
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-06-24T13:59:00.000Z"), TZ),
+    false
+  );
+  // 8:00 AM MDT = 14:00 UTC
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-06-24T14:00:00.000Z"), TZ),
+    true
+  );
+  // 8:59 PM MDT = 02:59 UTC next day
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-06-25T02:59:00.000Z"), TZ),
+    true
+  );
+  // 9:00 PM MDT = 03:00 UTC
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-06-25T03:00:00.000Z"), TZ),
+    false
+  );
+
+  // 10:00 PM MDT Jun 24 → 8:00 AM Jun 25
+  const overnight = new Date("2026-06-25T04:00:00.000Z");
+  assert.equal(
+    nextCampaignSendWindowStart(overnight, TZ).toISOString(),
+    "2026-06-25T14:00:00.000Z"
+  );
+
+  // 2:00 AM MDT Jun 24 → 8:00 AM Jun 24
+  const early = new Date("2026-06-24T08:00:00.000Z");
+  assert.equal(
+    clampToCampaignSendWindow(early, TZ).toISOString(),
+    "2026-06-24T14:00:00.000Z"
+  );
 });

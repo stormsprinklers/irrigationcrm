@@ -77,6 +77,14 @@ function mfaOtpCopy(purpose: AuthMfaPurpose) {
       label: "phone number release",
     };
   }
+  if (purpose === "PHONE_ASSIGNMENT_UNLOCK") {
+    return {
+      sms: (code: string) =>
+        `Storm Sprinklers phone assignment unlock code: ${code}. Expires in 10 minutes.`,
+      subject: "Storm Sprinklers phone assignment unlock code",
+      label: "phone assignment unlock",
+    };
+  }
   if (purpose === "ACCOUNT_PASSWORD") {
     return {
       sms: (code: string) =>

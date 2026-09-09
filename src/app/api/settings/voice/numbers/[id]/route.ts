@@ -8,9 +8,13 @@ import {
   reassignPhoneNumberToCompany,
 } from "@/lib/voice/reassign-phone-company";
 import { releaseNumber } from "@/lib/twilio/numbers";
-import { verifyPhoneReleaseActionToken } from "@/lib/twilio/phone-release-token";
+import {
+  PHONE_ASSIGNMENT_PURPOSE,
+  verifyPhoneReleaseActionToken,
+  verifyPhoneStepUpToken,
+} from "@/lib/twilio/phone-release-token";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
-import { listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
+import { attachNumberToA2pMessagingService, listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
 import { prisma } from "@/lib/prisma";
 
 async function operatedCompanyIdsFor(user: {
@@ -46,6 +50,8 @@ export async function PATCH(
       assignedUserId,
       trackingSource,
       companyId: nextCompanyId,
+      messagingServiceSid: nextMessagingServiceSid,
+      assignmentLocked: nextAssignmentLocked,
     } = body;
 
     const allowedCompanyIds = await operatedCompanyIdsFor(user);
@@ -57,16 +63,65 @@ export async function PATCH(
       return NextResponse.json({ error: "Phone number not found" }, { status: 404 });
     }
 
-    if (
+    const changingCompany =
       nextCompanyId !== undefined &&
       nextCompanyId !== null &&
-      String(nextCompanyId) !== existing.companyId
-    ) {
+      String(nextCompanyId) !== existing.companyId;
+    const campaignSid =
+      nextMessagingServiceSid === undefined || nextMessagingServiceSid === null
+        ? undefined
+        : String(nextMessagingServiceSid).trim();
+    const changingCampaign = Boolean(campaignSid);
+    const locking = nextAssignmentLocked === true && !existing.assignmentLocked;
+    const unlocking = nextAssignmentLocked === false && existing.assignmentLocked;
+    const needsAssignmentMfa =
+      existing.assignmentLocked && (changingCompany || changingCampaign || unlocking);
+
+    if (needsAssignmentMfa) {
+      const mfaToken =
+        request.headers.get("x-phone-assignment-mfa") ??
+        request.nextUrl.searchParams.get("assignmentMfa") ??
+        "";
+      if (!mfaToken) {
+        return NextResponse.json(
+          { error: "2FA verification required to change locked company or campaign assignment" },
+          { status: 401 }
+        );
+      }
+      const verified = await verifyPhoneStepUpToken(mfaToken, {
+        userId: user.id,
+        companyId: user.companyId,
+        purpose: PHONE_ASSIGNMENT_PURPOSE,
+      });
+      if (!verified.ok) {
+        return NextResponse.json({ error: verified.error }, { status: 401 });
+      }
+    }
+
+    if (locking || unlocking) {
+      existing = await prisma.phoneNumber.update({
+        where: { id },
+        data: unlocking
+          ? {
+              assignmentLocked: false,
+              assignmentLockedAt: null,
+              assignmentLockedByUserId: null,
+            }
+          : {
+              assignmentLocked: true,
+              assignmentLockedAt: new Date(),
+              assignmentLockedByUserId: user.id,
+            },
+      });
+    }
+
+    if (changingCompany) {
       try {
         existing = await reassignPhoneNumberToCompany({
           numberId: id,
           toCompanyId: String(nextCompanyId),
           allowedCompanyIds,
+          messagingServiceSid: changingCampaign ? campaignSid : undefined,
         });
       } catch (err) {
         if (err instanceof PhoneCompanyReassignError) {
@@ -74,11 +129,25 @@ export async function PATCH(
         }
         throw err;
       }
+    } else if (changingCampaign) {
+      if (!existing.twilioSid) {
+        return NextResponse.json(
+          { error: "This number is not linked to Twilio, so it cannot join a campaign." },
+          { status: 400 }
+        );
+      }
+      const a2p = await attachNumberToA2pMessagingService(existing.twilioSid, {
+        companyId: existing.companyId,
+        messagingServiceSid: campaignSid,
+      });
+      if (!a2p.ok) {
+        return NextResponse.json({ error: a2p.error }, { status: 400 });
+      }
     }
 
     const companyId = existing.companyId;
-    const onlyCompanyChange =
-      nextCompanyId !== undefined &&
+    const onlyAssignmentChange =
+      (changingCompany || changingCampaign || locking || unlocking) &&
       e164 === undefined &&
       friendlyName === undefined &&
       callFlowId === undefined &&
@@ -86,7 +155,7 @@ export async function PATCH(
       numberType === undefined &&
       assignedUserId === undefined &&
       trackingSource === undefined;
-    if (onlyCompanyChange) {
+    if (onlyAssignmentChange) {
       return NextResponse.json(existing);
     }
 

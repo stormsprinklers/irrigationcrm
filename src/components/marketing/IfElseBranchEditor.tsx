@@ -16,11 +16,11 @@ import {
   IF_ELSE_MAX_BRANCHES,
   IF_ELSE_OPERATORS,
   emptyIfElseBranch,
-  emptyIfElseCondition,
   emptyIfElseSegment,
   operatorNeedsValue,
   parseIfElseConfig,
   usesIfElseConfig,
+  type IfElseBooleanOp,
   type IfElseBranch,
   type IfElseCondition,
   type IfElseConfig,
@@ -81,6 +81,41 @@ function NextStepSelect({
         </option>
       ))}
     </select>
+  );
+}
+
+function BooleanOpToggle({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: IfElseBooleanOp;
+  onChange: (next: IfElseBooleanOp) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      className="inline-flex rounded-md border border-input bg-white p-0.5"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {(["AND", "OR"] as const).map((op) => (
+        <button
+          key={op}
+          type="button"
+          className={cn(
+            "min-w-[3.25rem] rounded px-2 py-1 text-[11px] font-semibold tracking-wide",
+            value === op
+              ? "bg-slate-900 text-white"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+          aria-pressed={value === op}
+          onClick={() => onChange(op)}
+        >
+          {op}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -165,61 +200,39 @@ function SegmentEditor({
     });
   }
 
+  function removeCondition(index: number) {
+    if (segment.conditions.length <= 1) {
+      onRemove();
+      return;
+    }
+    onChange({
+      ...segment,
+      conditions: segment.conditions.filter((_, i) => i !== index),
+    });
+  }
+
   return (
     <div className="rounded-md border bg-white p-3">
       <div className="space-y-2">
         {segment.conditions.map((condition, index) => (
-          <ConditionRow
-            key={condition.id}
-            condition={condition}
-            canRemove={segment.conditions.length > 1}
-            onChange={(next) => updateCondition(index, next)}
-            onRemove={() =>
-              onChange({
-                ...segment,
-                conditions: segment.conditions.filter((_, i) => i !== index),
-              })
-            }
-          />
+          <div key={condition.id}>
+            {index > 0 ? (
+              <div className="mb-2 flex justify-center">
+                <BooleanOpToggle
+                  value={segment.booleanOp}
+                  ariaLabel="Combine conditions in this segment"
+                  onChange={(booleanOp) => onChange({ ...segment, booleanOp })}
+                />
+              </div>
+            ) : null}
+            <ConditionRow
+              condition={condition}
+              canRemove={segment.conditions.length > 1 || canRemove}
+              onChange={(next) => updateCondition(index, next)}
+              onRemove={() => removeCondition(index)}
+            />
+          </div>
         ))}
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
-          <select
-            className="flex h-8 rounded-md border border-input bg-white px-2 text-xs font-medium"
-            value={segment.booleanOp}
-            onChange={(e) =>
-              onChange({ ...segment, booleanOp: e.target.value === "OR" ? "OR" : "AND" })
-            }
-          >
-            <option value="AND">AND</option>
-            <option value="OR">OR</option>
-          </select>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-8 w-8"
-            onClick={() =>
-              onChange({
-                ...segment,
-                conditions: [...segment.conditions, emptyIfElseCondition()],
-              })
-            }
-            aria-label="Add condition"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        {canRemove ? (
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:text-foreground"
-            onClick={onRemove}
-          >
-            Remove segment
-          </button>
-        ) : null}
       </div>
     </div>
   );
@@ -316,9 +329,20 @@ function BranchCard({
           {branch.segments.map((segment, segmentIndex) => (
             <div key={segment.id}>
               {segmentIndex > 0 ? (
-                <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  AND
-                </p>
+                <div className="my-2 flex justify-center">
+                  <BooleanOpToggle
+                    value={segment.joinOp === "OR" ? "OR" : "AND"}
+                    ariaLabel={`Combine segment ${segmentIndex} with the previous segment`}
+                    onChange={(joinOp) =>
+                      onChange({
+                        ...branch,
+                        segments: branch.segments.map((row, i) =>
+                          i === segmentIndex ? { ...row, joinOp } : row
+                        ),
+                      })
+                    }
+                  />
+                </div>
               ) : null}
               <SegmentEditor
                 segment={segment}
@@ -338,15 +362,23 @@ function BranchCard({
               />
             </div>
           ))}
-          <button
-            type="button"
-            className="text-sm font-medium text-primary hover:underline"
-            onClick={() =>
-              onChange({ ...branch, segments: [...branch.segments, emptyIfElseSegment()] })
-            }
-          >
-            + Add segment
-          </button>
+          <div className="flex justify-center pt-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-8 w-8"
+              aria-label="Add segment"
+              onClick={() =>
+                onChange({
+                  ...branch,
+                  segments: [...branch.segments, emptyIfElseSegment("AND")],
+                })
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               Then continue to
@@ -397,7 +429,8 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
           Branches
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Fork the contact journey based on conditions. The first matching branch wins.
+          Fork the contact journey based on conditions. Use + to add a segment, then set AND or
+          OR between segments. The first matching branch wins.
         </p>
       </div>
 

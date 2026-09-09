@@ -48,7 +48,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       name,
-      type,
       channel,
       subject,
       bodyText,
@@ -68,8 +67,7 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("Invalid channel");
     }
 
-    const campaignType =
-      type && Object.values(CampaignType).includes(type) ? type : CampaignType.BLAST;
+    const campaignType = CampaignType.DRIP;
 
     const campaign = await prisma.campaign.create({
       data: {

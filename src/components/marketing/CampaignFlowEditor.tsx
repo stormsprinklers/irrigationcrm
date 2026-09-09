@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  CircleHelp,
   Clock,
   GitBranch,
   Mail,
+  Maximize2,
   MessageSquare,
   Tag,
   Trash2,
@@ -14,11 +16,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { AudienceBuilder } from "@/components/marketing/AudienceBuilder";
+import { CampaignEmailEditorDialog } from "@/components/marketing/CampaignEmailEditorDialog";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { IfElseBranchEditor } from "@/components/marketing/IfElseBranchEditor";
 import { BranchFork, PanCanvas, VerticalConnector } from "@/components/flow-canvas/PanCanvas";
-import type { CampaignFlowNodeInput, CampaignFlowNodeType } from "@/lib/marketing/types";
+import type {
+  AudienceFilters,
+  CampaignFlowNodeInput,
+  CampaignFlowNodeType,
+} from "@/lib/marketing/types";
 import {
   IF_ELSE_MAX_BRANCHES,
   branchPreview,
@@ -41,6 +54,7 @@ import {
   campaignStartDateInputValue,
 } from "@/lib/marketing/campaign-time";
 import { addTagSummary, parseAddTagConfig } from "@/lib/marketing/add-tag";
+import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 
 type Props = {
   nodes: CampaignFlowNodeInput[];
@@ -48,12 +62,34 @@ type Props = {
   emailsPerDay: number;
   smsPerDay: number;
   startAt?: string;
+  channel: "EMAIL" | "SMS";
+  audienceFilters: AudienceFilters;
+  onAudienceChange: (filters: AudienceFilters) => void;
   onSettingsChange: (settings: {
     emailsPerDay: number;
     smsPerDay: number;
     startAt?: string;
   }) => void;
 };
+
+function FieldTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex shrink-0 text-muted-foreground/80 hover:text-foreground"
+          aria-label={label}
+        >
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const NODE_META: Record<
   CampaignFlowNodeType,
@@ -271,6 +307,9 @@ export function CampaignFlowEditor({
   emailsPerDay,
   smsPerDay,
   startAt,
+  channel,
+  audienceFilters,
+  onAudienceChange,
   onSettingsChange,
 }: Props) {
   const [selectionId, setSelectionId] = useState<string | null>(nodes[0] ? ensureNodeId(nodes[0]) : null);
@@ -549,10 +588,18 @@ export function CampaignFlowEditor({
   const treeRendered = new Set<string>();
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <TooltipProvider delayDuration={200}>
+      <div className="flex h-full min-h-0 flex-col">
       <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
         <div>
-          <label className="text-xs font-medium text-muted-foreground">Emails per day</label>
+          <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <span>Emails per day</span>
+            <FieldTip label="About emails per day">
+              This is the most emails this campaign will send in one day (company timezone). Extra
+              contacts stay enrolled and are sent starting at 8:00 a.m. the next morning. Nobody is
+              skipped.
+            </FieldTip>
+          </label>
           <Input
             type="number"
             className="mt-1 h-8"
@@ -567,7 +614,14 @@ export function CampaignFlowEditor({
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-muted-foreground">SMS per day</label>
+          <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <span>SMS per day</span>
+            <FieldTip label="About SMS per day">
+              This is the most texts this campaign will send in one day (company timezone). Extra
+              contacts stay enrolled and are sent starting at 8:00 a.m. the next morning. Nobody is
+              skipped.
+            </FieldTip>
+          </label>
           <Input
             type="number"
             className="mt-1 h-8"
@@ -647,7 +701,7 @@ export function CampaignFlowEditor({
         </div>
 
         {selected ? (
-          <aside className="flex w-[min(28rem,46vw)] shrink-0 flex-col border-l border-border bg-background">
+          <aside className="flex w-[min(36rem,52vw)] shrink-0 flex-col border-l border-border bg-background">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -684,6 +738,9 @@ export function CampaignFlowEditor({
                 allNodes={nodes}
                 otherNodes={nodes.filter((n) => ensureNodeId(n) !== ensureNodeId(selected))}
                 timezone={timezone}
+                channel={channel}
+                audienceFilters={audienceFilters}
+                onAudienceChange={onAudienceChange}
                 onConfigChange={(config) => setConfigFor(ensureNodeId(selected), config)}
               />
             </div>
@@ -691,6 +748,7 @@ export function CampaignFlowEditor({
         ) : null}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -814,16 +872,28 @@ function NodeConfigEditor({
   allNodes,
   otherNodes,
   timezone,
+  channel,
+  audienceFilters,
+  onAudienceChange,
   onConfigChange,
 }: {
   node: CampaignFlowNodeInput;
   allNodes: CampaignFlowNodeInput[];
   otherNodes: CampaignFlowNodeInput[];
   timezone: string;
+  channel: "EMAIL" | "SMS";
+  audienceFilters: AudienceFilters;
+  onAudienceChange: (filters: AudienceFilters) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
 }) {
   const smsRef = useRef<HTMLTextAreaElement>(null);
+  const [emailEditorOpen, setEmailEditorOpen] = useState(false);
   const config = node.config;
+  const nodeKey = ensureNodeId(node);
+
+  useEffect(() => {
+    setEmailEditorOpen(false);
+  }, [nodeKey]);
 
   if (node.type === "TRIGGER") {
     const kind = String(config.kind ?? "manual_audience");
@@ -842,6 +912,19 @@ function NodeConfigEditor({
             <option value="city">Customer city matches</option>
           </select>
         </div>
+        {kind === "manual_audience" ? (
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-sm font-medium">Audience</p>
+            <p className="text-xs text-muted-foreground">
+              Filter who is enrolled when this campaign is activated.
+            </p>
+            <AudienceBuilder
+              channel={channel}
+              filters={audienceFilters}
+              onChange={onAudienceChange}
+            />
+          </div>
+        ) : null}
         {kind === "job_completed" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -1022,18 +1105,43 @@ function NodeConfigEditor({
   }
 
   if (node.type === "SEND_EMAIL") {
+    const subject = String(config.subject ?? "");
+    const bodyHtml = String(config.bodyHtml ?? "");
+    const preview = htmlToPlainText(bodyHtml).slice(0, 160);
     return (
-      <EmailCampaignEditor
-        subject={String(config.subject ?? "")}
-        bodyHtml={String(config.bodyHtml ?? "")}
-        aiPrompt={String(config.aiPrompt ?? "")}
-        defaultExpanded={false}
-        onSubjectChange={(subject) => onConfigChange({ ...config, subject })}
-        onAiPromptChange={(aiPrompt) => onConfigChange({ ...config, aiPrompt })}
-        onBodyChange={(bodyHtml, bodyText) =>
-          onConfigChange({ ...config, bodyHtml, bodyText })
-        }
-      />
+      <div className="space-y-3">
+        <div>
+          <label className="text-sm font-medium">Subject</label>
+          <Input
+            className="mt-1"
+            value={subject}
+            onChange={(e) => onConfigChange({ ...config, subject: e.target.value })}
+            placeholder="Subject line"
+          />
+        </div>
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+          <p className="text-xs font-medium text-muted-foreground">Preview</p>
+          <p className="mt-1 text-sm text-foreground">
+            {preview || "No email designed yet. Open the editor to write this step."}
+          </p>
+        </div>
+        <Button type="button" className="w-full" onClick={() => setEmailEditorOpen(true)}>
+          <Maximize2 className="h-4 w-4" />
+          Open email editor
+        </Button>
+        <CampaignEmailEditorDialog
+          open={emailEditorOpen}
+          subject={subject}
+          bodyHtml={bodyHtml}
+          aiPrompt={String(config.aiPrompt ?? "")}
+          onClose={() => setEmailEditorOpen(false)}
+          onSubjectChange={(nextSubject) => onConfigChange({ ...config, subject: nextSubject })}
+          onAiPromptChange={(aiPrompt) => onConfigChange({ ...config, aiPrompt })}
+          onBodyChange={(nextBodyHtml, bodyText) =>
+            onConfigChange({ ...config, bodyHtml: nextBodyHtml, bodyText })
+          }
+        />
+      </div>
     );
   }
 

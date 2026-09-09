@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 const modules = [
   {
     title: "Campaigns",
-    description: "Email blasts, SMS, drips, and delivery/open/click insights in one place.",
+    description: "Email, SMS, and multi-step campaigns with delivery, open, and click insights.",
     href: "/marketing/campaigns",
     icon: Mail,
     cta: "View campaigns",

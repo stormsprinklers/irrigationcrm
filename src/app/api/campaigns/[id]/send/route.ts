@@ -24,8 +24,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Campaign already completed" }, { status: 409 });
     }
 
-    const stats = await sendCampaign(id);
-    return NextResponse.json({ stats });
+    const result = await sendCampaign(id);
+    return NextResponse.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();

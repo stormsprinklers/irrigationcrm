@@ -1,4 +1,4 @@
-import { AUTOMATED_SEND_WINDOW_START_HOUR } from "@/lib/communications/send-window";
+import { CAMPAIGN_SEND_WINDOW_START_HOUR } from "@/lib/communications/send-window";
 import {
   addZonedCalendarDays,
   getZonedParts,
@@ -18,7 +18,7 @@ function pad(n: number) {
 /**
  * Interpret a campaign date/time in the company timezone.
  *
- * - `YYYY-MM-DD` (and legacy UTC-midnight ISO) → 5:00 AM that local morning
+ * - `YYYY-MM-DD` (and legacy UTC-midnight ISO) → 8:00 AM that local morning
  * - `YYYY-MM-DDTHH:mm` without a zone → that wall clock in company TZ
  * - Full ISO with `Z` / offset → absolute instant
  */
@@ -40,7 +40,7 @@ export function parseCampaignInstant(
       Number(dateOnly[1]),
       Number(dateOnly[2]),
       Number(dateOnly[3]),
-      AUTOMATED_SEND_WINDOW_START_HOUR,
+      CAMPAIGN_SEND_WINDOW_START_HOUR,
       0,
       0
     );

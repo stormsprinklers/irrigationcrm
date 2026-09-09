@@ -6,9 +6,10 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import {
+  companiesHaveA2pCampaign,
   getA2pStatusForCompanies,
-  isA2pMessagingConfigured,
   listUserOperatedCompanyIds,
+  saveCompanyMessagingServiceSid,
   saveSharedMessagingServiceSid,
   syncCompaniesNumbersToA2p,
 } from "@/lib/twilio/a2p";
@@ -40,8 +41,8 @@ export async function GET() {
 }
 
 /**
- * PATCH — Save the shared Messaging Service SID chosen in the A2P settings UI.
- * Body: { messagingServiceSid: "MG…" | null }
+ * PATCH — Save a company campaign SID, or the shared fallback Messaging Service.
+ * Body: { messagingServiceSid: "MG…" | null, companyId?: string }
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -56,11 +57,7 @@ export async function PATCH(request: NextRequest) {
       raw === null || raw === undefined || raw === ""
         ? null
         : String(raw).trim();
-
-    const saved = await saveSharedMessagingServiceSid({
-      messagingServiceSid,
-      updatedByUserId: user.id,
-    });
+    const companyId = body.companyId ? String(body.companyId).trim() : "";
 
     const sessionUser = await prisma.user.findFirst({
       where: { id: user.id },
@@ -73,6 +70,23 @@ export async function PATCH(request: NextRequest) {
       sessionUser.email,
       user.companyId
     );
+
+    let saved: string | null;
+    if (companyId) {
+      if (!companyIds.includes(companyId)) {
+        return forbiddenResponse();
+      }
+      saved = await saveCompanyMessagingServiceSid({
+        companyId,
+        messagingServiceSid,
+      });
+    } else {
+      saved = await saveSharedMessagingServiceSid({
+        messagingServiceSid,
+        updatedByUserId: user.id,
+      });
+    }
+
     const status = await getA2pStatusForCompanies(companyIds);
     return NextResponse.json({ ...status, savedMessagingServiceSid: saved });
   } catch (error) {
@@ -86,23 +100,14 @@ export async function PATCH(request: NextRequest) {
 }
 
 /**
- * POST — Attach all Twilio-linked numbers for this admin’s operated businesses
- * (current company + same-email / account-linked companies) to the shared A2P Messaging Service.
+ * POST — Attach unlocked Twilio-linked numbers for this admin’s operated businesses
+ * to each company’s A2P Messaging Service (shared fallback if a company has none).
  */
 export async function POST() {
   try {
     const user = await requireSessionUser();
     if (user.role !== "ADMIN" && user.role !== "MANAGER") {
       return forbiddenResponse();
-    }
-    if (!(await isA2pMessagingConfigured())) {
-      return NextResponse.json(
-        {
-          error:
-            "Choose a Messaging Service on the A2P campaign tab before attaching numbers.",
-        },
-        { status: 503 }
-      );
     }
 
     const sessionUser = await prisma.user.findFirst({
@@ -116,6 +121,15 @@ export async function POST() {
       sessionUser.email,
       user.companyId
     );
+    if (!(await companiesHaveA2pCampaign(companyIds))) {
+      return NextResponse.json(
+        {
+          error:
+            "Choose a Messaging Service for each company on the A2P campaign tab before attaching numbers.",
+        },
+        { status: 503 }
+      );
+    }
     const result = await syncCompaniesNumbersToA2p(companyIds);
     return NextResponse.json(result);
   } catch (error) {

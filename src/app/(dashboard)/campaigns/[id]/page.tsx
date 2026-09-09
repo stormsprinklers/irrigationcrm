@@ -65,7 +65,11 @@ export default function CampaignDetailPage() {
       const res = await fetch(`/api/campaigns/${id}/send`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Send failed");
-      toast.success("Campaign sent");
+      toast.success(
+        data.deferredForQuietHours
+          ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
+          : "Campaign sent"
+      );
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Send failed");

@@ -74,7 +74,7 @@ export async function GET() {
     const operatedIds = await companyIdsForNumbersList(user);
     const companies = await prisma.company.findMany({
       where: { id: { in: operatedIds } },
-      select: { id: true, name: true },
+      select: { id: true, name: true, a2pMessagingServiceSid: true },
       orderBy: { name: "asc" },
     });
 

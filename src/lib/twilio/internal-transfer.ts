@@ -188,7 +188,7 @@ export async function importTwilioNumbersToCompany(
         console.error("[twilio-transfer] webhook config failed", found.sid, err);
       }
       try {
-        const a2p = await attachNumberToA2pMessagingService(found.sid);
+        const a2p = await attachNumberToA2pMessagingService(found.sid, { companyId });
         if (!a2p.ok) {
           console.warn("[twilio-transfer] A2P attach failed", found.sid, a2p.error);
         }

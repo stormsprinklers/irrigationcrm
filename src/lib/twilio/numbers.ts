@@ -249,7 +249,7 @@ export async function purchaseNumber(
   await configureNumberWebhooks(purchased.sid);
 
   // Shared A2P / 10DLC campaign — attach every purchased number to the account Messaging Service.
-  const a2p = await attachNumberToA2pMessagingService(purchased.sid);
+  const a2p = await attachNumberToA2pMessagingService(purchased.sid, { companyId });
   if (!a2p.ok) {
     console.warn("[twilio] purchased number but A2P attach failed", purchased.sid, a2p.error);
   }
@@ -351,7 +351,7 @@ export async function syncAccountNumbers(companyId: string) {
         console.error("Failed to configure webhooks for", num.e164, error);
       }
       try {
-        const a2p = await attachNumberToA2pMessagingService(num.sid);
+        const a2p = await attachNumberToA2pMessagingService(num.sid, { companyId });
         if (!a2p.ok) {
           console.warn("[twilio] sync A2P attach failed", num.e164, a2p.error);
         }
@@ -383,7 +383,7 @@ export async function syncAccountNumbers(companyId: string) {
       console.error("Failed to configure webhooks for", num.e164, error);
     }
     try {
-      const a2p = await attachNumberToA2pMessagingService(num.sid);
+      const a2p = await attachNumberToA2pMessagingService(num.sid, { companyId });
       if (!a2p.ok) {
         console.warn("[twilio] sync A2P attach failed", num.e164, a2p.error);
       }

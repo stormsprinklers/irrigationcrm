@@ -4,15 +4,15 @@ import { parseCampaignInstant } from "../campaign-time";
 
 const TZ = "America/Denver";
 
-test("date-only start is 5:00 AM company local, not UTC midnight", () => {
-  // 2026-09-10 5:00 AM MDT = 11:00 UTC
+test("date-only start is 8:00 AM company local, not UTC midnight", () => {
+  // 2026-09-10 8:00 AM MDT = 14:00 UTC
   const at = parseCampaignInstant("2026-09-10", TZ);
-  assert.equal(at?.toISOString(), "2026-09-10T11:00:00.000Z");
+  assert.equal(at?.toISOString(), "2026-09-10T14:00:00.000Z");
 });
 
 test("legacy UTC-midnight ISO is treated as that local date", () => {
   const at = parseCampaignInstant("2026-09-10T00:00:00.000Z", TZ);
-  assert.equal(at?.toISOString(), "2026-09-10T11:00:00.000Z");
+  assert.equal(at?.toISOString(), "2026-09-10T14:00:00.000Z");
 });
 
 test("datetime-local without zone uses company wall clock", () => {

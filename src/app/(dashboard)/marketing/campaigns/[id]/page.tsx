@@ -146,7 +146,13 @@ export default function MarketingCampaignDetailPage() {
       const res = await fetch(endpoint, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Action failed");
-      toast.success(action === "activate" ? "Drip activated" : "Campaign sent");
+      toast.success(
+        data.deferredForQuietHours
+          ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
+          : action === "activate"
+            ? "Campaign activated"
+            : "Campaign sent"
+      );
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
@@ -202,7 +208,7 @@ export default function MarketingCampaignDetailPage() {
               campaign.type === "DRIP" ? (
                 campaign.status !== "ACTIVE" ? (
                   <Button size="sm" onClick={() => runAction("activate")} disabled={acting}>
-                    {acting ? "Activating..." : "Activate automation"}
+                    {acting ? "Activating..." : "Activate campaign"}
                   </Button>
                 ) : null
               ) : campaign.status === "DRAFT" || campaign.status === "SCHEDULED" ? (
@@ -254,7 +260,7 @@ export default function MarketingCampaignDetailPage() {
 
       <div className="mb-6 rounded-lg border border-border bg-white p-4">
         <div className="flex flex-wrap gap-3 text-sm">
-          <Badge>{campaign.type}</Badge>
+          <Badge>{campaign.type === "DRIP" ? "Campaign" : "Blast"}</Badge>
           <Badge>{campaign.channel}</Badge>
           <Badge variant="secondary">{campaign.status}</Badge>
           {campaign.list && <span>List: {campaign.list.name}</span>}
@@ -333,7 +339,7 @@ export default function MarketingCampaignDetailPage() {
                 {campaign.flowMetrics.enrollments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-muted-foreground">
-                      No enrollments yet. Activate the automation to enroll your audience.
+                      No enrollments yet. Activate the campaign to enroll your audience.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -374,7 +380,7 @@ export default function MarketingCampaignDetailPage() {
 
       {campaign.type === "DRIP" && (campaign.flowNodes?.length ?? 0) > 0 && (
         <div className="mb-6 rounded-lg border bg-white p-4">
-          <h3 className="mb-3 font-medium">Automation steps</h3>
+          <h3 className="mb-3 font-medium">Campaign steps</h3>
           <ol className="space-y-2 text-sm">
             {campaign.flowNodes!.map((node, i) => (
               <li key={node.id}>
@@ -387,7 +393,7 @@ export default function MarketingCampaignDetailPage() {
 
       {campaign.type === "DRIP" && campaign.steps.length > 0 && !(campaign.flowNodes?.length) && (
         <div className="mb-6 rounded-lg border bg-white p-4">
-          <h3 className="mb-3 font-medium">Drip sequence</h3>
+          <h3 className="mb-3 font-medium">Campaign sequence</h3>
           <ol className="space-y-2 text-sm">
             {campaign.steps.map((step, i) => (
               <li key={i}>
@@ -418,7 +424,7 @@ export default function MarketingCampaignDetailPage() {
             {campaign.recipients.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground">
-                  Recipients appear when the campaign is sent or drip is activated.
+                  Recipients appear when the campaign is sent or activated.
                 </TableCell>
               </TableRow>
             ) : (

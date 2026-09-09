@@ -24,6 +24,8 @@ function Stars({ count }: { count: number }) {
   );
 }
 
+const UNKNOWN_ASSIGNEE_ID = "__unknown__";
+
 type NeedsAssignmentReview = {
   id: string;
   reviewId: string;
@@ -247,7 +249,11 @@ export function GoogleReviewsInbox() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       Assigned:{" "}
                       {card.assigned
-                        .map((row) => `${row.name} (${row.share.toFixed(2)})`)
+                        .map((row) =>
+                          row.userId === UNKNOWN_ASSIGNEE_ID
+                            ? "Unknown"
+                            : `${row.name} (${row.share.toFixed(2)})`
+                        )
                         .join(", ")}
                     </p>
                   ) : null}
@@ -355,19 +361,24 @@ function AssignmentPanel({
 
   async function assign() {
     if (!selected.length) {
-      toast.error("Select at least one technician");
+      toast.error("Select at least one technician, or Unknown");
       return;
     }
+    const unknown = selected.includes(UNKNOWN_ASSIGNEE_ID);
     setSaving(true);
     try {
       const res = await fetch("/api/marketing/google-business/reviews/assignments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewId: review.id, userIds: selected }),
+        body: JSON.stringify(
+          unknown
+            ? { reviewId: review.id, unknown: true }
+            : { reviewId: review.id, userIds: selected }
+        ),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to assign review");
-      toast.success("Review assigned");
+      toast.success(unknown ? "Marked as unknown" : "Review assigned");
       onAssigned();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to assign review");
@@ -377,9 +388,15 @@ function AssignmentPanel({
   }
 
   function toggleTech(userId: string) {
-    setSelected((current) =>
-      current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
-    );
+    setSelected((current) => {
+      if (userId === UNKNOWN_ASSIGNEE_ID) {
+        return current.includes(UNKNOWN_ASSIGNEE_ID) ? [] : [UNKNOWN_ASSIGNEE_ID];
+      }
+      const withoutUnknown = current.filter((id) => id !== UNKNOWN_ASSIGNEE_ID);
+      return withoutUnknown.includes(userId)
+        ? withoutUnknown.filter((id) => id !== userId)
+        : [...withoutUnknown, userId];
+    });
   }
 
   return (
@@ -393,7 +410,7 @@ function AssignmentPanel({
         <span>
           <span className="block text-sm font-medium text-amber-950">Assign credit</span>
           <span className="block text-xs text-amber-900/80">
-            Could not match a technician automatically — pick who should get credit.
+            Could not match a technician automatically — pick who should get credit, or Unknown.
           </span>
         </span>
         <ChevronDown
@@ -403,6 +420,14 @@ function AssignmentPanel({
       {open ? (
         <div className="space-y-3 border-t border-amber-200 px-3 py-3">
           <div className="flex flex-wrap gap-2">
+            <label className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2 py-1 text-xs">
+              <input
+                type="checkbox"
+                checked={selected.includes(UNKNOWN_ASSIGNEE_ID)}
+                onChange={() => toggleTech(UNKNOWN_ASSIGNEE_ID)}
+              />
+              Unknown
+            </label>
             {technicians.map((tech) => {
               const checked = selected.includes(tech.id);
               return (
@@ -421,7 +446,9 @@ function AssignmentPanel({
             })}
           </div>
           {technicians.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No technicians available to assign.</p>
+            <p className="text-xs text-muted-foreground">
+              No technicians available — you can still mark this as Unknown.
+            </p>
           ) : null}
           <Button type="button" size="sm" disabled={saving} onClick={() => void assign()}>
             {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}

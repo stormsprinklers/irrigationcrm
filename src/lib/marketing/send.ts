@@ -10,8 +10,8 @@ import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { assertOutboundCommsEnabled, getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import {
-  clampToAutomatedSendWindow,
-  isWithinAutomatedSendWindow,
+  clampToCampaignSendWindow,
+  isWithinCampaignSendWindow,
 } from "@/lib/communications/send-window";
 import { addZonedCalendarDays, startOfZonedDay } from "@/lib/datetime/zoned";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
@@ -26,6 +26,7 @@ import {
   resolveMarketingEmailFrom,
   resolveMarketingSmsFrom,
 } from "@/lib/marketing/sender";
+import { notifyAdminsCampaignQuietHours } from "@/lib/marketing/quiet-hours-notify";
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 
@@ -319,6 +320,7 @@ async function sendToRecipient(
 export async function sendCampaignBatch(campaignId: string): Promise<{
   done: boolean;
   stats: CampaignStats;
+  deferredForQuietHours?: boolean;
 }> {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -334,6 +336,24 @@ export async function sendCampaignBatch(campaignId: string): Promise<{
   }
   if (campaign.type === CampaignType.DRIP) {
     return { done: true, stats: buildCampaignStats([]) };
+  }
+
+  const companyTz = campaign.company.timezone;
+  if (!isWithinCampaignSendWindow(new Date(), companyTz)) {
+    const resumeAt = clampToCampaignSendWindow(new Date(), companyTz);
+    await prisma.campaign.update({
+      where: { id: campaignId },
+      data: { status: CampaignStatus.SENDING },
+    });
+    await notifyAdminsCampaignQuietHours({
+      companyId: campaign.companyId,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      resumeAt,
+      timeZone: companyTz,
+    });
+    const stats = await refreshCampaignStats(campaignId);
+    return { done: false, stats, deferredForQuietHours: true };
   }
 
   await prisma.campaign.update({
@@ -398,15 +418,37 @@ export async function sendCampaign(campaignId: string) {
   let stats: CampaignStats = { sent: 0, delivered: 0, failed: 0, pending: 0 };
   let iterations = 0;
   const maxIterations = 200;
+  let deferredForQuietHours = false;
 
   while (!done && iterations < maxIterations) {
     const result = await sendCampaignBatch(campaignId);
     done = result.done;
     stats = result.stats;
     iterations++;
+    if (result.deferredForQuietHours) {
+      deferredForQuietHours = true;
+      break;
+    }
   }
 
-  return stats;
+  return { stats, deferredForQuietHours };
+}
+
+export async function processPendingBlastSends() {
+  const campaigns = await prisma.campaign.findMany({
+    where: {
+      type: CampaignType.BLAST,
+      status: CampaignStatus.SENDING,
+    },
+    select: { id: true },
+    take: 20,
+  });
+  let processed = 0;
+  for (const campaign of campaigns) {
+    await sendCampaignBatch(campaign.id);
+    processed += 1;
+  }
+  return { processed };
 }
 
 export async function activateDripCampaign(campaignId: string) {
@@ -432,6 +474,7 @@ export async function processDripSends() {
 
   const sentCounts = new Map<string, { email: number; sms: number }>();
   const freezeByCompany = new Map<string, boolean>();
+  const quietHoursNotified = new Set<string>();
 
   for (const enrollment of enrollments) {
     // Flow-engine enrollments are handled by processFlowEnrollments.
@@ -446,11 +489,22 @@ export async function processDripSends() {
     }
     if (frozen) continue;
     const companyTz = campaign.company.timezone;
-    if (!isWithinAutomatedSendWindow(now, companyTz)) {
+    if (!isWithinCampaignSendWindow(now, companyTz)) {
+      const resumeAt = clampToCampaignSendWindow(now, companyTz);
       await prisma.campaignEnrollment.update({
         where: { id: enrollment.id },
-        data: { nextSendAt: clampToAutomatedSendWindow(now, companyTz) },
+        data: { nextSendAt: resumeAt },
       });
+      if (!quietHoursNotified.has(campaign.id)) {
+        quietHoursNotified.add(campaign.id);
+        await notifyAdminsCampaignQuietHours({
+          companyId: campaign.companyId,
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          resumeAt,
+          timeZone: companyTz,
+        });
+      }
       continue;
     }
     const dripSettings = (campaign.dripSettings ?? {}) as DripSettings;
@@ -536,7 +590,7 @@ export async function processDripSends() {
         data: { status: CampaignEnrollmentStatus.COMPLETED },
       });
     } else {
-      const nextSendAt = clampToAutomatedSendWindow(
+      const nextSendAt = clampToCampaignSendWindow(
         addZonedCalendarDays(now, nextStep.delayDays ?? 0, companyTz, {
           keepTime: true,
         }),

@@ -516,6 +516,8 @@ model Company {
   holidayLightingCatalog   Json?
   description              String?
   twilioPhone              String?
+  /// Twilio Messaging Service SID (MG…) for this company’s A2P / 10DLC campaign.
+  a2pMessagingServiceSid   String?
   sendgridFrom             String?
   /// From number for marketing SMS campaigns (E.164). Falls back to twilioPhone when unset.
   marketingTwilioPhone     String?
@@ -1251,6 +1253,7 @@ enum AuthMfaPurpose {
   LMS_LOGIN
   EXPENSE_CARD_ADMIN
   PHONE_NUMBER_RELEASE
+  PHONE_ASSIGNMENT_UNLOCK
   ACCOUNT_PASSWORD
 }
 
@@ -1804,6 +1807,10 @@ model PhoneNumber {
   assignedUserId String?
   trackingSource String?
   twilioSid      String?
+  /// When true, company and A2P campaign cannot be changed without step-up MFA.
+  assignmentLocked Boolean @default(false)
+  assignmentLockedAt DateTime?
+  assignmentLockedByUserId String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -1926,6 +1933,7 @@ enum AppNotificationType {
   EXPENSE_CARD_FUNDING
   PORTAL_CONTACT
   TIME_OFF_REQUEST
+  CAMPAIGN_QUIET_HOURS
 }
 
 model NotificationTemplate {
@@ -4090,6 +4098,7 @@ model GbpReviewStaffNotify {
 enum GbpReviewAssignStatus {
   ASSIGNED
   NEEDS_REVIEW
+  UNKNOWN
 }
 
 model GbpReview {

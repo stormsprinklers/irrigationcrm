@@ -26,6 +26,7 @@ export async function reassignPhoneNumberToCompany(params: {
   toCompanyId: string;
   /** Companies the caller is allowed to move between (source + target must both be in this set). */
   allowedCompanyIds: string[];
+  messagingServiceSid?: string | null;
 }) {
   const allowed = new Set(params.allowedCompanyIds);
   if (!allowed.has(params.toCompanyId)) {
@@ -71,7 +72,11 @@ export async function reassignPhoneNumberToCompany(params: {
     if (wasPrimary) {
       await promoteOrClearPrimary(fromCompanyId);
     }
-    await ensureTwilioReadyForNumber(clash.twilioSid);
+    await ensureTwilioReadyForNumber(
+      clash.twilioSid,
+      params.toCompanyId,
+      params.messagingServiceSid
+    );
     return clash;
   }
 
@@ -113,7 +118,11 @@ export async function reassignPhoneNumberToCompany(params: {
     );
   }
 
-  await ensureTwilioReadyForNumber(updated.twilioSid);
+  await ensureTwilioReadyForNumber(
+    updated.twilioSid,
+    params.toCompanyId,
+    params.messagingServiceSid
+  );
 
   return (
     (await prisma.phoneNumber.findUnique({ where: { id: updated.id } })) ??
@@ -142,7 +151,11 @@ async function promoteOrClearPrimary(companyId: string) {
     .catch(() => undefined);
 }
 
-async function ensureTwilioReadyForNumber(twilioSid: string | null | undefined) {
+async function ensureTwilioReadyForNumber(
+  twilioSid: string | null | undefined,
+  companyId: string,
+  messagingServiceSid?: string | null
+) {
   if (!twilioSid?.startsWith("PN")) return;
   try {
     await configureNumberWebhooks(twilioSid);
@@ -150,7 +163,10 @@ async function ensureTwilioReadyForNumber(twilioSid: string | null | undefined) 
     console.error("[reassign] webhook configure failed", twilioSid, error);
   }
   try {
-    const a2p = await attachNumberToA2pMessagingService(twilioSid);
+    const a2p = await attachNumberToA2pMessagingService(twilioSid, {
+      companyId,
+      messagingServiceSid,
+    });
     if (!a2p.ok) {
       console.warn("[reassign] A2P attach failed", twilioSid, a2p.error);
     }

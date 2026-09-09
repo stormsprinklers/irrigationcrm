@@ -14,7 +14,7 @@ export default function NewMarketingCampaignPage() {
         className="shrink-0"
         breadcrumb={["Marketing", "Campaigns", "New"]}
         title="New campaign"
-        subtitle="Target customers, generate branded emails with AI, and send or schedule."
+        subtitle="Open the campaign builder to filter your audience and design the sequence."
       />
       <div className="min-h-0 flex-1">
         <CampaignWizard onSaved={(id) => router.push(`/marketing/campaigns/${id}`)} />

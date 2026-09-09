@@ -88,9 +88,10 @@ async function applyAssignments(
   reviewRowId: string,
   userIds: string[],
   customerId: string | null,
-  manual: boolean
+  manual: boolean,
+  unknown = false
 ) {
-  const unique = [...new Set(userIds)];
+  const unique = unknown ? [] : [...new Set(userIds)];
   const share = unique.length ? 1 / unique.length : 0;
 
   await prisma.$transaction(async (tx) => {
@@ -107,7 +108,11 @@ async function applyAssignments(
     await tx.gbpReview.update({
       where: { id: reviewRowId },
       data: {
-        status: unique.length ? GbpReviewAssignStatus.ASSIGNED : GbpReviewAssignStatus.NEEDS_REVIEW,
+        status: unique.length
+          ? GbpReviewAssignStatus.ASSIGNED
+          : unknown
+            ? GbpReviewAssignStatus.UNKNOWN
+            : GbpReviewAssignStatus.NEEDS_REVIEW,
         customerId,
         assignedManually: manual,
       },
@@ -220,6 +225,7 @@ export async function assignPendingGbpReviews(companyId: string) {
     where: {
       companyId,
       assignedManually: false,
+      status: { not: GbpReviewAssignStatus.UNKNOWN },
       OR: [{ status: GbpReviewAssignStatus.NEEDS_REVIEW }, { assignments: { none: {} } }],
     },
   });
@@ -269,13 +275,24 @@ export async function syncAndAssignGbpReviews(companyId: string, options?: { max
 export async function manuallyAssignGbpReview(
   companyId: string,
   reviewId: string,
-  userIds: string[]
+  userIds: string[],
+  options?: { unknown?: boolean }
 ) {
   const review = await prisma.gbpReview.findFirst({
     where: { id: reviewId, companyId },
     select: { id: true },
   });
   if (!review) return null;
+
+  if (options?.unknown) {
+    await applyAssignments(review.id, [], null, true, true);
+    return prisma.gbpReview.findUnique({
+      where: { id: review.id },
+      include: {
+        assignments: { include: { user: { select: { id: true, name: true } } } },
+      },
+    });
+  }
 
   const techs = await prisma.user.findMany({
     where: {

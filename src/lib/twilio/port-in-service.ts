@@ -157,7 +157,7 @@ export async function importCompletedPortNumber(portInId: string) {
   }
 
   try {
-    const a2p = await attachNumberToA2pMessagingService(match.sid);
+    const a2p = await attachNumberToA2pMessagingService(match.sid, { companyId: row.companyId });
     if (!a2p.ok) {
       console.warn("[porting] A2P attach failed", match.sid, a2p.error);
     }

@@ -61,6 +61,46 @@ test("AND branch requires every condition", () => {
   );
 });
 
+test("OR between segments matches if either segment matches", () => {
+  const row = branch({
+    segments: [
+      {
+        id: "s1",
+        booleanOp: "AND",
+        joinOp: "AND",
+        conditions: [{ id: "1", field: "city", operator: "is", value: "Lehi" }],
+      },
+      {
+        id: "s2",
+        booleanOp: "AND",
+        joinOp: "OR",
+        conditions: [{ id: "2", field: "tags", operator: "is_any_of", value: "vip" }],
+      },
+    ],
+  });
+  assert.equal(branchMatches(contact, row), true);
+});
+
+test("AND between segments requires every segment", () => {
+  const row = branch({
+    segments: [
+      {
+        id: "s1",
+        booleanOp: "AND",
+        joinOp: "AND",
+        conditions: [{ id: "1", field: "city", operator: "is", value: "Salt Lake City" }],
+      },
+      {
+        id: "s2",
+        booleanOp: "AND",
+        joinOp: "AND",
+        conditions: [{ id: "2", field: "leadSource", operator: "is", value: "Yard sign" }],
+      },
+    ],
+  });
+  assert.equal(branchMatches(contact, row), false);
+});
+
 test("OR branch accepts any matching condition", () => {
   const row = branch({
     nextId: "or-path",

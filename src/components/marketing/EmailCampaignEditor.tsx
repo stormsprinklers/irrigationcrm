@@ -45,6 +45,8 @@ type Props = {
   onAiPromptChange: (prompt: string) => void;
   /** When true, start in expanded/fullscreen layout. */
   defaultExpanded?: boolean;
+  /** Hide the expand/fullscreen control when the editor already lives in a popup. */
+  hideExpandToggle?: boolean;
 };
 
 type PaletteState = {
@@ -83,6 +85,7 @@ function EmailCampaignEditorInner({
   onBodyChange,
   onAiPromptChange,
   defaultExpanded = true,
+  hideExpandToggle = false,
 }: Props) {
   const { brand } = useCompanyBrand();
   const defaultPalette = useMemo<PaletteState>(() => {
@@ -373,19 +376,21 @@ function EmailCampaignEditorInner({
               Send test email
             </Button>
           )}
-          <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? (
-              <>
-                <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
-                Exit fullscreen
-              </>
-            ) : (
-              <>
-                <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
-                Expand editor
-              </>
-            )}
-          </Button>
+          {hideExpandToggle ? null : (
+            <Button type="button" variant="outline" size="sm" onClick={() => setExpanded((v) => !v)}>
+              {expanded ? (
+                <>
+                  <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
+                  Exit fullscreen
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="mr-1.5 h-3.5 w-3.5" />
+                  Expand editor
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 

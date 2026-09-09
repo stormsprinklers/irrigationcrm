@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CampaignStatus } from "@prisma/client";
+import { CampaignStatus, CampaignType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import {
   archiveCampaign,
@@ -124,7 +124,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = String(body.name);
-    if (body.type !== undefined && existing.status === CampaignStatus.DRAFT) data.type = body.type;
+    if (body.type !== undefined && existing.status === CampaignStatus.DRAFT) {
+      if (body.type !== CampaignType.BLAST) data.type = body.type;
+    }
     if (body.channel !== undefined && existing.status === CampaignStatus.DRAFT) {
       data.channel = body.channel;
     }

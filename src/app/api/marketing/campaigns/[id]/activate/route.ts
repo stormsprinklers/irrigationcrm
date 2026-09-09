@@ -16,7 +16,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
     });
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (campaign.type !== "DRIP") {
-      return NextResponse.json({ error: "Only drip campaigns can be activated" }, { status: 400 });
+      return NextResponse.json({ error: "Only campaigns can be activated" }, { status: 400 });
     }
 
     const result = await activateDripCampaign(id);

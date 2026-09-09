@@ -73,6 +73,6 @@ export type CampaignFormState = {
   audienceFilters: AudienceFilters;
   dripSettings: DripSettings;
   steps: CampaignStepInput[];
-  /** Automation decision-tree nodes (DRIP campaigns). */
+  /** Campaign builder nodes. */
   flowNodes: CampaignFlowNodeInput[];
 };

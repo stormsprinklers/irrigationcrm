@@ -76,7 +76,7 @@ export default function MarketingCampaignsPage() {
       <PageHeader
         breadcrumb={["Marketing", "Campaigns"]}
         title="Campaigns"
-        subtitle="Email blasts, SMS campaigns, drip sequences, and performance insights."
+        subtitle="Build campaigns with waits, email, SMS, and If/Else branches."
         actions={
           <Button size="sm" asChild>
             <Link href="/marketing/campaigns/new">
@@ -93,7 +93,7 @@ export default function MarketingCampaignsPage() {
         comingSoon={false}
         metrics={[
           { label: "Total campaigns", value: loading ? "—" : summary?.campaignCount ?? 0 },
-          { label: "Active drips", value: loading ? "—" : summary?.activeDrip ?? 0 },
+          { label: "Active campaigns", value: loading ? "—" : summary?.activeDrip ?? 0 },
           { label: "Delivery rate", value: loading ? "—" : `${summary?.deliveryRate ?? 0}%` },
           { label: "Open rate", value: loading ? "—" : `${summary?.openRate ?? 0}%` },
           { label: "Click rate", value: loading ? "—" : `${summary?.clickRate ?? 0}%` },
@@ -152,7 +152,7 @@ export default function MarketingCampaignsPage() {
                       {c.name}
                     </Link>
                   </TableCell>
-                  <TableCell>{c.type}</TableCell>
+                  <TableCell>{c.type === "DRIP" ? "Campaign" : "Blast"}</TableCell>
                   <TableCell>{c.channel}</TableCell>
                   <TableCell>
                     <Badge

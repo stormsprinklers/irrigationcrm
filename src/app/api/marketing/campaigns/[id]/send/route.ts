@@ -16,11 +16,11 @@ export async function POST(_request: NextRequest, { params }: Params) {
     });
     if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (campaign.type === "DRIP") {
-      return NextResponse.json({ error: "Use activate for drip campaigns" }, { status: 400 });
+      return NextResponse.json({ error: "Use activate for this campaign" }, { status: 400 });
     }
 
-    const stats = await sendCampaign(id);
-    return NextResponse.json({ stats });
+    const result = await sendCampaign(id);
+    return NextResponse.json(result);
   } catch (err) {
     const commsDisabled = outboundCommsErrorResponse(err);
     if (commsDisabled) return commsDisabled;

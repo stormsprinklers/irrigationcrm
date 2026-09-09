@@ -32,9 +32,14 @@ export type IfElseCondition = {
   value: string;
 };
 
+export type IfElseBooleanOp = "AND" | "OR";
+
 export type IfElseSegment = {
   id: string;
-  booleanOp: "AND" | "OR";
+  /** How conditions inside this segment combine. */
+  booleanOp: IfElseBooleanOp;
+  /** How this segment combines with the previous one. Ignored on the first segment. */
+  joinOp: IfElseBooleanOp;
   conditions: IfElseCondition[];
 };
 
@@ -76,10 +81,15 @@ export function emptyIfElseCondition(): IfElseCondition {
   return { id: newIfElseId(), field: "city", operator: "is", value: "" };
 }
 
-export function emptyIfElseSegment(): IfElseSegment {
+function asBooleanOp(value: unknown): IfElseBooleanOp {
+  return value === "OR" ? "OR" : "AND";
+}
+
+export function emptyIfElseSegment(joinOp: IfElseBooleanOp = "AND"): IfElseSegment {
   return {
     id: newIfElseId(),
     booleanOp: "AND",
+    joinOp,
     conditions: [emptyIfElseCondition()],
   };
 }
@@ -133,7 +143,8 @@ function parseSegment(raw: unknown): IfElseSegment {
   const conditionsRaw = Array.isArray(item.conditions) ? item.conditions : [];
   return {
     id: typeof item.id === "string" && item.id ? item.id : newIfElseId(),
-    booleanOp: item.booleanOp === "OR" ? "OR" : "AND",
+    booleanOp: asBooleanOp(item.booleanOp),
+    joinOp: asBooleanOp(item.joinOp),
     conditions: (conditionsRaw.length ? conditionsRaw : [{}]).map(parseCondition),
   };
 }
@@ -148,7 +159,8 @@ function parseBranch(raw: unknown): IfElseBranch {
     segments = [
       {
         id: newIfElseId(),
-        booleanOp: item.booleanOp === "OR" ? "OR" : "AND",
+        booleanOp: asBooleanOp(item.booleanOp),
+        joinOp: "AND",
         conditions: conditionsRaw.map(parseCondition),
       },
     ];
@@ -351,7 +363,11 @@ function segmentMatches(contact: IfElseContact, segment: IfElseSegment): boolean
 
 export function branchMatches(contact: IfElseContact, branch: IfElseBranch): boolean {
   if (branch.segments.length === 0) return false;
-  return branch.segments.every((segment) => segmentMatches(contact, segment));
+  return branch.segments.reduce((matched, segment, index) => {
+    const next = segmentMatches(contact, segment);
+    if (index === 0) return next;
+    return asBooleanOp(segment.joinOp) === "OR" ? matched || next : matched && next;
+  }, false);
 }
 
 export function pickIfElseNextId(contact: IfElseContact, config: IfElseConfig): string {
@@ -386,11 +402,16 @@ export function conditionPreview(condition: IfElseCondition): string {
 }
 
 export function branchPreview(branch: IfElseBranch): string {
-  const parts = branch.segments.flatMap((segment) =>
-    segment.conditions.map((condition, index) => {
-      const prefix = index === 0 ? "" : ` ${segment.booleanOp} `;
-      return `${prefix}${conditionPreview(condition)}`;
-    })
-  );
+  const parts = branch.segments.map((segment, segmentIndex) => {
+    const inner = segment.conditions
+      .map((condition, index) => {
+        const prefix = index === 0 ? "" : ` ${segment.booleanOp} `;
+        return `${prefix}${conditionPreview(condition)}`;
+      })
+      .join("");
+    const wrapped = segment.conditions.length > 1 ? `(${inner})` : inner;
+    const join = segmentIndex === 0 ? "" : ` ${asBooleanOp(segment.joinOp)} `;
+    return `${join}${wrapped}`;
+  });
   return parts.join("").trim() || "No conditions";
 }
