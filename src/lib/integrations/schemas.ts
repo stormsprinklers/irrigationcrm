@@ -39,6 +39,30 @@ export const websiteEventSchema = z.object({
   occurredAt: z.string().datetime().optional(),
 });
 
+export const websiteWinterizationSchema = z.object({
+  externalId: z.string().min(1),
+  name: z.string().min(1),
+  firstName: z.string().optional().nullable(),
+  lastName: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable().or(z.literal("")),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zip: z.string().optional().nullable(),
+  zoneCount: z.number().int().positive(),
+  quotedPrice: z.number().nonnegative(),
+  weekStart: z.string().min(8),
+  weekEnd: z.string().min(8),
+  weekLabel: z.string().min(1),
+  schedulingNotes: z.string().optional().nullable(),
+  shutoffValveLocation: z.string().optional().nullable(),
+  timerLocation: z.string().optional().nullable(),
+  source: z.string().optional().nullable(),
+});
+
+export type WebsiteWinterizationInput = z.infer<typeof websiteWinterizationSchema>;
+
 export const designEstimateLineItemSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional().nullable(),

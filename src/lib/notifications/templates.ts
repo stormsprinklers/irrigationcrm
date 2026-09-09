@@ -301,16 +301,21 @@ export const DEFAULT_TEMPLATES: Array<{
   },
 ];
 
-/** Supports {snake_case} and legacy {{camelCase}} merge fields. */
+function missingMergeValue(value: string | number | null | undefined): boolean {
+  if (value === null || value === undefined) return true;
+  return String(value).trim() === "";
+}
+
+/** Supports {snake_case}, {snake_case|fallback}, and legacy {{camelCase}} merge fields. */
 export function renderTemplate(template: string, context: TemplateContext): string {
   let result = template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     const value = context[key];
-    if (value === null || value === undefined) return "";
+    if (missingMergeValue(value)) return "";
     return String(value);
   });
-  result = result.replace(/\{([a-z_]+)\}/g, (_, key: string) => {
+  result = result.replace(/\{([a-z_]+)(?:\|([^}]*))?\}/g, (_, key: string, fallback?: string) => {
     const value = context[key];
-    if (value === null || value === undefined) return "";
+    if (missingMergeValue(value)) return fallback ?? "";
     return String(value);
   });
   return result;

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
 import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
+import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type {
@@ -65,7 +66,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
   const campaignId = initial?.id;
   const existingStatus = initial?.status;
   const alreadyLive = existingStatus === "ACTIVE";
-  const smsRef = useRef<HTMLTextAreaElement>(null);
+  const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const isBlast = form.type === "BLAST";
 
   function update<K extends keyof CampaignFormState>(key: K, value: CampaignFormState[K]) {
@@ -221,13 +222,16 @@ export function CampaignWizard({ initial, onSaved }: Props) {
                 }}
               />
             </div>
-            <textarea
+            <MergeTokenTextField
               ref={smsRef}
               className="mt-1 min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
               value={form.bodyText}
-              onChange={(e) => update("bodyText", e.target.value)}
+              onChange={(next) => update("bodyText", next)}
               placeholder="Your SMS message. Reply STOP to opt out will be appended."
             />
+            <p className="text-xs text-muted-foreground">
+              Click a highlighted variable to set the text used when that customer info is missing.
+            </p>
           </div>
         )}
         <div className="flex flex-wrap gap-2">
@@ -245,7 +249,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-white">
+    <div className="flex min-h-[calc(100dvh-12rem)] flex-col overflow-hidden rounded-lg border bg-white">
       <div className="flex shrink-0 flex-wrap items-end gap-3 border-b border-border px-4 py-3">
         <div className="min-w-[12rem] flex-1">
           <label className="text-xs font-medium text-muted-foreground">Campaign name</label>
@@ -301,7 +305,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           )}
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="flex flex-1 flex-col">
         <CampaignFlowEditor
           nodes={form.flowNodes}
           onChange={(flowNodes) => update("flowNodes", flowNodes)}

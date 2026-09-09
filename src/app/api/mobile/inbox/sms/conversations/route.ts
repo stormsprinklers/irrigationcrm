@@ -11,6 +11,7 @@ import { listEligibleCustomerIdsForFieldSms, FIELD_CUSTOMER_COMMS_FORBIDDEN } fr
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
+import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
@@ -136,7 +137,9 @@ export async function POST(request: NextRequest) {
         conversationId: conversation.id,
         senderId: user.id,
         direction: "OUTBOUND",
-        body: messageBody.trim() || (mediaUrls.length ? "[Media message]" : ""),
+        body:
+          prefixOutboundSmsWithCompanyName(company?.name ?? "", messageBody.trim()) ||
+          (mediaUrls.length ? "[Media message]" : ""),
         twilioMessageSid: twilioMessage.sid,
         deliveryStatus: "queued",
         ...(media.length

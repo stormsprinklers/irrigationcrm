@@ -18,6 +18,10 @@ export function canViewSettingsNav(role: string | null | undefined) {
   return Boolean(role) && !isFieldRole(role ?? "");
 }
 
+export function canViewWinterizationNav(role: string | null | undefined) {
+  return Boolean(role) && !isFieldRole(role ?? "");
+}
+
 export function canViewMaintenancePlansNav(role: string | null | undefined) {
   return Boolean(role) && !isFieldRole(role ?? "");
 }
@@ -173,6 +177,9 @@ export function canSearchCrmPage(
   }
   if (href === "/maintenance-plans" || href.startsWith("/maintenance-plans/")) {
     return canViewMaintenancePlansNav(user.role);
+  }
+  if (href === "/winterization" || href.startsWith("/winterization/")) {
+    return canViewWinterizationNav(user.role);
   }
   if (href === "/settings" || href.startsWith("/settings/")) {
     return settingsPathAccess(href, user) !== "hidden";

@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
           companyId: company.id,
           customerId: customer.id,
           text: `${subject}\n${text ?? ""}`,
+          channel: "email",
         })
       )
       .catch((err) => console.error("Campaign wait reply check failed", err));

@@ -1,4 +1,8 @@
+import { addCampaignWaitDays } from "@/lib/marketing/campaign-time";
+import { delayMs, matchingReplyKeyword, type WaitDurationUnit } from "@/lib/marketing/wait-config";
+
 export const IF_ELSE_FIELDS = [
+  { id: "smsReply", label: "SMS reply" },
   { id: "name", label: "Name" },
   { id: "city", label: "City" },
   { id: "company", label: "Company" },
@@ -53,6 +57,11 @@ export type IfElseConfig = {
   kind: "if_else";
   branches: IfElseBranch[];
   noneNextId: string;
+  /** When true, unmatched contacts wait, then take timeoutNextId. */
+  timeoutEnabled: boolean;
+  timeoutAmount: number;
+  timeoutUnit: WaitDurationUnit;
+  timeoutNextId: string;
 };
 
 export const IF_ELSE_MAX_BRANCHES = 8;
@@ -67,6 +76,8 @@ export type IfElseContact = {
   leadSource: string;
   ltv: number;
   lastAppointmentAt: Date | null;
+  /** Latest inbound SMS/email body while waiting on this step. */
+  smsReply?: string;
 };
 
 export function newIfElseId() {
@@ -107,6 +118,10 @@ export function defaultIfElseConfig(): IfElseConfig {
     kind: "if_else",
     branches: [emptyIfElseBranch()],
     noneNextId: "",
+    timeoutEnabled: false,
+    timeoutAmount: 2,
+    timeoutUnit: "days",
+    timeoutNextId: "",
   };
 }
 
@@ -173,6 +188,14 @@ function parseBranch(raw: unknown): IfElseBranch {
 }
 
 export function parseIfElseConfig(config: Record<string, unknown>): IfElseConfig {
+  const timeoutUnit =
+    config.timeoutUnit === "minutes" || config.timeoutUnit === "hours" || config.timeoutUnit === "days"
+      ? config.timeoutUnit
+      : "days";
+  const timeoutAmountRaw = Number(config.timeoutAmount);
+  const timeoutAmount =
+    Number.isFinite(timeoutAmountRaw) && timeoutAmountRaw >= 0 ? timeoutAmountRaw : 2;
+
   if (usesIfElseConfig(config)) {
     const rawBranches = Array.isArray(config.branches) ? config.branches : [];
     const branches = rawBranches.slice(0, IF_ELSE_MAX_BRANCHES).map(parseBranch);
@@ -180,6 +203,10 @@ export function parseIfElseConfig(config: Record<string, unknown>): IfElseConfig
       kind: "if_else",
       branches,
       noneNextId: typeof config.noneNextId === "string" ? config.noneNextId : "",
+      timeoutEnabled: Boolean(config.timeoutEnabled),
+      timeoutAmount,
+      timeoutUnit,
+      timeoutNextId: typeof config.timeoutNextId === "string" ? config.timeoutNextId : "",
     };
   }
 
@@ -187,7 +214,31 @@ export function parseIfElseConfig(config: Record<string, unknown>): IfElseConfig
     kind: "if_else",
     branches: [emptyIfElseBranch()],
     noneNextId: typeof config.noNextId === "string" ? config.noNextId : "",
+    timeoutEnabled: Boolean(config.timeoutEnabled),
+    timeoutAmount,
+    timeoutUnit,
+    timeoutNextId: typeof config.timeoutNextId === "string" ? config.timeoutNextId : "",
   };
+}
+
+export function ifElseWaitsForSmsReply(config: IfElseConfig): boolean {
+  return config.branches.some((branch) =>
+    branch.segments.some((segment) =>
+      segment.conditions.some((condition) => condition.field === "smsReply")
+    )
+  );
+}
+
+export function ifElseTimeoutAt(
+  config: IfElseConfig,
+  from = new Date(),
+  timeZone?: string | null
+): Date | null {
+  if (!config.timeoutEnabled) return null;
+  if (config.timeoutUnit === "days") {
+    return addCampaignWaitDays(from, config.timeoutAmount, timeZone);
+  }
+  return new Date(from.getTime() + delayMs(config.timeoutAmount, config.timeoutUnit));
 }
 
 export function remapFlowNextIds(
@@ -202,6 +253,7 @@ export function remapFlowNextIds(
   next.yesNextId = mapId(next.yesNextId);
   next.noNextId = mapId(next.noNextId);
   next.noneNextId = mapId(next.noneNextId);
+  next.timeoutNextId = mapId(next.timeoutNextId);
   if (Array.isArray(next.branches)) {
     next.branches = next.branches.map((row) => {
       const branch = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
@@ -219,6 +271,7 @@ export function scrubIfElseNextIds(
   if (next.yesNextId === removedId) next.yesNextId = "";
   if (next.noNextId === removedId) next.noNextId = "";
   if (next.noneNextId === removedId) next.noneNextId = "";
+  if (next.timeoutNextId === removedId) next.timeoutNextId = "";
   if (Array.isArray(next.branches)) {
     next.branches = next.branches.map((row) => {
       const branch = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
@@ -263,6 +316,8 @@ function cityValues(contact: IfElseContact): string[] {
 
 function fieldText(contact: IfElseContact, field: IfElseField): string {
   switch (field) {
+    case "smsReply":
+      return contact.smsReply ?? "";
     case "name":
       return contact.name;
     case "city":
@@ -298,7 +353,32 @@ function matchList(actuals: string[], op: IfElseOperator, raw: string): boolean 
   return null;
 }
 
+function evaluateSmsReply(contact: IfElseContact, condition: IfElseCondition): boolean {
+  if (contact.smsReply == null) return false;
+  const reply = contact.smsReply;
+  const op = condition.operator;
+  if (!reply.trim()) {
+    return op === "is_empty";
+  }
+  if (op === "is_empty") return false;
+  if (op === "is_not_empty") return true;
+  if (op === "is" || op === "is_any_of") {
+    const keywords = op === "is_any_of" ? splitList(condition.value) : [condition.value];
+    return matchingReplyKeyword(reply, keywords.map(norm).filter(Boolean)) != null;
+  }
+  if (op === "is_not" || op === "is_not_any_of") {
+    const keywords = op === "is_not_any_of" ? splitList(condition.value) : [condition.value];
+    return matchingReplyKeyword(reply, keywords.map(norm).filter(Boolean)) == null;
+  }
+  if (op === "contains") return norm(reply).includes(norm(condition.value));
+  if (op === "does_not_contain") return !norm(reply).includes(norm(condition.value));
+  return false;
+}
+
 function evaluateCondition(contact: IfElseContact, condition: IfElseCondition): boolean {
+  if (condition.field === "smsReply") {
+    return evaluateSmsReply(contact, condition);
+  }
   const op = condition.operator;
   const raw = condition.value;
   if (op === "is_empty") return isEmptyField(contact, condition.field);
@@ -377,6 +457,36 @@ export function pickIfElseNextId(contact: IfElseContact, config: IfElseConfig): 
   return config.noneNextId;
 }
 
+export function ifElseNeedsWait(config: IfElseConfig): boolean {
+  return ifElseWaitsForSmsReply(config) || config.timeoutEnabled;
+}
+
+export type IfElseResolvePhase = "immediate" | "reply" | "timeout";
+
+export type IfElseResolveResult = {
+  reason: "match" | "none" | "timeout";
+  nextId: string;
+  branchId: string;
+};
+
+/** First matching branch wins. Timeout is only used when the wait expires unmatched. */
+export function resolveIfElseBranch(
+  contact: IfElseContact | null,
+  config: IfElseConfig,
+  phase: IfElseResolvePhase
+): IfElseResolveResult {
+  const matched = contact
+    ? config.branches.find((branch) => branchMatches(contact, branch))
+    : undefined;
+  if (matched) {
+    return { reason: "match", nextId: matched.nextId, branchId: matched.id };
+  }
+  if (phase === "timeout") {
+    return { reason: "timeout", nextId: config.timeoutNextId, branchId: "timeout" };
+  }
+  return { reason: "none", nextId: config.noneNextId, branchId: "none" };
+}
+
 function operatorLabel(id: IfElseOperator) {
   return IF_ELSE_OPERATORS.find((o) => o.id === id)?.label ?? id;
 }
@@ -391,7 +501,9 @@ export function ifElseSummary(config: Record<string, unknown>): string {
   }
   const parsed = parseIfElseConfig(config);
   const count = parsed.branches.length;
-  return `If/Else · ${count} branch${count === 1 ? "" : "es"} + None`;
+  const sms = ifElseWaitsForSmsReply(parsed) ? " · SMS reply" : "";
+  const timeout = parsed.timeoutEnabled ? " + Timeout" : "";
+  return `If/Else · ${count} branch${count === 1 ? "" : "es"} + None${timeout}${sms}`;
 }
 
 export function conditionPreview(condition: IfElseCondition): string {

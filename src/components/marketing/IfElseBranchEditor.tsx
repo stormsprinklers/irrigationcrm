@@ -17,6 +17,7 @@ import {
   IF_ELSE_OPERATORS,
   emptyIfElseBranch,
   emptyIfElseSegment,
+  ifElseWaitsForSmsReply,
   operatorNeedsValue,
   parseIfElseConfig,
   usesIfElseConfig,
@@ -27,6 +28,7 @@ import {
   type IfElseOperator,
   type IfElseSegment,
 } from "@/lib/marketing/if-else";
+import type { WaitDurationUnit } from "@/lib/marketing/wait-config";
 import { cn } from "@/lib/utils";
 
 const selectClass =
@@ -38,6 +40,13 @@ type Props = {
   labelForNode: (id: string) => string;
   onChange: (config: IfElseConfig) => void;
 };
+
+function operatorsForField(field: IfElseCondition["field"]) {
+  if (field === "smsReply") {
+    return IF_ELSE_OPERATORS.filter((operator) => operator.id !== "lt" && operator.id !== "gt");
+  }
+  return IF_ELSE_OPERATORS;
+}
 
 function valueInputType(condition: IfElseCondition): "text" | "number" | "date" {
   if (!operatorNeedsValue(condition.operator)) return "text";
@@ -51,6 +60,12 @@ function valueInputType(condition: IfElseCondition): "text" | "number" | "date" 
 }
 
 function valuePlaceholder(condition: IfElseCondition) {
+  if (condition.field === "smsReply") {
+    if (condition.operator === "is_any_of" || condition.operator === "is_not_any_of") {
+      return "yes, yeah, yep";
+    }
+    return "yes";
+  }
   if (condition.operator === "is_any_of" || condition.operator === "is_not_any_of") {
     return condition.field === "tags" ? "vip, holiday" : "Salt Lake City, Lehi";
   }
@@ -136,9 +151,14 @@ function ConditionRow({
       <select
         className={cn(selectClass, "min-w-[9.5rem] flex-1")}
         value={condition.field}
-        onChange={(e) =>
-          onChange({ ...condition, field: e.target.value as IfElseCondition["field"] })
-        }
+        onChange={(e) => {
+          const field = e.target.value as IfElseCondition["field"];
+          const operators = operatorsForField(field);
+          const operator = operators.some((item) => item.id === condition.operator)
+            ? condition.operator
+            : operators[0]?.id ?? "is";
+          onChange({ ...condition, field, operator });
+        }}
       >
         {IF_ELSE_FIELDS.map((field) => (
           <option key={field.id} value={field.id}>
@@ -153,7 +173,7 @@ function ConditionRow({
           onChange({ ...condition, operator: e.target.value as IfElseOperator })
         }
       >
-        {IF_ELSE_OPERATORS.map((operator) => (
+        {operatorsForField(condition.field).map((operator) => (
           <option key={operator.id} value={operator.id}>
             {operator.label}
           </option>
@@ -429,9 +449,56 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
           Branches
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Fork the contact journey based on conditions. Use + to add a segment, then set AND or
-          OR between segments. The first matching branch wins.
+          Fork the contact journey based on conditions. Use SMS reply to split on what they text
+          back (not case sensitive — Yes and yes match the same branch). First matching branch
+          wins. SMS reply branches wait for a text; turn on a timeout if they never respond.
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-white px-3 py-3">
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={parsed.timeoutEnabled}
+            onChange={(e) =>
+              commit({
+                timeoutEnabled: e.target.checked,
+                timeoutAmount: parsed.timeoutAmount || 2,
+                timeoutUnit: parsed.timeoutUnit || "days",
+              })
+            }
+          />
+          <span>
+            <span className="font-medium">Wait with a timeout</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Adds a Timeout branch when the wait ends without a match — no reply yet, or the
+              conditions still are not met. Timeout is always its own path, separate from None.
+            </span>
+          </span>
+        </label>
+        {parsed.timeoutEnabled ? (
+          <div className="mt-3 grid grid-cols-[1fr_8rem] gap-2">
+            <Input
+              type="number"
+              min={0}
+              className="h-9"
+              value={parsed.timeoutAmount}
+              onChange={(e) => commit({ timeoutAmount: Number(e.target.value) || 0 })}
+            />
+            <select
+              className={selectClass}
+              value={parsed.timeoutUnit}
+              onChange={(e) =>
+                commit({ timeoutUnit: e.target.value as WaitDurationUnit })
+              }
+            >
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-3">
@@ -488,7 +555,9 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
       <div className="rounded-lg border bg-slate-50/80 px-3 py-3">
         <p className="text-sm font-semibold">None branch</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Used when none of the conditions above are satisfied.
+          {ifElseWaitsForSmsReply(parsed)
+            ? "Used when they reply, but none of the SMS / condition branches above match."
+            : "Used when none of the conditions above are satisfied."}
         </p>
         <div className="mt-2">
           <NextStepSelect
@@ -500,6 +569,23 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
           />
         </div>
       </div>
+      {parsed.timeoutEnabled ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3">
+          <p className="text-sm font-semibold">Timeout branch</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Always used when the wait ends without a matching reply or condition.
+          </p>
+          <div className="mt-2">
+            <NextStepSelect
+              value={parsed.timeoutNextId}
+              emptyLabel="Exit campaign"
+              otherNodes={otherNodes}
+              labelForNode={labelForNode}
+              onChange={(timeoutNextId) => commit({ timeoutNextId })}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { sendSms } from "@/lib/inbox/twilio";
+import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
@@ -103,7 +104,8 @@ async function sendSmsMessage(params: {
       conversationId: conversation.id,
       senderId: params.user.id,
       direction: "OUTBOUND",
-      body: params.messageBody.trim() || (mediaUrls.length ? "[Media message]" : ""),
+      body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
+        (mediaUrls.length ? "[Media message]" : ""),
       twilioMessageSid: twilioMessage.sid,
       deliveryStatus: "queued",
       ...(params.media.length

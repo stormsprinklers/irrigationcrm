@@ -96,6 +96,19 @@ export async function PATCH(request: NextRequest) {
       data.showStormAiFab = Boolean(data.showStormAiFab);
     }
 
+    for (const key of [
+      "winterizationTabStartMonth",
+      "winterizationTabStartDay",
+      "winterizationTabEndMonth",
+      "winterizationTabEndDay",
+    ] as const) {
+      if (key in data) {
+        const n = Number(data[key]);
+        data[key] = Number.isFinite(n) ? Math.trunc(n) : undefined;
+        if (data[key] === undefined) delete data[key];
+      }
+    }
+
     if ("customerBaseUrl" in data) {
       try {
         data.customerBaseUrl = parseCustomerBaseUrlInput(data.customerBaseUrl);

@@ -453,7 +453,7 @@ export function CompanySettingsInner() {
                   <p className="text-sm font-medium">Irrigation tools</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Rachio, property irrigation maps, sprinkler programming guides, parts suppliers,
-                    and related portal features.
+                    winterization list, and related portal features.
                   </p>
                 </div>
                 <Switch
@@ -470,6 +470,106 @@ export function CompanySettingsInner() {
                   }
                 />
               </div>
+              {company.irrigationFeaturesEnabled !== false ? (
+                <div className="rounded-md border border-border bg-muted/30 p-3">
+                  <p className="text-sm font-medium">Winterization list tab</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Irrigation-only top tab listing customers who requested a blow-out week and still
+                    need a specific appointment date.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(
+                      [
+                        { id: "OFF" as const, label: "Off" },
+                        { id: "ON" as const, label: "Always on" },
+                        { id: "SCHEDULED" as const, label: "On a schedule" },
+                      ]
+                    ).map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`rounded-md border px-3 py-1.5 text-xs font-medium ${
+                          (company.winterizationTabMode ?? "SCHEDULED") === option.id
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-input bg-white"
+                        }`}
+                        onClick={() =>
+                          setCompany({ ...company, winterizationTabMode: option.id })
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {(company.winterizationTabMode ?? "SCHEDULED") === "SCHEDULED" ? (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <label className="text-xs text-muted-foreground">
+                        Show from (month / day)
+                        <span className="mt-1 flex gap-1">
+                          <Input
+                            className="h-8"
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={company.winterizationTabStartMonth ?? 8}
+                            onChange={(e) =>
+                              setCompany({
+                                ...company,
+                                winterizationTabStartMonth: Number(e.target.value) || 8,
+                              })
+                            }
+                          />
+                          <Input
+                            className="h-8"
+                            type="number"
+                            min={1}
+                            max={31}
+                            value={company.winterizationTabStartDay ?? 1}
+                            onChange={(e) =>
+                              setCompany({
+                                ...company,
+                                winterizationTabStartDay: Number(e.target.value) || 1,
+                              })
+                            }
+                          />
+                        </span>
+                      </label>
+                      <label className="text-xs text-muted-foreground">
+                        Hide after (month / day)
+                        <span className="mt-1 flex gap-1">
+                          <Input
+                            className="h-8"
+                            type="number"
+                            min={1}
+                            max={12}
+                            value={company.winterizationTabEndMonth ?? 11}
+                            onChange={(e) =>
+                              setCompany({
+                                ...company,
+                                winterizationTabEndMonth: Number(e.target.value) || 11,
+                              })
+                            }
+                          />
+                          <Input
+                            className="h-8"
+                            type="number"
+                            min={1}
+                            max={31}
+                            value={company.winterizationTabEndDay ?? 15}
+                            onChange={(e) =>
+                              setCompany({
+                                ...company,
+                                winterizationTabEndDay: Number(e.target.value) || 15,
+                              })
+                            }
+                          />
+                        </span>
+                        <span className="mt-0.5 block">Defaults to Aug 1 – Nov 15</span>
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Holiday lighting tools</p>

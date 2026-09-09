@@ -14,6 +14,11 @@ export const companySettingsSelect = {
   legalName: true,
   industry: true,
   irrigationFeaturesEnabled: true,
+  winterizationTabMode: true,
+  winterizationTabStartMonth: true,
+  winterizationTabStartDay: true,
+  winterizationTabEndMonth: true,
+  winterizationTabEndDay: true,
   holidayLightingFeaturesEnabled: true,
   maintenancePlansFeaturesEnabled: true,
   holidayLightingCatalog: true,
@@ -102,6 +107,11 @@ export type CompanySettingsDTO = {
   legalName: string | null;
   industry: string | null;
   irrigationFeaturesEnabled: boolean;
+  winterizationTabMode: "OFF" | "ON" | "SCHEDULED";
+  winterizationTabStartMonth: number;
+  winterizationTabStartDay: number;
+  winterizationTabEndMonth: number;
+  winterizationTabEndDay: number;
   holidayLightingFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
   holidayLightingCatalog: unknown;

@@ -22,6 +22,7 @@ export type CompanyBrand = {
   secondaryColor: string;
   palette: BrandPalette;
   irrigationFeaturesEnabled: boolean;
+  winterizationTabVisible: boolean;
   holidayLightingFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
   customerBaseUrl: string | null;
@@ -70,6 +71,7 @@ const fallbackBrand: CompanyBrand = {
   secondaryColor: DEFAULT_BRAND_PALETTE.secondary,
   palette: DEFAULT_BRAND_PALETTE,
   irrigationFeaturesEnabled: true,
+  winterizationTabVisible: true,
   holidayLightingFeaturesEnabled: false,
   maintenancePlansFeaturesEnabled: true,
   customerBaseUrl: null,
@@ -104,6 +106,7 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         secondaryColor: palette.secondary,
         palette,
         irrigationFeaturesEnabled: resolveIrrigationFeatures(data),
+        winterizationTabVisible: Boolean(data.winterizationTabVisible),
         holidayLightingFeaturesEnabled: resolveHolidayFeatures(data),
         maintenancePlansFeaturesEnabled: resolveMaintenanceFeatures(data),
         customerBaseUrl: typeof data.customerBaseUrl === "string" ? data.customerBaseUrl : null,
@@ -138,6 +141,11 @@ export function useCompanyBrand() {
     };
   }
   return ctx;
+}
+
+export function useWinterizationTab() {
+  const { brand, loading } = useCompanyBrand();
+  return { enabled: brand.winterizationTabVisible, loading };
 }
 
 /** Staff CRM: whether irrigation tools (Rachio, maps, programming, suppliers) should show. */

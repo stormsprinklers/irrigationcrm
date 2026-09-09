@@ -1,4 +1,5 @@
 import { buildNotificationContext } from "@/lib/notifications/context";
+import { unwrapMergeTokenSpans } from "@/lib/notifications/merge-tokens";
 import { renderTemplate } from "@/lib/notifications/templates";
 
 export type MarketingMergeCompany = {
@@ -29,20 +30,27 @@ export function renderMarketingMergeFields(params: {
   bodyText: string;
   bodyHtml: string | null;
 }) {
+  const name = params.customer?.name?.trim() || "";
   const ctx = buildNotificationContext({
     company: params.company,
     customer: {
-      name: params.customer?.name?.trim() || "Customer",
+      name,
       address: params.customer?.address,
       city: params.customer?.city,
       state: params.customer?.state,
       zip: params.customer?.zip,
     },
   });
+  if (!name) {
+    ctx.customer_first_name = "";
+    ctx.customer_last_name = "";
+    ctx.customerName = "";
+  }
 
+  const bodyHtml = params.bodyHtml ? unwrapMergeTokenSpans(params.bodyHtml) : null;
   return {
     subject: renderTemplate(params.subject, ctx),
     bodyText: renderTemplate(params.bodyText, ctx),
-    bodyHtml: params.bodyHtml ? renderTemplate(params.bodyHtml, ctx) : null,
+    bodyHtml: bodyHtml ? renderTemplate(bodyHtml, ctx) : null,
   };
 }

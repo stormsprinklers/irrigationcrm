@@ -16,6 +16,7 @@ import { canAccessHiring } from "@/lib/hiring/permissions";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 import {
   canViewMaintenancePlansNav,
+  canViewWinterizationNav,
   canViewMarketing,
   canViewReporting,
   canViewSettingsNav,
@@ -97,6 +98,9 @@ export function TopNav() {
   const navItems = primaryNav.filter((item) => {
     if (item.href === "/holiday-lighting/quote") {
       return brand.holidayLightingFeaturesEnabled;
+    }
+    if (item.href === "/winterization") {
+      return brand.winterizationTabVisible && canViewWinterizationNav(role);
     }
     if (item.href === "/maintenance-plans") {
       return brand.maintenancePlansFeaturesEnabled && canViewMaintenancePlansNav(role);

@@ -31,14 +31,20 @@ import {
   parseWaitConfig,
   recipientMatchesWaitAction,
   waitTimeoutAt,
+  REPLY_POLL_MS,
   type WaitAction,
 } from "@/lib/marketing/wait-config";
 import {
   branchMatches,
+  ifElseNeedsWait,
+  ifElseTimeoutAt,
+  ifElseWaitsForSmsReply,
   isLegacyReactionBranch,
   parseIfElseConfig,
-  pickIfElseNextId,
   remapFlowNextIds,
+  resolveIfElseBranch,
+  type IfElseContact,
+  type IfElseResolvePhase,
 } from "@/lib/marketing/if-else";
 import { loadIfElseContact } from "@/lib/marketing/if-else-contact";
 
@@ -268,6 +274,116 @@ async function completeWaitAndAdvance(params: {
   });
 }
 
+function stubIfElseContact(smsReply: string): IfElseContact {
+  return {
+    name: "",
+    city: "",
+    companyName: "",
+    tags: [],
+    leadSource: "",
+    ltv: 0,
+    lastAppointmentAt: null,
+    smsReply,
+  };
+}
+
+function withSmsReply(contact: IfElseContact | null, smsReply: string | null): IfElseContact | null {
+  if (smsReply == null) return contact;
+  return contact ? { ...contact, smsReply } : stubIfElseContact(smsReply);
+}
+
+function nextIfElseCheckAt(until: Date | null, waitsForSms: boolean, from = new Date()) {
+  if (!waitsForSms) return until ?? from;
+  const poll = new Date(from.getTime() + REPLY_POLL_MS);
+  if (until && until.getTime() <= poll.getTime()) return until;
+  return poll;
+}
+
+async function latestInboundSmsBody(params: {
+  companyId: string;
+  customerId: string;
+  since: Date;
+}): Promise<string | null> {
+  const message = await prisma.message.findFirst({
+    where: {
+      direction: MessageDirection.INBOUND,
+      sentAt: { gte: params.since },
+      conversation: {
+        companyId: params.companyId,
+        customerId: params.customerId,
+      },
+    },
+    select: { body: true },
+    orderBy: { sentAt: "desc" },
+  });
+  const body = message?.body?.trim();
+  return body || null;
+}
+
+async function completeBranchAndAdvance(params: {
+  enrollmentId: string;
+  campaign: { id: string; name: string; companyId: string };
+  timezone: string | null;
+  node: FlowNodeRow;
+  nodes: FlowNodeRow[];
+  eventType: "branch_yes" | "branch_none" | "branch_timeout";
+  targetId: string;
+  meta?: Record<string, unknown>;
+}) {
+  await logEvent(params.enrollmentId, params.node.id, params.eventType, {
+    nextId: params.targetId,
+    ...params.meta,
+  });
+  const target = findNode(params.nodes, params.targetId);
+  if (!target) {
+    await prisma.campaignEnrollment.update({
+      where: { id: params.enrollmentId },
+      data: { status: CampaignEnrollmentStatus.COMPLETED },
+    });
+    return;
+  }
+  await prisma.campaignEnrollment.update({
+    where: { id: params.enrollmentId },
+    data: {
+      currentNodeId: target.id,
+      nextSendAt: await scheduleOrHoldCampaignSend({
+        companyId: params.campaign.companyId,
+        campaignId: params.campaign.id,
+        campaignName: params.campaign.name,
+        timeZone: params.timezone,
+      }),
+    },
+  });
+}
+
+async function finishIfElseBranch(params: {
+  enrollmentId: string;
+  campaign: { id: string; name: string; companyId: string };
+  timezone: string | null;
+  node: FlowNodeRow;
+  nodes: FlowNodeRow[];
+  contact: IfElseContact | null;
+  phase: IfElseResolvePhase;
+}) {
+  const parsed = parseIfElseConfig(params.node.config);
+  const outcome = resolveIfElseBranch(params.contact, parsed, params.phase);
+  await completeBranchAndAdvance({
+    enrollmentId: params.enrollmentId,
+    campaign: params.campaign,
+    timezone: params.timezone,
+    node: params.node,
+    nodes: params.nodes,
+    eventType:
+      outcome.reason === "match"
+        ? "branch_yes"
+        : outcome.reason === "timeout"
+          ? "branch_timeout"
+          : "branch_none",
+    targetId: outcome.nextId,
+    meta: { branchId: outcome.branchId, reason: outcome.reason, phase: params.phase },
+  });
+}
+
 async function customerReplyMatch(params: {
   companyId: string;
   customerId: string;
@@ -339,6 +455,7 @@ export async function advanceWaitOnCustomerReply(params: {
   companyId: string;
   customerId: string;
   text: string;
+  channel?: "sms" | "email";
 }): Promise<{ advanced: number }> {
   const matchedPreview = matchingReplyKeyword(params.text, []);
   if (!matchedPreview) return { advanced: 0 };
@@ -373,16 +490,52 @@ export async function advanceWaitOnCustomerReply(params: {
       sortOrder: n.sortOrder,
     }));
     const node = findNode(nodes, enrollment.currentNodeId);
-    if (!node || node.type !== CampaignFlowNodeType.WAIT) continue;
+    if (!node) continue;
 
-    const wait = parseWaitConfig(node.config);
-    if (!wait.usesReply) continue;
+    if (node.type === CampaignFlowNodeType.WAIT) {
+      const wait = parseWaitConfig(node.config);
+      if (!wait.usesReply) continue;
 
-    const keywordHit = matchingReplyKeyword(params.text, wait.keywords);
-    if (!keywordHit) continue;
+      const keywordHit = matchingReplyKeyword(params.text, wait.keywords);
+      if (!keywordHit) continue;
+
+      const waited = await prisma.campaignEnrollmentEvent.findFirst({
+        where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "wait_started" },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!waited) continue;
+
+      const alreadyDone = await prisma.campaignEnrollmentEvent.findFirst({
+        where: {
+          enrollmentId: enrollment.id,
+          nodeId: node.id,
+          eventType: "wait_completed",
+          createdAt: { gte: waited.createdAt },
+        },
+      });
+      if (alreadyDone) continue;
+
+      await completeWaitAndAdvance({
+        enrollmentId: enrollment.id,
+        timezone: enrollment.campaign.company.timezone,
+        node,
+        nodes,
+        reason: "reply",
+        matched: keywordHit,
+      });
+      advanced += 1;
+      continue;
+    }
+
+    if (node.type !== CampaignFlowNodeType.BRANCH) continue;
+    if (params.channel === "email") continue;
+    if (isLegacyReactionBranch(node.config)) continue;
+
+    const parsed = parseIfElseConfig(node.config);
+    if (!ifElseWaitsForSmsReply(parsed)) continue;
 
     const waited = await prisma.campaignEnrollmentEvent.findFirst({
-      where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "wait_started" },
+      where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
       orderBy: { createdAt: "desc" },
     });
     if (!waited) continue;
@@ -391,19 +544,25 @@ export async function advanceWaitOnCustomerReply(params: {
       where: {
         enrollmentId: enrollment.id,
         nodeId: node.id,
-        eventType: "wait_completed",
+        eventType: { in: ["branch_yes", "branch_none", "branch_timeout"] },
         createdAt: { gte: waited.createdAt },
       },
     });
     if (alreadyDone) continue;
 
-    await completeWaitAndAdvance({
+    const contact = await loadIfElseContact(params.companyId, params.customerId);
+    await finishIfElseBranch({
       enrollmentId: enrollment.id,
+      campaign: {
+        id: enrollment.campaign.id,
+        name: enrollment.campaign.name,
+        companyId: enrollment.campaign.companyId,
+      },
       timezone: enrollment.campaign.company.timezone,
       node,
       nodes,
-      reason: "reply",
-      matched: keywordHit,
+      contact: withSmsReply(contact, params.text),
+      phase: "reply",
     });
     advanced += 1;
   }
@@ -887,39 +1046,131 @@ export async function processFlowEnrollments(limit = 40) {
       }
 
       const parsed = parseIfElseConfig(node.config);
+      const waitsForSms = ifElseWaitsForSmsReply(parsed);
+      const needsWait = ifElseNeedsWait(parsed);
       const contact = await loadIfElseContact(
         enrollment.campaign.companyId,
         enrollment.customerId
       );
-      const matched = contact
-        ? parsed.branches.find((branch) => branchMatches(contact, branch))
-        : undefined;
-      const targetId = contact ? pickIfElseNextId(contact, parsed) : parsed.noneNextId;
-      const target = findNode(nodes, targetId);
 
-      await logEvent(enrollment.id, node.id, matched ? "branch_yes" : "branch_none", {
-        branchId: matched?.id ?? "none",
+      const entered = await prisma.campaignEnrollmentEvent.findFirst({
+        where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
+        orderBy: { createdAt: "desc" },
       });
 
-      if (!target) {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: { status: CampaignEnrollmentStatus.COMPLETED },
-        });
-      } else {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            currentNodeId: target.id,
-            nextSendAt: await scheduleOrHoldCampaignSend({
-                companyId: enrollment.campaign.companyId,
-                campaignId: enrollment.campaignId,
-                campaignName: enrollment.campaign.name,
-                timeZone: companyTz,
-              }),
+      const finish = (phase: IfElseResolvePhase, withContact: IfElseContact | null) =>
+        finishIfElseBranch({
+          enrollmentId: enrollment.id,
+          campaign: {
+            id: enrollment.campaign.id,
+            name: enrollment.campaign.name,
+            companyId: enrollment.campaign.companyId,
           },
+          timezone: companyTz,
+          node,
+          nodes,
+          contact: withContact,
+          phase,
         });
+
+      if (!entered) {
+        const matchedImmediately = contact
+          ? parsed.branches.some((branch) => branchMatches(contact, branch))
+          : false;
+        if (matchedImmediately || !needsWait) {
+          await finish("immediate", contact);
+          processed++;
+          continue;
+        }
+
+        const now = new Date();
+        const until = ifElseTimeoutAt(parsed, now, companyTz);
+        await logEvent(enrollment.id, node.id, "branch_wait", {
+          until: until?.toISOString() ?? null,
+          waitsForSms,
+          timeoutEnabled: parsed.timeoutEnabled,
+        });
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: { nextSendAt: nextIfElseCheckAt(until, waitsForSms, now) },
+        });
+        processed++;
+        continue;
       }
+
+      const alreadyDone = await prisma.campaignEnrollmentEvent.findFirst({
+        where: {
+          enrollmentId: enrollment.id,
+          nodeId: node.id,
+          eventType: { in: ["branch_yes", "branch_none", "branch_timeout"] },
+          createdAt: { gte: entered.createdAt },
+        },
+      });
+      if (alreadyDone) {
+        const meta = eventMeta(alreadyDone.meta);
+        const storedNextId = typeof meta.nextId === "string" ? meta.nextId : "";
+        await completeBranchAndAdvance({
+          enrollmentId: enrollment.id,
+          campaign: {
+            id: enrollment.campaign.id,
+            name: enrollment.campaign.name,
+            companyId: enrollment.campaign.companyId,
+          },
+          timezone: companyTz,
+          node,
+          nodes,
+          eventType:
+            alreadyDone.eventType === "branch_timeout"
+              ? "branch_timeout"
+              : alreadyDone.eventType === "branch_none"
+                ? "branch_none"
+                : "branch_yes",
+          targetId: storedNextId,
+          meta: { recovered: true, branchId: meta.branchId ?? "none" },
+        });
+        processed++;
+        continue;
+      }
+
+      const waitMeta = eventMeta(entered.meta);
+      const until =
+        typeof waitMeta.until === "string" && waitMeta.until
+          ? new Date(waitMeta.until)
+          : ifElseTimeoutAt(parsed, entered.createdAt, companyTz);
+      const now = new Date();
+
+      if (waitsForSms) {
+        const smsReply = await latestInboundSmsBody({
+          companyId: enrollment.campaign.companyId,
+          customerId: enrollment.customerId,
+          since: entered.createdAt,
+        });
+        if (smsReply) {
+          await finish("reply", withSmsReply(contact, smsReply));
+          processed++;
+          continue;
+        }
+      }
+
+      const matchedWhileWaiting = contact
+        ? parsed.branches.some((branch) => branchMatches(contact, branch))
+        : false;
+      if (matchedWhileWaiting) {
+        await finish("immediate", contact);
+        processed++;
+        continue;
+      }
+
+      if (parsed.timeoutEnabled && until && now.getTime() >= until.getTime()) {
+        await finish("timeout", contact);
+        processed++;
+        continue;
+      }
+
+      await prisma.campaignEnrollment.update({
+        where: { id: enrollment.id },
+        data: { nextSendAt: nextIfElseCheckAt(until, waitsForSms, now) },
+      });
       processed++;
       continue;
     }

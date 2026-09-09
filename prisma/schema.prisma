@@ -22,6 +22,19 @@ enum CustomerStatus {
   ARCHIVED
 }
 
+enum WinterizationTabMode {
+  OFF
+  ON
+  SCHEDULED
+}
+
+enum WinterizationRequestStatus {
+  NEED_BOOKING
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
 enum Scope {
   EXTERNAL
   INTERNAL
@@ -508,6 +521,12 @@ model Company {
   industry                 String?
   /// When false, hide irrigation-specific tools (Rachio, maps, programming, parts suppliers, portal irrigation).
   irrigationFeaturesEnabled Boolean @default(true)
+  /// Top-nav Winterization list: off, always on, or only during a calendar window.
+  winterizationTabMode WinterizationTabMode @default(SCHEDULED)
+  winterizationTabStartMonth Int @default(8)
+  winterizationTabStartDay Int @default(1)
+  winterizationTabEndMonth Int @default(11)
+  winterizationTabEndDay Int @default(15)
   /// When true, show holiday lighting quoting tools (maps measure, catalog, AI preview).
   holidayLightingFeaturesEnabled Boolean @default(false)
   /// When false, hide maintenance plan tools (templates, enrollments, portal plans).
@@ -724,6 +743,7 @@ model Company {
   defaultLeadAssignee    User?                    @relation("DefaultLeadAssignee", fields: [defaultLeadAssigneeId], references: [id], onDelete: SetNull)
   users                  User[]
   customers              Customer[]
+  winterizationRequests  WinterizationRequest[]
   customerPhones         CustomerPhone[]
   mediaAssets            CompanyMediaAsset[]
   blockedContacts        BlockedContact[]
@@ -1418,10 +1438,47 @@ model Customer {
   feedbackSurveyResponses FeedbackSurveyResponse[]
   marketingTouchEvents   MarketingTouchEvent[]
   gbpReviews             GbpReview[]
+  winterizationRequests  WinterizationRequest[]
 
   @@index([referredByCustomerId])
   @@index([companyId, attributionChannel])
   @@index([companyId, createdAt])
+}
+
+model WinterizationRequest {
+  id        String   @id @default(cuid())
+  companyId String
+  customerId String?
+  leadId     String?
+  status     WinterizationRequestStatus @default(NEED_BOOKING)
+  seasonYear Int
+  weekStart  DateTime
+  weekEnd    DateTime
+  weekLabel  String
+  zoneCount  Int?
+  quotedPrice Decimal? @db.Decimal(10, 2)
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  city       String?
+  state      String?
+  zip        String?
+  schedulingNotes        String? @db.Text
+  shutoffValveLocation   String? @db.Text
+  timerLocation          String? @db.Text
+  source     String  @default("website")
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, externalId])
+  @@index([companyId, status, seasonYear])
+  @@index([companyId, weekStart])
+  @@index([customerId])
 }
 
 model CustomerPhone {

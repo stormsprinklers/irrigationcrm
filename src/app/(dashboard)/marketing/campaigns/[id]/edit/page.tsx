@@ -89,9 +89,8 @@ export default function EditMarketingCampaignPage() {
   }
 
   return (
-    <ContentArea className="flex h-full max-w-none flex-col overflow-y-auto">
+    <ContentArea className="max-w-none">
       <PageHeader
-        className="shrink-0"
         breadcrumb={["Marketing", "Campaigns", campaign.name, "Edit"]}
         title={`Edit ${campaign.name}`}
         subtitle={
@@ -100,31 +99,29 @@ export default function EditMarketingCampaignPage() {
             : "Open campaigns can be edited until they are sent, completed, cancelled, or archived."
         }
       />
-      <div className="min-h-0 flex-1">
-        <CampaignWizard
-          initial={{
-            id: campaign.id,
-            status: campaign.status,
-            name: campaign.name,
-            type: campaign.type,
-            channel: campaign.channel,
-            subject: campaign.subject ?? "",
-            bodyText: campaign.bodyText ?? "",
-            bodyHtml: campaign.bodyHtml ?? "",
-            aiPrompt: campaign.aiPrompt ?? "",
-            audienceFilters: campaign.audienceFilters ?? {},
-            dripSettings: campaign.dripSettings ?? { emailsPerDay: 50, smsPerDay: 50 },
-            steps: campaign.steps ?? [],
-            flowNodes: (campaign.flowNodes ?? []).map((node) => ({
-              id: node.id,
-              type: node.type,
-              config: (node.config ?? {}) as Record<string, unknown>,
-              sortOrder: node.sortOrder,
-            })),
-          }}
-          onSaved={(campaignId) => router.push(`/marketing/campaigns/${campaignId}`)}
-        />
-      </div>
+      <CampaignWizard
+        initial={{
+          id: campaign.id,
+          status: campaign.status,
+          name: campaign.name,
+          type: campaign.type,
+          channel: campaign.channel,
+          subject: campaign.subject ?? "",
+          bodyText: campaign.bodyText ?? "",
+          bodyHtml: campaign.bodyHtml ?? "",
+          aiPrompt: campaign.aiPrompt ?? "",
+          audienceFilters: campaign.audienceFilters ?? {},
+          dripSettings: campaign.dripSettings ?? { emailsPerDay: 50, smsPerDay: 50 },
+          steps: campaign.steps ?? [],
+          flowNodes: (campaign.flowNodes ?? []).map((node) => ({
+            id: node.id,
+            type: node.type,
+            config: (node.config ?? {}) as Record<string, unknown>,
+            sortOrder: node.sortOrder,
+          })),
+        }}
+        onSaved={(campaignId) => router.push(`/marketing/campaigns/${campaignId}`)}
+      />
     </ContentArea>
   );
 }

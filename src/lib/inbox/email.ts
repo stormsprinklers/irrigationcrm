@@ -113,6 +113,41 @@ function parseFromAddress(from: string): { address: string; name: string } {
   return { name: "", address: from.trim() };
 }
 
+export function buildTwilioEmailPayload(params: {
+  from: string;
+  to: string[];
+  subject: string;
+  text?: string;
+  html?: string;
+  attachments?: Array<{
+    filename: string;
+    contentType: string;
+    content: string;
+  }>;
+}): Record<string, unknown> {
+  const fromParsed = parseFromAddress(params.from);
+  const from = {
+    address: fromParsed.address,
+    name: fromParsed.name || fromParsed.address.split("@")[0] || "Support",
+  };
+  const text =
+    params.text ??
+    params.html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
+    "";
+  const html = params.html ?? (params.text ? `<p>${params.text.replace(/\n/g, "<br/>")}</p>` : "");
+
+  return {
+    from,
+    to: params.to.map((address) => ({ address: address.trim() })),
+    content: {
+      subject: params.subject,
+      html,
+      ...(text ? { text } : {}),
+      ...(params.attachments?.length ? { attachments: params.attachments } : {}),
+    },
+  };
+}
+
 function formatTwilioEmailError(status: number, body: unknown, source: TwilioEmailAuthSource) {
   const raw = typeof body === "string" ? body : JSON.stringify(body);
   const parsed = typeof body === "object" && body !== null ? (body as { code?: number; message?: string }) : null;
@@ -154,31 +189,15 @@ export async function sendEmail(params: {
   }
 
   const credentials = getTwilioEmailCredentials();
-  const fromParsed = parseFromAddress(params.from);
-  const from = {
-    address: fromParsed.address,
-    name: fromParsed.name || fromParsed.address.split("@")[0] || "Support",
-  };
-  const text =
-    params.text ??
-    params.html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
-    "";
-  const html = params.html ?? (params.text ? `<p>${params.text.replace(/\n/g, "<br/>")}</p>` : "");
-
-  const payload: Record<string, unknown> = {
-    from,
-    to: params.to.map((address) => ({ address: address.trim() })),
-    content: {
-      subject: params.subject,
-      html,
-      ...(text ? { text } : {}),
-      ...(params.attachments?.length ? { attachments: params.attachments } : {}),
-    },
-  };
-
-  if (params.replyTo?.trim()) {
-    payload.replyTo = { address: params.replyTo.trim() };
-  }
+  // Twilio Email API has no replyTo field and 400s if it is present.
+  const payload = buildTwilioEmailPayload({
+    from: params.from,
+    to: params.to,
+    subject: params.subject,
+    text: params.text,
+    html: params.html,
+    attachments: params.attachments,
+  });
 
   const res = await fetch(TWILIO_EMAIL_API, {
     method: "POST",

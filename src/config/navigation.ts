@@ -20,6 +20,7 @@ export const primaryNav: NavItem[] = [
   { label: "Customers", href: "/customers" },
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
+  { label: "Winterization", href: "/winterization" },
   { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Holiday Lighting", href: "/holiday-lighting/quote" },
   { label: "Marketing", href: "/marketing" },

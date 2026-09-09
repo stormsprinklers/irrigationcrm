@@ -25,6 +25,7 @@ import {
 import { AudienceBuilder } from "@/components/marketing/AudienceBuilder";
 import { CampaignEmailEditorDialog } from "@/components/marketing/CampaignEmailEditorDialog";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
+import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import { IfElseBranchEditor } from "@/components/marketing/IfElseBranchEditor";
 import { BranchFork, PanCanvas, VerticalConnector } from "@/components/flow-canvas/PanCanvas";
 import type {
@@ -139,7 +140,7 @@ const NODE_META: Record<
   BRANCH: {
     label: "If/Else",
     icon: GitBranch,
-    blurb: "Fork the contact journey through this workflow based on conditions",
+    blurb: "Fork the journey by conditions, SMS replies, or a wait timeout",
     tone: "border-orange-200",
     iconTone: "bg-orange-100 text-orange-700",
   },
@@ -213,7 +214,7 @@ type FlowEdge = {
   key: string;
   label: string;
   nextId: string;
-  kind: "linear" | "branch" | "none";
+  kind: "linear" | "branch" | "none" | "timeout";
 };
 
 function ensureNodeId(node: CampaignFlowNodeInput): string {
@@ -243,6 +244,16 @@ function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput
         nextId: parsed.noneNextId,
         kind: "none" as const,
       },
+      ...(parsed.timeoutEnabled
+        ? [
+            {
+              key: "timeout",
+              label: "Timeout",
+              nextId: parsed.timeoutNextId,
+              kind: "timeout" as const,
+            },
+          ]
+        : []),
     ];
   }
   const next = linearNext(nodes, ensureNodeId(node));
@@ -412,12 +423,14 @@ export function CampaignFlowEditor({
     const nextConfig =
       edgeKey === "none"
         ? { ...parsed, noneNextId: child.id }
-        : {
-            ...parsed,
-            branches: parsed.branches.map((branch) =>
-              branch.id === edgeKey ? { ...branch, nextId: child.id } : branch
-            ),
-          };
+        : edgeKey === "timeout"
+          ? { ...parsed, timeoutNextId: child.id }
+          : {
+              ...parsed,
+              branches: parsed.branches.map((branch) =>
+                branch.id === edgeKey ? { ...branch, nextId: child.id } : branch
+              ),
+            };
     onChange(
       reindex(
         nodes
@@ -531,7 +544,9 @@ export function CampaignFlowEditor({
                     type="button"
                     className={cn(
                       "mb-1 max-w-[14rem] rounded-full border px-3 py-1.5 text-center text-xs font-medium",
-                      edge.kind === "none"
+                      edge.kind === "timeout"
+                        ? "border-amber-200 bg-amber-50 text-amber-950"
+                        : edge.kind === "none"
                         ? "border-border bg-muted/50"
                         : "border-sky-200 bg-sky-50 text-sky-900"
                     )}
@@ -589,7 +604,7 @@ export function CampaignFlowEditor({
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-1 flex-col">
       <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
         <div>
           <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
@@ -652,8 +667,8 @@ export function CampaignFlowEditor({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="relative min-h-0 min-w-0 flex-1">
+      <div className="flex min-h-[36rem] flex-1 items-stretch">
+        <div className="relative min-h-[36rem] min-w-0 flex-1">
           <PanCanvas zoom={zoom} onZoomChange={setZoom}>
             <div className="relative flex flex-col items-center">
               <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
@@ -732,7 +747,7 @@ export function CampaignFlowEditor({
                 </Button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            <div className="space-y-3 p-4">
               <NodeConfigEditor
                 node={selected}
                 allNodes={nodes}
@@ -886,7 +901,8 @@ function NodeConfigEditor({
   onAudienceChange: (filters: AudienceFilters) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
 }) {
-  const smsRef = useRef<HTMLTextAreaElement>(null);
+  const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  const emailSubjectRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const [emailEditorOpen, setEmailEditorOpen] = useState(false);
   const config = node.config;
   const nodeKey = ensureNodeId(node);
@@ -1111,13 +1127,26 @@ function NodeConfigEditor({
     return (
       <div className="space-y-3">
         <div>
-          <label className="text-sm font-medium">Subject</label>
-          <Input
-            className="mt-1"
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium">Subject</label>
+            <InsertVariableButton
+              onInsert={(token) => {
+                const { next } = applyTokenToInput(emailSubjectRef.current, subject, token);
+                onConfigChange({ ...config, subject: next });
+              }}
+            />
+          </div>
+          <MergeTokenTextField
+            ref={emailSubjectRef}
+            multiline={false}
+            className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
             value={subject}
-            onChange={(e) => onConfigChange({ ...config, subject: e.target.value })}
+            onChange={(next) => onConfigChange({ ...config, subject: next })}
             placeholder="Subject line"
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Click a highlighted variable to set the text used when that customer info is missing.
+          </p>
         </div>
         <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
           <p className="text-xs font-medium text-muted-foreground">Preview</p>
@@ -1158,13 +1187,16 @@ function NodeConfigEditor({
             }}
           />
         </div>
-        <textarea
+        <MergeTokenTextField
           ref={smsRef}
           className="mt-1 min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
           value={bodyText}
-          onChange={(e) => onConfigChange({ ...config, bodyText: e.target.value })}
+          onChange={(next) => onConfigChange({ ...config, bodyText: next })}
           placeholder="Reply STOP to opt out will be appended."
         />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Click a highlighted variable to set the text used when that customer info is missing.
+        </p>
       </div>
     );
   }

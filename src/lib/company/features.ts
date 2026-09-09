@@ -24,6 +24,8 @@ export const HOLIDAY_LIGHTING_NAV_HREFS = new Set([
   "/settings/holiday-lighting",
 ]);
 
+export const WINTERIZATION_NAV_HREFS = new Set(["/winterization"]);
+
 /** Company-level maintenance plans pack (templates, enrollments, billing, portal plans). */
 export function maintenancePlansFeaturesEnabled(
   company: { maintenancePlansFeaturesEnabled?: boolean | null } | null | undefined

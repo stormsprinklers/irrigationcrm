@@ -82,7 +82,6 @@ export async function POST(request: NextRequest) {
         subject: personalized.subject || company.name,
         text: personalized.bodyText,
         html,
-        replyTo: user.email || undefined,
         bypassCommsFreeze: true,
       }
     );

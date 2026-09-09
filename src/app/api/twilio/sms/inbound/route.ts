@@ -283,6 +283,7 @@ export async function POST(request: NextRequest) {
             companyId: company.id,
             customerId: customer.id,
             text: trimmedBody,
+            channel: "sms",
           })
         )
         .catch((err) => console.error("Campaign wait reply check failed", err));

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
+import { winterizationTabVisible } from "@/lib/winterization/visibility";
 
 /** Lightweight branding payload for staff CRM chrome (logo + colors). */
 export async function GET() {
@@ -26,13 +27,21 @@ export async function GET() {
         irrigationFeaturesEnabled: true,
         holidayLightingFeaturesEnabled: true,
         maintenancePlansFeaturesEnabled: true,
+        winterizationTabMode: true,
+        winterizationTabStartMonth: true,
+        winterizationTabStartDay: true,
+        winterizationTabEndMonth: true,
+        winterizationTabEndDay: true,
         customerBaseUrl: true,
       },
     });
     if (!company) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
-    return NextResponse.json(company);
+    return NextResponse.json({
+      ...company,
+      winterizationTabVisible: winterizationTabVisible(company),
+    });
   } catch {
     return unauthorizedResponse();
   }

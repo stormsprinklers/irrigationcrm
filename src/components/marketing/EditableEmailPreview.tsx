@@ -4,6 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { Bold, Italic, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MergeTokenFallbackEditor } from "@/components/communications/MergeTokenFallbackEditor";
+import { formatMergeToken, mergeTokenKeyFromInsert, type ParsedMergeToken } from "@/lib/notifications/merge-tokens";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -16,12 +18,58 @@ type Props = {
 
 export type EditableEmailPreviewHandle = {
   insertText: (text: string) => void;
+  insertMergeToken: (token: string) => void;
 };
 
 const EDITOR_SCRIPT = `
 (function() {
   if (window.__emailEditorReady) return;
   window.__emailEditorReady = true;
+
+  var MERGE_RE = /\\{([a-z_]+)(?:\\|([^}]*))?\\}/g;
+
+  function escapeAttr(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
+  function mergeChipHtml(key, fallback) {
+    var inner = fallback ? '{' + key + '|' + fallback + '}' : '{' + key + '}';
+    return '<span data-merge-token="' + escapeAttr(key) + '" data-merge-fallback="' + escapeAttr(fallback || '') + '" contenteditable="false" class="merge-token">' + escapeAttr(inner) + '</span>';
+  }
+
+  function wrapMergeTokens(root) {
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var nodes = [];
+    while (walker.nextNode()) {
+      var node = walker.currentNode;
+      var parent = node.parentElement;
+      if (!parent) continue;
+      if (parent.closest('[data-merge-token], script, style')) continue;
+      MERGE_RE.lastIndex = 0;
+      if (!node.nodeValue || !MERGE_RE.test(node.nodeValue)) continue;
+      nodes.push(node);
+    }
+    nodes.forEach(function(textNode) {
+      var text = textNode.nodeValue || '';
+      var frag = document.createDocumentFragment();
+      var last = 0;
+      var m;
+      MERGE_RE.lastIndex = 0;
+      while ((m = MERGE_RE.exec(text))) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        var span = document.createElement('span');
+        span.setAttribute('data-merge-token', m[1]);
+        span.setAttribute('data-merge-fallback', m[2] || '');
+        span.setAttribute('contenteditable', 'false');
+        span.className = 'merge-token';
+        span.textContent = m[0];
+        frag.appendChild(span);
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      if (textNode.parentNode) textNode.parentNode.replaceChild(frag, textNode);
+    });
+  }
 
   function editableTargets() {
     return Array.from(document.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,td,th,span,div,a'));
@@ -31,9 +79,11 @@ const EDITOR_SCRIPT = `
     editableTargets().forEach(function(el) {
       if (el.closest('script') || el.tagName === 'SCRIPT') return;
       if (el.tagName === 'TABLE' || el.tagName === 'TBODY' || el.tagName === 'TR') return;
+      if (el.closest('[data-merge-token]')) return;
       if (el.tagName === 'A') {
         el.setAttribute('contenteditable', 'true');
         el.addEventListener('click', function(e) {
+          if (e.target && e.target.closest && e.target.closest('[data-merge-token]')) return;
           e.preventDefault();
           e.stopPropagation();
           window.parent.postMessage({
@@ -51,6 +101,7 @@ const EDITOR_SCRIPT = `
       }
       el.setAttribute('contenteditable', 'true');
     });
+    wrapMergeTokens(document.body);
   }
 
   function serialize() {
@@ -71,12 +122,67 @@ const EDITOR_SCRIPT = `
     }, 200);
   }
 
+  var savedRange = null;
+  var lastEditable = null;
+
+  function saveSelection() {
+    var sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !sel.anchorNode || !document.contains(sel.anchorNode)) return;
+    try {
+      savedRange = sel.getRangeAt(0).cloneRange();
+    } catch (err) {}
+  }
+
+  function restoreSelection() {
+    if (!savedRange) return false;
+    try {
+      var node = savedRange.commonAncestorContainer;
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      var editable = el && el.closest ? el.closest('[contenteditable="true"]') : null;
+      if (editable) {
+        lastEditable = editable;
+        editable.focus();
+      }
+      var sel = window.getSelection();
+      if (!sel) return false;
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+      return true;
+    } catch (err) {
+      savedRange = null;
+      return false;
+    }
+  }
+
+  function ensureCaret() {
+    if (restoreSelection()) return;
+    var target = lastEditable || document.querySelector('[contenteditable="true"]');
+    if (!target) return;
+    target.focus();
+    var range = document.createRange();
+    range.selectNodeContents(target);
+    range.collapse(false);
+    var sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    savedRange = range.cloneRange();
+  }
+
   document.addEventListener('input', notify);
-  document.addEventListener('keyup', notify);
-  document.addEventListener('focusin', function() {
+  document.addEventListener('keyup', function() {
+    saveSelection();
+    notify();
+  });
+  document.addEventListener('selectionchange', saveSelection);
+  document.addEventListener('focusout', saveSelection);
+  document.addEventListener('focusin', function(e) {
+    var t = e.target && e.target.closest ? e.target.closest('[contenteditable="true"]') : null;
+    if (t) lastEditable = t;
     window.parent.postMessage({ type: 'email-editor-focus' }, '*');
   });
   document.addEventListener('mouseup', function() {
+    saveSelection();
     var sel = window.getSelection();
     window.parent.postMessage({
       type: 'email-editor-selection',
@@ -88,6 +194,9 @@ const EDITOR_SCRIPT = `
     var data = event.data || {};
     if (data.type === 'email-editor-command') {
       try {
+        if (data.command !== 'setMergeFallback' && data.command !== 'clearMergeEditing') {
+          ensureCaret();
+        }
         if (data.command === 'fontName') {
           document.execCommand('fontName', false, data.value);
         } else if (data.command === 'fontSize') {
@@ -101,12 +210,22 @@ const EDITOR_SCRIPT = `
             document.execCommand('createLink', false, data.href || '#');
           }
         } else if (data.command === 'insertText') {
-          var sel = window.getSelection();
-          if (!sel || !sel.rangeCount) {
-            var first = document.querySelector('[contenteditable="true"]');
-            if (first) first.focus();
-          }
           document.execCommand('insertText', false, data.value || '');
+        } else if (data.command === 'insertMergeToken') {
+          document.execCommand('insertHTML', false, mergeChipHtml(data.value || '', ''));
+          saveSelection();
+        } else if (data.command === 'setMergeFallback') {
+          var chip = document.querySelector('[data-editing-merge="1"]');
+          if (chip) {
+            var key = chip.getAttribute('data-merge-token') || '';
+            var fb = data.fallback || '';
+            chip.setAttribute('data-merge-fallback', fb);
+            chip.textContent = fb ? '{' + key + '|' + fb + '}' : '{' + key + '}';
+          }
+        } else if (data.command === 'clearMergeEditing') {
+          document.querySelectorAll('[data-editing-merge]').forEach(function(n) {
+            n.removeAttribute('data-editing-merge');
+          });
         } else {
           document.execCommand(data.command, false, data.value || null);
         }
@@ -128,9 +247,25 @@ const EDITOR_SCRIPT = `
     }
   });
 
+  document.addEventListener('click', function(e) {
+    var chip = e.target && e.target.closest ? e.target.closest('[data-merge-token]') : null;
+    if (!chip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    document.querySelectorAll('[data-editing-merge]').forEach(function(n) {
+      n.removeAttribute('data-editing-merge');
+    });
+    chip.setAttribute('data-editing-merge', '1');
+    window.parent.postMessage({
+      type: 'email-editor-merge-token',
+      key: chip.getAttribute('data-merge-token') || '',
+      fallback: chip.getAttribute('data-merge-fallback') || ''
+    }, '*');
+  }, true);
+
   var style = document.createElement('style');
   style.setAttribute('data-email-editor', '1');
-  style.textContent = '[contenteditable="true"]{outline:1px dashed transparent;}[contenteditable="true"]:hover{outline-color:#94a3b8;}[contenteditable="true"]:focus{outline-color:#4C9BC8;outline-width:2px;}a[contenteditable="true"]{cursor:text;}';
+  style.textContent = '[contenteditable="true"]{outline:1px dashed transparent;}[contenteditable="true"]:hover{outline-color:#94a3b8;}[contenteditable="true"]:focus{outline-color:#4C9BC8;outline-width:2px;}a[contenteditable="true"]{cursor:text;}.merge-token{background:#C2E4F0;color:#102341;border-radius:4px;padding:0 4px;cursor:pointer;white-space:nowrap;font:inherit;}.merge-token:hover{background:#4C9BC8;color:#fff;}[data-editing-merge="1"]{outline:2px solid #102341;}';
   document.head.appendChild(style);
   enableEditing();
   window.parent.postMessage({ type: 'email-editor-ready' }, '*');
@@ -154,6 +289,7 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
   const applyingRef = useRef(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string; text: string } | null>(null);
   const [linkHref, setLinkHref] = useState("");
+  const [mergeToken, setMergeToken] = useState<ParsedMergeToken | null>(null);
   const [fontFamily, setFontFamily] = useState("Arial");
   const [fontSize, setFontSize] = useState("3");
 
@@ -192,6 +328,18 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
           "*"
         );
       }
+      if (data.type === "email-editor-merge-token") {
+        const key = String(data.key ?? "");
+        const fallback = String(data.fallback ?? "");
+        if (!key) return;
+        setMergeToken({
+          raw: formatMergeToken(key, fallback),
+          key,
+          fallback,
+          start: 0,
+          end: 0,
+        });
+      }
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -209,6 +357,9 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
     insertText(text: string) {
       sendCommand("insertText", text);
     },
+    insertMergeToken(token: string) {
+      sendCommand("insertMergeToken", mergeTokenKeyFromInsert(token));
+    },
   }));
 
   function saveLink() {
@@ -222,10 +373,22 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
   return (
     <div className={cn("flex flex-1 flex-col", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2">
-        <Button type="button" size="sm" variant="outline" onClick={() => sendCommand("bold")}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => sendCommand("bold")}
+        >
           <Bold className="h-3.5 w-3.5" />
         </Button>
-        <Button type="button" size="sm" variant="outline" onClick={() => sendCommand("italic")}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => sendCommand("italic")}
+        >
           <Italic className="h-3.5 w-3.5" />
         </Button>
         <select
@@ -273,7 +436,7 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
           Link
         </Button>
         <span className="ml-auto text-xs text-muted-foreground">
-          Click text to edit · click a link to change its URL
+          Click text to edit · click a variable to set fallback text · click a link to change its URL
         </span>
       </div>
 
@@ -292,6 +455,29 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
           />
         </div>
       </div>
+
+      {mergeToken ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md">
+            <MergeTokenFallbackEditor
+              token={mergeToken}
+              onFallbackChange={(fallback) => {
+                iframeRef.current?.contentWindow?.postMessage(
+                  { type: "email-editor-command", command: "setMergeFallback", fallback },
+                  "*"
+                );
+              }}
+              onClose={() => {
+                iframeRef.current?.contentWindow?.postMessage(
+                  { type: "email-editor-command", command: "clearMergeEditing" },
+                  "*"
+                );
+                setMergeToken(null);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {linkDialog ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">

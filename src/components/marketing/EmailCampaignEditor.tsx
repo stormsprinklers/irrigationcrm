@@ -25,6 +25,7 @@ import {
 } from "@/components/media/MediaLibraryPicker";
 import { EditableEmailPreview, type EditableEmailPreviewHandle } from "@/components/marketing/EditableEmailPreview";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
+import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
@@ -124,8 +125,8 @@ function EmailCampaignEditorInner({
   const [testTo, setTestTo] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
   const [htmlSourceOpen, setHtmlSourceOpen] = useState(false);
-  const subjectRef = useRef<HTMLInputElement>(null);
-  const htmlRef = useRef<HTMLTextAreaElement>(null);
+  const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const htmlRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const previewRef = useRef<EditableEmailPreviewHandle>(null);
 
   useEffect(() => {
@@ -483,19 +484,6 @@ function EmailCampaignEditorInner({
               </>
             )}
           </Button>
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs text-muted-foreground">Subject</label>
-              <InsertVariableButton onInsert={insertIntoSubject} />
-            </div>
-            <Input
-              ref={subjectRef}
-              className="mt-1"
-              value={subject}
-              onChange={(e) => onSubjectChange(e.target.value)}
-            />
-          </div>
-
           <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
             <div className="flex items-center justify-between gap-2">
               <p className="font-medium text-foreground">Brand palette</p>
@@ -596,6 +584,24 @@ function EmailCampaignEditorInner({
 
         <div className="flex min-h-0 flex-col gap-4">
           <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col overflow-hidden rounded-lg border bg-white">
+            <div className="border-b px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-muted-foreground">Subject</label>
+                <InsertVariableButton onInsert={insertIntoSubject} />
+              </div>
+              <MergeTokenTextField
+                ref={subjectRef}
+                multiline={false}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                value={subject}
+                onChange={onSubjectChange}
+                placeholder="Hi {customer_first_name}, a note from us"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Customer variables are personalized at send. Click a highlighted token to set
+                fallback text.
+              </p>
+            </div>
             <div className="flex items-center justify-between border-b px-3 py-2">
               <div>
                 <h3 className="text-sm font-semibold">Live preview</h3>
@@ -605,7 +611,7 @@ function EmailCampaignEditorInner({
               </div>
               <div className="flex gap-1">
                 <InsertVariableButton
-                  onInsert={(token) => previewRef.current?.insertText(token)}
+                  onInsert={(token) => previewRef.current?.insertMergeToken(token)}
                 />
                 <Button
                   type="button"
@@ -670,11 +676,12 @@ function EmailCampaignEditorInner({
               ) : null}
             </div>
             {htmlSourceOpen ? (
-              <textarea
+              <MergeTokenTextField
                 ref={htmlRef}
+                tone="dark"
                 className="min-h-[160px] max-h-[240px] resize-y border-t bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
                 value={htmlDraft}
-                onChange={(e) => applyHtml(e.target.value)}
+                onChange={applyHtml}
                 spellCheck={false}
                 placeholder="Paste a full email HTML document here…"
               />

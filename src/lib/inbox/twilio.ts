@@ -2,6 +2,8 @@ import twilio from "twilio";
 import type { NextRequest } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
+import { prisma } from "@/lib/prisma";
+import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { getSharedMessagingServiceSid, ensureCompanyFromNumberOnA2p } from "@/lib/twilio/a2p";
 
 function firstHeaderValue(value: string | null) {
@@ -129,6 +131,11 @@ export async function sendSms(params: {
   if (!params.bypassCommsFreeze) {
     await assertOutboundCommsEnabled(params.companyId, "sms");
   }
+  const company = await prisma.company.findUnique({
+    where: { id: params.companyId },
+    select: { name: true },
+  });
+  const body = prefixOutboundSmsWithCompanyName(company?.name ?? "", params.body);
   const client = getTwilioClient();
   const messagingServiceSid = await getSharedMessagingServiceSid();
   // Prefer Messaging Service when configured (US A2P / 10DLC). Keep From so the
@@ -143,7 +150,7 @@ export async function sendSms(params: {
   }
   return client.messages.create({
     to: params.to,
-    body: params.body || undefined,
+    body: body || undefined,
     mediaUrl: params.mediaUrl?.length ? params.mediaUrl : undefined,
     statusCallback: params.statusCallback,
     ...(messagingServiceSid

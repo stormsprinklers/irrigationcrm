@@ -21,18 +21,36 @@ import { cn } from "@/lib/utils";
 
 type TextField = HTMLInputElement | HTMLTextAreaElement;
 
+const lastInputSelection = new WeakMap<TextField, { start: number; end: number }>();
+
+export function rememberInputSelection(el: TextField | null) {
+  if (!el || el.selectionStart == null) return;
+  lastInputSelection.set(el, {
+    start: el.selectionStart,
+    end: el.selectionEnd ?? el.selectionStart,
+  });
+}
+
 export function applyTokenToInput(
   el: TextField | null,
   value: string,
   token: string
 ) {
-  const start = el?.selectionStart ?? value.length;
-  const end = el?.selectionEnd ?? start;
+  const remembered = el ? lastInputSelection.get(el) : undefined;
+  const live = Boolean(el && document.activeElement === el && el.selectionStart != null);
+  const start = live
+    ? el!.selectionStart ?? value.length
+    : remembered?.start ?? el?.selectionStart ?? value.length;
+  const end = live
+    ? el!.selectionEnd ?? start
+    : remembered?.end ?? el?.selectionEnd ?? start;
   const result = insertTokenAt(value, token, start, end);
+  if (el) lastInputSelection.set(el, { start: result.caret, end: result.caret });
   requestAnimationFrame(() => {
     if (!el) return;
     el.focus();
     el.setSelectionRange(result.caret, result.caret);
+    rememberInputSelection(el);
   });
   return result;
 }
@@ -69,11 +87,13 @@ export function InsertVariableButton({
         align="start"
         className="max-h-80 min-w-[14rem] overflow-y-auto"
         onCloseAutoFocus={(event) => event.preventDefault()}
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         {organized.mode === "flat"
           ? organized.items.map((field) => (
               <DropdownMenuItem
                 key={field.token}
+                onPointerDown={(event) => event.preventDefault()}
                 onSelect={() => onInsert(field.token)}
               >
                 <span>{field.label}</span>
@@ -86,6 +106,7 @@ export function InsertVariableButton({
                   {folder.items.map((field) => (
                     <DropdownMenuItem
                       key={field.token}
+                      onPointerDown={(event) => event.preventDefault()}
                       onSelect={() => onInsert(field.token)}
                     >
                       <span>{field.label}</span>
