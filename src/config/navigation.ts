@@ -21,15 +21,14 @@ export const primaryNav: NavItem[] = [
   { label: "Inbox", href: "/inbox" },
   { label: "Schedule", href: "/schedule" },
   { label: "Winterization", href: "/winterization" },
-  { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Holiday Lighting", href: "/holiday-lighting/quote" },
   { label: "Marketing", href: "/marketing" },
   { label: "Reporting", href: "/reporting" },
-  { label: "Settings", href: "/settings" },
 ];
 
 /** Secondary tools nested under the top-nav "Other" dropdown. */
 export const otherNav: NavItem[] = [
+  { label: "Maintenance Plans", href: "/maintenance-plans" },
   { label: "Price Book", href: "/price-book" },
   { label: "Hiring", href: "/hiring" },
   { label: "Vehicles", href: "/vehicles" },
@@ -362,6 +361,7 @@ export function getPrimaryNavActive(pathname: string, href: string) {
   if (href === "/reporting") return pathname.startsWith("/reporting");
   if (href === "/storm-ai") return pathname === "/storm-ai" || pathname.startsWith("/storm-ai/");
   if (href === "/timesheets") return pathname.startsWith("/timesheets");
+  if (href === "/maintenance-plans") return pathname.startsWith("/maintenance-plans");
   if (href === "/settings") return pathname.startsWith("/settings");
   return pathname.startsWith(href);
 }

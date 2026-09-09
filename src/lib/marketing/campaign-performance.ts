@@ -51,7 +51,9 @@ export type CampaignPerformance = {
 };
 
 function asConfig(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function recipientChannel(

@@ -82,7 +82,7 @@ type CampaignDetail = {
       id: string;
       status: string;
       currentNodeId: string | null;
-      nextSendAt: string;
+      nextSendAt: string | null;
       customer: { id: string; name: string; email: string | null };
       lastEvent: { eventType: string; createdAt: string } | null;
     }>;
@@ -266,7 +266,7 @@ export default function MarketingCampaignDetailPage() {
           {campaign.list && <span>List: {campaign.list.name}</span>}
           {campaign.type === "DRIP" && (
             <span>
-              Enrollments: {campaign.enrollments.length} active
+              Enrollments: {(campaign.enrollments ?? []).length} active
             </span>
           )}
         </div>
@@ -358,7 +358,9 @@ export default function MarketingCampaignDetailPage() {
                             : e.currentNodeId ?? "—"}
                         </TableCell>
                         <TableCell>
-                          {format(new Date(e.nextSendAt), "MMM d h:mm a")}
+                          {e.nextSendAt
+                            ? format(new Date(e.nextSendAt), "MMM d h:mm a")
+                            : "—"}
                         </TableCell>
                         <TableCell>
                           {e.lastEvent
@@ -391,11 +393,11 @@ export default function MarketingCampaignDetailPage() {
         </div>
       )}
 
-      {campaign.type === "DRIP" && campaign.steps.length > 0 && !(campaign.flowNodes?.length) && (
+      {campaign.type === "DRIP" && (campaign.steps?.length ?? 0) > 0 && !(campaign.flowNodes?.length) && (
         <div className="mb-6 rounded-lg border bg-white p-4">
           <h3 className="mb-3 font-medium">Campaign sequence</h3>
           <ol className="space-y-2 text-sm">
-            {campaign.steps.map((step, i) => (
+            {(campaign.steps ?? []).map((step, i) => (
               <li key={i}>
                 Step {i + 1}: {step.channel}
                 {step.subject ? ` — ${step.subject}` : ""} (delay {step.delayDays}d)
@@ -421,14 +423,14 @@ export default function MarketingCampaignDetailPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {campaign.recipients.length === 0 ? (
+            {(campaign.recipients ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-muted-foreground">
                   Recipients appear when the campaign is sent or activated.
                 </TableCell>
               </TableRow>
             ) : (
-              campaign.recipients.map((r) => (
+              (campaign.recipients ?? []).map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>
                     {r.email ?? (r.phone ? formatPhoneDisplay(r.phone) : null) ?? "—"}

@@ -6,12 +6,14 @@ import { RolePreviewBanner } from "@/components/layout/RolePreviewBanner";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
 import { IncomingCallModal } from "@/components/voice/IncomingCallModal";
 import { InboxBadgesProvider } from "@/contexts/InboxBadgesProvider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <VoiceDeviceProvider>
       <InboxBadgesProvider>
         <CompanyBrandProvider>
+          <TooltipProvider delayDuration={200}>
           <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
             <TopNav />
             <RolePreviewBanner />
@@ -20,6 +22,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ActiveCallBar />
             <IncomingCallModal />
           </div>
+          </TooltipProvider>
         </CompanyBrandProvider>
       </InboxBadgesProvider>
     </VoiceDeviceProvider>

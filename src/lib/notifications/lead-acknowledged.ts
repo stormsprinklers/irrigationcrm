@@ -1,7 +1,10 @@
 import type { Lead } from "@prisma/client";
-import { customerBookingUrl } from "@/lib/company/customer-url";
 import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { formatCustomerAddress } from "@/lib/notifications/context";
+import {
+  leadAcknowledgementSnippets,
+  resolveLeadAcknowledgementBookingUrl,
+} from "@/lib/notifications/lead-acknowledgement-snippets";
 import { sendOperationalNotification } from "@/lib/notifications/send";
 import { prisma } from "@/lib/prisma";
 
@@ -10,19 +13,19 @@ function firstNameFrom(name: string) {
   return part || "there";
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 /**
  * Customer-facing SMS/email when a website lead is received (quote consent).
  */
 export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
-  const meta =
-    lead.metadata && typeof lead.metadata === "object" && !Array.isArray(lead.metadata)
-      ? (lead.metadata as Record<string, unknown>)
-      : {};
+  const meta = asRecord(lead.metadata);
 
-  const consents =
-    meta.consents && typeof meta.consents === "object" && !Array.isArray(meta.consents)
-      ? (meta.consents as Record<string, unknown>)
-      : {};
+  const consents = asRecord(meta.consents);
 
   // Require quote consent (or legacy missing = allow for non-estimate sources)
   if (consents.quote === false) return;
@@ -36,21 +39,15 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
       onlineBookingEnabled: true,
       phone: true,
       customerBaseUrl: true,
+      websiteBaseUrl: true,
+      website: true,
+      campaignCtaLinks: true,
     },
   });
   if (!company) return;
 
-  const soft =
-    meta.softEstimate && typeof meta.softEstimate === "object" && !Array.isArray(meta.softEstimate)
-      ? (meta.softEstimate as Record<string, unknown>)
-      : null;
-  const rangeLabel =
-    typeof soft?.label === "string" && soft.label
-      ? `Estimated range: ${soft.label}`
-      : "";
-
-  const bookingLink =
-    company.onlineBookingEnabled ? customerBookingUrl(company) ?? "" : "";
+  const bookingLink = resolveLeadAcknowledgementBookingUrl(company, meta);
+  const snippets = leadAcknowledgementSnippets(meta, bookingLink);
 
   await sendOperationalNotification({
     companyId,
@@ -66,8 +63,8 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
       customer_address: formatCustomerAddress(parseLeadServiceAddress(lead.notes, lead.metadata)),
       company_name: company.name,
       companyName: company.name,
-      booking_link: bookingLink,
-      estimate_range: rangeLabel,
+      booking_link: snippets.booking_link,
+      estimate_range: snippets.estimate_range,
       company_phone: company.phone ?? "",
     },
   });

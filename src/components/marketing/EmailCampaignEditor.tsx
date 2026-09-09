@@ -97,7 +97,7 @@ function EmailCampaignEditorInner({
       soft: normalizeHex(p.soft, stormBrand.ice),
       panel: normalizeHex(p.panel, "#E8F4FA"),
       accent: p.accent ? normalizeHex(p.accent, stormBrand.coral) : null,
-      extras: p.extras.map((c) => normalizeHex(c, "#FFFFFF")),
+      extras: (p.extras ?? []).map((c) => normalizeHex(c, "#FFFFFF")),
     };
   }, [brand.palette]);
 
@@ -214,7 +214,7 @@ function EmailCampaignEditorInner({
   // Seed announcement template into an empty editor once branding/contact is ready.
   useEffect(() => {
     if (templateSeeded) return;
-    if (bodyHtml.trim()) {
+    if (String(bodyHtml ?? "").trim()) {
       setTemplateSeeded(true);
       return;
     }

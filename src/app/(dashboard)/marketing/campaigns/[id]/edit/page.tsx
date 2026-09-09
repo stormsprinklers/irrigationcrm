@@ -9,7 +9,7 @@ import { CampaignLifecycleActions } from "@/components/marketing/CampaignLifecyc
 import { CampaignWizard } from "@/components/marketing/CampaignWizard";
 import { Button } from "@/components/ui/button";
 import { isCampaignEditable } from "@/lib/marketing/campaign-lifecycle";
-import type { CampaignFlowNodeInput, CampaignFormState } from "@/lib/marketing/types";
+import type { AudienceFilters, CampaignFlowNodeInput, CampaignFormState } from "@/lib/marketing/types";
 import { toast } from "sonner";
 
 type LoadedCampaign = CampaignFormState & {
@@ -25,6 +25,27 @@ type LoadedCampaign = CampaignFormState & {
     sortOrder: number;
   }>;
 };
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asAudienceFilters(value: unknown): AudienceFilters {
+  return asRecord(value) as AudienceFilters;
+}
+
+function asFlowNodes(
+  nodes: LoadedCampaign["flowNodes"]
+): CampaignFlowNodeInput[] {
+  return (Array.isArray(nodes) ? nodes : []).map((node) => ({
+    id: node.id,
+    type: node.type,
+    config: asRecord(node.config),
+    sortOrder: node.sortOrder,
+  }));
+}
 
 export default function EditMarketingCampaignPage() {
   const params = useParams();
@@ -110,15 +131,18 @@ export default function EditMarketingCampaignPage() {
           bodyText: campaign.bodyText ?? "",
           bodyHtml: campaign.bodyHtml ?? "",
           aiPrompt: campaign.aiPrompt ?? "",
-          audienceFilters: campaign.audienceFilters ?? {},
-          dripSettings: campaign.dripSettings ?? { emailsPerDay: 50, smsPerDay: 50 },
+          audienceFilters: asAudienceFilters(campaign.audienceFilters),
+          dripSettings: {
+            emailsPerDay: 50,
+            smsPerDay: 50,
+            ...(asRecord(campaign.dripSettings) as {
+              emailsPerDay?: number;
+              smsPerDay?: number;
+              startAt?: string;
+            }),
+          },
           steps: campaign.steps ?? [],
-          flowNodes: (campaign.flowNodes ?? []).map((node) => ({
-            id: node.id,
-            type: node.type,
-            config: (node.config ?? {}) as Record<string, unknown>,
-            sortOrder: node.sortOrder,
-          })),
+          flowNodes: asFlowNodes(campaign.flowNodes),
         }}
         onSaved={(campaignId) => router.push(`/marketing/campaigns/${campaignId}`)}
       />

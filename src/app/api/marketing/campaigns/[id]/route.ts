@@ -77,7 +77,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       })),
       enrollments: campaign.enrollments.map((e) => ({
         ...e,
-        nextSendAt: e.nextSendAt.toISOString(),
+        nextSendAt: e.nextSendAt ? e.nextSendAt.toISOString() : null,
       })),
     });
   } catch (error) {

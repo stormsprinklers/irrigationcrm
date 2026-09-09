@@ -1,8 +1,12 @@
-export function parseAddTagConfig(config: Record<string, unknown>): string[] {
-  const fromList = Array.isArray(config.tags)
-    ? config.tags.map((tag) => String(tag).trim()).filter(Boolean)
+export function parseAddTagConfig(config: unknown): string[] {
+  const rec =
+    config && typeof config === "object" && !Array.isArray(config)
+      ? (config as Record<string, unknown>)
+      : {};
+  const fromList = Array.isArray(rec.tags)
+    ? rec.tags.map((tag) => String(tag).trim()).filter(Boolean)
     : [];
-  const single = typeof config.tag === "string" ? config.tag.trim() : "";
+  const single = typeof rec.tag === "string" ? rec.tag.trim() : "";
   const merged = [...fromList, ...(single ? [single] : [])];
   const seen = new Set<string>();
   const unique: string[] = [];
@@ -15,7 +19,7 @@ export function parseAddTagConfig(config: Record<string, unknown>): string[] {
   return unique;
 }
 
-export function addTagSummary(config: Record<string, unknown>): string {
+export function addTagSummary(config: unknown): string {
   const tags = parseAddTagConfig(config);
   return tags.length ? `Add tag · ${tags.join(", ")}` : "Add tag";
 }

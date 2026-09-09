@@ -56,7 +56,9 @@ type FlowNodeRow = {
 };
 
 function asConfig(value: unknown): Record<string, unknown> {
-  return (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 /** Convert legacy linear CampaignStep rows into flow nodes for the editor. */
@@ -1360,7 +1362,7 @@ export async function getCampaignFlowMetrics(campaignId: string) {
       id: e.id,
       status: e.status,
       currentNodeId: e.currentNodeId,
-      nextSendAt: e.nextSendAt.toISOString(),
+      nextSendAt: e.nextSendAt ? e.nextSendAt.toISOString() : null,
       customer: e.customer,
       lastEvent: e.events[0]
         ? {

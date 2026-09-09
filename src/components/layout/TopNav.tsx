@@ -41,10 +41,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-function filterOtherNav(items: NavItem[], role: string | undefined) {
+function filterOtherNav(
+  items: NavItem[],
+  role: string | undefined,
+  flags: { maintenancePlans: boolean }
+) {
   return items.filter((item) => {
     if (item.href === "/hiring") return canAccessHiring(role);
     if (item.href === "/vehicles") return canViewVehicles(role);
+    if (item.href === "/maintenance-plans") {
+      return flags.maintenancePlans && canViewMaintenancePlansNav(role);
+    }
     return true;
   });
 }
@@ -102,15 +109,13 @@ export function TopNav() {
     if (item.href === "/winterization") {
       return brand.winterizationTabVisible && canViewWinterizationNav(role);
     }
-    if (item.href === "/maintenance-plans") {
-      return brand.maintenancePlansFeaturesEnabled && canViewMaintenancePlansNav(role);
-    }
-    if (item.href === "/settings") return canViewSettingsNav(role);
     if (item.href === "/marketing") return canViewMarketing(role);
     if (item.href === "/reporting") return canViewReporting(role);
     return true;
   });
-  const otherItems = filterOtherNav(otherNav, role);
+  const otherItems = filterOtherNav(otherNav, role, {
+    maintenancePlans: brand.maintenancePlansFeaturesEnabled,
+  });
   const otherActive = isOtherNavActive(pathname, otherItems);
   const lmsUrl = process.env.NEXT_PUBLIC_LMS_URL?.replace(/\/$/, "") || "";
 
@@ -244,7 +249,12 @@ export function TopNav() {
           </Button>
           {canViewSettingsNav(role) ? (
             <Button variant="ghost" size="icon" asChild>
-              <Link href="/settings" aria-label="Settings">
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                aria-current={pathname.startsWith("/settings") ? "page" : undefined}
+                className={cn(pathname.startsWith("/settings") ? "text-foreground" : undefined)}
+              >
                 <Settings className="h-5 w-5" />
               </Link>
             </Button>

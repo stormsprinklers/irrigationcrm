@@ -32,6 +32,18 @@ export async function buildAudienceWhere(
     where.tags = { hasSome: tags };
   }
 
+  const excludeTags = filters?.excludeTags?.filter(Boolean) ?? [];
+  if (excludeTags.length > 0) {
+    const excludeClause: Prisma.CustomerWhereInput = {
+      NOT: { tags: { hasSome: excludeTags } },
+    };
+    where.AND = Array.isArray(where.AND)
+      ? [...where.AND, excludeClause]
+      : where.AND
+        ? [where.AND, excludeClause]
+        : [excludeClause];
+  }
+
   const servicedFrom = filters?.servicedFrom ? new Date(filters.servicedFrom) : null;
   const servicedTo = filters?.servicedTo ? new Date(filters.servicedTo) : null;
   const itemIds = filters?.priceBookItemIds?.filter(Boolean) ?? [];

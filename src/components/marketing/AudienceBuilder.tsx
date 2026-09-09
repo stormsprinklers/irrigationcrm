@@ -17,11 +17,20 @@ type Props = {
   onChange: (filters: AudienceFilters) => void;
 };
 
+function asStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string" && value.trim()) {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export function AudienceBuilder({ channel, filters, onChange }: Props) {
   const [cities, setCities] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [cityInput, setCityInput] = useState("");
   const [tagInput, setTagInput] = useState("");
+  const [excludeTagInput, setExcludeTagInput] = useState("");
   const [preview, setPreview] = useState<{
     count: number;
     sample: AudiencePreviewCustomer[];
@@ -85,7 +94,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   function addCity(city: string) {
     const value = city.trim();
     if (!value) return;
-    const next = [...(filters.cities ?? [])];
+    const next = asStringList(filters.cities);
     if (!next.includes(value)) next.push(value);
     update({ cities: next });
     setCityInput("");
@@ -94,10 +103,19 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   function addTag(tag: string) {
     const value = tag.trim();
     if (!value) return;
-    const next = [...(filters.tags ?? [])];
+    const next = asStringList(filters.tags);
     if (!next.includes(value)) next.push(value);
     update({ tags: next });
     setTagInput("");
+  }
+
+  function addExcludeTag(tag: string) {
+    const value = tag.trim();
+    if (!value) return;
+    const next = asStringList(filters.excludeTags);
+    if (!next.includes(value)) next.push(value);
+    update({ excludeTags: next });
+    setExcludeTagInput("");
   }
 
   function onItemPicked(item: PriceBookItemDTO) {
@@ -189,12 +207,12 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
       <div>
         <label className="text-sm font-medium">Cities</label>
         <div className="mt-2 flex flex-wrap gap-2">
-          {(filters.cities ?? []).map((city) => (
+          {asStringList(filters.cities).map((city) => (
             <Badge key={city} variant="secondary" className="gap-1 pr-1">
               {city}
               <button
                 type="button"
-                onClick={() => update({ cities: filters.cities?.filter((c) => c !== city) })}
+                onClick={() => update({ cities: asStringList(filters.cities).filter((c) => c !== city) })}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -231,7 +249,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
           <Input
             type="date"
             className="mt-1"
-            value={filters.servicedFrom?.slice(0, 10) ?? ""}
+            value={typeof filters.servicedFrom === "string" ? filters.servicedFrom.slice(0, 10) : ""}
             onChange={(e) => update({ servicedFrom: e.target.value || undefined })}
           />
         </div>
@@ -240,7 +258,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
           <Input
             type="date"
             className="mt-1"
-            value={filters.servicedTo?.slice(0, 10) ?? ""}
+            value={typeof filters.servicedTo === "string" ? filters.servicedTo.slice(0, 10) : ""}
             onChange={(e) => update({ servicedTo: e.target.value || undefined })}
           />
         </div>
@@ -273,37 +291,82 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
         <ItemPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={onItemPicked} />
       </div>
 
-      <div>
-        <label className="text-sm font-medium">Customer tags</label>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {(filters.tags ?? []).map((tag) => (
-            <Badge key={tag} variant="secondary" className="gap-1 pr-1">
-              {tag}
-              <button
-                type="button"
-                onClick={() => update({ tags: filters.tags?.filter((t) => t !== tag) })}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="text-sm font-medium">Include tags</label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Only customers who have at least one of these tags.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {asStringList(filters.tags).map((tag) => (
+              <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+                {tag}
+                <button
+                  type="button"
+                  onClick={() => update({ tags: asStringList(filters.tags).filter((t) => t !== tag) })}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Input
+              list="audience-tags"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              placeholder="Add include tag..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTag(tagInput);
+                }
+              }}
+            />
+            <Button type="button" variant="outline" onClick={() => addTag(tagInput)}>
+              Add
+            </Button>
+          </div>
         </div>
-        <div className="mt-2 flex gap-2">
-          <Input
-            list="audience-tags"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            placeholder="Add tag filter..."
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTag(tagInput);
-              }
-            }}
-          />
-          <Button type="button" variant="outline" onClick={() => addTag(tagInput)}>
-            Add
-          </Button>
+        <div>
+          <label className="text-sm font-medium">Exclude tags</label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Remove anyone with these tags, such as winterizations_2026.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {asStringList(filters.excludeTags).map((tag) => (
+              <Badge key={`exclude-${tag}`} variant="outline" className="gap-1 pr-1">
+                {tag}
+                <button
+                  type="button"
+                  onClick={() =>
+                    update({
+                      excludeTags: asStringList(filters.excludeTags).filter((t) => t !== tag),
+                    })
+                  }
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <Input
+              list="audience-tags"
+              value={excludeTagInput}
+              onChange={(e) => setExcludeTagInput(e.target.value)}
+              placeholder="Add exclude tag..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addExcludeTag(excludeTagInput);
+                }
+              }}
+            />
+            <Button type="button" variant="outline" onClick={() => addExcludeTag(excludeTagInput)}>
+              Add
+            </Button>
+          </div>
         </div>
         <datalist id="audience-tags">
           {availableTags.map((tag) => (

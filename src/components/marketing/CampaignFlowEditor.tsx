@@ -153,6 +153,25 @@ const NODE_META: Record<
   },
 };
 
+const UNKNOWN_NODE_META = {
+  label: "Step",
+  icon: CircleHelp,
+  blurb: "Campaign step",
+  tone: "border-border",
+  iconTone: "bg-muted text-muted-foreground",
+};
+
+function nodeMeta(type: string | undefined) {
+  return (type && NODE_META[type as CampaignFlowNodeType]) || UNKNOWN_NODE_META;
+}
+
+function nodeConfig(node: CampaignFlowNodeInput): Record<string, unknown> {
+  const config = node.config as unknown;
+  return config && typeof config === "object" && !Array.isArray(config)
+    ? (config as Record<string, unknown>)
+    : {};
+}
+
 const ADDABLE_TYPES: CampaignFlowNodeType[] = [
   "WAIT",
   "SEND_EMAIL",
@@ -230,7 +249,7 @@ function linearNext(nodes: CampaignFlowNodeInput[], nodeId: string) {
 function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput[]): FlowEdge[] {
   if (node.type === "EXIT") return [];
   if (node.type === "BRANCH") {
-    const parsed = parseIfElseConfig(node.config);
+    const parsed = parseIfElseConfig(nodeConfig(node));
     return [
       ...parsed.branches.map((branch, index) => ({
         key: branch.id,
@@ -268,25 +287,26 @@ function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput
 }
 
 function nodeCardSummary(node: CampaignFlowNodeInput, timezone: string) {
-  if (node.type === "WAIT") return waitSummary(node.config, timezone);
-  if (node.type === "BRANCH") return ifElseSummary(node.config);
-  if (node.type === "ADD_TAG") return addTagSummary(node.config);
+  const config = nodeConfig(node);
+  if (node.type === "WAIT") return waitSummary(config, timezone);
+  if (node.type === "BRANCH") return ifElseSummary(config);
+  if (node.type === "ADD_TAG") return addTagSummary(config);
   if (node.type === "SEND_EMAIL") {
-    const subject = String(node.config.subject ?? "").trim();
+    const subject = String(config.subject ?? "").trim();
     return subject || NODE_META.SEND_EMAIL.blurb;
   }
   if (node.type === "SEND_SMS") {
-    const body = String(node.config.bodyText ?? "").trim();
+    const body = String(config.bodyText ?? "").trim();
     return body ? body.slice(0, 72) : NODE_META.SEND_SMS.blurb;
   }
   if (node.type === "TRIGGER") {
-    const kind = String(node.config.kind ?? "manual_audience");
+    const kind = String(config.kind ?? "manual_audience");
     if (kind === "job_completed") return "When a visit is completed";
     if (kind === "form_no_booking") return "Form filled, no appointment";
     if (kind === "city") return "Customer city matches";
     return "When the campaign is activated";
   }
-  return NODE_META[node.type].blurb;
+  return nodeMeta(node.type).blurb;
 }
 
 function AddStepMenu({
@@ -305,7 +325,7 @@ function AddStepMenu({
           className="h-7 px-2 text-xs"
           onClick={() => onPick(type)}
         >
-          + {NODE_META[type].label}
+          + {nodeMeta(type).label}
         </Button>
       ))}
     </div>
@@ -397,7 +417,7 @@ export function CampaignFlowEditor({
     const next = reindex(
       nodes
         .filter((n) => ensureNodeId(n) !== id)
-        .map((n) => ({ ...n, config: scrubIfElseNextIds(n.config, id) }))
+        .map((n) => ({ ...n, config: scrubIfElseNextIds(nodeConfig(n), id) }))
     );
     onChange(next);
     setSelectionId((prev) => (prev === id ? next[0] ? ensureNodeId(next[0]) : null : prev));
@@ -419,7 +439,7 @@ export function CampaignFlowEditor({
     const parent = byId.get(parentId);
     if (!parent || parent.type !== "BRANCH") return;
     const child = createNode(type, nodes.length);
-    const parsed = parseIfElseConfig(parent.config);
+    const parsed = parseIfElseConfig(nodeConfig(parent));
     const nextConfig =
       edgeKey === "none"
         ? { ...parsed, noneNextId: child.id }
@@ -444,7 +464,7 @@ export function CampaignFlowEditor({
   function addIfElseBranch(parentId: string) {
     const parent = byId.get(parentId);
     if (!parent || parent.type !== "BRANCH") return;
-    const parsed = parseIfElseConfig(parent.config);
+    const parsed = parseIfElseConfig(nodeConfig(parent));
     if (parsed.branches.length >= IF_ELSE_MAX_BRANCHES) return;
     setConfigFor(parentId, { ...parsed, branches: [...parsed.branches, emptyIfElseBranch()] });
   }
@@ -464,7 +484,7 @@ export function CampaignFlowEditor({
           }}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          → {NODE_META[target.type].label}
+          → {nodeMeta(target.type).label}
         </button>
       </div>
     );
@@ -481,7 +501,7 @@ export function CampaignFlowEditor({
     rendered.add(nodeId);
     const nextSeen = new Set(pathSeen);
     nextSeen.add(nodeId);
-    const meta = NODE_META[node.type];
+    const meta = nodeMeta(node.type);
     const Icon = meta.icon;
     const selectedCard = selectionId === nodeId;
     const edges = outgoingEdges(node, nodes);
@@ -576,7 +596,7 @@ export function CampaignFlowEditor({
                 </div>
               )),
               ...(node.type === "BRANCH" &&
-              parseIfElseConfig(node.config).branches.length < IF_ELSE_MAX_BRANCHES
+              parseIfElseConfig(nodeConfig(node)).branches.length < IF_ELSE_MAX_BRANCHES
                 ? [
                     <div key="add-branch" className="flex w-max flex-col items-center">
                       <button
@@ -720,7 +740,7 @@ export function CampaignFlowEditor({
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {NODE_META[selected.type].label}
+                  {nodeMeta(selected.type).label}
                 </p>
                 <h3 className="font-semibold text-foreground">Edit step</h3>
               </div>
@@ -770,7 +790,7 @@ export function CampaignFlowEditor({
 function labelForId(id: string, nodes: CampaignFlowNodeInput[]) {
   const idx = nodes.findIndex((n) => n.id === id);
   if (idx < 0) return "";
-  return `#${idx + 1} ${NODE_META[nodes[idx].type].label}`;
+  return `#${idx + 1} ${nodeMeta(nodes[idx].type).label}`;
 }
 
 function DurationFields({
@@ -904,7 +924,7 @@ function NodeConfigEditor({
   const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const emailSubjectRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const [emailEditorOpen, setEmailEditorOpen] = useState(false);
-  const config = node.config;
+  const config = nodeConfig(node);
   const nodeKey = ensureNodeId(node);
 
   useEffect(() => {
@@ -991,7 +1011,7 @@ function NodeConfigEditor({
             <label className="text-xs text-muted-foreground">Cities (comma-separated)</label>
             <Input
               className="mt-1"
-              value={(config.cities as string[] | undefined)?.join(", ") ?? ""}
+              value={Array.isArray(config.cities) ? config.cities.map(String).join(", ") : String(config.cities ?? "")}
               onChange={(e) =>
                 onConfigChange({
                   ...config,

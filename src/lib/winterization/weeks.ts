@@ -41,6 +41,10 @@ export function winterizationSeasonYear(now = new Date()) {
   return now > seasonEnd ? year + 1 : year;
 }
 
+export function winterizationSeasonTag(year = winterizationSeasonYear()) {
+  return `winterizations_${year}`;
+}
+
 export function listWinterizationWeeks(now = new Date()): WinterizationWeek[] {
   const year = winterizationSeasonYear(now);
   const weeks: WinterizationWeek[] = [];

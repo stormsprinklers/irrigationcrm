@@ -110,7 +110,7 @@ export const EVENT_LABELS: Record<NotificationEvent, string> = {
   ESTIMATE_SENT: "Estimate sent",
   ESTIMATE_FOLLOW_UP: "Estimate follow-up",
   FEEDBACK_SURVEY: "Feedback survey",
-  LEAD_ACKNOWLEDGED: "Website lead acknowledged",
+  LEAD_ACKNOWLEDGED: "Website form received",
 };
 
 export const DEFAULT_TEMPLATES: Array<{
@@ -286,18 +286,18 @@ export const DEFAULT_TEMPLATES: Array<{
   },
   {
     slug: "lead_acknowledged",
-    name: "Website lead acknowledged",
+    name: "Website form received",
     channel: "SMS",
     event: "LEAD_ACKNOWLEDGED",
-    body: "Hi {customer_first_name}, we got your request! {company_name} will follow up soon. Ballpark: {estimate_range} Book: {booking_link}",
+    body: "Hi {customer_first_name}, we got your request! {company_name} will follow up soon.{estimate_range}{booking_link}",
   },
   {
     slug: "lead_acknowledged",
-    name: "Website lead acknowledged",
+    name: "Website form received",
     channel: "EMAIL",
     event: "LEAD_ACKNOWLEDGED",
     subject: "We received your request — {company_name}",
-    body: "Hi {customer_first_name},\n\nThanks for reaching out to {company_name}. Our team is reviewing your details and will follow up shortly.\n\n{estimate_range}\n\nBook a time with us:\n{booking_link}\n\nOr call/text {company_phone}.\n\n— {company_name}",
+    body: "Hi {customer_first_name},\n\nThanks for reaching out to {company_name}. Our team is reviewing your details and will follow up shortly.{estimate_range}{booking_link}\n\nOr call/text {company_phone}.\n\n— {company_name}",
   },
 ];
 
@@ -318,7 +318,22 @@ export function renderTemplate(template: string, context: TemplateContext): stri
     if (missingMergeValue(value)) return fallback ?? "";
     return String(value);
   });
-  return result;
+  return tidyRenderedNotification(result);
+}
+
+/** Drop leftover labels when a merge field was empty, e.g. "Ballpark:  Book: ". */
+export function tidyRenderedNotification(text: string): string {
+  let out = text.replace(/\r\n/g, "\n");
+  out = out.replace(/\b(Ballpark|Book|Estimated range):\s+\1:/gi, "$1:");
+  out = out.replace(
+    /\b(Ballpark|Book|Estimated range):\s*(?=(?:\b(?:Ballpark|Book|Estimated range):|\n|$))/gi,
+    ""
+  );
+  out = out.replace(/Book a time with us:\s*\n+(?=\n|Or call|$)/gi, "");
+  out = out.replace(/[ \t]{2,}/g, " ");
+  out = out.replace(/ +\n/g, "\n");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
 }
 
 // Re-export for backward compatibility

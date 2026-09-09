@@ -62,7 +62,14 @@ export function parseReplyKeywords(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-export function parseWaitConfig(config: Record<string, unknown>): ParsedWaitConfig {
+function asRecord(value: unknown): Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
+  const config = asRecord(raw);
   const mode = asMode(config.mode);
   let delayUnit = asUnit(config.delayUnit);
   let delayAmount = Number(config.delayAmount);
@@ -170,7 +177,7 @@ export function waitActionLabel(action: WaitAction): string {
   return "they open an email";
 }
 
-export function waitSummary(config: Record<string, unknown>, timeZone?: string | null): string {
+export function waitSummary(config: unknown, timeZone?: string | null): string {
   const wait = parseWaitConfig(config);
   const durationLabel = `${wait.delayAmount} ${wait.delayUnit}`;
   const keywordLabel =

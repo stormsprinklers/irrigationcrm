@@ -5,6 +5,10 @@ import { formatArrivalWindow } from "../arrival-window";
 import { isEstimateOpenForFollowUp } from "../estimate-followup";
 import { splitCustomerName } from "../name-utils";
 import {
+  leadAcknowledgementSnippets,
+  resolveLeadAcknowledgementBookingUrl,
+} from "../lead-acknowledgement-snippets";
+import {
   MERGE_FIELDS,
   insertTokenAt,
   organizeMergeFields,
@@ -21,6 +25,93 @@ test("isEstimateOpenForFollowUp is true only for SENT", () => {
   assert.equal(isEstimateOpenForFollowUp(EstimateStatus.SENT), true);
   assert.equal(isEstimateOpenForFollowUp(EstimateStatus.APPROVED), false);
   assert.equal(isEstimateOpenForFollowUp(EstimateStatus.DECLINED), false);
+});
+
+test("renderTemplate drops empty Ballpark/Book labels", () => {
+  const oldSms =
+    "Hi {customer_first_name}, we got your request! {company_name} will follow up soon. Ballpark: {estimate_range} Book: {booking_link}";
+  assert.equal(
+    renderTemplate(oldSms, {
+      customer_first_name: "Austin",
+      company_name: "Storm Sprinklers",
+      estimate_range: "",
+      booking_link: "",
+    }),
+    "Hi Austin, we got your request! Storm Sprinklers will follow up soon."
+  );
+});
+
+test("leadAcknowledgementSnippets uses winterization quote and week", () => {
+  const winter = leadAcknowledgementSnippets(
+    { winterization: true, quotedPrice: 149, weekLabel: "September 14–18" },
+    "https://example.com/book"
+  );
+  assert.equal(winter.estimate_range, " Quoted $149 for September 14–18.");
+  assert.equal(winter.booking_link, "");
+
+  const empty = leadAcknowledgementSnippets({}, "");
+  assert.equal(empty.estimate_range, "");
+  assert.equal(empty.booking_link, "");
+
+  const quote = leadAcknowledgementSnippets({ formattedEstimate: "$200–$300" }, "https://book.example");
+  assert.equal(quote.estimate_range, " Ballpark: $200–$300.");
+  assert.equal(quote.booking_link, " Book: https://book.example");
+});
+
+test("winterization acknowledgment SMS includes quote and week", () => {
+  const snippets = leadAcknowledgementSnippets(
+    { winterization: true, quotedPrice: 149, weekLabel: "September 14–18" },
+    ""
+  );
+  assert.equal(
+    renderTemplate(
+      "Hi {customer_first_name}, we got your request! {company_name} will follow up soon.{estimate_range}{booking_link}",
+      {
+        customer_first_name: "Austin",
+        company_name: "Storm Sprinklers",
+        ...snippets,
+      }
+    ),
+    "Hi Austin, we got your request! Storm Sprinklers will follow up soon. Quoted $149 for September 14–18."
+  );
+});
+
+test("pricing quote SMS uses quote snapshot and website booking URL", () => {
+  const bookingLink = resolveLeadAcknowledgementBookingUrl(
+    { website: "www.stormsprinklers.com", onlineBookingEnabled: false },
+    { event: "pricing_quote_captured" }
+  );
+  assert.equal(bookingLink, "https://www.stormsprinklers.com/booking");
+
+  const snippets = leadAcknowledgementSnippets(
+    {
+      quote: { title: "Leak repair", price: 150, price_range: { min: 99, max: 399 } },
+    },
+    bookingLink
+  );
+  assert.equal(snippets.estimate_range, " Ballpark: $99–$399.");
+  assert.equal(snippets.booking_link, " Book: https://www.stormsprinklers.com/booking");
+  assert.equal(
+    renderTemplate(
+      "Hi {customer_first_name}, we got your request! {company_name} will follow up soon.{estimate_range}{booking_link}",
+      {
+        customer_first_name: "Austin",
+        company_name: "Storm Sprinklers",
+        ...snippets,
+      }
+    ),
+    "Hi Austin, we got your request! Storm Sprinklers will follow up soon. Ballpark: $99–$399. Book: https://www.stormsprinklers.com/booking"
+  );
+});
+
+test("renderTemplate collapses doubled Ballpark/Book labels", () => {
+  assert.equal(
+    renderTemplate("Ballpark: {estimate_range} Book: {booking_link}", {
+      estimate_range: " Ballpark: $200–$300.",
+      booking_link: " Book: https://book.example",
+    }),
+    "Ballpark: $200–$300. Book: https://book.example"
+  );
 });
 
 test("renderTemplate supports snake_case merge fields", () => {

@@ -2,7 +2,10 @@ import type { CampaignChannel, CampaignType } from "@prisma/client";
 
 export type AudienceFilters = {
   cities?: string[];
+  /** Include customers who have at least one of these tags. */
   tags?: string[];
+  /** Exclude customers who have any of these tags. */
+  excludeTags?: string[];
   servicedFrom?: string;
   servicedTo?: string;
   priceBookItemIds?: string[];

@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ export function MarketingMetricGrid({
   }[columns];
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className={cn("grid gap-4", colClass, className)}>
       {metrics.map((metric) => (
         <div key={metric.label} className="rounded-lg border border-border bg-white p-4">
@@ -73,6 +75,7 @@ export function MarketingMetricGrid({
         </div>
       ))}
     </div>
+    </TooltipProvider>
   );
 }
 

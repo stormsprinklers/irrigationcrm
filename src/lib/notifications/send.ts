@@ -438,6 +438,19 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
       });
     }
 
+    if (
+      existing &&
+      tpl.slug === "lead_acknowledged" &&
+      existing.body.includes("{estimate_range}") &&
+      existing.body.includes("{booking_link}") &&
+      (existing.body.includes("Ballpark:") || existing.body.includes("Book a time with us:"))
+    ) {
+      await prisma.notificationTemplate.update({
+        where: { id: existing.id },
+        data: { name: tpl.name, subject: tpl.subject ?? existing.subject, body: tpl.body },
+      });
+    }
+
     const template =
       existing ??
       (await prisma.notificationTemplate.create({

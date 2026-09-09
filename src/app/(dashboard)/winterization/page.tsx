@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useWinterizationTab } from "@/components/layout/CompanyBrandProvider";
+import { AddToWinterizationListDialog } from "@/components/winterization/AddToWinterizationListDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { winterizationSeasonTag } from "@/lib/winterization/weeks";
+import type { WinterizationWeek } from "@/lib/winterization/weeks";
 
 type Row = {
   id: string;
@@ -29,7 +33,7 @@ type Row = {
   zip: string | null;
   zoneCount: number | null;
   quotedPrice: number | null;
-  weekLabel: string;
+  weekLabel: string | null;
   schedulingNotes: string | null;
   shutoffValveLocation: string | null;
   timerLocation: string | null;
@@ -42,6 +46,9 @@ export default function WinterizationListPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("NEED_BOOKING");
+  const [weeks, setWeeks] = useState<WinterizationWeek[]>([]);
+  const [seasonTag, setSeasonTag] = useState(() => winterizationSeasonTag());
+  const [addOpen, setAddOpen] = useState(false);
 
   function load() {
     setLoading(true);
@@ -50,6 +57,10 @@ export default function WinterizationListPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load");
         setRows(data.requests ?? []);
+        setWeeks(data.weeks ?? []);
+        if (typeof data.seasonTag === "string" && data.seasonTag) {
+          setSeasonTag(data.seasonTag);
+        }
       })
       .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load"))
       .finally(() => setLoading(false));
@@ -98,7 +109,13 @@ export default function WinterizationListPage() {
     <ContentArea className="max-w-6xl">
       <PageHeader
         title="Winterization"
-        subtitle="Customers who requested a blow-out week and still need a specific appointment date."
+        subtitle={`Customers who want a blow-out this season. Everyone on this list is tagged ${seasonTag} so campaigns can skip them.`}
+        actions={
+          <Button type="button" onClick={() => setAddOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add to list
+          </Button>
+        }
       />
       <div className="mb-4 flex flex-wrap gap-2">
         {[
@@ -159,7 +176,7 @@ export default function WinterizationListPage() {
                   ) : null}
                 </TableCell>
                 <TableCell>
-                  <div>{row.weekLabel}</div>
+                  <div>{row.weekLabel || "No week yet"}</div>
                   <Badge variant="outline" className="mt-1">
                     {row.status === "NEED_BOOKING" ? "Needs date" : row.status.toLowerCase()}
                   </Badge>
@@ -188,6 +205,13 @@ export default function WinterizationListPage() {
           </TableBody>
         </Table>
       )}
+      <AddToWinterizationListDialog
+        open={addOpen}
+        weeks={weeks}
+        seasonTag={seasonTag}
+        onClose={() => setAddOpen(false)}
+        onAdded={load}
+      />
     </ContentArea>
   );
 }

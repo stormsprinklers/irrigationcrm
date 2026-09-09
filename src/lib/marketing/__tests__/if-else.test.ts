@@ -183,6 +183,14 @@ test("contains is case-insensitive and is_empty detects missing city", () => {
   );
 });
 
+test("parseIfElseConfig accepts missing or non-object config without throwing", () => {
+  const empty = parseIfElseConfig(null);
+  assert.equal(empty.kind, "if_else");
+  assert.equal(empty.branches.length, 1);
+  assert.equal(parseIfElseConfig(undefined).kind, "if_else");
+  assert.equal(parseIfElseConfig([]).kind, "if_else");
+});
+
 test("parseIfElseConfig wraps legacy condition lists into a segment", () => {
   const parsed = parseIfElseConfig({
     kind: "if_else",

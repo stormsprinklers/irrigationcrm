@@ -97,6 +97,11 @@ const EVENT_TIMING_FIELDS: Partial<Record<NotificationEvent, TimingField[]>> = {
   ],
 };
 
+const EVENT_HINTS: Partial<Record<NotificationEvent, string>> = {
+  LEAD_ACKNOWLEDGED:
+    "Sent when someone submits a website form, including winterization bookings. Open this section and click Edit on the SMS template to change the text.",
+};
+
 const EVENT_LINK_FIELDS: Partial<
   Record<NotificationEvent, { key: keyof CompanySettingsDTO; label: string; placeholder: string }>
 > = {
@@ -266,6 +271,7 @@ export default function SettingsNotificationsPage() {
           const companyToggle = EVENT_COMPANY_TOGGLE[event];
           const timingFields = EVENT_TIMING_FIELDS[event] ?? [];
           const linkField = EVENT_LINK_FIELDS[event];
+          const hint = EVENT_HINTS[event];
           const isEnabled = companyToggle
             ? Boolean(company[companyToggle.key])
             : eventRules.some((r) => r.enabled);
@@ -274,8 +280,9 @@ export default function SettingsNotificationsPage() {
             <NotificationSection
               key={event}
               title={EVENT_LABELS[event]}
-              defaultOpen={event === "VISIT_EN_ROUTE"}
+              defaultOpen={event === "VISIT_EN_ROUTE" || event === "LEAD_ACKNOWLEDGED"}
             >
+              {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
               {companyToggle ? (
                 <label className="flex items-center gap-3 text-sm">
                   <Checkbox

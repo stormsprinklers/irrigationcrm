@@ -125,12 +125,20 @@ export function defaultIfElseConfig(): IfElseConfig {
   };
 }
 
-export function usesIfElseConfig(config: Record<string, unknown>): boolean {
-  return config.kind === "if_else" || Array.isArray(config.branches);
+function asRecord(value: unknown): Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
-export function isLegacyReactionBranch(config: Record<string, unknown>): boolean {
-  return !usesIfElseConfig(config) && typeof config.metric === "string";
+export function usesIfElseConfig(config: unknown): boolean {
+  const rec = asRecord(config);
+  return rec.kind === "if_else" || Array.isArray(rec.branches);
+}
+
+export function isLegacyReactionBranch(config: unknown): boolean {
+  const rec = asRecord(config);
+  return !usesIfElseConfig(rec) && typeof rec.metric === "string";
 }
 
 function asField(value: unknown): IfElseField {
@@ -187,7 +195,8 @@ function parseBranch(raw: unknown): IfElseBranch {
   };
 }
 
-export function parseIfElseConfig(config: Record<string, unknown>): IfElseConfig {
+export function parseIfElseConfig(raw: unknown): IfElseConfig {
+  const config = asRecord(raw);
   const timeoutUnit =
     config.timeoutUnit === "minutes" || config.timeoutUnit === "hours" || config.timeoutUnit === "days"
       ? config.timeoutUnit
@@ -495,7 +504,7 @@ function fieldLabel(id: IfElseField) {
   return IF_ELSE_FIELDS.find((f) => f.id === id)?.label ?? id;
 }
 
-export function ifElseSummary(config: Record<string, unknown>): string {
+export function ifElseSummary(config: unknown): string {
   if (isLegacyReactionBranch(config)) {
     return "If/Else · convert this step to conditions";
   }

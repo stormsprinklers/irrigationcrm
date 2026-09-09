@@ -53,8 +53,20 @@ export function CampaignWizard({ initial, onSaved }: Props) {
     ...defaultForm,
     ...initial,
     type: initial?.type === "BLAST" ? "BLAST" : "DRIP",
-    audienceFilters: initial?.audienceFilters ?? {},
-    dripSettings: { ...defaultForm.dripSettings, ...initial?.dripSettings },
+    audienceFilters:
+      initial?.audienceFilters &&
+      typeof initial.audienceFilters === "object" &&
+      !Array.isArray(initial.audienceFilters)
+        ? initial.audienceFilters
+        : {},
+    dripSettings: {
+      ...defaultForm.dripSettings,
+      ...(initial?.dripSettings &&
+      typeof initial.dripSettings === "object" &&
+      !Array.isArray(initial.dripSettings)
+        ? initial.dripSettings
+        : {}),
+    },
     steps: initial?.steps ?? [],
     flowNodes:
       initial?.flowNodes && initial.flowNodes.length > 0

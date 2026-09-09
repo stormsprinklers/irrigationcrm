@@ -68,10 +68,11 @@ export function campaignStartDateInputValue(
   startAt: string | undefined,
   timeZone?: string | null
 ): string {
-  if (!startAt) return "";
-  if (DATE_ONLY.test(startAt)) return startAt;
-  const instant = parseCampaignInstant(startAt, timeZone);
-  if (!instant) return startAt.slice(0, 10);
+  if (startAt == null || startAt === "") return "";
+  const raw = String(startAt);
+  if (DATE_ONLY.test(raw)) return raw;
+  const instant = parseCampaignInstant(raw, timeZone);
+  if (!instant) return raw.slice(0, 10);
   const parts = getZonedParts(instant, resolveCompanyTimezone(timeZone));
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 }
