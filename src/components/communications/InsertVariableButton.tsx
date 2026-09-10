@@ -74,7 +74,18 @@ export function InsertVariableButton({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size={size} className={cn("gap-1", className)}>
+        <Button
+          type="button"
+          variant="outline"
+          size={size}
+          className={cn("gap-1", className)}
+          onPointerDown={() => {
+            const el = document.activeElement;
+            if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+              rememberInputSelection(el);
+            }
+          }}
+        >
           <Plus className="h-3.5 w-3.5" />
           Variable
         </Button>
@@ -83,7 +94,6 @@ export function InsertVariableButton({
         align="end"
         className="z-[200] max-h-80 min-w-[14rem] overflow-y-auto"
         onCloseAutoFocus={(event) => event.preventDefault()}
-        onOpenAutoFocus={(event) => event.preventDefault()}
       >
         {folders.map((folder, index) => (
           <div key={folder.label || "fields"}>
