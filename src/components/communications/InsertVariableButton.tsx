@@ -6,9 +6,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -68,53 +67,39 @@ export function InsertVariableButton({
   className,
   size = "sm",
 }: Props) {
-  const organized = organizeMergeFields(fields);
+  const organized = organizeMergeFields(fields, 0);
+  const folders =
+    organized.mode === "folders" ? organized.folders : [{ label: "", items: [...organized.items] }];
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size={size}
-          className={cn("gap-1", className)}
-          onPointerDown={(event) => event.preventDefault()}
-        >
+        <Button type="button" variant="outline" size={size} className={cn("gap-1", className)}>
           <Plus className="h-3.5 w-3.5" />
           Variable
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="start"
-        className="max-h-80 min-w-[14rem] overflow-y-auto"
+        align="end"
+        className="z-[200] max-h-80 min-w-[14rem] overflow-y-auto"
         onCloseAutoFocus={(event) => event.preventDefault()}
+        onOpenAutoFocus={(event) => event.preventDefault()}
       >
-        {organized.mode === "flat"
-          ? organized.items.map((field) => (
+        {folders.map((folder, index) => (
+          <div key={folder.label || "fields"}>
+            {index > 0 ? <DropdownMenuSeparator /> : null}
+            {folder.label ? <DropdownMenuLabel>{folder.label}</DropdownMenuLabel> : null}
+            {folder.items.map((field) => (
               <DropdownMenuItem
                 key={field.token}
                 onPointerDown={(event) => event.preventDefault()}
                 onSelect={() => onInsert(field.token)}
               >
-                <span>{field.label}</span>
+                {field.label}
               </DropdownMenuItem>
-            ))
-          : organized.folders.map((folder) => (
-              <DropdownMenuSub key={folder.label}>
-                <DropdownMenuSubTrigger>{folder.label}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="max-h-80 min-w-[14rem] overflow-y-auto">
-                  {folder.items.map((field) => (
-                    <DropdownMenuItem
-                      key={field.token}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onSelect={() => onInsert(field.token)}
-                    >
-                      <span>{field.label}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
             ))}
+          </div>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -113,6 +113,19 @@ function parseFromAddress(from: string): { address: string; name: string } {
   return { name: "", address: from.trim() };
 }
 
+function escapeEmailText(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Twilio requires `content.html`. Mirror plain text with no layout or branding. */
+export function plainTextAsEmailHtml(text: string) {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;white-space:pre-wrap;">${escapeEmailText(text)}</div>`;
+}
+
 export function buildTwilioEmailPayload(params: {
   from: string;
   to: string[];
@@ -130,18 +143,20 @@ export function buildTwilioEmailPayload(params: {
     address: fromParsed.address,
     name: fromParsed.name || fromParsed.address.split("@")[0] || "Support",
   };
+  const html = params.html?.trim() ? params.html : undefined;
   const text =
     params.text ??
-    params.html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
+    html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
     "";
-  const html = params.html ?? (params.text ? `<p>${params.text.replace(/\n/g, "<br/>")}</p>` : "");
+  // Twilio Email API requires html; keep a 1:1 unformatted copy for text-only sends.
+  const htmlOut = html ?? (text ? plainTextAsEmailHtml(text) : undefined);
 
   return {
     from,
     to: params.to.map((address) => ({ address: address.trim() })),
     content: {
       subject: params.subject,
-      html,
+      ...(htmlOut ? { html: htmlOut } : {}),
       ...(text ? { text } : {}),
       ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     },

@@ -36,6 +36,7 @@ import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection"
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import { marketingConsentLabel } from "@/lib/marketing/opt-out";
 import { canViewMaintenancePlansNav } from "@/lib/settings/access";
 import { useIrrigationFeatures, useHolidayLightingFeatures, useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
@@ -86,6 +87,39 @@ function ProfileDetail({
         <p className="text-sm">{value || "—"}</p>
         {actions}
       </div>
+    </div>
+  );
+}
+
+function ConsentBadge({ value }: { value: boolean }) {
+  const optedOut = Boolean(value);
+  return (
+    <Badge variant={optedOut ? "destructive" : "success"}>
+      {marketingConsentLabel(optedOut)}
+    </Badge>
+  );
+}
+
+function MarketingConsentSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium">{label}</label>
+      <select
+        className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+        value={value ? "out" : "in"}
+        onChange={(e) => onChange(e.target.value === "out")}
+      >
+        <option value="in">Opted in</option>
+        <option value="out">Opted out</option>
+      </select>
     </div>
   );
 }
@@ -852,13 +886,14 @@ export function CustomerProfile({ customerId }: Props) {
                   ) : null}
                   <div className="sm:col-span-2 rounded-md border p-3 text-sm">
                     <p className="mb-2 font-medium">Messaging preferences</p>
-                    <ul className="grid gap-1 text-muted-foreground sm:grid-cols-2">
+                    <ul className="grid gap-2 sm:grid-cols-2">
                       <li>
-                        Marketing email:{" "}
-                        {customer.marketingEmailOptOut ? "Off" : "On"}
+                        <span className="text-muted-foreground">Marketing email:</span>{" "}
+                        <ConsentBadge value={customer.marketingEmailOptOut} />
                       </li>
                       <li>
-                        Marketing SMS: {customer.marketingSmsOptOut ? "Off" : "On"}
+                        <span className="text-muted-foreground">Marketing SMS:</span>{" "}
+                        <ConsentBadge value={customer.marketingSmsOptOut} />
                       </li>
                       <li>
                         Appointment email:{" "}
@@ -966,33 +1001,24 @@ export function CustomerProfile({ customerId }: Props) {
                   <div className="sm:col-span-2 rounded-md border p-3">
                     <p className="mb-2 text-sm font-medium">Messaging preferences</p>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      Checked means the customer wants to receive that message type.
+                      New customers are opted in. Texting STOP (nothing else) opts them out of
+                      marketing SMS; START opts them back in.
                     </p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={!profileCustomer.marketingEmailOptOut}
-                          onCheckedChange={(checked) =>
-                            setDraftCustomer({
-                              ...profileCustomer,
-                              marketingEmailOptOut: !Boolean(checked),
-                            })
-                          }
-                        />
-                        Marketing email
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={!profileCustomer.marketingSmsOptOut}
-                          onCheckedChange={(checked) =>
-                            setDraftCustomer({
-                              ...profileCustomer,
-                              marketingSmsOptOut: !Boolean(checked),
-                            })
-                          }
-                        />
-                        Marketing SMS
-                      </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <MarketingConsentSelect
+                        label="Marketing email"
+                        value={profileCustomer.marketingEmailOptOut}
+                        onChange={(marketingEmailOptOut) =>
+                          setDraftCustomer({ ...profileCustomer, marketingEmailOptOut })
+                        }
+                      />
+                      <MarketingConsentSelect
+                        label="Marketing SMS"
+                        value={profileCustomer.marketingSmsOptOut}
+                        onChange={(marketingSmsOptOut) =>
+                          setDraftCustomer({ ...profileCustomer, marketingSmsOptOut })
+                        }
+                      />
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={!profileCustomer.appointmentReminderEmailOptOut}

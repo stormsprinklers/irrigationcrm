@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
+import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 import { resolveMarketingEmailFrom } from "@/lib/marketing/sender";
@@ -66,8 +67,9 @@ export async function POST(request: NextRequest) {
       bodyHtml: bodyHtml || null,
     });
 
-    const html =
-      personalized.bodyHtml ?? `<p>${personalized.bodyText.replace(/\n/g, "<br/>")}</p>`;
+    const html = isHtmlEmailBody(personalized.bodyHtml)
+      ? personalized.bodyHtml ?? undefined
+      : undefined;
 
     const result = await sendCompanyEmail(
       {

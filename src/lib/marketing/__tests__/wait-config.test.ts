@@ -57,7 +57,7 @@ test("delay_or_reply summary and next check uses the earlier of timeout and poll
   assert.equal(check.getTime() - from.getTime(), REPLY_POLL_MS);
 });
 
-test("action wait polls until open or click and has no timeout", () => {
+test("action wait has no timeout unless timeoutEnabled is set", () => {
   const opened = parseWaitConfig({ mode: "action", action: "opened" });
   assert.equal(opened.usesAction, true);
   assert.equal(opened.hasTimeout, false);
@@ -69,6 +69,33 @@ test("action wait polls until open or click and has no timeout", () => {
   const from = new Date("2026-09-08T12:00:00.000Z");
   assert.equal(waitTimeoutAt(opened, from), null);
   assert.equal(nextWaitCheckAt(opened, null, from).getTime() - from.getTime(), REPLY_POLL_MS);
+});
+
+test("reply and action waits honor an explicit timeout", () => {
+  const from = new Date("2026-09-08T12:00:00.000Z");
+  const replyRaw = {
+    mode: "reply",
+    timeoutEnabled: true,
+    delayAmount: 6,
+    delayUnit: "hours",
+    replyKeyword: "yes",
+  };
+  const reply = parseWaitConfig(replyRaw);
+  assert.equal(reply.hasTimeout, true);
+  assert.equal(waitSummary(replyRaw), "Until reply containing “yes” or 6 hours");
+  assert.equal(waitTimeoutAt(reply, from)?.toISOString(), "2026-09-08T18:00:00.000Z");
+
+  const actionRaw = {
+    mode: "action",
+    action: "opened",
+    timeoutEnabled: true,
+    delayAmount: 2,
+    delayUnit: "days",
+  };
+  const action = parseWaitConfig(actionRaw);
+  assert.equal(action.hasTimeout, true);
+  assert.equal(waitSummary(actionRaw), "Until they open an email or 2 days");
+  assert.equal(waitTimeoutAt(action, from)?.toISOString(), "2026-09-10T12:00:00.000Z");
 });
 
 test("recipientMatchesWaitAction respects opened vs clicked", () => {

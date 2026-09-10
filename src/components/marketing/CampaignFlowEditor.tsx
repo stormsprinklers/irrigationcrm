@@ -56,6 +56,7 @@ import {
 } from "@/lib/marketing/campaign-time";
 import { addTagSummary, parseAddTagConfig } from "@/lib/marketing/add-tag";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 
 type Props = {
   nodes: CampaignFlowNodeInput[];
@@ -140,7 +141,7 @@ const NODE_META: Record<
   BRANCH: {
     label: "If/Else",
     icon: GitBranch,
-    blurb: "Fork the journey by conditions, SMS replies, or a wait timeout",
+    blurb: "Fork the journey by conditions or SMS replies",
     tone: "border-orange-200",
     iconTone: "bg-orange-100 text-orange-700",
   },
@@ -213,6 +214,7 @@ function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
         sendAt: undefined,
         replyKeyword: "",
         action: "opened",
+        timeoutEnabled: false,
       };
     case "SEND_EMAIL":
       return { subject: "", bodyHtml: "", bodyText: "", aiPrompt: "" };
@@ -1068,7 +1070,7 @@ function NodeConfigEditor({
             ) : null}
           </select>
         </div>
-        {mode === "delay" || mode === "delay_or_reply" ? (
+        {mode === "delay" ? (
           <div>
             <label className="text-xs text-muted-foreground">
               Wait for (e.g. 2 days, 6 hours, 30 minutes)
@@ -1136,6 +1138,45 @@ function NodeConfigEditor({
             </p>
           </div>
         ) : null}
+        {mode === "reply" || mode === "action" || mode === "delay_or_reply" ? (
+          <div className="rounded-lg border bg-white px-3 py-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={wait.timeoutEnabled}
+                onChange={(e) =>
+                  onConfigChange({
+                    ...config,
+                    mode: mode === "delay_or_reply" ? "reply" : mode,
+                    timeoutEnabled: e.target.checked,
+                    delayAmount: wait.delayAmount || 2,
+                    delayUnit: wait.delayUnit || "days",
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium">Continue after a timeout</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  If they never{" "}
+                  {mode === "action" ? "take that action" : "reply"}, keep going after this
+                  long instead of waiting forever.
+                </span>
+              </span>
+            </label>
+            {wait.timeoutEnabled ? (
+              <div className="mt-3">
+                <DurationFields
+                  amount={wait.delayAmount || 2}
+                  unit={wait.delayUnit || "days"}
+                  onChange={(delayAmount, delayUnit) =>
+                    onConfigChange({ ...config, delayAmount, delayUnit, timeoutEnabled: true })
+                  }
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1143,7 +1184,10 @@ function NodeConfigEditor({
   if (node.type === "SEND_EMAIL") {
     const subject = String(config.subject ?? "");
     const bodyHtml = String(config.bodyHtml ?? "");
-    const preview = htmlToPlainText(bodyHtml).slice(0, 160);
+    const bodyText = String(config.bodyText ?? "");
+    const preview = (
+      isHtmlEmailBody(bodyHtml) ? htmlToPlainText(bodyHtml) : bodyText
+    ).slice(0, 160);
     return (
       <div className="space-y-3">
         <div>
@@ -1182,6 +1226,7 @@ function NodeConfigEditor({
           open={emailEditorOpen}
           subject={subject}
           bodyHtml={bodyHtml}
+          bodyText={bodyText}
           aiPrompt={String(config.aiPrompt ?? "")}
           onClose={() => setEmailEditorOpen(false)}
           onSubjectChange={(nextSubject) => onConfigChange({ ...config, subject: nextSubject })}

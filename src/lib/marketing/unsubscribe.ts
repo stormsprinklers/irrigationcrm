@@ -85,14 +85,24 @@ export function marketingUnsubscribeUrl(
   return `${base}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
+/** Append a preferences line to a plain-text marketing email. */
+export function appendMarketingUnsubscribeText(text: string, unsubscribeUrl: string): string {
+  const existing = text.trimEnd();
+  if (!unsubscribeUrl) return existing;
+  if (existing.includes(unsubscribeUrl)) return existing;
+  if (/unsubscribe from marketing emails/i.test(existing.slice(-400))) return existing;
+  const footer = `You received this email because you are a customer. This is a marketing message.\nUnsubscribe from marketing emails: ${unsubscribeUrl}`;
+  return existing ? `${existing}\n\n${footer}` : footer;
+}
+
 /** Append a preferences footer to marketing campaign HTML. */
 export function appendMarketingUnsubscribeFooter(
   html: string,
-  preferencesUrl: string
+  unsubscribeUrl: string
 ): string {
   const footer = `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280">
   <p style="margin:0 0 8px">You received this email because you are a customer. This is a marketing message.</p>
-  <p style="margin:0"><a href="${preferencesUrl}" style="color:#4C9BC8">Manage email preferences</a> — choose which messages you want to receive.</p>
+  <p style="margin:0"><a href="${unsubscribeUrl}" style="color:#4C9BC8">Unsubscribe from marketing emails</a> — this removes you from our campaigns and turns off marketing email.</p>
 </div>`;
 
   if (/<\/body>/i.test(html)) {

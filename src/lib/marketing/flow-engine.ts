@@ -1295,6 +1295,17 @@ export async function processCampaignTriggers(companyId?: string) {
         where: { campaignId_customerId: { campaignId: campaign.id, customerId } },
       });
       if (existing) continue;
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId: campaign.companyId },
+        select: {
+          doNotService: true,
+          marketingEmailOptOut: true,
+          marketingSmsOptOut: true,
+        },
+      });
+      if (!customer || customer.doNotService) continue;
+      if (campaign.channel === "EMAIL" && customer.marketingEmailOptOut === true) continue;
+      if (campaign.channel === "SMS" && customer.marketingSmsOptOut === true) continue;
       await prisma.campaignEnrollment.create({
         data: {
           campaignId: campaign.id,

@@ -10,6 +10,8 @@ import { deleteCustomerForCompany } from "@/lib/customers/delete";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
+import { CampaignChannel } from "@prisma/client";
+import { unenrollCustomerFromCampaigns } from "@/lib/marketing/opt-out";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,6 +56,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return forbiddenResponse();
     }
 
+    const marketingEmailOptOut =
+      body.marketingEmailOptOut === undefined
+        ? undefined
+        : Boolean(body.marketingEmailOptOut);
+    const marketingSmsOptOut =
+      body.marketingSmsOptOut === undefined
+        ? undefined
+        : Boolean(body.marketingSmsOptOut);
+
     const customer = await prisma.customer.update({
       where: { id },
       data: {
@@ -69,12 +80,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
         ...(body.leadSource !== undefined ? { leadSource: body.leadSource ?? null } : {}),
         ...(body.doNotService !== undefined ? { doNotService: Boolean(body.doNotService) } : {}),
-        ...(body.marketingEmailOptOut !== undefined
-          ? { marketingEmailOptOut: Boolean(body.marketingEmailOptOut) }
-          : {}),
-        ...(body.marketingSmsOptOut !== undefined
-          ? { marketingSmsOptOut: Boolean(body.marketingSmsOptOut) }
-          : {}),
+        ...(marketingEmailOptOut !== undefined ? { marketingEmailOptOut } : {}),
+        ...(marketingSmsOptOut !== undefined ? { marketingSmsOptOut } : {}),
         ...(body.appointmentReminderEmailOptOut !== undefined
           ? { appointmentReminderEmailOptOut: Boolean(body.appointmentReminderEmailOptOut) }
           : {}),
@@ -96,6 +103,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         _count: { select: { properties: true, visits: true, estimates: true, invoices: true } },
       },
     });
+
+    if (marketingEmailOptOut === true) {
+      await unenrollCustomerFromCampaigns({
+        customerId: id,
+        companyId: user.companyId,
+        channel: CampaignChannel.EMAIL,
+        reason: "Marketing email opt-out",
+      });
+    }
+    if (marketingSmsOptOut === true) {
+      await unenrollCustomerFromCampaigns({
+        customerId: id,
+        companyId: user.companyId,
+        channel: CampaignChannel.SMS,
+        reason: "Marketing SMS opt-out",
+      });
+    }
 
     return NextResponse.json(serializeCustomer(customer));
   } catch {

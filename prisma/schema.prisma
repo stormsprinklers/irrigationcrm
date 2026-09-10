@@ -1395,9 +1395,9 @@ model Customer {
   stripeCustomerId String?
   status           CustomerStatus @default(ACTIVE)
   doNotService     Boolean        @default(false)
-  /// Opt out of marketing email only — appointment/invoice/portal mail still allowed.
+  /// Opt out of marketing email only — appointment/invoice/portal mail still allowed. Default false = opted in.
   marketingEmailOptOut Boolean    @default(false)
-  /// Opt out of marketing SMS (campaigns / offers).
+  /// Opt out of marketing SMS (campaigns / offers). Default false = opted in.
   marketingSmsOptOut Boolean      @default(false)
   /// Opt out of appointment reminder emails (visit scheduled/updated/en-route/etc.).
   appointmentReminderEmailOptOut Boolean @default(false)
@@ -1467,6 +1467,7 @@ model WinterizationRequest {
   schedulingNotes        String? @db.Text
   shutoffValveLocation   String? @db.Text
   timerLocation          String? @db.Text
+  scheduledDate DateTime?
   source     String  @default("website")
   externalId String?
   createdAt  DateTime @default(now())

@@ -10,7 +10,13 @@ export function rewriteTrackedLinks(
   return html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>/gi,
     (match, before, url, after) => {
-      if (url.startsWith("mailto:") || url.startsWith("#") || url.includes("/api/marketing/track/click")) {
+      if (
+        url.startsWith("mailto:") ||
+        url.startsWith("#") ||
+        url.includes("/api/marketing/track/click") ||
+        url.includes("/api/marketing/unsubscribe") ||
+        /\/portal\/[^/]+\/preferences/.test(url)
+      ) {
         return match;
       }
       const tracked = `${base}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;

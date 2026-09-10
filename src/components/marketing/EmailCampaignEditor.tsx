@@ -31,6 +31,8 @@ import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { stormBrand } from "@/lib/branding";
 import {
   EMAIL_TEMPLATES,
+  isHtmlEmailBody,
+  isPlainTextEmailTemplate,
   renderEmailTemplatePreview,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
@@ -40,6 +42,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   subject: string;
   bodyHtml: string;
+  bodyText?: string;
   aiPrompt: string;
   onSubjectChange: (subject: string) => void;
   onBodyChange: (html: string, text: string) => void;
@@ -81,6 +84,7 @@ function normalizeHex(value: string, fallback: string) {
 function EmailCampaignEditorInner({
   subject,
   bodyHtml,
+  bodyText = "",
   aiPrompt,
   onSubjectChange,
   onBodyChange,
@@ -104,10 +108,13 @@ function EmailCampaignEditorInner({
   const [generating, setGenerating] = useState(false);
   const [mobilePreview, setMobilePreview] = useState(false);
   const [htmlDraft, setHtmlDraft] = useState(bodyHtml);
+  const [plainDraft, setPlainDraft] = useState(bodyText);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [palette, setPalette] = useState<PaletteState>(defaultPalette);
   const [paletteSeeded, setPaletteSeeded] = useState(false);
-  const [templateId, setTemplateId] = useState<EmailTemplateId>("announcement");
+  const [templateId, setTemplateId] = useState<EmailTemplateId>(() =>
+    !isHtmlEmailBody(bodyHtml) && String(bodyText ?? "").trim() ? "plain" : "announcement"
+  );
   const [selectedImages, setSelectedImages] = useState<MediaLibraryItem[]>([]);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [companyContact, setCompanyContact] = useState<CompanyContact>({
@@ -127,11 +134,17 @@ function EmailCampaignEditorInner({
   const [htmlSourceOpen, setHtmlSourceOpen] = useState(false);
   const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const htmlRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+  const plainRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const previewRef = useRef<EditableEmailPreviewHandle>(null);
+  const isPlain = isPlainTextEmailTemplate(templateId);
 
   useEffect(() => {
     setHtmlDraft(bodyHtml);
   }, [bodyHtml]);
+
+  useEffect(() => {
+    setPlainDraft(bodyText);
+  }, [bodyText]);
 
   useEffect(() => {
     if (paletteSeeded) return;
@@ -164,6 +177,12 @@ function EmailCampaignEditorInner({
     onBodyChange(next, htmlToPlainText(next));
   }
 
+  function applyPlain(next: string) {
+    setPlainDraft(next);
+    setHtmlDraft("");
+    onBodyChange("", next);
+  }
+
   function insertIntoSubject(token: string) {
     const { next } = applyTokenToInput(subjectRef.current, subject, token);
     onSubjectChange(next);
@@ -174,8 +193,20 @@ function EmailCampaignEditorInner({
     applyHtml(next);
   }
 
+  function insertIntoPlain(token: string) {
+    const { next } = applyTokenToInput(plainRef.current, plainDraft, token);
+    applyPlain(next);
+  }
+
   const applyTemplate = useCallback(
     (id: EmailTemplateId, nextPalette?: PaletteState) => {
+      setTemplateSeeded(true);
+      if (id === "plain") {
+        const starting = templateId === "plain" ? plainDraft : htmlToPlainText(htmlDraft);
+        setTemplateId("plain");
+        applyPlain(starting);
+        return;
+      }
       const p = nextPalette ?? palette;
       const logoUrl =
         absolutePublicBlobUrl(companyContact.emailLogoUrl) ||
@@ -207,21 +238,25 @@ function EmailCampaignEditorInner({
       setTemplateId(id);
       applyHtml(html);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyHtml is stable enough via setState
-    [brand.companyName, brand.logoUrl, companyContact, palette, selectedImages]
+    [brand.companyName, brand.logoUrl, companyContact, palette, selectedImages, htmlDraft, plainDraft, templateId]
   );
 
   // Seed announcement template into an empty editor once branding/contact is ready.
   useEffect(() => {
     if (templateSeeded) return;
-    if (String(bodyHtml ?? "").trim()) {
+    if (isHtmlEmailBody(bodyHtml)) {
+      setTemplateSeeded(true);
+      return;
+    }
+    if (String(bodyText ?? "").trim()) {
+      setTemplateId("plain");
       setTemplateSeeded(true);
       return;
     }
     if (!brand.companyId && brand.companyName === "Company") return;
     applyTemplate("announcement");
     setTemplateSeeded(true);
-  }, [applyTemplate, bodyHtml, brand.companyId, brand.companyName, templateSeeded]);
+  }, [applyTemplate, bodyHtml, bodyText, brand.companyId, brand.companyName, templateSeeded]);
 
   function insertImageIntoHtml(url: string, alt: string) {
     const img = `<img src="${url}" alt="${alt.replace(/"/g, "&quot;")}" width="600" style="width:100%;max-width:600px;height:auto;display:block;margin:16px auto;" />`;
@@ -249,7 +284,8 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           prompt: aiPrompt,
           subject,
-          existingHtml: htmlDraft.trim() || undefined,
+          existingHtml: isPlain ? undefined : htmlDraft.trim() || undefined,
+          existingText: isPlain ? plainDraft.trim() || undefined : undefined,
           brandPalette: {
             primary: palette.primary,
             secondary: palette.secondary,
@@ -259,14 +295,26 @@ function EmailCampaignEditorInner({
             extras: palette.extras,
           },
           templateId,
-          imageUrls: selectedImages.map((img) => img.publicUrl),
+          imageUrls: isPlain ? [] : selectedImages.map((img) => img.publicUrl),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "AI request failed");
       onSubjectChange(data.subject ?? subject);
-      applyHtml(data.bodyHtml ?? "");
-      toast.success(htmlDraft.trim() ? "HTML updated" : "Email generated");
+      if (isPlain) {
+        applyPlain(data.bodyText ?? htmlToPlainText(data.bodyHtml ?? ""));
+      } else {
+        applyHtml(data.bodyHtml ?? "");
+      }
+      toast.success(
+        isPlain
+          ? plainDraft.trim()
+            ? "Email updated"
+            : "Email generated"
+          : htmlDraft.trim()
+            ? "HTML updated"
+            : "Email generated"
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI request failed");
     } finally {
@@ -280,7 +328,7 @@ function EmailCampaignEditorInner({
       toast.error("Enter an email address");
       return;
     }
-    if (!subject.trim() && !htmlDraft.trim()) {
+    if (!subject.trim() && !htmlDraft.trim() && !plainDraft.trim()) {
       toast.error("Add a subject or email body first");
       return;
     }
@@ -292,7 +340,8 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           to,
           subject,
-          bodyHtml: htmlDraft,
+          bodyHtml: isPlain ? "" : htmlDraft,
+          bodyText: isPlain ? plainDraft : htmlToPlainText(htmlDraft),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -306,6 +355,7 @@ function EmailCampaignEditorInner({
   }
 
   const hasExistingHtml = Boolean(htmlDraft.trim());
+  const hasExistingBody = isPlain ? Boolean(plainDraft.trim()) : hasExistingHtml;
 
   return (
     <div
@@ -318,11 +368,17 @@ function EmailCampaignEditorInner({
         <div>
           <h3 className="text-sm font-semibold">Email builder</h3>
           <p className="text-xs text-muted-foreground">
-            Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
-            <Link href="/settings/campaign-links" className="underline">
-              Campaign links
-            </Link>
-            .
+            {isPlain
+              ? "Plain text only — no HTML, photos, or layout. Recipients see exactly what you type."
+              : (
+                <>
+                  Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
+                  <Link href="/settings/campaign-links" className="underline">
+                    Campaign links
+                  </Link>
+                  .
+                </>
+              )}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -428,6 +484,7 @@ function EmailCampaignEditorInner({
             </div>
           </div>
 
+          {!isPlain ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">Photos</p>
@@ -460,14 +517,17 @@ function EmailCampaignEditorInner({
               </div>
             )}
           </div>
+          ) : null}
 
           <textarea
             className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             value={aiPrompt}
             onChange={(e) => onAiPromptChange(e.target.value)}
             placeholder={
-              hasExistingHtml
-                ? "Describe edits: make the CTA use primary, shorten the intro…"
+              hasExistingBody
+                ? isPlain
+                  ? "Describe edits: shorter, warmer tone, add a sign-off…"
+                  : "Describe edits: make the CTA use primary, shorten the intro…"
                 : "Describe your campaign: offer, tone, what the CTA should say…"
             }
           />
@@ -480,10 +540,11 @@ function EmailCampaignEditorInner({
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                  {hasExistingHtml ? "Fill / edit with AI" : "Generate email"}
+                  {hasExistingBody ? "Fill / edit with AI" : "Generate email"}
               </>
             )}
           </Button>
+          {!isPlain ? (
           <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
             <div className="flex items-center justify-between gap-2">
               <p className="font-medium text-foreground">Brand palette</p>
@@ -580,6 +641,7 @@ function EmailCampaignEditorInner({
               Add color
             </Button>
           </div>
+          ) : null}
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
@@ -602,6 +664,29 @@ function EmailCampaignEditorInner({
                 fallback text.
               </p>
             </div>
+            {isPlain ? (
+              <>
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                  <div>
+                    <h3 className="text-sm font-semibold">Message</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Unformatted plain text — no HTML, colors, or layout.
+                    </p>
+                  </div>
+                  <InsertVariableButton onInsert={insertIntoPlain} />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <MergeTokenTextField
+                    ref={plainRef}
+                    className="min-h-[min(50vh,520px)] w-full resize-none border-0 px-4 py-3 text-sm leading-relaxed outline-none"
+                    value={plainDraft}
+                    onChange={applyPlain}
+                    placeholder={"Hi {customer_first_name},\n\nWrite your email here…"}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
             <div className="flex items-center justify-between border-b px-3 py-2">
               <div>
                 <h3 className="text-sm font-semibold">Live preview</h3>
@@ -639,8 +724,11 @@ function EmailCampaignEditorInner({
               mobilePreview={mobilePreview}
               onHtmlChange={applyHtml}
             />
+              </>
+            )}
           </div>
 
+          {!isPlain ? (
           <div className="flex flex-col rounded-lg border bg-white">
             <div className="flex items-center justify-between px-3 py-2">
               <button
@@ -687,6 +775,7 @@ function EmailCampaignEditorInner({
               />
             ) : null}
           </div>
+          ) : null}
         </div>
       </div>
 
@@ -697,7 +786,7 @@ function EmailCampaignEditorInner({
           setSelectedImages((prev) =>
             prev.some((p) => p.id === asset.id) ? prev : [...prev, asset].slice(0, 4)
           );
-          if (hasExistingHtml) {
+          if (!isPlain && hasExistingHtml) {
             insertImageIntoHtml(asset.publicUrl, asset.alt ?? asset.fileName);
           }
         }}

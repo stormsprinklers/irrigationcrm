@@ -109,7 +109,7 @@ export async function sendCompanyEmail(
     to: string[];
     subject: string;
     text?: string;
-    html: string;
+    html?: string;
     replyTo?: string;
     fromOverride?: string | null;
     attachments?: Array<{
@@ -133,12 +133,16 @@ export async function sendCompanyEmail(
     throw new Error("From email address not configured");
   }
 
+  const html = params.html?.trim()
+    ? wrapBrandedEmailHtml(params.html, resolved)
+    : undefined;
+
   return sendEmail({
     from,
     to: params.to,
     subject: params.subject,
-    text: applyCompanyEmailSignatureText(params.text, resolved),
-    html: wrapBrandedEmailHtml(params.html, resolved),
+    text: html ? applyCompanyEmailSignatureText(params.text, resolved) : params.text,
+    html,
     replyTo: params.replyTo,
     attachments: params.attachments,
   });

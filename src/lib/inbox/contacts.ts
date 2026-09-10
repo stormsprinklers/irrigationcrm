@@ -76,3 +76,10 @@ export async function unblockCustomer(companyId: string, blockedId: string) {
   if (!entry) return null;
   return prisma.blockedContact.delete({ where: { id: blockedId } });
 }
+
+export async function unblockContactByPhone(companyId: string, phone: string) {
+  const normalized = normalizePhone(phone);
+  await prisma.blockedContact.deleteMany({
+    where: { companyId, phone: normalized },
+  });
+}

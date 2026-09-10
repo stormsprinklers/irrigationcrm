@@ -451,54 +451,8 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
         <p className="mt-1 text-xs text-muted-foreground">
           Fork the contact journey based on conditions. Use SMS reply to split on what they text
           back (not case sensitive — Yes and yes match the same branch). First matching branch
-          wins. SMS reply branches wait for a text; turn on a timeout if they never respond.
+          wins. To stop waiting after a while, add a Wait step with a timeout — not this If/Else.
         </p>
-      </div>
-
-      <div className="rounded-lg border bg-white px-3 py-3">
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={parsed.timeoutEnabled}
-            onChange={(e) =>
-              commit({
-                timeoutEnabled: e.target.checked,
-                timeoutAmount: parsed.timeoutAmount || 2,
-                timeoutUnit: parsed.timeoutUnit || "days",
-              })
-            }
-          />
-          <span>
-            <span className="font-medium">Wait with a timeout</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Adds a Timeout branch when the wait ends without a match — no reply yet, or the
-              conditions still are not met. Timeout is always its own path, separate from None.
-            </span>
-          </span>
-        </label>
-        {parsed.timeoutEnabled ? (
-          <div className="mt-3 grid grid-cols-[1fr_8rem] gap-2">
-            <Input
-              type="number"
-              min={0}
-              className="h-9"
-              value={parsed.timeoutAmount}
-              onChange={(e) => commit({ timeoutAmount: Number(e.target.value) || 0 })}
-            />
-            <select
-              className={selectClass}
-              value={parsed.timeoutUnit}
-              onChange={(e) =>
-                commit({ timeoutUnit: e.target.value as WaitDurationUnit })
-              }
-            >
-              <option value="minutes">Minutes</option>
-              <option value="hours">Hours</option>
-              <option value="days">Days</option>
-            </select>
-          </div>
-        ) : null}
       </div>
 
       <div className="space-y-3">
@@ -571,10 +525,31 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
       </div>
       {parsed.timeoutEnabled ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3">
-          <p className="text-sm font-semibold">Timeout branch</p>
+          <p className="text-sm font-semibold">Timeout path (older campaigns)</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Always used when the wait ends without a matching reply or condition.
+            New timeouts belong on a Wait step. This path is only here because this If/Else
+            already had one.
           </p>
+          <div className="mt-3 grid grid-cols-[1fr_8rem] gap-2">
+            <Input
+              type="number"
+              min={0}
+              className="h-9"
+              value={parsed.timeoutAmount}
+              onChange={(e) => commit({ timeoutAmount: Number(e.target.value) || 0 })}
+            />
+            <select
+              className={selectClass}
+              value={parsed.timeoutUnit}
+              onChange={(e) =>
+                commit({ timeoutUnit: e.target.value as WaitDurationUnit })
+              }
+            >
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </div>
           <div className="mt-2">
             <NextStepSelect
               value={parsed.timeoutNextId}
@@ -584,6 +559,13 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
               onChange={(timeoutNextId) => commit({ timeoutNextId })}
             />
           </div>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-muted-foreground hover:underline"
+            onClick={() => commit({ timeoutEnabled: false, timeoutNextId: "" })}
+          >
+            Remove timeout path
+          </button>
         </div>
       ) : null}
     </div>

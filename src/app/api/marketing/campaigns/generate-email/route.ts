@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { prompt, subject, existingHtml, brandPalette, templateId, imageUrls } = body;
+    const { prompt, subject, existingHtml, existingText, brandPalette, templateId, imageUrls } = body;
 
     if (!prompt?.trim()) {
       return badRequestResponse("prompt is required");
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       subject: subject ? String(subject) : undefined,
       companyName: company.name,
       existingHtml: existingHtml ? String(existingHtml) : undefined,
+      existingText: existingText ? String(existingText) : undefined,
       templateId: isEmailTemplateId(templateId) ? templateId : null,
       allowedLinks,
       imageUrls: images,

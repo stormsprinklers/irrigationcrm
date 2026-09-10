@@ -94,7 +94,7 @@ export async function queryAudienceCustomers(
     where.id = { in: includeIds };
   }
 
-  // Marketing email opt-outs never receive campaign email.
+  // Marketing opt-outs never receive campaign messages. null (unknown) is still eligible.
   if (channel === "EMAIL") {
     where.marketingEmailOptOut = false;
   }

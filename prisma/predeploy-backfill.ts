@@ -81,9 +81,45 @@ async function ensureVehicleNotesColumn() {
   }
 }
 
+async function isColumnNullable(table: string, column: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ is_nullable: string }[]>`
+    SELECT is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = ${table}
+      AND column_name = ${column}
+  `;
+  return rows[0]?.is_nullable === "YES";
+}
+
+/** If a prior deploy made these nullable, restore opted-in (false) as the default. */
+async function restoreMarketingOptOutDefaults() {
+  for (const column of ["marketingEmailOptOut", "marketingSmsOptOut"] as const) {
+    const exists = await columnExists("Customer", column);
+    if (!exists) continue;
+    const alreadyNullable = await isColumnNullable("Customer", column);
+    if (!alreadyNullable) continue;
+    const updated = await prisma.$executeRawUnsafe(
+      `UPDATE "Customer" SET "${column}" = false WHERE "${column}" IS NULL`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Customer" ALTER COLUMN "${column}" SET DEFAULT false`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Customer" ALTER COLUMN "${column}" SET NOT NULL`
+    );
+    console.log(`Restored Customer.${column} default opted-in (${updated} null rows)`);
+  }
+}
+
 async function main() {
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
+  try {
+    await restoreMarketingOptOutDefaults();
+  } catch (err) {
+    console.warn("Marketing opt-out default restore skipped:", err);
+  }
   try {
     await backfillCallCustomers();
   } catch (err) {

@@ -6,7 +6,17 @@ import {
   getTwilioWebhookUrlCandidates,
   isValidTwilioWebhookRequest,
 } from "@/lib/inbox/twilio";
-import { isContactBlocked, normalizePhone, blockCustomer } from "@/lib/inbox/contacts";
+import { isContactBlocked, normalizePhone, blockCustomer, unblockContactByPhone } from "@/lib/inbox/contacts";
+import {
+  optInCustomerMarketingSms,
+  optOutCustomerMarketingSms,
+} from "@/lib/marketing/opt-out";
+import {
+  isExactSmsStart,
+  isExactSmsStop,
+  marketingSmsStartReply,
+  marketingSmsStopReply,
+} from "@/lib/inbox/sms-opt-keywords";
 import {
   findExistingSmsConversationAnyScope,
   findOrCreateSmsConversation,
@@ -54,13 +64,16 @@ export async function POST(request: NextRequest) {
     const company = inboundLine.company;
 
     const normalizedFrom = normalizePhone(from);
-    const normalizedBody = body.trim().toUpperCase();
+    const companyName = company.name?.trim() || "us";
 
-    if (
-      normalizedBody &&
-      ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(normalizedBody)
-    ) {
+    if (isExactSmsStop(body)) {
       const customer = await findCustomerByPhone(company.id, normalizedFrom);
+      if (customer) {
+        await optOutCustomerMarketingSms({
+          customerId: customer.id,
+          companyId: company.id,
+        });
+      }
       const admin = await prisma.user.findFirst({
         where: { companyId: company.id, role: "ADMIN" },
         select: { id: true },
@@ -74,10 +87,19 @@ export async function POST(request: NextRequest) {
           reason: "SMS STOP opt-out",
         });
       }
-      return new NextResponse(
-        '<?xml version="1.0" encoding="UTF-8"?><Response><Message>You have been unsubscribed.</Message></Response>',
-        { headers: { "Content-Type": "text/xml" } }
-      );
+      return twilioSmsReply(marketingSmsStopReply(companyName));
+    }
+
+    if (isExactSmsStart(body)) {
+      const customer = await findCustomerByPhone(company.id, normalizedFrom);
+      if (customer) {
+        await optInCustomerMarketingSms({
+          customerId: customer.id,
+          companyId: company.id,
+        });
+      }
+      await unblockContactByPhone(company.id, normalizedFrom);
+      return twilioSmsReply(marketingSmsStartReply(companyName));
     }
 
     const blocked = await isContactBlocked(company.id, normalizedFrom, null);
@@ -294,4 +316,15 @@ export async function POST(request: NextRequest) {
     console.error("Twilio SMS inbound handler error", error);
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
+}
+
+function twilioSmsReply(message: string) {
+  const escaped = message
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return new NextResponse(
+    `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escaped}</Message></Response>`,
+    { headers: { "Content-Type": "text/xml" } }
+  );
 }

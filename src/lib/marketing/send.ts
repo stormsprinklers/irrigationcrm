@@ -15,13 +15,10 @@ import {
 } from "@/lib/communications/send-window";
 import { addZonedCalendarDays, startOfZonedDay } from "@/lib/datetime/zoned";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
-import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
 import { buildCampaignStats, mergeCampaignStatsJson } from "@/lib/marketing/stats";
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
-import {
-  appendMarketingUnsubscribeFooter,
-  marketingUnsubscribeUrl,
-} from "@/lib/marketing/unsubscribe";
+import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
+import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
   resolveMarketingSmsFrom,
@@ -280,31 +277,28 @@ async function sendToRecipient(
     return false;
   }
 
-  let rawHtml =
-    bodyHtml ?? `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`;
+  const unsubscribeUrl = recipient.customerId
+    ? marketingUnsubscribeUrl(
+        recipient.customerId,
+        campaign.companyId,
+        campaign.company.customerBaseUrl
+      )
+    : `mailto:${fromEmail}?subject=unsubscribe%20marketing`;
 
-  if (recipient.customerId) {
-    const unsubUrl = marketingUnsubscribeUrl(
-      recipient.customerId,
-      campaign.companyId,
-      campaign.company.customerBaseUrl
-    );
-    rawHtml = appendMarketingUnsubscribeFooter(rawHtml, unsubUrl);
-  } else {
-    rawHtml = appendMarketingUnsubscribeFooter(
-      rawHtml,
-      `mailto:${fromEmail}?subject=unsubscribe%20marketing`
-    );
-  }
-
-  const html = rewriteTrackedLinks(rawHtml, recipient.id, campaign.company.customerBaseUrl);
+  const outbound = buildMarketingEmailPayload({
+    bodyHtml,
+    bodyText,
+    unsubscribeUrl,
+    recipientId: recipient.id,
+    publicBaseUrl: campaign.company.customerBaseUrl,
+  });
 
   const response = await sendCompanyEmail(branding, {
     companyId: campaign.companyId,
     to: [email],
     subject,
-    text: bodyText,
-    html,
+    text: outbound.text,
+    html: outbound.html,
   });
   await prisma.campaignRecipient.update({
     where: { id: recipient.id },

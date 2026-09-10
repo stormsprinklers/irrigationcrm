@@ -6,11 +6,22 @@ import {
   type CompanySignatureFields,
 } from "@/lib/inbox/company-email-signature";
 
-export const EMAIL_TEMPLATE_IDS = ["announcement", "offer", "letter"] as const;
+export const EMAIL_TEMPLATE_IDS = ["announcement", "offer", "letter", "plain"] as const;
 export type EmailTemplateId = (typeof EMAIL_TEMPLATE_IDS)[number];
 
 export function isEmailTemplateId(value: unknown): value is EmailTemplateId {
   return typeof value === "string" && (EMAIL_TEMPLATE_IDS as readonly string[]).includes(value);
+}
+
+export function isPlainTextEmailTemplate(id: EmailTemplateId | string | null | undefined) {
+  return id === "plain";
+}
+
+/** True when the stored body is an HTML email (not empty / not plain text). */
+export function isHtmlEmailBody(html: string | null | undefined) {
+  const value = html?.trim() ?? "";
+  if (!value) return false;
+  return /<[a-z][\s\S]*>/i.test(value);
 }
 
 export type EmailTemplateMeta = {
@@ -34,6 +45,11 @@ export const EMAIL_TEMPLATES: EmailTemplateMeta[] = [
     id: "letter",
     name: "Letter to homeowner",
     description: "Simple plain letter with a signature block (logo, company name, contact info).",
+  },
+  {
+    id: "plain",
+    name: "Plain text",
+    description: "No HTML or layout — just the words, like a regular unformatted email.",
   },
 ];
 
@@ -128,6 +144,8 @@ export function renderEmailTemplateSkeleton(params: {
   mode?: "preview" | "ai";
   company?: EmailTemplateCompanyInfo;
 }): string {
+  if (params.templateId === "plain") return "";
+
   const mode = params.mode ?? "ai";
   const isPreview = mode === "preview";
   const c = colorsFromPalette(params.palette);

@@ -3,15 +3,12 @@ import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
-import {
-  appendMarketingUnsubscribeFooter,
-  marketingUnsubscribeUrl,
-} from "@/lib/marketing/unsubscribe";
+import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
   resolveMarketingSmsFrom,
 } from "@/lib/marketing/sender";
-import { rewriteTrackedLinks } from "@/lib/marketing/link-tracking";
+import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 
@@ -133,12 +130,17 @@ export async function sendCampaignMessage(params: {
       return false;
     }
 
-    let rawHtml = bodyHtml ?? `<p>${bodyText.replace(/\n/g, "<br/>")}</p>`;
-    rawHtml = appendMarketingUnsubscribeFooter(
-      rawHtml,
-      marketingUnsubscribeUrl(customer.id, campaign.companyId, campaign.company.customerBaseUrl)
-    );
-    const html = rewriteTrackedLinks(rawHtml, recipient.id, campaign.company.customerBaseUrl);
+    const outbound = buildMarketingEmailPayload({
+      bodyHtml,
+      bodyText,
+      unsubscribeUrl: marketingUnsubscribeUrl(
+        customer.id,
+        campaign.companyId,
+        campaign.company.customerBaseUrl
+      ),
+      recipientId: recipient.id,
+      publicBaseUrl: campaign.company.customerBaseUrl,
+    });
 
     const response = await sendCompanyEmail(
       {
@@ -151,8 +153,8 @@ export async function sendCampaignMessage(params: {
         companyId: campaign.companyId,
         to: [customer.email],
         subject: subject || campaign.name,
-        text: bodyText,
-        html,
+        text: outbound.text,
+        html: outbound.html,
       }
     );
 

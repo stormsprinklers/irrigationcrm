@@ -4,6 +4,8 @@ import {
   prefsAllOptedOut,
   verifyMessagingPreferencesToken,
 } from "@/lib/marketing/unsubscribe";
+import { CampaignChannel } from "@prisma/client";
+import { unenrollCustomerFromCampaigns } from "@/lib/marketing/opt-out";
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
@@ -100,23 +102,19 @@ export async function POST(request: NextRequest) {
   }
 
   if (marketingEmailOptOut) {
-    await prisma.campaignEnrollment.updateMany({
-      where: {
-        customerId: verified.customerId,
-        status: "ACTIVE",
-        campaign: { companyId: verified.companyId, type: "DRIP", channel: "EMAIL" },
-      },
-      data: { status: "CANCELLED" },
+    await unenrollCustomerFromCampaigns({
+      customerId: verified.customerId,
+      companyId: verified.companyId,
+      channel: CampaignChannel.EMAIL,
+      reason: "Marketing email opt-out",
     });
   }
   if (marketingSmsOptOut) {
-    await prisma.campaignEnrollment.updateMany({
-      where: {
-        customerId: verified.customerId,
-        status: "ACTIVE",
-        campaign: { companyId: verified.companyId, type: "DRIP", channel: "SMS" },
-      },
-      data: { status: "CANCELLED" },
+    await unenrollCustomerFromCampaigns({
+      customerId: verified.customerId,
+      companyId: verified.companyId,
+      channel: CampaignChannel.SMS,
+      reason: "Marketing SMS opt-out",
     });
   }
 

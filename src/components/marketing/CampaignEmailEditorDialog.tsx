@@ -10,6 +10,7 @@ type Props = {
   open: boolean;
   subject: string;
   bodyHtml: string;
+  bodyText?: string;
   aiPrompt: string;
   onClose: () => void;
   onSubjectChange: (subject: string) => void;
@@ -21,6 +22,7 @@ export function CampaignEmailEditorDialog({
   open,
   subject,
   bodyHtml,
+  bodyText,
   aiPrompt,
   onClose,
   onSubjectChange,
@@ -87,6 +89,7 @@ export function CampaignEmailEditorDialog({
           <EmailCampaignEditor
             subject={subject}
             bodyHtml={bodyHtml}
+            bodyText={bodyText}
             aiPrompt={aiPrompt}
             defaultExpanded={false}
             hideExpandToggle

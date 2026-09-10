@@ -20,6 +20,7 @@ export type ParsedWaitConfig = {
   action: WaitAction;
   usesReply: boolean;
   usesAction: boolean;
+  timeoutEnabled: boolean;
   hasTimeout: boolean;
 };
 
@@ -83,6 +84,14 @@ export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
       if (!config.delayUnit && delayAmount === 1) delayUnit = mode === "delay" ? "days" : delayUnit;
     }
   }
+  if (
+    (mode === "reply" || mode === "action") &&
+    Boolean(config.timeoutEnabled) &&
+    delayAmount === 0
+  ) {
+    delayAmount = 2;
+    if (!config.delayUnit) delayUnit = "days";
+  }
 
   const sendAtRaw =
     mode === "date" && typeof config.sendAt === "string" && config.sendAt.trim()
@@ -94,7 +103,11 @@ export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
   const action = asAction(config.action);
   const usesReply = mode === "reply" || mode === "delay_or_reply";
   const usesAction = mode === "action";
-  const hasTimeout = mode === "delay" || mode === "date" || mode === "delay_or_reply";
+  const timeoutEnabled =
+    mode === "delay_or_reply" ||
+    ((mode === "reply" || mode === "action") && Boolean(config.timeoutEnabled));
+  const hasTimeout =
+    mode === "delay" || mode === "date" || mode === "delay_or_reply" || timeoutEnabled;
 
   return {
     mode,
@@ -106,6 +119,7 @@ export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
     action,
     usesReply,
     usesAction,
+    timeoutEnabled,
     hasTimeout,
   };
 }
@@ -122,7 +136,11 @@ export function waitTimeoutAt(
   if (wait.mode === "date") {
     return parseCampaignInstant(wait.sendAtRaw, timeZone) ?? wait.sendAt;
   }
-  if (wait.mode === "delay" || wait.mode === "delay_or_reply") {
+  if (
+    wait.mode === "delay" ||
+    wait.mode === "delay_or_reply" ||
+    ((wait.mode === "reply" || wait.mode === "action") && wait.timeoutEnabled)
+  ) {
     if (wait.delayUnit === "days") {
       return addCampaignWaitDays(from, wait.delayAmount, timeZone);
     }
@@ -199,8 +217,14 @@ export function waitSummary(config: unknown, timeZone?: string | null): string {
         })}`
       : "Until a specific date/time";
   }
-  if (wait.mode === "reply") return `Until ${keywordLabel}`;
-  if (wait.mode === "action") return `Until ${waitActionLabel(wait.action)}`;
+  if (wait.mode === "reply") {
+    if (wait.timeoutEnabled) return `Until ${keywordLabel} or ${durationLabel}`;
+    return `Until ${keywordLabel}`;
+  }
+  if (wait.mode === "action") {
+    if (wait.timeoutEnabled) return `Until ${waitActionLabel(wait.action)} or ${durationLabel}`;
+    return `Until ${waitActionLabel(wait.action)}`;
+  }
   if (wait.mode === "delay_or_reply") {
     return `Until ${durationLabel} or ${keywordLabel}`;
   }

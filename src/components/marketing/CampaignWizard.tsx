@@ -215,6 +215,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           <EmailCampaignEditor
             subject={form.subject}
             bodyHtml={form.bodyHtml}
+            bodyText={form.bodyText}
             aiPrompt={form.aiPrompt}
             onSubjectChange={(subject) => update("subject", subject)}
             onAiPromptChange={(aiPrompt) => update("aiPrompt", aiPrompt)}

@@ -26,6 +26,32 @@ export async function applyWinterizationSeasonTag(
   });
 }
 
+export async function removeWinterizationSeasonTag(
+  customerId: string | null | undefined,
+  seasonYear = winterizationSeasonYear()
+) {
+  if (!customerId) return;
+  const tag = winterizationSeasonTag(seasonYear);
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, tags: true },
+  });
+  if (!customer || !alreadyHasTag(customer.tags, tag)) return;
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: { tags: customer.tags.filter((item) => item.toLowerCase() !== tag.toLowerCase()) },
+  });
+}
+
+export async function removeWinterizationSeasonTags(
+  customerIds: Array<string | null | undefined>,
+  seasonYear = winterizationSeasonYear()
+) {
+  const ids = [...new Set(customerIds.filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return;
+  await Promise.all(ids.map((id) => removeWinterizationSeasonTag(id, seasonYear)));
+}
+
 export async function ensureWinterizationSeasonTags(
   customerIds: Array<string | null | undefined>,
   seasonYear = winterizationSeasonYear()

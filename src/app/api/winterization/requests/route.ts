@@ -21,11 +21,12 @@ function serializeRequest(row: {
   quotedPrice: { toString(): string } | number | null;
   weekLabel: string;
   weekStart: Date;
+  scheduledDate: Date | null;
   schedulingNotes: string | null;
   shutoffValveLocation: string | null;
   timerLocation: string | null;
   customerId: string | null;
-  customer?: { name: string } | null;
+  customer?: { name: string; city: string | null } | null;
   createdAt: Date;
 }) {
   return {
@@ -35,12 +36,13 @@ function serializeRequest(row: {
     phone: row.phone,
     email: row.email,
     address: row.address,
-    city: row.city,
+    city: row.city?.trim() || row.customer?.city?.trim() || null,
     zip: row.zip,
     zoneCount: row.zoneCount,
     quotedPrice: row.quotedPrice != null ? Number(row.quotedPrice) : null,
     weekLabel: row.weekLabel,
     weekStart: row.weekStart.toISOString(),
+    scheduledDate: row.scheduledDate ? row.scheduledDate.toISOString().slice(0, 10) : null,
     schedulingNotes: row.schedulingNotes,
     shutoffValveLocation: row.shutoffValveLocation,
     timerLocation: row.timerLocation,
@@ -72,10 +74,10 @@ export async function GET(request: NextRequest) {
           : { status: { in: ["NEED_BOOKING", "SCHEDULED"] } }),
       },
       include: {
-        customer: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true, city: true } },
       },
       orderBy: [{ weekStart: "asc" }, { createdAt: "asc" }],
-      take: 200,
+      take: 500,
     });
 
     await ensureWinterizationSeasonTags(
@@ -83,10 +85,19 @@ export async function GET(request: NextRequest) {
       seasonYear
     ).catch(() => undefined);
 
+    const cities = [
+      ...new Set(
+        rows
+          .map((row) => (row.city?.trim() || row.customer?.city?.trim() || ""))
+          .filter(Boolean)
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
     return NextResponse.json({
       seasonYear,
       seasonTag: winterizationSeasonTag(seasonYear),
       weeks: listWinterizationWeeks(),
+      cities,
       requests: rows.map(serializeRequest),
     });
   } catch {

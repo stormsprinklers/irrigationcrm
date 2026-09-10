@@ -3,6 +3,7 @@ import { requireOpenAIApiKey } from "@/lib/openai/client";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import {
   isEmailTemplateId,
+  isPlainTextEmailTemplate,
   renderEmailTemplateSkeleton,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
@@ -59,6 +60,8 @@ export async function generateCampaignEmail(params: {
   ctaUrl?: string;
   /** When set, AI revises this HTML instead of generating from scratch. */
   existingHtml?: string;
+  /** When the template is plain text, AI revises this body instead of HTML. */
+  existingText?: string;
   brandPalette?: EmailBrandPalette;
   templateId?: EmailTemplateId | string | null;
   allowedLinks?: CampaignAllowedLink[];
@@ -73,9 +76,12 @@ export async function generateCampaignEmail(params: {
   companyZip?: string | null;
 }) {
   const apiKey = requireOpenAIApiKey();
-  const existing = params.existingHtml?.trim() ?? "";
-  const isEdit = Boolean(existing);
   const templateId = isEmailTemplateId(params.templateId) ? params.templateId : null;
+  const isPlain = isPlainTextEmailTemplate(templateId);
+  const existingHtml = params.existingHtml?.trim() ?? "";
+  const existingText = params.existingText?.trim() ?? "";
+  const existing = isPlain ? existingText : existingHtml;
+  const isEdit = Boolean(existing);
   const allowedLinks = params.allowedLinks ?? [];
   const imageUrls = (params.imageUrls ?? []).filter(Boolean);
   const websiteRaw = params.companyWebsite?.trim();
@@ -115,7 +121,7 @@ ${formatAllowedLinks(allowedLinks)}
   }.`;
 
   const skeleton =
-    !isEdit && templateId
+    !isEdit && templateId && !isPlain
       ? renderEmailTemplateSkeleton({
           templateId,
           companyName: params.companyName,
@@ -137,7 +143,30 @@ ${formatAllowedLinks(allowedLinks)}
         })
       : null;
 
-  const system = isEdit
+  const plainLinkRules = `CRITICAL LINK RULES:
+- You MUST NOT invent, guess, or fabricate any URLs.
+- You may ONLY include these allowed links, written as full URLs in the text:
+${formatAllowedLinks(allowedLinks)}
+- If no suitable link exists, mention the action in words without a URL.`;
+
+  const system = isPlain
+    ? isEdit
+      ? `You are an expert email marketer for ${params.companyName}.
+Brand voice: friendly, upbeat, and professional.
+You will receive an EXISTING plain-text email and an edit request.
+Return ONLY valid JSON with keys: subject, bodyText.
+bodyText must be unformatted plain text — no HTML, no markdown, no tables, no CSS.
+Apply the user's requested changes carefully. Keep line breaks readable.
+${plainLinkRules}
+Do not include markdown fences or extra commentary.`
+      : `You are an expert email marketer for ${params.companyName}.
+Brand voice: friendly, upbeat, and professional.
+Return ONLY valid JSON with keys: subject, bodyText.
+bodyText must be a complete unformatted plain-text email — no HTML, no markdown, no tables, no CSS, no signature block unless the brief asks for one.
+Write like a normal email: short greeting, body paragraphs separated by blank lines, optional sign-off.
+${plainLinkRules}
+Do not include markdown fences or extra commentary.`
+    : isEdit
     ? `You are an expert email marketer and HTML email developer for ${params.companyName}.
 Brand voice: friendly, upbeat, and professional.
 Brand colors (use these hex values): primary ${primary}, secondary ${secondary}, soft ${soft}, panel ${panel}, accent ${accent}. Full palette: ${paletteList}.
@@ -163,7 +192,23 @@ ${
 ${linkRules}
 Do not include markdown fences or extra commentary.`;
 
-  const user = isEdit
+  const user = isPlain
+    ? isEdit
+      ? `Edit this plain-text marketing email for ${params.companyName}.
+${params.subject ? `Current subject: ${params.subject}` : ""}
+
+Edit request:
+${params.prompt}
+
+Existing text:
+${existing}`
+      : `Write a plain-text marketing email (no HTML).
+Company: ${params.companyName}
+${params.subject ? `Suggested subject: ${params.subject}` : ""}
+
+Campaign brief:
+${params.prompt}`
+    : isEdit
     ? `Edit this marketing email for ${params.companyName}.
 ${params.subject ? `Current subject: ${params.subject}` : ""}
 
@@ -210,7 +255,16 @@ ${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
   const raw = data.choices?.[0]?.message?.content?.trim();
   if (!raw) throw new Error("No content from OpenAI");
 
-  const parsed = JSON.parse(raw) as { subject?: string; bodyHtml?: string };
+  const parsed = JSON.parse(raw) as { subject?: string; bodyHtml?: string; bodyText?: string };
+  const subject = parsed.subject ?? params.subject ?? "News from " + params.companyName;
+
+  if (isPlain) {
+    let bodyText = (parsed.bodyText ?? "").trim();
+    if (!bodyText && parsed.bodyHtml) bodyText = htmlToPlainText(parsed.bodyHtml);
+    if (!bodyText) throw new Error("AI returned empty email text");
+    return { subject, bodyHtml: "", bodyText };
+  }
+
   let bodyHtml = (parsed.bodyHtml ?? "").trim();
   if (!bodyHtml) throw new Error("AI returned empty HTML");
 
@@ -220,10 +274,7 @@ ${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
     bodyHtml = wrapBrandedEmail(bodyHtml, params, { primary, secondary });
   }
 
-  const subject = parsed.subject ?? params.subject ?? "News from " + params.companyName;
-  const bodyText = htmlToPlainText(bodyHtml);
-
-  return { subject, bodyHtml, bodyText };
+  return { subject, bodyHtml, bodyText: htmlToPlainText(bodyHtml) };
 }
 
 function looksLikeFullEmail(html: string) {
