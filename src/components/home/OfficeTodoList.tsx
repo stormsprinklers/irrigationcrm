@@ -12,8 +12,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import {
-  OFFICE_TODO_RECURRENCE_LABELS,
+  OFFICE_TODO_WEEKDAYS,
   canUseOfficeTodos,
+  defaultRecurrenceEvery,
+  officeTodoRecurrenceHint,
+  officeTodoRecurrenceLabel,
   type OfficeTodoDTO,
   type OfficeTodoRecurrence,
 } from "@/lib/home/todo-types";
@@ -36,6 +39,7 @@ export function OfficeTodoList() {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [recurrence, setRecurrence] = useState<OfficeTodoRecurrence>("NONE");
+  const [recurrenceEvery, setRecurrenceEvery] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -56,6 +60,7 @@ export function OfficeTodoList() {
 
   const openTodos = useMemo(() => todos.filter((todo) => !todo.completedAt), [todos]);
   const doneTodos = useMemo(() => todos.filter((todo) => todo.completedAt), [todos]);
+  const recurrenceHint = officeTodoRecurrenceHint(recurrence, recurrenceEvery);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -72,6 +77,7 @@ export function OfficeTodoList() {
           title: title.trim(),
           notes: notes.trim() || undefined,
           recurrence,
+          recurrenceEvery,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -80,6 +86,7 @@ export function OfficeTodoList() {
       setTitle("");
       setNotes("");
       setRecurrence("NONE");
+      setRecurrenceEvery(null);
       setAdding(false);
       toast.success("Task added for the whole CSR team");
     } catch (err) {
@@ -165,12 +172,59 @@ export function OfficeTodoList() {
               <select
                 className={selectClassName}
                 value={recurrence}
-                onChange={(e) => setRecurrence(e.target.value as OfficeTodoRecurrence)}
+                onChange={(e) => {
+                  const next = e.target.value as OfficeTodoRecurrence;
+                  setRecurrence(next);
+                  setRecurrenceEvery(defaultRecurrenceEvery(next));
+                }}
               >
-                <option value="NONE">One-time</option>
-                <option value="DAILY">Repeats daily</option>
-                <option value="WEEKLY">Repeats weekly</option>
+                <option value="NONE">Does not repeat</option>
+                <option value="EVERY_N_DAYS">Every … days</option>
+                <option value="WEEKLY_ON_DAY">Every week on …</option>
+                <option value="MONTHLY_ON_DAY">Every … of the month</option>
               </select>
+              {recurrence === "EVERY_N_DAYS" ? (
+                <>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    className="h-9 w-[4.5rem]"
+                    aria-label="Repeat every how many days"
+                    value={recurrenceEvery ?? 1}
+                    onChange={(e) => setRecurrenceEvery(Number(e.target.value) || 1)}
+                  />
+                  <span className="text-sm text-muted-foreground">days</span>
+                </>
+              ) : null}
+              {recurrence === "WEEKLY_ON_DAY" ? (
+                <select
+                  className={selectClassName}
+                  aria-label="Weekday"
+                  value={recurrenceEvery ?? 1}
+                  onChange={(e) => setRecurrenceEvery(Number(e.target.value))}
+                >
+                  {OFFICE_TODO_WEEKDAYS.map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {recurrence === "MONTHLY_ON_DAY" ? (
+                <>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    className="h-9 w-[4.5rem]"
+                    aria-label="Day of the month"
+                    value={recurrenceEvery ?? 1}
+                    onChange={(e) => setRecurrenceEvery(Number(e.target.value) || 1)}
+                  />
+                  <span className="text-sm text-muted-foreground">of the month</span>
+                </>
+              ) : null}
               <Button type="submit" size="sm" disabled={saving}>
                 {saving ? "Adding..." : "Add"}
               </Button>
@@ -183,17 +237,14 @@ export function OfficeTodoList() {
                   setTitle("");
                   setNotes("");
                   setRecurrence("NONE");
+                  setRecurrenceEvery(null);
                 }}
               >
                 Cancel
               </Button>
             </div>
-            {recurrence !== "NONE" ? (
-              <p className="text-xs text-muted-foreground">
-                {recurrence === "DAILY"
-                  ? "Comes back each morning after it is checked off."
-                  : "Comes back at the start of next week after it is checked off."}
-              </p>
+            {recurrenceHint ? (
+              <p className="text-xs text-muted-foreground">{recurrenceHint}</p>
             ) : null}
           </form>
         ) : null}
@@ -286,7 +337,9 @@ function TodoRow({
         {todo.notes ? <p className="text-xs text-muted-foreground">{todo.notes}</p> : null}
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {todo.recurrence !== "NONE" ? (
-            <Badge variant="secondary">{OFFICE_TODO_RECURRENCE_LABELS[todo.recurrence]}</Badge>
+            <Badge variant="secondary">
+              {officeTodoRecurrenceLabel(todo.recurrence, todo.recurrenceEvery)}
+            </Badge>
           ) : null}
           {done && todo.completedByName && todo.completedAt ? (
             <span className="text-[11px] text-muted-foreground">

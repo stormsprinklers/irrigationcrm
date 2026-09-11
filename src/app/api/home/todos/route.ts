@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       title,
       notes: typeof body.notes === "string" ? body.notes : null,
       recurrence: body.recurrence,
+      recurrenceEvery: body.recurrenceEvery,
     });
     return NextResponse.json(todo, { status: 201 });
   } catch (error) {

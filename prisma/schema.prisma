@@ -112,6 +112,9 @@ enum OfficeTodoRecurrence {
   NONE
   DAILY
   WEEKLY
+  EVERY_N_DAYS
+  WEEKLY_ON_DAY
+  MONTHLY_ON_DAY
 }
 
 enum PayType {
@@ -2939,17 +2942,19 @@ model EmployeeWorkSchedule {
 }
 
 model OfficeTodo {
-  id            String               @id @default(cuid())
-  companyId     String
-  title         String
-  notes         String?
-  sortOrder     Int                  @default(0)
-  recurrence    OfficeTodoRecurrence @default(NONE)
-  completedAt   DateTime?
-  completedById String?
-  createdById   String
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  id               String               @id @default(cuid())
+  companyId        String
+  title            String
+  notes            String?
+  sortOrder        Int                  @default(0)
+  recurrence       OfficeTodoRecurrence @default(NONE)
+  /// Days (EVERY_N_DAYS), weekday 0–6 Sun–Sat (WEEKLY_ON_DAY), or day of month 1–31 (MONTHLY_ON_DAY).
+  recurrenceEvery  Int?
+  completedAt      DateTime?
+  completedById    String?
+  createdById      String
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdBy   User    @relation("OfficeTodoCreator", fields: [createdById], references: [id], onDelete: Cascade)

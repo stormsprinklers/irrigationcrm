@@ -1,6 +1,7 @@
 import { OfficeTodoRecurrence } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  parseOfficeTodoRecurrence,
   shouldReopenRecurringTodo,
   type OfficeTodoDTO,
   type OfficeTodoRecurrence as Recurrence,
@@ -18,6 +19,7 @@ type TodoRow = {
   title: string;
   notes: string | null;
   recurrence: OfficeTodoRecurrence;
+  recurrenceEvery: number | null;
   completedAt: Date | null;
   createdAt: Date;
   createdBy: { name: string };
@@ -30,6 +32,7 @@ export function serializeOfficeTodo(row: TodoRow): OfficeTodoDTO {
     title: row.title,
     notes: row.notes,
     recurrence: row.recurrence,
+    recurrenceEvery: row.recurrenceEvery,
     completedAt: row.completedAt?.toISOString() ?? null,
     completedByName: row.completedBy?.name ?? null,
     createdByName: row.createdBy.name,
@@ -49,15 +52,16 @@ async function reopenDueRecurringTodos(companyId: string) {
     where: {
       companyId,
       completedAt: { not: null },
-      recurrence: { in: [OfficeTodoRecurrence.DAILY, OfficeTodoRecurrence.WEEKLY] },
+      recurrence: { not: OfficeTodoRecurrence.NONE },
     },
-    select: { id: true, recurrence: true, completedAt: true },
+    select: { id: true, recurrence: true, recurrenceEvery: true, completedAt: true },
   });
 
   const reopenIds = completedRecurring
     .filter((todo) =>
       shouldReopenRecurringTodo({
         recurrence: todo.recurrence,
+        recurrenceEvery: todo.recurrenceEvery,
         completedAt: todo.completedAt,
         timezone,
         now,
@@ -88,15 +92,20 @@ export async function listOfficeTodos(companyId: string) {
 export async function createOfficeTodo(
   companyId: string,
   createdById: string,
-  input: { title: string; notes?: string | null; recurrence?: Recurrence }
+  input: {
+    title: string;
+    notes?: string | null;
+    recurrence?: Recurrence;
+    recurrenceEvery?: number | null;
+  }
 ) {
   const title = input.title.trim();
   if (!title) throw new Error("Title is required");
 
-  const recurrence =
-    input.recurrence === "DAILY" || input.recurrence === "WEEKLY"
-      ? input.recurrence
-      : OfficeTodoRecurrence.NONE;
+  const { recurrence, recurrenceEvery } = parseOfficeTodoRecurrence(
+    input.recurrence,
+    input.recurrenceEvery
+  );
 
   const last = await prisma.officeTodo.findFirst({
     where: { companyId },
@@ -111,6 +120,7 @@ export async function createOfficeTodo(
       title,
       notes: input.notes?.trim() || null,
       recurrence,
+      recurrenceEvery,
       sortOrder: (last?.sortOrder ?? 0) + 1,
     },
     include: todoInclude,

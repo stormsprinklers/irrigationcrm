@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         sentAt: c.sentAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
         recipientCount: uniqueCampaignRecipientCount(c.recipients),
-        sendCount: stats.total,
+        sendCount: stats.total ?? 0,
         delivered: stats.delivered,
         opened: stats.opened ?? 0,
         clicked: stats.clicked ?? 0,
