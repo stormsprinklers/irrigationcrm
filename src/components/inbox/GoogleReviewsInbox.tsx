@@ -1,8 +1,8 @@
 "use client";
 
 import { format } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Loader2, Sparkles, Star } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
@@ -25,6 +25,13 @@ function Stars({ count }: { count: number }) {
 }
 
 const UNKNOWN_ASSIGNEE_ID = "__unknown__";
+const UNKNOWN_ASSIGNEE_LABEL = "None / Unknown";
+
+type ReviewTechnician = {
+  id: string;
+  name: string;
+  status?: "ACTIVE" | "ARCHIVED" | string;
+};
 
 type NeedsAssignmentReview = {
   id: string;
@@ -58,7 +65,7 @@ export function GoogleReviewsInbox() {
   const [assignmentsByGoogleReviewId, setAssignmentsByGoogleReviewId] = useState<
     Record<string, Array<{ userId: string; name: string; share: number }>>
   >({});
-  const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([]);
+  const [technicians, setTechnicians] = useState<ReviewTechnician[]>([]);
 
   const loadAssignments = useCallback(async () => {
     const res = await fetch("/api/marketing/google-business/reviews/assignments");
@@ -251,8 +258,8 @@ export function GoogleReviewsInbox() {
                       {card.assigned
                         .map((row) =>
                           row.userId === UNKNOWN_ASSIGNEE_ID
-                            ? "Unknown"
-                            : `${row.name} (${row.share.toFixed(2)})`
+                            ? "None / Unknown"
+                            : `${row.name}${row.share ? ` (${row.share.toFixed(2)})` : ""}`
                         )
                         .join(", ")}
                     </p>
@@ -340,6 +347,151 @@ export function GoogleReviewsInbox() {
   );
 }
 
+function technicianLabel(tech: ReviewTechnician) {
+  return tech.status === "ARCHIVED" ? `${tech.name} (archived)` : tech.name;
+}
+
+function ReviewAssigneeSearch({
+  technicians,
+  selected,
+  onToggle,
+}: {
+  technicians: ReviewTechnician[];
+  selected: string[];
+  onToggle: (userId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const selectedTechs = technicians.filter((tech) => selected.includes(tech.id));
+  const unknownSelected = selected.includes(UNKNOWN_ASSIGNEE_ID);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const people = technicians.filter((tech) => {
+      if (!q) return true;
+      return technicianLabel(tech).toLowerCase().includes(q);
+    });
+    return people;
+  }, [query, technicians]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {unknownSelected ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-background px-2 py-0.5 text-xs">
+            {UNKNOWN_ASSIGNEE_LABEL}
+            <button
+              type="button"
+              className="rounded-full p-0.5 hover:bg-muted"
+              aria-label="Clear None / Unknown"
+              onClick={() => onToggle(UNKNOWN_ASSIGNEE_ID)}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ) : null}
+        {selectedTechs.map((tech) => (
+          <span
+            key={tech.id}
+            className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-background px-2 py-0.5 text-xs"
+          >
+            {technicianLabel(tech)}
+            <button
+              type="button"
+              className="rounded-full p-0.5 hover:bg-muted"
+              aria-label={`Remove ${tech.name}`}
+              onClick={() => onToggle(tech.id)}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <div className="relative" ref={rootRef}>
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search technicians…"
+          className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+        {open ? (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 cursor-default"
+              aria-label="Close technician list"
+              onClick={() => setOpen(false)}
+            />
+            <ul
+              className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
+              role="listbox"
+            >
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={unknownSelected}
+                  onClick={() => {
+                    onToggle(UNKNOWN_ASSIGNEE_ID);
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full px-3 py-2 text-left text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                    unknownSelected && "bg-highlight-panel"
+                  )}
+                >
+                  {UNKNOWN_ASSIGNEE_LABEL}
+                </button>
+              </li>
+              {results.length === 0 ? (
+                <li className="px-3 py-2 text-sm text-muted-foreground">No technicians found.</li>
+              ) : (
+                results.map((tech) => {
+                  const checked = selected.includes(tech.id);
+                  return (
+                    <li key={tech.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={checked}
+                        onClick={() => {
+                          onToggle(tech.id);
+                          setQuery("");
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+                          checked && "bg-highlight-panel"
+                        )}
+                      >
+                        <span>{tech.name}</span>
+                        {tech.status === "ARCHIVED" ? (
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Archived
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function AssignmentPanel({
   review,
   technicians,
@@ -347,7 +499,7 @@ function AssignmentPanel({
   onAssigned,
 }: {
   review: NeedsAssignmentReview;
-  technicians: Array<{ id: string; name: string }>;
+  technicians: ReviewTechnician[];
   defaultOpen: boolean;
   onAssigned: () => void;
 }) {
@@ -361,7 +513,7 @@ function AssignmentPanel({
 
   async function assign() {
     if (!selected.length) {
-      toast.error("Select at least one technician, or Unknown");
+      toast.error("Select at least one technician, or None / Unknown");
       return;
     }
     const unknown = selected.includes(UNKNOWN_ASSIGNEE_ID);
@@ -378,7 +530,7 @@ function AssignmentPanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to assign review");
-      toast.success(unknown ? "Marked as unknown" : "Review assigned");
+      toast.success(unknown ? "Marked as none / unknown" : "Review assigned");
       onAssigned();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to assign review");
@@ -410,7 +562,7 @@ function AssignmentPanel({
         <span>
           <span className="block text-sm font-medium text-amber-950">Assign credit</span>
           <span className="block text-xs text-amber-900/80">
-            Could not match a technician automatically — pick who should get credit, or Unknown.
+            Could not match a technician automatically — search who should get credit, or None / Unknown.
           </span>
         </span>
         <ChevronDown
@@ -419,35 +571,14 @@ function AssignmentPanel({
       </button>
       {open ? (
         <div className="space-y-3 border-t border-amber-200 px-3 py-3">
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2 py-1 text-xs">
-              <input
-                type="checkbox"
-                checked={selected.includes(UNKNOWN_ASSIGNEE_ID)}
-                onChange={() => toggleTech(UNKNOWN_ASSIGNEE_ID)}
-              />
-              Unknown
-            </label>
-            {technicians.map((tech) => {
-              const checked = selected.includes(tech.id);
-              return (
-                <label
-                  key={tech.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-white px-2 py-1 text-xs"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleTech(tech.id)}
-                  />
-                  {tech.name}
-                </label>
-              );
-            })}
-          </div>
+          <ReviewAssigneeSearch
+            technicians={technicians}
+            selected={selected}
+            onToggle={toggleTech}
+          />
           {technicians.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No technicians available — you can still mark this as Unknown.
+              No technicians on file — you can still pick None / Unknown.
             </p>
           ) : null}
           <Button type="button" size="sm" disabled={saving} onClick={() => void assign()}>

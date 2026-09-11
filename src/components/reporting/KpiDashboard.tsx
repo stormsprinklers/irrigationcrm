@@ -8,6 +8,7 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
 import { StripePayoutsCard } from "@/components/reporting/StripePayoutsCard";
+import { OfficeTodoList } from "@/components/home/OfficeTodoList";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
   ADMIN_HOME_KPI_PRESETS,
@@ -214,9 +215,12 @@ export function KpiDashboard({
       />
 
       {isHome ? (
-        <div className="mb-8">
-          <StripePayoutsCard />
-        </div>
+        <>
+          <div className="mb-8">
+            <StripePayoutsCard />
+          </div>
+          <OfficeTodoList />
+        </>
       ) : null}
 
       {loading ? (

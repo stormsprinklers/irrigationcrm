@@ -17,7 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
+import {
+  BILLING_FREQUENCY_LABELS,
+  PLAN_VISIT_STATUS_LABELS,
+  formatCurrency,
+} from "@/lib/maintenance-plans/format";
 import { computeCancellationFee } from "@/lib/maintenance-plans/billing";
 import { latePaymentSummary } from "@/lib/maintenance-plans/late-payment";
 import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
@@ -145,10 +149,15 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
         <div>
           <h1 className="text-2xl font-semibold">{enrollment.template.name}</h1>
           <p className="text-muted-foreground">
-            <CustomerNameWithBadge
-              name={enrollment.customer.name}
-              doNotService={enrollment.customer.doNotService}
-            />{" "}
+            <Link
+              href={`/customers/${enrollment.customer.id}?tab=maintenance`}
+              className="text-primary hover:underline"
+            >
+              <CustomerNameWithBadge
+                name={enrollment.customer.name}
+                doNotService={enrollment.customer.doNotService}
+              />
+            </Link>{" "}
             · {enrollment.property.name}
           </p>
         </div>
@@ -286,7 +295,7 @@ export function EnrollmentDetail({ enrollment, onUpdated }: Props) {
                     </TableCell>
                     <TableCell>
                       <Badge variant={pv.status === "OVERDUE" ? "destructive" : "outline"}>
-                        {pv.status}
+                        {PLAN_VISIT_STATUS_LABELS[pv.status] ?? pv.status}
                       </Badge>
                     </TableCell>
                     <TableCell>

@@ -64,6 +64,10 @@ export function canEditEmployeeColor(role: string) {
   return role === "ADMIN" || role === "MANAGER" || role === "CSR";
 }
 
+export function canEditEmployeeWorkHours(role: string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
 export function canViewEmployeeLms(role: string) {
   return role === "ADMIN" || role === "MANAGER";
 }

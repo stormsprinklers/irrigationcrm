@@ -74,23 +74,23 @@
 .dark {
   color-scheme: dark;
   --background: #0f1729;
-  --foreground: #e8eef5;
+  --foreground: #f8fafc;
   --card: #162033;
-  --card-foreground: #e8eef5;
-  --popover: #162033;
-  --popover-foreground: #e8eef5;
-  --primary: #4c9bc8;
-  --primary-foreground: #ffffff;
+  --card-foreground: #f8fafc;
+  --popover: #1a2740;
+  --popover-foreground: #f8fafc;
+  --primary: #5eb0d9;
+  --primary-foreground: #0c1526;
   --secondary: #1e3a52;
-  --secondary-foreground: #c2e4f0;
+  --secondary-foreground: #d7eef7;
   --muted: #1a2740;
-  --muted-foreground: #94a3b8;
-  --accent: #1e3a52;
-  --accent-foreground: #c2e4f0;
+  --muted-foreground: #cbd5e1;
+  --accent: #243b58;
+  --accent-foreground: #f8fafc;
   --destructive: #f87171;
-  --border: #2a3d5c;
-  --input: #2a3d5c;
-  --ring: #4c9bc8;
+  --border: #3d5578;
+  --input: #3d5578;
+  --ring: #5eb0d9;
   --highlight: #1e3a52;
   --highlight-panel: #152238;
   --page: #0c1526;
@@ -102,6 +102,124 @@
 
 .dark .text-storm-navy {
   color: var(--foreground);
+}
+
+.dark .text-storm-sky {
+  color: #7ec8ea;
+}
+
+/*
+ * Hardcoded light-theme ink/icons stay navy after .bg-white is remapped to a
+ * dark card. Force readable contrast on the dashboard (portal restored below).
+ */
+.dark .text-black,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700,
+.dark .text-zinc-900,
+.dark .text-zinc-800,
+.dark .text-zinc-700,
+.dark .text-neutral-900,
+.dark .text-neutral-800 {
+  color: var(--foreground);
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-zinc-600,
+.dark .text-zinc-500 {
+  color: var(--muted-foreground);
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+.dark .bg-zinc-50,
+.dark .bg-neutral-50 {
+  background-color: var(--muted);
+}
+
+.dark .text-amber-950,
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700,
+.dark [class*="text-amber-9"],
+.dark [class*="text-amber-8"],
+.dark [class*="text-amber-7"] {
+  color: #fcd34d;
+}
+
+.dark .text-green-800,
+.dark .text-green-700,
+.dark .text-emerald-800,
+.dark .text-emerald-700 {
+  color: #86efac;
+}
+
+.dark .text-red-800,
+.dark .text-red-700,
+.dark .text-red-600 {
+  color: #fca5a5;
+}
+
+.dark .text-blue-800,
+.dark .text-blue-700 {
+  color: #93c5fd;
+}
+
+.dark .text-purple-800,
+.dark .text-purple-700 {
+  color: #d8b4fe;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-100 {
+  background-color: rgb(69 26 3 / 0.55);
+}
+
+.dark .bg-green-50,
+.dark .bg-green-100,
+.dark .bg-emerald-50,
+.dark .bg-emerald-100 {
+  background-color: rgb(5 46 22 / 0.55);
+}
+
+.dark .bg-red-50,
+.dark .bg-red-100 {
+  background-color: rgb(69 10 10 / 0.55);
+}
+
+.dark .bg-purple-50,
+.dark .bg-purple-100 {
+  background-color: rgb(59 7 100 / 0.45);
+}
+
+.dark .border-amber-200,
+.dark .border-amber-300 {
+  border-color: rgb(180 83 9 / 0.65);
+}
+
+.dark .border-green-200,
+.dark .border-emerald-200,
+.dark .border-red-200 {
+  border-color: rgb(148 163 184 / 0.35);
+}
+
+/* HTML email / pasted rich text keeps its own ink — read it on a light sheet. */
+.crm-rich-html {
+  background-color: #ffffff;
+  color: #102341;
+}
+
+.dark .crm-rich-html {
+  background-color: #f8fafc !important;
+  color: #102341 !important;
 }
 
 /* Native selects: OS dropdown lists stay light with dark text in dark mode */
@@ -219,6 +337,28 @@
 .portal-shell .text-slate-700,
 .dark .portal-shell .text-slate-700 {
   color: #0f172a !important;
+}
+
+.portal-shell .text-slate-800,
+.dark .portal-shell .text-slate-800,
+.portal-shell .text-slate-900,
+.dark .portal-shell .text-slate-900 {
+  color: #0f172a !important;
+}
+
+.portal-shell .text-amber-900,
+.dark .portal-shell .text-amber-900 {
+  color: #78350f !important;
+}
+
+.portal-shell .bg-slate-50,
+.dark .portal-shell .bg-slate-50 {
+  background-color: #f8fafc !important;
+}
+
+.portal-shell .bg-amber-50,
+.dark .portal-shell .bg-amber-50 {
+  background-color: #fffbeb !important;
 }
 
 .portal-shell .border-border,

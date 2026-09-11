@@ -24,6 +24,8 @@ import {
   scheduleCrewColumnId,
 } from "@/lib/schedule/columns";
 import {
+  isWorkingOnDay,
+  offWindowsForDay,
   openSlotsForDay,
   toMinutes,
   windowsForDivision,
@@ -193,6 +195,98 @@ type TimeGridProps = {
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
+
+function firstName(name: string) {
+  return name.split(/\s+/)[0] ?? name;
+}
+
+function columnIsWorking(
+  column: TechColumn,
+  day: Date,
+  workSchedules?: Record<string, WorkScheduleDayDTO[]>
+) {
+  if (column.isUnassigned || !column.scheduleUserId) return true;
+  return isWorkingOnDay(workSchedules?.[column.scheduleUserId], day.getDay());
+}
+
+function OffTimeBlocks({
+  day,
+  column,
+  workSchedules,
+  startHour,
+}: {
+  day: Date;
+  column: TechColumn;
+  workSchedules: Record<string, WorkScheduleDayDTO[]> | undefined;
+  startHour: number;
+}) {
+  if (column.isUnassigned || !column.scheduleUserId) return null;
+  const windows = offWindowsForDay(workSchedules?.[column.scheduleUserId], day.getDay());
+  if (!windows.length) return null;
+
+  return (
+    <>
+      {windows.map((slot) => {
+        const top = (toMinutes(slot.start) / 60 - startHour) * HOUR_HEIGHT;
+        const height = ((toMinutes(slot.end) - toMinutes(slot.start)) / 60) * HOUR_HEIGHT;
+        if (height <= 0) return null;
+        return (
+          <div
+            key={`${slot.start}-${slot.end}`}
+            className="pointer-events-none absolute inset-x-0.5 z-0 overflow-hidden rounded-sm bg-muted/70"
+            style={{
+              top,
+              height,
+              backgroundImage:
+                "repeating-linear-gradient(-45deg, transparent, transparent 7px, hsl(var(--muted-foreground) / 0.08) 7px, hsl(var(--muted-foreground) / 0.08) 14px)",
+            }}
+            title="OFF"
+          >
+            {height >= 28 ? (
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold tracking-[0.2em] text-muted-foreground">
+                OFF
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function WeekDayStaffStatus({
+  day,
+  columns,
+  workSchedules,
+}: {
+  day: Date;
+  columns: TechColumn[];
+  workSchedules?: Record<string, WorkScheduleDayDTO[]>;
+}) {
+  const staff = columns.filter((column) => !column.isUnassigned);
+  if (staff.length === 0) return null;
+
+  const working: string[] = [];
+  const off: string[] = [];
+  for (const column of staff) {
+    const name = firstName(column.name);
+    if (columnIsWorking(column, day, workSchedules)) working.push(name);
+    else off.push(name);
+  }
+
+  return (
+    <div className="mt-1 space-y-0.5 text-left text-[10px] leading-tight">
+      <p className="truncate text-foreground" title={working.length ? working.join(", ") : "No one scheduled"}>
+        {working.length > 0 ? `On: ${working.join(", ")}` : "On: —"}
+      </p>
+      {off.length > 0 ? (
+        <p className="truncate font-medium text-muted-foreground" title={off.join(", ")}>
+          Off: {off.join(", ")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function OpenTimeSlotBoxes({
   day,
@@ -366,8 +460,8 @@ function TimeGrid({
     multiDayJobs.length > 0
       ? Math.max(MULTI_DAY_ROW_HEIGHT, multiDayLanes.length * MULTI_DAY_ROW_HEIGHT)
       : 0;
-  const dayHeaderHeight = 56;
-  const dayViewTechRowHeight = isDayView ? 32 : 0;
+  const dayHeaderHeight = isDayView ? 56 : 92;
+  const dayViewTechRowHeight = isDayView ? 44 : 0;
   const stickyHeaderHeight = dayHeaderHeight + multiDayRowHeight + dayViewTechRowHeight;
 
   if (isDayView && columns.length === 0) {
@@ -408,6 +502,13 @@ function TimeGrid({
                     >
                       {format(day, "d")}
                     </p>
+                    {!isDayView ? (
+                      <WeekDayStaffStatus
+                        day={day}
+                        columns={columns}
+                        workSchedules={workSchedules}
+                      />
+                    ) : null}
                   </div>
                 );
               })}
@@ -486,30 +587,40 @@ function TimeGrid({
                   style={{ width: TIME_GUTTER }}
                 />
                 <div className="flex shrink-0" style={{ width: dayWidth }}>
-                  {columns.map((col) => (
+                  {columns.map((col) => {
+                    const offDay = days[0] ? !columnIsWorking(col, days[0], workSchedules) : false;
+                    return (
                     <div
                       key={col.id}
                       className="border-r border-border/60 px-0.5 py-1 text-center last:border-r-0"
                       style={{ width: techColWidth }}
-                      title={col.name}
+                      title={offDay ? `${col.name} · OFF` : col.name}
                     >
                       {col.isUnassigned ? (
                         <span className="text-[9px] text-muted-foreground">—</span>
                       ) : (
-                        <Avatar className="mx-auto h-5 w-5">
-                          {col.photoUrl ? (
-                            <AvatarImage src={blobProxyUrl(col.photoUrl)} alt={col.name} />
+                        <>
+                          <Avatar className={cn("mx-auto h-5 w-5", offDay && "opacity-50")}>
+                            {col.photoUrl ? (
+                              <AvatarImage src={blobProxyUrl(col.photoUrl)} alt={col.name} />
+                            ) : null}
+                            <AvatarFallback
+                              className="text-[7px]"
+                              style={{ backgroundColor: col.color ?? "#64748B", color: "#fff" }}
+                            >
+                              {getInitials(col.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {offDay ? (
+                            <p className="mt-0.5 text-[8px] font-semibold tracking-wide text-muted-foreground">
+                              OFF
+                            </p>
                           ) : null}
-                          <AvatarFallback
-                            className="text-[7px]"
-                            style={{ backgroundColor: col.color ?? "#64748B", color: "#fff" }}
-                          >
-                            {getInitials(col.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        </>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
@@ -550,12 +661,16 @@ function TimeGrid({
                         if (!visibleColumnIds.has(col.id)) return false;
                         return startOfDay(new Date(job.startAt)).toDateString() === dayKey;
                       });
+                      const offDay = !columnIsWorking(col, day, workSchedules);
                       const laidOut = assignLanes(colJobs);
 
                       return (
                         <div
                           key={`${dayKey}-${col.id}`}
-                          className="relative border-r border-border/60 last:border-r-0"
+                          className={cn(
+                            "relative border-r border-border/60 last:border-r-0",
+                            offDay && "bg-muted/20"
+                          )}
                           style={{ width: techColWidth, height: gridHeight }}
                         >
                           <button
@@ -565,6 +680,12 @@ function TimeGrid({
                             onClick={(e) =>
                               handleGridClick(e, day, col, onSlotClick)
                             }
+                          />
+                          <OffTimeBlocks
+                            day={day}
+                            column={col}
+                            workSchedules={workSchedules}
+                            startHour={startHour}
                           />
                           <OpenTimeSlotBoxes
                             day={day}

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { notifyAllCompaniesOfNewGbpReviews } from "@/lib/google-business/review-staff-notifier";
 import { syncAndAssignGbpReviews } from "@/lib/google-business/review-assigner";
+import { isGbpReviewPullHour } from "@/lib/google-business/review-pull-window";
 import { prisma } from "@/lib/prisma";
+
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -10,8 +13,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const results = await notifyAllCompaniesOfNewGbpReviews();
-  const notified = results.reduce((sum, row) => sum + (row.notified ?? 0), 0);
+  // Vercel cron is UTC; fire at 22:00 and 23:00 UTC and only pull at 4pm Mountain.
+  if (!isGbpReviewPullHour()) {
+    return NextResponse.json({ ok: true, skipped: "not_4pm_mountain" });
+  }
 
   const companies = await prisma.company.findMany({
     where: {
@@ -38,6 +43,9 @@ export async function GET(request: NextRequest) {
       });
     }
   }
+
+  const results = await notifyAllCompaniesOfNewGbpReviews();
+  const notified = results.reduce((sum, row) => sum + (row.notified ?? 0), 0);
 
   return NextResponse.json({ ok: true, notified, results, assigned });
 }

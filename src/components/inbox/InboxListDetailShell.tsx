@@ -61,7 +61,7 @@ export function InboxListDetailShell({
     >
       {/* Mobile chrome — list-first list view */}
       {listFirst && !showDetailOnMobile ? (
-        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:hidden">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-card px-3 py-2.5 md:hidden">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">{listLabel}</p>
             {onCompose ? (
@@ -83,7 +83,7 @@ export function InboxListDetailShell({
 
       {/* Mobile chrome — detail / compose with back */}
       {listFirst && showDetailOnMobile ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-white px-2 py-2 md:hidden">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-2 py-2 md:hidden">
           <Button
             type="button"
             variant="ghost"
@@ -99,7 +99,7 @@ export function InboxListDetailShell({
 
       {/* Mobile chrome — legacy drawer toggle (non list-first) */}
       {!listFirst ? (
-        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:hidden">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border bg-card px-3 py-2.5 md:hidden">
           <Button
             type="button"
             variant="outline"
@@ -128,7 +128,7 @@ export function InboxListDetailShell({
       <aside
         id="inbox-list-drawer"
         className={cn(
-          "flex flex-col border-r border-border bg-white",
+          "flex flex-col border-r border-border bg-card",
           "md:relative md:flex md:h-full md:w-72 md:shrink-0 md:shadow-none",
           listFirst
             ? cn(
@@ -171,7 +171,7 @@ export function InboxListDetailShell({
 
       <div
         className={cn(
-          "min-h-0 min-w-0 flex-1 flex-col bg-white",
+          "min-h-0 min-w-0 flex-1 flex-col bg-card",
           detailScroll === "page" ? "overflow-y-auto" : "overflow-hidden",
           listFirst
             ? showDetailOnMobile

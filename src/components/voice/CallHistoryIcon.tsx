@@ -20,19 +20,19 @@ export function CallHistoryIcon({ direction, answered, className }: Props) {
     <div
       className={cn(
         "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border",
-        answered ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50",
+        answered ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/70" : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/70",
         className
       )}
       aria-hidden
     >
       <Phone
-        className={cn("h-4 w-4", answered ? "text-green-700" : "text-red-600")}
+        className={cn("h-4 w-4", answered ? "text-green-700 dark:text-green-300" : "text-red-600 dark:text-red-300")}
         strokeWidth={2.25}
       />
       <DirectionIcon
         className={cn(
-          "absolute bottom-0 left-0 h-3.5 w-3.5 rounded-full bg-white p-0.5",
-          direction === "INBOUND" ? "text-storm-sky" : "text-storm-navy"
+          "absolute bottom-0 left-0 h-3.5 w-3.5 rounded-full bg-background p-0.5",
+          direction === "INBOUND" ? "text-storm-sky" : "text-foreground"
         )}
         strokeWidth={2.5}
       />

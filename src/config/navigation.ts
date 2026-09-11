@@ -163,7 +163,8 @@ export const companySettingsSidebar: NavSection[] = [
 export const teamSettingsSidebar: NavSection[] = [
   {
     items: [
-      { label: "Employees", href: "/settings/employees" },
+      { label: "Employees", href: "/settings/employees", exact: true },
+      { label: "Work hours", href: "/settings/employees/schedules" },
       { label: "Field devices", href: "/settings/field-devices" },
       { label: "Compensation", href: "/settings/compensation" },
       { label: "Service areas", href: "/settings/service-areas" },

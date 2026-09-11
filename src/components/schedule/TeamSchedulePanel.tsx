@@ -10,6 +10,7 @@ import {
   subWeeks,
 } from "date-fns";
 import { ArrowLeft, CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,6 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
   const [timeOff, setTimeOff] = useState<TimeOffRequestDTO[]>([]);
   const [pendingRequests, setPendingRequests] = useState<TimeOffRequestDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingSchedule, setSavingSchedule] = useState(false);
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [requestForm, setRequestForm] = useState({
     startDate: format(new Date(), "yyyy-MM-dd"),
@@ -131,27 +131,6 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
     loadPending();
   }, [loadPending]);
 
-  async function saveWorkSchedule() {
-    if (!canManage || !selectedUserId) return;
-    setSavingSchedule(true);
-    try {
-      const res = await fetch("/api/schedule/team", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: selectedUserId, days: workSchedule }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Failed to save");
-      }
-      toast.success("Work schedule saved");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save work schedule");
-    } finally {
-      setSavingSchedule(false);
-    }
-  }
-
   async function submitTimeOffRequest() {
     if (!selectedUserId) return;
     setSubmittingRequest(true);
@@ -201,12 +180,6 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
     } catch {
       toast.error("Failed to update request");
     }
-  }
-
-  function updateWorkDay(dayOfWeek: number, patch: Partial<WorkScheduleDayDTO>) {
-    setWorkSchedule((days) =>
-      days.map((day) => (day.dayOfWeek === dayOfWeek ? { ...day, ...patch } : day))
-    );
   }
 
   function timeOffForDay(day: Date) {
@@ -275,57 +248,32 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
           ) : (
             <div className="grid w-full gap-6 lg:grid-cols-2">
               <section className="rounded-lg border border-border p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="font-semibold">Work days</h3>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="font-semibold">Work hours</h3>
                   {canManage ? (
-                    <Button size="sm" onClick={saveWorkSchedule} disabled={savingSchedule}>
-                      {savingSchedule ? "Saving..." : "Save schedule"}
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href="/settings/employees/schedules">Edit in Team settings</Link>
                     </Button>
                   ) : null}
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Set which days this employee works. Non-working days block visit assignments.
+                  Off days show as OFF on this employee&apos;s schedule column and cannot be booked.
                 </p>
                 <div className="space-y-2">
                   {workSchedule.map((day) => (
                     <div
                       key={day.dayOfWeek}
-                      className="flex flex-wrap items-center gap-3 rounded-md border border-border/60 px-3 py-2"
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2 text-sm"
                     >
-                      <label className="flex min-w-[120px] items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={day.isWorking}
-                          disabled={!canManage}
-                          onCheckedChange={(checked) =>
-                            updateWorkDay(day.dayOfWeek, { isWorking: checked === true })
-                          }
-                        />
-                        {DAY_LABELS[day.dayOfWeek]}
-                      </label>
+                      <span>{DAY_LABELS[day.dayOfWeek]}</span>
                       {day.isWorking ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Input
-                            type="time"
-                            value={day.startTime ?? ""}
-                            disabled={!canManage}
-                            onChange={(e) =>
-                              updateWorkDay(day.dayOfWeek, { startTime: e.target.value || null })
-                            }
-                            className="h-8 w-[120px]"
-                          />
-                          <span className="text-muted-foreground">to</span>
-                          <Input
-                            type="time"
-                            value={day.endTime ?? ""}
-                            disabled={!canManage}
-                            onChange={(e) =>
-                              updateWorkDay(day.dayOfWeek, { endTime: e.target.value || null })
-                            }
-                            className="h-8 w-[120px]"
-                          />
-                        </div>
+                        <span>
+                          {day.startTime ?? "—"} – {day.endTime ?? "—"}
+                        </span>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Off</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Off
+                        </span>
                       )}
                     </div>
                   ))}

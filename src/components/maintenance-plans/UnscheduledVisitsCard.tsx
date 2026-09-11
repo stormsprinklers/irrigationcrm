@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +20,7 @@ import {
 
 type UnscheduledVisit = {
   id: string;
+  customerId: string;
   customer: string;
   customerDoNotService?: boolean;
   property: string;
@@ -124,10 +126,15 @@ export function UnscheduledVisitsCard() {
                 {visits.map((visit) => (
                   <TableRow key={visit.id}>
                     <TableCell className="font-medium">
-                      <CustomerNameWithBadge
-                        name={visit.customer}
-                        doNotService={visit.customerDoNotService}
-                      />
+                      <Link
+                        href={`/customers/${visit.customerId}?tab=maintenance`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        <CustomerNameWithBadge
+                          name={visit.customer}
+                          doNotService={visit.customerDoNotService}
+                        />
+                      </Link>
                     </TableCell>
                     <TableCell>{visit.property}</TableCell>
                     <TableCell>{visit.visitTitle}</TableCell>

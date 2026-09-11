@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 
 export function DueForBillingCard({ rows }: { rows: BillingRowDisplay[] }) {
   const lateRows = rows.filter((row) =>
@@ -72,15 +73,31 @@ export function DueForBillingCard({ rows }: { rows: BillingRowDisplay[] }) {
                   >
                     <TableCell className="font-medium">
                       <div className="space-y-1">
-                        {row.enrollmentId ? (
+                        {row.customerId ? (
+                          <Link
+                            href={`/customers/${row.customerId}?tab=maintenance`}
+                            className="font-medium text-primary hover:underline"
+                          >
+                            <CustomerNameWithBadge
+                              name={row.customer}
+                              doNotService={row.customerDoNotService}
+                            />
+                          </Link>
+                        ) : row.enrollmentId ? (
                           <Link
                             href={`/maintenance-plans/enrollments/${row.enrollmentId}`}
                             className="text-primary hover:underline"
                           >
-                            {row.customer}
+                            <CustomerNameWithBadge
+                              name={row.customer}
+                              doNotService={row.customerDoNotService}
+                            />
                           </Link>
                         ) : (
-                          row.customer
+                          <CustomerNameWithBadge
+                            name={row.customer}
+                            doNotService={row.customerDoNotService}
+                          />
                         )}
                         {late ? (
                           <Badge variant="destructive" className="text-[10px]">

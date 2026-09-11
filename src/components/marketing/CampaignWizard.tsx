@@ -187,7 +187,9 @@ export function CampaignWizard({ initial, onSaved }: Props) {
         data.deferredForQuietHours
           ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
           : action === "activate"
-            ? "Campaign activated"
+            ? data.processed
+              ? "Campaign activated and first messages sent"
+              : "Campaign activated"
             : "Campaign sent"
       );
       onSaved(id);

@@ -60,9 +60,9 @@ export async function GET() {
         include: { assignments: { include: { user: { select: { id: true, name: true } } } } },
       }),
       prisma.user.findMany({
-        where: { companyId: user.companyId, status: "ACTIVE", role: { in: REVIEW_ALIAS_ROLES } },
-        select: { id: true, name: true },
-        orderBy: { firstName: "asc" },
+        where: { companyId: user.companyId, role: { in: REVIEW_ALIAS_ROLES } },
+        select: { id: true, name: true, status: true },
+        orderBy: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
       }),
     ]);
 

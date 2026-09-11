@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm, type EmployeeRecord } from "./EmployeeForm";
 import { CrewManager } from "./CrewManager";
 import { SyncEmployeesFromCompanyModal } from "./SyncEmployeesFromCompanyModal";
-import { ROLE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
+import { ROLE_LABELS, canDeleteEmployee, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { useSession } from "next-auth/react";
 
@@ -22,6 +22,7 @@ export function EmployeeList() {
   const { data: session } = useSession();
   const role = session?.user?.role ?? "";
   const canManage = canManageEmployees(role);
+  const canDelete = canDeleteEmployee(role);
   const showLms = canViewEmployeeLms(role);
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
   const [serviceAreas, setServiceAreas] = useState<ServiceAreaOption[]>([]);
@@ -253,7 +254,7 @@ export function EmployeeList() {
                       </Button>
                     ) : null}
                     <Button variant="outline" size="sm" onClick={() => setEditing(employee)}>
-                      {canManage ? "Edit" : "Color"}
+                      {canManage ? "Edit" : "Hours & color"}
                     </Button>
                     {canManage && employee.status === "ACTIVE" ? (
                       <Button variant="outline" size="sm" onClick={() => archiveEmployee(employee.id, "archive")}>
@@ -265,7 +266,7 @@ export function EmployeeList() {
                         Restore
                       </Button>
                     ) : null}
-                    {canManage ? (
+                    {canDelete ? (
                       <Button variant="ghost" size="sm" onClick={() => deleteEmployee(employee.id)}>
                         Delete
                       </Button>

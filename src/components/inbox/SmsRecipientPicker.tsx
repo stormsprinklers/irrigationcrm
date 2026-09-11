@@ -200,7 +200,7 @@ export function SmsRecipientPicker({ scope, value, onChange, className }: Props)
             aria-label="Close recipient list"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg dark:bg-[#ffffff] dark:text-[#102341]">
+          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-lg">
             {loading ? (
               <p className="p-3 text-sm text-muted-foreground">Searching...</p>
             ) : (
@@ -210,7 +210,7 @@ export function SmsRecipientPicker({ scope, value, onChange, className }: Props)
                     <button
                       type="button"
                       onClick={selectManualPhone}
-                      className="flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm hover:bg-muted/50 dark:hover:bg-muted dark:hover:text-[#102341]"
+                      className="flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
                     >
                       <span className="font-medium">Text {formatPhoneDisplay(search.trim())}</span>
                       <span className="text-xs text-muted-foreground">Use this phone number</span>
@@ -232,7 +232,7 @@ export function SmsRecipientPicker({ scope, value, onChange, className }: Props)
                         type="button"
                         disabled={!contact.phone}
                         onClick={() => selectContact(contact)}
-                        className="flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50 dark:hover:bg-muted dark:hover:text-[#102341]"
+                        className="flex w-full flex-col items-start gap-0.5 border-b border-border px-3 py-2 text-left text-sm last:border-b-0 hover:bg-accent hover:text-accent-foreground"
                       >
                         <span className="font-medium">{contact.name}</span>
                         <span className="text-xs text-muted-foreground">

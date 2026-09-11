@@ -33,6 +33,7 @@ const publicPaths = [
   "/api/marketing/google-analytics/callback",
   "/api/marketing/unsubscribe",
   "/api/marketing/track",
+  "/api/cron",
   "/api/portal/preferences",
   "/api/public",
   "/api/integrations",

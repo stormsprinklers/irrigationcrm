@@ -138,13 +138,15 @@ export default function MarketingCampaignDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function runAction(action: "send" | "activate") {
+  async function runAction(action: "send" | "activate" | "process") {
     setActing(true);
     try {
       const endpoint =
         action === "activate"
           ? `/api/marketing/campaigns/${id}/activate`
-          : `/api/marketing/campaigns/${id}/send`;
+          : action === "process"
+            ? `/api/marketing/campaigns/${id}/process`
+            : `/api/marketing/campaigns/${id}/send`;
       const res = await fetch(endpoint, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Action failed");
@@ -152,8 +154,14 @@ export default function MarketingCampaignDetailPage() {
         data.deferredForQuietHours
           ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
           : action === "activate"
-            ? "Campaign activated"
-            : "Campaign sent"
+            ? data.processed
+              ? "Campaign activated and first messages sent"
+              : "Campaign activated"
+            : action === "process"
+              ? data.processed
+                ? "Due campaign steps ran"
+                : "No due campaign steps right now"
+              : "Campaign sent"
       );
       load();
     } catch (err) {
@@ -212,7 +220,11 @@ export default function MarketingCampaignDetailPage() {
                   <Button size="sm" onClick={() => runAction("activate")} disabled={acting}>
                     {acting ? "Activating..." : "Activate campaign"}
                   </Button>
-                ) : null
+                ) : (
+                  <Button size="sm" onClick={() => runAction("process")} disabled={acting}>
+                    {acting ? "Sending..." : "Send due messages"}
+                  </Button>
+                )
               ) : campaign.status === "DRAFT" || campaign.status === "SCHEDULED" ? (
                 <Button size="sm" onClick={() => runAction("send")} disabled={acting}>
                   {acting ? "Sending..." : "Send now"}

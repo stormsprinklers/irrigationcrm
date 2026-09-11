@@ -39,7 +39,7 @@ export function CardSetupForm({ onSaved, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-md border bg-muted/20 p-4">
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { link: "never" } }} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={!stripe || saving}>
           {saving ? (

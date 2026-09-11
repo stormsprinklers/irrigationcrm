@@ -34,19 +34,10 @@ import {
   scheduleCrewColumnId,
 } from "@/lib/schedule/columns";
 import type { DivisionBookingWindows } from "@/lib/schedule/open-time-slots";
-import {
-  defaultEmployeeWorkSchedule,
-  workDayForDate,
-} from "@/lib/schedule/open-time-slots";
 import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import { useSession } from "next-auth/react";
 import { isFieldRole } from "@/lib/employees";
-
-function scheduleColumnIdForJob(job: ScheduleJobDTO) {
-  if (job.crew?.id) return scheduleCrewColumnId(job.crew.id);
-  return job.assignedUser?.id ?? "__unassigned__";
-}
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
@@ -211,35 +202,8 @@ export function ScheduleView({
       }
     }
 
-    if (viewMode !== "day") return cols;
-
-    const dayOfWeek = focusDay.getDay();
-    const workSchedules = filterOptions.openTimeSlots?.workSchedules ?? {};
-    const focusKey = focusDay.toDateString();
-    const columnsWithJobs = new Set(
-      jobs
-        .filter((job) => startOfDay(new Date(job.startAt)).toDateString() === focusKey)
-        .map(scheduleColumnIdForJob)
-    );
-
-    return cols.filter((col) => {
-      if (col.isUnassigned) return true;
-      if (columnsWithJobs.has(col.id)) return true;
-      if (!col.scheduleUserId) return true;
-      const schedule =
-        workSchedules[col.scheduleUserId] ?? defaultEmployeeWorkSchedule();
-      return Boolean(workDayForDate(schedule, dayOfWeek)?.isWorking);
-    });
-  }, [
-    columnEmployees,
-    filterOptions.crews,
-    filterOptions.openTimeSlots?.workSchedules,
-    focusDay,
-    hiddenUserIds,
-    jobs,
-    showUnassigned,
-    viewMode,
-  ]);
+    return cols;
+  }, [columnEmployees, filterOptions.crews, hiddenUserIds, showUnassigned]);
 
   const visibleJobs = useMemo(() => {
     return jobs.filter((job) => {
@@ -465,6 +429,7 @@ export function ScheduleView({
         slot={quickAddSlot}
         serviceAreas={filterOptions.serviceAreas}
         employees={filterOptions.employees}
+        workSchedules={filterOptions.openTimeSlots?.workSchedules}
         onClose={() => setQuickAddSlot(null)}
         onCreated={() => {
           void loadData();

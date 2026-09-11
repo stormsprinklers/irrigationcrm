@@ -3,6 +3,7 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { GoogleBusinessApiError, requireGbpCompany } from "@/lib/google-business/client";
 import { listGbpReviews } from "@/lib/google-business/v4-api";
 import { assignPendingGbpReviews, upsertGbpReviews } from "@/lib/google-business/review-assigner";
+import { notifyStaffOfNewGbpReviews } from "@/lib/google-business/review-staff-notifier";
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,6 +21,9 @@ export async function GET(request: NextRequest) {
     await upsertGbpReviews(user.companyId, data.reviews);
     await assignPendingGbpReviews(user.companyId).catch((error) => {
       console.error("GBP review assignment failed", error);
+    });
+    await notifyStaffOfNewGbpReviews(user.companyId).catch((error) => {
+      console.error("GBP review staff notify failed", error);
     });
 
     return NextResponse.json(data);

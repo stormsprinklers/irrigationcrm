@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,43 @@ export function CustomerSearchPicker({
   const [loading, setLoading] = useState(false);
   const [displayName, setDisplayName] = useState(selectedName ?? "");
   const [open, setOpen] = useState(false);
+  const compactRootRef = useRef<HTMLDivElement>(null);
+  const [compactMenuStyle, setCompactMenuStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
     if (selectedName) setDisplayName(selectedName);
   }, [selectedName]);
+
+  useEffect(() => {
+    if (!compact || !open) return;
+
+    function updatePosition() {
+      const el = compactRootRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const menuHeight = 220;
+      const gap = 4;
+      const spaceBelow = window.innerHeight - rect.bottom - gap;
+      const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
+      setCompactMenuStyle({
+        position: "fixed",
+        left: rect.left,
+        width: rect.width,
+        zIndex: 200,
+        ...(openUp
+          ? { bottom: window.innerHeight - rect.top + gap }
+          : { top: rect.bottom + gap }),
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [compact, open]);
 
   const searchCustomers = useCallback(
     async (searchQuery: string) => {
@@ -95,7 +128,7 @@ export function CustomerSearchPicker({
   if (compact) {
     const selected = Boolean(value && displayName);
     return (
-      <div className={cn("relative min-w-0", className)}>
+      <div className={cn("relative min-w-0", className)} ref={compactRootRef}>
         {selected && !open ? (
           <div className="flex h-9 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-sm">
             <span className="min-w-0 flex-1 truncate font-medium">{displayName}</span>
@@ -141,7 +174,10 @@ export function CustomerSearchPicker({
         )}
 
         {showResults && !(selected && !open) ? (
-          <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-background shadow-md">
+          <ul
+            className="max-h-48 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+            style={compactMenuStyle}
+          >
             {loading ? (
               <li className="px-3 py-2 text-sm text-muted-foreground">Searching…</li>
             ) : query.trim().length < minQueryLength ? (

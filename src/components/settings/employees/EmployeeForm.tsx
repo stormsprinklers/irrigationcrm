@@ -10,9 +10,12 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, canManageEmployees, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, PAY_TYPE_LABELS, canManageEmployees, canEditEmployeeWorkHours, canViewEmployeeLms, employeeInitials, formatEmployeeName, splitFullName } from "@/lib/employees";
 import { trueRoleOf } from "@/lib/role-preview";
 import { EmployeeTrainingPanel } from "./EmployeeTrainingPanel";
+import { EmployeeWorkHoursEditor } from "./EmployeeWorkHoursEditor";
+import { defaultEmployeeWorkSchedule } from "@/lib/schedule/open-time-slots";
+import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 
 type ServiceAreaOption = { id: string; name: string; color: string };
 
@@ -105,6 +108,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   const showLms = canViewEmployeeLms(effectiveRole);
   const canEditReviewAliases = trueRole === "ADMIN" || trueRole === "MANAGER";
   const [generatingAliases, setGeneratingAliases] = useState(false);
+  const [workSchedule, setWorkSchedule] = useState<WorkScheduleDayDTO[]>(defaultEmployeeWorkSchedule);
+  const [loadingHours, setLoadingHours] = useState(false);
+  const canEditHours = canEditEmployeeWorkHours(effectiveRole);
 
   useEffect(() => {
     if (!canManage) return;
@@ -197,6 +203,30 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     setConfirmPassword("");
   }, [employee]);
 
+  useEffect(() => {
+    if (!employee) {
+      setWorkSchedule(defaultEmployeeWorkSchedule());
+      return;
+    }
+    let cancelled = false;
+    setLoadingHours(true);
+    void fetch(`/api/schedule/team?userId=${encodeURIComponent(employee.id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setWorkSchedule(data?.workSchedule ?? defaultEmployeeWorkSchedule());
+      })
+      .catch(() => {
+        if (!cancelled) setWorkSchedule(defaultEmployeeWorkSchedule());
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHours(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employee]);
+
   function toggleArea(areaId: string) {
     setForm((prev) => ({
       ...prev,
@@ -236,6 +266,21 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     }
   }
 
+  async function saveWorkHours(userId: string) {
+    if (!canEditHours) return true;
+    const res = await fetch("/api/schedule/team", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, days: workSchedule }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to save work hours");
+      return false;
+    }
+    return true;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -267,7 +312,9 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           toast.error(data.error ?? "Save failed");
           return;
         }
-        toast.success("Employee color updated");
+        const hoursOk = await saveWorkHours(employee.id);
+        if (!hoursOk) return;
+        toast.success("Color and work hours updated");
         onSaved();
         return;
       }
@@ -346,6 +393,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
       } else if (data.lmsSyncStatus === "synced") {
         toast.message("Synced to LMS");
       }
+      const savedId = employee?.id ?? data.id;
+      if (savedId) {
+        const hoursOk = await saveWorkHours(savedId);
+        if (!hoursOk) return;
+      }
       onSaved();
     } finally {
       setSaving(false);
@@ -394,8 +446,8 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
 
       {colorOnly ? (
         <p className="text-sm text-muted-foreground">
-          You can change this employee&apos;s schedule color. Other employee details are managed by
-          admins.
+          You can change this employee&apos;s schedule color and work hours. Other employee details
+          are managed by admins. Employees cannot be deleted from here.
         </p>
       ) : null}
 
@@ -709,6 +761,20 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
 
       </fieldset>
       )}
+
+      {canEditHours ? (
+        <section className="space-y-2 rounded-md border border-border p-3">
+          <h3 className="text-sm font-semibold">Work hours</h3>
+          <p className="text-xs text-muted-foreground">
+            Off days and hours outside this window show as OFF on the schedule and cannot be booked.
+          </p>
+          {loadingHours ? (
+            <p className="text-sm text-muted-foreground">Loading hours...</p>
+          ) : (
+            <EmployeeWorkHoursEditor days={workSchedule} onChange={setWorkSchedule} />
+          )}
+        </section>
+      ) : null}
 
       <div className="flex gap-2">
         <Button type="submit" disabled={saving}>

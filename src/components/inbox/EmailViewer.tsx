@@ -292,7 +292,7 @@ export function EmailViewer({
       <div className="flex-1 overflow-auto p-4">
         {htmlBody ? (
           <div
-            className="prose prose-sm max-w-none text-sm"
+            className="crm-rich-html prose prose-sm max-w-none rounded-md border border-border p-4 text-sm"
             dangerouslySetInnerHTML={{ __html: htmlBody }}
           />
         ) : (

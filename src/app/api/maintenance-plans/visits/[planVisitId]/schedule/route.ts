@@ -58,7 +58,6 @@ export async function POST(request: NextRequest, { params }: Params) {
       const area = await resolveServiceAreaByZip(user.companyId, String(zip));
       serviceAreaId = area?.id;
     }
-    if (!serviceAreaId) return badRequestResponse("serviceAreaId or property zip is required");
 
     const block = await getCustomerServiceBlock(user.companyId, planVisit.enrollment.customerId);
     if (block) return badRequestResponse(block);
@@ -93,7 +92,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           startAt,
           endAt,
           division: Division.SERVICE,
-          serviceAreaId,
+          serviceAreaId: serviceAreaId ?? null,
           assignedUserId: assignedUserId ?? null,
           status: VisitStatus.SCHEDULED,
           tags: ["maintenance-plan"],

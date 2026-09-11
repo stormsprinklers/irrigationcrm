@@ -48,12 +48,8 @@ import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal"
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
 import { PropertyIrrigationWizard } from "@/components/customers/PropertyIrrigationWizard";
 import { PropertyIrrigationSummary } from "@/components/customers/PropertyIrrigationSummary";
-import { BILLING_FREQUENCY_LABELS, formatCurrency } from "@/lib/maintenance-plans/format";
-import {
-  enrollmentHasLatePayment,
-  latePaymentSummary,
-} from "@/lib/maintenance-plans/late-payment";
-import { LatePaymentAlert } from "@/components/maintenance-plans/LatePaymentAlert";
+import { formatCurrency } from "@/lib/maintenance-plans/format";
+import { CustomerMaintenancePlansTab } from "@/components/customers/CustomerMaintenancePlansTab";
 import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -793,7 +789,16 @@ export function CustomerProfile({ customerId }: Props) {
         />
       ) : null}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          setActiveTab(value);
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("tab", value);
+          const qs = params.toString();
+          router.replace(`/customers/${customerId}?${qs}`, { scroll: false });
+        }}
+      >
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="properties">Properties</TabsTrigger>
@@ -1559,88 +1564,7 @@ export function CustomerProfile({ customerId }: Props) {
 
         {showMaintenance ? (
         <TabsContent value="maintenance" className="space-y-4">
-          {(() => {
-            const lateEnrollments = enrollments.filter(enrollmentHasLatePayment);
-            if (!lateEnrollments.length) return null;
-            const periods = lateEnrollments.flatMap((e) => e.billingPeriods ?? []);
-            const { count, total } = latePaymentSummary(periods);
-            return (
-              <LatePaymentAlert
-                title={
-                  lateEnrollments.length === 1
-                    ? "Late on maintenance plan payment"
-                    : "Late on maintenance plan payments"
-                }
-                amount={total}
-                description={
-                  count === 1
-                    ? `${lateEnrollments[0].template.name} has an overdue billing period.`
-                    : `${count} billing periods are overdue across ${lateEnrollments.length} plans.`
-                }
-              />
-            );
-          })()}
-
-          <div className="flex justify-end">
-            <Button type="button" onClick={openEnrollModal}>
-              <Plus className="h-4 w-4" />
-              Enroll in plan
-            </Button>
-          </div>
-
-          <Card>
-            <CardContent className="pt-6">
-              {enrollments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No maintenance plan enrollments.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Plan</TableHead>
-                      <TableHead>Property</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Billing</TableHead>
-                      <TableHead>Price</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {enrollments.map((enrollment) => {
-                      const late = enrollmentHasLatePayment(enrollment);
-                      return (
-                      <TableRow
-                        key={enrollment.id}
-                        className={late ? "bg-red-50/80 dark:bg-red-950/20" : undefined}
-                      >
-                        <TableCell>
-                          <div className="space-y-1">
-                            <Link
-                              href={`/maintenance-plans/enrollments/${enrollment.id}`}
-                              className="font-medium text-primary hover:underline"
-                            >
-                              {enrollment.template.name}
-                            </Link>
-                            {late ? (
-                              <Badge variant="destructive" className="text-[10px]">
-                                Late payment
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>{enrollment.property.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{enrollment.status.replace(/_/g, " ")}</Badge>
-                        </TableCell>
-                        <TableCell>{BILLING_FREQUENCY_LABELS[enrollment.billingFrequency]}</TableCell>
-                        <TableCell>{formatCurrency(enrollment.template.basePrice)}</TableCell>
-                      </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
+          <CustomerMaintenancePlansTab enrollments={enrollments} onEnroll={openEnrollModal} />
         </TabsContent>
         ) : null}
       </Tabs>

@@ -280,7 +280,7 @@ export function SocialDmMessagePane({
                     "max-w-[85%] rounded-lg px-3 py-2 text-sm",
                     msg.direction === "OUTBOUND"
                       ? "ml-auto bg-primary text-primary-foreground"
-                      : "border border-border bg-white"
+                      : "border border-border bg-muted text-foreground"
                   )}
                 >
                   <p className="whitespace-pre-wrap">{msg.body}</p>
@@ -303,7 +303,7 @@ export function SocialDmMessagePane({
 
           <form
             onSubmit={(e) => void handleSend(e)}
-            className="flex shrink-0 items-end gap-2 border-t border-border bg-white p-4"
+            className="flex shrink-0 items-end gap-2 border-t border-border bg-background p-4"
           >
             <textarea
               rows={2}

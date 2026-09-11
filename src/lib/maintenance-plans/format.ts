@@ -53,7 +53,9 @@ export function enrollmentStatusesToDisplay(
 export type BillingRowDisplay = {
   id: string;
   enrollmentId?: string;
+  customerId?: string;
   customer: string;
+  customerDoNotService?: boolean;
   phone: string | null;
   dueDate: string;
   status: string;
@@ -72,6 +74,14 @@ export function formatBillingStatus(status: string) {
       return status.charAt(0) + status.slice(1).toLowerCase();
   }
 }
+
+export const PLAN_VISIT_STATUS_LABELS: Record<string, string> = {
+  UNSCHEDULED: "Unscheduled",
+  SCHEDULED: "Scheduled",
+  COMPLETED: "Completed",
+  SKIPPED: "Skipped",
+  OVERDUE: "Overdue",
+};
 
 export const BILLING_FREQUENCY_LABELS: Record<string, string> = {
   MONTHLY: "Monthly",

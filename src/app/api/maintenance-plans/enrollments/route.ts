@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
       mobileReturn,
       successUrl: mobileReturn
         ? undefined
-        : `${appUrl}/customers/${body.customerId}?tab=plans&cardSetup=success`,
+        : `${appUrl}/customers/${body.customerId}?tab=maintenance&cardSetup=success`,
       cancelUrl: mobileReturn
         ? undefined
-        : `${appUrl}/customers/${body.customerId}?tab=plans&cardSetup=cancelled`,
+        : `${appUrl}/customers/${body.customerId}?tab=maintenance&cardSetup=cancelled`,
     });
 
     if (!cardCheck.ok) {

@@ -108,6 +108,12 @@ enum TimeOffType {
   OTHER
 }
 
+enum OfficeTodoRecurrence {
+  NONE
+  DAILY
+  WEEKLY
+}
+
 enum PayType {
   HOURLY
   COMMISSION
@@ -799,6 +805,7 @@ model Company {
   hcpEntityMappings      HcpEntityMapping[]
   employeeWorkSchedules  EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]
+  officeTodos            OfficeTodo[]
   checklistTemplates     ChecklistTemplate[]
   portalLoginTokens      CustomerPortalLoginToken[]
   portalOffers           PortalOffer[]
@@ -1012,6 +1019,8 @@ model User {
   timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
   reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
   createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
+  createdOfficeTodos     OfficeTodo[]         @relation("OfficeTodoCreator")
+  completedOfficeTodos   OfficeTodo[]         @relation("OfficeTodoCompleter")
   lmsUserId              String?
   lmsSyncStatus          String?
   lmsLastSyncedAt        DateTime?
@@ -2927,6 +2936,27 @@ model EmployeeWorkSchedule {
 
   @@unique([userId, dayOfWeek])
   @@index([companyId])
+}
+
+model OfficeTodo {
+  id            String               @id @default(cuid())
+  companyId     String
+  title         String
+  notes         String?
+  sortOrder     Int                  @default(0)
+  recurrence    OfficeTodoRecurrence @default(NONE)
+  completedAt   DateTime?
+  completedById String?
+  createdById   String
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   User    @relation("OfficeTodoCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  completedBy User?   @relation("OfficeTodoCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId, completedAt])
+  @@index([companyId, sortOrder])
 }
 
 model TimeOffRequest {

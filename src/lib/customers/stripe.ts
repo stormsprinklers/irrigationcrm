@@ -106,6 +106,7 @@ export async function createCardSetupCheckoutSession(params: {
     mode: "setup",
     customer: params.stripeCustomerId,
     payment_method_types: ["card"],
+    wallet_options: { link: { display: "never" } },
     success_url: successUrl,
     cancel_url: cancelUrl,
     metadata: {

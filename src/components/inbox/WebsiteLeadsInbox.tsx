@@ -859,7 +859,7 @@ export function WebsiteLeadsInbox() {
           </div>
         ) : emailDetail?.bodyHtml ? (
           <div
-            className="prose prose-sm max-w-none break-words text-sm"
+            className="crm-rich-html prose prose-sm max-w-none break-words rounded-md border border-border p-4 text-sm"
             dangerouslySetInnerHTML={{
               __html: sanitizeEmailHtml(emailDetail.bodyHtml),
             }}

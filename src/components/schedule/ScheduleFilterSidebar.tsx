@@ -135,7 +135,7 @@ export function ScheduleFilterSidebar({
             <InboxCountOrb count={pendingTimeOffCount} />
           </button>
           <p className="mt-1 px-1 text-[11px] text-muted-foreground">
-            Work days, time off, and request approvals
+            Time off and request approvals
           </p>
         </div>
         )}

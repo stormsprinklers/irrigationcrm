@@ -53,7 +53,9 @@ export default function MaintenancePlansPage() {
               (row: {
                 id: string;
                 enrollmentId: string;
+                customerId?: string;
                 customer: string;
+                customerDoNotService?: boolean;
                 phone: string | null;
                 dueDate: string;
                 status: string;
@@ -61,7 +63,9 @@ export default function MaintenancePlansPage() {
               }) => ({
                 id: row.id,
                 enrollmentId: row.enrollmentId,
+                customerId: row.customerId,
                 customer: row.customer,
+                customerDoNotService: row.customerDoNotService,
                 phone: row.phone,
                 dueDate: row.dueDate,
                 status: row.status,

@@ -469,7 +469,7 @@ export async function listDueBilling(companyId: string) {
     include: {
       enrollment: {
         include: {
-          customer: { select: { id: true, name: true, phone: true } },
+          customer: { select: { id: true, name: true, phone: true, doNotService: true } },
           template: { select: { name: true } },
         },
       },
@@ -480,7 +480,9 @@ export async function listDueBilling(companyId: string) {
   return rows.map((r) => ({
     id: r.id,
     enrollmentId: r.enrollmentId,
+    customerId: r.enrollment.customer.id,
     customer: r.enrollment.customer.name,
+    customerDoNotService: r.enrollment.customer.doNotService,
     phone: r.enrollment.customer.phone,
     planName: r.enrollment.template.name,
     dueDate: r.dueDate.toISOString(),
@@ -524,6 +526,7 @@ export async function listUnscheduledVisits(companyId: string) {
   return rows.map((r) => ({
     id: r.id,
     enrollmentId: r.enrollmentId,
+    customerId: r.enrollment.customer.id,
     customer: r.enrollment.customer.name,
     customerDoNotService: r.enrollment.customer.doNotService,
     property: r.enrollment.property.name,

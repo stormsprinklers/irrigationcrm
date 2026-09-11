@@ -10,6 +10,8 @@ import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicke
 import { EmployeeSearchPicker } from "@/components/schedule/EmployeeSearchPicker";
 import type { CustomerDTO } from "@/lib/customers/types";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
+import { assignmentOffMessage } from "@/lib/schedule/open-time-slots";
+import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -19,6 +21,7 @@ type Props = {
   slot: ScheduleSlotClick | null;
   serviceAreas: { id: string; name: string }[];
   employees: { id: string; name: string }[];
+  workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   onClose: () => void;
   onCreated: (visitId: string) => void;
 };
@@ -27,6 +30,7 @@ export function ScheduleQuickAddDialog({
   open,
   slot,
   employees,
+  workSchedules,
   onClose,
   onCreated,
 }: Props) {
@@ -61,6 +65,19 @@ export function ScheduleQuickAddDialog({
 
   if (!open || !slot) return null;
 
+  const offMessage =
+    !crewId && assignedUserId
+      ? assignmentOffMessage(
+          assignedUserName || "This technician",
+          workSchedules?.[assignedUserId],
+          slot.startAt.getDay(),
+          slot.startAt.getHours() * 60 + slot.startAt.getMinutes(),
+          slot.endAt.getHours() * 60 +
+            slot.endAt.getMinutes() +
+            (slot.endAt.getDate() !== slot.startAt.getDate() ? 24 * 60 : 0)
+        )
+      : null;
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!slot) return;
@@ -74,6 +91,10 @@ export function ScheduleQuickAddDialog({
     }
     if (selectedCustomer?.doNotService) {
       toast.error("This customer is marked DO NOT SERVICE");
+      return;
+    }
+    if (offMessage) {
+      toast.error(offMessage);
       return;
     }
 
@@ -118,86 +139,92 @@ export function ScheduleQuickAddDialog({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-md rounded-lg border bg-background shadow-lg">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col rounded-lg border bg-background shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
           <div>
             <h2 className="font-semibold">Schedule visit</h2>
             <p className="text-xs text-muted-foreground">
               {format(slot.startAt, "EEE, MMM d")} · {format(slot.startAt, "h:mm a")} –{" "}
               {format(slot.endAt, "h:mm a")} (3h arrival window)
             </p>
+            {offMessage ? (
+              <p className="mt-1 text-xs font-medium text-destructive">{offMessage}. Pick another technician or day.</p>
+            ) : null}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        <form className="space-y-3 p-4" onSubmit={(e) => void handleCreate(e)}>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Title</label>
-            <Input
-              className="mt-1"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Service visit"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Customer</label>
-            <div className="mt-1">
-              <CustomerSearchPicker
-                value={customerId}
-                selectedName={customerName}
-                onValueChange={(id, name) => {
-                  setCustomerId(id);
-                  setCustomerName(name);
-                  if (!id) setSelectedCustomer(null);
-                }}
-                onCustomerSelect={setSelectedCustomer}
+        <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={(e) => void handleCreate(e)}>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Title</label>
+              <Input
+                className="mt-1"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Service visit"
               />
             </div>
-          </div>
 
-          {crewId ? (
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Crew</label>
-              <p className="mt-1 rounded-md border border-border px-3 py-2 text-sm">{crewName}</p>
-            </div>
-          ) : (
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Technician</label>
+              <label className="text-xs font-medium text-muted-foreground">Customer</label>
               <div className="mt-1">
-                <EmployeeSearchPicker
-                  value={assignedUserId}
-                  selectedName={assignedUserName}
-                  employees={employees}
+                <CustomerSearchPicker
+                  compact
+                  value={customerId}
+                  selectedName={customerName}
                   onValueChange={(id, name) => {
-                    setAssignedUserId(id);
-                    setAssignedUserName(name);
+                    setCustomerId(id);
+                    setCustomerName(name);
+                    if (!id) setSelectedCustomer(null);
                   }}
+                  onCustomerSelect={setSelectedCustomer}
                 />
               </div>
             </div>
-          )}
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground">Division</label>
-            <select
-              className={`${selectClassName} mt-1`}
-              value={division}
-              onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL")}
-            >
-              <option value="SERVICE">Service</option>
-              <option value="INSTALL">Install</option>
-            </select>
+            {crewId ? (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Crew</label>
+                <p className="mt-1 rounded-md border border-border px-3 py-2 text-sm">{crewName}</p>
+              </div>
+            ) : (
+              <div className="relative z-20">
+                <label className="text-xs font-medium text-muted-foreground">Technician</label>
+                <div className="mt-1">
+                  <EmployeeSearchPicker
+                    value={assignedUserId}
+                    selectedName={assignedUserName}
+                    employees={employees}
+                    onValueChange={(id, name) => {
+                      setAssignedUserId(id);
+                      setAssignedUserName(name);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Division</label>
+              <select
+                className={`${selectClassName} mt-1`}
+                value={division}
+                onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL")}
+              >
+                <option value="SERVICE">Service</option>
+                <option value="INSTALL">Install</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex shrink-0 justify-end gap-2 border-t bg-background px-4 py-3">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || Boolean(offMessage)}>
               {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
               Create visit
             </Button>

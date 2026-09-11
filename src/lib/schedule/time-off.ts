@@ -1,6 +1,6 @@
 import { TimeOffStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { defaultEmployeeWorkSchedule, toMinutes } from "@/lib/schedule/open-time-slots";
+import { assignmentOffMessage } from "@/lib/schedule/open-time-slots";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { localTimeParts } from "@/lib/voice/hours-branch";
 
@@ -184,36 +184,21 @@ export async function assertEmployeeAvailableForAssignment(
     };
   }
 
-  const workDays = await prisma.employeeWorkSchedule.findMany({
-    where: { companyId, userId },
-  });
-
-  const schedule =
-    workDays.length > 0
-      ? workDays
-      : defaultEmployeeWorkSchedule().map((day) => ({
-          dayOfWeek: day.dayOfWeek,
-          isWorking: day.isWorking,
-          startTime: day.startTime,
-          endTime: day.endTime,
-        }));
-
+  const schedule = await getEmployeeWorkSchedule(companyId, userId);
   const timezone = company?.timezone;
   const startParts = localTimeParts(timezone, startAt);
   const endParts = localTimeParts(timezone, endAt);
-  const daySchedule = schedule.find((row) => row.dayOfWeek === startParts.day);
-
-  let warning: string | null = null;
-  if (daySchedule && !daySchedule.isWorking) {
-    warning = `${employee.name} is not scheduled to work this day`;
-  } else if (daySchedule?.isWorking && daySchedule.startTime && daySchedule.endTime) {
-    const windowStart = toMinutes(daySchedule.startTime);
-    const windowEnd = toMinutes(daySchedule.endTime);
-    const endsNextDay = endParts.day !== startParts.day;
-    const endMinutes = endsNextDay ? endParts.minutes + 24 * 60 : endParts.minutes;
-    if (startParts.minutes < windowStart || endMinutes > windowEnd) {
-      warning = `${employee.name} is only scheduled ${daySchedule.startTime}–${daySchedule.endTime} this day`;
-    }
+  const endsNextDay = endParts.day !== startParts.day;
+  const endMinutes = endsNextDay ? endParts.minutes + 24 * 60 : endParts.minutes;
+  const offMessage = assignmentOffMessage(
+    employee.name,
+    schedule,
+    startParts.day,
+    startParts.minutes,
+    endMinutes
+  );
+  if (offMessage) {
+    return { error: offMessage, warning: null };
   }
 
   const conflictWhere = {
@@ -231,11 +216,11 @@ export async function assertEmployeeAvailableForAssignment(
   if (conflict) {
     return {
       error: `${employee.name} is already assigned to "${conflict.title}" during this time`,
-      warning,
+      warning: null,
     };
   }
 
-  return { error: null, warning };
+  return { error: null, warning: null };
 }
 
 export async function validateAssignmentUpdate(

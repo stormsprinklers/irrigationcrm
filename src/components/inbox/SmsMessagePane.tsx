@@ -74,7 +74,7 @@ function ComposeBar({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex shrink-0 flex-col gap-2 border-t border-border bg-white p-4"
+      className="flex shrink-0 flex-col gap-2 border-t border-border bg-background p-4"
     >
       <InboxAttachmentPicker
         channel="sms"
@@ -336,8 +336,8 @@ export function SmsMessagePane({
                       className={cn(
                         "rounded-2xl px-4 py-2 text-sm",
                         msg.direction === "OUTBOUND"
-                          ? "bg-primary text-white"
-                          : "bg-white text-foreground shadow-sm"
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border bg-muted text-foreground shadow-sm"
                       )}
                     >
                       {msg.body && msg.body !== "[Media message]" ? (
@@ -348,7 +348,7 @@ export function SmsMessagePane({
                         className={cn(
                           "mt-1 text-[10px] leading-snug",
                           msg.direction === "OUTBOUND"
-                            ? "text-right text-white/70"
+                            ? "text-right text-primary-foreground/70"
                             : "text-muted-foreground"
                         )}
                       >
@@ -376,19 +376,19 @@ export function SmsMessagePane({
                     msg.contactInfoDetected ? (
                       <div className="flex flex-col items-start gap-1 px-1">
                         {msg.contactInfoAppliedAt ? (
-                          <span className="text-[10px] font-medium text-green-700">
+                          <span className="text-[10px] font-medium text-green-700 dark:text-green-300">
                             Contact info added
                           </span>
                         ) : (
                           <>
-                            <span className="text-[10px] font-medium text-amber-700">
+                            <span className="text-[10px] font-medium text-amber-700 dark:text-amber-300">
                               Contact info detected
                             </span>
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 border-amber-300 bg-amber-50 text-xs text-amber-900 hover:bg-amber-100"
+                              className="h-7 border-amber-300 bg-amber-50 text-xs text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200 dark:hover:bg-amber-900/50"
                               onClick={() => setContactInfoMessageId(msg.id)}
                             >
                               + Add contact info
@@ -504,7 +504,7 @@ function DeliveryFailureDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="sms-delivery-title"
-        className="w-full max-w-md rounded-lg border border-border bg-white p-5 shadow-lg"
+        className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-lg"
       >
         <h2 id="sms-delivery-title" className="flex items-center gap-2 text-base font-semibold">
           <AlertCircle className="h-4 w-4 text-destructive" aria-hidden />

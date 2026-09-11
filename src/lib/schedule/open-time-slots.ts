@@ -115,6 +115,64 @@ export function workDayForDate(
   return schedule.find((d) => d.dayOfWeek === dayOfWeek) ?? null;
 }
 
+export function isWorkingOnDay(
+  schedule: WorkScheduleDayDTO[] | undefined,
+  dayOfWeek: number
+) {
+  const days = schedule && schedule.length > 0 ? schedule : defaultEmployeeWorkSchedule();
+  return Boolean(workDayForDate(days, dayOfWeek)?.isWorking);
+}
+
+/**
+ * Hours on the schedule grid that are outside this employee's work day.
+ * Full-day OFF when they are not working that weekday.
+ */
+export function offWindowsForDay(
+  schedule: WorkScheduleDayDTO[] | undefined,
+  dayOfWeek: number,
+  gridStart = "04:00",
+  gridEnd = "23:00"
+): BookingWindow[] {
+  const days = schedule && schedule.length > 0 ? schedule : defaultEmployeeWorkSchedule();
+  const day = workDayForDate(days, dayOfWeek);
+  if (!day?.isWorking) {
+    return [{ start: gridStart, end: gridEnd }];
+  }
+
+  const workStart = day.startTime ?? DEFAULT_WORK_DAY_START;
+  const workEnd = day.endTime ?? DEFAULT_WORK_DAY_END;
+  const windows: BookingWindow[] = [];
+  if (toMinutes(workStart) > toMinutes(gridStart)) {
+    windows.push({ start: gridStart, end: workStart });
+  }
+  if (toMinutes(workEnd) < toMinutes(gridEnd)) {
+    windows.push({ start: workEnd, end: gridEnd });
+  }
+  return windows;
+}
+
+/** Client/server copy for why a visit cannot be assigned on this work schedule. */
+export function assignmentOffMessage(
+  employeeName: string,
+  schedule: WorkScheduleDayDTO[] | undefined,
+  dayOfWeek: number,
+  startMinutes: number,
+  endMinutes: number
+): string | null {
+  const days = schedule && schedule.length > 0 ? schedule : defaultEmployeeWorkSchedule();
+  const day = workDayForDate(days, dayOfWeek);
+  if (!day?.isWorking) {
+    return `${employeeName} is off this day`;
+  }
+  if (!day.startTime || !day.endTime) return null;
+  const windowStart = toMinutes(day.startTime);
+  const windowEnd = toMinutes(day.endTime);
+  if (startMinutes < windowStart || endMinutes > windowEnd) {
+    return `${employeeName} is only working ${day.startTime}–${day.endTime} this day`;
+  }
+  return null;
+}
+
 /**
  * Intersect division booking windows with the employee's work hours for a day.
  * Adjacent windows that only touch (11:00–11:00) stay separate.

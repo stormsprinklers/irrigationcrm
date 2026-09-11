@@ -6,6 +6,7 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { KpiStrip } from "@/components/home/KpiStrip";
 import { MaintenancePlansHomeCard } from "@/components/home/MaintenancePlansHomeCard";
+import { OfficeTodoList } from "@/components/home/OfficeTodoList";
 import { SummaryCard } from "@/components/home/SummaryCard";
 import { useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { HomeDateRange, HomeKpi, HomeSummaryCard } from "@/lib/home/types";
@@ -45,6 +46,8 @@ export function HomePageInner() {
           My expense card
         </Link>
       </p>
+
+      <OfficeTodoList />
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading dashboard...</p>
