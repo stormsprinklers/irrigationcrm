@@ -8,6 +8,7 @@ import {
   isIsoDay,
   removeWinterizationRequests,
   scheduleWinterizationRequests,
+  updateWinterizationSchedulingNotes,
 } from "@/lib/winterization/actions";
 
 const STATUSES = new Set<string>(Object.values(WinterizationRequestStatus));
@@ -31,12 +32,29 @@ export async function PATCH(
     const status = String(body.status ?? "");
     const scheduledDate =
       typeof body.scheduledDate === "string" ? body.scheduledDate.trim() : "";
+    const notesProvided = Object.prototype.hasOwnProperty.call(body, "schedulingNotes");
+    const schedulingNotes =
+      typeof body.schedulingNotes === "string"
+        ? body.schedulingNotes
+        : body.schedulingNotes === null
+          ? null
+          : undefined;
 
     const existing = await prisma.winterizationRequest.findFirst({
       where: { id, companyId: user.companyId },
       select: { id: true },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (notesProvided && !status && !scheduledDate) {
+      const updated = await updateWinterizationSchedulingNotes(
+        user.companyId,
+        id,
+        schedulingNotes ?? null
+      );
+      if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(updated);
+    }
 
     if (status === WinterizationRequestStatus.CANCELLED) {
       const result = await removeWinterizationRequests(user.companyId, [id]);

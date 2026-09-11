@@ -24,7 +24,13 @@ export function CustomerSummaryCard({ customerId }: Props) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Customer summary</CardTitle>
+        <CardTitle className="text-base">
+          {loading || !summary
+            ? "Summary"
+            : summary.lifetimeValue > 0
+              ? "Customer summary"
+              : "Contact summary"}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -38,6 +44,11 @@ export function CustomerSummaryCard({ customerId }: Props) {
               <p className="mt-1 text-3xl font-semibold tracking-tight">
                 {summary ? formatCurrency(summary.lifetimeValue) : "—"}
               </p>
+              {summary && summary.lifetimeValue <= 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No paid work yet. This person is listed under Contacts until they have lifetime value.
+                </p>
+              ) : null}
             </div>
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>

@@ -9,8 +9,14 @@ import {
   zonedWallTimeToUtc,
 } from "@/lib/datetime/zoned";
 import { prisma } from "@/lib/prisma";
+import { BOOKING_SLOT_MINUTES } from "@/lib/booking/slot-minutes";
 
-export const BOOKING_SLOT_MINUTES = 120;
+export {
+  BOOKING_SLOT_MINUTES,
+  BOOKING_SLOT_MINUTES_MIN,
+  BOOKING_SLOT_MINUTES_MAX,
+  clampOnlineBookingSlotMinutes,
+} from "@/lib/booking/slot-minutes";
 export const BOOKING_LOOKAHEAD_DAYS = 14;
 
 export type BookingSlot = {

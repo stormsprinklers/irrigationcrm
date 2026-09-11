@@ -51,7 +51,10 @@ export async function recordInvoicePayment(
 
   if (params.stripePaymentIntentId) {
     const existing = await prisma.payment.findFirst({
-      where: { stripePaymentIntentId: params.stripePaymentIntentId },
+      where: {
+        stripePaymentIntentId: params.stripePaymentIntentId,
+        invoiceId: params.invoiceId,
+      },
     });
     if (existing) {
       const invoice = await prisma.invoice.findUnique({
@@ -204,6 +207,19 @@ export async function recordInvoicePayment(
       companyId: invoice.companyId,
       event: "INVOICE_PAID_RECEIPT",
       // Send both email and SMS when configured (CRM receipt, not Stripe's).
+    });
+  }
+
+  if (nextStatus === "PAID") {
+    await prisma.maintenancePlanBillingPeriod.updateMany({
+      where: { invoiceId: invoice.id, status: { not: "PAID" } },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        ...(params.stripePaymentIntentId
+          ? { stripePaymentIntentId: params.stripePaymentIntentId }
+          : {}),
+      },
     });
   }
 

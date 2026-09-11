@@ -106,6 +106,23 @@ test("pricing quote SMS uses quote snapshot and website booking URL", () => {
   );
 });
 
+test("lead ack prefers the saved website booking URL over hostname /booking", () => {
+  assert.equal(
+    resolveLeadAcknowledgementBookingUrl(
+      {
+        websiteBookingUrl: "https://www.stormsprinklers.com/booking",
+        website: "www.stormsprinklers.com",
+        campaignCtaLinks: { bookingUrl: "https://campaign.example/override" },
+        bookingSlug: "storm",
+        customerBaseUrl: "https://portal.example.com",
+        onlineBookingEnabled: true,
+      },
+      { event: "pricing_quote_captured" }
+    ),
+    "https://www.stormsprinklers.com/booking"
+  );
+});
+
 test("renderTemplate collapses doubled Ballpark/Book labels", () => {
   assert.equal(
     renderTemplate("Ballpark: {estimate_range} Book: {booking_link}", {
@@ -288,6 +305,19 @@ test("buildNotificationContext fills company phone and booking link", () => {
   });
   assert.equal(ctx.company_phone, "385-555-0100");
   assert.equal(ctx.booking_link, "https://portal.example.com/book/storm");
+});
+
+test("buildNotificationContext uses the website booking URL when set", () => {
+  const ctx = buildNotificationContext({
+    company: {
+      name: "Storm Sprinklers",
+      websiteBookingUrl: "https://www.stormsprinklers.com/booking",
+      bookingSlug: "storm",
+      customerBaseUrl: "https://portal.example.com",
+    },
+    customer: { name: "Jane Doe" },
+  });
+  assert.equal(ctx.booking_link, "https://www.stormsprinklers.com/booking");
 });
 
 test("followUpRunAt is 24 hours after completion, not the appointment time", () => {

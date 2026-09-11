@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  officeTodoRecurrenceFormValues,
   officeTodoRecurrenceLabel,
   parseOfficeTodoRecurrence,
   shouldReopenRecurringTodo,
@@ -190,4 +191,11 @@ test("officeTodoRecurrenceLabel describes custom schedules", () => {
   assert.equal(officeTodoRecurrenceLabel("EVERY_N_DAYS", 3), "Every 3 days");
   assert.equal(officeTodoRecurrenceLabel("WEEKLY_ON_DAY", 1), "Every Monday");
   assert.equal(officeTodoRecurrenceLabel("MONTHLY_ON_DAY", 15), "Every 15th of the month");
+});
+
+test("daily tasks edit as every 1 day", () => {
+  assert.deepEqual(
+    officeTodoRecurrenceFormValues({ recurrence: "DAILY", recurrenceEvery: null }),
+    { recurrence: "EVERY_N_DAYS", recurrenceEvery: 1 }
+  );
 });

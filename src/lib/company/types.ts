@@ -39,6 +39,9 @@ export const companySettingsSelect = {
   onlineBookingVirtualOnly: true,
   bookingSlug: true,
   bookingLeadTimeHours: true,
+  onlineBookingSlotMinutes: true,
+  websiteBookingUrl: true,
+  websiteWinterizationBookingUrl: true,
   portalEnabled: true,
   portalShowInvoices: true,
   portalShowEstimates: true,
@@ -132,6 +135,9 @@ export type CompanySettingsDTO = {
   onlineBookingVirtualOnly: boolean;
   bookingSlug: string | null;
   bookingLeadTimeHours: number;
+  onlineBookingSlotMinutes: number;
+  websiteBookingUrl: string | null;
+  websiteWinterizationBookingUrl: string | null;
   portalEnabled: boolean;
   portalShowInvoices: boolean;
   portalShowEstimates: boolean;

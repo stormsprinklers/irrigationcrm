@@ -5,8 +5,9 @@ import {
   ACTIVE_MAINTENANCE_ENROLLMENT_STATUSES,
 } from "@/lib/company/features";
 import { getAppBaseUrl } from "@/lib/app-url";
-import { parseCustomerBaseUrlInput } from "@/lib/company/customer-url";
+import { parseCustomerBaseUrlInput, parsePublicHttpUrl } from "@/lib/company/customer-url";
 import { companySettingsSelect, serializeCompanySettings } from "@/lib/company/types";
+import { clampOnlineBookingSlotMinutes } from "@/lib/booking/slot-minutes";
 import { countActiveMaintenanceEnrollments } from "@/lib/maintenance-plans/feature";
 import { prisma } from "@/lib/prisma";
 
@@ -118,6 +119,26 @@ export async function PATCH(request: NextRequest) {
           { status: 400 }
         );
       }
+    }
+
+    for (const key of ["websiteBookingUrl", "websiteWinterizationBookingUrl"] as const) {
+      if (key in data) {
+        try {
+          data[key] = parsePublicHttpUrl(
+            data[key],
+            key === "websiteBookingUrl" ? "website booking URL" : "winterization booking URL"
+          );
+        } catch (err) {
+          return NextResponse.json(
+            { error: err instanceof Error ? err.message : "Invalid booking URL" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    if ("onlineBookingSlotMinutes" in data) {
+      data.onlineBookingSlotMinutes = clampOnlineBookingSlotMinutes(data.onlineBookingSlotMinutes);
     }
 
     const company = await prisma.company.update({

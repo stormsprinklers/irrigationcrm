@@ -54,6 +54,7 @@ export function leadAcknowledgementEstimate(meta: Record<string, unknown>): stri
 }
 
 export type LeadBookingCompany = {
+  websiteBookingUrl?: string | null;
   websiteBaseUrl?: string | null;
   website?: string | null;
   campaignCtaLinks?: unknown;
@@ -68,6 +69,9 @@ export function resolveLeadAcknowledgementBookingUrl(
   meta: Record<string, unknown>
 ): string {
   if (Boolean(meta.winterization)) return "";
+
+  const websiteUrl = company.websiteBookingUrl?.trim();
+  if (websiteUrl) return websiteUrl.replace(/\/$/, "");
 
   const campaignUrl = campaignBookingOverride(company.campaignCtaLinks);
   if (campaignUrl) return campaignUrl;

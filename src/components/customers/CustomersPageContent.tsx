@@ -25,6 +25,11 @@ const emptyFilters: CustomerListFilters = {
   status: "ACTIVE",
 };
 
+type Props = {
+  /** Paying customers vs never-paid contacts. */
+  segment: "CUSTOMERS" | "CONTACTS";
+};
+
 function buildQuery(filters: CustomerListFilters) {
   const params = new URLSearchParams();
   if (filters.search?.trim()) params.set("search", filters.search.trim());
@@ -33,11 +38,13 @@ function buildQuery(filters: CustomerListFilters) {
   if (filters.leadSource?.trim()) params.set("leadSource", filters.leadSource.trim());
   if (filters.company?.trim()) params.set("company", filters.company.trim());
   if (filters.status && filters.status !== "ACTIVE") params.set("status", filters.status);
+  if (filters.segment) params.set("segment", filters.segment);
   const query = params.toString();
   return query ? `?${query}` : "";
 }
 
-export default function CustomersPageContent() {
+export default function CustomersPageContent({ segment }: Props) {
+  const isContacts = segment === "CONTACTS";
   const { data: session } = useSession();
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
@@ -58,12 +65,20 @@ export default function CustomersPageContent() {
     leadSource: searchParams.get("leadSource") ?? "",
     company: searchParams.get("company") ?? "",
     status: "ACTIVE",
+    segment,
   }));
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const hasActiveFilters = useMemo(
-    () => Object.values(filters).some((value) => value?.trim()),
+    () =>
+      Boolean(
+        filters.search?.trim() ||
+          filters.city?.trim() ||
+          filters.zip?.trim() ||
+          filters.leadSource?.trim() ||
+          filters.company?.trim()
+      ),
     [filters]
   );
 
@@ -75,15 +90,19 @@ export default function CustomersPageContent() {
   }, []);
 
   useEffect(() => {
-    setFilters((prev) => ({ ...prev, status: listTab === "ARCHIVED" ? "ARCHIVED" : "ACTIVE" }));
+    setFilters((prev) => ({
+      ...prev,
+      status: listTab === "ARCHIVED" ? "ARCHIVED" : "ACTIVE",
+      segment,
+    }));
     setSelectedIds([]);
-  }, [listTab]);
+  }, [listTab, segment]);
 
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
       load(filters)
-        .catch(() => toast.error("Failed to load customers"))
+        .catch(() => toast.error(isContacts ? "Failed to load contacts" : "Failed to load customers"))
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
@@ -137,7 +156,7 @@ export default function CustomersPageContent() {
       const customer = await createDraftCustomer();
       window.location.href = `/customers/${customer.id}?edit=1`;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create customer");
+      toast.error(err instanceof Error ? err.message : isContacts ? "Failed to create contact" : "Failed to create customer");
       setCreating(false);
     }
   }
@@ -145,13 +164,19 @@ export default function CustomersPageContent() {
   return (
     <ContentArea>
       <PageHeader
-        breadcrumb={["Customers", "All Customers"]}
-        title="All Customers"
-        subtitle={loading ? "Loading..." : `${customers.length} records`}
+        breadcrumb={["Customers", isContacts ? "Contacts" : "All Customers"]}
+        title={isContacts ? "Contacts" : "Customers"}
+        subtitle={
+          loading
+            ? "Loading..."
+            : isContacts
+              ? `${customers.length} people with no lifetime value — never billed for work`
+              : `${customers.length} customers with paid work`
+        }
         actions={
           <Button size="sm" onClick={() => void createCustomer()} disabled={creating}>
             <Plus className="h-4 w-4" />
-            {creating ? "Creating…" : "Create customer"}
+            {creating ? "Creating…" : isContacts ? "Create contact" : "Create customer"}
           </Button>
         }
       />
@@ -186,7 +211,12 @@ export default function CustomersPageContent() {
           />
         </div>
         {hasActiveFilters && (
-          <Button type="button" variant="outline" size="sm" onClick={() => setFilters(emptyFilters)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setFilters({ ...emptyFilters, segment })}
+          >
             Clear filters
           </Button>
         )}
@@ -307,6 +337,7 @@ export default function CustomersPageContent() {
                   <CustomerNameWithBadge
                     name={customer.name}
                     doNotService={customer.doNotService}
+                    isContact={customer.isContact}
                   />
                   {customer.email ? ` · ${customer.email}` : ""}
                 </button>
@@ -360,12 +391,15 @@ export default function CustomersPageContent() {
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading customers...</p>
+        <p className="text-sm text-muted-foreground">
+          {isContacts ? "Loading contacts..." : "Loading customers..."}
+        </p>
       ) : (
         <CustomerTable
           data={customers}
           selectedIds={selectedIds}
           onSelectedIdsChange={setSelectedIds}
+          nameColumnLabel={isContacts ? "Contact name" : "Customer name"}
         />
       )}
     </ContentArea>

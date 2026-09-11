@@ -17,11 +17,63 @@ export function isPlainTextEmailTemplate(id: EmailTemplateId | string | null | u
   return id === "plain";
 }
 
+export const PLAIN_EMAIL_ATTR = "data-plain-email";
+
+const PLAIN_EMAIL_WRAP_STYLE =
+  "font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1e293b;";
+
 /** True when the stored body is an HTML email (not empty / not plain text). */
 export function isHtmlEmailBody(html: string | null | undefined) {
   const value = html?.trim() ?? "";
   if (!value) return false;
   return /<[a-z][\s\S]*>/i.test(value);
+}
+
+export function isPlainEmailHtml(html: string | null | undefined) {
+  return Boolean(html?.includes(PLAIN_EMAIL_ATTR));
+}
+
+export function looksLikePlainEmail(
+  bodyHtml: string | null | undefined,
+  bodyText?: string | null
+) {
+  if (isPlainEmailHtml(bodyHtml)) return true;
+  return !isHtmlEmailBody(bodyHtml) && Boolean(String(bodyText ?? "").trim());
+}
+
+export function wrapPlainEmailHtml(innerHtml: string): string {
+  const inner = innerHtml.trim() || "<p><br></p>";
+  if (isPlainEmailHtml(inner)) return inner;
+  return `<div ${PLAIN_EMAIL_ATTR}="true" style="${PLAIN_EMAIL_WRAP_STYLE}">${inner}</div>`;
+}
+
+export function unwrapPlainEmailHtml(html: string): string {
+  const value = html.trim();
+  if (!value) return "<p><br></p>";
+  const marked = value.match(
+    new RegExp(`<div[^>]*${PLAIN_EMAIL_ATTR}[^>]*>([\\s\\S]*)</div>\\s*$`, "i")
+  );
+  if (marked?.[1] != null) return marked[1].trim() || "<p><br></p>";
+  const nested = value.match(
+    new RegExp(`<div[^>]*${PLAIN_EMAIL_ATTR}[^>]*>([\\s\\S]*?)</div>`, "i")
+  );
+  if (nested?.[1] != null) return nested[1].trim() || "<p><br></p>";
+  if (isHtmlEmailBody(value)) return value;
+  return textToPlainEmailInner(value);
+}
+
+function textToPlainEmailInner(text: string): string {
+  const escaped = escapeHtml(text);
+  if (!escaped.trim()) return "<p><br></p>";
+  return escaped
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+/** Turn typed/AI plain text into simple HTML that can still be bold/italic/underline. */
+export function textToPlainEmailHtml(text: string): string {
+  return wrapPlainEmailHtml(textToPlainEmailInner(text));
 }
 
 export type EmailTemplateMeta = {
@@ -49,7 +101,7 @@ export const EMAIL_TEMPLATES: EmailTemplateMeta[] = [
   {
     id: "plain",
     name: "Plain text",
-    description: "No HTML or layout — just the words, like a regular unformatted email.",
+    description: "Simple email with bold, italic, and underline — no photos or designed layout.",
   },
 ];
 

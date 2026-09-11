@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { toNumber } from "@/lib/visits/totals";
+import { recordInvoicePayment } from "@/lib/invoices/record-payment";
+import { nextInvoiceNumber } from "@/lib/visits/queries";
 
 export { computeCancellationFee } from "@/lib/maintenance-plans/billing";
 
@@ -52,11 +53,38 @@ export async function recordMaintenanceInvoicePayment(params: {
   amount: number;
   stripePaymentIntentId?: string | null;
 }) {
+  const period = await prisma.maintenancePlanBillingPeriod.findFirst({
+    where: { id: params.billingPeriodId, enrollmentId: params.enrollmentId },
+    include: { invoice: { select: { id: true, status: true } } },
+  });
+  if (!period) return null;
+
+  const existingInvoice = period.invoice;
+  if (
+    existingInvoice &&
+    existingInvoice.status !== "VOID" &&
+    existingInvoice.status !== "REFUNDED"
+  ) {
+    await recordInvoicePayment({
+      invoiceId: existingInvoice.id,
+      amount: params.amount,
+      stripePaymentIntentId: params.stripePaymentIntentId,
+    });
+    await prisma.maintenancePlanBillingPeriod.update({
+      where: { id: period.id },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        stripePaymentIntentId: params.stripePaymentIntentId ?? period.stripePaymentIntentId,
+      },
+    });
+    return prisma.invoice.findUnique({ where: { id: existingInvoice.id } });
+  }
+
   const company = await prisma.company.findUnique({ where: { id: params.companyId } });
   if (!company) return null;
 
-  const count = await prisma.invoice.count({ where: { companyId: params.companyId } });
-  const invoiceNumber = `INV-${String(count + 1).padStart(5, "0")}`;
+  const invoiceNumber = await nextInvoiceNumber(params.companyId);
 
   const invoice = await prisma.invoice.create({
     data: {

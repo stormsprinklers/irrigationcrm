@@ -163,9 +163,13 @@ export async function runStormAiTool(
               outstandingBalance: canAccessInvoices(user.role)
                 ? summary.outstandingBalance
                 : undefined,
+              isContact: summary.lifetimeValue <= 0,
             }
           : null;
-        return ok({ customer: serialized, summary: summaryOut });
+        return ok({
+          customer: { ...serialized, isContact: summary ? summary.lifetimeValue <= 0 : undefined },
+          summary: summaryOut,
+        });
       }
       case "get_customer_history": {
         const customerId = String(args.customerId ?? "");

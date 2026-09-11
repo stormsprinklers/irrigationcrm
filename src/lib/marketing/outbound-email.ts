@@ -23,9 +23,13 @@ export function buildMarketingEmailPayload(params: {
     params.recipientId
   );
   if (!isHtmlEmailBody(params.bodyHtml)) {
+    const html = appendMarketingUnsubscribeFooter(
+      plainTextAsEmailHtml(params.bodyText),
+      params.unsubscribeUrl
+    );
     return {
       text,
-      html: appendOpenTrackingPixel(plainTextAsEmailHtml(text), params.recipientId),
+      html: appendOpenTrackingPixel(html, params.recipientId),
     };
   }
 

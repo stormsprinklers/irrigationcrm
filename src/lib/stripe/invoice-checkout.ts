@@ -76,6 +76,75 @@ export async function createInvoiceCheckoutSession(params: {
   return session;
 }
 
+export async function createCombinedInvoiceCheckoutSession(params: {
+  invoices: Array<{ id: string; invoiceNumber: string; balanceDue: number }>;
+  companyId: string;
+  customerId: string;
+  customerEmail: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error("STRIPE_SECRET_KEY is not configured");
+  }
+  if (params.invoices.length < 2) {
+    throw new Error("At least two invoices are required");
+  }
+
+  const lineItems = params.invoices.map((invoice) => {
+    const amountCents = Math.round(invoice.balanceDue * 100);
+    if (amountCents <= 0) {
+      throw new Error(`Invoice ${invoice.invoiceNumber} has no balance due`);
+    }
+    return {
+      quantity: 1,
+      price_data: {
+        currency: "usd" as const,
+        unit_amount: amountCents,
+        product_data: {
+          name: `Invoice ${invoice.invoiceNumber}`,
+          description: "Customer portal payment",
+        },
+      },
+    };
+  });
+
+  const invoiceIds = params.invoices.map((invoice) => invoice.id).join(",");
+  const amountsCents = params.invoices
+    .map((invoice) => String(Math.round(invoice.balanceDue * 100)))
+    .join(",");
+  const metadata = {
+    checkoutType: "multi_invoice",
+    invoiceIds,
+    amountsCents,
+    companyId: params.companyId,
+    customerId: params.customerId,
+  };
+
+  const stripe = getStripeClient();
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: params.customerEmail ?? undefined,
+    wallet_options: { link: { display: "never" } },
+    line_items: lineItems,
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    payment_intent_data: { metadata },
+    metadata,
+  });
+
+  await prisma.invoice.updateMany({
+    where: { id: { in: params.invoices.map((invoice) => invoice.id) }, companyId: params.companyId },
+    data: { stripeCheckoutSessionId: session.id },
+  });
+
+  if (!session.url) {
+    throw new Error("Failed to create checkout session");
+  }
+
+  return session;
+}
+
 /**
  * Create a fresh Stripe Checkout Session for in-app card collection.
  * Do not put session.url in SMS, email, or QR — use getInvoicePayUrl() instead.

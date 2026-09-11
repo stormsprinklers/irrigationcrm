@@ -18,7 +18,8 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     type: "function",
     function: {
       name: "search_customers",
-      description: "Search customers by name, phone, email, city, or zip.",
+      description:
+        "Search customers and contacts by name, phone, email, city, or zip. Contacts are people on file with no lifetime value (never paid for work).",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -34,7 +35,7 @@ export const STORM_AI_TOOLS: StormAiOpenAiTool[] = [
     type: "function",
     function: {
       name: "get_customer",
-      description: "Get one customer profile and summary by id.",
+      description: "Get one customer or contact profile and summary by id. isContact is true when lifetime value is $0.",
       parameters: {
         type: "object",
         additionalProperties: false,

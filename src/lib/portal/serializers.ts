@@ -85,6 +85,7 @@ export function serializePortalInvoice(invoice: {
   createdAt: Date;
   paidAt: Date | null;
   payments: Array<{ amount: { toNumber?: () => number } | number; refundedAt: Date | null }>;
+  maintenanceBillingPeriods?: Array<{ id: string }>;
 }) {
   const total = typeof invoice.total === "number" ? invoice.total : toNumber(invoice.total as never);
   const amountPaid = invoice.payments.reduce((sum, p) => {
@@ -95,6 +96,7 @@ export function serializePortalInvoice(invoice: {
 
   const balanceDue = Math.max(0, total - amountPaid);
   const display = getPortalInvoiceDisplay({ status: invoice.status, balanceDue });
+  const isMaintenancePlan = (invoice.maintenanceBillingPeriods?.length ?? 0) > 0;
 
   return {
     id: invoice.id,
@@ -104,6 +106,7 @@ export function serializePortalInvoice(invoice: {
     amountPaid,
     balanceDue: display.balanceDue,
     isPayable: display.isPayable,
+    isMaintenancePlan,
     statusLabel: display.statusLabel,
     publicToken: invoice.publicToken,
     createdAt: invoice.createdAt.toISOString(),

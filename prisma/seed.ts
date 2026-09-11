@@ -85,6 +85,9 @@ async function main() {
       referralCode: "STORM-REF",
       bookingSlug: "storm-sprinklers",
       onlineBookingEnabled: true,
+      websiteBookingUrl: "https://www.stormsprinklers.com/booking",
+      websiteWinterizationBookingUrl: "https://www.stormsprinklers.com/book-winterization",
+      onlineBookingSlotMinutes: 180,
       intakeRequiredFields: ["name", "phone", "email"],
     },
     create: {
@@ -114,6 +117,9 @@ async function main() {
       referralCode: "STORM-REF",
       bookingSlug: "storm-sprinklers",
       onlineBookingEnabled: true,
+      websiteBookingUrl: "https://www.stormsprinklers.com/booking",
+      websiteWinterizationBookingUrl: "https://www.stormsprinklers.com/book-winterization",
+      onlineBookingSlotMinutes: 180,
       intakeRequiredFields: ["name", "phone", "email"],
     },
   });

@@ -24,6 +24,7 @@ import {
   type MediaLibraryItem,
 } from "@/components/media/MediaLibraryPicker";
 import { EditableEmailPreview, type EditableEmailPreviewHandle } from "@/components/marketing/EditableEmailPreview";
+import { PlainEmailEditor, type PlainEmailEditorHandle } from "@/components/marketing/PlainEmailEditor";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
@@ -32,8 +33,12 @@ import { stormBrand } from "@/lib/branding";
 import {
   EMAIL_TEMPLATES,
   isHtmlEmailBody,
+  isPlainEmailHtml,
   isPlainTextEmailTemplate,
+  looksLikePlainEmail,
   renderEmailTemplatePreview,
+  textToPlainEmailHtml,
+  wrapPlainEmailHtml,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
@@ -113,7 +118,7 @@ function EmailCampaignEditorInner({
   const [palette, setPalette] = useState<PaletteState>(defaultPalette);
   const [paletteSeeded, setPaletteSeeded] = useState(false);
   const [templateId, setTemplateId] = useState<EmailTemplateId>(() =>
-    !isHtmlEmailBody(bodyHtml) && String(bodyText ?? "").trim() ? "plain" : "announcement"
+    looksLikePlainEmail(bodyHtml, bodyText) ? "plain" : "announcement"
   );
   const [selectedImages, setSelectedImages] = useState<MediaLibraryItem[]>([]);
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -134,8 +139,8 @@ function EmailCampaignEditorInner({
   const [htmlSourceOpen, setHtmlSourceOpen] = useState(false);
   const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const htmlRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
-  const plainRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const previewRef = useRef<EditableEmailPreviewHandle>(null);
+  const plainEditorRef = useRef<PlainEmailEditorHandle>(null);
   const isPlain = isPlainTextEmailTemplate(templateId);
 
   useEffect(() => {
@@ -177,10 +182,16 @@ function EmailCampaignEditorInner({
     onBodyChange(next, htmlToPlainText(next));
   }
 
-  function applyPlain(next: string) {
-    setPlainDraft(next);
-    setHtmlDraft("");
-    onBodyChange("", next);
+  function applyPlainHtml(nextHtml: string) {
+    const wrapped = wrapPlainEmailHtml(nextHtml);
+    const text = htmlToPlainText(wrapped);
+    setHtmlDraft(wrapped);
+    setPlainDraft(text);
+    onBodyChange(wrapped, text);
+  }
+
+  function applyPlainFromText(next: string) {
+    applyPlainHtml(textToPlainEmailHtml(next));
   }
 
   function insertIntoSubject(token: string) {
@@ -193,18 +204,18 @@ function EmailCampaignEditorInner({
     applyHtml(next);
   }
 
-  function insertIntoPlain(token: string) {
-    const { next } = applyTokenToInput(plainRef.current, plainDraft, token);
-    applyPlain(next);
-  }
-
   const applyTemplate = useCallback(
     (id: EmailTemplateId, nextPalette?: PaletteState) => {
       setTemplateSeeded(true);
       if (id === "plain") {
-        const starting = templateId === "plain" ? plainDraft : htmlToPlainText(htmlDraft);
+        if (templateId === "plain" && isPlainEmailHtml(htmlDraft)) {
+          setTemplateId("plain");
+          return;
+        }
+        const starting =
+          templateId === "plain" ? plainDraft : htmlToPlainText(htmlDraft) || plainDraft;
         setTemplateId("plain");
-        applyPlain(starting);
+        applyPlainFromText(starting);
         return;
       }
       const p = nextPalette ?? palette;
@@ -244,12 +255,15 @@ function EmailCampaignEditorInner({
   // Seed announcement template into an empty editor once branding/contact is ready.
   useEffect(() => {
     if (templateSeeded) return;
-    if (isHtmlEmailBody(bodyHtml)) {
+    if (isHtmlEmailBody(bodyHtml) && !isPlainEmailHtml(bodyHtml)) {
       setTemplateSeeded(true);
       return;
     }
-    if (String(bodyText ?? "").trim()) {
+    if (isPlainEmailHtml(bodyHtml) || String(bodyText ?? "").trim()) {
       setTemplateId("plain");
+      if (!isPlainEmailHtml(bodyHtml) && String(bodyText ?? "").trim()) {
+        applyPlainFromText(bodyText);
+      }
       setTemplateSeeded(true);
       return;
     }
@@ -285,7 +299,9 @@ function EmailCampaignEditorInner({
           prompt: aiPrompt,
           subject,
           existingHtml: isPlain ? undefined : htmlDraft.trim() || undefined,
-          existingText: isPlain ? plainDraft.trim() || undefined : undefined,
+          existingText: isPlain
+            ? htmlToPlainText(htmlDraft) || plainDraft.trim() || undefined
+            : undefined,
           brandPalette: {
             primary: palette.primary,
             secondary: palette.secondary,
@@ -302,7 +318,7 @@ function EmailCampaignEditorInner({
       if (!res.ok) throw new Error(data.error ?? "AI request failed");
       onSubjectChange(data.subject ?? subject);
       if (isPlain) {
-        applyPlain(data.bodyText ?? htmlToPlainText(data.bodyHtml ?? ""));
+        applyPlainHtml(data.bodyHtml || textToPlainEmailHtml(data.bodyText ?? ""));
       } else {
         applyHtml(data.bodyHtml ?? "");
       }
@@ -340,7 +356,7 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           to,
           subject,
-          bodyHtml: isPlain ? "" : htmlDraft,
+          bodyHtml: htmlDraft,
           bodyText: isPlain ? plainDraft : htmlToPlainText(htmlDraft),
         }),
       });
@@ -355,7 +371,9 @@ function EmailCampaignEditorInner({
   }
 
   const hasExistingHtml = Boolean(htmlDraft.trim());
-  const hasExistingBody = isPlain ? Boolean(plainDraft.trim()) : hasExistingHtml;
+  const hasExistingBody = isPlain
+    ? Boolean(plainDraft.trim() || htmlToPlainText(htmlDraft).trim())
+    : hasExistingHtml;
 
   return (
     <div
@@ -369,7 +387,7 @@ function EmailCampaignEditorInner({
           <h3 className="text-sm font-semibold">Email builder</h3>
           <p className="text-xs text-muted-foreground">
             {isPlain
-              ? "Plain text only — no HTML, photos, or layout. Recipients see exactly what you type."
+              ? "Simple formatted email — bold, italic, and underline. Recipients still get an unsubscribe button at the bottom."
               : (
                 <>
                   Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
@@ -666,22 +684,24 @@ function EmailCampaignEditorInner({
             </div>
             {isPlain ? (
               <>
-                <div className="flex items-center justify-between border-b px-3 py-2">
-                  <div>
-                    <h3 className="text-sm font-semibold">Message</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Unformatted plain text — no HTML, colors, or layout.
-                    </p>
-                  </div>
-                  <InsertVariableButton onInsert={insertIntoPlain} />
+                <div className="border-b px-3 py-2">
+                  <h3 className="text-sm font-semibold">Message</h3>
+                  <p className="text-xs text-muted-foreground">
+                    No photos or layout — just the email, with optional bold, italic, and underline.
+                    An unsubscribe button is added at the bottom when it sends.
+                  </p>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">
-                  <MergeTokenTextField
-                    ref={plainRef}
-                    className="min-h-[min(50vh,520px)] w-full resize-none border-0 px-4 py-3 text-sm leading-relaxed outline-none"
-                    value={plainDraft}
-                    onChange={applyPlain}
-                    placeholder={"Hi {customer_first_name},\n\nWrite your email here…"}
+                  <PlainEmailEditor
+                    ref={plainEditorRef}
+                    html={htmlDraft || textToPlainEmailHtml(plainDraft)}
+                    onChange={applyPlainHtml}
+                    placeholder="Hi {customer_first_name}, write your email here…"
+                    actions={
+                      <InsertVariableButton
+                        onInsert={(token) => plainEditorRef.current?.insertMergeToken(token)}
+                      />
+                    }
                   />
                 </div>
               </>

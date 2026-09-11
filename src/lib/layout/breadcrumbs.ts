@@ -32,6 +32,7 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
   Home: node("/home"),
   Customers: node("/customers", kids({
     "All Customers": node("/customers"),
+    Contacts: node("/customers/contacts"),
     Visits: node("/customers/jobs"),
     Estimates: node("/customers/estimates"),
     Leads: node("/customers/leads"),

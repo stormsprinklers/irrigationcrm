@@ -28,6 +28,8 @@ export type CustomerDTO = {
   estimateCount?: number;
   invoiceCount?: number;
   canViewCustomerComms?: boolean;
+  /** True when this record has no lifetime value (no paid work). */
+  isContact?: boolean;
 };
 
 export type CustomerPropertyDTO = {
@@ -54,6 +56,8 @@ export type CustomerListFilters = {
   leadSource?: string;
   company?: string;
   status?: "ACTIVE" | "ARCHIVED" | "ALL";
+  /** Paying customers vs never-paid contacts. Omit to include both. */
+  segment?: "CUSTOMERS" | "CONTACTS";
 };
 
 export type CustomerPhoneDTO = {

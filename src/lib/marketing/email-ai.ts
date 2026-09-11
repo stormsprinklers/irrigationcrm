@@ -5,6 +5,7 @@ import {
   isEmailTemplateId,
   isPlainTextEmailTemplate,
   renderEmailTemplateSkeleton,
+  textToPlainEmailHtml,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
 import type { CampaignAllowedLink } from "@/lib/marketing/campaign-links";
@@ -262,7 +263,7 @@ ${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
     let bodyText = (parsed.bodyText ?? "").trim();
     if (!bodyText && parsed.bodyHtml) bodyText = htmlToPlainText(parsed.bodyHtml);
     if (!bodyText) throw new Error("AI returned empty email text");
-    return { subject, bodyHtml: "", bodyText };
+    return { subject, bodyHtml: textToPlainEmailHtml(bodyText), bodyText };
   }
 
   let bodyHtml = (parsed.bodyHtml ?? "").trim();

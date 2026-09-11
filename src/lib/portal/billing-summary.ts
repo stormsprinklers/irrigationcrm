@@ -45,7 +45,10 @@ export async function getPortalBillingSummary(params: {
   const [invoices, enrollments, cards] = await Promise.all([
     prisma.invoice.findMany({
       where: { companyId: params.companyId, customerId: params.customerId },
-      include: { payments: true },
+      include: {
+        payments: true,
+        maintenanceBillingPeriods: { select: { id: true }, take: 1 },
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
@@ -72,7 +75,7 @@ export async function getPortalBillingSummary(params: {
 
   const payableInvoices = invoices
     .map(serializePortalInvoice)
-    .filter((inv) => inv.isPayable && inv.balanceDue > 0)
+    .filter((inv) => inv.isPayable && inv.balanceDue > 0 && !inv.isMaintenancePlan)
     .map((inv) => ({
       id: inv.id,
       invoiceNumber: inv.invoiceNumber,

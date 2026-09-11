@@ -100,9 +100,17 @@ export function appendMarketingUnsubscribeFooter(
   html: string,
   unsubscribeUrl: string
 ): string {
-  const footer = `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280">
-  <p style="margin:0 0 8px">You received this email because you are a customer. This is a marketing message.</p>
-  <p style="margin:0"><a href="${unsubscribeUrl}" style="color:#4C9BC8">Unsubscribe from marketing emails</a> — this removes you from our campaigns and turns off marketing email.</p>
+  if (!unsubscribeUrl) return html;
+  if (
+    html.includes(unsubscribeUrl) &&
+    /unsubscribe from marketing emails/i.test(html)
+  ) {
+    return html;
+  }
+
+  const footer = `<div data-marketing-unsubscribe="true" style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#6b7280">
+  <p style="margin:0 0 12px">You received this email because you are a customer. This is a marketing message.</p>
+  <a href="${unsubscribeUrl}" style="display:inline-block;padding:10px 16px;background-color:#4C9BC8;color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:700;">Unsubscribe from marketing emails</a>
 </div>`;
 
   if (/<\/body>/i.test(html)) {

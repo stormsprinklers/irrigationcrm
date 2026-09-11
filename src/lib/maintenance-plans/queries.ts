@@ -8,7 +8,7 @@ import {
   computePeriodAmount,
   monthlyRecurringAmount,
 } from "./billing";
-import { generatePlanVisitRows } from "./visits";
+import { generatePlanVisitRows, planIncludesWinterization } from "./visits";
 import type {
   BillingPeriodDTO,
   DashboardDTO,
@@ -228,7 +228,15 @@ export async function listEnrollments(
 export async function activateEnrollment(companyId: string, enrollmentId: string) {
   const enrollment = await prisma.maintenancePlanEnrollment.findFirst({
     where: { id: enrollmentId, companyId },
-    include: { template: { include: { visitTemplates: { orderBy: { sortOrder: "asc" } } } } },
+    include: {
+      template: {
+        include: {
+          visitTemplates: { orderBy: { sortOrder: "asc" } },
+          addons: { select: { id: true, name: true } },
+        },
+      },
+      property: { select: { address: true, city: true, state: true, zip: true } },
+    },
   });
   if (!enrollment) return null;
 
@@ -274,6 +282,26 @@ export async function activateEnrollment(companyId: string, enrollmentId: string
       },
     }),
   ]);
+
+  if (
+    planIncludesWinterization({
+      visitTemplates: enrollment.template.visitTemplates,
+      addons: enrollment.template.addons,
+      selectedAddonIds: enrollment.selectedAddonIds,
+    })
+  ) {
+    const { ensureCustomerOnWinterizationList } = await import("@/lib/winterization/create");
+    await ensureCustomerOnWinterizationList(companyId, {
+      customerId: enrollment.customerId,
+      address: enrollment.property.address,
+      city: enrollment.property.city,
+      state: enrollment.property.state,
+      zip: enrollment.property.zip,
+      schedulingNotes: `Maintenance plan: ${enrollment.template.name}`,
+    }).catch((err) => {
+      console.error("Winterization list auto-add failed:", err);
+    });
+  }
 
   return getEnrollment(companyId, enrollmentId);
 }

@@ -1,5 +1,5 @@
 import { Division, VisitStatus } from "@prisma/client";
-import { getAvailableSlots, BOOKING_SLOT_MINUTES } from "@/lib/booking/availability";
+import { getAvailableSlots, BOOKING_SLOT_MINUTES, clampOnlineBookingSlotMinutes } from "@/lib/booking/availability";
 import {
   getStaffOnlineBookingSlots,
   listBookableStaff,
@@ -70,7 +70,9 @@ async function loadBookingOffer(companyId: string): Promise<BookingOffer | null>
 
   const staff = await listBookableStaff(companyId);
   const virtual = Boolean(company.onlineBookingVirtualOnly);
-  const slotMinutes = virtual ? VIRTUAL_SLOT_MINUTES : BOOKING_SLOT_MINUTES;
+  const slotMinutes = virtual
+    ? VIRTUAL_SLOT_MINUTES
+    : clampOnlineBookingSlotMinutes(company.onlineBookingSlotMinutes, BOOKING_SLOT_MINUTES);
 
   let internalSlots: InternalSlot[];
   if (staff.length) {

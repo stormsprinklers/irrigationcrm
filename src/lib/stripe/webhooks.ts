@@ -1,9 +1,13 @@
 import type Stripe from "stripe";
 import { recordInvoicePayment } from "@/lib/invoices/record-payment";
 import { recordMaintenanceInvoicePayment } from "@/lib/maintenance-plans/discounts";
-import { confirmCheckoutSession } from "@/lib/stripe/confirm-checkout";
+import {
+  applyCombinedInvoicePayment,
+  applyPaidCheckoutSession,
+  confirmCheckoutSession,
+} from "@/lib/stripe/confirm-checkout";
+import { parseCombinedInvoiceMetadata } from "@/lib/invoices/combined-payment";
 import { prisma } from "@/lib/prisma";
-import { toNumber } from "@/lib/visits/totals";
 
 type InvoiceWithSubscription = Stripe.Invoice & {
   subscription?: string | Stripe.Subscription | null;
@@ -38,25 +42,7 @@ function getPaymentIntentId(session: Stripe.Checkout.Session): string | null {
 }
 
 export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
-  if (session.payment_status !== "paid") return;
-
-  const invoiceId = session.metadata?.invoiceId;
-  if (!invoiceId) return;
-
-  const invoice = await prisma.invoice.findUnique({
-    where: { id: invoiceId },
-    select: { total: true },
-  });
-  if (!invoice) return;
-
-  const amount = session.amount_total != null ? session.amount_total / 100 : toNumber(invoice.total);
-
-  await recordInvoicePayment({
-    invoiceId,
-    amount,
-    stripePaymentIntentId: getPaymentIntentId(session),
-    stripeCheckoutSessionId: session.id,
-  });
+  await applyPaidCheckoutSession(session);
 }
 
 export async function handleCheckoutSessionAsyncPaymentSucceeded(session: Stripe.Checkout.Session) {
@@ -64,11 +50,22 @@ export async function handleCheckoutSessionAsyncPaymentSucceeded(session: Stripe
 }
 
 export async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
-  const invoiceId = paymentIntent.metadata?.invoiceId;
-  if (!invoiceId) return;
-
+  const combined = parseCombinedInvoiceMetadata(paymentIntent.metadata);
   const amount = (paymentIntent.amount_received ?? paymentIntent.amount ?? 0) / 100;
   if (amount <= 0) return;
+
+  if (combined) {
+    await applyCombinedInvoicePayment({
+      companyId: combined.companyId,
+      planned: combined.planned,
+      amountPaid: amount,
+      paymentIntentId: paymentIntent.id,
+    });
+    return;
+  }
+
+  const invoiceId = paymentIntent.metadata?.invoiceId;
+  if (!invoiceId) return;
 
   await recordInvoicePayment({
     invoiceId,
@@ -172,6 +169,11 @@ export async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
       status: { in: ["DUE", "PENDING"] },
     },
     data: { status: "FAILED" },
+  });
+
+  const { ensureLatePlanBillingInvoices } = await import("@/lib/maintenance-plans/late-invoices");
+  await ensureLatePlanBillingInvoices(enrollment.companyId, enrollment.customerId).catch((err) => {
+    console.error("Late maintenance plan invoices failed:", err);
   });
 }
 

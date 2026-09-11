@@ -109,7 +109,7 @@ export function applyCompanyEmailSignature(html: string, fields: CompanySignatur
   if (htmlHasCompanySignature(html)) return html;
   const signatureHtml = buildCompanySignatureHtml(fields);
   const prefsBlock = html.match(
-    /<div[^>]*>[\s\S]*?Manage (?:email|messaging) preferences[\s\S]*?<\/div>/i
+    /<div[^>]*>[\s\S]*?(?:Unsubscribe from marketing emails|Manage (?:email|messaging) preferences)[\s\S]*?<\/div>/i
   );
   if (prefsBlock?.index != null) {
     return html.slice(0, prefsBlock.index) + signatureHtml + html.slice(prefsBlock.index);

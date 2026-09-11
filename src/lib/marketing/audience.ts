@@ -1,6 +1,7 @@
 import type { CampaignChannel, Prisma } from "@prisma/client";
 import type { AudienceFilters } from "@/lib/marketing/types";
 import { prisma } from "@/lib/prisma";
+import { customerSegmentWhere } from "@/lib/customers/lifetime-value";
 
 export async function buildAudienceWhere(
   companyId: string,
@@ -42,6 +43,18 @@ export async function buildAudienceWhere(
       : where.AND
         ? [where.AND, excludeClause]
         : [excludeClause];
+  }
+
+  const recordType = filters?.recordType;
+  if (recordType === "CUSTOMERS" || recordType === "CONTACTS") {
+    const segmentClause = customerSegmentWhere(recordType);
+    if (segmentClause) {
+      where.AND = Array.isArray(where.AND)
+        ? [...where.AND, segmentClause]
+        : where.AND
+          ? [where.AND, segmentClause]
+          : [segmentClause];
+    }
   }
 
   const servicedFrom = filters?.servicedFrom ? new Date(filters.servicedFrom) : null;

@@ -31,10 +31,12 @@ export function CustomerTable({
   data,
   selectedIds = [],
   onSelectedIdsChange,
+  nameColumnLabel = "Customer name",
 }: {
   data: CustomerDTO[];
   selectedIds?: string[];
   onSelectedIdsChange?: (ids: string[]) => void;
+  nameColumnLabel?: string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const rowSelection = useMemo(() => {
@@ -82,7 +84,7 @@ export function CustomerTable({
             className="-ml-4 h-8"
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
-            Customer name
+            {nameColumnLabel}
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         ),
@@ -91,6 +93,7 @@ export function CustomerTable({
             <CustomerNameWithBadge
               name={row.original.name}
               doNotService={row.original.doNotService}
+              isContact={row.original.isContact}
             />
           </Link>
         ),
@@ -152,7 +155,7 @@ export function CustomerTable({
             : "—"),
       },
     ],
-    []
+    [nameColumnLabel]
   );
 
   const table = useReactTable({

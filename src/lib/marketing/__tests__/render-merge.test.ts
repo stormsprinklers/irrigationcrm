@@ -27,6 +27,22 @@ test("renderMarketingMergeFields personalizes subject, SMS, and HTML", () => {
   assert.equal(out.bodyHtml, "<p>Hi Jane in Lehi at 10 Main St, Lehi, UT 84043</p>");
 });
 
+test("renderMarketingMergeFields uses the website booking URL when set", () => {
+  const out = renderMarketingMergeFields({
+    company: {
+      name: "Storm Sprinklers",
+      bookingSlug: "storm-sprinklers",
+      customerBaseUrl: "https://portal.example.com",
+      websiteBookingUrl: "https://www.stormsprinklers.com/booking",
+    },
+    customer: { name: "Jane Doe" },
+    subject: "Book",
+    bodyText: "Book: {booking_link}",
+    bodyHtml: null,
+  });
+  assert.equal(out.bodyText, "Book: https://www.stormsprinklers.com/booking");
+});
+
 test("renderMarketingMergeFields uses per-token fallbacks when customer fields are empty", () => {
   const out = renderMarketingMergeFields({
     company: { name: "Storm Sprinklers" },

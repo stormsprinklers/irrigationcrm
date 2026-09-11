@@ -1,4 +1,4 @@
-import { customerPublicUrl } from "@/lib/company/customer-url";
+import { customerRadarBookingUrl } from "@/lib/company/customer-url";
 
 export type CampaignCustomLink = {
   id: string;
@@ -42,19 +42,25 @@ export function parseCampaignCtaLinks(raw: unknown): CampaignCtaLinksStored {
 
 export function resolveBookingUrl(params: {
   bookingUrlOverride?: string | null;
+  websiteBookingUrl?: string | null;
   bookingSlug?: string | null;
   customerBaseUrl?: string | null;
 }): string | null {
   const override = params.bookingUrlOverride?.trim();
   if (override) return override;
-  const slug = params.bookingSlug?.trim();
-  if (!slug) return null;
-  return customerPublicUrl({ customerBaseUrl: params.customerBaseUrl }, `/book/${slug}`);
+  const website = params.websiteBookingUrl?.trim();
+  if (website) return website.replace(/\/$/, "");
+  return customerRadarBookingUrl({
+    bookingSlug: params.bookingSlug,
+    customerBaseUrl: params.customerBaseUrl,
+  });
 }
 
 /** Flatten built-in + custom links for AI and UI. */
 export function resolveCampaignAllowedLinks(params: {
   campaignCtaLinks?: unknown;
+  websiteBookingUrl?: string | null;
+  websiteWinterizationBookingUrl?: string | null;
   bookingSlug?: string | null;
   customerBaseUrl?: string | null;
   privacyPolicyUrl?: string | null;
@@ -65,11 +71,22 @@ export function resolveCampaignAllowedLinks(params: {
 
   const bookingUrl = resolveBookingUrl({
     bookingUrlOverride: stored.bookingUrl,
+    websiteBookingUrl: params.websiteBookingUrl,
     bookingSlug: params.bookingSlug,
     customerBaseUrl: params.customerBaseUrl,
   });
   if (bookingUrl) {
     links.push({ key: "booking", label: "Booking", url: bookingUrl, builtin: true });
+  }
+
+  const winterization = params.websiteWinterizationBookingUrl?.trim();
+  if (winterization) {
+    links.push({
+      key: "winterization_booking",
+      label: "Winterization booking",
+      url: winterization.replace(/\/$/, ""),
+      builtin: true,
+    });
   }
 
   const privacy = params.privacyPolicyUrl?.trim();

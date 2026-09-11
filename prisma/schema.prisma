@@ -599,10 +599,16 @@ model Company {
   invoiceTerms             String?
   invoiceFooter            String?
   onlineBookingEnabled     Boolean  @default(false)
-  /// When true, public/website booking is virtual consults (Google Meet), not on-site jobs.
+  /// When true, Radar public booking is virtual consults (Google Meet), not on-site jobs.
   onlineBookingVirtualOnly Boolean  @default(false)
   bookingSlug              String?
   bookingLeadTimeHours     Int      @default(24)
+  /// On-site Radar booker slot length. Website HCP jobs are typically 180 minutes; not wired to HCP.
+  onlineBookingSlotMinutes Int      @default(120)
+  /// Customer-facing marketing-site booking page (e.g. https://www.stormsprinklers.com/booking).
+  websiteBookingUrl        String?
+  /// Optional week-request page (e.g. https://www.stormsprinklers.com/book-winterization).
+  websiteWinterizationBookingUrl String?
   googleCalendarRefreshToken    String?
   googleCalendarConnectedEmail  String?
   googleCalendarConnectedAt     DateTime?

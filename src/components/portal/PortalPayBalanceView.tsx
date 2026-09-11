@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PortalShell } from "./PortalShell";
+import {
+  PortalPayAllInvoicesButton,
+  confirmPortalInvoiceCheckout,
+} from "./PortalPayAllInvoicesButton";
 
 type BillingSummary = {
   invoiceBalanceDue: number;
@@ -35,20 +41,41 @@ function money(n: number) {
 }
 
 export function PortalPayBalanceView({ slug }: { slug: string }) {
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get("payment");
+  const sessionId = searchParams.get("session_id");
+  const confirmed = useRef(false);
   const [me, setMe] = useState<{
     company: { name: string; emailLogoUrl: string | null; features: Record<string, boolean> };
   } | null>(null);
   const [summary, setSummary] = useState<BillingSummary | null>(null);
 
-  useEffect(() => {
-    Promise.all([
+  function load() {
+    return Promise.all([
       fetch("/api/portal/me").then((r) => r.json()),
       fetch("/api/portal/billing-summary").then((r) => r.json()),
     ]).then(([meData, billing]) => {
       setMe(meData);
       setSummary(billing);
     });
+  }
+
+  useEffect(() => {
+    load().catch(() => toast.error("Failed to load your balance"));
   }, []);
+
+  useEffect(() => {
+    if (paymentStatus !== "success" || !sessionId || confirmed.current) return;
+    confirmed.current = true;
+    confirmPortalInvoiceCheckout(sessionId)
+      .then(() => {
+        toast.success("Payment received");
+        return load();
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Unable to confirm payment");
+      });
+  }, [paymentStatus, sessionId]);
 
   if (!me || !summary) {
     return <p className="text-sm text-muted-foreground">Loading...</p>;
@@ -80,7 +107,14 @@ export function PortalPayBalanceView({ slug }: { slug: string }) {
 
         {summary.payableInvoices.length > 0 ? (
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold text-storm-navy">Invoices</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold text-storm-navy">Invoices</h2>
+              <PortalPayAllInvoicesButton
+                returnPath={`/portal/${slug}/pay`}
+                count={summary.payableInvoices.length}
+                total={summary.invoiceBalanceDue}
+              />
+            </div>
             <ul className="space-y-2">
               {summary.payableInvoices.map((inv) => (
                 <li
@@ -108,6 +142,9 @@ export function PortalPayBalanceView({ slug }: { slug: string }) {
             <div className="rounded-lg border border-border bg-white p-4">
               <p className="font-medium">
                 {money(summary.maintenanceBalanceDue)} due on your maintenance plan
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Plan billing stays separate so the recurring charge and saved card stay on the plan.
               </p>
               <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
                 {summary.unpaidMaintenancePeriods.map((p) => (

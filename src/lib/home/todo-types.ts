@@ -94,6 +94,19 @@ export function defaultRecurrenceEvery(recurrence: OfficeTodoRecurrence): number
   return null;
 }
 
+export function officeTodoRecurrenceFormValues(todo: {
+  recurrence: OfficeTodoRecurrence;
+  recurrenceEvery: number | null;
+}): { recurrence: OfficeTodoRecurrence; recurrenceEvery: number | null } {
+  if (todo.recurrence === "DAILY") {
+    return { recurrence: "EVERY_N_DAYS", recurrenceEvery: 1 };
+  }
+  return {
+    recurrence: todo.recurrence,
+    recurrenceEvery: todo.recurrenceEvery ?? defaultRecurrenceEvery(todo.recurrence),
+  };
+}
+
 export function officeTodoRecurrenceLabel(
   recurrence: OfficeTodoRecurrence,
   recurrenceEvery?: number | null

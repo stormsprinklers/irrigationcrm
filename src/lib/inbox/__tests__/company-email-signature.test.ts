@@ -53,14 +53,14 @@ test("applyCompanyEmailSignature does not duplicate an existing signature", () =
   assert.equal(twice, once);
 });
 
-test("applyCompanyEmailSignature inserts before messaging preferences", () => {
+test("applyCompanyEmailSignature inserts before unsubscribe and messaging preferences", () => {
   const html = applyCompanyEmailSignature(
-    `<p>Body</p><div style="margin-top:24px"><p><a href="https://example.com">Manage messaging preferences</a></p></div>`,
+    `<p>Body</p><div style="margin-top:24px"><p><a href="https://example.com">Unsubscribe from marketing emails</a></p></div>`,
     company
   );
   const sigAt = html.indexOf(COMPANY_SIGNATURE_ATTR);
-  const prefsAt = html.indexOf("Manage messaging preferences");
-  assert.ok(sigAt >= 0 && prefsAt > sigAt);
+  const unsubAt = html.indexOf("Unsubscribe from marketing emails");
+  assert.ok(sigAt >= 0 && unsubAt > sigAt);
 });
 
 test("applyCompanyEmailSignatureText appends contact under the body", () => {

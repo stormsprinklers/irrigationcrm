@@ -271,3 +271,88 @@ export async function addCrmWinterizationRequest(companyId: string, input: CrmWi
   await applyWinterizationSeasonTag(customer.id, seasonYear);
   return request;
 }
+
+export async function ensureCustomerOnWinterizationList(
+  companyId: string,
+  input: CrmWinterizationAdd
+) {
+  try {
+    await addCrmWinterizationRequest(companyId, input);
+    return { added: true as const };
+  } catch (err) {
+    if (err instanceof WinterizationDuplicateError) {
+      return { added: false as const, reason: "duplicate" as const };
+    }
+    if (err instanceof Error && /do not service/i.test(err.message)) {
+      return { added: false as const, reason: "do_not_service" as const };
+    }
+    throw err;
+  }
+}
+
+export async function syncWinterizationListFromMaintenancePlans(companyId: string) {
+  const seasonYear = winterizationSeasonYear();
+  const { planIncludesWinterization } = await import("@/lib/maintenance-plans/visits");
+
+  const enrollments = await prisma.maintenancePlanEnrollment.findMany({
+    where: {
+      companyId,
+      status: { in: ["ACTIVE", "PENDING_RENEWAL", "RENEWED", "EXPIRING_SOON"] },
+    },
+    select: {
+      customerId: true,
+      selectedAddonIds: true,
+      property: { select: { address: true, city: true, state: true, zip: true } },
+      template: {
+        select: {
+          name: true,
+          visitTemplates: { select: { season: true, name: true, visitTitle: true } },
+          addons: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+
+  const already = await prisma.winterizationRequest.findMany({
+    where: {
+      companyId,
+      seasonYear,
+      status: { in: [WinterizationRequestStatus.NEED_BOOKING, WinterizationRequestStatus.SCHEDULED] },
+      customerId: { not: null },
+    },
+    select: { customerId: true },
+  });
+  const onList = new Set(already.map((row) => row.customerId).filter(Boolean) as string[]);
+
+  let added = 0;
+  for (const enrollment of enrollments) {
+    if (onList.has(enrollment.customerId)) continue;
+    if (
+      !planIncludesWinterization({
+        visitTemplates: enrollment.template.visitTemplates,
+        addons: enrollment.template.addons,
+        selectedAddonIds: enrollment.selectedAddonIds,
+      })
+    ) {
+      continue;
+    }
+
+    const result = await ensureCustomerOnWinterizationList(companyId, {
+      customerId: enrollment.customerId,
+      address: enrollment.property.address,
+      city: enrollment.property.city,
+      state: enrollment.property.state,
+      zip: enrollment.property.zip,
+      schedulingNotes: `Maintenance plan: ${enrollment.template.name}`,
+    });
+    if (result.added) {
+      onList.add(enrollment.customerId);
+      added += 1;
+    } else if (result.reason === "duplicate") {
+      onList.add(enrollment.customerId);
+    }
+  }
+
+  return { added };
+}
+

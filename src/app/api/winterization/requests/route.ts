@@ -65,17 +65,23 @@ export async function GET(request: NextRequest) {
 
     const status = request.nextUrl.searchParams.get("status");
     const seasonYear = Number(request.nextUrl.searchParams.get("year")) || winterizationSeasonYear();
+    const listWhere = {
+      companyId: user.companyId,
+      seasonYear,
+      ...(status && status !== "ALL"
+        ? { status: status as WinterizationRequestStatus }
+        : { status: { in: ["NEED_BOOKING", "SCHEDULED"] as WinterizationRequestStatus[] } }),
+    };
+    const listInclude = {
+      customer: { select: { id: true, name: true, city: true } },
+    } as const;
+
+    const { syncWinterizationListFromMaintenancePlans } = await import("@/lib/winterization/create");
+    await syncWinterizationListFromMaintenancePlans(user.companyId).catch(() => undefined);
+
     const rows = await prisma.winterizationRequest.findMany({
-      where: {
-        companyId: user.companyId,
-        seasonYear,
-        ...(status && status !== "ALL"
-          ? { status: status as WinterizationRequestStatus }
-          : { status: { in: ["NEED_BOOKING", "SCHEDULED"] } }),
-      },
-      include: {
-        customer: { select: { id: true, name: true, city: true } },
-      },
+      where: listWhere,
+      include: listInclude,
       orderBy: [{ weekStart: "asc" }, { createdAt: "asc" }],
       take: 500,
     });

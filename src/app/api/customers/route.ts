@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listCustomers, serializeCustomer } from "@/lib/customers/queries";
+import { parseCustomerRecordSegment } from "@/lib/customers/lifetime-value";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
@@ -15,6 +16,7 @@ export async function GET(request: NextRequest) {
       leadSource: searchParams.get("leadSource") ?? undefined,
       company: searchParams.get("company") ?? undefined,
       status: (searchParams.get("status") as "ACTIVE" | "ARCHIVED" | "ALL" | null) ?? undefined,
+      segment: parseCustomerRecordSegment(searchParams.get("segment")),
     });
     return NextResponse.json({ customers, total: customers.length });
   } catch {

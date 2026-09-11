@@ -5,6 +5,7 @@ export type CustomerUrlCompany = {
   customerBaseUrl?: string | null;
   portalSlug?: string | null;
   bookingSlug?: string | null;
+  websiteBookingUrl?: string | null;
 };
 
 function stripTrailingSlash(url: string) {
@@ -46,6 +47,41 @@ export function parseCustomerBaseUrlInput(raw: unknown): string | null {
   const protocol = isLocal ? parsed.protocol : "https:";
   const port = parsed.port ? `:${parsed.port}` : "";
   return `${protocol}//${host}${port}`;
+}
+
+/** Full public http(s) URL, including a path (e.g. website /booking). Empty becomes null. */
+export function parsePublicHttpUrl(raw: unknown, label = "URL"): string | null {
+  if (raw == null) return null;
+  if (typeof raw !== "string") {
+    throw new Error(`Enter a valid ${label} like https://www.stormsprinklers.com/booking`);
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+  } catch {
+    throw new Error(`Enter a valid ${label} like https://www.stormsprinklers.com/booking`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${label} must use https`);
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  if (!host || (!isLocal && !host.includes("."))) {
+    throw new Error(`Enter a full ${label} like https://www.stormsprinklers.com/booking`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error(`Enter a valid ${label} without credentials`);
+  }
+
+  const protocol = isLocal ? parsed.protocol : "https:";
+  const port = parsed.port ? `:${parsed.port}` : "";
+  const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/$/, "");
+  return `${protocol}//${host}${port}${path}${parsed.search}`;
 }
 
 /** Origin used in customer SMS/email/portal links for this company. */
@@ -98,10 +134,23 @@ export function customerInvoicePayUrl(
   return customerPublicUrl(company, `/pay/${publicToken}`);
 }
 
-export function customerBookingUrl(company: CustomerUrlCompany | null | undefined): string | null {
+/** Radar public booker (`/book/{slug}`). Prefer `customerBookingUrl` for customer-facing links. */
+export function customerRadarBookingUrl(
+  company: CustomerUrlCompany | null | undefined
+): string | null {
   const slug = company?.bookingSlug?.trim();
   if (!slug) return null;
   return customerPublicUrl(company, `/book/${slug}`);
+}
+
+/**
+ * Customer-facing booking link. Uses the marketing-site URL when set so SMS/email
+ * go to the live website booker (Housecall Pro today) instead of Radar `/book/{slug}`.
+ */
+export function customerBookingUrl(company: CustomerUrlCompany | null | undefined): string | null {
+  const website = company?.websiteBookingUrl?.trim();
+  if (website) return website.replace(/\/$/, "");
+  return customerRadarBookingUrl(company);
 }
 
 export function customerLiveTrackUrl(

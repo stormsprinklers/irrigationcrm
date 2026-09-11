@@ -1,5 +1,7 @@
 import type { CampaignChannel, CampaignType } from "@prisma/client";
 
+export type AudienceRecordType = "ALL" | "CUSTOMERS" | "CONTACTS";
+
 export type AudienceFilters = {
   cities?: string[];
   /** Include customers who have at least one of these tags. */
@@ -9,6 +11,8 @@ export type AudienceFilters = {
   servicedFrom?: string;
   servicedTo?: string;
   priceBookItemIds?: string[];
+  /** Paying customers vs never-paid contacts. Default ALL. */
+  recordType?: AudienceRecordType;
   /** When set, audience is limited to these customer IDs (still must match channel/block rules). */
   includeCustomerIds?: string[];
   /** Always removed from the audience after filters apply. */

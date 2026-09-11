@@ -29,6 +29,8 @@ export async function POST(request: NextRequest) {
         state: true,
         zip: true,
         bookingSlug: true,
+        websiteBookingUrl: true,
+        websiteWinterizationBookingUrl: true,
         customerBaseUrl: true,
         privacyPolicyUrl: true,
         termsOfServiceUrl: true,
@@ -41,6 +43,8 @@ export async function POST(request: NextRequest) {
 
     const allowedLinks = resolveCampaignAllowedLinks({
       campaignCtaLinks: company.campaignCtaLinks,
+      websiteBookingUrl: company.websiteBookingUrl,
+      websiteWinterizationBookingUrl: company.websiteWinterizationBookingUrl,
       bookingSlug: company.bookingSlug,
       customerBaseUrl: company.customerBaseUrl,
       privacyPolicyUrl: company.privacyPolicyUrl,

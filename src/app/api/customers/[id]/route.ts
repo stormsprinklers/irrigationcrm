@@ -8,6 +8,7 @@ import {
 import { canEditCustomerTags, canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { deleteCustomerForCompany } from "@/lib/customers/delete";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
+import { customerIsContact } from "@/lib/customers/lifetime-value";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 import { CampaignChannel } from "@prisma/client";
@@ -24,6 +25,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const { canAccessFieldCustomerComms } = await import("@/lib/field/access");
     return NextResponse.json({
       ...serializeCustomer(customer),
+      isContact: await customerIsContact(user.companyId, id),
       canViewCustomerComms: await canAccessFieldCustomerComms(user, id),
     });
   } catch {
@@ -121,7 +123,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       });
     }
 
-    return NextResponse.json(serializeCustomer(customer));
+    return NextResponse.json({
+      ...serializeCustomer(customer),
+      isContact: await customerIsContact(user.companyId, id),
+    });
   } catch {
     return unauthorizedResponse();
   }

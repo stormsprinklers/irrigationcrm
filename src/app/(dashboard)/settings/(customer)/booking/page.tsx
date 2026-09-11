@@ -91,11 +91,14 @@ export default function SettingsBookingPage() {
   }
 
   const publicOrigin = (company.customerBaseUrl || company.appBaseUrl || "").replace(/\/$/, "");
-  const publicUrl = company.bookingSlug
+  const radarBookingUrl = company.bookingSlug
     ? publicOrigin
       ? `${publicOrigin}/book/${company.bookingSlug}`
       : `/book/${company.bookingSlug}`
-    : "Set a slug to generate URL";
+    : "Set a slug to generate a Radar booking URL";
+  const customerFacingUrl =
+    company.websiteBookingUrl?.trim() ||
+    (company.bookingSlug && publicOrigin ? `${publicOrigin}/book/${company.bookingSlug}` : null);
 
   const divisionWindows = parseDivisionBookingWindows(company.divisionBookingWindows);
 
@@ -121,6 +124,58 @@ export default function SettingsBookingPage() {
         }
       />
       <div className="space-y-4 rounded-lg border border-border bg-white p-6">
+        <div>
+          <h3 className="font-semibold">Website booking</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Storm&apos;s live site already has a full booker: zip code, then service (repair,
+            seasonal, or install), then Housecall Pro availability, then contact and address. That
+            creates a Housecall Pro job. Winterization is a separate week request — no day or time
+            slot. Radar is not connected to that flow; these URLs are only used in SMS, email, and
+            campaigns while you finish Radar.
+          </p>
+        </div>
+        <div>
+          <label className="text-sm text-muted-foreground">Online booking URL</label>
+          <Input
+            className="mt-1"
+            value={company.websiteBookingUrl ?? ""}
+            onChange={(e) => setCompany({ ...company, websiteBookingUrl: e.target.value })}
+            placeholder="https://www.stormsprinklers.com/booking"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Used for <code className="text-xs">{`{booking_link}`}</code> in notifications and
+            campaigns (unless a campaign override is set).
+          </p>
+        </div>
+        <div>
+          <label className="text-sm text-muted-foreground">Winterization booking URL (optional)</label>
+          <Input
+            className="mt-1"
+            value={company.websiteWinterizationBookingUrl ?? ""}
+            onChange={(e) =>
+              setCompany({ ...company, websiteWinterizationBookingUrl: e.target.value })
+            }
+            placeholder="https://www.stormsprinklers.com/book-winterization"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Available as a campaign link for winterization week requests. Lead acknowledgements for
+            winterization still do not include a booking link.
+          </p>
+        </div>
+        {customerFacingUrl ? (
+          <p className="text-sm text-muted-foreground">Customer-facing booking link: {customerFacingUrl}</p>
+        ) : null}
+      </div>
+
+      <div className="mt-6 space-y-4 rounded-lg border border-border bg-white p-6">
+        <div>
+          <h3 className="font-semibold">Radar booking</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Radar&apos;s own public booker (/book/slug on this company&apos;s customer domain). It is
+            not on the Storm website and does not create Housecall Pro jobs. When you switch off
+            Housecall Pro, customers can use this page instead of the website URL above.
+          </p>
+        </div>
         <label className="flex items-center gap-3 text-sm">
           <Checkbox
             checked={company.onlineBookingEnabled}
@@ -128,7 +183,7 @@ export default function SettingsBookingPage() {
               setCompany({ ...company, onlineBookingEnabled: Boolean(checked) })
             }
           />
-          Enable online booking
+          Enable Radar online booking
         </label>
         <label className="flex items-start gap-3 text-sm">
           <Checkbox
@@ -140,8 +195,8 @@ export default function SettingsBookingPage() {
           <span>
             Virtual appointments only
             <span className="mt-0.5 block text-xs text-muted-foreground">
-              30-minute Google Meet consults. Enable this for Chestnut &amp; Cheer (or any
-              company that should not book on-site jobs from the website).
+              30-minute Google Meet consults. Use this for Chestnut &amp; Cheer (or any company
+              that should not book on-site jobs from Radar).
             </span>
           </span>
         </label>
@@ -154,8 +209,7 @@ export default function SettingsBookingPage() {
             placeholder="storm-sprinklers"
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Public booking URL uses this company&apos;s customer domain (Settings → Customer
-            portal).
+            Radar URL uses this company&apos;s customer domain (Settings → Customer portal).
           </p>
         </div>
         <div>
@@ -169,7 +223,25 @@ export default function SettingsBookingPage() {
             }
           />
         </div>
-        <p className="text-sm text-muted-foreground">Public URL: {publicUrl}</p>
+        <div>
+          <label className="text-sm text-muted-foreground">On-site slot length (minutes)</label>
+          <Input
+            type="number"
+            min={15}
+            max={480}
+            className="mt-1 max-w-[120px]"
+            value={company.onlineBookingSlotMinutes ?? 120}
+            onChange={(e) =>
+              setCompany({ ...company, onlineBookingSlotMinutes: Number(e.target.value) })
+            }
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Storm&apos;s website books 180-minute Housecall Pro jobs (45 minutes for
+            winterization). Set Radar to 180 when you want on-site visits to match that window.
+            Virtual consults stay 30 minutes.
+          </p>
+        </div>
+        <p className="text-sm text-muted-foreground">Radar public URL: {radarBookingUrl}</p>
       </div>
 
       <BookingPeopleAndMeet />
@@ -304,8 +376,9 @@ function BookingPeopleAndMeet() {
           <div>
             <h3 className="font-semibold">Who can take online bookings</h3>
             <p className="text-sm text-muted-foreground">
-              Only checked people appear on the public/website calendar. Slots use their work
-              hours and skip times they already have assigned visits or approved time off.
+              Only checked people appear on Radar&apos;s public calendar — not the marketing
+              website, which still books through Housecall Pro. Slots use their work hours and skip
+              times they already have assigned visits or approved time off.
             </p>
           </div>
           <Button size="sm" onClick={saveStaff} disabled={savingStaff}>

@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 import { resolveMarketingEmailFrom } from "@/lib/marketing/sender";
+import {
+  appendMarketingUnsubscribeFooter,
+  appendMarketingUnsubscribeText,
+  marketingUnsubscribeUrl,
+} from "@/lib/marketing/unsubscribe";
 import { prisma } from "@/lib/prisma";
+import { plainTextAsEmailHtml } from "@/lib/inbox/email";
 
 function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -51,6 +58,7 @@ export async function POST(request: NextRequest) {
         email: { equals: to, mode: "insensitive" },
       },
       select: {
+        id: true,
         name: true,
         address: true,
         city: true,
@@ -79,9 +87,15 @@ export async function POST(request: NextRequest) {
       bodyHtml: bodyHtml || null,
     });
 
-    const html = isHtmlEmailBody(personalized.bodyHtml)
-      ? personalized.bodyHtml ?? undefined
-      : undefined;
+    const unsubscribeUrl = matchedCustomer?.id
+      ? marketingUnsubscribeUrl(matchedCustomer.id, user.companyId, company.customerBaseUrl)
+      : `${getCustomerBaseUrl(company)}/api/marketing/unsubscribe`;
+
+    const htmlSource = isHtmlEmailBody(personalized.bodyHtml)
+      ? personalized.bodyHtml ?? ""
+      : plainTextAsEmailHtml(personalized.bodyText);
+    const html = appendMarketingUnsubscribeFooter(htmlSource, unsubscribeUrl);
+    const text = appendMarketingUnsubscribeText(personalized.bodyText, unsubscribeUrl);
 
     const result = await sendCompanyEmail(
       {
@@ -94,7 +108,7 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         to: [to],
         subject: personalized.subject || company.name,
-        text: personalized.bodyText,
+        text,
         html,
         bypassCommsFreeze: true,
       }

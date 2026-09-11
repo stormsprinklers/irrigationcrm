@@ -22,6 +22,7 @@ type PhoneOption = {
 type CampaignLinksResponse = {
   bookingUrl: string;
   bookingSlug: string | null;
+  websiteBookingUrl: string;
   privacyPolicyUrl: string;
   termsOfServiceUrl: string;
   custom: CustomLink[];
@@ -43,6 +44,7 @@ export default function CampaignLinksSettingsPage() {
   const [termsOfServiceUrl, setTermsOfServiceUrl] = useState("");
   const [custom, setCustom] = useState<CustomLink[]>([]);
   const [bookingSlug, setBookingSlug] = useState<string | null>(null);
+  const [websiteBookingUrl, setWebsiteBookingUrl] = useState("");
   const [marketingTwilioPhone, setMarketingTwilioPhone] = useState("");
   const [marketingSendgridFrom, setMarketingSendgridFrom] = useState("");
   const [fallbackTwilioPhone, setFallbackTwilioPhone] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export default function CampaignLinksSettingsPage() {
         setTermsOfServiceUrl(data.termsOfServiceUrl ?? "");
         setCustom(data.custom ?? []);
         setBookingSlug(data.bookingSlug ?? null);
+        setWebsiteBookingUrl(data.websiteBookingUrl ?? "");
         setMarketingTwilioPhone(data.marketingTwilioPhone ?? "");
         setMarketingSendgridFrom(data.marketingSendgridFrom ?? "");
         setFallbackTwilioPhone(data.fallbackTwilioPhone ?? null);
@@ -176,13 +179,16 @@ export default function CampaignLinksSettingsPage() {
                 value={bookingUrl}
                 onChange={(e) => setBookingUrl(e.target.value)}
                 placeholder={
-                  bookingSlug
-                    ? `Leave blank to use /book/${bookingSlug}`
-                    : "https://…"
+                  websiteBookingUrl
+                    ? `Leave blank to use ${websiteBookingUrl}`
+                    : bookingSlug
+                      ? `Leave blank to use Radar /book/${bookingSlug}`
+                      : "https://www.stormsprinklers.com/booking"
                 }
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Override the public booking page URL, or leave blank to use your booking slug.
+                Override campaign booking CTAs. Leave blank to use the website booking URL from
+                Settings → Booking (or Radar&apos;s /book slug if no website URL is set).
               </p>
             </div>
             <div>

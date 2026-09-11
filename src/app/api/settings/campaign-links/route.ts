@@ -20,6 +20,8 @@ async function buildResponse(companyId: string) {
       where: { id: companyId },
       select: {
         bookingSlug: true,
+        websiteBookingUrl: true,
+        websiteWinterizationBookingUrl: true,
         customerBaseUrl: true,
         privacyPolicyUrl: true,
         termsOfServiceUrl: true,
@@ -48,11 +50,14 @@ async function buildResponse(companyId: string) {
   return {
     bookingUrl: stored.bookingUrl ?? "",
     bookingSlug: company.bookingSlug,
+    websiteBookingUrl: company.websiteBookingUrl ?? "",
     privacyPolicyUrl: company.privacyPolicyUrl ?? "",
     termsOfServiceUrl: company.termsOfServiceUrl ?? "",
     custom: stored.custom ?? [],
     allowedLinks: resolveCampaignAllowedLinks({
       campaignCtaLinks: company.campaignCtaLinks,
+      websiteBookingUrl: company.websiteBookingUrl,
+      websiteWinterizationBookingUrl: company.websiteWinterizationBookingUrl,
       bookingSlug: company.bookingSlug,
       customerBaseUrl: company.customerBaseUrl,
       privacyPolicyUrl: company.privacyPolicyUrl,

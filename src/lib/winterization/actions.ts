@@ -71,3 +71,23 @@ export async function removeWinterizationRequests(companyId: string, ids: string
 
   return { updated: rows.length };
 }
+
+export async function updateWinterizationSchedulingNotes(
+  companyId: string,
+  id: string,
+  schedulingNotes: string | null
+) {
+  const existing = await prisma.winterizationRequest.findFirst({
+    where: { id, companyId },
+    select: { id: true },
+  });
+  if (!existing) return null;
+
+  const notes = schedulingNotes?.trim() || null;
+  const updated = await prisma.winterizationRequest.update({
+    where: { id },
+    data: { schedulingNotes: notes },
+    select: { id: true, schedulingNotes: true },
+  });
+  return updated;
+}

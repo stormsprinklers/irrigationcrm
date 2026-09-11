@@ -129,6 +129,58 @@ export async function createOfficeTodo(
   return serializeOfficeTodo(row);
 }
 
+export async function updateOfficeTodo(
+  companyId: string,
+  todoId: string,
+  input: {
+    title?: string;
+    notes?: string | null;
+    recurrence?: Recurrence;
+    recurrenceEvery?: number | null;
+  }
+) {
+  const existing = await prisma.officeTodo.findFirst({
+    where: { id: todoId, companyId },
+    select: { id: true, recurrence: true, recurrenceEvery: true },
+  });
+  if (!existing) return null;
+
+  const data: {
+    title?: string;
+    notes?: string | null;
+    recurrence?: OfficeTodoRecurrence;
+    recurrenceEvery?: number | null;
+  } = {};
+
+  if (input.title !== undefined) {
+    const title = input.title.trim();
+    if (!title) throw new Error("Title is required");
+    data.title = title;
+  }
+  if (input.notes !== undefined) {
+    data.notes = input.notes?.trim() || null;
+  }
+  if (input.recurrence !== undefined) {
+    const parsed = parseOfficeTodoRecurrence(input.recurrence, input.recurrenceEvery);
+    data.recurrence = parsed.recurrence;
+    data.recurrenceEvery = parsed.recurrenceEvery;
+  } else if (input.recurrenceEvery !== undefined) {
+    const parsed = parseOfficeTodoRecurrence(existing.recurrence, input.recurrenceEvery);
+    data.recurrence = parsed.recurrence;
+    data.recurrenceEvery = parsed.recurrenceEvery;
+  }
+
+  if (Object.keys(data).length === 0) throw new Error("Nothing to update");
+
+  const row = await prisma.officeTodo.update({
+    where: { id: todoId },
+    data,
+    include: todoInclude,
+  });
+
+  return serializeOfficeTodo(row);
+}
+
 export async function setOfficeTodoCompleted(
   companyId: string,
   todoId: string,
@@ -150,6 +202,22 @@ export async function setOfficeTodoCompleted(
   });
 
   return serializeOfficeTodo(row);
+}
+
+export async function skipOfficeTodoOccurrence(
+  companyId: string,
+  todoId: string,
+  userId: string
+) {
+  const existing = await prisma.officeTodo.findFirst({
+    where: { id: todoId, companyId },
+    select: { id: true, recurrence: true },
+  });
+  if (!existing) return null;
+  if (existing.recurrence === OfficeTodoRecurrence.NONE) {
+    throw new Error("This task is not repeating");
+  }
+  return setOfficeTodoCompleted(companyId, todoId, true, userId);
 }
 
 export async function deleteOfficeTodo(companyId: string, todoId: string) {

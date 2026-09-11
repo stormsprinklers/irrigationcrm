@@ -145,6 +145,7 @@ async function sendToRecipient(
       timezone?: string | null;
       portalSlug?: string | null;
       bookingSlug?: string | null;
+      websiteBookingUrl?: string | null;
       customerBaseUrl?: string | null;
       googleReviewUrl?: string | null;
       websiteBaseUrl?: string | null;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -61,6 +61,109 @@ function formatDay(iso: string | null) {
   } catch {
     return iso;
   }
+}
+
+const notesClassName =
+  "flex min-h-[4.5rem] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
+function WinterizationNotesCell({
+  row,
+  onSaved,
+}: {
+  row: Row;
+  onSaved: (id: string, schedulingNotes: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(row.schedulingNotes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(row.schedulingNotes ?? "");
+  }, [editing, row.schedulingNotes]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/winterization/requests/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedulingNotes: draft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Could not save notes");
+      }
+      onSaved(row.id, typeof data.schedulingNotes === "string" ? data.schedulingNotes : draft.trim() || null);
+      setEditing(false);
+      toast.success("Notes saved");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save notes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <TableCell className="max-w-xs text-xs text-muted-foreground">
+      {row.shutoffValveLocation ? <div>Valve: {row.shutoffValveLocation}</div> : null}
+      {row.timerLocation ? <div>Timer: {row.timerLocation}</div> : null}
+      {editing ? (
+        <form
+          className="mt-1 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <textarea
+            autoFocus
+            className={notesClassName}
+            placeholder="Add a note for the office or tech…"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            disabled={saving}
+          />
+          <div className="flex flex-wrap gap-1">
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={saving}
+              onClick={() => {
+                setDraft(row.schedulingNotes ?? "");
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="mt-0.5 flex items-start gap-1">
+          <div className="min-w-0 flex-1 whitespace-pre-wrap">
+            {row.schedulingNotes ? (
+              row.schedulingNotes
+            ) : (
+              <span className="italic">No notes</span>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            aria-label={`Edit notes for ${row.name}`}
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+    </TableCell>
+  );
 }
 
 export default function WinterizationListPage() {
@@ -412,11 +515,14 @@ export default function WinterizationListPage() {
                   </TableCell>
                   <TableCell>{row.zoneCount ?? "—"}</TableCell>
                   <TableCell>{row.quotedPrice != null ? `$${row.quotedPrice}` : "—"}</TableCell>
-                  <TableCell className="max-w-xs text-xs text-muted-foreground">
-                    {row.shutoffValveLocation ? <div>Valve: {row.shutoffValveLocation}</div> : null}
-                    {row.timerLocation ? <div>Timer: {row.timerLocation}</div> : null}
-                    {row.schedulingNotes ? <div>{row.schedulingNotes}</div> : null}
-                  </TableCell>
+                  <WinterizationNotesCell
+                    row={row}
+                    onSaved={(id, schedulingNotes) => {
+                      setRows((current) =>
+                        current.map((item) => (item.id === id ? { ...item, schedulingNotes } : item))
+                      );
+                    }}
+                  />
                   <TableCell className="whitespace-nowrap text-right">
                     {row.status === "NEED_BOOKING" ? (
                       <Button

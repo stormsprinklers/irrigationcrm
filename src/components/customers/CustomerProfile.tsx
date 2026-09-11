@@ -43,6 +43,7 @@ import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { canAccessInvoices, canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
 import { RachioPropertyPanel } from "@/components/rachio/RachioPropertyPanel";
@@ -240,6 +241,7 @@ export function CustomerProfile({ customerId }: Props) {
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [refundInvoiceId, setRefundInvoiceId] = useState<string | null>(null);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+  const [voidInvoiceId, setVoidInvoiceId] = useState<string | null>(null);
   const [invoiceActingId, setInvoiceActingId] = useState<string | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -524,13 +526,20 @@ export function CustomerProfile({ customerId }: Props) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast.error(data.error ?? "Failed to void invoice");
-        return;
+        return false;
       }
       toast.success("Invoice voided");
       await refreshInvoices();
+      return true;
     } finally {
       setInvoiceActingId(null);
     }
+  }
+
+  async function confirmVoidInvoice() {
+    if (!voidInvoiceId) return;
+    const ok = await voidInvoice(voidInvoiceId);
+    if (ok) setVoidInvoiceId(null);
   }
 
   async function confirmDeleteInvoice(voidFirst: boolean) {
@@ -721,14 +730,15 @@ export function CustomerProfile({ customerId }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button variant="ghost" size="sm" className="-ml-2 mb-2" asChild>
-            <Link href="/customers">
+            <Link href={customer.isContact ? "/customers/contacts" : "/customers"}>
               <ArrowLeft className="h-4 w-4" />
-              Customers
+              {customer.isContact ? "Contacts" : "Customers"}
             </Link>
           </Button>
           <CustomerNameWithBadge
             name={customer.name}
             doNotService={customer.doNotService}
+            isContact={customer.isContact}
             className="text-2xl font-semibold"
             nameClassName="text-2xl font-semibold"
           />
@@ -1521,7 +1531,7 @@ export function CustomerProfile({ customerId }: Props) {
                                 variant="ghost"
                                 size="sm"
                                 disabled={acting}
-                                onClick={() => void voidInvoice(invoice.id)}
+                                onClick={() => setVoidInvoiceId(invoice.id)}
                               >
                                 Void
                               </Button>
@@ -1680,6 +1690,23 @@ export function CustomerProfile({ customerId }: Props) {
           open
           onClose={() => setRefundInvoiceId(null)}
           onRefunded={() => void refreshInvoices()}
+        />
+      ) : null}
+
+      {voidInvoiceId ? (
+        <ConfirmDialog
+          open
+          title="Void this invoice?"
+          description={`This marks invoice ${
+            invoices.find((invoice) => invoice.id === voidInvoiceId)?.invoiceNumber ?? ""
+          } as void. It cannot be collected after that.`}
+          confirmLabel="Void invoice"
+          confirmVariant="destructive"
+          busy={invoiceActingId === voidInvoiceId}
+          onConfirm={() => void confirmVoidInvoice()}
+          onCancel={() => {
+            if (invoiceActingId !== voidInvoiceId) setVoidInvoiceId(null);
+          }}
         />
       ) : null}
 

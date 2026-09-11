@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -56,6 +57,7 @@ export default function CustomerInvoicesPage() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [refundInvoice, setRefundInvoice] = useState<InvoiceRow | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<InvoiceRow | null>(null);
+  const [voidInvoice, setVoidInvoice] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -78,7 +80,7 @@ export default function CustomerInvoicesPage() {
     load();
   }, [load]);
 
-  async function handleAction(id: string, action: "send" | "remind" | "copy" | "void") {
+  async function handleAction(id: string, action: "send" | "remind" | "copy") {
     if (action === "copy") {
       const invoice = invoices.find((inv) => inv.id === id);
       if (!invoice) return;
@@ -107,9 +109,25 @@ export default function CustomerInvoicesPage() {
         }
         return;
       }
-      toast.success(
-        action === "send" ? "Invoice sent" : action === "remind" ? "Reminder sent" : "Invoice voided"
-      );
+      toast.success(action === "send" ? "Invoice sent" : "Reminder sent");
+      load();
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function confirmVoid() {
+    if (!voidInvoice) return;
+    setActingId(voidInvoice.id);
+    try {
+      const res = await fetch(`/api/invoices/${voidInvoice.id}/void`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to void invoice");
+        return;
+      }
+      toast.success("Invoice voided");
+      setVoidInvoice(null);
       load();
     } finally {
       setActingId(null);
@@ -230,7 +248,7 @@ export default function CustomerInvoicesPage() {
                           variant="ghost"
                           size="sm"
                           disabled={actingId === invoice.id}
-                          onClick={() => handleAction(invoice.id, "void")}
+                          onClick={() => setVoidInvoice(invoice)}
                         >
                           Void
                         </Button>
@@ -290,6 +308,20 @@ export default function CustomerInvoicesPage() {
           open
           onClose={() => setRefundInvoice(null)}
           onRefunded={() => load()}
+        />
+      ) : null}
+      {voidInvoice ? (
+        <ConfirmDialog
+          open
+          title="Void this invoice?"
+          description={`This marks invoice ${voidInvoice.invoiceNumber} as void. It cannot be collected after that.`}
+          confirmLabel="Void invoice"
+          confirmVariant="destructive"
+          busy={actingId === voidInvoice.id}
+          onConfirm={() => void confirmVoid()}
+          onCancel={() => {
+            if (actingId !== voidInvoice.id) setVoidInvoice(null);
+          }}
         />
       ) : null}
       {deleteInvoice ? (

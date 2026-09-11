@@ -73,6 +73,7 @@ export async function loadOnlineBookingCompany(companyId: string) {
       businessHours: true,
       timezone: true,
       onlineBookingVirtualOnly: true,
+      onlineBookingSlotMinutes: true,
       googleCalendarRefreshToken: true,
     },
   });

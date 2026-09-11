@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { customerSegmentWhere } from "@/lib/customers/lifetime-value";
 import type { CustomerDTO, CustomerListFilters, CustomerPropertyDTO } from "./types";
 
 export const customerInclude = {
@@ -132,6 +133,9 @@ export async function listCustomers(companyId: string, filters: CustomerListFilt
     and.push({ status: "ACTIVE" });
   }
 
+  const segmentWhere = customerSegmentWhere(filters.segment);
+  if (segmentWhere) and.push(segmentWhere);
+
   if (and.length > 0) {
     where.AND = and;
   }
@@ -143,7 +147,15 @@ export async function listCustomers(companyId: string, filters: CustomerListFilt
     take: 500,
   });
 
-  return customers.map(serializeCustomer);
+  return customers.map((customer) => ({
+    ...serializeCustomer(customer),
+    isContact:
+      filters.segment === "CONTACTS"
+        ? true
+        : filters.segment === "CUSTOMERS"
+          ? false
+          : undefined,
+  }));
 }
 
 export async function getCustomerForCompany(companyId: string, customerId: string) {

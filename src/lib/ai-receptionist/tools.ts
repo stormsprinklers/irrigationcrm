@@ -9,7 +9,7 @@ import {
 } from "@/lib/ai-receptionist/types";
 import { ensureAiReceptionistSystemUser } from "@/lib/ai-receptionist/system-user";
 import { hashToolArgs } from "@/lib/ai-receptionist/auth";
-import { getAvailableSlots, BOOKING_SLOT_MINUTES, formatSlotLabel } from "@/lib/booking/availability";
+import { getAvailableSlots, clampOnlineBookingSlotMinutes, formatSlotLabel } from "@/lib/booking/availability";
 import { getCustomerServiceBlock } from "@/lib/customers/service-guard";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
@@ -460,15 +460,18 @@ async function runTool(
           businessHours: true,
           bookingLeadTimeHours: true,
           timezone: true,
+          onlineBookingSlotMinutes: true,
         },
       });
       if (!company) return { ok: false, error: "Company not found", code: "NOT_FOUND" };
       const limit = Number(args.limit ?? 6);
+      const slotMinutes = clampOnlineBookingSlotMinutes(company.onlineBookingSlotMinutes);
       const slots = await getAvailableSlots({
         companyId: ctx.companyId,
         businessHours: company.businessHours,
         bookingLeadTimeHours: company.bookingLeadTimeHours,
         timeZone: company.timezone,
+        slotMinutes,
       });
       return {
         ok: true,
@@ -544,9 +547,6 @@ async function runTool(
 
     case "reserve_appointment": {
       const startAt = new Date(String(args.startAt));
-      const endAt = args.endAt
-        ? new Date(String(args.endAt))
-        : addMinutes(startAt, BOOKING_SLOT_MINUTES);
       const idempotencyKey = String(args.idempotencyKey);
 
       const existingHold = await prisma.appointmentHold.findUnique({
@@ -576,14 +576,18 @@ async function runTool(
           businessHours: true,
           bookingLeadTimeHours: true,
           timezone: true,
+          onlineBookingSlotMinutes: true,
         },
       });
       if (!company) return { ok: false, error: "Company not found", code: "NOT_FOUND" };
+      const slotMinutes = clampOnlineBookingSlotMinutes(company.onlineBookingSlotMinutes);
+      const endAt = args.endAt ? new Date(String(args.endAt)) : addMinutes(startAt, slotMinutes);
       const slots = await getAvailableSlots({
         companyId: ctx.companyId,
         businessHours: company.businessHours,
         bookingLeadTimeHours: company.bookingLeadTimeHours,
         timeZone: company.timezone,
+        slotMinutes,
       });
       const stillOpen = slots.some(
         (s) => s.startAt === startAt.toISOString() && s.endAt === endAt.toISOString()
@@ -734,23 +738,24 @@ async function runTool(
         return { ok: false, error: "This visit cannot be rescheduled", code: "INVALID_STATUS" };
       }
       const startAt = new Date(String(args.startAt));
-      const endAt = args.endAt
-        ? new Date(String(args.endAt))
-        : addMinutes(startAt, BOOKING_SLOT_MINUTES);
       const company = await prisma.company.findUnique({
         where: { id: ctx.companyId },
         select: {
           businessHours: true,
           bookingLeadTimeHours: true,
           timezone: true,
+          onlineBookingSlotMinutes: true,
         },
       });
       if (!company) return { ok: false, error: "Company not found", code: "NOT_FOUND" };
+      const slotMinutes = clampOnlineBookingSlotMinutes(company.onlineBookingSlotMinutes);
+      const endAt = args.endAt ? new Date(String(args.endAt)) : addMinutes(startAt, slotMinutes);
       const slots = await getAvailableSlots({
         companyId: ctx.companyId,
         businessHours: company.businessHours,
         bookingLeadTimeHours: company.bookingLeadTimeHours,
         timeZone: company.timezone,
+        slotMinutes,
       });
       const open = slots.some(
         (s) => s.startAt === startAt.toISOString() && s.endAt === endAt.toISOString()

@@ -156,6 +156,7 @@ export async function sendOperationalNotification(params: {
       privacyPolicyUrl: true,
       portalSlug: true,
       bookingSlug: true,
+      websiteBookingUrl: true,
       customerBaseUrl: true,
       notifyVisitScheduled: true,
       notifyVisitTimeUpdated: true,

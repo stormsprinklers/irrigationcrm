@@ -1,6 +1,7 @@
 import { InvoiceStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { ensureLatePlanBillingInvoices } from "@/lib/maintenance-plans/late-invoices";
 import type { InvoiceDTO, PublicInvoiceDTO } from "./types";
 
 export const invoiceInclude = {
@@ -102,6 +103,10 @@ export async function listInvoices(
   companyId: string,
   filters?: { customerId?: string; status?: string; search?: string }
 ) {
+  await ensureLatePlanBillingInvoices(companyId, filters?.customerId).catch((err) => {
+    console.error("Late maintenance plan invoices failed:", err);
+  });
+
   const where: Prisma.InvoiceWhereInput = { companyId };
 
   if (filters?.customerId) where.customerId = filters.customerId;

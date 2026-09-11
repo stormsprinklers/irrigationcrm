@@ -37,6 +37,7 @@ export async function notifyVisitEvent(params: {
       timezone: company.timezone,
       portalSlug: company.portalSlug,
       bookingSlug: company.bookingSlug,
+      websiteBookingUrl: company.websiteBookingUrl,
       customerBaseUrl: company.customerBaseUrl,
       googleReviewUrl: company.googleReviewUrl,
       websiteBaseUrl: company.websiteBaseUrl,

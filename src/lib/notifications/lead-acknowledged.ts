@@ -36,6 +36,7 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
     select: {
       name: true,
       bookingSlug: true,
+      websiteBookingUrl: true,
       onlineBookingEnabled: true,
       phone: true,
       customerBaseUrl: true,

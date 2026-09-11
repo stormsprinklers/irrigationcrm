@@ -205,6 +205,37 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   return (
     <div className="space-y-5">
       <div>
+        <label className="text-sm font-medium">Who to include</label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Contacts have no lifetime value (we have never been paid for work). Customers have paid us.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(
+            [
+              { id: "ALL", label: "Everyone" },
+              { id: "CUSTOMERS", label: "Customers" },
+              { id: "CONTACTS", label: "Contacts" },
+            ] as const
+          ).map((option) => {
+            const selected = (filters.recordType ?? "ALL") === option.id;
+            return (
+              <Button
+                key={option.id}
+                type="button"
+                size="sm"
+                variant={selected ? "secondary" : "outline"}
+                onClick={() =>
+                  update({ recordType: option.id === "ALL" ? undefined : option.id })
+                }
+              >
+                {option.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
         <label className="text-sm font-medium">Cities</label>
         <div className="mt-2 flex flex-wrap gap-2">
           {asStringList(filters.cities).map((city) => (
@@ -380,7 +411,15 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
           <p className="text-sm font-medium">
             {loadingPreview
               ? "Calculating audience..."
-              : `${effectiveCount} customer${effectiveCount === 1 ? "" : "s"} selected`}
+              : `${effectiveCount} ${
+                  filters.recordType === "CONTACTS"
+                    ? effectiveCount === 1
+                      ? "contact"
+                      : "contacts"
+                    : effectiveCount === 1
+                      ? "customer"
+                      : "customers"
+                } selected`}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" variant="outline" onClick={selectAllVisible}>
