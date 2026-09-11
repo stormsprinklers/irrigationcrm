@@ -6,6 +6,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { processEstimateFollowUpJob } from "@/lib/notifications/estimate-followup";
 import { notifyVisitEvent } from "@/lib/notifications/visit-events";
+import { holdUntilCompletedDelay } from "@/lib/notifications/jobs";
 import type { NotificationEvent } from "@/lib/notifications/templates";
 
 export async function GET(request: Request) {
@@ -55,6 +56,27 @@ export async function GET(request: Request) {
           companyId: job.companyId,
         });
       } else if (job.visitId) {
+        const hold = await holdUntilCompletedDelay({
+          visitId: job.visitId,
+          companyId: job.companyId,
+          event: job.event,
+          now,
+        });
+        if (hold.action === "cancel") {
+          await prisma.notificationJob.update({
+            where: { id: job.id },
+            data: { processedAt: new Date() },
+          });
+          continue;
+        }
+        if (hold.action === "hold") {
+          await prisma.notificationJob.update({
+            where: { id: job.id },
+            data: { runAt: hold.runAt },
+          });
+          deferred++;
+          continue;
+        }
         await notifyVisitEvent({
           visitId: job.visitId,
           companyId: job.companyId,

@@ -923,3 +923,7 @@ export function useVoiceDevice() {
   }
   return ctx;
 }
+
+export function useVoiceDeviceOptional() {
+  return useContext(VoiceContext);
+}

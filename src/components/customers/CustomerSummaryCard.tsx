@@ -39,7 +39,7 @@ export function CustomerSummaryCard({ customerId }: Props) {
                 {summary ? formatCurrency(summary.lifetimeValue) : "—"}
               </p>
             </div>
-            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Last visit
@@ -58,14 +58,6 @@ export function CustomerSummaryCard({ customerId }: Props) {
                   {summary?.createdAt
                     ? format(new Date(summary.createdAt), "MMM d, yyyy")
                     : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Lifetime gross profit
-                </dt>
-                <dd className="mt-1 text-lg font-semibold">
-                  {summary ? formatCurrency(summary.lifetimeGrossProfit) : "—"}
                 </dd>
               </div>
               <div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SprinklerProgrammingSetupTable } from "@/components/irrigation/SprinklerProgrammingSetupTable";
 import type { ControllerProgramGuide } from "@/lib/irrigation/runtime-engine";
@@ -20,6 +21,7 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
     grassSeason: "COOL" as "COOL" | "WARM",
   });
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -68,89 +70,101 @@ export function ControllerProgramGuidePanel({ customerId, propertyId }: Props) {
     }
   }
 
-  if (loading) {
-    return (
-      <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
-        </div>
-        <p className="p-4 text-sm text-muted-foreground">Calculating runtimes...</p>
-      </section>
-    );
-  }
-
-  if (!guide || guide.programs.length === 0) {
-    return (
-      <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">Sprinkler Programming Setup</h2>
-        </div>
-        <p className="p-4 text-sm text-muted-foreground">
-          Add zones with vegetation and irrigation types to generate a programming guide.
-        </p>
-      </section>
-    );
-  }
+  const hasPrograms = Boolean(guide && guide.programs.length > 0);
 
   return (
     <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Controller settings</h2>
-          <p className="text-xs text-muted-foreground">
-            Recommendations update from zone attributes, weather, and the settings below.
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 px-4 py-3",
+          expanded && "border-b border-border"
+        )}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              expanded && "rotate-180"
+            )}
+          />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">Controller settings</h2>
+            {expanded ? (
+              <p className="text-xs text-muted-foreground">
+                Recommendations update from zone attributes, weather, and the settings below.
+              </p>
+            ) : null}
+          </div>
+        </button>
+        {expanded ? (
+          <Button type="button" variant="ghost" size="icon" onClick={() => void load(true)}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        ) : null}
+      </div>
+
+      {expanded ? (
+        loading ? (
+          <p className="p-4 text-sm text-muted-foreground">Calculating runtimes...</p>
+        ) : !hasPrograms ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            Add zones with vegetation and irrigation types to generate a programming guide.
           </p>
-        </div>
-        <Button type="button" variant="ghost" size="icon" onClick={() => void load(true)}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
+        ) : (
+          <>
+            <div className="space-y-3 border-b border-border p-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.droughtRestrictionsActive}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, droughtRestrictionsActive: e.target.checked }))
+                  }
+                />
+                Drought restrictions (2 days/week)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={settings.cycleSoakEnabled}
+                  onChange={(e) =>
+                    setSettings((s) => ({ ...s, cycleSoakEnabled: e.target.checked }))
+                  }
+                />
+                Cycle-soak for clay/sloped zones (always on when a run exceeds 60 min)
+              </label>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Grass season:</span>
+                <select
+                  value={settings.grassSeason}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      grassSeason: e.target.value as "COOL" | "WARM",
+                    }))
+                  }
+                  className="h-8 rounded-md border px-2 text-sm"
+                >
+                  <option value="COOL">Cool-season (Utah default)</option>
+                  <option value="WARM">Warm-season</option>
+                </select>
+              </div>
+              <Button type="button" size="sm" onClick={() => void saveSettings()} disabled={saving}>
+                {saving ? "Updating..." : "Update recommendations"}
+              </Button>
+            </div>
 
-      <div className="space-y-3 border-b border-border p-4">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.droughtRestrictionsActive}
-            onChange={(e) =>
-              setSettings((s) => ({ ...s, droughtRestrictionsActive: e.target.checked }))
-            }
-          />
-          Drought restrictions (2 days/week)
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.cycleSoakEnabled}
-            onChange={(e) =>
-              setSettings((s) => ({ ...s, cycleSoakEnabled: e.target.checked }))
-            }
-          />
-          Cycle-soak for clay/sloped zones (always on when a run exceeds 60 min)
-        </label>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Grass season:</span>
-          <select
-            value={settings.grassSeason}
-            onChange={(e) =>
-              setSettings((s) => ({
-                ...s,
-                grassSeason: e.target.value as "COOL" | "WARM",
-              }))
-            }
-            className="h-8 rounded-md border px-2 text-sm"
-          >
-            <option value="COOL">Cool-season (Utah default)</option>
-            <option value="WARM">Warm-season</option>
-          </select>
-        </div>
-        <Button type="button" size="sm" onClick={() => void saveSettings()} disabled={saving}>
-          {saving ? "Updating..." : "Update recommendations"}
-        </Button>
-      </div>
-
-      <div className="p-4">
-        <SprinklerProgrammingSetupTable guide={guide} />
-      </div>
+            <div className="p-4">
+              <SprinklerProgrammingSetupTable guide={guide!} />
+            </div>
+          </>
+        )
+      ) : null}
     </section>
   );
 }

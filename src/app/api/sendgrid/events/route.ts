@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { validateEmailWebhook } from "@/lib/inbox/email";
+import { trackCampaignEngagement } from "@/lib/marketing/engagement";
 
 type EmailEvent = {
   event?: string;
@@ -51,30 +52,25 @@ export async function POST(request: NextRequest) {
     if (!recipient) continue;
 
     const eventName = evt.event?.toLowerCase();
+
+    if (eventName === "open" || eventName === "opened") {
+      await trackCampaignEngagement({ recipientId: recipient.id, kind: "opened" });
+      continue;
+    }
+    if (eventName === "click" || eventName === "clicked") {
+      await trackCampaignEngagement({ recipientId: recipient.id, kind: "clicked" });
+      continue;
+    }
+
     const update: {
       status?: string;
       error?: string | null;
       deliveredAt?: Date;
-      openedAt?: Date;
-      clickedAt?: Date;
-      clickCount?: { increment: number };
     } = {};
-    let trackedKind: "opened" | "clicked" | null = null;
 
     if (eventName === "delivered") {
       update.status = "delivered";
       update.deliveredAt = new Date();
-    } else if (eventName === "open" || eventName === "opened") {
-      update.openedAt = new Date();
-      trackedKind = "opened";
-      if (recipient.status === "sent") {
-        update.status = "delivered";
-        update.deliveredAt = recipient.deliveredAt ?? new Date();
-      }
-    } else if (eventName === "click" || eventName === "clicked") {
-      update.clickedAt = recipient.clickedAt ?? new Date();
-      update.clickCount = { increment: 1 };
-      trackedKind = "clicked";
     } else if (eventName === "bounce" || eventName === "dropped" || eventName === "failed") {
       update.status = "failed";
       update.error = eventName === "bounce" ? "Bounced" : recipient.error;
@@ -101,18 +97,6 @@ export async function POST(request: NextRequest) {
       where: { id: recipient.campaignId },
       data: { statsJson: stats },
     });
-
-    if (trackedKind && recipient.customerId) {
-      void import("@/lib/marketing/flow-engine")
-        .then(({ advanceWaitOnTrackedAction }) =>
-          advanceWaitOnTrackedAction({
-            campaignId: recipient.campaignId,
-            customerId: recipient.customerId!,
-            kind: trackedKind!,
-          })
-        )
-        .catch((err) => console.error("Campaign wait action check failed", err));
-    }
   }
 
   return NextResponse.json({ ok: true });

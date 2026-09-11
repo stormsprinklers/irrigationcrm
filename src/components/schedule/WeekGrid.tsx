@@ -33,6 +33,7 @@ import {
   type BookingWindow,
 } from "@/lib/schedule/open-time-slots";
 import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import { isFieldRole } from "@/lib/employees";
 
 const SCHEDULE_START_HOUR = 4;
 const SCHEDULE_END_HOUR = 22;
@@ -55,6 +56,7 @@ export type TechColumn = {
   photoUrl?: string | null;
   isUnassigned?: boolean;
   isCrew?: boolean;
+  role?: string;
   /** User whose work schedule drives Open Time Slots (foreman for crews). */
   scheduleUserId?: string | null;
   division?: "SERVICE" | "INSTALL" | null;
@@ -263,7 +265,9 @@ function WeekDayStaffStatus({
   columns: TechColumn[];
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
 }) {
-  const staff = columns.filter((column) => !column.isUnassigned);
+  const staff = columns.filter(
+    (column) => !column.isUnassigned && !column.isCrew && isFieldRole(column.role ?? "")
+  );
   if (staff.length === 0) return null;
 
   const working: string[] = [];

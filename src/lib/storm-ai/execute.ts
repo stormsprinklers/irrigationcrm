@@ -163,9 +163,6 @@ export async function runStormAiTool(
               outstandingBalance: canAccessInvoices(user.role)
                 ? summary.outstandingBalance
                 : undefined,
-              lifetimeGrossProfit: canViewProfitMargins(user.role)
-                ? summary.lifetimeGrossProfit
-                : undefined,
             }
           : null;
         return ok({ customer: serialized, summary: summaryOut });

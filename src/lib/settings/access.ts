@@ -77,7 +77,6 @@ export function settingsPathAccess(
   if (path === "/settings") return "read";
   if (startsWithPath(path, "/settings/appearance")) return "write";
   if (startsWithPath(path, "/settings/holiday-lighting")) return "hidden";
-  if (startsWithPath(path, "/settings/expense-cards")) return "hidden";
   if (startsWithPath(path, "/settings/storm-ai")) return "hidden";
   if (startsWithPath(path, "/settings/employees")) return "write";
   if (startsWithPath(path, "/settings/field-devices")) return "write";

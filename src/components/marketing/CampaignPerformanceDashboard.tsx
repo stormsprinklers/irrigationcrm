@@ -32,7 +32,8 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
           {
             label: "People enrolled",
             value: enrolled.total,
-            tooltip: "Active plus completed. Blast campaigns count pending as active and unique sent contacts as completed.",
+            tooltip:
+              "Unique people. An email and an SMS to the same customer count as one person.",
           },
           { label: "Active", value: enrolled.active },
           { label: "Completed", value: enrolled.completed },
@@ -50,7 +51,7 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
           comingSoon={false}
           columns={7}
           metrics={[
-            { label: "Sent", value: deliverability.sent },
+            { label: "Sent", value: deliverability.sent, tooltip: "Messages sent (email and SMS count separately)." },
             { label: "Delivered", value: deliverability.delivered },
             { label: "Failed", value: deliverability.failed },
             { label: "Bounced", value: deliverability.bounced },
@@ -65,8 +66,8 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Email open rates</h3>
           <p className="text-xs text-muted-foreground">
-            Opens come from Twilio Email / SendGrid open tracking on HTML emails, not a pixel in
-            this app.
+            Opens are counted when the tracking pixel loads (and when they click a link). Some
+            inboxes block images, so open rate can still undercount.
           </p>
         </div>
         <Table>

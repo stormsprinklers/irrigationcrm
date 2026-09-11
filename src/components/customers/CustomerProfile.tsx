@@ -224,6 +224,7 @@ export function CustomerProfile({ customerId }: Props) {
       total: number;
       amountPaid: number;
       balanceDue?: number;
+      publicToken?: string;
       createdAt: string;
       visit?: { id: string; title: string } | null;
       maintenancePlanEnrollment?: { id: string; planName: string } | null;
@@ -1489,6 +1490,20 @@ export function CustomerProfile({ customerId }: Props) {
                         <TableCell>{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap justify-end gap-1">
+                            {balanceDue > 0 &&
+                            invoice.status !== "VOID" &&
+                            invoice.status !== "REFUNDED" &&
+                            invoice.publicToken ? (
+                              <Button type="button" variant="ghost" size="sm" asChild>
+                                <Link
+                                  href={`/pay/${invoice.publicToken}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Take payment
+                                </Link>
+                              </Button>
+                            ) : null}
                             {balanceDue > 0 && invoice.status !== "VOID" ? (
                               <Button
                                 type="button"
@@ -1513,7 +1528,7 @@ export function CustomerProfile({ customerId }: Props) {
                             ) : null}
                             {invoice.visit ? (
                               <Button type="button" variant="ghost" size="sm" asChild>
-                                <Link href={`/visits/${invoice.visit.id}`}>Visit</Link>
+                                <Link href={`/visits/${invoice.visit.id}`}>Visit Details</Link>
                               </Button>
                             ) : null}
                             {invoice.maintenancePlanEnrollment ? (

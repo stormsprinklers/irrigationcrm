@@ -449,9 +449,9 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
           Branches
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Fork the contact journey based on conditions. Use SMS reply to split on what they text
-          back (not case sensitive — Yes and yes match the same branch). First matching branch
-          wins. To stop waiting after a while, add a Wait step with a timeout — not this If/Else.
+          Fork the contact journey based on conditions. Use SMS reply to split on what they
+          already texted back (not case sensitive — Yes and yes match the same branch). First
+          matching branch wins. If they need time to reply, put a Wait step before this If/Else.
         </p>
       </div>
 
@@ -510,7 +510,7 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
         <p className="text-sm font-semibold">None branch</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {ifElseWaitsForSmsReply(parsed)
-            ? "Used when they reply, but none of the SMS / condition branches above match."
+            ? "Used when none of the SMS / condition branches above match the reply they already sent."
             : "Used when none of the conditions above are satisfied."}
         </p>
         <div className="mt-2">

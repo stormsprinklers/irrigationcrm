@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CampaignStatus, CampaignType } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { buildCampaignStats } from "@/lib/marketing/stats";
+import { buildCampaignStats, uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       },
       include: {
         recipients: {
-          select: { status: true, openedAt: true, clickCount: true },
+          select: { id: true, customerId: true, email: true, phone: true, status: true, openedAt: true, clickCount: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
         status: c.status,
         sentAt: c.sentAt?.toISOString() ?? null,
         createdAt: c.createdAt.toISOString(),
-        recipientCount: c.recipients.length,
+        recipientCount: uniqueCampaignRecipientCount(c.recipients),
+        sendCount: stats.total,
         delivered: stats.delivered,
         opened: stats.opened ?? 0,
         clicked: stats.clicked ?? 0,
@@ -48,16 +49,16 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const emailCampaigns = rows.filter((c) => c.channel === "EMAIL" && c.recipientCount > 0);
+    const emailCampaigns = rows.filter((c) => c.channel === "EMAIL" && c.sendCount > 0);
     const totals = emailCampaigns.reduce(
       (acc, c) => {
-        acc.recipients += c.recipientCount;
+        acc.sends += c.sendCount;
         acc.delivered += c.delivered;
         acc.opened += c.opened;
         acc.clicked += c.clicked;
         return acc;
       },
-      { recipients: 0, delivered: 0, opened: 0, clicked: 0 }
+      { sends: 0, delivered: 0, opened: 0, clicked: 0 }
     );
 
     return NextResponse.json({
@@ -67,9 +68,7 @@ export async function GET(request: NextRequest) {
           (c) => c.type === CampaignType.DRIP && c.status === "ACTIVE"
         ).length,
         deliveryRate:
-          totals.recipients > 0
-            ? Math.round((totals.delivered / totals.recipients) * 1000) / 10
-            : 0,
+          totals.sends > 0 ? Math.round((totals.delivered / totals.sends) * 1000) / 10 : 0,
         openRate:
           totals.delivered > 0
             ? Math.round((totals.opened / totals.delivered) * 1000) / 10

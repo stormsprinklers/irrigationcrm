@@ -1,13 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { CustomerDTO } from "@/lib/customers/types";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import {
+  AddCustomerQuickDialog,
+  prefillFromSearchQuery,
+} from "@/components/customers/AddCustomerQuickDialog";
 
 type Props = {
   value: string;
@@ -36,29 +41,33 @@ export function CustomerSearchPicker({
   const [loading, setLoading] = useState(false);
   const [displayName, setDisplayName] = useState(selectedName ?? "");
   const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const compactRootRef = useRef<HTMLDivElement>(null);
-  const [compactMenuStyle, setCompactMenuStyle] = useState<React.CSSProperties>({});
+  const [compactMenuStyle, setCompactMenuStyle] = useState<React.CSSProperties | null>(null);
 
   useEffect(() => {
     if (selectedName) setDisplayName(selectedName);
   }, [selectedName]);
 
   useEffect(() => {
-    if (!compact || !open) return;
+    if (!compact || !open) {
+      setCompactMenuStyle(null);
+      return;
+    }
 
     function updatePosition() {
       const el = compactRootRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const menuHeight = 220;
       const gap = 4;
       const spaceBelow = window.innerHeight - rect.bottom - gap;
-      const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
+      const spaceAbove = rect.top - gap;
+      const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
       setCompactMenuStyle({
         position: "fixed",
         left: rect.left,
-        width: rect.width,
-        zIndex: 200,
+        width: Math.max(rect.width, 280),
+        zIndex: 300,
         ...(openUp
           ? { bottom: window.innerHeight - rect.top + gap }
           : { top: rect.bottom + gap }),
@@ -112,6 +121,12 @@ export function CustomerSearchPicker({
     setQuery("");
     setResults([]);
     setOpen(false);
+    setCreateOpen(false);
+  }
+
+  function openCreate() {
+    setOpen(false);
+    setCreateOpen(true);
   }
 
   function clearSelection() {
@@ -121,9 +136,6 @@ export function CustomerSearchPicker({
     setResults([]);
     setOpen(false);
   }
-
-  const showResults =
-    open && (loading || query.trim().length >= minQueryLength || results.length > 0);
 
   if (compact) {
     const selected = Boolean(value && displayName);
@@ -173,50 +185,73 @@ export function CustomerSearchPicker({
           </div>
         )}
 
-        {showResults && !(selected && !open) ? (
-          <ul
-            className="max-h-48 overflow-y-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
-            style={compactMenuStyle}
-          >
-            {loading ? (
-              <li className="px-3 py-2 text-sm text-muted-foreground">Searching…</li>
-            ) : query.trim().length < minQueryLength ? (
-              <li className="px-3 py-2 text-sm text-muted-foreground">
-                Type at least {minQueryLength} characters…
-              </li>
-            ) : results.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-muted-foreground">No customers found.</li>
-            ) : (
-              results.map((customer) => (
-                <li key={customer.id}>
+        {open && !(selected && !open) && compactMenuStyle && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                className="flex flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+                style={compactMenuStyle}
+              >
+                <ul className="max-h-48 overflow-y-auto">
+                  {loading ? (
+                    <li className="px-3 py-2 text-sm text-muted-foreground">Searching…</li>
+                  ) : query.trim().length < minQueryLength ? (
+                    <li className="px-3 py-2 text-sm text-muted-foreground">
+                      Type at least {minQueryLength} characters to search, or add a new customer.
+                    </li>
+                  ) : results.length === 0 ? (
+                    <li className="px-3 py-2 text-sm text-muted-foreground">No customers found.</li>
+                  ) : (
+                    results.map((customer) => (
+                      <li key={customer.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectCustomer(customer)}
+                          disabled={customer.doNotService}
+                          className={cn(
+                            "flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-muted/50",
+                            value === customer.id && "bg-highlight-panel",
+                            customer.doNotService && "cursor-not-allowed opacity-50"
+                          )}
+                        >
+                          <span className="font-medium">
+                            {customer.name}
+                            {customer.doNotService ? " (do not service)" : ""}
+                          </span>
+                          {(customer.phone || customer.email) && (
+                            <span className="text-xs text-muted-foreground">
+                              {[customer.phone ? formatPhoneDisplay(customer.phone) : null, customer.email]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+                <div className="border-t border-border p-1">
                   <button
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selectCustomer(customer)}
-                    disabled={customer.doNotService}
-                    className={cn(
-                      "flex w-full flex-col items-start px-3 py-2 text-left text-sm hover:bg-muted/50",
-                      value === customer.id && "bg-highlight-panel",
-                      customer.doNotService && "cursor-not-allowed opacity-50"
-                    )}
+                    onClick={openCreate}
+                    className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted/50"
                   >
-                    <span className="font-medium">
-                      {customer.name}
-                      {customer.doNotService ? " (do not service)" : ""}
-                    </span>
-                    {(customer.phone || customer.email) && (
-                      <span className="text-xs text-muted-foreground">
-                        {[customer.phone ? formatPhoneDisplay(customer.phone) : null, customer.email]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    )}
+                    <Plus className="h-4 w-4" />
+                    Add customer
                   </button>
-                </li>
-              ))
-            )}
-          </ul>
-        ) : null}
+                </div>
+              </div>,
+              document.body
+            )
+          : null}
+
+        <AddCustomerQuickDialog
+          open={createOpen}
+          prefill={prefillFromSearchQuery(query)}
+          onClose={() => setCreateOpen(false)}
+          onCreated={selectCustomer}
+        />
       </div>
     );
   }
@@ -282,6 +317,16 @@ export function CustomerSearchPicker({
           </ul>
         )}
       </ScrollArea>
+      <Button type="button" variant="outline" size="sm" onClick={openCreate}>
+        <Plus className="h-4 w-4" />
+        Add customer
+      </Button>
+      <AddCustomerQuickDialog
+        open={createOpen}
+        prefill={prefillFromSearchQuery(query)}
+        onClose={() => setCreateOpen(false)}
+        onCreated={selectCustomer}
+      />
     </div>
   );
 }

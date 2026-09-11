@@ -194,8 +194,19 @@ export default function CustomerInvoicesPage() {
                   <TableCell>{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap justify-end gap-1">
-                      {invoice.balanceDue > 0 && invoice.status !== "VOID" ? (
+                      {invoice.balanceDue > 0 &&
+                      invoice.status !== "VOID" &&
+                      invoice.status !== "REFUNDED" ? (
                         <>
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link
+                              href={`/pay/${invoice.publicToken}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Take payment
+                            </Link>
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -226,7 +237,7 @@ export default function CustomerInvoicesPage() {
                       ) : null}
                       {invoice.visit ? (
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/visits/${invoice.visit.id}`}>Visit</Link>
+                          <Link href={`/visits/${invoice.visit.id}`}>Visit Details</Link>
                         </Button>
                       ) : null}
                       {invoice.maintenancePlanEnrollment ? (

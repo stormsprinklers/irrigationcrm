@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EstimateStatus } from "@prisma/client";
+import { addHours } from "date-fns";
 import { formatArrivalWindow } from "../arrival-window";
 import { isEstimateOpenForFollowUp } from "../estimate-followup";
+import { followUpRunAt } from "../jobs";
 import { splitCustomerName } from "../name-utils";
 import {
   leadAcknowledgementSnippets,
@@ -286,4 +288,24 @@ test("buildNotificationContext fills company phone and booking link", () => {
   });
   assert.equal(ctx.company_phone, "385-555-0100");
   assert.equal(ctx.booking_link, "https://portal.example.com/book/storm");
+});
+
+test("followUpRunAt is 24 hours after completion, not the appointment time", () => {
+  const completedAt = new Date("2026-09-11T18:00:00.000Z");
+  const appointmentEnd = new Date("2026-09-10T16:00:00.000Z");
+  const runAt = followUpRunAt({
+    completedAt,
+    delayHours: 24,
+    timeZone: "America/Denver",
+  });
+  assert.ok(runAt);
+  assert.equal(runAt.getTime(), addHours(completedAt, 24).getTime());
+  assert.notEqual(runAt.getTime(), addHours(appointmentEnd, 24).getTime());
+});
+
+test("followUpRunAt returns null when delay is 0 so the message can send immediately", () => {
+  assert.equal(
+    followUpRunAt({ completedAt: new Date("2026-09-11T18:00:00.000Z"), delayHours: 0 }),
+    null
+  );
 });

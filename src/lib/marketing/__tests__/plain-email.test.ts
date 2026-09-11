@@ -14,7 +14,7 @@ test("isPlainTextEmailTemplate matches the plain template id", () => {
   assert.equal(isPlainTextEmailTemplate("letter"), false);
 });
 
-test("buildMarketingEmailPayload sends text-only for unformatted bodies", () => {
+test("buildMarketingEmailPayload sends HTML with an open pixel for unformatted bodies", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "",
     bodyText: "Hi neighbor,\n\nJust a note.",
@@ -22,9 +22,10 @@ test("buildMarketingEmailPayload sends text-only for unformatted bodies", () => 
     recipientId: "rec_1",
   });
 
-  assert.equal(out.html, undefined);
   assert.match(out.text, /Hi neighbor/);
   assert.match(out.text, /Unsubscribe from marketing emails: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
+  assert.match(out.html ?? "", /Hi neighbor/);
+  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
 });
 
 test("buildMarketingEmailPayload keeps HTML for formatted bodies", () => {
@@ -37,6 +38,7 @@ test("buildMarketingEmailPayload keeps HTML for formatted bodies", () => {
 
   assert.match(out.html ?? "", /<p>Hello/);
   assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
   assert.match(out.html ?? "", /Unsubscribe from marketing emails/);
   assert.match(out.text, /Unsubscribe from marketing emails/);
 });

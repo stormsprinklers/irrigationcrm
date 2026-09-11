@@ -282,6 +282,8 @@ test("SMS reply matching is case-insensitive and splits into separate branches",
   assert.equal(ifElseWaitsForSmsReply(config), true);
   assert.equal(ifElseNeedsWait(config), true);
 
+  assert.equal(ifElseNeedsWait({ ...config, timeoutEnabled: false }), false);
+
   assert.equal(resolveIfElseBranch({ ...contact, smsReply: "YES" }, config, "reply").nextId, "yes-step");
   assert.equal(resolveIfElseBranch({ ...contact, smsReply: " yes " }, config, "reply").nextId, "yes-step");
   assert.equal(resolveIfElseBranch({ ...contact, smsReply: "Nope" }, config, "reply").nextId, "no-step");

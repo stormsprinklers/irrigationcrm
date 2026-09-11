@@ -467,7 +467,9 @@ export function pickIfElseNextId(contact: IfElseContact, config: IfElseConfig): 
 }
 
 export function ifElseNeedsWait(config: IfElseConfig): boolean {
-  return ifElseWaitsForSmsReply(config) || config.timeoutEnabled;
+  // SMS replies already received (or a prior Wait step) are evaluated immediately.
+  // Only a legacy timeout path holds the contact on this node.
+  return config.timeoutEnabled;
 }
 
 export type IfElseResolvePhase = "immediate" | "reply" | "timeout";

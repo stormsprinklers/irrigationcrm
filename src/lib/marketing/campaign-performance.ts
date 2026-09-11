@@ -5,7 +5,7 @@ import {
   EmailFolder,
   MessageDirection,
 } from "@prisma/client";
-import { rateOrNull } from "@/lib/marketing/stats";
+import { campaignRecipientKey, rateOrNull, uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 
 export type CampaignMessagePerformance = {
@@ -112,11 +112,17 @@ export async function getCampaignPerformance(campaignId: string): Promise<Campai
     (row) => row.status === CampaignEnrollmentStatus.COMPLETED
   ).length;
 
-  const blastActive = campaign.type === CampaignType.BLAST ? pending : activeEnrollments;
+  const uniquePeople = uniqueCampaignRecipientCount(recipients);
+  const uniqueSentPeople = uniqueCampaignRecipientCount(sentRows);
+  const pendingRows = recipients.filter((row) => row.status === "pending");
+  const sentKeys = new Set(sentRows.map((row) => campaignRecipientKey(row)).filter(Boolean));
+  const pendingOnlyPeople = uniqueCampaignRecipientCount(
+    pendingRows.filter((row) => !sentKeys.has(campaignRecipientKey(row)))
+  );
+
+  const blastActive = campaign.type === CampaignType.BLAST ? pendingOnlyPeople : activeEnrollments;
   const blastCompleted =
-    campaign.type === CampaignType.BLAST
-      ? new Set(sentRows.map((row) => row.customerId ?? row.id)).size
-      : completedEnrollments;
+    campaign.type === CampaignType.BLAST ? uniqueSentPeople : completedEnrollments;
 
   const nodeById = new Map(campaign.flowNodes.map((node) => [node.id, node]));
   const groups = new Map<string, typeof recipients>();
@@ -297,7 +303,10 @@ export async function getCampaignPerformance(campaignId: string): Promise<Campai
     enrolled: {
       active: blastActive,
       completed: blastCompleted,
-      total: blastActive + blastCompleted,
+      total:
+        campaign.type === CampaignType.BLAST
+          ? uniquePeople
+          : blastActive + blastCompleted,
     },
     deliverability: {
       sent: sentRows.length,

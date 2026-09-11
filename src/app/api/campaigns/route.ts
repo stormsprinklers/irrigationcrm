@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CampaignChannel, CampaignStatus, CampaignType } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -11,7 +12,7 @@ export async function GET() {
       where: { companyId: user.companyId },
       include: {
         list: { select: { id: true, name: true } },
-        _count: { select: { recipients: true } },
+        recipients: { select: { id: true, customerId: true, email: true, phone: true } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -25,7 +26,7 @@ export async function GET() {
         status: c.status,
         subject: c.subject,
         list: c.list,
-        recipientCount: c._count.recipients,
+        recipientCount: uniqueCampaignRecipientCount(c.recipients),
         scheduledAt: c.scheduledAt?.toISOString() ?? null,
         sentAt: c.sentAt?.toISOString() ?? null,
         statsJson: c.statsJson,

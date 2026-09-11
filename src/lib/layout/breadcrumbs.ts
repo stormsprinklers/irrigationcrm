@@ -102,7 +102,6 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
       "Parts Info": node("/settings/storm-ai/technician-assistant/parts"),
     })),
     "Holiday lighting": node("/settings/holiday-lighting"),
-    "Company Expense Cards": node("/settings/expense-cards"),
     Team: node("/settings/employees"),
     Employees: node("/settings/employees"),
     "Work hours": node("/settings/employees/schedules"),
@@ -188,7 +187,6 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
   Campaigns: node("/campaigns", kids({
     New: node("/campaigns/new"),
   })),
-  "Expense card": node("/expense-card"),
 });
 
 export type BreadcrumbInput = string | { label: string; href?: string | null };

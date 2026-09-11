@@ -20,8 +20,55 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { CampaignPerformance } from "@/lib/marketing/campaign-performance";
+import { campaignRecipientKey } from "@/lib/marketing/stats";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+
+function groupCampaignRecipients(rows: CampaignDetail["recipients"]) {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      email: string | null;
+      phone: string | null;
+      statuses: string[];
+      channels: string[];
+      sentAt: string | null;
+      openedAt: string | null;
+      clickCount: number;
+      errors: string[];
+    }
+  >();
+
+  for (const row of rows) {
+    const key = campaignRecipientKey(row) || row.id;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        key,
+        email: row.email,
+        phone: row.phone,
+        statuses: [row.status],
+        channels: row.channel ? [row.channel] : [],
+        sentAt: row.sentAt,
+        openedAt: row.openedAt,
+        clickCount: row.clickCount,
+        errors: row.error ? [row.error] : [],
+      });
+      continue;
+    }
+    if (!existing.email && row.email) existing.email = row.email;
+    if (!existing.phone && row.phone) existing.phone = row.phone;
+    if (!existing.statuses.includes(row.status)) existing.statuses.push(row.status);
+    if (row.channel && !existing.channels.includes(row.channel)) existing.channels.push(row.channel);
+    if (row.sentAt && (!existing.sentAt || row.sentAt < existing.sentAt)) existing.sentAt = row.sentAt;
+    if (row.openedAt && !existing.openedAt) existing.openedAt = row.openedAt;
+    existing.clickCount += row.clickCount;
+    if (row.error) existing.errors.push(row.error);
+  }
+
+  return [...groups.values()];
+}
 
 function flowNodeTypeLabel(type: string) {
   switch (type) {
@@ -97,8 +144,10 @@ type CampaignDetail = {
   }>;
   recipients: Array<{
     id: string;
+    customerId?: string | null;
     email: string | null;
     phone: string | null;
+    channel?: string | null;
     status: string;
     error: string | null;
     sentAt: string | null;
@@ -422,11 +471,15 @@ export default function MarketingCampaignDetailPage() {
       <div className="rounded-lg border border-border bg-white">
         <div className="border-b border-border px-4 py-3">
           <h3 className="font-medium">Recipients</h3>
+          <p className="text-xs text-muted-foreground">
+            One row per person. Email and SMS to the same customer are combined.
+          </p>
         </div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Contact</TableHead>
+              <TableHead>Channel</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Opened</TableHead>
@@ -437,17 +490,20 @@ export default function MarketingCampaignDetailPage() {
           <TableBody>
             {(campaign.recipients ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
+                <TableCell colSpan={7} className="text-muted-foreground">
                   Recipients appear when the campaign is sent or activated.
                 </TableCell>
               </TableRow>
             ) : (
-              (campaign.recipients ?? []).map((r) => (
-                <TableRow key={r.id}>
+              groupCampaignRecipients(campaign.recipients ?? []).map((r) => (
+                <TableRow key={r.key}>
                   <TableCell>
-                    {r.email ?? (r.phone ? formatPhoneDisplay(r.phone) : null) ?? "—"}
+                    {[r.email, r.phone ? formatPhoneDisplay(r.phone) : null]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
                   </TableCell>
-                  <TableCell>{r.status}</TableCell>
+                  <TableCell>{r.channels.length > 0 ? r.channels.join(" · ") : "—"}</TableCell>
+                  <TableCell>{r.statuses.join(" · ")}</TableCell>
                   <TableCell>
                     {r.sentAt ? format(new Date(r.sentAt), "MMM d h:mm a") : "—"}
                   </TableCell>
@@ -455,7 +511,7 @@ export default function MarketingCampaignDetailPage() {
                     {r.openedAt ? format(new Date(r.openedAt), "MMM d h:mm a") : "—"}
                   </TableCell>
                   <TableCell>{r.clickCount > 0 ? r.clickCount : "—"}</TableCell>
-                  <TableCell className="text-destructive">{r.error ?? ""}</TableCell>
+                  <TableCell className="text-destructive">{r.errors.join(" · ")}</TableCell>
                 </TableRow>
               ))
             )}

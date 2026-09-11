@@ -1,5 +1,10 @@
+import { plainTextAsEmailHtml } from "@/lib/inbox/email";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
-import { rewriteTrackedLinks, rewriteTrackedUrlsInText } from "@/lib/marketing/link-tracking";
+import {
+  appendOpenTrackingPixel,
+  rewriteTrackedLinks,
+  rewriteTrackedUrlsInText,
+} from "@/lib/marketing/link-tracking";
 import {
   appendMarketingUnsubscribeFooter,
   appendMarketingUnsubscribeText,
@@ -18,7 +23,10 @@ export function buildMarketingEmailPayload(params: {
     params.recipientId
   );
   if (!isHtmlEmailBody(params.bodyHtml)) {
-    return { text };
+    return {
+      text,
+      html: appendOpenTrackingPixel(plainTextAsEmailHtml(text), params.recipientId),
+    };
   }
 
   const rawHtml = appendMarketingUnsubscribeFooter(
@@ -27,6 +35,6 @@ export function buildMarketingEmailPayload(params: {
   );
   return {
     text,
-    html: rewriteTrackedLinks(rawHtml, params.recipientId),
+    html: appendOpenTrackingPixel(rewriteTrackedLinks(rawHtml, params.recipientId), params.recipientId),
   };
 }

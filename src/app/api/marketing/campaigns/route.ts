@@ -3,6 +3,7 @@ import { CampaignChannel, CampaignStatus, CampaignType } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { previewAudience } from "@/lib/marketing/audience";
 import type { AudienceFilters } from "@/lib/marketing/types";
+import { uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -13,7 +14,8 @@ export async function GET() {
       where: { companyId: user.companyId },
       include: {
         list: { select: { id: true, name: true } },
-        _count: { select: { recipients: true, enrollments: true } },
+        recipients: { select: { id: true, customerId: true, email: true, phone: true } },
+        _count: { select: { enrollments: true } },
         steps: { select: { id: true }, take: 1 },
       },
       orderBy: { createdAt: "desc" },
@@ -28,7 +30,7 @@ export async function GET() {
         status: c.status,
         subject: c.subject,
         list: c.list,
-        recipientCount: c._count.recipients,
+        recipientCount: uniqueCampaignRecipientCount(c.recipients),
         enrollmentCount: c._count.enrollments,
         stepCount: c.steps.length,
         scheduledAt: c.scheduledAt?.toISOString() ?? null,

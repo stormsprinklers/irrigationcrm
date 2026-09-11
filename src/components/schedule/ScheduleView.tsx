@@ -198,6 +198,7 @@ export function ScheduleView({
           photoUrl: employee.photoUrl,
           scheduleUserId: employee.id,
           division: employee.division ?? "SERVICE",
+          role: employee.role,
         });
       }
     }

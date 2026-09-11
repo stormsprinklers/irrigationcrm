@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runExpenseCardAutoTopUps } from "@/lib/expense-cards/auto-topup";
 
+/** Expense cards are deprecated — do not fund Stripe Issuing. */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
@@ -8,18 +8,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const results = await runExpenseCardAutoTopUps();
-    return NextResponse.json({
-      ok: true,
-      checked: results.length,
-      results,
-    });
-  } catch (err) {
-    console.error("[cron] expense-card-topup failed", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Top-up cron failed" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ ok: true, deprecated: true, checked: 0 });
 }

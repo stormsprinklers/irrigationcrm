@@ -315,6 +315,15 @@ function nextIfElseCheckAt(until: Date | null, waitsForSms: boolean, from = new 
   return poll;
 }
 
+async function enrollmentLookbackSince(enrollmentId: string, fallback: Date) {
+  const sent = await prisma.campaignEnrollmentEvent.findFirst({
+    where: { enrollmentId, eventType: "sent" },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return sent?.createdAt ?? fallback;
+}
+
 async function latestInboundSmsBody(params: {
   companyId: string;
   customerId: string;
@@ -707,6 +716,30 @@ export async function processFlowEnrollments(
   let processed = 0;
   const quietHoursNotified = new Set<string>();
 
+  const now = new Date();
+  const branchNodes = await prisma.campaignFlowNode.findMany({
+    where: {
+      type: CampaignFlowNodeType.BRANCH,
+      ...(campaignId ? { campaignId } : {}),
+      campaign: { status: CampaignStatus.ACTIVE, type: CampaignType.DRIP },
+    },
+    select: { id: true, config: true },
+  });
+  const immediateBranchIds = branchNodes
+    .filter((node) => !isLegacyReactionBranch(node.config) && !ifElseNeedsWait(parseIfElseConfig(node.config)))
+    .map((node) => node.id);
+  if (immediateBranchIds.length > 0) {
+    await prisma.campaignEnrollment.updateMany({
+      where: {
+        status: CampaignEnrollmentStatus.ACTIVE,
+        currentNodeId: { in: immediateBranchIds },
+        nextSendAt: { gt: now },
+        ...(campaignId ? { campaignId } : {}),
+      },
+      data: { nextSendAt: now },
+    });
+  }
+
   // Run enough rounds that SEND → WAIT (start) or SEND → next SEND can happen
   // in the same request instead of waiting for the next cron tick.
   for (let round = 0; round < 8; round++) {
@@ -836,6 +869,44 @@ async function processOneDueEnrollment(
 
       if (!waited) {
         const now = new Date();
+        if (wait.usesAction) {
+          const hit = await customerActionMatch({
+            campaignId: enrollment.campaignId,
+            customerId: enrollment.customerId,
+            action: wait.action,
+          });
+          if (hit) {
+            await completeWaitAndAdvance({
+              enrollmentId: enrollment.id,
+              timezone: companyTz,
+              node,
+              nodes,
+              reason: "action",
+              matched: hit,
+            });
+            return;
+          }
+        }
+        if (wait.usesReply) {
+          const since = await enrollmentLookbackSince(enrollment.id, enrollment.createdAt);
+          const hit = await customerReplyMatch({
+            companyId: enrollment.campaign.companyId,
+            customerId: enrollment.customerId,
+            since,
+            keywords: wait.keywords,
+          });
+          if (hit) {
+            await completeWaitAndAdvance({
+              enrollmentId: enrollment.id,
+              timezone: companyTz,
+              node,
+              nodes,
+              reason: "reply",
+              matched: hit,
+            });
+            return;
+          }
+        }
         const until = waitTimeoutAt(wait, now, companyTz);
         const when = nextWaitCheckAt(wait, until, now);
         await logEvent(enrollment.id, node.id, "wait_started", {
@@ -891,10 +962,11 @@ async function processOneDueEnrollment(
       const now = new Date();
 
       if (wait.usesReply) {
+        const since = await enrollmentLookbackSince(enrollment.id, waited.createdAt);
         const hit = await customerReplyMatch({
           companyId: enrollment.campaign.companyId,
           customerId: enrollment.customerId,
-          since: waited.createdAt,
+          since,
           keywords: wait.keywords,
         });
         if (hit) {
@@ -1138,6 +1210,18 @@ async function processOneDueEnrollment(
         enrollment.campaign.companyId,
         enrollment.customerId
       );
+      const smsSince = waitsForSms
+        ? await enrollmentLookbackSince(enrollment.id, enrollment.createdAt)
+        : null;
+      const smsReply =
+        waitsForSms && smsSince
+          ? await latestInboundSmsBody({
+              companyId: enrollment.campaign.companyId,
+              customerId: enrollment.customerId,
+              since: smsSince,
+            })
+          : null;
+      const contactWithReply = withSmsReply(contact, smsReply);
 
       const entered = await prisma.campaignEnrollmentEvent.findFirst({
         where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
@@ -1160,11 +1244,11 @@ async function processOneDueEnrollment(
         });
 
       if (!entered) {
-        const matchedImmediately = contact
-          ? parsed.branches.some((branch) => branchMatches(contact, branch))
+        const matchedImmediately = contactWithReply
+          ? parsed.branches.some((branch) => branchMatches(contactWithReply, branch))
           : false;
         if (matchedImmediately || !needsWait) {
-          await finish("immediate", contact);
+          await finish("immediate", contactWithReply);
           return;
         }
 
@@ -1222,28 +1306,22 @@ async function processOneDueEnrollment(
           : ifElseTimeoutAt(parsed, entered.createdAt, companyTz);
       const now = new Date();
 
-      if (waitsForSms) {
-        const smsReply = await latestInboundSmsBody({
-          companyId: enrollment.campaign.companyId,
-          customerId: enrollment.customerId,
-          since: entered.createdAt,
-        });
-        if (smsReply) {
-          await finish("reply", withSmsReply(contact, smsReply));
-          return;
-        }
-      }
-
-      const matchedWhileWaiting = contact
-        ? parsed.branches.some((branch) => branchMatches(contact, branch))
+      const matchedWhileWaiting = contactWithReply
+        ? parsed.branches.some((branch) => branchMatches(contactWithReply, branch))
         : false;
       if (matchedWhileWaiting) {
-        await finish("immediate", contact);
+        await finish(smsReply ? "reply" : "immediate", contactWithReply);
         return;
       }
 
       if (parsed.timeoutEnabled && until && now.getTime() >= until.getTime()) {
-        await finish("timeout", contact);
+        await finish("timeout", contactWithReply);
+        return;
+      }
+
+      // Legacy / stuck enrollments that were polling with no timeout: resolve now.
+      if (!parsed.timeoutEnabled) {
+        await finish("immediate", contactWithReply);
         return;
       }
 

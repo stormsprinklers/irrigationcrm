@@ -1,4 +1,5 @@
 import type { CampaignStats } from "@/lib/marketing/types";
+import { phoneDigitsKey } from "@/lib/inbox/phone";
 
 type RecipientRow = {
   status: string;
@@ -20,6 +21,38 @@ export function buildCampaignStats(recipients: RecipientRow[]): CampaignStats {
   const clicked = recipients.filter((r) => (r.clickCount ?? 0) > 0).length;
 
   return { total, sent, delivered, failed, pending, opened, clicked };
+}
+
+/** One person can have an email row and an SMS row; count them once. */
+export function campaignRecipientKey(row: {
+  id?: string;
+  customerId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  return (
+    row.customerId ||
+    row.email?.trim().toLowerCase() ||
+    phoneDigitsKey(row.phone) ||
+    row.id ||
+    ""
+  );
+}
+
+export function uniqueCampaignRecipientCount(
+  rows: Array<{
+    id?: string;
+    customerId?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  }>
+) {
+  const keys = new Set<string>();
+  for (const row of rows) {
+    const key = campaignRecipientKey(row);
+    if (key) keys.add(key);
+  }
+  return keys.size;
 }
 
 export function rate(numerator: number, denominator: number) {

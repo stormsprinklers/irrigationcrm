@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Maximize2, Pencil, Plus, Save, ZoomIn } from "lucide-react";
+import { ChevronDown, Maximize2, Pencil, Plus, Save, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import {
   AerialZoneMapEditor,
@@ -91,6 +91,7 @@ export function PropertyIrrigationMapEditor({
   const [diagramUrl, setDiagramUrl] = useState<string | null>(propertyDiagramUrl ?? null);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropBusy, setCropBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const mapImageUrl = blobProxyUrl(diagramUrl || aerialUrl);
 
@@ -318,44 +319,54 @@ export function PropertyIrrigationMapEditor({
     setActiveZoneIndex((i) => Math.max(0, Math.min(i, zones.length - 2)));
   }
 
-  if (!mapImageUrl) {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3">
-        <div>
-          <p className="text-sm font-medium">Irrigation map</p>
-          <p className="text-sm text-muted-foreground">
-            No map for {propertyName} yet. Set one up from the customer profile.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const zonesWithPolygons = zones.filter((zone) => zone.polygon?.length);
   const isEditing = editing && allowInlineEdit;
 
   return (
-    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <section
+      className={cn(
+        "min-w-0 max-w-full overflow-hidden rounded-lg border",
+        mapImageUrl ? "border-border bg-white" : "border-dashed border-border bg-muted/20"
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 px-4 py-3",
+          expanded && "border-b border-border"
+        )}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-left"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              expanded && "rotate-180"
+            )}
+          />
           <h2 className="text-sm font-semibold">Irrigation map</h2>
           <span className="truncate text-sm text-muted-foreground">· {propertyName}</span>
-          {irrigationMapStatus === "PUBLISHED" ? (
-            <Badge variant="secondary" className="text-[10px]">
-              Published
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px]">
-              Draft
-            </Badge>
-          )}
-          {!loading && zonesWithPolygons.length > 0 ? (
+          {mapImageUrl ? (
+            irrigationMapStatus === "PUBLISHED" ? (
+              <Badge variant="secondary" className="text-[10px]">
+                Published
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px]">
+                Draft
+              </Badge>
+            )
+          ) : null}
+          {mapImageUrl && !loading && zonesWithPolygons.length > 0 ? (
             <Badge variant="outline" className="text-[10px]">
               {zonesWithPolygons.length} zone{zonesWithPolygons.length === 1 ? "" : "s"}
             </Badge>
           ) : null}
-        </div>
-        {allowInlineEdit ? (
+        </button>
+        {expanded && allowInlineEdit && mapImageUrl ? (
           <div className="flex max-w-full flex-wrap gap-2">
             {aerialUrl ? (
               <>
@@ -407,6 +418,13 @@ export function PropertyIrrigationMapEditor({
         ) : null}
       </div>
 
+      {expanded && !mapImageUrl ? (
+        <p className="px-4 pb-3 text-sm text-muted-foreground">
+          No map for {propertyName} yet. Set one up from the customer profile.
+        </p>
+      ) : null}
+
+      {expanded && mapImageUrl ? (
       <div className="space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium">Water source</label>
@@ -554,8 +572,9 @@ export function PropertyIrrigationMapEditor({
           </>
         )}
       </div>
+      ) : null}
 
-      {cropOpen && aerialUrl ? (
+      {expanded && cropOpen && aerialUrl ? (
         <AerialCropDialog
           imageUrl={blobProxyUrl(aerialUrl) ?? ""}
           busy={cropBusy}

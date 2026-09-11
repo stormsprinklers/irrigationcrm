@@ -1,5 +1,5 @@
-import { ExpenseCardsSettingsPanel } from "@/components/settings/ExpenseCardsSettingsPanel";
+import { redirect } from "next/navigation";
 
 export default function ExpenseCardsSettingsPage() {
-  return <ExpenseCardsSettingsPanel />;
+  redirect("/settings");
 }

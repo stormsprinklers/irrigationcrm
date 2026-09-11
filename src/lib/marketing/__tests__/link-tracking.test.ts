@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getAppBaseUrl } from "@/lib/app-url";
 import {
+  appendOpenTrackingPixel,
   rewriteTrackedLinks,
   rewriteTrackedUrlsInText,
   shouldSkipTrackedUrl,
@@ -37,6 +38,13 @@ test("buildMarketingEmailPayload tracks links in HTML and in the text part", () 
     recipientId: "rec_1",
   });
   assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
+});
+
+test("appendOpenTrackingPixel inserts a 1x1 image once", () => {
+  const html = appendOpenTrackingPixel("<p>Hi</p>", "rec_1");
+  assert.match(html, /\/api\/marketing\/track\/open\?r=rec_1/);
+  assert.equal(appendOpenTrackingPixel(html, "rec_1"), html);
 });

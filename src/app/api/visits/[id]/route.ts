@@ -8,7 +8,7 @@ import { requireFieldVisitAccess } from "@/lib/field/visit-guard";
 import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 import { prisma } from "@/lib/prisma";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
-import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
+import { onVisitCancelled, onVisitCompleted, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
@@ -185,11 +185,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       new Date(body.startAt).getTime() !== existing.startAt.getTime();
     const cancelled =
       body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
+    const becameCompleted =
+      body.status === VisitStatus.COMPLETED && existing.status !== VisitStatus.COMPLETED;
     const becameScheduled =
       existing.status === VisitStatus.UNSCHEDULED && nextStatus === VisitStatus.SCHEDULED;
 
     if (cancelled && existing.customerId) {
       void onVisitCancelled(id, user.companyId).catch(() => {});
+    } else if (becameCompleted && existing.customerId) {
+      void onVisitCompleted(id, user.companyId).catch((err) =>
+        console.error("Visit completed notification error:", err)
+      );
     } else if (existing.customerId && body.status !== VisitStatus.CANCELLED) {
       if (becameScheduled) {
         void onVisitTimeChanged({

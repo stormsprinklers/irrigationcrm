@@ -1,13 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { isBillingPeriodLate } from "@/lib/maintenance-plans/late-payment";
-import { computeVisitProfit } from "@/lib/visits/profit";
 import { toNumber } from "@/lib/visits/totals";
 
 export type CustomerSummary = {
   createdAt: string;
   lastVisitAt: string | null;
   lifetimeValue: number;
-  lifetimeGrossProfit: number;
   outstandingBalance: number;
 };
 
@@ -97,17 +95,6 @@ export async function getCustomerSummary(
     outstandingBalance += toNumber(period.amount);
   }
 
-  const completedVisits = await prisma.visit.findMany({
-    where: { customerId, companyId, status: "COMPLETED" },
-    select: { id: true },
-  });
-
-  let lifetimeGrossProfit = 0;
-  for (const visit of completedVisits) {
-    const profit = await computeVisitProfit(companyId, visit.id);
-    if (profit) lifetimeGrossProfit += profit.grossProfit;
-  }
-  lifetimeGrossProfit = Math.round(lifetimeGrossProfit * 100) / 100;
   lifetimeValue = Math.round(lifetimeValue * 100) / 100;
   outstandingBalance = Math.round(outstandingBalance * 100) / 100;
 
@@ -116,7 +103,6 @@ export async function getCustomerSummary(
     lastVisitAt:
       lastVisit?.endAt?.toISOString() ?? lastVisit?.startAt?.toISOString() ?? null,
     lifetimeValue,
-    lifetimeGrossProfit,
     outstandingBalance,
   };
 }

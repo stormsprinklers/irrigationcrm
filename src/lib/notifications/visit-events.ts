@@ -104,6 +104,7 @@ export async function onVisitCompleted(visitId: string, companyId: string) {
       visitId,
       event: "REVIEW_REQUEST",
       delayHours: company.reviewRequestDelayHours,
+      from: new Date(),
     });
   }
 
@@ -115,6 +116,7 @@ export async function onVisitCompleted(visitId: string, companyId: string) {
       visitId,
       event: "FEEDBACK_SURVEY",
       delayHours: company.feedbackSurveyDelayHours,
+      from: new Date(),
     });
   }
 }

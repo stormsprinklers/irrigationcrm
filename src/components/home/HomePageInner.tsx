@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { ClockInOutButton } from "@/components/home/ClockInOutButton";
@@ -40,12 +39,6 @@ export function HomePageInner() {
       </h1>
 
       <ClockInOutButton />
-
-      <p className="mb-6 mt-2">
-        <Link href="/expense-card" className="text-sm font-medium text-primary hover:underline">
-          My expense card
-        </Link>
-      </p>
 
       <OfficeTodoList />
 
