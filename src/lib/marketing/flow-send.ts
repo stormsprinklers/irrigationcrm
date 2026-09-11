@@ -51,6 +51,12 @@ export async function sendCampaignMessage(params: {
     marketingSmsOptOut?: boolean;
     doNotService?: boolean;
   };
+  property?: {
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+  } | null;
   channel: CampaignChannel;
   subject: string;
   bodyText: string;
@@ -61,6 +67,7 @@ export async function sendCampaignMessage(params: {
   const personalized = renderMarketingMergeFields({
     company: campaign.company,
     customer,
+    property: params.property,
     subject: params.subject,
     bodyText: params.bodyText,
     bodyHtml: params.bodyHtml,

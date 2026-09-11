@@ -50,7 +50,18 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         email: { equals: to, mode: "insensitive" },
       },
-      select: { name: true, address: true, city: true, state: true, zip: true },
+      select: {
+        name: true,
+        address: true,
+        city: true,
+        state: true,
+        zip: true,
+        properties: {
+          orderBy: { isPrimary: "desc" },
+          take: 1,
+          select: { address: true, city: true, state: true, zip: true },
+        },
+      },
     });
 
     const personalized = renderMarketingMergeFields({
@@ -62,6 +73,7 @@ export async function POST(request: NextRequest) {
         state: null,
         zip: null,
       },
+      property: matchedCustomer?.properties[0] ?? null,
       subject,
       bodyText,
       bodyHtml: bodyHtml || null,

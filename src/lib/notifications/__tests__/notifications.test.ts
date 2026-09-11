@@ -161,6 +161,7 @@ test("buildNotificationContext includes arrival window and parsed names", () => 
   assert.equal(ctx.company_name, "Storm Sprinklers");
   assert.ok(String(ctx.visit_arrival_window).includes("–"));
   assert.equal(ctx.customer_address, "123 Main St");
+  assert.equal(ctx.customer_city, "");
 });
 
 test("buildNotificationContext fills {customer_address} from property when visit/customer street is empty", () => {
@@ -175,6 +176,7 @@ test("buildNotificationContext fills {customer_address} from property when visit
     },
   });
   assert.equal(ctx.customer_address, "456 Spruce Ave, Denver, CO 80202");
+  assert.equal(ctx.customer_city, "Denver");
 });
 
 test("buildNotificationContext prefers visit address over property and customer", () => {
@@ -193,6 +195,7 @@ test("buildNotificationContext prefers visit address over property and customer"
     },
   });
   assert.equal(ctx.customer_address, "333 Visit Ln, Littleton, CO 80120");
+  assert.equal(ctx.customer_city, "Littleton");
 });
 
 test("buildEnRouteContext uses fallback when ETA unavailable", () => {

@@ -18,24 +18,25 @@ test("buildMarketingEmailPayload sends text-only for unformatted bodies", () => 
   const out = buildMarketingEmailPayload({
     bodyHtml: "",
     bodyText: "Hi neighbor,\n\nJust a note.",
-    unsubscribeUrl: "https://example.com/unsub",
+    unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
 
   assert.equal(out.html, undefined);
   assert.match(out.text, /Hi neighbor/);
-  assert.match(out.text, /Unsubscribe from marketing emails: https:\/\/example.com\/unsub/);
+  assert.match(out.text, /Unsubscribe from marketing emails: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
 });
 
 test("buildMarketingEmailPayload keeps HTML for formatted bodies", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "<p>Hello <a href=\"https://stormsprinklers.com\">site</a></p>",
     bodyText: "Hello",
-    unsubscribeUrl: "https://example.com/unsub",
+    unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
 
   assert.match(out.html ?? "", /<p>Hello/);
+  assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
   assert.match(out.html ?? "", /Unsubscribe from marketing emails/);
   assert.match(out.text, /Unsubscribe from marketing emails/);
 });

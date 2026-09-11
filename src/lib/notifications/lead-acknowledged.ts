@@ -48,6 +48,7 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
 
   const bookingLink = resolveLeadAcknowledgementBookingUrl(company, meta);
   const snippets = leadAcknowledgementSnippets(meta, bookingLink);
+  const serviceAddress = parseLeadServiceAddress(lead.notes, lead.metadata);
 
   await sendOperationalNotification({
     companyId,
@@ -60,7 +61,8 @@ export async function notifyLeadAcknowledged(companyId: string, lead: Lead) {
     context: {
       customer_first_name: firstNameFrom(lead.name),
       customer_last_name: lead.name.trim().split(/\s+/).slice(1).join(" ") || "",
-      customer_address: formatCustomerAddress(parseLeadServiceAddress(lead.notes, lead.metadata)),
+      customer_address: formatCustomerAddress(serviceAddress),
+      customer_city: serviceAddress?.city?.trim() ?? "",
       company_name: company.name,
       companyName: company.name,
       booking_link: snippets.booking_link,

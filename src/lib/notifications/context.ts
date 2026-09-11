@@ -86,6 +86,18 @@ function resolveCustomerAddress(params: {
   return "";
 }
 
+function resolveCustomerCity(params: {
+  visit?: AddressSlice | null;
+  property?: AddressSlice | null;
+  customer?: AddressSlice | null;
+}) {
+  for (const source of [params.visit, params.property, params.customer]) {
+    const city = source?.city?.trim();
+    if (city) return city;
+  }
+  return "";
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
@@ -114,6 +126,11 @@ export function buildNotificationContext(params: {
   const { firstName, lastName } = splitCustomerName(customerName);
 
   const visitAddress = resolveCustomerAddress({
+    visit: params.visit,
+    property: params.property,
+    customer: params.customer,
+  });
+  const customerCity = resolveCustomerCity({
     visit: params.visit,
     property: params.property,
     customer: params.customer,
@@ -153,6 +170,7 @@ export function buildNotificationContext(params: {
     customer_first_name: firstName,
     customer_last_name: lastName,
     customer_address: visitAddress,
+    customer_city: customerCity,
     technician_first_name: technicianFirst,
     company_name: params.company.name,
     company_phone: params.company.phone?.trim() ?? "",

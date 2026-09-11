@@ -1,0 +1,42 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { getAppBaseUrl } from "@/lib/app-url";
+import {
+  rewriteTrackedLinks,
+  rewriteTrackedUrlsInText,
+  shouldSkipTrackedUrl,
+} from "../link-tracking";
+import { buildMarketingEmailPayload } from "../outbound-email";
+
+test("rewriteTrackedLinks wraps http hrefs and skips unsubscribe", () => {
+  const html = [
+    '<p><a href="https://stormsprinklers.com/winter">Winter</a></p>',
+    '<p><a href="https://crm.example.com/api/marketing/unsubscribe?token=abc">Unsub</a></p>',
+  ].join("");
+  const out = rewriteTrackedLinks(html, "rec_1");
+  assert.match(out, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out, /u=https%3A%2F%2Fstormsprinklers.com%2Fwinter/);
+  assert.match(out, /href="https:\/\/crm.example.com\/api\/marketing\/unsubscribe\?token=abc"/);
+});
+
+test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", () => {
+  const text =
+    "Book here https://stormsprinklers.com/book.\nUnsubscribe from marketing emails: https://crm.example.com/api/marketing/unsubscribe?token=abc";
+  const out = rewriteTrackedUrlsInText(text, "rec_1");
+  assert.match(out, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out, /u=https%3A%2F%2Fstormsprinklers.com%2Fbook/);
+  assert.match(out, /unsubscribe\?token=abc/);
+  assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
+});
+
+test("buildMarketingEmailPayload tracks links in HTML and in the text part", () => {
+  const out = buildMarketingEmailPayload({
+    bodyHtml: '<p>Hello <a href="https://stormsprinklers.com">site</a></p>',
+    bodyText: "Hello https://stormsprinklers.com",
+    unsubscribeUrl: `${getAppBaseUrl()}/api/marketing/unsubscribe?token=t`,
+    recipientId: "rec_1",
+  });
+  assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
+});

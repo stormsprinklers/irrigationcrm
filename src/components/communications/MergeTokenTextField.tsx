@@ -105,28 +105,34 @@ export const MergeTokenTextField = forwardRef<HTMLTextAreaElement | HTMLInputEle
       onChange(next);
     }
 
+    // Chrome (margin, min-height, width) stays on the outer wrap. Padding, border, and
+    // font stay on the in-flow field. The highlight layer copies that inner box with a
+    // transparent border so it does not draw a second outline or pick up the field's margin.
     const fieldClassName = cn(
+      "font-[inherit] leading-[inherit]",
+      multiline && "whitespace-pre-wrap break-words",
       className,
-      "relative w-full bg-transparent",
-      tone === "light" ? "caret-foreground text-transparent" : "caret-white text-transparent"
+      "relative z-[1] m-0 block bg-transparent",
+      tone === "light"
+        ? "caret-foreground text-transparent placeholder:text-muted-foreground"
+        : "caret-white text-transparent placeholder:text-slate-500"
     );
     const backdropClassName = cn(
-      "pointer-events-none absolute inset-0 overflow-auto",
+      "merge-token-backdrop pointer-events-none absolute inset-0 overflow-auto font-[inherit] leading-[inherit]",
+      tone === "dark" && "merge-token-backdrop-dark",
       multiline ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-nowrap",
-      tone === "dark"
-        ? "bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100"
-        : "px-3 py-2 text-sm leading-normal text-foreground",
-      !multiline && tone === "light" && "flex h-9 items-center py-1",
-      className
+      className,
+      "m-0 block h-auto min-h-0 border-transparent bg-transparent shadow-none",
+      tone === "dark" ? "text-slate-100" : "text-foreground"
     );
 
     return (
-      <div className="relative">
-        <div className="relative">
+      <div className={cn("relative", className, "block border-0 p-0 shadow-none ring-0 resize-none")}>
+        <div className="relative overflow-hidden rounded-[inherit]">
           <div
             ref={backdropRef}
             aria-hidden
-            className={cn("merge-token-backdrop", tone === "dark" && "merge-token-backdrop-dark", backdropClassName)}
+            className={backdropClassName}
             dangerouslySetInnerHTML={{ __html: highlightMergeTokens(value) + (multiline ? "\n" : "") }}
           />
           {multiline ? (

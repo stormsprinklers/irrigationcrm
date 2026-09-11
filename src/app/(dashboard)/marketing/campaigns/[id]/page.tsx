@@ -8,6 +8,7 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { CampaignLifecycleActions } from "@/components/marketing/CampaignLifecycleActions";
 import { CampaignPerformanceDashboard } from "@/components/marketing/CampaignPerformanceDashboard";
+import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +79,7 @@ type CampaignDetail = {
       sortOrder: number;
       counts: Record<string, number>;
     }>;
+    peopleByNode?: Record<string, number>;
     enrollments: Array<{
       id: string;
       status: string;
@@ -301,23 +303,34 @@ export default function MarketingCampaignDetailPage() {
             ))}
           </div>
 
-          {campaign.flowMetrics.nodeStats.length > 0 ? (
-            <div className="rounded-lg border bg-white p-4">
-              <h3 className="mb-3 font-medium">Stage funnel</h3>
-              <ul className="space-y-2 text-sm">
-                {campaign.flowMetrics.nodeStats.map((n) => (
-                  <li key={n.nodeId} className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
-                      #{n.sortOrder + 1} {n.type}
-                    </Badge>
-                    {Object.entries(n.counts).map(([k, v]) => (
-                      <span key={k} className="text-muted-foreground">
-                        {k}: {v}
-                      </span>
-                    ))}
-                  </li>
-                ))}
-              </ul>
+          {campaign.flowNodes && campaign.flowNodes.length > 0 ? (
+            <div className="overflow-hidden rounded-lg border bg-white">
+              <div className="border-b px-4 py-3">
+                <h3 className="font-medium">Stage funnel</h3>
+                <p className="text-xs text-muted-foreground">
+                  Blue orbs are people currently on that step (active or paused). Completed
+                  contacts show on Exit.
+                </p>
+              </div>
+              <div className="min-h-[36rem]">
+                <CampaignFlowEditor
+                  nodes={campaign.flowNodes.map((node) => ({
+                    id: node.id,
+                    type: node.type as "TRIGGER" | "WAIT" | "SEND_EMAIL" | "SEND_SMS" | "ADD_TAG" | "BRANCH" | "EXIT",
+                    sortOrder: node.sortOrder,
+                    config: node.config,
+                  }))}
+                  onChange={() => {}}
+                  emailsPerDay={0}
+                  smsPerDay={0}
+                  channel={campaign.channel === "SMS" ? "SMS" : "EMAIL"}
+                  audienceFilters={{}}
+                  onAudienceChange={() => {}}
+                  onSettingsChange={() => {}}
+                  readOnly
+                  nodeCounts={campaign.flowMetrics.peopleByNode ?? {}}
+                />
+              </div>
             </div>
           ) : null}
 
@@ -379,19 +392,6 @@ export default function MarketingCampaignDetailPage() {
           </div>
         </div>
       ) : null}
-
-      {campaign.type === "DRIP" && (campaign.flowNodes?.length ?? 0) > 0 && (
-        <div className="mb-6 rounded-lg border bg-white p-4">
-          <h3 className="mb-3 font-medium">Campaign steps</h3>
-          <ol className="space-y-2 text-sm">
-            {campaign.flowNodes!.map((node, i) => (
-              <li key={node.id}>
-                Step {i + 1}: {flowNodeTypeLabel(node.type)}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
 
       {campaign.type === "DRIP" && (campaign.steps?.length ?? 0) > 0 && !(campaign.flowNodes?.length) && (
         <div className="mb-6 rounded-lg border bg-white p-4">

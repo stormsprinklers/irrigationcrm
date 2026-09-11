@@ -192,6 +192,11 @@ async function sendToRecipient(
           marketingEmailOptOut: true,
           marketingSmsOptOut: true,
           doNotService: true,
+          properties: {
+            orderBy: { isPrimary: "desc" },
+            take: 1,
+            select: { address: true, city: true, state: true, zip: true },
+          },
         },
       })
     : null;
@@ -221,6 +226,7 @@ async function sendToRecipient(
   const personalized = renderMarketingMergeFields({
     company: campaign.company,
     customer: customerRecord,
+    property: customerRecord?.properties[0] ?? null,
     subject,
     bodyText,
     bodyHtml,

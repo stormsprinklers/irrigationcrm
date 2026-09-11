@@ -692,7 +692,15 @@ export async function processFlowEnrollments(limit = 40) {
           flowNodes: { orderBy: { sortOrder: "asc" } },
         },
       },
-      customer: true,
+      customer: {
+        include: {
+          properties: {
+            orderBy: { isPrimary: "desc" },
+            take: 1,
+            select: { address: true, city: true, state: true, zip: true },
+          },
+        },
+      },
     },
     take: limit,
     orderBy: { nextSendAt: "asc" },
@@ -906,6 +914,7 @@ export async function processFlowEnrollments(limit = 40) {
       const ok = await sendCampaignMessage({
         campaign: enrollment.campaign,
         customer: enrollment.customer,
+        property: enrollment.customer.properties[0] ?? null,
         channel: isSms ? CampaignChannel.SMS : CampaignChannel.EMAIL,
         subject: String(node.config.subject ?? enrollment.campaign.subject ?? ""),
         bodyText: String(node.config.bodyText ?? ""),
@@ -1366,9 +1375,22 @@ export async function getCampaignFlowMetrics(campaignId: string) {
     };
   });
 
+  const peopleByNode: Record<string, number> = {};
+  for (const enrollment of enrollments) {
+    if (enrollment.status === "CANCELLED") continue;
+    const nodeId = enrollment.currentNodeId;
+    if (!nodeId) continue;
+    if (enrollment.status === "COMPLETED") {
+      const node = nodes.find((n) => n.id === nodeId);
+      if (node?.type !== "EXIT") continue;
+    }
+    peopleByNode[nodeId] = (peopleByNode[nodeId] ?? 0) + 1;
+  }
+
   return {
     byStatus,
     nodeStats,
+    peopleByNode,
     enrollments: enrollments.map((e) => ({
       id: e.id,
       status: e.status,

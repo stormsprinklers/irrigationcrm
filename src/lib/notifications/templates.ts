@@ -25,6 +25,7 @@ export const MERGE_FIELDS = [
   { token: "{customer_first_name}", label: "Customer first name", group: "Contact info" },
   { token: "{customer_last_name}", label: "Customer last name", group: "Contact info" },
   { token: "{customer_address}", label: "Customer address", group: "Contact info" },
+  { token: "{customer_city}", label: "Customer city", group: "Contact info" },
   { token: "{company_name}", label: "Company name", group: "Company" },
   { token: "{company_phone}", label: "Company phone", group: "Company" },
   { token: "{terms_of_service_url}", label: "Terms of service URL", group: "Company" },

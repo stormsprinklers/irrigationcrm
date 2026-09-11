@@ -72,6 +72,9 @@ type Props = {
     smsPerDay: number;
     startAt?: string;
   }) => void;
+  /** Analytics view: canvas only, with people-count orbs. */
+  readOnly?: boolean;
+  nodeCounts?: Record<string, number>;
 };
 
 function FieldTip({ label, children }: { label: string; children: ReactNode }) {
@@ -344,6 +347,8 @@ export function CampaignFlowEditor({
   audienceFilters,
   onAudienceChange,
   onSettingsChange,
+  readOnly = false,
+  nodeCounts,
 }: Props) {
   const [selectionId, setSelectionId] = useState<string | null>(nodes[0] ? ensureNodeId(nodes[0]) : null);
   const [zoom, setZoom] = useState(1);
@@ -519,6 +524,14 @@ export function CampaignFlowEditor({
           )}
           onClick={() => setSelectionId(nodeId)}
         >
+          {nodeCounts ? (
+            <span
+              className="absolute -right-2 -top-2 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-sky-600 px-1.5 text-[11px] font-semibold text-white shadow"
+              title={`${nodeCounts[nodeId] ?? 0} people currently in this step`}
+            >
+              {nodeCounts[nodeId] ?? 0}
+            </span>
+          ) : null}
           <span className="flex items-start gap-3">
             <span
               className={cn(
@@ -553,7 +566,7 @@ export function CampaignFlowEditor({
             ) : (
               <>
                 <VerticalConnector />
-                <AddStepMenu onPick={(type) => insertAfter(nodeId, type)} />
+                {readOnly ? null : <AddStepMenu onPick={(type) => insertAfter(nodeId, type)} />}
               </>
             )}
           </div>
@@ -592,12 +605,15 @@ export function CampaignFlowEditor({
                   ) : (
                     <>
                       <VerticalConnector />
-                      <AddStepMenu onPick={(type) => addFromBranch(nodeId, edge.key, type)} />
+                      {readOnly ? null : (
+                        <AddStepMenu onPick={(type) => addFromBranch(nodeId, edge.key, type)} />
+                      )}
                     </>
                   )}
                 </div>
               )),
               ...(node.type === "BRANCH" &&
+              !readOnly &&
               parseIfElseConfig(nodeConfig(node)).branches.length < IF_ELSE_MAX_BRANCHES
                 ? [
                     <div key="add-branch" className="flex w-max flex-col items-center">
@@ -627,7 +643,8 @@ export function CampaignFlowEditor({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex flex-1 flex-col">
-      <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
+      {readOnly ? null : (
+        <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
         <div>
           <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
             <span>Emails per day</span>
@@ -688,6 +705,7 @@ export function CampaignFlowEditor({
           />
         </div>
       </div>
+      )}
 
       <div className="flex min-h-[36rem] flex-1 items-stretch">
         <div className="relative min-h-[36rem] min-w-0 flex-1">
@@ -704,7 +722,7 @@ export function CampaignFlowEditor({
                   <VerticalConnector taller />
                   {renderNode(startId, new Set(), treeRendered)}
                 </>
-              ) : (
+              ) : readOnly ? null : (
                 <div className="mt-4 flex flex-col items-center">
                   <VerticalConnector />
                   <Button
@@ -737,7 +755,7 @@ export function CampaignFlowEditor({
           </PanCanvas>
         </div>
 
-        {selected ? (
+        {selected && !readOnly ? (
           <aside className="flex w-[min(36rem,52vw)] shrink-0 flex-col border-l border-border bg-background">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>

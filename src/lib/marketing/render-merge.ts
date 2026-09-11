@@ -26,6 +26,7 @@ export type MarketingMergeCustomer = {
 export function renderMarketingMergeFields(params: {
   company: MarketingMergeCompany;
   customer?: MarketingMergeCustomer | null;
+  property?: MarketingMergeCustomer | null;
   subject: string;
   bodyText: string;
   bodyHtml: string | null;
@@ -40,6 +41,14 @@ export function renderMarketingMergeFields(params: {
       state: params.customer?.state,
       zip: params.customer?.zip,
     },
+    property: params.property
+      ? {
+          address: params.property.address,
+          city: params.property.city,
+          state: params.property.state,
+          zip: params.property.zip,
+        }
+      : undefined,
   });
   if (!name) {
     ctx.customer_first_name = "";

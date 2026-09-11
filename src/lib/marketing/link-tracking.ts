@@ -1,28 +1,44 @@
-const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL ?? "";
+import { getAppBaseUrl } from "@/lib/app-url";
 
-export function rewriteTrackedLinks(
-  html: string,
-  recipientId: string,
-  publicBaseUrl?: string | null
-) {
+function trackingBaseUrl() {
+  return getAppBaseUrl().replace(/\/$/, "");
+}
+
+export function shouldSkipTrackedUrl(url: string) {
+  return (
+    url.startsWith("mailto:") ||
+    url.startsWith("tel:") ||
+    url.startsWith("#") ||
+    url.includes("/api/marketing/track/click") ||
+    url.includes("/api/marketing/unsubscribe") ||
+    /\/portal\/[^/]+\/preferences/.test(url)
+  );
+}
+
+export function trackedClickUrl(recipientId: string, url: string) {
+  return `${trackingBaseUrl()}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;
+}
+
+export function rewriteTrackedLinks(html: string, recipientId: string) {
   if (!html) return html;
-  const base = (publicBaseUrl?.trim() || APP_URL()).replace(/\/$/, "");
   return html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>/gi,
     (match, before, url, after) => {
-      if (
-        url.startsWith("mailto:") ||
-        url.startsWith("#") ||
-        url.includes("/api/marketing/track/click") ||
-        url.includes("/api/marketing/unsubscribe") ||
-        /\/portal\/[^/]+\/preferences/.test(url)
-      ) {
-        return match;
-      }
-      const tracked = `${base}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;
-      return `<a ${before}href="${tracked}"${after}>`;
+      if (shouldSkipTrackedUrl(url)) return match;
+      return `<a ${before}href="${trackedClickUrl(recipientId, url)}"${after}>`;
     }
   );
+}
+
+/** Wrap http(s) URLs in plain text so click tracking works without HTML. */
+export function rewriteTrackedUrlsInText(text: string, recipientId: string) {
+  if (!text) return text;
+  return text.replace(/https?:\/\/[^\s<>"']+/gi, (raw) => {
+    const trailing = raw.match(/[).,;:!?]+$/)?.[0] ?? "";
+    const url = trailing ? raw.slice(0, -trailing.length) : raw;
+    if (!url || shouldSkipTrackedUrl(url)) return raw;
+    return `${trackedClickUrl(recipientId, url)}${trailing}`;
+  });
 }
 
 export function htmlToPlainText(html: string) {

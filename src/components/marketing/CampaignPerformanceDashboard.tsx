@@ -20,7 +20,7 @@ type Props = {
 };
 
 export function CampaignPerformanceDashboard({ performance }: Props) {
-  const { enrolled, deliverability, emails, links, responses, unsubscribes } = performance;
+  const { enrolled, deliverability, emails, links, unsubscribes } = performance;
   const sms = performance.sms ?? [];
 
   return (
@@ -61,31 +61,13 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         />
       </div>
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium">Response rates</h3>
-        <MarketingMetricGrid
-          comingSoon={false}
-          columns={4}
-          metrics={[
-            {
-              label: "Email response rate",
-              value: fmtRate(responses.emailRate),
-              tooltip: `${responses.emailReplied} of ${responses.emailSent} email recipients replied after the first send.`,
-            },
-            {
-              label: "SMS response rate",
-              value: fmtRate(responses.smsRate),
-              tooltip: `${responses.smsReplied} of ${responses.smsSent} SMS recipients replied after the first send.`,
-            },
-            { label: "Email replies", value: `${responses.emailReplied} / ${responses.emailSent}` },
-            { label: "SMS replies", value: `${responses.smsReplied} / ${responses.smsSent}` },
-          ]}
-        />
-      </div>
-
       <div className="rounded-lg border border-border bg-white">
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Email open rates</h3>
+          <p className="text-xs text-muted-foreground">
+            Opens come from Twilio Email / SendGrid open tracking on HTML emails, not a pixel in
+            this app.
+          </p>
         </div>
         <Table>
           <TableHeader>
@@ -151,8 +133,8 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Link click-through rates</h3>
           <p className="text-xs text-muted-foreground">
-            Overall CTR {fmtRate(performance.overallCtr)}. Per-link counts are recorded as
-            recipients click tracked links.
+            Overall CTR {fmtRate(performance.overallCtr)}. HTML and plain-text email links are
+            wrapped with a tracking URL at send time. SMS links are not tracked.
           </p>
         </div>
         <Table>
