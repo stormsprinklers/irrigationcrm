@@ -1,6 +1,6 @@
 import { TimeOffStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { assignmentOffMessage } from "@/lib/schedule/open-time-slots";
+import { assignmentOffMessage, defaultEmployeeWorkSchedule } from "@/lib/schedule/open-time-slots";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { localTimeParts } from "@/lib/voice/hours-branch";
 
