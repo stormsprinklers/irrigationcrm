@@ -51,6 +51,8 @@ export const DEMO_WEBSITE_ORGANIC_CONVERSIONS = 94;
 
 export function buildDemoGscDashboard(): GscDashboardData {
   return {
+    daily: [],
+    pageTrendLimited: false,
     overview: {
       siteUrl: DEMO_GSC_SITE,
       startDate: DEMO_START,

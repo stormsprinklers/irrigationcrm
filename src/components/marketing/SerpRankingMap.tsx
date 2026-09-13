@@ -12,13 +12,14 @@ import {
 import { buildRankingTooltipHtml } from "@/lib/local-seo/tooltip";
 
 type Props = {
+  compact?: boolean;
   rankings: SerpApiCityRanking[];
   trackedName: string;
   /** ISO timestamp of the most recent SerpAPI fetch for this keyword (live data only). */
   lastSearchedAt?: string | null;
 };
 
-export function SerpRankingMap({ rankings, trackedName, lastSearchedAt }: Props) {
+export function SerpRankingMap({ rankings, trackedName, lastSearchedAt, compact = false }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
 
@@ -106,7 +107,7 @@ export function SerpRankingMap({ rankings, trackedName, lastSearchedAt }: Props)
         ) : null}
         <div
           ref={containerRef}
-          className="h-[520px] w-full overflow-hidden rounded-lg border border-border"
+          className={`${compact ? "h-[300px]" : "h-[520px]"} w-full overflow-hidden rounded-lg border border-border`}
         />
       </div>
     </div>

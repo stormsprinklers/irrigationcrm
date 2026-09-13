@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GbpReviewStarBreakdown, GbpReviewSummary } from "@/lib/google-business/engagement-types";
 import type { GbpConnectionStatus, GbpPerformanceSummary } from "@/lib/google-business/types";
+import { MarketingMetricGrid } from "@/components/marketing/MarketingMetricGrid";
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -255,8 +256,26 @@ export function GoogleBusinessProfilePanel() {
     return status ? <GbpSetupPrompt status={status} /> : null;
   }
 
+  const metric = (name: string) => performance?.metrics.find((item) => item.metric === name);
+  const dates = performance?.metrics.flatMap((item) => item.dailyValues.map((value) => value.date)) ?? [];
+  const uniqueDates = [...new Set(dates)].sort();
+  const combinedTrend = (names: string[]) => uniqueDates.map((date) => ({
+    date,
+    value: names.reduce((sum, name) => sum + (metric(name)?.dailyValues.find((item) => item.date === date)?.value ?? 0), 0),
+  }));
+  const impressionsTrend = combinedTrend([
+    "BUSINESS_IMPRESSIONS_DESKTOP_MAPS", "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH",
+    "BUSINESS_IMPRESSIONS_MOBILE_MAPS", "BUSINESS_IMPRESSIONS_MOBILE_SEARCH",
+  ]);
+  const interactionsTrend = combinedTrend(["BUSINESS_DIRECTION_REQUESTS", "CALL_CLICKS", "WEBSITE_CLICKS", "BUSINESS_CONVERSATIONS"]);
+  const metricCards = performance ? [
+    { label: "Profile views", value: formatCount(performance.totals.impressions), hint: "Search + Maps, desktop + mobile", trend: impressionsTrend },
+    { label: "Customer actions", value: formatCount(performance.totals.interactions), hint: "Calls, clicks, directions, and messages", trend: interactionsTrend },
+    ...performance.metrics.map((item) => ({ label: item.label, value: formatCount(item.total), trend: item.dailyValues.map((value) => ({ date: value.date, value: value.value })) })),
+  ] : [];
+
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5">
       <div className="rounded-lg border bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -280,13 +299,8 @@ export function GoogleBusinessProfilePanel() {
                 </>
               )}
             </div>
-            {reviewSummary?.byStar?.length ? (
-              <GbpReviewStarBreakdownChart
-                byStar={reviewSummary.byStar}
-                totalReviewCount={reviewSummary.totalReviewCount}
-                averageRating={reviewSummary.averageRating}
-              />
-            ) : null}
+            {reviewSummary?.averageRating != null ? <div className="mt-2 flex items-center gap-2"><AverageStars rating={reviewSummary.averageRating} /><span className="text-sm font-semibold">{reviewSummary.averageRating.toFixed(1)}</span></div> : null}
+            {reviewSummary?.byStar?.length ? <details className="mt-3 text-sm"><summary className="cursor-pointer text-xs text-muted-foreground">Rating breakdown</summary><GbpReviewStarBreakdownChart byStar={reviewSummary.byStar} totalReviewCount={reviewSummary.totalReviewCount} averageRating={reviewSummary.averageRating} /></details> : null}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -332,7 +346,7 @@ export function GoogleBusinessProfilePanel() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-wrap items-center justify-between gap-3 space-y-0 pb-3">
           <div>
             <CardTitle className="text-base">Performance</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -342,16 +356,9 @@ export function GoogleBusinessProfilePanel() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {[7, 28, 90].map((range) => (
-              <Button
-                key={range}
-                size="sm"
-                variant={days === range ? "default" : "outline"}
-                onClick={() => setDays(range)}
-              >
-                {range}d
-              </Button>
-            ))}
+            <select className="h-9 rounded-md border border-input bg-background px-2 text-sm" value={days} onChange={(event) => setDays(Number(event.target.value))} aria-label="Performance date range">
+              <option value={7}>Last 7 days</option><option value={28}>Last 28 days</option><option value={90}>Last 90 days</option>
+            </select>
             <Button
               size="icon"
               variant="outline"
@@ -362,71 +369,14 @@ export function GoogleBusinessProfilePanel() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent>
           {loadingPerformance && !performance ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading metrics...
             </div>
           ) : performance ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-lg border p-4">
-                  <p className="text-2xl font-semibold">
-                    {formatCount(performance.totals.impressions)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Total impressions</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-2xl font-semibold">
-                    {formatCount(performance.totals.interactions)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Profile interactions</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-2xl font-semibold">
-                    {formatCount(
-                      performance.metrics.find((m) => m.metric === "CALL_CLICKS")?.total ?? 0
-                    )}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Call clicks</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-2xl font-semibold">
-                    {formatCount(
-                      performance.metrics.find((m) => m.metric === "WEBSITE_CLICKS")?.total ?? 0
-                    )}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Website clicks</p>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-left">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Metric</th>
-                      <th className="px-4 py-3 font-medium text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {performance.metrics.map((metric) => (
-                      <tr key={metric.metric} className="border-t">
-                        <td className="px-4 py-3">{metric.label}</td>
-                        <td className="px-4 py-3 text-right font-medium">
-                          {formatCount(metric.total)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Data from Google Business Profile Performance API. Metrics are daily totals;
-                multiple impressions by the same user in one day count once.
-              </p>
-            </>
+            <MarketingMetricGrid compact columns={4} comingSoon={false} metrics={metricCards} />
           ) : (
             <p className="text-sm text-muted-foreground">No performance data available yet.</p>
           )}

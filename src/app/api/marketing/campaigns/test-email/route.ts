@@ -116,9 +116,10 @@ export async function POST(request: NextRequest) {
         to: [to],
         subject: personalized.subject || company.name,
         text: outbound.text,
+        html: outbound.html,
         bypassCommsFreeze: true,
         skipBranding: true,
-        omitHtml: true,
+        omitHtml: outbound.omitHtml,
       }
     );
 

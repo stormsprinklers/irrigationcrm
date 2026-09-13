@@ -61,7 +61,6 @@ function EmailCampaignEditorInner({
 }: Props) {
   const { brand } = useCompanyBrand();
   const [generating, setGenerating] = useState(false);
-  const [plainDraft, setPlainDraft] = useState(() => seedPlainBody(bodyHtml, bodyText));
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [companyContact, setCompanyContact] = useState<CompanyContact>({
     phone: null,
@@ -80,10 +79,11 @@ function EmailCampaignEditorInner({
   const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const bodyRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const next = seedPlainBody(bodyHtml, bodyText);
-    setPlainDraft(next);
-  }, [bodyHtml, bodyText]);
+  // Keep the controlled value verbatim: normalization during typing removes spaces,
+  // blank lines, and moves the caret. Seed the greeting only on initial mount.
+  const plainDraft = seeded
+    ? campaignPlainBodyText(bodyHtml, bodyText)
+    : seedPlainBody(bodyHtml, bodyText);
 
   useEffect(() => {
     if (seeded) return;
@@ -118,7 +118,6 @@ function EmailCampaignEditorInner({
   }, []);
 
   function applyPlain(next: string) {
-    setPlainDraft(next);
     onBodyChange("", next);
   }
 
@@ -214,7 +213,7 @@ function EmailCampaignEditorInner({
         <div>
           <h3 className="text-sm font-semibold">Email</h3>
           <p className="text-xs text-muted-foreground">
-            Plain text only — the same kind of message you’d type in Gmail. Company contact info and an
+            A simple email — the same kind of message you’d type in Gmail. Company contact info and an
             unsubscribe link are added when it sends. Put links in as full URLs so we can track clicks.
           </p>
         </div>
@@ -362,9 +361,8 @@ function EmailCampaignEditorInner({
               <p className="text-xs font-medium text-muted-foreground">Added when it sends</p>
               <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-foreground/80">
                 {signaturePreview || brand.companyName}
-                {"\n\n"}
-                Unsubscribe: (link added for each recipient)
               </pre>
+              <span className="mt-4 inline-block text-xs text-muted-foreground underline">Unsubscribe</span>
             </div>
           </div>
         </div>

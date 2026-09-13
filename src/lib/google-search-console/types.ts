@@ -50,6 +50,8 @@ export type GscSitemap = {
 };
 
 export type GscDashboardData = {
+  daily: { date: string; clicks: number; impressions: number; ctr: number; position: number; pagesWithImpressions: number }[];
+  pageTrendLimited: boolean;
   overview: GscOverview;
   queries: GscQueryRow[];
   pages: GscPageRow[];

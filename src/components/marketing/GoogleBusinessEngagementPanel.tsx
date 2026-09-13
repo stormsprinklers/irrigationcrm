@@ -9,6 +9,7 @@ import {
   Megaphone,
   Sparkles,
 } from "lucide-react";
+import { getPostCadence } from "@/lib/google-business/post-cadence";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +117,7 @@ function PostsTab({
   const [mediaOpen, setMediaOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [postsExpanded, setPostsExpanded] = useState(false);
 
   const loadPosts = useCallback(async () => {
     setLoadingPosts(true);
@@ -196,11 +198,22 @@ function PostsTab({
     }
   }
 
+  const recentPosts = [...posts]
+    .sort((a, b) => new Date(b.createTime ?? 0).getTime() - new Date(a.createTime ?? 0).getTime())
+    .slice(0, 3);
+  const { daysSinceLastPost, tone: postCadenceTone } = getPostCadence(recentPosts[0]?.createTime);
+  const postAgeClass = postCadenceTone === "overdue"
+    ? "text-red-600"
+    : postCadenceTone === "warning"
+      ? "text-amber-600"
+      : "text-muted-foreground";
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-3 rounded-lg border p-4">
-        <p className="text-sm font-medium">Create a post</p>
-        <div className="space-y-2">
+    <div className="space-y-4">
+      <div className="grid gap-4 rounded-lg border p-4 xl:grid-cols-2">
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Create a post</p>
+          <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">
             What should this post be about?
           </label>
@@ -210,21 +223,27 @@ function PostsTab({
             onChange={(e) => setBrief(e.target.value)}
             placeholder="e.g. Spring startup special, winterization tips, new team member"
           />
-        </div>
-        <Button type="button" size="sm" variant="outline" disabled={generating} onClick={() => void generatePost()}>
+          </div>
+          <Button type="button" size="sm" variant="outline" disabled={generating} onClick={() => void generatePost()}>
           {generating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
           Generate post with AI
-        </Button>
-        <div className="space-y-2">
+          </Button>
+          <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">Post text (editable)</label>
-          <textarea
+          <textarea lang="en-US" spellCheck
             className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             value={postText}
             onChange={(e) => setPostText(e.target.value)}
             placeholder="AI draft or your own copy…"
           />
+          </div>
+          <Button type="button" disabled={posting} onClick={() => void publishPost()}>
+            {posting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Publish post
+          </Button>
         </div>
-        <JobPhotoPicker
+        <div className="space-y-3">
+          <JobPhotoPicker
           photos={jobPhotos}
           loading={loadingPhotos}
           selectedId={libraryPhoto ? null : selectedPhotoId}
@@ -234,8 +253,8 @@ function PostsTab({
           }}
           onReload={onReloadPhotos}
           label="Optional photo from recent visits or social (last 14 days)"
-        />
-        <div className="flex flex-wrap items-center gap-2">
+          />
+          <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={() => setMediaOpen(true)}>
             Choose from media library
           </Button>
@@ -253,11 +272,8 @@ function PostsTab({
               </button>
             </span>
           ) : null}
+          </div>
         </div>
-        <Button type="button" disabled={posting} onClick={() => void publishPost()}>
-          {posting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-          Publish post
-        </Button>
       </div>
 
       <MediaLibraryPicker
@@ -270,8 +286,18 @@ function PostsTab({
         }}
       />
 
-      <div className="space-y-3">
-        <p className="text-sm font-medium">Recent posts</p>
+      <div className="rounded-lg border p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">Recent posts</p>
+            {!loadingPosts ? <p className={`mt-0.5 text-xs font-medium ${postAgeClass}`}>
+              {daysSinceLastPost == null ? "No posts yet" : `${daysSinceLastPost} day${daysSinceLastPost === 1 ? "" : "s"} since last post`}
+            </p> : null}
+          </div>
+          {!loadingPosts && posts.length > 0 ? <Button type="button" size="sm" variant="ghost" onClick={() => setPostsExpanded((value) => !value)} aria-expanded={postsExpanded}>
+            {postsExpanded ? "Hide posts" : "Show latest 3"}
+          </Button> : null}
+        </div>
         {loadingPosts ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -279,8 +305,8 @@ function PostsTab({
           </div>
         ) : posts.length === 0 ? (
           <p className="text-sm text-muted-foreground">No posts on this location yet.</p>
-        ) : (
-          posts.map((post) => (
+        ) : postsExpanded ? (
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">{recentPosts.map((post) => (
             <div key={post.name} className="rounded-lg border p-3 space-y-2">
               {post.createTime ? (
                 <p className="text-xs text-muted-foreground">
@@ -298,8 +324,8 @@ function PostsTab({
                 </div>
               ) : null}
             </div>
-          ))
-        )}
+          ))}</div>
+        ) : null}
       </div>
     </div>
   );

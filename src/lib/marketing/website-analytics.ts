@@ -6,6 +6,7 @@ type EventRow = {
   pagePath: string | null;
   metadata: Prisma.JsonValue;
   sessionId: string | null;
+  occurredAt?: Date;
 };
 
 function metaString(metadata: Prisma.JsonValue, key: string) {
@@ -39,6 +40,7 @@ export async function getWebsiteAnalyticsReport(
     where: {
       companyId,
       source: "WEBSITE",
+      eventType: { not: "VISITOR_HEARTBEAT" },
       occurredAt: { gte: params.from, lte: params.to },
     },
     select: {
@@ -51,7 +53,21 @@ export async function getWebsiteAnalyticsReport(
     orderBy: { occurredAt: "asc" },
   });
 
-  return summarizeWebsiteEvents(events);
+  return { ...summarizeWebsiteEvents(events), daily: summarizeWebsiteTimeline(events, params) };
+}
+
+export function summarizeWebsiteTimeline(events: EventRow[], params: { from: Date; to: Date }) {
+  const byDate = new Map<string, EventRow[]>();
+  const day = new Date(params.from);
+  day.setUTCHours(0, 0, 0, 0);
+  while (day <= params.to) {
+    byDate.set(day.toISOString().slice(0, 10), []);
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  for (const event of events) {
+    if (event.occurredAt && event.occurredAt >= params.from && event.occurredAt <= params.to) byDate.get(event.occurredAt.toISOString().slice(0, 10))?.push(event);
+  }
+  return [...byDate].map(([date, rows]) => ({ date, ...summarizeWebsiteEvents(rows) }));
 }
 
 export function summarizeWebsiteEvents(events: EventRow[]) {
@@ -60,6 +76,7 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
   const utmSources = new Map<string, number>();
   const utmCampaigns = new Map<string, number>();
   const sourceBuckets = new Map<string, number>();
+  const visitors = new Set<string>();
 
   let homepageScroll50 = 0;
   let homepageScroll90 = 0;
@@ -80,6 +97,8 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
   ]);
 
   for (const event of events) {
+    if (event.eventType === "VISITOR_HEARTBEAT") continue;
+    if (event.sessionId) visitors.add(event.sessionId);
     const path = event.pagePath ?? "/";
 
     if (event.eventType === "PAGE_VIEW") {
@@ -114,9 +133,11 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
     const utmCampaign = metaString(event.metadata, "utm_campaign");
     const sourceBucket = metaString(event.metadata, "source_bucket");
 
-    if (utmSource) utmSources.set(utmSource, (utmSources.get(utmSource) ?? 0) + 1);
-    if (utmCampaign) utmCampaigns.set(utmCampaign, (utmCampaigns.get(utmCampaign) ?? 0) + 1);
-    if (sourceBucket) sourceBuckets.set(sourceBucket, (sourceBuckets.get(sourceBucket) ?? 0) + 1);
+    if (event.eventType === "PAGE_VIEW") {
+      if (utmSource) utmSources.set(utmSource, (utmSources.get(utmSource) ?? 0) + 1);
+      if (utmCampaign) utmCampaigns.set(utmCampaign, (utmCampaigns.get(utmCampaign) ?? 0) + 1);
+      if (sourceBucket) sourceBuckets.set(sourceBucket, (sourceBuckets.get(sourceBucket) ?? 0) + 1);
+    }
   }
 
   const sortEntries = (map: Map<string, number>, limit = 10) =>
@@ -129,7 +150,8 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
   const totalSessions = [...landingPages.values()].reduce((sum, n) => sum + n, 0);
 
   return {
-    totalEvents: events.length,
+    totalEvents: events.filter((e) => e.eventType !== "VISITOR_HEARTBEAT").length,
+    totalVisitors: visitors.size,
     totalPageViews,
     totalSessions,
     homepage: {

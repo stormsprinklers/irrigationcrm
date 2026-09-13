@@ -19,11 +19,13 @@ export default function GoogleBusinessMarketingPage() {
           </Button>
         }
       />
-      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
-        <GoogleBusinessProfilePanel />
-      </Suspense>
-      <div className="mt-8">
-        <GbpLocalRankingPanel />
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
+          <GoogleBusinessProfilePanel />
+        </Suspense>
+        <aside className="min-w-0">
+          <GbpLocalRankingPanel compact />
+        </aside>
       </div>
     </ContentArea>
   );

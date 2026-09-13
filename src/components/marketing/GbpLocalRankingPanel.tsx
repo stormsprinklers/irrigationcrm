@@ -1,5 +1,5 @@
 import { SerpRankingPanel } from "@/components/marketing/SerpRankingPanel";
 
-export function GbpLocalRankingPanel() {
-  return <SerpRankingPanel variant="gbp" />;
+export function GbpLocalRankingPanel({ compact = false }: { compact?: boolean }) {
+  return <SerpRankingPanel variant="gbp" compact={compact} />;
 }

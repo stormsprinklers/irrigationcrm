@@ -7,12 +7,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { MetricTrend, type TrendPoint } from "./MetricTrend";
 
 export type MarketingMetric = {
   label: string;
   value?: string | number;
   hint?: string;
   tooltip?: string;
+  trend?: TrendPoint[];
+  unit?: string;
 };
 
 type Props = {
@@ -20,6 +23,7 @@ type Props = {
   columns?: 2 | 3 | 4 | 5 | 6 | 7;
   className?: string;
   comingSoon?: boolean;
+  compact?: boolean;
 };
 
 export function MarketingMetricGrid({
@@ -27,6 +31,7 @@ export function MarketingMetricGrid({
   columns = 4,
   className,
   comingSoon = true,
+  compact = false,
 }: Props) {
   const colClass = {
     2: "sm:grid-cols-2",
@@ -41,9 +46,9 @@ export function MarketingMetricGrid({
     <TooltipProvider delayDuration={200}>
     <div className={cn("grid gap-4", colClass, className)}>
       {metrics.map((metric) => (
-        <div key={metric.label} className="rounded-lg border border-border bg-white p-4">
+        <div key={metric.label} className={cn("rounded-lg border border-border bg-white", compact ? "p-3" : "p-4")}>
           <div className="mb-1 flex items-start justify-between gap-2">
-            <p className="text-2xl font-semibold text-foreground">
+            <p className={cn("font-semibold text-foreground", compact ? "text-xl" : "text-2xl")}>
               {metric.value ?? "—"}
             </p>
             {comingSoon && !metric.value ? (
@@ -72,6 +77,7 @@ export function MarketingMetricGrid({
           {metric.hint ? (
             <p className="mt-1 text-xs text-muted-foreground/80">{metric.hint}</p>
           ) : null}
+          {metric.trend ? <MetricTrend compact={compact} points={metric.trend} label={metric.label} unit={metric.unit} /> : null}
         </div>
       ))}
     </div>

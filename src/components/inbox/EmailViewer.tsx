@@ -1,4 +1,5 @@
 "use client";
+import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 
 import { useEffect, useState } from "react";
 import { Archive, Download, Mail, Send, Trash2, X } from "lucide-react";
@@ -222,17 +223,17 @@ export function EmailViewer({
           ) : null}
         </div>
         <EmailRecipientPicker scope={scope} value={recipients} onChange={setRecipients} />
-        <Input
+        <MergeTokenTextField multiline={false}
           placeholder="Subject"
           value={subject}
-          onChange={(e) => setSubject(e.target.value)}
+          onChange={setSubject}
           className="mb-2"
         />
-        <textarea
+        <MergeTokenTextField
           className="mb-3 min-h-[200px] flex-1 rounded-md border border-input p-3 text-sm"
           placeholder="Message... (URLs will become clickable links)"
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={setBody}
         />
         <InboxAttachmentPicker
           channel="email"

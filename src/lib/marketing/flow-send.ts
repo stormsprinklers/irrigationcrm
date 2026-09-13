@@ -175,8 +175,9 @@ export async function sendCampaignMessage(params: {
         to: [customer.email],
         subject: subject || campaign.name,
         text: outbound.text,
+        html: outbound.html,
         skipBranding: true,
-        omitHtml: true,
+        omitHtml: outbound.omitHtml,
       }
     );
 

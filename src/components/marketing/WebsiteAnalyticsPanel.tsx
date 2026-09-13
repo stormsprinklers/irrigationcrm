@@ -6,6 +6,8 @@ import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LiveVisitors } from "./LiveVisitors";
+import { MetricTrend } from "./MetricTrend";
 import {
   MarketingMetricGrid,
   MarketingSectionCard,
@@ -14,6 +16,8 @@ import {
 type RankedRow = { label: string; count: number };
 
 type WebsiteAnalyticsReport = {
+  totalVisitors: number;
+  daily: (Omit<WebsiteAnalyticsReport, "daily" | "from" | "to" | "days"> & { date: string })[];
   totalEvents: number;
   totalPageViews: number;
   totalSessions: number;
@@ -75,7 +79,7 @@ function RankedTable({ rows, emptyLabel }: { rows: RankedRow[]; emptyLabel: stri
           {rows.map((row) => (
             <tr key={row.label} className="border-b last:border-b-0">
               <td className="max-w-md px-3 py-2 font-medium">{row.label}</td>
-              <td className="px-3 py-2">{formatCount(row.count)}</td>
+              <td className="min-w-24 px-3 py-2">{formatCount(row.count)}<div className="mt-1 h-1.5 rounded bg-muted"><div className="h-full rounded bg-primary" style={{ width: `${row.count / Math.max(1, ...rows.map((r) => r.count)) * 100}%` }} /></div></td>
             </tr>
           ))}
         </tbody>
@@ -89,16 +93,19 @@ export function WebsiteAnalyticsPanel() {
   const [report, setReport] = useState<WebsiteAnalyticsReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
   const loadReport = useCallback(async (rangeDays: number, silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
+      setError("");
       const res = await fetch(`/api/marketing/website-analytics/dashboard?days=${rangeDays}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load website analytics");
       setReport(data as WebsiteAnalyticsReport);
     } catch (err) {
+      setError(err instanceof Error ? err.message : "Website analytics unavailable");
       toast.error(err instanceof Error ? err.message : "Failed to load website analytics");
       setReport(null);
     } finally {
@@ -116,9 +123,10 @@ export function WebsiteAnalyticsPanel() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
+      <LiveVisitors />
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <CardHeader className="flex flex-wrap items-start justify-between gap-4 space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <BarChart3 className="h-5 w-5" />
@@ -153,7 +161,7 @@ export function WebsiteAnalyticsPanel() {
           </div>
         </CardHeader>
         <CardContent>
-          {!report ? (
+          {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : !report ? (
             <p className="text-sm text-muted-foreground">
               No website events yet. Ensure{" "}
               <code className="text-xs">CRM_INTEGRATION_URL</code> and{" "}
@@ -171,12 +179,16 @@ export function WebsiteAnalyticsPanel() {
 
       {report && report.totalEvents > 0 ? (
         <>
+          <MarketingSectionCard title="Visitors over time" description={`${formatCount(report.totalVisitors)} unique browsers in this period · first-party website tracking`}>
+            <MetricTrend large label="Daily visitors" unit="browsers" points={report.daily.map((r) => ({ date: r.date, value: r.totalVisitors }))} />
+            <p className="mt-3 text-xs text-muted-foreground">Each browser counts once per day and once in the period total. Returning browsers may appear on multiple days. Dates use UTC.</p>
+          </MarketingSectionCard>
           <MarketingMetricGrid
             comingSoon={false}
-            columns={7}
+            columns={3}
             metrics={[
               { label: "Page views", value: formatCount(report.totalPageViews) },
-              { label: "Sessions", value: formatCount(report.totalSessions), hint: "New visits" },
+              { label: "New browsers", value: formatCount(report.totalSessions), hint: "First recorded visit" },
               {
                 label: "Phone clicks",
                 value: formatCount(report.conversions.phoneClicks),
@@ -198,7 +210,7 @@ export function WebsiteAnalyticsPanel() {
                 value: formatCount(report.conversions.organicConversions),
                 hint: "Google organic attribution",
               },
-            ]}
+            ].map((metric, index) => ({ ...metric, trend: report.daily.map((r) => ({ date: r.date, value: [r.totalPageViews, r.totalSessions, r.conversions.phoneClicks, r.conversions.smsClicks, r.conversions.formSubmits, r.conversions.bookingCompleted, r.conversions.organicConversions][index] })) }))}
           />
 
           <MarketingSectionCard
@@ -225,7 +237,7 @@ export function WebsiteAnalyticsPanel() {
                       ? `${formatCount(report.homepage.dwellSamples)} samples (10s+ on page)`
                       : "Fires after 10 seconds on homepage",
                 },
-              ]}
+              ].map((metric, index) => ({ ...metric, unit: index === 2 ? "seconds" : "events", trend: report.daily.map((r) => ({ date: r.date, value: [r.homepage.scroll50, r.homepage.scroll90, r.homepage.avgDwellSeconds][index] })) }))}
             />
           </MarketingSectionCard>
 

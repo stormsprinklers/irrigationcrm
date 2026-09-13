@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { Send, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import {
 import { resolveSmsSendTarget } from "@/lib/inbox/sms-send-target";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
+import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 
 type Message = {
@@ -86,18 +87,18 @@ function ComposeBar({
       />
       <div className="flex items-end gap-2">
       {multiline ? (
-        <textarea
+        <MergeTokenTextField
           rows={3}
           className="min-h-[44px] w-full min-w-0 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm"
           placeholder={placeholder}
           value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
+          onChange={onBodyChange}
         />
       ) : (
-        <input
+        <MergeTokenTextField multiline={false}
           placeholder={placeholder}
           value={body}
-          onChange={(e) => onBodyChange(e.target.value)}
+          onChange={onBodyChange}
           className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
@@ -134,6 +135,8 @@ export function SmsMessagePane({
   const [deliveryDetailMsg, setDeliveryDetailMsg] = useState<Message | null>(null);
   const [resending, setResending] = useState(false);
   const badgesNotifiedFor = useRef<string | null>(null);
+  const messageScrollRef = useRef<HTMLDivElement>(null);
+  const messageContentRef = useRef<HTMLDivElement>(null);
 
   const isCompose = !conversationId;
 
@@ -200,6 +203,37 @@ export function SmsMessagePane({
 
   const thread = conversation?.id === conversationId ? conversation : null;
   const threadMessages = thread ? messages : [];
+  const loadedThreadId = thread?.id;
+
+  useLayoutEffect(() => {
+    if (!loadedThreadId) return;
+    const viewport = messageScrollRef.current?.querySelector<HTMLElement>(
+      "[data-radix-scroll-area-viewport]"
+    );
+    const content = messageContentRef.current;
+    if (!viewport || !content) return;
+
+    let followingLatest = true;
+    const scrollToLatest = () => {
+      if (followingLatest) viewport.scrollTop = viewport.scrollHeight;
+    };
+    const handleScroll = () => {
+      followingLatest = viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop < 64;
+    };
+
+    // Wait for this thread's messages to mount, and scroll only its viewport.
+    scrollToLatest();
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    // New messages, loaded media, and viewport resizes can change the bottom.
+    const observer = new ResizeObserver(scrollToLatest);
+    observer.observe(content);
+    observer.observe(viewport);
+    return () => {
+      observer.disconnect();
+      viewport.removeEventListener("scroll", handleScroll);
+    };
+  }, [loadedThreadId]);
+
   const canSend = conversationId
     ? Boolean(thread?.participantPhone)
     : Boolean(recipient?.phone);
@@ -338,8 +372,8 @@ export function SmsMessagePane({
       )}
 
       <div className="min-h-0 flex-1 overflow-hidden bg-muted/20">
-        <ScrollArea className="h-full w-full">
-          <div className="flex min-h-full flex-col p-4">
+        <ScrollArea ref={messageScrollRef} className="h-full w-full">
+          <div ref={messageContentRef} className="flex min-h-full flex-col p-4">
             {threadMessages.length > 0 ? (
               <div className="space-y-3">
                 {threadMessages.map((msg) => {

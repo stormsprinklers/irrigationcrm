@@ -31,14 +31,14 @@ test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", ()
   assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
 });
 
-test("buildMarketingEmailPayload tracks links in the text part only", () => {
+test("buildMarketingEmailPayload tracks links in both email parts", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<p>Hello <a href="https://stormsprinklers.com">site</a></p>',
     bodyText: "Hello https://stormsprinklers.com",
     unsubscribeUrl: `${getAppBaseUrl()}/api/marketing/unsubscribe?token=t`,
     recipientId: "rec_1",
   });
-  assert.equal(out.html, undefined);
+  assert.match(out.html, />Unsubscribe</);
   assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
   assert.doesNotMatch(out.text, /track\/open/);

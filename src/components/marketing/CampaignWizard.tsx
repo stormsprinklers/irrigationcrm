@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { CampaignChannel } from "@prisma/client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
@@ -81,6 +80,12 @@ export function CampaignWizard({ initial, onSaved }: Props) {
   const alreadyLive = existingStatus === "ACTIVE";
   const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
   const isBlast = form.type === "BLAST";
+  const firstMessage = [...form.flowNodes]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .find((node) => node.type === "SEND_EMAIL" || node.type === "SEND_SMS");
+  const channel = !isBlast && firstMessage
+    ? firstMessage.type === "SEND_SMS" ? "SMS" : "EMAIL"
+    : form.channel;
 
   function update<K extends keyof CampaignFormState>(key: K, value: CampaignFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -105,7 +110,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       const payload = {
         name: form.name,
         type: isBlast ? "BLAST" : "DRIP",
-        channel: form.channel,
+        channel,
         subject: form.subject || null,
         bodyText: form.bodyText || form.name,
         bodyHtml: form.bodyHtml || null,
@@ -278,23 +283,6 @@ export function CampaignWizard({ initial, onSaved }: Props) {
             placeholder="Spring follow-up"
           />
         </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Primary channel</label>
-          <div className="mt-1 flex gap-1">
-            {(["EMAIL", "SMS"] as CampaignChannel[]).map((channel) => (
-              <Button
-                key={channel}
-                type="button"
-                size="sm"
-                className="h-8"
-                variant={form.channel === channel ? "default" : "outline"}
-                onClick={() => update("channel", channel)}
-              >
-                {channel}
-              </Button>
-            ))}
-          </div>
-        </div>
         <div className="ml-auto flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => saveDraft()}>
             Save draft
@@ -331,7 +319,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           smsPerDay={form.dripSettings.smsPerDay ?? 50}
           startAt={form.dripSettings.startAt}
           senderName={form.dripSettings.senderName}
-          channel={form.channel}
+          channel={channel}
           audienceFilters={form.audienceFilters}
           onAudienceChange={(audienceFilters) => update("audienceFilters", audienceFilters)}
           onSettingsChange={(dripSettings) => update("dripSettings", dripSettings)}

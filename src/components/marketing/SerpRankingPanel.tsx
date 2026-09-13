@@ -63,6 +63,7 @@ const ORGANIC_CONFIG: SerpRankingPanelConfig = {
 
 type Props = {
   variant: "gbp" | "organic";
+  compact?: boolean;
 };
 
 function getConfig(variant: Props["variant"]) {
@@ -73,7 +74,7 @@ function getKeywords(settings: SerpRankingsSettings, channel: SerpRankingsChanne
   return channel === "ORGANIC" ? settings.organicKeywords : settings.gbpKeywords;
 }
 
-export function SerpRankingPanel({ variant }: Props) {
+export function SerpRankingPanel({ variant, compact = false }: Props) {
   const config = getConfig(variant);
   const [settings, setSettings] = useState<SerpRankingsSettings | null>(null);
   const [rankings, setRankings] = useState<SerpApiRankingsResponse | null>(null);
@@ -171,7 +172,7 @@ export function SerpRankingPanel({ variant }: Props) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+      <CardHeader className={`flex ${compact ? "flex-col" : "flex-row"} items-start justify-between gap-4 space-y-0`}>
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
             <MapPinned className="h-5 w-5" />
@@ -269,6 +270,7 @@ export function SerpRankingPanel({ variant }: Props) {
               </p>
             ) : null}
             <SerpRankingMap
+              compact={compact}
               rankings={rankings.cities}
               trackedName={rankings.businessName}
               lastSearchedAt={

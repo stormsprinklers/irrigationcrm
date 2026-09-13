@@ -15,18 +15,11 @@ export default function MarketingSeoPage() {
         subtitle="Organic search visibility, rankings, and site health."
       />
 
-      <div className="mb-8">
-        <SerpRankingPanel variant="organic" />
-      </div>
-
-      <div className="mb-8">
-        <SeoRecommendationsPanel />
-      </div>
-
-      <div className="mb-8">
+      <div className="mb-8 grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
         <Suspense fallback={<p className="text-sm text-muted-foreground">Loading website analytics...</p>}>
           <WebsiteAnalyticsPanel />
         </Suspense>
+        <aside className="min-w-0"><SerpRankingPanel variant="organic" compact /></aside>
       </div>
 
       <div className="mb-8">
@@ -34,6 +27,7 @@ export default function MarketingSeoPage() {
           <SearchConsolePanel />
         </Suspense>
       </div>
+      <SeoRecommendationsPanel />
     </ContentArea>
   );
 }

@@ -19,6 +19,8 @@ import type {
 } from "@/lib/google-search-console/types";
 import { SEARCH_CONSOLE_SCOPE } from "@/lib/google-search-console/types";
 import { prisma } from "@/lib/prisma";
+import { accessibleSites } from "./site-selection";
+export { pickDefaultSite } from "./site-selection";
 
 const WEBMASTERS_API = "https://www.googleapis.com/webmasters/v3";
 const SEARCH_ANALYTICS_API = "https://searchconsole.googleapis.com/webmasters/v3";
@@ -46,7 +48,7 @@ export function buildSearchConsoleAuthUrl(companyId: string, redirectUri: string
     response_type: "code",
     scope: SEARCH_CONSOLE_SCOPE,
     access_type: "offline",
-    prompt: "consent",
+    prompt: "consent select_account",
     state: createOAuthState(companyId),
   });
 
@@ -165,13 +167,13 @@ export async function listSearchConsoleSites(companyId: string): Promise<GscSite
     `${WEBMASTERS_API}/sites`
   );
 
-  return (data.siteEntry ?? [])
+  return accessibleSites((data.siteEntry ?? [])
     .filter((site) => site.siteUrl)
     .map((site) => ({
       siteUrl: site.siteUrl!,
       permissionLevel: site.permissionLevel ?? "unknown",
     }))
-    .sort((a, b) => a.siteUrl.localeCompare(b.siteUrl));
+    .sort((a, b) => a.siteUrl.localeCompare(b.siteUrl)));
 }
 
 async function querySearchAnalytics(
@@ -327,11 +329,13 @@ export async function getSearchConsoleDashboard(
   const accessToken = await getSearchConsoleAccessToken(companyId);
   const { startDate, endDate } = dateRange(days);
 
-  const [pages, pagesWithImpressions, queries, sitemaps] = await Promise.all([
+  const [pages, pagesWithImpressions, queries, sitemaps, dailyResult, dailyPages] = await Promise.all([
     fetchPages(accessToken, siteUrl, startDate, endDate, 50),
     fetchPagesCount(accessToken, siteUrl, startDate, endDate),
     fetchQueries(accessToken, siteUrl, startDate, endDate, 50),
     fetchSitemaps(accessToken, siteUrl),
+    querySearchAnalytics(accessToken, siteUrl, { startDate, endDate, dimensions: ["date"], rowLimit: 25000 }),
+    querySearchAnalytics(accessToken, siteUrl, { startDate, endDate, dimensions: ["date", "page"], rowLimit: 25000 }),
   ]);
 
   const overview = await fetchOverview(
@@ -342,7 +346,16 @@ export async function getSearchConsoleDashboard(
     pagesWithImpressions
   );
 
-  return { overview, queries, pages, sitemaps };
+  const pageCounts = new Map<string, number>();
+  for (const raw of dailyPages.rows ?? []) {
+    const row = mapAnalyticsRow(raw);
+    if (row.impressions > 0) pageCounts.set(row.keys[0], (pageCounts.get(row.keys[0]) ?? 0) + 1);
+  }
+  const daily = (dailyResult.rows ?? []).map((raw) => {
+    const row = mapAnalyticsRow(raw);
+    return { date: row.keys[0], clicks: row.clicks, impressions: row.impressions, ctr: row.ctr, position: row.position, pagesWithImpressions: pageCounts.get(row.keys[0]) ?? 0 };
+  }).sort((a,b) => a.date.localeCompare(b.date));
+  return { overview, queries, pages, sitemaps, daily, pageTrendLimited: (dailyPages.rows?.length ?? 0) >= 25000 };
 }
 
 export async function getGscConnectionStatus(companyId: string): Promise<GscConnectionStatus | null> {
@@ -372,34 +385,12 @@ export async function getGscConnectionStatus(companyId: string): Promise<GscConn
 }
 
 export async function saveSearchConsoleSite(companyId: string, siteUrl: string) {
+  const sites = await listSearchConsoleSites(companyId);
+  if (!sites.some((site) => site.siteUrl === siteUrl)) {
+    throw new GoogleSearchConsoleApiError("This Google account cannot access that exact property. Choose an available property, or reconnect with an account granted access in Search Console Settings > Users and permissions.", 403);
+  }
   await prisma.company.update({
     where: { id: companyId },
     data: { googleSearchConsoleSiteUrl: siteUrl },
   });
-}
-
-export function pickDefaultSite(sites: GscSite[], websiteUrl?: string | null) {
-  if (!sites.length) return null;
-
-  const normalizedWebsite = websiteUrl?.trim().toLowerCase();
-  if (normalizedWebsite) {
-    const host = normalizedWebsite
-      .replace(/^https?:\/\//, "")
-      .replace(/^www\./, "")
-      .replace(/\/$/, "");
-
-    const domainMatch = sites.find((site) =>
-      site.siteUrl.toLowerCase().includes(`sc-domain:${host}`)
-    );
-    if (domainMatch) return domainMatch.siteUrl;
-
-    const httpsMatch = sites.find((site) => {
-      const lower = site.siteUrl.toLowerCase();
-      return lower.includes(host) && lower.startsWith("http");
-    });
-    if (httpsMatch) return httpsMatch.siteUrl;
-  }
-
-  const fullAccess = sites.find((site) => site.permissionLevel === "siteFullUser");
-  return fullAccess?.siteUrl ?? sites[0].siteUrl;
 }

@@ -50,6 +50,9 @@ export function SearchConsolePanel() {
   const [loadingSites, setLoadingSites] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [savingSite, setSavingSite] = useState(false);
+  const [dashboardError, setDashboardError] = useState("");
+  const [permissionError, setPermissionError] = useState(false);
+  const [conversionTrend, setConversionTrend] = useState<{ date: string; value: number }[]>([]);
 
   const redirectUri =
     typeof window !== "undefined"
@@ -78,12 +81,15 @@ export function SearchConsolePanel() {
 
   const loadDashboard = useCallback(async (rangeDays: number) => {
     setLoadingDashboard(true);
+    setDashboardError("");
+    setPermissionError(false);
     try {
       const res = await fetch(`/api/marketing/search-console/dashboard?days=${rangeDays}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to load Search Console data");
+      if (!res.ok) { setPermissionError(res.status === 403); throw new Error(data.error ?? "Failed to load Search Console data"); }
       setDashboard(data as GscDashboardData);
     } catch (err) {
+      setDashboardError(err instanceof Error ? err.message : "Search Console unavailable");
       toast.error(err instanceof Error ? err.message : "Failed to load Search Console data");
       setDashboard(null);
     } finally {
@@ -97,6 +103,7 @@ export function SearchConsolePanel() {
       if (res.ok) {
         const data = await res.json();
         setWebsiteConversions(data.conversions?.organicConversions ?? 0);
+        setConversionTrend((data.daily ?? []).map((r: { date: string; conversions: { organicConversions: number } }) => ({ date: r.date, value: r.conversions.organicConversions })));
       }
     } catch {
       /* optional */
@@ -259,7 +266,7 @@ export function SearchConsolePanel() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <CardHeader className="flex flex-wrap items-start justify-between gap-4 space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <Search className="h-5 w-5" />
@@ -282,6 +289,7 @@ export function SearchConsolePanel() {
               onChange={(event) => saveSite(event.target.value)}
             >
               {!status.siteUrl ? <option value="">Select property</option> : null}
+              {status.siteUrl && !sites.some((s) => s.siteUrl === status.siteUrl) ? <option value={status.siteUrl} disabled>{status.siteUrl} (access unavailable)</option> : null}
               {sites.map((site) => (
                 <option key={site.siteUrl} value={site.siteUrl}>
                   {site.siteUrl}
@@ -314,6 +322,13 @@ export function SearchConsolePanel() {
           </div>
         </CardHeader>
         <CardContent>
+          {dashboardError ? <div role="alert" className="mb-4 space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <p className="font-medium">{permissionError ? "Google account needs access to this property" : "Search Console data unavailable"}</p>
+            <p className="break-words text-muted-foreground">{dashboardError}</p>
+            {permissionError && <><ol className="list-decimal space-y-1 pl-5"><li>Select a property you can access above. A domain property (sc-domain:stormsprinklers.com) includes www and non-www; URL-prefix properties are separate.</li><li>If your property is missing, its owner must grant your Google account access in Search Console → Settings → Users and permissions.</li><li>Reconnect with that same Google account, then select the verified property.</li></ol><a className="text-primary underline" href="https://support.google.com/webmasters/answer/7687615" target="_blank" rel="noreferrer">Google’s permissions instructions</a></>}
+            <div className="flex flex-wrap gap-3"><Button size="sm" variant="outline" onClick={() => loadSites()}>Reload properties</Button><Button size="sm" asChild><a href="/api/marketing/search-console">Reconnect Google account</a></Button></div>
+          </div> : null}
+          {!loadingSites && sites.length === 0 ? <p className="mb-3 text-sm text-muted-foreground">No accessible properties were returned for this account. Grant it access in Google Search Console, then reconnect.</p> : null}
           {!status.siteUrl ? (
             <p className="text-sm text-muted-foreground">
               {loadingSites
@@ -337,7 +352,7 @@ export function SearchConsolePanel() {
       {overview ? (
         <MarketingMetricGrid
           comingSoon={false}
-          columns={6}
+          columns={3}
           metrics={[
             { label: "Organic clicks", value: formatCount(overview.clicks), hint: "Search Console" },
             {
@@ -363,12 +378,13 @@ export function SearchConsolePanel() {
                 websiteConversions != null ? formatCount(websiteConversions) : "—",
               hint: "Website tracking (Google organic)",
             },
-          ]}
+          ].map((metric, index) => ({ ...metric, unit: index === 3 ? "%" : undefined, trend: index === 5 ? conversionTrend : (dashboard?.daily ?? []).map((r) => ({ date: r.date, value: [r.clicks, r.impressions, r.position || null, r.ctr * 100, r.pagesWithImpressions][index] })) }))}
         />
       ) : null}
 
       {dashboard ? (
         <>
+          {dashboard.pageTrendLimited && <p className="text-xs text-muted-foreground">Page counts are a lower bound: Google returned the 25,000-row reporting limit.</p>}
           <MarketingSectionCard
             title="Top queries"
             description="Search terms that drove impressions and clicks."

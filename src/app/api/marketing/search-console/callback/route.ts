@@ -55,15 +55,18 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    if (!existing.googleSearchConsoleSiteUrl) {
+    {
       try {
         const sites = await listSearchConsoleSites(companyId);
-        const defaultSite = pickDefaultSite(
+        const defaultSite = sites.some((site) => site.siteUrl === existing.googleSearchConsoleSiteUrl)
+          ? existing.googleSearchConsoleSiteUrl : pickDefaultSite(
           sites,
           existing.organicSearchWebsiteUrl ?? existing.website
         );
         if (defaultSite) {
           await saveSearchConsoleSite(companyId, defaultSite);
+        } else {
+          await prisma.company.update({ where: { id: companyId }, data: { googleSearchConsoleSiteUrl: null } });
         }
       } catch {
         /* property can be selected manually */
