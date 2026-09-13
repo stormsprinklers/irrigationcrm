@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { withSanitizedCampaignSenderName } from "@/lib/marketing/sender";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -57,7 +58,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.listId !== undefined) data.listId = body.listId;
     if (body.audienceFilters !== undefined) data.audienceFilters = body.audienceFilters;
     if (body.aiPrompt !== undefined) data.aiPrompt = body.aiPrompt;
-    if (body.dripSettings !== undefined) data.dripSettings = body.dripSettings;
+    if (body.dripSettings !== undefined) {
+      data.dripSettings = withSanitizedCampaignSenderName(body.dripSettings);
+    }
     if (body.scheduledAt !== undefined) {
       data.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
     }

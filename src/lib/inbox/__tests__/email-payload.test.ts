@@ -34,3 +34,17 @@ test("Twilio email payload uses unformatted html when sending plain text", () =>
   assert.doesNotMatch(String(content.html), /<table/i);
   assert.doesNotMatch(String(content.html), /<br/i);
 });
+
+test("Twilio email payload can omit html for plaintext campaigns", () => {
+  const payload = buildTwilioEmailPayload({
+    from: "Storm Sprinklers <hello@stormsprinklers.com>",
+    to: ["jordan@example.com"],
+    subject: "Plain note",
+    text: "Just the words.\n\nThanks",
+    omitHtml: true,
+  });
+
+  const content = payload.content as Record<string, unknown>;
+  assert.equal(content.text, "Just the words.\n\nThanks");
+  assert.equal(content.html, undefined);
+});

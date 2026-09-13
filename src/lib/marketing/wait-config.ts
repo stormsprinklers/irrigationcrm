@@ -7,7 +7,7 @@ export type WaitDurationUnit = (typeof WAIT_DURATION_UNITS)[number];
 export const WAIT_MODES = ["delay", "date", "reply", "action", "delay_or_reply"] as const;
 export type WaitMode = (typeof WAIT_MODES)[number];
 
-export const WAIT_ACTIONS = ["opened", "clicked", "opened_or_clicked"] as const;
+export const WAIT_ACTIONS = ["clicked"] as const;
 export type WaitAction = (typeof WAIT_ACTIONS)[number];
 
 export type ParsedWaitConfig = {
@@ -50,9 +50,8 @@ function asMode(value: unknown): WaitMode {
   return "delay";
 }
 
-function asAction(value: unknown): WaitAction {
-  if (value === "clicked" || value === "opened_or_clicked") return value;
-  return "opened";
+function asAction(_value: unknown): WaitAction {
+  return "clicked";
 }
 
 export function parseReplyKeywords(raw: unknown): string[] {
@@ -179,20 +178,14 @@ export function matchingReplyKeyword(text: string, keywords: string[]): string |
 
 export function recipientMatchesWaitAction(
   recipient: { openedAt?: Date | null; clickedAt?: Date | null; clickCount?: number } | null,
-  action: WaitAction
+  _action: WaitAction
 ): boolean {
   if (!recipient) return false;
-  const opened = Boolean(recipient.openedAt);
-  const clicked = Boolean(recipient.clickedAt || (recipient.clickCount ?? 0) > 0);
-  if (action === "opened") return opened;
-  if (action === "clicked") return clicked;
-  return opened || clicked;
+  return Boolean(recipient.clickedAt || (recipient.clickCount ?? 0) > 0);
 }
 
-export function waitActionLabel(action: WaitAction): string {
-  if (action === "clicked") return "they click a link";
-  if (action === "opened_or_clicked") return "they open an email or click a link";
-  return "they open an email";
+export function waitActionLabel(_action: WaitAction): string {
+  return "they click a link";
 }
 
 export function waitSummary(config: unknown, timeZone?: string | null): string {

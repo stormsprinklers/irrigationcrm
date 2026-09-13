@@ -123,6 +123,8 @@ export async function sendCompanyEmail(
     bypassCommsFreeze?: boolean;
     /** Send HTML as-is — no logo, signature, or branded wrapper. */
     skipBranding?: boolean;
+    /** Do not send an HTML MIME part (campaign plaintext). */
+    omitHtml?: boolean;
   }
 ): Promise<SendEmailResult> {
   if (!params.bypassCommsFreeze) {
@@ -137,21 +139,23 @@ export async function sendCompanyEmail(
     throw new Error("From email address not configured");
   }
 
-  const html = params.html?.trim()
-    ? params.skipBranding
-      ? params.html
-      : wrapBrandedEmailHtml(params.html, resolved)
-    : undefined;
+  const html =
+    params.omitHtml || !params.html?.trim()
+      ? undefined
+      : params.skipBranding
+        ? params.html
+        : wrapBrandedEmailHtml(params.html, resolved);
 
   return sendEmail({
     from,
     to: params.to,
     subject: params.subject,
     text:
-      params.skipBranding || !html
+      params.skipBranding || params.omitHtml || !html
         ? params.text
         : applyCompanyEmailSignatureText(params.text, resolved),
     html,
+    omitHtml: params.omitHtml,
     replyTo: params.replyTo,
     attachments: params.attachments,
   });

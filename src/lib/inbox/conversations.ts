@@ -4,7 +4,9 @@ import {
   normalizePhone,
   phoneDigitsKey,
   phoneLookupVariants,
+  phonesMatch,
 } from "@/lib/inbox/phone";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 
 export async function findSmsConversationByPhone(params: {
   companyId: string;
@@ -54,6 +56,28 @@ export async function findExistingSmsConversationAnyScope(params: {
   });
 }
 
+/** Link by phone; never keep a customer whose number is a different person. */
+export async function nextCustomerIdForSmsPhone(params: {
+  companyId: string;
+  participantPhone: string;
+  currentCustomerId?: string | null;
+}): Promise<string | null> {
+  const matched = await findCustomerByPhone(params.companyId, params.participantPhone);
+  if (matched) return matched.id;
+
+  if (!params.currentCustomerId) return null;
+
+  const linked = await prisma.customer.findFirst({
+    where: { id: params.currentCustomerId, companyId: params.companyId },
+    select: { phone: true },
+  });
+  if (!linked) return null;
+  if (linked.phone && !phonesMatch(linked.phone, params.participantPhone)) {
+    return null;
+  }
+  return params.currentCustomerId;
+}
+
 export async function findOrCreateSmsConversation(params: {
   companyId: string;
   scope: Scope;
@@ -72,17 +96,20 @@ export async function findOrCreateSmsConversation(params: {
       participantPhone: normalizedPhone,
     });
     if (existing) {
+      const nextCustomerId = await nextCustomerIdForSmsPhone({
+        companyId: params.companyId,
+        participantPhone: normalizedPhone,
+        currentCustomerId: existing.customerId,
+      });
       const needsUpdate =
         existing.participantPhone !== normalizedPhone ||
-        (params.customerId && !existing.customerId);
+        nextCustomerId !== (existing.customerId ?? null);
       if (needsUpdate) {
         return prisma.conversation.update({
           where: { id: existing.id },
           data: {
             participantPhone: normalizedPhone,
-            ...(params.customerId && !existing.customerId
-              ? { customerId: params.customerId }
-              : {}),
+            customerId: nextCustomerId,
           },
         });
       }

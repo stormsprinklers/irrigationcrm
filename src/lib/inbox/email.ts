@@ -132,6 +132,8 @@ export function buildTwilioEmailPayload(params: {
   subject: string;
   text?: string;
   html?: string;
+  /** Marketing campaigns: send text/plain only so Gmail does not treat it as HTML. */
+  omitHtml?: boolean;
   attachments?: Array<{
     filename: string;
     contentType: string;
@@ -148,8 +150,10 @@ export function buildTwilioEmailPayload(params: {
     params.text ??
     html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
     "";
-  // Twilio Email API requires html; keep a 1:1 unformatted copy for text-only sends.
-  const htmlOut = html ?? (text ? plainTextAsEmailHtml(text) : undefined);
+  // Inbox/transactional: Twilio still wants an html twin. Campaigns omit it on purpose.
+  const htmlOut = params.omitHtml
+    ? undefined
+    : html ?? (text ? plainTextAsEmailHtml(text) : undefined);
 
   return {
     from,
@@ -192,6 +196,7 @@ export async function sendEmail(params: {
   subject: string;
   text?: string;
   html?: string;
+  omitHtml?: boolean;
   replyTo?: string;
   attachments?: Array<{
     filename: string;
@@ -210,7 +215,8 @@ export async function sendEmail(params: {
     to: params.to,
     subject: params.subject,
     text: params.text,
-    html: params.html,
+    html: params.omitHtml ? undefined : params.html,
+    omitHtml: params.omitHtml,
     attachments: params.attachments,
   });
 

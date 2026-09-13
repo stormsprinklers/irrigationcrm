@@ -33,6 +33,8 @@ export async function GET() {
         winterizationTabEndMonth: true,
         winterizationTabEndDay: true,
         customerBaseUrl: true,
+        timezone: true,
+        emailSenderName: true,
       },
     });
     if (!company) {

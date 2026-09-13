@@ -39,6 +39,8 @@ export type DripSettings = {
   emailsPerDay?: number;
   smsPerDay?: number;
   startAt?: string;
+  /** Overrides company email sender display name for this campaign. */
+  senderName?: string;
 };
 
 export type CampaignStats = {

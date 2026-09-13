@@ -14,7 +14,7 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
-import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { resolveCustomerIdForSmsPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { isBlobStorageUrl } from "@/lib/blob/urls";
@@ -75,11 +75,11 @@ export async function POST(request: NextRequest) {
 
     if (isFieldRole(user.role)) {
       const eligible = await listEligibleCustomerIdsForFieldSms(user);
-      let resolvedCustomerId = customerId;
-      if (!resolvedCustomerId) {
-        const customer = await findCustomerByPhone(user.companyId, normalizePhone(to));
-        resolvedCustomerId = customer?.id;
-      }
+      const resolvedCustomerId = await resolveCustomerIdForSmsPhone(
+        user.companyId,
+        normalizePhone(to),
+        customerId
+      );
       if (!resolvedCustomerId || !eligible.includes(resolvedCustomerId)) {
         return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
       }
@@ -109,11 +109,11 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("Message body or media required");
     }
 
-    let resolvedCustomerId = customerId;
-    if (!resolvedCustomerId) {
-      const customer = await findCustomerByPhone(user.companyId, normalizedTo);
-      resolvedCustomerId = customer?.id;
-    }
+    const resolvedCustomerId = await resolveCustomerIdForSmsPhone(
+      user.companyId,
+      normalizedTo,
+      customerId
+    );
 
     const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
     const twilioMessage = await sendSms({

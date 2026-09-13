@@ -22,7 +22,7 @@ import {
   scheduleOrHoldCampaignSend,
 } from "@/lib/marketing/quiet-hours-notify";
 import { mergeCustomerTags, parseAddTagConfig } from "@/lib/marketing/add-tag";
-import { parseCampaignInstant } from "@/lib/marketing/campaign-time";
+import { resolveCampaignStartAt } from "@/lib/marketing/campaign-time";
 import { startOfZonedDay } from "@/lib/datetime/zoned";
 import {
   matchingReplyKeyword,
@@ -179,7 +179,8 @@ export async function activateFlowCampaign(campaignId: string) {
   const dripSettings = (campaign.dripSettings ?? {}) as DripSettings;
   const filters = campaign.audienceFilters as AudienceFilters | null;
   const trigger = flowNodes.find((n) => n.type === CampaignFlowNodeType.TRIGGER);
-  const triggerKind = asConfig(trigger?.config).kind ?? "manual_audience";
+  const triggerConfig = asConfig(trigger?.config);
+  const triggerKind = triggerConfig.kind ?? "manual_audience";
 
   let customers: Array<{ id: string; email: string | null; phone: string | null }> = [];
   if (triggerKind === "manual_audience" || !trigger) {
@@ -190,9 +191,11 @@ export async function activateFlowCampaign(campaignId: string) {
     );
   }
 
-  const intendedStart = dripSettings.startAt
-    ? parseCampaignInstant(dripSettings.startAt, campaign.company.timezone) ?? new Date()
-    : new Date();
+  const { intendedStart, isScheduled } = resolveCampaignStartAt({
+    triggerConfig,
+    dripSettings,
+    timeZone: campaign.company.timezone,
+  });
   const startAt = await scheduleOrHoldCampaignSend({
     companyId: campaign.companyId,
     campaignId,
@@ -224,8 +227,9 @@ export async function activateFlowCampaign(campaignId: string) {
   });
 
   let processed = 0;
+  const sendIsDue = startAt.getTime() <= Date.now() + 1000;
   try {
-    if (customers.length > 0) {
+    if (customers.length > 0 && sendIsDue) {
       const result = await processFlowEnrollments({
         campaignId,
         limit: Math.min(customers.length, 25),
@@ -239,7 +243,8 @@ export async function activateFlowCampaign(campaignId: string) {
   return {
     enrolled: customers.length,
     processed,
-    deferredForQuietHours: startAt.getTime() > intendedStart.getTime() + 1000,
+    deferredForQuietHours: !isScheduled && startAt.getTime() > intendedStart.getTime() + 1000,
+    scheduledFor: isScheduled || startAt.getTime() > Date.now() + 60_000 ? startAt.toISOString() : null,
   };
 }
 
@@ -468,12 +473,7 @@ async function customerActionMatch(params: {
     orderBy: { sentAt: "desc" },
   });
   if (!recipientMatchesWaitAction(recent, params.action)) return null;
-  if (params.action === "clicked") return "clicked";
-  if (params.action === "opened_or_clicked") {
-    if (recent?.clickedAt || (recent?.clickCount ?? 0) > 0) return "clicked";
-    return "opened";
-  }
-  return "opened";
+  return "clicked";
 }
 
 export async function advanceWaitOnCustomerReply(params: {
@@ -634,7 +634,6 @@ export async function advanceWaitOnTrackedAction(params: {
 
     const wait = parseWaitConfig(node.config);
     if (!wait.usesAction) continue;
-    if (wait.action === "opened" && params.kind !== "opened") continue;
     if (wait.action === "clicked" && params.kind !== "clicked") continue;
 
     const waited = await prisma.campaignEnrollmentEvent.findFirst({
@@ -743,20 +742,20 @@ export async function processFlowEnrollments(
   // Run enough rounds that SEND → WAIT (start) or SEND → next SEND can happen
   // in the same request instead of waiting for the next cron tick.
   for (let round = 0; round < 8; round++) {
-    const due = await prisma.campaignEnrollment.findMany({
-      where: {
-        status: CampaignEnrollmentStatus.ACTIVE,
-        nextSendAt: { lte: new Date() },
+  const due = await prisma.campaignEnrollment.findMany({
+    where: {
+      status: CampaignEnrollmentStatus.ACTIVE,
+      nextSendAt: { lte: new Date() },
         ...(campaignId ? { campaignId } : {}),
-        campaign: { status: CampaignStatus.ACTIVE, type: CampaignType.DRIP },
-      },
-      include: {
-        campaign: {
-          include: {
-            company: true,
-            flowNodes: { orderBy: { sortOrder: "asc" } },
-          },
+      campaign: { status: CampaignStatus.ACTIVE, type: CampaignType.DRIP },
+    },
+    include: {
+      campaign: {
+        include: {
+          company: true,
+          flowNodes: { orderBy: { sortOrder: "asc" } },
         },
+      },
         customer: {
           include: {
             properties: {
@@ -766,15 +765,15 @@ export async function processFlowEnrollments(
             },
           },
         },
-      },
-      take: limit,
-      orderBy: { nextSendAt: "asc" },
-    });
+    },
+    take: limit,
+    orderBy: { nextSendAt: "asc" },
+  });
 
     if (due.length === 0) break;
     const processedBeforeRound = processed;
 
-    for (const enrollment of due) {
+  for (const enrollment of due) {
       try {
         await processOneDueEnrollment(enrollment as DueEnrollment, quietHoursNotified);
         processed++;
@@ -823,12 +822,12 @@ async function processOneDueEnrollment(
   enrollment: DueEnrollment,
   quietHoursNotified: Set<string>
 ) {
-  const nodes = enrollment.campaign.flowNodes.map((n) => ({
-    id: n.id,
-    type: n.type,
-    config: asConfig(n.config),
-    sortOrder: n.sortOrder,
-  }));
+    const nodes = enrollment.campaign.flowNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      config: asConfig(n.config),
+      sortOrder: n.sortOrder,
+    }));
   if (nodes.length === 0) {
     await prisma.campaignEnrollment.update({
       where: { id: enrollment.id },
@@ -931,26 +930,26 @@ async function processOneDueEnrollment(
         },
       });
       if (alreadyDone) {
-        const next = nextLinearNode(nodes, node.id);
-        if (!next) {
-          await prisma.campaignEnrollment.update({
-            where: { id: enrollment.id },
-            data: { status: CampaignEnrollmentStatus.COMPLETED },
-          });
-        } else {
-          await prisma.campaignEnrollment.update({
-            where: { id: enrollment.id },
-            data: {
-              currentNodeId: next.id,
+      const next = nextLinearNode(nodes, node.id);
+      if (!next) {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: { status: CampaignEnrollmentStatus.COMPLETED },
+        });
+      } else {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: {
+            currentNodeId: next.id,
               nextSendAt: await scheduleOrHoldCampaignSend({
                 companyId: enrollment.campaign.companyId,
                 campaignId: enrollment.campaignId,
                 campaignName: enrollment.campaign.name,
                 timeZone: companyTz,
               }),
-            },
-          });
-        }
+          },
+        });
+      }
         return;
       }
 
@@ -1141,65 +1140,61 @@ async function processOneDueEnrollment(
 
     if (node.type === CampaignFlowNodeType.BRANCH) {
       if (isLegacyReactionBranch(node.config)) {
-        const entered = await prisma.campaignEnrollmentEvent.findFirst({
-          where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
-          orderBy: { createdAt: "desc" },
-        });
+      const entered = await prisma.campaignEnrollmentEvent.findFirst({
+        where: { enrollmentId: enrollment.id, nodeId: node.id, eventType: "branch_wait" },
+        orderBy: { createdAt: "desc" },
+      });
 
-        if (!entered) {
-          await logEvent(enrollment.id, node.id, "branch_wait");
-          await prisma.campaignEnrollment.update({
-            where: { id: enrollment.id },
-            data: {
+      if (!entered) {
+        await logEvent(enrollment.id, node.id, "branch_wait");
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: {
               nextSendAt: new Date(Date.now() + parseBranchWaitMs(node.config)),
-            },
-          });
-          return;
-        }
-
-        const metric = String(node.config.metric ?? "opened");
-        const recent = await prisma.campaignRecipient.findFirst({
-          where: {
-            campaignId: enrollment.campaignId,
-            customerId: enrollment.customerId,
-            status: { in: ["sent", "delivered"] },
           },
-          orderBy: { sentAt: "desc" },
         });
+          return;
+      }
 
-        const yes =
-          metric === "clicked"
-            ? Boolean(recent?.clickedAt || (recent?.clickCount ?? 0) > 0)
-            : Boolean(recent?.openedAt);
+      const recent = await prisma.campaignRecipient.findFirst({
+        where: {
+          campaignId: enrollment.campaignId,
+          customerId: enrollment.customerId,
+          status: { in: ["sent", "delivered"] },
+        },
+        orderBy: { sentAt: "desc" },
+      });
 
-        const targetId = yes
-          ? String(node.config.yesNextId ?? "")
-          : String(node.config.noNextId ?? "");
-        const target = findNode(nodes, targetId) ?? (yes ? nextLinearNode(nodes, node.id) : null);
+      const yes = Boolean(recent?.clickedAt || (recent?.clickCount ?? 0) > 0);
 
-        await logEvent(enrollment.id, node.id, yes ? "branch_yes" : "branch_no", {
-          metric,
+      const targetId = yes
+        ? String(node.config.yesNextId ?? "")
+        : String(node.config.noNextId ?? "");
+      const target = findNode(nodes, targetId) ?? (yes ? nextLinearNode(nodes, node.id) : null);
+
+      await logEvent(enrollment.id, node.id, yes ? "branch_yes" : "branch_no", {
+        metric: "clicked",
+      });
+
+      if (!target) {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: { status: CampaignEnrollmentStatus.COMPLETED },
         });
-
-        if (!target) {
-          await prisma.campaignEnrollment.update({
-            where: { id: enrollment.id },
-            data: { status: CampaignEnrollmentStatus.COMPLETED },
-          });
-        } else {
-          await prisma.campaignEnrollment.update({
-            where: { id: enrollment.id },
-            data: {
-              currentNodeId: target.id,
+      } else {
+        await prisma.campaignEnrollment.update({
+          where: { id: enrollment.id },
+          data: {
+            currentNodeId: target.id,
               nextSendAt: await scheduleOrHoldCampaignSend({
                 companyId: enrollment.campaign.companyId,
                 campaignId: enrollment.campaignId,
                 campaignName: enrollment.campaign.name,
                 timeZone: companyTz,
               }),
-            },
-          });
-        }
+          },
+        });
+      }
         return;
       }
 

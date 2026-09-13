@@ -200,7 +200,9 @@ export default function MarketingCampaignDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Action failed");
       toast.success(
-        data.deferredForQuietHours
+        data.scheduledFor
+          ? `Campaign activated. First messages send ${format(new Date(data.scheduledFor), "MMM d, yyyy 'at' h:mm a")}`
+          : data.deferredForQuietHours
           ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
           : action === "activate"
             ? data.processed
@@ -242,7 +244,6 @@ export default function MarketingCampaignDetailPage() {
 
   const stats = campaign.statsJson ?? {};
   const delivered = stats.delivered ?? 0;
-  const opened = stats.opened ?? 0;
   const clicked = stats.clicked ?? 0;
   const canSendOrActivate =
     campaign.status !== "COMPLETED" &&
@@ -288,11 +289,10 @@ export default function MarketingCampaignDetailPage() {
         <CampaignPerformanceDashboard performance={campaign.performance} />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {[
               { label: "Sent", value: stats.sent ?? 0 },
               { label: "Delivered", value: delivered },
-              { label: "Opened", value: opened },
               { label: "Clicked", value: clicked },
               { label: "Failed", value: stats.failed ?? 0 },
               { label: "Pending", value: stats.pending ?? 0 },
@@ -305,10 +305,9 @@ export default function MarketingCampaignDetailPage() {
           </div>
 
           {delivered > 0 && campaign.channel === "EMAIL" && (
-            <div className="mb-6 grid grid-cols-3 gap-4">
+            <div className="mb-6 grid grid-cols-2 gap-4">
               {[
                 { label: "Delivery rate", value: `${Math.round((delivered / (stats.total ?? delivered)) * 100)}%` },
-                { label: "Open rate", value: `${Math.round((opened / delivered) * 100)}%` },
                 { label: "Click rate", value: `${Math.round((clicked / delivered) * 100)}%` },
               ].map((s) => (
                 <div key={s.label} className="rounded-lg border bg-muted/20 p-4">
@@ -482,7 +481,6 @@ export default function MarketingCampaignDetailPage() {
               <TableHead>Channel</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Sent</TableHead>
-              <TableHead>Opened</TableHead>
               <TableHead>Clicks</TableHead>
               <TableHead>Error</TableHead>
             </TableRow>
@@ -490,7 +488,7 @@ export default function MarketingCampaignDetailPage() {
           <TableBody>
             {(campaign.recipients ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   Recipients appear when the campaign is sent or activated.
                 </TableCell>
               </TableRow>
@@ -506,9 +504,6 @@ export default function MarketingCampaignDetailPage() {
                   <TableCell>{r.statuses.join(" · ")}</TableCell>
                   <TableCell>
                     {r.sentAt ? format(new Date(r.sentAt), "MMM d h:mm a") : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {r.openedAt ? format(new Date(r.openedAt), "MMM d h:mm a") : "—"}
                   </TableCell>
                   <TableCell>{r.clickCount > 0 ? r.clickCount : "—"}</TableCell>
                   <TableCell className="text-destructive">{r.errors.join(" · ")}</TableCell>

@@ -139,6 +139,7 @@ export default function EditMarketingCampaignPage() {
               emailsPerDay?: number;
               smsPerDay?: number;
               startAt?: string;
+              senderName?: string;
             }),
           },
           steps: campaign.steps ?? [],

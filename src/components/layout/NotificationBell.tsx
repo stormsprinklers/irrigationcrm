@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Bell, Briefcase, CalendarOff, Car, CheckCheck, Mail, MessageSquare, Moon, Phone, Star, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,10 @@ type AppNotification = {
   href?: string | null;
   isRead: boolean;
   createdAt: string;
+  companyId?: string | null;
+  companyName?: string | null;
+  brandPrimary?: string | null;
+  switchUserId?: string | null;
 };
 
 function notificationIcon(type: AppNotification["type"]) {
@@ -72,12 +77,37 @@ function formatWhen(iso: string) {
   return date.toLocaleDateString();
 }
 
+function CompanyColorBar({
+  color,
+  companyName,
+}: {
+  color?: string | null;
+  companyName?: string | null;
+}) {
+  if (!color) return null;
+  return (
+    <>
+      {companyName ? <span className="sr-only">{companyName}</span> : null}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-[3px] rounded-r-sm"
+        style={{ backgroundColor: color }}
+      />
+    </>
+  );
+}
+
 export function NotificationBell() {
+  const router = useRouter();
+  const { data: session, update } = useSession();
+  const currentCompanyId = session?.user?.companyId ?? null;
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [switching, setSwitching] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
+  const openNotificationRef = useRef<(item: AppNotification) => void>(() => {});
 
   const loadNotifications = useCallback(async (showToasts = false) => {
     try {
@@ -92,12 +122,13 @@ export function NotificationBell() {
           seenIdsRef.current.add(item.id);
           toast(item.title, {
             description: item.body ?? undefined,
+            style: item.brandPrimary
+              ? { borderRight: `3px solid ${item.brandPrimary}` }
+              : undefined,
             action: item.href
               ? {
                   label: "View",
-                  onClick: () => {
-                    window.location.href = item.href!;
-                  },
+                  onClick: () => openNotificationRef.current(item),
                 }
               : undefined,
           });
@@ -120,9 +151,9 @@ export function NotificationBell() {
     void loadNotifications(false);
     const interval = setInterval(() => loadNotifications(true), 20_000);
     return () => clearInterval(interval);
-  }, [loadNotifications]);
+  }, [loadNotifications, session?.user?.id]);
 
-  async function markRead(ids: string[]) {
+  const markRead = useCallback(async (ids: string[]) => {
     await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -132,7 +163,7 @@ export function NotificationBell() {
       current.map((item) => (ids.includes(item.id) ? { ...item, isRead: true } : item))
     );
     setUnreadCount((count) => Math.max(0, count - ids.length));
-  }
+  }, []);
 
   async function markAllRead() {
     await fetch("/api/notifications", {
@@ -143,6 +174,53 @@ export function NotificationBell() {
     setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
     setUnreadCount(0);
   }
+
+  const openNotification = useCallback(
+    async (item: AppNotification) => {
+      if (!item.isRead) void markRead([item.id]);
+      setOpen(false);
+      if (!item.href) return;
+
+      const needsSwitch = Boolean(
+        item.switchUserId && item.companyId && currentCompanyId && item.companyId !== currentCompanyId
+      );
+      if (needsSwitch && item.switchUserId) {
+        if (switching) return;
+        setSwitching(true);
+        try {
+          const res = await fetch("/api/account/switch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: item.switchUserId }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.session) {
+            await update({
+              user: {
+                id: data.session.id,
+                email: data.session.email,
+                name: data.session.name,
+                companyId: data.session.companyId,
+                role: data.session.role,
+                trueRole: null,
+              },
+            });
+          }
+          window.location.href = item.href;
+        } finally {
+          setSwitching(false);
+        }
+        return;
+      }
+
+      router.push(item.href);
+    },
+    [currentCompanyId, markRead, router, switching, update]
+  );
+
+  openNotificationRef.current = (item) => {
+    void openNotification(item);
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -176,46 +254,28 @@ export function NotificationBell() {
         ) : (
           notifications.map((item) => {
             const Icon = notificationIcon(item.type);
-            const content = (
-              <div className="flex gap-2 py-0.5">
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className={cn("text-sm leading-snug", !item.isRead && "font-medium")}>
-                    {item.title}
-                  </p>
-                  {item.body ? (
-                    <p className="truncate text-xs text-muted-foreground">{item.body}</p>
-                  ) : null}
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatWhen(item.createdAt)}</p>
-                </div>
-              </div>
-            );
-
-            if (item.href) {
-              return (
-                <DropdownMenuItem key={item.id} asChild className="cursor-pointer">
-                  <Link
-                    href={item.href}
-                    onClick={() => {
-                      if (!item.isRead) void markRead([item.id]);
-                      setOpen(false);
-                    }}
-                  >
-                    {content}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            }
-
             return (
               <DropdownMenuItem
                 key={item.id}
-                className="cursor-pointer"
+                className="relative cursor-pointer overflow-hidden"
+                disabled={switching}
                 onClick={() => {
-                  if (!item.isRead) void markRead([item.id]);
+                  void openNotification(item);
                 }}
               >
-                {content}
+                <div className="flex w-full gap-2 py-0.5 pr-1.5">
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className={cn("text-sm leading-snug", !item.isRead && "font-medium")}>
+                      {item.title}
+                    </p>
+                    {item.body ? (
+                      <p className="truncate text-xs text-muted-foreground">{item.body}</p>
+                    ) : null}
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">{formatWhen(item.createdAt)}</p>
+                  </div>
+                </div>
+                <CompanyColorBar color={item.brandPrimary} companyName={item.companyName} />
               </DropdownMenuItem>
             );
           })

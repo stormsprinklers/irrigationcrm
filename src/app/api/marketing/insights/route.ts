@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
       },
       include: {
         recipients: {
-          select: { id: true, customerId: true, email: true, phone: true, status: true, openedAt: true, clickCount: true },
+          select: { id: true, customerId: true, email: true, phone: true, status: true, clickCount: true },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -35,13 +35,8 @@ export async function GET(request: NextRequest) {
         recipientCount: uniqueCampaignRecipientCount(c.recipients),
         sendCount: stats.total ?? 0,
         delivered: stats.delivered,
-        opened: stats.opened ?? 0,
         clicked: stats.clicked ?? 0,
         deliveryRate: stats.total ? Math.round((stats.delivered / stats.total) * 1000) / 10 : 0,
-        openRate:
-          stats.delivered > 0
-            ? Math.round(((stats.opened ?? 0) / stats.delivered) * 1000) / 10
-            : 0,
         clickRate:
           stats.delivered > 0
             ? Math.round(((stats.clicked ?? 0) / stats.delivered) * 1000) / 10
@@ -54,11 +49,10 @@ export async function GET(request: NextRequest) {
       (acc, c) => {
         acc.sends += c.sendCount;
         acc.delivered += c.delivered;
-        acc.opened += c.opened;
         acc.clicked += c.clicked;
         return acc;
       },
-      { sends: 0, delivered: 0, opened: 0, clicked: 0 }
+      { sends: 0, delivered: 0, clicked: 0 }
     );
 
     return NextResponse.json({
@@ -69,10 +63,6 @@ export async function GET(request: NextRequest) {
         ).length,
         deliveryRate:
           totals.sends > 0 ? Math.round((totals.delivered / totals.sends) * 1000) / 10 : 0,
-        openRate:
-          totals.delivered > 0
-            ? Math.round((totals.opened / totals.delivered) * 1000) / 10
-            : 0,
         clickRate:
           totals.delivered > 0
             ? Math.round((totals.clicked / totals.delivered) * 1000) / 10

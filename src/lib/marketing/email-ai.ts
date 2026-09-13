@@ -2,10 +2,7 @@ import { stormBrand } from "@/lib/branding";
 import { requireOpenAIApiKey } from "@/lib/openai/client";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import {
-  isEmailTemplateId,
-  isPlainTextEmailTemplate,
   renderEmailTemplateSkeleton,
-  textToPlainEmailHtml,
   type EmailTemplateId,
 } from "@/lib/marketing/email-templates";
 import type { CampaignAllowedLink } from "@/lib/marketing/campaign-links";
@@ -77,8 +74,8 @@ export async function generateCampaignEmail(params: {
   companyZip?: string | null;
 }) {
   const apiKey = requireOpenAIApiKey();
-  const templateId = isEmailTemplateId(params.templateId) ? params.templateId : null;
-  const isPlain = isPlainTextEmailTemplate(templateId);
+  const templateId = "plain";
+  const isPlain = true;
   const existingHtml = params.existingHtml?.trim() ?? "";
   const existingText = params.existingText?.trim() ?? "";
   const existing = isPlain ? existingText : existingHtml;
@@ -163,8 +160,8 @@ Do not include markdown fences or extra commentary.`
       : `You are an expert email marketer for ${params.companyName}.
 Brand voice: friendly, upbeat, and professional.
 Return ONLY valid JSON with keys: subject, bodyText.
-bodyText must be a complete unformatted plain-text email — no HTML, no markdown, no tables, no CSS, no signature block unless the brief asks for one.
-Write like a normal email: short greeting, body paragraphs separated by blank lines, optional sign-off.
+bodyText must be a complete unformatted plain-text email — no HTML, no markdown, no tables, no CSS, no signature, no unsubscribe line.
+Start with Hey {customer_first_name}, then the body, with paragraphs separated by blank lines. Optional short sign-off like Thanks. The CRM adds company contact info and unsubscribe when sending.
 ${plainLinkRules}
 Do not include markdown fences or extra commentary.`
     : isEdit
@@ -259,11 +256,11 @@ ${skeleton ? `Template skeleton HTML to fill in:\n${skeleton}` : ""}`;
   const parsed = JSON.parse(raw) as { subject?: string; bodyHtml?: string; bodyText?: string };
   const subject = parsed.subject ?? params.subject ?? "News from " + params.companyName;
 
-  if (isPlain) {
+    if (isPlain) {
     let bodyText = (parsed.bodyText ?? "").trim();
     if (!bodyText && parsed.bodyHtml) bodyText = htmlToPlainText(parsed.bodyHtml);
     if (!bodyText) throw new Error("AI returned empty email text");
-    return { subject, bodyHtml: textToPlainEmailHtml(bodyText), bodyText };
+    return { subject, bodyHtml: "", bodyText };
   }
 
   let bodyHtml = (parsed.bodyHtml ?? "").trim();

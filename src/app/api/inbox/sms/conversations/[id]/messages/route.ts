@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { nextCustomerIdForSmsPhone } from "@/lib/inbox/conversations";
+import { phonesMatch } from "@/lib/inbox/phone";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 import {
   canAccessFieldSmsConversation,
@@ -34,15 +35,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (!conversation.customerId && conversation.participantPhone) {
-      const customer = await findCustomerByPhone(
-        user.companyId,
-        conversation.participantPhone
-      );
-      if (customer) {
+    const customerPhoneMismatch =
+      Boolean(conversation.customer?.phone) &&
+      Boolean(conversation.participantPhone) &&
+      !phonesMatch(conversation.customer?.phone, conversation.participantPhone);
+
+    if (
+      conversation.participantPhone &&
+      (!conversation.customerId || customerPhoneMismatch)
+    ) {
+      const nextId = await nextCustomerIdForSmsPhone({
+        companyId: user.companyId,
+        participantPhone: conversation.participantPhone,
+        currentCustomerId: conversation.customerId,
+      });
+      if (nextId !== (conversation.customerId ?? null)) {
         conversation = await prisma.conversation.update({
           where: { id: conversation.id },
-          data: { customerId: customer.id },
+          data: { customerId: nextId },
           include: {
             customer: {
               select: {

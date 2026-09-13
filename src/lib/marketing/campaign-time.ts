@@ -91,6 +91,24 @@ export function campaignDatetimeLocalValue(
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
+/** First-send time for a campaign: trigger sendAt, else drip startAt, else now. */
+export function resolveCampaignStartAt(params: {
+  triggerConfig?: Record<string, unknown> | null;
+  dripSettings?: { startAt?: string } | null;
+  timeZone?: string | null;
+  now?: Date;
+}): { intendedStart: Date; isScheduled: boolean; raw: string | null } {
+  const trigger =
+    params.triggerConfig && typeof params.triggerConfig === "object" ? params.triggerConfig : {};
+  const raw = String(trigger.sendAt ?? params.dripSettings?.startAt ?? "").trim() || null;
+  const parsed = raw ? parseCampaignInstant(raw, params.timeZone) : null;
+  const now = params.now ?? new Date();
+  if (parsed && parsed.getTime() > now.getTime()) {
+    return { intendedStart: parsed, isScheduled: true, raw };
+  }
+  return { intendedStart: now, isScheduled: false, raw };
+}
+
 export function addCampaignWaitDays(
   from: Date,
   days: number,

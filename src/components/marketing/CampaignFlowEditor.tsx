@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   CircleHelp,
   Clock,
@@ -32,6 +33,7 @@ import type {
   AudienceFilters,
   CampaignFlowNodeInput,
   CampaignFlowNodeType,
+  DripSettings,
 } from "@/lib/marketing/types";
 import {
   IF_ELSE_MAX_BRANCHES,
@@ -50,9 +52,10 @@ import {
   type WaitDurationUnit,
   type WaitMode,
 } from "@/lib/marketing/wait-config";
+import { formatInTimezone } from "@/lib/datetime/zoned";
 import {
   campaignDatetimeLocalValue,
-  campaignStartDateInputValue,
+  parseCampaignInstant,
 } from "@/lib/marketing/campaign-time";
 import { addTagSummary, parseAddTagConfig } from "@/lib/marketing/add-tag";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
@@ -64,18 +67,62 @@ type Props = {
   emailsPerDay: number;
   smsPerDay: number;
   startAt?: string;
+  senderName?: string;
   channel: "EMAIL" | "SMS";
   audienceFilters: AudienceFilters;
   onAudienceChange: (filters: AudienceFilters) => void;
-  onSettingsChange: (settings: {
-    emailsPerDay: number;
-    smsPerDay: number;
-    startAt?: string;
-  }) => void;
+  onSettingsChange: (settings: DripSettings) => void;
   /** Analytics view: canvas only, with people-count orbs. */
   readOnly?: boolean;
   nodeCounts?: Record<string, number>;
 };
+
+function SenderNameField({
+  value,
+  placeholder,
+  disabled,
+  onCommit,
+}: {
+  value?: string;
+  placeholder: string;
+  disabled?: boolean;
+  onCommit: (next?: string) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const draftRef = useRef(draft);
+  const onCommitRef = useRef(onCommit);
+  draftRef.current = draft;
+  onCommitRef.current = onCommit;
+
+  useEffect(() => {
+    setDraft(value ?? "");
+  }, [value]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const next = draft.trim() ? draft : undefined;
+      if ((value ?? "") === (next ?? "")) return;
+      onCommitRef.current(next);
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [draft, value]);
+
+  return (
+    <Input
+      className="mt-1 h-8"
+      value={draft}
+      placeholder={placeholder}
+      disabled={disabled}
+      maxLength={78}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const next = draftRef.current.trim() ? draftRef.current : undefined;
+        if ((value ?? "") === (next ?? "")) return;
+        flushSync(() => onCommitRef.current(next));
+      }}
+    />
+  );
+}
 
 function FieldTip({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -216,7 +263,7 @@ function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
         delayUnit: "days",
         sendAt: undefined,
         replyKeyword: "",
-        action: "opened",
+        action: "clicked",
         timeoutEnabled: false,
       };
     case "SEND_EMAIL":
@@ -291,7 +338,7 @@ function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput
   ];
 }
 
-function nodeCardSummary(node: CampaignFlowNodeInput, timezone: string) {
+function nodeCardSummary(node: CampaignFlowNodeInput, timezone: string, campaignStartAt?: string) {
   const config = nodeConfig(node);
   if (node.type === "WAIT") return waitSummary(config, timezone);
   if (node.type === "BRANCH") return ifElseSummary(config);
@@ -309,6 +356,17 @@ function nodeCardSummary(node: CampaignFlowNodeInput, timezone: string) {
     if (kind === "job_completed") return "When a visit is completed";
     if (kind === "form_no_booking") return "Form filled, no appointment";
     if (kind === "city") return "Customer city matches";
+    const sendAt = String(config.sendAt ?? campaignStartAt ?? "").trim();
+    const at = parseCampaignInstant(sendAt, timezone);
+    if (at && at.getTime() > Date.now()) {
+      return `Starts ${formatInTimezone(at, timezone, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })}`;
+    }
     return "When the campaign is activated";
   }
   return nodeMeta(node.type).blurb;
@@ -343,6 +401,7 @@ export function CampaignFlowEditor({
   emailsPerDay,
   smsPerDay,
   startAt,
+  senderName,
   channel,
   audienceFilters,
   onAudienceChange,
@@ -353,17 +412,33 @@ export function CampaignFlowEditor({
   const [selectionId, setSelectionId] = useState<string | null>(nodes[0] ? ensureNodeId(nodes[0]) : null);
   const [zoom, setZoom] = useState(1);
   const [timezone, setTimezone] = useState("America/Denver");
+  const [defaultSenderName, setDefaultSenderName] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings/company")
+    fetch("/api/settings/company/branding")
       .then((res) => res.json())
       .then((data) => {
         if (typeof data.timezone === "string" && data.timezone.trim()) {
           setTimezone(data.timezone.trim());
         }
+        const companySender =
+          (typeof data.emailSenderName === "string" && data.emailSenderName.trim()) ||
+          (typeof data.name === "string" && data.name.trim()) ||
+          "";
+        if (companySender) setDefaultSenderName(companySender);
       })
       .catch(() => {});
   }, []);
+
+  function emitSettings(patch: Partial<DripSettings>) {
+    onSettingsChange({
+      emailsPerDay,
+      smsPerDay,
+      startAt,
+      senderName,
+      ...patch,
+    });
+  }
 
   const byId = useMemo(() => {
     const map = new Map<string, CampaignFlowNodeInput>();
@@ -546,7 +621,7 @@ export function CampaignFlowEditor({
                 {meta.label}
               </span>
               <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                {nodeCardSummary(node, timezone)}
+                {nodeCardSummary(node, timezone, startAt)}
               </span>
             </span>
           </span>
@@ -658,13 +733,7 @@ export function CampaignFlowEditor({
             type="number"
             className="mt-1 h-8"
             value={emailsPerDay}
-            onChange={(e) =>
-              onSettingsChange({
-                emailsPerDay: Number(e.target.value) || 0,
-                smsPerDay,
-                startAt,
-              })
-            }
+            onChange={(e) => emitSettings({ emailsPerDay: Number(e.target.value) || 0 })}
           />
         </div>
         <div>
@@ -680,28 +749,22 @@ export function CampaignFlowEditor({
             type="number"
             className="mt-1 h-8"
             value={smsPerDay}
-            onChange={(e) =>
-              onSettingsChange({
-                emailsPerDay,
-                smsPerDay: Number(e.target.value) || 0,
-                startAt,
-              })
-            }
+            onChange={(e) => emitSettings({ smsPerDay: Number(e.target.value) || 0 })}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-muted-foreground">Start date ({timezone})</label>
-          <Input
-            type="date"
-            className="mt-1 h-8"
-            value={campaignStartDateInputValue(startAt, timezone)}
-            onChange={(e) =>
-              onSettingsChange({
-                emailsPerDay,
-                smsPerDay,
-                startAt: e.target.value || undefined,
-              })
-            }
+          <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+            <span>Sender name</span>
+            <FieldTip label="About sender name">
+              This is the name people see in their inbox From field, like Austin Green instead of
+              Storm Sprinklers. Leave blank to use the company default.
+            </FieldTip>
+          </label>
+          <SenderNameField
+            value={senderName}
+            placeholder={defaultSenderName || "Company name"}
+            disabled={readOnly}
+            onCommit={(next) => emitSettings({ senderName: next })}
           />
         </div>
       </div>
@@ -796,6 +859,11 @@ export function CampaignFlowEditor({
                 channel={channel}
                 audienceFilters={audienceFilters}
                 onAudienceChange={onAudienceChange}
+                emailsPerDay={emailsPerDay}
+                smsPerDay={smsPerDay}
+                startAt={startAt}
+                senderName={senderName}
+                onSettingsChange={emitSettings}
                 onConfigChange={(config) => setConfigFor(ensureNodeId(selected), config)}
               />
             </div>
@@ -930,6 +998,11 @@ function NodeConfigEditor({
   channel,
   audienceFilters,
   onAudienceChange,
+  emailsPerDay,
+  smsPerDay,
+  startAt,
+  senderName,
+  onSettingsChange,
   onConfigChange,
 }: {
   node: CampaignFlowNodeInput;
@@ -939,6 +1012,11 @@ function NodeConfigEditor({
   channel: "EMAIL" | "SMS";
   audienceFilters: AudienceFilters;
   onAudienceChange: (filters: AudienceFilters) => void;
+  emailsPerDay: number;
+  smsPerDay: number;
+  startAt?: string;
+  senderName?: string;
+  onSettingsChange: (settings: DripSettings) => void;
   onConfigChange: (config: Record<string, unknown>) => void;
 }) {
   const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
@@ -962,7 +1040,7 @@ function NodeConfigEditor({
             value={kind}
             onChange={(e) => onConfigChange({ ...config, kind: e.target.value })}
           >
-            <option value="manual_audience">When campaign is activated (audience filters)</option>
+            <option value="manual_audience">Audience list (activate or schedule)</option>
             <option value="job_completed">Visit completed</option>
             <option value="form_no_booking">Form filled, no appointment</option>
             <option value="city">Customer city matches</option>
@@ -970,6 +1048,57 @@ function NodeConfigEditor({
         </div>
         {kind === "manual_audience" ? (
           <div className="space-y-2 border-t border-border pt-3">
+            <div>
+              <label className="text-sm font-medium">When to send</label>
+              <select
+                className="mt-1 flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={String(config.sendAt ?? startAt ?? "").trim() ? "scheduled" : "immediate"}
+                onChange={(e) => {
+                  if (e.target.value === "immediate") {
+                    onConfigChange({ ...config, sendAt: undefined });
+                    onSettingsChange({ startAt: undefined });
+                    return;
+                  }
+                  const existing = String(config.sendAt ?? startAt ?? "").trim();
+                  const next =
+                    existing ||
+                    campaignDatetimeLocalValue(
+                      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+                      timezone
+                    );
+                  onConfigChange({ ...config, sendAt: next });
+                  onSettingsChange({ emailsPerDay, smsPerDay, startAt: next });
+                }}
+              >
+                <option value="immediate">As soon as the campaign is activated</option>
+                <option value="scheduled">At a scheduled date and time</option>
+              </select>
+            </div>
+            {String(config.sendAt ?? startAt ?? "").trim() ? (
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  First messages send at ({timezone})
+                </label>
+                <Input
+                  type="datetime-local"
+                  className="mt-1"
+                  value={campaignDatetimeLocalValue(config.sendAt ?? startAt, timezone)}
+                  onChange={(e) => {
+                    const next = e.target.value || undefined;
+                    onConfigChange({ ...config, sendAt: next });
+                    onSettingsChange({ emailsPerDay, smsPerDay, startAt: next });
+                  }}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Activate whenever you want. People are enrolled now; nothing sends until this time.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Choose a scheduled date and time if you don’t want the first email or text to go out
+                the moment you hit Activate.
+              </p>
+            )}
             <p className="text-sm font-medium">Audience</p>
             <p className="text-xs text-muted-foreground">
               Filter who is enrolled when this campaign is activated.
@@ -1147,12 +1276,10 @@ function NodeConfigEditor({
                 onConfigChange({ ...config, action: e.target.value as WaitAction })
               }
             >
-              <option value="opened">Opens an email</option>
               <option value="clicked">Clicks a link</option>
-              <option value="opened_or_clicked">Opens an email or clicks a link</option>
             </select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Uses the most recent campaign email or SMS sent to this contact.
+              Continues when they click a tracked link in the most recent campaign email.
             </p>
           </div>
         ) : null}
@@ -1252,6 +1379,7 @@ function NodeConfigEditor({
           onBodyChange={(nextBodyHtml, bodyText) =>
             onConfigChange({ ...config, bodyHtml: nextBodyHtml, bodyText })
           }
+          senderName={senderName}
         />
       </div>
     );

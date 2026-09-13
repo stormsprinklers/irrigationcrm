@@ -34,7 +34,6 @@ type CampaignRow = {
   opened?: number;
   clicked?: number;
   deliveryRate?: number;
-  openRate?: number;
   clickRate?: number;
 };
 
@@ -43,7 +42,6 @@ type InsightsData = {
     campaignCount: number;
     activeDrip: number;
     deliveryRate: number;
-    openRate: number;
     clickRate: number;
   };
   campaigns: CampaignRow[];
@@ -89,13 +87,12 @@ export default function MarketingCampaignsPage() {
 
       <MarketingMetricGrid
         className="mb-8"
-        columns={5}
+        columns={4}
         comingSoon={false}
         metrics={[
           { label: "Total campaigns", value: loading ? "—" : summary?.campaignCount ?? 0 },
           { label: "Active campaigns", value: loading ? "—" : summary?.activeDrip ?? 0 },
           { label: "Delivery rate", value: loading ? "—" : `${summary?.deliveryRate ?? 0}%` },
-          { label: "Open rate", value: loading ? "—" : `${summary?.openRate ?? 0}%` },
           { label: "Click rate", value: loading ? "—" : `${summary?.clickRate ?? 0}%` },
         ]}
       />
@@ -120,7 +117,6 @@ export default function MarketingCampaignsPage() {
               <TableHead>Status</TableHead>
               <TableHead>Recipients</TableHead>
               <TableHead>Delivered</TableHead>
-              <TableHead>Open %</TableHead>
               <TableHead>Click %</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead className="w-12 text-right"> </TableHead>
@@ -129,13 +125,13 @@ export default function MarketingCampaignsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : campaigns.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   {includeArchived
                     ? "No archived campaigns."
                     : "No campaigns yet. Create your first marketing campaign."}
@@ -169,7 +165,6 @@ export default function MarketingCampaignsPage() {
                   </TableCell>
                   <TableCell>{c.recipientCount}</TableCell>
                   <TableCell>{c.delivered ?? "—"}</TableCell>
-                  <TableCell>{c.openRate != null ? `${c.openRate}%` : "—"}</TableCell>
                   <TableCell>{c.clickRate != null ? `${c.clickRate}%` : "—"}</TableCell>
                   <TableCell>
                     {c.sentAt ? format(new Date(c.sentAt), "MMM d, yyyy") : "—"}

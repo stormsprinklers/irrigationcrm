@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
 import { SmsThreadList } from "@/components/inbox/SmsThreadList";
 import { SmsMessagePane } from "@/components/inbox/SmsMessagePane";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { isCustomerTeamScope, parseInboxRoute } from "@/lib/inbox/types";
+
+const DEEP_LINK_KEYS = ["customerId", "phone", "email", "name", "conversationId"] as const;
 
 export function InboxChannelView({
   channel,
@@ -16,6 +18,8 @@ export function InboxChannelView({
   scope: string;
 }) {
   const parsed = parseInboxRoute(channel, scope);
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const deepLink = useMemo(
     () => ({
@@ -29,9 +33,21 @@ export function InboxChannelView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const userOverrideRef = useRef(false);
 
   const ch = parsed?.channel;
   const sc = parsed?.scope;
+
+  function clearInboxDeepLink() {
+    if (!DEEP_LINK_KEYS.some((key) => searchParams.get(key))) return;
+    router.replace(pathname || `/inbox/${channel}/${scope}`, { scroll: false });
+  }
+
+  useEffect(() => {
+    if (deepLink.customerId || deepLink.phone) {
+      userOverrideRef.current = false;
+    }
+  }, [deepLink.customerId, deepLink.phone]);
 
   useEffect(() => {
     if (ch !== "sms" || sc !== "customers") return;
@@ -51,9 +67,11 @@ export function InboxChannelView({
     if (deepLink.customerId) params.set("customerId", deepLink.customerId);
     if (deepLink.phone) params.set("phone", deepLink.phone);
 
+    let cancelled = false;
     fetch(`/api/inbox/sms/conversations/resolve?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
+        if (cancelled || userOverrideRef.current) return;
         if (data.conversation?.id) {
           setSelectedId(data.conversation.id);
           setIsComposing(false);
@@ -63,6 +81,9 @@ export function InboxChannelView({
         }
       })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [ch, sc, deepLink.customerId, deepLink.phone]);
 
   if (!parsed || !ch || !sc) {
@@ -85,12 +106,16 @@ export function InboxChannelView({
         listFirst
         composing={isComposing && !selectedId}
         onCompose={() => {
+          userOverrideRef.current = true;
           setSelectedId(null);
           setIsComposing(true);
+          clearInboxDeepLink();
         }}
         onMobileBack={() => {
+          userOverrideRef.current = true;
           setSelectedId(null);
           setIsComposing(false);
+          clearInboxDeepLink();
         }}
         list={
           <div className="flex h-full flex-col">
@@ -99,8 +124,10 @@ export function InboxChannelView({
               scope={teamScope}
               selectedId={selectedId}
               onSelect={(id) => {
+                userOverrideRef.current = true;
                 setSelectedId(id);
                 setIsComposing(false);
+                clearInboxDeepLink();
               }}
             />
           </div>
@@ -110,13 +137,15 @@ export function InboxChannelView({
             <SmsMessagePane
               conversationId={selectedId}
               scope={teamScope}
-              initialPhone={deepLink.phone}
-              initialCustomerId={deepLink.customerId}
-              initialName={deepLink.name}
+              initialPhone={selectedId ? null : deepLink.phone}
+              initialCustomerId={selectedId ? null : deepLink.customerId}
+              initialName={selectedId ? null : deepLink.name}
               onSent={(id) => {
+                userOverrideRef.current = true;
                 setSelectedId(id);
                 setIsComposing(false);
                 setRefreshKey((k) => k + 1);
+                clearInboxDeepLink();
               }}
             />
           ) : (

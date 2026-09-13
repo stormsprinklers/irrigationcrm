@@ -1,55 +1,65 @@
-import { plainTextAsEmailHtml } from "@/lib/inbox/email";
-import { isHtmlEmailBody, looksLikePlainEmail } from "@/lib/marketing/email-templates";
-import {
-  appendOpenTrackingPixel,
-  rewriteTrackedLinks,
-  rewriteTrackedUrlsInText,
-} from "@/lib/marketing/link-tracking";
-import {
-  appendMarketingUnsubscribeFooter,
-  appendMarketingUnsubscribeText,
-  appendPlainUnsubscribeFooter,
-  appendPlainUnsubscribeText,
-} from "@/lib/marketing/unsubscribe";
+import { applyCompanyEmailSignatureText, type CompanySignatureFields } from "@/lib/inbox/company-email-signature";
+import { htmlToPlainText, rewriteTrackedUrlsInText } from "@/lib/marketing/link-tracking";
+import { appendPlainUnsubscribeText } from "@/lib/marketing/unsubscribe";
 
-/** Build the HTML and/or plain-text parts for a campaign send. */
+export const DEFAULT_CAMPAIGN_GREETING = "Hey {customer_first_name},";
+
+export function campaignPlainBodyText(
+  bodyHtml: string | null | undefined,
+  bodyText: string | null | undefined
+): string {
+  const text = String(bodyText ?? "").trim();
+  if (text) return text;
+  return htmlToPlainText(bodyHtml ?? "").trim();
+}
+
+export function ensureCampaignGreeting(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return `${DEFAULT_CAMPAIGN_GREETING}\n\n`;
+  if (/^(hey|hi|hello)\b/i.test(trimmed)) return trimmed;
+  return `${DEFAULT_CAMPAIGN_GREETING}\n\n${trimmed}`;
+}
+
+export function signatureFieldsFromCompany(company: {
+  name: string;
+  phone?: string | null;
+  supportEmail?: string | null;
+  website?: string | null;
+  websiteBaseUrl?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}): CompanySignatureFields {
+  return {
+    companyName: company.name,
+    phone: company.phone,
+    supportEmail: company.supportEmail,
+    website: company.website ?? company.websiteBaseUrl,
+    address: company.address,
+    city: company.city,
+    state: company.state,
+    zip: company.zip,
+  };
+}
+
+/** Build a native plaintext campaign: greeting, body, company signature, unsubscribe URL. */
 export function buildMarketingEmailPayload(params: {
   bodyHtml: string | null | undefined;
   bodyText: string;
   unsubscribeUrl: string;
   recipientId: string;
   publicBaseUrl?: string | null;
-}): { text: string; html?: string; unbranded: boolean } {
-  const unbranded = looksLikePlainEmail(params.bodyHtml, params.bodyText);
-  const text = rewriteTrackedUrlsInText(
-    unbranded
-      ? appendPlainUnsubscribeText(params.bodyText, params.unsubscribeUrl)
-      : appendMarketingUnsubscribeText(params.bodyText, params.unsubscribeUrl),
-    params.recipientId
-  );
-
-  if (unbranded) {
-    const htmlSource = isHtmlEmailBody(params.bodyHtml)
-      ? params.bodyHtml ?? ""
-      : plainTextAsEmailHtml(params.bodyText);
-    const html = appendPlainUnsubscribeFooter(htmlSource, params.unsubscribeUrl);
-    return {
-      text,
-      unbranded: true,
-      html: appendOpenTrackingPixel(
-        /<a\s/i.test(html) ? rewriteTrackedLinks(html, params.recipientId) : html,
-        params.recipientId
-      ),
-    };
-  }
-
-  const rawHtml = appendMarketingUnsubscribeFooter(params.bodyHtml ?? "", params.unsubscribeUrl);
+  signature?: CompanySignatureFields | null;
+}): { text: string; html?: undefined; unbranded: true; omitHtml: true } {
+  const body = ensureCampaignGreeting(campaignPlainBodyText(params.bodyHtml, params.bodyText));
+  const withSignature = params.signature
+    ? applyCompanyEmailSignatureText(body, params.signature) ?? body
+    : body;
+  const withUnsubscribe = appendPlainUnsubscribeText(withSignature, params.unsubscribeUrl);
   return {
-    text,
-    unbranded: false,
-    html: appendOpenTrackingPixel(
-      rewriteTrackedLinks(rawHtml, params.recipientId),
-      params.recipientId
-    ),
+    text: rewriteTrackedUrlsInText(withUnsubscribe, params.recipientId),
+    unbranded: true,
+    omitHtml: true,
   };
 }

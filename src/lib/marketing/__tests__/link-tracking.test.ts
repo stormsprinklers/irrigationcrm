@@ -31,17 +31,17 @@ test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", ()
   assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
 });
 
-test("buildMarketingEmailPayload tracks links in HTML and in the text part", () => {
+test("buildMarketingEmailPayload tracks links in the text part only", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<p>Hello <a href="https://stormsprinklers.com">site</a></p>',
     bodyText: "Hello https://stormsprinklers.com",
     unsubscribeUrl: `${getAppBaseUrl()}/api/marketing/unsubscribe?token=t`,
     recipientId: "rec_1",
   });
-  assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
-  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
+  assert.equal(out.html, undefined);
   assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
+  assert.doesNotMatch(out.text, /track\/open/);
 });
 
 test("htmlToPlainText keeps hyperlink text and URL", () => {

@@ -4,6 +4,7 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { previewAudience } from "@/lib/marketing/audience";
 import type { AudienceFilters } from "@/lib/marketing/types";
 import { uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
+import { withSanitizedCampaignSenderName } from "@/lib/marketing/sender";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
         listId: listId ?? null,
         audienceFilters: audienceFilters ?? undefined,
         aiPrompt: aiPrompt ?? null,
-        dripSettings: dripSettings ?? undefined,
+        dripSettings: withSanitizedCampaignSenderName(dripSettings) ?? undefined,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         status: scheduledAt ? CampaignStatus.SCHEDULED : CampaignStatus.DRAFT,
         steps:

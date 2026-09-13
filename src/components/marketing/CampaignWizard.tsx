@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { CampaignChannel } from "@prisma/client";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { CampaignFlowEditor } from "@/components/marketing/CampaignFlowEditor";
 import { EmailCampaignEditor } from "@/components/marketing/EmailCampaignEditor";
@@ -184,7 +185,9 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Action failed");
       toast.success(
-        data.deferredForQuietHours
+        data.scheduledFor
+          ? `Campaign activated. First messages send ${format(new Date(data.scheduledFor), "MMM d, yyyy 'at' h:mm a")}`
+          : data.deferredForQuietHours
           ? "Campaign held until 8:00 AM local time (no sends between 9:00 PM and 8:00 AM)"
           : action === "activate"
             ? data.processed
@@ -327,6 +330,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           emailsPerDay={form.dripSettings.emailsPerDay ?? 50}
           smsPerDay={form.dripSettings.smsPerDay ?? 50}
           startAt={form.dripSettings.startAt}
+          senderName={form.dripSettings.senderName}
           channel={form.channel}
           audienceFilters={form.audienceFilters}
           onAudienceChange={(audienceFilters) => update("audienceFilters", audienceFilters)}

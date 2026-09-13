@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { phoneDigitsKey, phoneLookupVariants } from "@/lib/inbox/phone";
+import { phoneDigitsKey, phoneLookupVariants, phonesMatch } from "@/lib/inbox/phone";
 
 export type CustomerContact = {
   id: string;
@@ -130,4 +130,28 @@ export async function findCustomerByPhone(
   if (altEndsWith?.customer) return altEndsWith.customer;
 
   return findByDigitKey(companyId, last10);
+}
+
+/**
+ * Customer to attach to an SMS phone. Prefer the person who owns this number.
+ * Never return a requested id whose stored phone is a different number.
+ */
+export async function resolveCustomerIdForSmsPhone(
+  companyId: string,
+  phone: string,
+  requestedCustomerId?: string | null
+): Promise<string | undefined> {
+  const matched = await findCustomerByPhone(companyId, phone);
+  if (matched) return matched.id;
+
+  const requestedId = requestedCustomerId?.trim();
+  if (!requestedId) return undefined;
+
+  const requested = await prisma.customer.findFirst({
+    where: { id: requestedId, companyId },
+    select: { id: true, phone: true },
+  });
+  if (!requested) return undefined;
+  if (requested.phone && !phonesMatch(requested.phone, phone)) return undefined;
+  return requested.id;
 }

@@ -57,18 +57,19 @@ test("delay_or_reply summary and next check uses the earlier of timeout and poll
   assert.equal(check.getTime() - from.getTime(), REPLY_POLL_MS);
 });
 
-test("action wait has no timeout unless timeoutEnabled is set", () => {
-  const opened = parseWaitConfig({ mode: "action", action: "opened" });
-  assert.equal(opened.usesAction, true);
-  assert.equal(opened.hasTimeout, false);
+test("action wait maps open tracking to click tracking", () => {
+  const wait = parseWaitConfig({ mode: "action", action: "opened" });
+  assert.equal(wait.usesAction, true);
+  assert.equal(wait.hasTimeout, false);
+  assert.equal(wait.action, "clicked");
   assert.equal(waitSummary({ mode: "action", action: "clicked" }), "Until they click a link");
   assert.equal(
     waitSummary({ mode: "action", action: "opened_or_clicked" }),
-    "Until they open an email or click a link"
+    "Until they click a link"
   );
   const from = new Date("2026-09-08T12:00:00.000Z");
-  assert.equal(waitTimeoutAt(opened, from), null);
-  assert.equal(nextWaitCheckAt(opened, null, from).getTime() - from.getTime(), REPLY_POLL_MS);
+  assert.equal(waitTimeoutAt(wait, from), null);
+  assert.equal(nextWaitCheckAt(wait, null, from).getTime() - from.getTime(), REPLY_POLL_MS);
 });
 
 test("reply and action waits honor an explicit timeout", () => {
@@ -94,19 +95,14 @@ test("reply and action waits honor an explicit timeout", () => {
   };
   const action = parseWaitConfig(actionRaw);
   assert.equal(action.hasTimeout, true);
-  assert.equal(waitSummary(actionRaw), "Until they open an email or 2 days");
+  assert.equal(waitSummary(actionRaw), "Until they click a link or 2 days");
   assert.equal(waitTimeoutAt(action, from)?.toISOString(), "2026-09-10T12:00:00.000Z");
 });
 
-test("recipientMatchesWaitAction respects opened vs clicked", () => {
-  assert.equal(recipientMatchesWaitAction({ openedAt: new Date(), clickCount: 0 }, "opened"), true);
+test("recipientMatchesWaitAction only counts clicks", () => {
   assert.equal(recipientMatchesWaitAction({ openedAt: new Date(), clickCount: 0 }, "clicked"), false);
   assert.equal(recipientMatchesWaitAction({ clickedAt: new Date(), clickCount: 1 }, "clicked"), true);
-  assert.equal(
-    recipientMatchesWaitAction({ clickedAt: new Date(), clickCount: 1 }, "opened_or_clicked"),
-    true
-  );
-  assert.equal(recipientMatchesWaitAction(null, "opened"), false);
+  assert.equal(recipientMatchesWaitAction(null, "clicked"), false);
 });
 
 test("parseBranchWaitMs uses minutes when set", () => {

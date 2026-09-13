@@ -17,10 +17,11 @@ import { addZonedCalendarDays, startOfZonedDay } from "@/lib/datetime/zoned";
 import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { buildCampaignStats, mergeCampaignStatsJson } from "@/lib/marketing/stats";
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
-import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
+import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
+  resolveMarketingSenderName,
   resolveMarketingSmsFrom,
 } from "@/lib/marketing/sender";
 import { notifyAdminsCampaignQuietHours } from "@/lib/marketing/quiet-hours-notify";
@@ -135,6 +136,7 @@ async function sendToRecipient(
     name: string;
     bodyText: string;
     bodyHtml: string | null;
+    dripSettings?: unknown;
     company: {
       sendgridFrom: string | null;
       marketingSendgridFrom?: string | null;
@@ -153,6 +155,12 @@ async function sendToRecipient(
       privacyPolicyUrl?: string | null;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
+      supportEmail?: string | null;
+      website?: string | null;
+      address?: string | null;
+      city?: string | null;
+      state?: string | null;
+      zip?: string | null;
     };
   },
   recipient: {
@@ -170,13 +178,18 @@ async function sendToRecipient(
 ) {
   const channel = content?.channel ?? campaign.channel;
   let subject = content?.subject ?? campaign.subject ?? campaign.name;
-  let bodyText = content?.bodyText ?? campaign.bodyText;
-  let bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
+  let bodyText = ensureCampaignGreeting(
+    campaignPlainBodyText(content?.bodyHtml ?? campaign.bodyHtml, content?.bodyText ?? campaign.bodyText)
+  );
   const fromEmail = resolveMarketingEmailFrom(campaign.company);
   const branding = {
     companyName: campaign.company.name,
     sendgridFrom: fromEmail,
-    emailSenderName: campaign.company.emailSenderName,
+    emailSenderName: resolveMarketingSenderName({
+      dripSettings: campaign.dripSettings,
+      companySenderName: campaign.company.emailSenderName,
+      companyName: campaign.company.name,
+    }),
     emailLogoUrl: campaign.company.emailLogoUrl,
   };
   const fromPhone = resolveMarketingSmsFrom(campaign.company);
@@ -230,11 +243,10 @@ async function sendToRecipient(
     property: customerRecord?.properties[0] ?? null,
     subject,
     bodyText,
-    bodyHtml,
+    bodyHtml: "",
   });
   subject = personalized.subject;
   bodyText = personalized.bodyText;
-  bodyHtml = personalized.bodyHtml;
 
   const blocked = await isContactBlocked(
     campaign.companyId,
@@ -293,11 +305,12 @@ async function sendToRecipient(
     : `mailto:${fromEmail}?subject=unsubscribe%20marketing`;
 
   const outbound = buildMarketingEmailPayload({
-    bodyHtml,
+    bodyHtml: "",
     bodyText,
     unsubscribeUrl,
     recipientId: recipient.id,
     publicBaseUrl: campaign.company.customerBaseUrl,
+    signature: signatureFieldsFromCompany(campaign.company),
   });
 
   const response = await sendCompanyEmail(branding, {
@@ -305,8 +318,8 @@ async function sendToRecipient(
     to: [email],
     subject,
     text: outbound.text,
-    html: outbound.html,
-    skipBranding: outbound.unbranded,
+    skipBranding: true,
+    omitHtml: true,
   });
   await prisma.campaignRecipient.update({
     where: { id: recipient.id },

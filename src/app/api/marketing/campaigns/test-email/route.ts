@@ -3,9 +3,9 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
-import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
+import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
-import { resolveMarketingEmailFrom } from "@/lib/marketing/sender";
+import { resolveMarketingEmailFrom, resolveMarketingSenderName } from "@/lib/marketing/sender";
 import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import { prisma } from "@/lib/prisma";
 
@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
       typeof body.bodyText === "string" && body.bodyText.trim()
         ? body.bodyText
         : htmlToPlainText(bodyHtml);
+
+    const senderName =
+      typeof body.senderName === "string" && body.senderName.trim()
+        ? body.senderName.trim()
+        : null;
 
     if (!looksLikeEmail(to)) {
       return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
@@ -78,8 +83,8 @@ export async function POST(request: NextRequest) {
       },
       property: matchedCustomer?.properties[0] ?? null,
       subject,
-      bodyText,
-      bodyHtml: bodyHtml || null,
+      bodyText: ensureCampaignGreeting(campaignPlainBodyText(bodyHtml, bodyText)),
+      bodyHtml: "",
     });
 
     const unsubscribeUrl = matchedCustomer?.id
@@ -87,18 +92,23 @@ export async function POST(request: NextRequest) {
       : `${getCustomerBaseUrl(company)}/api/marketing/unsubscribe`;
 
     const outbound = buildMarketingEmailPayload({
-      bodyHtml: personalized.bodyHtml,
+      bodyHtml: "",
       bodyText: personalized.bodyText,
       unsubscribeUrl,
       recipientId: "test",
       publicBaseUrl: company.customerBaseUrl,
+      signature: signatureFieldsFromCompany(company),
     });
 
     const result = await sendCompanyEmail(
       {
         companyName: company.name,
         sendgridFrom: fromEmail,
-        emailSenderName: company.emailSenderName,
+        emailSenderName: resolveMarketingSenderName({
+          dripSettings: senderName ? { senderName } : null,
+          companySenderName: company.emailSenderName,
+          companyName: company.name,
+        }),
         emailLogoUrl: company.emailLogoUrl,
       },
       {
@@ -106,9 +116,9 @@ export async function POST(request: NextRequest) {
         to: [to],
         subject: personalized.subject || company.name,
         text: outbound.text,
-        html: outbound.html,
         bypassCommsFreeze: true,
-        skipBranding: outbound.unbranded,
+        skipBranding: true,
+        omitHtml: true,
       }
     );
 

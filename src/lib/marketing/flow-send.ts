@@ -6,9 +6,10 @@ import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
+  resolveMarketingSenderName,
   resolveMarketingSmsFrom,
 } from "@/lib/marketing/sender";
-import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
+import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 
@@ -19,6 +20,7 @@ export async function sendCampaignMessage(params: {
     companyId: string;
     name: string;
     subject: string | null;
+    dripSettings?: unknown;
     company: {
       sendgridFrom: string | null;
       marketingSendgridFrom?: string | null;
@@ -37,6 +39,12 @@ export async function sendCampaignMessage(params: {
       privacyPolicyUrl?: string | null;
       emailSenderName: string | null;
       emailLogoUrl: string | null;
+      supportEmail?: string | null;
+      website?: string | null;
+      address?: string | null;
+      city?: string | null;
+      state?: string | null;
+      zip?: string | null;
     };
   };
   customer: {
@@ -70,12 +78,12 @@ export async function sendCampaignMessage(params: {
     customer,
     property: params.property,
     subject: params.subject,
-    bodyText: params.bodyText,
-    bodyHtml: params.bodyHtml,
+    bodyText: ensureCampaignGreeting(campaignPlainBodyText(params.bodyHtml, params.bodyText)),
+    bodyHtml: "",
   });
   const subject = personalized.subject;
   const bodyText = personalized.bodyText;
-  const bodyHtml = personalized.bodyHtml;
+  const bodyHtml = "";
 
   if (customer.doNotService) {
     return false;
@@ -148,13 +156,18 @@ export async function sendCampaignMessage(params: {
       ),
       recipientId: recipient.id,
       publicBaseUrl: campaign.company.customerBaseUrl,
+      signature: signatureFieldsFromCompany(campaign.company),
     });
 
     const response = await sendCompanyEmail(
       {
         companyName: campaign.company.name,
         sendgridFrom: fromEmail,
-        emailSenderName: campaign.company.emailSenderName,
+        emailSenderName: resolveMarketingSenderName({
+          dripSettings: campaign.dripSettings,
+          companySenderName: campaign.company.emailSenderName,
+          companyName: campaign.company.name,
+        }),
         emailLogoUrl: campaign.company.emailLogoUrl,
       },
       {
@@ -162,8 +175,8 @@ export async function sendCampaignMessage(params: {
         to: [customer.email],
         subject: subject || campaign.name,
         text: outbound.text,
-        html: outbound.html,
-        skipBranding: outbound.unbranded,
+        skipBranding: true,
+        omitHtml: true,
       }
     );
 

@@ -1,47 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import {
-  ChevronDown,
-  ImagePlus,
-  Loader2,
-  Maximize2,
-  Minimize2,
-  Monitor,
-  Plus,
-  Send,
-  Smartphone,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { Loader2, Maximize2, Minimize2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  MediaLibraryPicker,
-  type MediaLibraryItem,
-} from "@/components/media/MediaLibraryPicker";
-import { EditableEmailPreview, type EditableEmailPreviewHandle } from "@/components/marketing/EditableEmailPreview";
-import { PlainEmailEditor, type PlainEmailEditorHandle } from "@/components/marketing/PlainEmailEditor";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
-import { absolutePublicBlobUrl } from "@/lib/blob/urls";
-import { stormBrand } from "@/lib/branding";
-import {
-  EMAIL_TEMPLATES,
-  isHtmlEmailBody,
-  isPlainEmailHtml,
-  isPlainTextEmailTemplate,
-  looksLikePlainEmail,
-  renderEmailTemplatePreview,
-  textToPlainEmailHtml,
-  wrapPlainEmailHtml,
-  type EmailTemplateId,
-} from "@/lib/marketing/email-templates";
+import { buildCompanySignatureText } from "@/lib/inbox/company-email-signature";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import {
+  DEFAULT_CAMPAIGN_GREETING,
+  campaignPlainBodyText,
+  signatureFieldsFromCompany,
+} from "@/lib/marketing/outbound-email";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -52,19 +27,9 @@ type Props = {
   onSubjectChange: (subject: string) => void;
   onBodyChange: (html: string, text: string) => void;
   onAiPromptChange: (prompt: string) => void;
-  /** When true, start in expanded/fullscreen layout. */
   defaultExpanded?: boolean;
-  /** Hide the expand/fullscreen control when the editor already lives in a popup. */
   hideExpandToggle?: boolean;
-};
-
-type PaletteState = {
-  primary: string;
-  secondary: string;
-  soft: string;
-  panel: string;
-  accent: string | null;
-  extras: string[];
+  senderName?: string;
 };
 
 type CompanyContact = {
@@ -75,15 +40,11 @@ type CompanyContact = {
   city: string | null;
   state: string | null;
   zip: string | null;
-  emailLogoUrl: string | null;
 };
 
-function normalizeHex(value: string, fallback: string) {
-  const raw = value.trim();
-  if (!raw) return fallback;
-  const withHash = raw.startsWith("#") ? raw : `#${raw}`;
-  if (!/^#[0-9a-fA-F]{6}$/i.test(withHash)) return fallback;
-  return withHash.toUpperCase();
+function seedPlainBody(html: string, text: string) {
+  const existing = campaignPlainBodyText(html, text);
+  return existing || `${DEFAULT_CAMPAIGN_GREETING}\n\n`;
 }
 
 function EmailCampaignEditorInner({
@@ -96,32 +57,12 @@ function EmailCampaignEditorInner({
   onAiPromptChange,
   defaultExpanded = true,
   hideExpandToggle = false,
+  senderName,
 }: Props) {
   const { brand } = useCompanyBrand();
-  const defaultPalette = useMemo<PaletteState>(() => {
-    const p = brand.palette;
-    return {
-      primary: normalizeHex(p.primary, stormBrand.sky),
-      secondary: normalizeHex(p.secondary, stormBrand.navy),
-      soft: normalizeHex(p.soft, stormBrand.ice),
-      panel: normalizeHex(p.panel, "#E8F4FA"),
-      accent: p.accent ? normalizeHex(p.accent, stormBrand.coral) : null,
-      extras: (p.extras ?? []).map((c) => normalizeHex(c, "#FFFFFF")),
-    };
-  }, [brand.palette]);
-
   const [generating, setGenerating] = useState(false);
-  const [mobilePreview, setMobilePreview] = useState(false);
-  const [htmlDraft, setHtmlDraft] = useState(bodyHtml);
-  const [plainDraft, setPlainDraft] = useState(bodyText);
+  const [plainDraft, setPlainDraft] = useState(() => seedPlainBody(bodyHtml, bodyText));
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [palette, setPalette] = useState<PaletteState>(defaultPalette);
-  const [paletteSeeded, setPaletteSeeded] = useState(false);
-  const [templateId, setTemplateId] = useState<EmailTemplateId>(() =>
-    looksLikePlainEmail(bodyHtml, bodyText) ? "plain" : "announcement"
-  );
-  const [selectedImages, setSelectedImages] = useState<MediaLibraryItem[]>([]);
-  const [mediaOpen, setMediaOpen] = useState(false);
   const [companyContact, setCompanyContact] = useState<CompanyContact>({
     phone: null,
     supportEmail: null,
@@ -130,33 +71,28 @@ function EmailCampaignEditorInner({
     city: null,
     state: null,
     zip: null,
-    emailLogoUrl: null,
   });
-  const [templateSeeded, setTemplateSeeded] = useState(false);
+  const [companySenderName, setCompanySenderName] = useState("");
   const [testOpen, setTestOpen] = useState(false);
   const [testTo, setTestTo] = useState("");
   const [sendingTest, setSendingTest] = useState(false);
-  const [htmlSourceOpen, setHtmlSourceOpen] = useState(false);
+  const [seeded, setSeeded] = useState(false);
   const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-  const htmlRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
-  const previewRef = useRef<EditableEmailPreviewHandle>(null);
-  const plainEditorRef = useRef<PlainEmailEditorHandle>(null);
-  const isPlain = isPlainTextEmailTemplate(templateId);
+  const bodyRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setHtmlDraft(bodyHtml);
-  }, [bodyHtml]);
+    const next = seedPlainBody(bodyHtml, bodyText);
+    setPlainDraft(next);
+  }, [bodyHtml, bodyText]);
 
   useEffect(() => {
-    setPlainDraft(bodyText);
-  }, [bodyText]);
-
-  useEffect(() => {
-    if (paletteSeeded) return;
-    if (!brand.companyId && brand.primaryColor === stormBrand.sky) return;
-    setPalette(defaultPalette);
-    setPaletteSeeded(true);
-  }, [brand.companyId, brand.primaryColor, defaultPalette, paletteSeeded]);
+    if (seeded) return;
+    const next = seedPlainBody(bodyHtml, bodyText);
+    if (next !== (bodyText || htmlToPlainText(bodyHtml))) {
+      onBodyChange("", next);
+    }
+    setSeeded(true);
+  }, [bodyHtml, bodyText, onBodyChange, seeded]);
 
   useEffect(() => {
     fetch("/api/settings/company/branding")
@@ -171,27 +107,19 @@ function EmailCampaignEditorInner({
           city: data.city ?? null,
           state: data.state ?? null,
           zip: data.zip ?? null,
-          emailLogoUrl: data.emailLogoUrl ?? null,
         });
+        setCompanySenderName(
+          (typeof data.emailSenderName === "string" && data.emailSenderName.trim()) ||
+            (typeof data.name === "string" && data.name.trim()) ||
+            ""
+        );
       })
       .catch(() => {});
   }, []);
 
-  function applyHtml(next: string) {
-    setHtmlDraft(next);
-    onBodyChange(next, htmlToPlainText(next));
-  }
-
-  function applyPlainHtml(nextHtml: string) {
-    const wrapped = wrapPlainEmailHtml(nextHtml);
-    const text = htmlToPlainText(wrapped);
-    setHtmlDraft(wrapped);
-    setPlainDraft(text);
-    onBodyChange(wrapped, text);
-  }
-
-  function applyPlainFromText(next: string) {
-    applyPlainHtml(textToPlainEmailHtml(next));
+  function applyPlain(next: string) {
+    setPlainDraft(next);
+    onBodyChange("", next);
   }
 
   function insertIntoSubject(token: string) {
@@ -199,91 +127,17 @@ function EmailCampaignEditorInner({
     onSubjectChange(next);
   }
 
-  function insertIntoHtml(token: string) {
-    const { next } = applyTokenToInput(htmlRef.current, htmlDraft, token);
-    applyHtml(next);
+  function insertIntoBody(token: string) {
+    const { next } = applyTokenToInput(bodyRef.current, plainDraft, token);
+    applyPlain(next);
   }
 
-  const applyTemplate = useCallback(
-    (id: EmailTemplateId, nextPalette?: PaletteState) => {
-      setTemplateSeeded(true);
-      if (id === "plain") {
-        if (templateId === "plain" && isPlainEmailHtml(htmlDraft)) {
-          setTemplateId("plain");
-          return;
-        }
-        const starting =
-          templateId === "plain" ? plainDraft : htmlToPlainText(htmlDraft) || plainDraft;
-        setTemplateId("plain");
-        applyPlainFromText(starting);
-        return;
-      }
-      const p = nextPalette ?? palette;
-      const logoUrl =
-        absolutePublicBlobUrl(companyContact.emailLogoUrl) ||
-        brand.logoUrl ||
-        null;
-      const html = renderEmailTemplatePreview({
-        templateId: id,
-        company: {
-          companyName: brand.companyName,
-          logoUrl,
-          phone: companyContact.phone,
-          email: companyContact.supportEmail,
-          website: companyContact.website,
-          address: companyContact.address,
-          city: companyContact.city,
-          state: companyContact.state,
-          zip: companyContact.zip,
-        },
-        palette: {
-          primary: p.primary,
-          secondary: p.secondary,
-          soft: p.soft,
-          panel: p.panel,
-          accent: p.accent,
-          extras: p.extras,
-        },
-        heroImageUrl: selectedImages[0]?.publicUrl ?? null,
-      });
-      setTemplateId(id);
-      applyHtml(html);
-    },
-    [brand.companyName, brand.logoUrl, companyContact, palette, selectedImages, htmlDraft, plainDraft, templateId]
+  const signaturePreview = buildCompanySignatureText(
+    signatureFieldsFromCompany({
+      name: brand.companyName,
+      ...companyContact,
+    })
   );
-
-  // Seed announcement template into an empty editor once branding/contact is ready.
-  useEffect(() => {
-    if (templateSeeded) return;
-    if (isHtmlEmailBody(bodyHtml) && !isPlainEmailHtml(bodyHtml)) {
-      setTemplateSeeded(true);
-      return;
-    }
-    if (isPlainEmailHtml(bodyHtml) || String(bodyText ?? "").trim()) {
-      setTemplateId("plain");
-      if (!isPlainEmailHtml(bodyHtml) && String(bodyText ?? "").trim()) {
-        applyPlainFromText(bodyText);
-      }
-      setTemplateSeeded(true);
-      return;
-    }
-    if (!brand.companyId && brand.companyName === "Company") return;
-    applyTemplate("announcement");
-    setTemplateSeeded(true);
-  }, [applyTemplate, bodyHtml, bodyText, brand.companyId, brand.companyName, templateSeeded]);
-
-  function insertImageIntoHtml(url: string, alt: string) {
-    const img = `<img src="${url}" alt="${alt.replace(/"/g, "&quot;")}" width="600" style="width:100%;max-width:600px;height:auto;display:block;margin:16px auto;" />`;
-    if (!htmlDraft.trim()) {
-      applyHtml(img);
-      return;
-    }
-    if (/<\/body>/i.test(htmlDraft)) {
-      applyHtml(htmlDraft.replace(/<\/body>/i, `${img}</body>`));
-      return;
-    }
-    applyHtml(`${htmlDraft}\n${img}`);
-  }
 
   async function runAi() {
     if (!aiPrompt.trim()) {
@@ -298,39 +152,15 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           prompt: aiPrompt,
           subject,
-          existingHtml: isPlain ? undefined : htmlDraft.trim() || undefined,
-          existingText: isPlain
-            ? htmlToPlainText(htmlDraft) || plainDraft.trim() || undefined
-            : undefined,
-          brandPalette: {
-            primary: palette.primary,
-            secondary: palette.secondary,
-            soft: palette.soft,
-            panel: palette.panel,
-            accent: palette.accent,
-            extras: palette.extras,
-          },
-          templateId,
-          imageUrls: isPlain ? [] : selectedImages.map((img) => img.publicUrl),
+          existingText: plainDraft.trim() || undefined,
+          templateId: "plain",
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "AI request failed");
       onSubjectChange(data.subject ?? subject);
-      if (isPlain) {
-        applyPlainHtml(data.bodyHtml || textToPlainEmailHtml(data.bodyText ?? ""));
-      } else {
-        applyHtml(data.bodyHtml ?? "");
-      }
-      toast.success(
-        isPlain
-          ? plainDraft.trim()
-            ? "Email updated"
-            : "Email generated"
-          : htmlDraft.trim()
-            ? "HTML updated"
-            : "Email generated"
-      );
+      applyPlain(typeof data.bodyText === "string" ? data.bodyText : plainDraft);
+      toast.success(plainDraft.trim() ? "Email updated" : "Email generated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI request failed");
     } finally {
@@ -344,7 +174,7 @@ function EmailCampaignEditorInner({
       toast.error("Enter an email address");
       return;
     }
-    if (!subject.trim() && !htmlDraft.trim() && !plainDraft.trim()) {
+    if (!subject.trim() && !plainDraft.trim()) {
       toast.error("Add a subject or email body first");
       return;
     }
@@ -356,8 +186,9 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           to,
           subject,
-          bodyHtml: htmlDraft,
-          bodyText: isPlain ? plainDraft : htmlToPlainText(htmlDraft),
+          bodyHtml: "",
+          bodyText: plainDraft,
+          senderName,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -370,10 +201,7 @@ function EmailCampaignEditorInner({
     }
   }
 
-  const hasExistingHtml = Boolean(htmlDraft.trim());
-  const hasExistingBody = isPlain
-    ? Boolean(plainDraft.trim() || htmlToPlainText(htmlDraft).trim())
-    : hasExistingHtml;
+  const hasExistingBody = Boolean(plainDraft.trim());
 
   return (
     <div
@@ -384,19 +212,10 @@ function EmailCampaignEditorInner({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Email builder</h3>
+          <h3 className="text-sm font-semibold">Email</h3>
           <p className="text-xs text-muted-foreground">
-            {isPlain
-              ? "Simple formatted email — bold, italic, underline, and links like “click here”. A small Unsubscribe link is added at the bottom when it sends."
-              : (
-                <>
-                  Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
-                  <Link href="/settings/campaign-links" className="underline">
-                    Campaign links
-                  </Link>
-                  .
-                </>
-              )}
+            Plain text only — the same kind of message you’d type in Gmail. Company contact info and an
+            unsubscribe link are added when it sends. Put links in as full URLs so we can track clicks.
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -417,12 +236,7 @@ function EmailCampaignEditorInner({
                   if (e.key === "Escape") setTestOpen(false);
                 }}
               />
-              <Button
-                type="button"
-                size="sm"
-                disabled={sendingTest}
-                onClick={() => void sendTestEmail()}
-              >
+              <Button type="button" size="sm" disabled={sendingTest} onClick={() => void sendTestEmail()}>
                 {sendingTest ? (
                   <>
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -435,13 +249,7 @@ function EmailCampaignEditorInner({
                   </>
                 )}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={sendingTest}
-                onClick={() => setTestOpen(false)}
-              >
+              <Button type="button" size="sm" variant="ghost" disabled={sendingTest} onClick={() => setTestOpen(false)}>
                 Cancel
               </Button>
             </div>
@@ -477,79 +285,17 @@ function EmailCampaignEditorInner({
       >
         <div className="space-y-3 rounded-lg border bg-white p-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
           <h3 className="text-sm font-semibold">AI assistant</h3>
-
-          <div>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Template</p>
-            <div className="space-y-2">
-              {EMAIL_TEMPLATES.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => applyTemplate(tpl.id)}
-                  className={cn(
-                    "w-full rounded-md border px-3 py-2 text-left text-sm transition",
-                    templateId === tpl.id
-                      ? "border-storm-sky bg-sky-50"
-                      : "hover:border-slate-300"
-                  )}
-                >
-                  <span className="font-medium">{tpl.name}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {tpl.description}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {!isPlain ? (
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-muted-foreground">Photos</p>
-              <Button type="button" variant="outline" size="sm" onClick={() => setMediaOpen(true)}>
-                <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
-                Library
-              </Button>
-            </div>
-            {selectedImages.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Optional — AI can place selected library photos in the layout.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {selectedImages.map((img) => (
-                  <div key={img.id} className="relative h-14 w-14 overflow-hidden rounded border">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={img.previewUrl} alt="" className="h-full w-full object-cover" />
-                    <button
-                      type="button"
-                      className="absolute right-0 top-0 bg-black/60 p-0.5 text-white"
-                      onClick={() =>
-                        setSelectedImages((prev) => prev.filter((x) => x.id !== img.id))
-                      }
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          ) : null}
-
           <textarea
             className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
             value={aiPrompt}
             onChange={(e) => onAiPromptChange(e.target.value)}
             placeholder={
               hasExistingBody
-                ? isPlain
-                  ? "Describe edits: shorter, warmer tone, add a sign-off…"
-                  : "Describe edits: make the CTA use primary, shorten the intro…"
-                : "Describe your campaign: offer, tone, what the CTA should say…"
+                ? "Describe edits: shorter, warmer tone…"
+                : "Describe the email: offer, tone, what they should do next…"
             }
           />
-          <Button type="button" className="w-full" onClick={runAi} disabled={generating}>
+          <Button type="button" className="w-full" onClick={() => void runAi()} disabled={generating}>
             {generating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -558,112 +304,27 @@ function EmailCampaignEditorInner({
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                  {hasExistingBody ? "Fill / edit with AI" : "Generate email"}
+                {hasExistingBody ? "Fill / edit with AI" : "Generate email"}
               </>
             )}
           </Button>
-          {!isPlain ? (
-          <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium text-foreground">Brand palette</p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setPalette(defaultPalette);
-                  toast.success("Palette reset to company branding");
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-            <p className="mt-1">
-              Edit colors for AI generate/edit. Click a swatch to copy hex into your HTML.
-            </p>
-
-            <PaletteRow
-              label="Primary"
-              value={palette.primary}
-              onChange={(hex) => setPalette((p) => ({ ...p, primary: hex }))}
-            />
-            <PaletteRow
-              label="Secondary"
-              value={palette.secondary}
-              onChange={(hex) => setPalette((p) => ({ ...p, secondary: hex }))}
-            />
-            <PaletteRow
-              label="Soft"
-              value={palette.soft}
-              onChange={(hex) => setPalette((p) => ({ ...p, soft: hex }))}
-            />
-            <PaletteRow
-              label="Panel"
-              value={palette.panel}
-              onChange={(hex) => setPalette((p) => ({ ...p, panel: hex }))}
-            />
-            {palette.accent ? (
-              <PaletteRow
-                label="Accent"
-                value={palette.accent}
-                onChange={(hex) => setPalette((p) => ({ ...p, accent: hex }))}
-                onRemove={() => setPalette((p) => ({ ...p, accent: null }))}
-              />
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2 w-full"
-                onClick={() => setPalette((p) => ({ ...p, accent: stormBrand.coral }))}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add accent
-              </Button>
-            )}
-
-            {palette.extras.map((extra, idx) => (
-              <PaletteRow
-                key={`extra-${idx}`}
-                label={`Extra ${idx + 1}`}
-                value={extra}
-                onChange={(hex) =>
-                  setPalette((p) => ({
-                    ...p,
-                    extras: p.extras.map((c, i) => (i === idx ? hex : c)),
-                  }))
-                }
-                onRemove={() =>
-                  setPalette((p) => ({
-                    ...p,
-                    extras: p.extras.filter((_, i) => i !== idx),
-                  }))
-                }
-              />
-            ))}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-2 w-full"
-              onClick={() =>
-                setPalette((p) => ({
-                  ...p,
-                  extras: [...p.extras, "#CCCCCC"],
-                }))
-              }
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add color
-            </Button>
-          </div>
-          ) : null}
+          <p className="text-xs text-muted-foreground">
+            Booking and other links come from{" "}
+            <Link href="/settings/campaign-links" className="underline">
+              Campaign links
+            </Link>
+            . Write them as full URLs in the message.
+          </p>
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
           <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col overflow-hidden rounded-lg border bg-white">
+            <div className="border-b px-3 py-2">
+              <label className="text-xs font-medium text-muted-foreground">From</label>
+              <p className="mt-1 text-sm text-foreground">
+                {senderName?.trim() || companySenderName || brand.companyName}
+              </p>
+            </div>
             <div className="border-b px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-xs font-medium text-muted-foreground">Subject</label>
@@ -677,198 +338,37 @@ function EmailCampaignEditorInner({
                 onChange={onSubjectChange}
                 placeholder="Hi {customer_first_name}, a note from us"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Customer variables are personalized at send. Click a highlighted token to set
-                fallback text.
+            </div>
+            <div className="border-b px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">Message</h3>
+                <InsertVariableButton onInsert={insertIntoBody} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Starts with a greeting. Signature and unsubscribe are appended automatically — don’t paste
+                HTML.
               </p>
             </div>
-            {isPlain ? (
-              <>
-                <div className="border-b px-3 py-2">
-                  <h3 className="text-sm font-semibold">Message</h3>
-                  <p className="text-xs text-muted-foreground">
-                    No photos or layout — just the email, with optional bold, italic, underline, and
-                    links. A small Unsubscribe link is added at the bottom when it sends.
-                  </p>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <PlainEmailEditor
-                    ref={plainEditorRef}
-                    html={htmlDraft || textToPlainEmailHtml(plainDraft)}
-                    onChange={applyPlainHtml}
-                    placeholder="Hi {customer_first_name}, write your email here…"
-                    actions={
-                      <InsertVariableButton
-                        onInsert={(token) => plainEditorRef.current?.insertMergeToken(token)}
-                      />
-                    }
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-            <div className="flex items-center justify-between border-b px-3 py-2">
-              <div>
-                <h3 className="text-sm font-semibold">Live preview</h3>
-                <p className="text-xs text-muted-foreground">
-                  {mobilePreview ? "Mobile · 375px wide" : "Desktop · up to 640px wide"}
-                </p>
-              </div>
-              <div className="flex gap-1">
-                <InsertVariableButton
-                  onInsert={(token) => previewRef.current?.insertMergeToken(token)}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={mobilePreview ? "ghost" : "secondary"}
-                  onClick={() => setMobilePreview(false)}
-                >
-                  <Monitor className="mr-1.5 h-4 w-4" />
-                  Desktop
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={mobilePreview ? "secondary" : "ghost"}
-                  onClick={() => setMobilePreview(true)}
-                >
-                  <Smartphone className="mr-1.5 h-4 w-4" />
-                  Mobile
-                </Button>
-              </div>
-            </div>
-            <EditableEmailPreview
-              ref={previewRef}
-              html={htmlDraft}
-              mobilePreview={mobilePreview}
-              onHtmlChange={applyHtml}
-            />
-              </>
-            )}
-          </div>
-
-          {!isPlain ? (
-          <div className="flex flex-col rounded-lg border bg-white">
-            <div className="flex items-center justify-between px-3 py-2">
-              <button
-                type="button"
-                className="flex items-center gap-1.5 text-left"
-                onClick={() => setHtmlSourceOpen((open) => !open)}
-                aria-expanded={htmlSourceOpen}
-              >
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-muted-foreground transition-transform",
-                    !htmlSourceOpen && "-rotate-90"
-                  )}
-                />
-                <h3 className="text-sm font-semibold">HTML source</h3>
-              </button>
-              {htmlSourceOpen ? (
-                <div className="flex gap-1">
-                  <InsertVariableButton onInsert={insertIntoHtml} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setMediaOpen(true)}>
-                    Insert image
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={!htmlDraft}
-                    onClick={() => applyHtml("")}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-            {htmlSourceOpen ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
               <MergeTokenTextField
-                ref={htmlRef}
-                tone="dark"
-                className="min-h-[160px] max-h-[240px] resize-y border-t bg-slate-950 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 outline-none"
-                value={htmlDraft}
-                onChange={applyHtml}
-                spellCheck={false}
-                placeholder="Paste a full email HTML document here…"
+                ref={bodyRef}
+                className="min-h-[min(50vh,520px)] w-full resize-none border-0 px-4 py-3 text-sm leading-relaxed outline-none"
+                value={plainDraft}
+                onChange={applyPlain}
+                placeholder={`${DEFAULT_CAMPAIGN_GREETING}\n\nWrite the rest of the email here…`}
               />
-            ) : null}
+            </div>
+            <div className="border-t bg-muted/30 px-4 py-3">
+              <p className="text-xs font-medium text-muted-foreground">Added when it sends</p>
+              <pre className="mt-2 whitespace-pre-wrap font-sans text-sm text-foreground/80">
+                {signaturePreview || brand.companyName}
+                {"\n\n"}
+                Unsubscribe: (link added for each recipient)
+              </pre>
+            </div>
           </div>
-          ) : null}
         </div>
       </div>
-
-      <MediaLibraryPicker
-        open={mediaOpen}
-        onOpenChange={setMediaOpen}
-        onSelect={(asset) => {
-          setSelectedImages((prev) =>
-            prev.some((p) => p.id === asset.id) ? prev : [...prev, asset].slice(0, 4)
-          );
-          if (!isPlain && hasExistingHtml) {
-            insertImageIntoHtml(asset.publicUrl, asset.alt ?? asset.fileName);
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-function PaletteRow({
-  label,
-  value,
-  onChange,
-  onRemove,
-}: {
-  label: string;
-  value: string;
-  onChange: (hex: string) => void;
-  onRemove?: () => void;
-}) {
-  const hex = normalizeHex(value, "#000000");
-  return (
-    <div className="mt-2 flex items-center gap-2">
-      <button
-        type="button"
-        title={`Copy ${hex}`}
-        className="h-7 w-7 shrink-0 rounded border border-border"
-        style={{ backgroundColor: hex }}
-        onClick={() => {
-          void navigator.clipboard?.writeText(hex);
-          toast.success(`Copied ${hex}`);
-        }}
-      />
-      <input
-        type="color"
-        aria-label={`${label} color picker`}
-        className="h-7 w-8 cursor-pointer rounded border border-border bg-transparent p-0"
-        value={hex}
-        onChange={(e) => onChange(e.target.value.toUpperCase())}
-      />
-      <Input
-        className="h-7 flex-1 font-mono text-xs"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => onChange(normalizeHex(value, hex))}
-        aria-label={`${label} hex`}
-      />
-      {onRemove ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={onRemove}
-          aria-label={`Remove ${label}`}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      ) : (
-        <span className="w-7 shrink-0 text-[10px] font-medium uppercase text-muted-foreground">
-          {label.slice(0, 3)}
-        </span>
-      )}
     </div>
   );
 }

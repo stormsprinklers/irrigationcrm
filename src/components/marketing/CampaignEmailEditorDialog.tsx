@@ -16,6 +16,7 @@ type Props = {
   onSubjectChange: (subject: string) => void;
   onAiPromptChange: (prompt: string) => void;
   onBodyChange: (html: string, text: string) => void;
+  senderName?: string;
 };
 
 export function CampaignEmailEditorDialog({
@@ -28,6 +29,7 @@ export function CampaignEmailEditorDialog({
   onSubjectChange,
   onAiPromptChange,
   onBodyChange,
+  senderName,
 }: Props) {
   const [mounted, setMounted] = useState(false);
   const onCloseRef = useRef(onClose);
@@ -96,6 +98,7 @@ export function CampaignEmailEditorDialog({
             onSubjectChange={onSubjectChange}
             onAiPromptChange={onAiPromptChange}
             onBodyChange={onBodyChange}
+            senderName={senderName}
           />
         </div>
       </div>

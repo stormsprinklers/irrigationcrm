@@ -21,6 +21,7 @@ import {
   formatSmsDeliveryFailure,
   isSmsNotDelivered,
 } from "@/lib/inbox/sms-delivery";
+import { resolveSmsSendTarget } from "@/lib/inbox/sms-send-target";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
@@ -57,6 +58,7 @@ function ComposeBar({
   onBodyChange,
   onSubmit,
   sending,
+  canSend = true,
   attachments,
   onAttachmentsChange,
   placeholder = "Type a message...",
@@ -66,6 +68,7 @@ function ComposeBar({
   onBodyChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   sending: boolean;
+  canSend?: boolean;
   attachments: PendingAttachment[];
   onAttachmentsChange: (attachments: PendingAttachment[]) => void;
   placeholder?: string;
@@ -98,7 +101,7 @@ function ComposeBar({
           className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
-      <Button type="submit" size="icon" className="shrink-0" disabled={sending || (!body.trim() && !attachments.length)}>
+      <Button type="submit" size="icon" className="shrink-0" disabled={sending || !canSend || (!body.trim() && !attachments.length)}>
         <Send className="h-4 w-4" />
       </Button>
       </div>
@@ -135,7 +138,17 @@ export function SmsMessagePane({
   const isCompose = !conversationId;
 
   useEffect(() => {
-    if (conversationId) return;
+    setBody("");
+    setAttachments([]);
+    setContactInfoMessageId(null);
+    setDeliveryDetailMsg(null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (conversationId) {
+      setRecipient(null);
+      return;
+    }
     if (initialPhone || initialName) {
       setRecipient({
         phone: initialPhone ?? "",
@@ -154,37 +167,55 @@ export function SmsMessagePane({
       return;
     }
 
+    let cancelled = false;
+    setConversation(null);
+    setMessages([]);
+
     async function load() {
       const res = await fetch(`/api/inbox/sms/conversations/${conversationId}/messages`);
-      if (res.ok) {
-        const data = await res.json();
-        setConversation(data.conversation);
-        setMessages(
-          data.messages.map((msg: Message & { contactInfoAppliedAt?: string | Date | null }) => ({
-            ...msg,
-            contactInfoAppliedAt: msg.contactInfoAppliedAt
-              ? new Date(msg.contactInfoAppliedAt).toISOString()
-              : null,
-          }))
-        );
-        if (conversationId && badgesNotifiedFor.current !== conversationId) {
-          badgesNotifiedFor.current = conversationId;
-          notifyInboxBadgesChanged();
-        }
+      if (cancelled || !res.ok) return;
+      const data = await res.json();
+      if (cancelled) return;
+      setConversation(data.conversation);
+      setMessages(
+        data.messages.map((msg: Message & { contactInfoAppliedAt?: string | Date | null }) => ({
+          ...msg,
+          contactInfoAppliedAt: msg.contactInfoAppliedAt
+            ? new Date(msg.contactInfoAppliedAt).toISOString()
+            : null,
+        }))
+      );
+      if (conversationId && badgesNotifiedFor.current !== conversationId) {
+        badgesNotifiedFor.current = conversationId;
+        notifyInboxBadgesChanged();
       }
     }
     load();
     const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [conversationId]);
+
+  const thread = conversation?.id === conversationId ? conversation : null;
+  const threadMessages = thread ? messages : [];
+  const canSend = conversationId
+    ? Boolean(thread?.participantPhone)
+    : Boolean(recipient?.phone);
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!body.trim() && !attachments.length) return;
 
-    const toPhone = recipient?.phone ?? conversation?.participantPhone;
-    if (!toPhone?.trim()) {
-      toast.error("Select a recipient");
+    const target = resolveSmsSendTarget({
+      conversationId,
+      conversation: thread,
+      recipient,
+      initialCustomerId,
+    });
+    if (!target.ok) {
+      toast.error(target.error);
       return;
     }
 
@@ -193,12 +224,13 @@ export function SmsMessagePane({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to: toPhone,
+        to: target.to,
+        conversationId: target.conversationId,
         body,
         media: attachments,
-        customerId: recipient?.customerId ?? conversation?.customer?.id ?? initialCustomerId ?? undefined,
-        userId: recipient?.userId,
-        title: recipient?.name ?? conversation?.title ?? undefined,
+        customerId: target.customerId,
+        userId: target.userId,
+        title: target.title,
         scope: scope === "customers" ? "external" : "internal",
       }),
     });
@@ -213,24 +245,24 @@ export function SmsMessagePane({
     const data = await res.json();
     setBody("");
     setAttachments([]);
+    setRecipient(null);
     toast.success("Message sent");
     onSent?.(data.conversation.id);
   }
 
-  const displayPhone = conversation?.participantPhone
-    ? formatPhoneDisplay(conversation.participantPhone)
-    : recipient?.phone
+  const displayPhone = thread?.participantPhone
+    ? formatPhoneDisplay(thread.participantPhone)
+    : isCompose && recipient?.phone
       ? formatPhoneDisplay(recipient.phone)
-      : initialPhone && isCompose
+      : isCompose && initialPhone
         ? formatPhoneDisplay(initialPhone)
         : null;
 
-  const displayName =
-    conversation?.customer?.name ??
-    recipient?.name ??
-    conversation?.title ??
-    (initialName && !conversationId ? initialName : null) ??
-    null;
+  const displayName = thread
+    ? thread.customer?.name ?? thread.title ?? null
+    : isCompose
+      ? recipient?.name ?? initialName ?? null
+      : null;
 
   const headerTitle =
     displayName ?? displayPhone ?? (conversationId ? "Conversation" : "New message");
@@ -239,7 +271,7 @@ export function SmsMessagePane({
     displayName && displayPhone && displayName !== displayPhone ? displayPhone : null;
 
   const blockPhone =
-    conversation?.customer?.phone ?? conversation?.participantPhone ?? null;
+    thread?.customer?.phone ?? thread?.participantPhone ?? null;
   const showBlockAction =
     scope === "customers" && Boolean(conversationId) && Boolean(blockPhone);
 
@@ -256,10 +288,10 @@ export function SmsMessagePane({
         {showBlockAction ? (
           <BlockContactAction
             inline
-            customerId={conversation?.customer?.id}
+            customerId={thread?.customer?.id}
             phone={blockPhone}
-            email={conversation?.customer?.email}
-            name={conversation?.customer?.name ?? phone}
+            email={thread?.customer?.email}
+            name={thread?.customer?.name ?? phone}
           />
         ) : null}
       </div>
@@ -270,11 +302,11 @@ export function SmsMessagePane({
     <div className="flex h-full w-full min-w-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
         <div className="min-w-0">
-          {conversation?.customer?.name ? (
+          {thread?.customer?.name ? (
             <>
               <CustomerNameWithBadge
-                name={conversation.customer.name}
-                doNotService={conversation.customer.doNotService}
+                name={thread.customer.name}
+                doNotService={thread.customer.doNotService}
                 nameClassName="truncate font-semibold"
               />
               {displayPhone ? <PhoneRow phone={displayPhone} /> : null}
@@ -308,20 +340,20 @@ export function SmsMessagePane({
       <div className="min-h-0 flex-1 overflow-hidden bg-muted/20">
         <ScrollArea className="h-full w-full">
           <div className="flex min-h-full flex-col p-4">
-            {messages.length > 0 ? (
+            {threadMessages.length > 0 ? (
               <div className="space-y-3">
-                {messages.map((msg) => {
+                {threadMessages.map((msg) => {
                   const attribution =
                     msg.direction === "OUTBOUND"
                       ? msg.sender?.name ?? "Team"
                       : scope === "customers"
-                        ? conversation?.customer?.name ??
-                          (conversation?.participantPhone
-                            ? formatPhoneDisplay(conversation.participantPhone)
+                        ? thread?.customer?.name ??
+                          (thread?.participantPhone
+                            ? formatPhoneDisplay(thread.participantPhone)
                             : "Customer")
-                        : conversation?.title ??
-                          (conversation?.participantPhone
-                            ? formatPhoneDisplay(conversation.participantPhone)
+                        : thread?.title ??
+                          (thread?.participantPhone
+                            ? formatPhoneDisplay(thread.participantPhone)
                             : "Team member");
 
                   return (
@@ -417,6 +449,7 @@ export function SmsMessagePane({
         onBodyChange={setBody}
         onSubmit={handleSend}
         sending={sending}
+        canSend={canSend}
         attachments={attachments}
         onAttachmentsChange={setAttachments}
         multiline
@@ -429,7 +462,9 @@ export function SmsMessagePane({
           onClose={() => setContactInfoMessageId(null)}
           onApplied={(customer) => {
             setConversation((prev) =>
-              prev ? { ...prev, customer: { ...customer, doNotService: prev.customer?.doNotService } } : prev
+              prev && prev.id === conversationId
+                ? { ...prev, customer: { ...customer, doNotService: prev.customer?.doNotService } }
+                : prev
             );
             setMessages((prev) =>
               prev.map((msg) =>

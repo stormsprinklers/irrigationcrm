@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { CampaignChannel, CampaignStatus, CampaignType } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { uniqueCampaignRecipientCount } from "@/lib/marketing/stats";
+import { withSanitizedCampaignSenderName } from "@/lib/marketing/sender";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
         listId: listId ?? null,
         audienceFilters: audienceFilters ?? undefined,
         aiPrompt: aiPrompt ?? null,
-        dripSettings: dripSettings ?? undefined,
+        dripSettings: withSanitizedCampaignSenderName(dripSettings) ?? undefined,
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         status: scheduledAt ? CampaignStatus.SCHEDULED : CampaignStatus.DRAFT,
       },

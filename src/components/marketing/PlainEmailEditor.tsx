@@ -186,10 +186,7 @@ export const PlainEmailEditor = forwardRef<PlainEmailEditorHandle, Props>(
             <Link2 className="mr-1 h-3.5 w-3.5" />
             Link
           </Button>
-          <span className="ml-auto text-xs text-muted-foreground">
-            Select text and add a link, or insert “click here”
-          </span>
-          {actions}
+          {actions ? <div className="ml-auto">{actions}</div> : null}
         </div>
         <div
           ref={editorRef}

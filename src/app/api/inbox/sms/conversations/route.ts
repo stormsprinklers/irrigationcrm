@@ -8,11 +8,12 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { phonesMatch } from "@/lib/inbox/phone";
 import { sendSms } from "@/lib/inbox/twilio";
 import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
-import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
-import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { findOrCreateSmsConversation, nextCustomerIdForSmsPhone } from "@/lib/inbox/conversations";
+import { resolveCustomerIdForSmsPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { isBlobStorageUrl } from "@/lib/blob/urls";
@@ -22,7 +23,8 @@ import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 
 type SendSmsBody = {
-  to: string;
+  to?: string;
+  conversationId?: string;
   body?: string;
   customerId?: string;
   scope?: string;
@@ -67,11 +69,14 @@ async function sendSmsMessage(params: {
     throw new Error("Message body or media required");
   }
 
-  let resolvedCustomerId = params.customerId;
-  if (params.scope === Scope.EXTERNAL && !resolvedCustomerId) {
-    const customer = await findCustomerByPhone(params.user.companyId, normalizedTo);
-    resolvedCustomerId = customer?.id;
-  }
+  const resolvedCustomerId =
+    params.scope === Scope.EXTERNAL
+      ? await resolveCustomerIdForSmsPhone(
+          params.user.companyId,
+          normalizedTo,
+          params.customerId
+        )
+      : params.customerId;
 
   let recipientTitle = params.title?.trim() || undefined;
   if (params.scope === Scope.INTERNAL && !recipientTitle && params.userId) {
@@ -188,12 +193,41 @@ export async function GET(request: NextRequest) {
       orderBy: { lastMessageAt: "desc" },
     });
 
-    return NextResponse.json(
-      conversations.map(({ _count, ...conversation }) => ({
-        ...conversation,
+    const rows = [];
+    for (const conversation of conversations) {
+      const { _count, customer, ...rest } = conversation;
+      let customerId = conversation.customerId;
+      let nextCustomer = customer;
+      if (
+        scope === Scope.EXTERNAL &&
+        conversation.participantPhone &&
+        customer?.phone &&
+        !phonesMatch(customer.phone, conversation.participantPhone)
+      ) {
+        const nextId = await nextCustomerIdForSmsPhone({
+          companyId: user.companyId,
+          participantPhone: conversation.participantPhone,
+          currentCustomerId: conversation.customerId,
+        });
+        if (nextId !== (conversation.customerId ?? null)) {
+          const updated = await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { customerId: nextId },
+            include: { customer: true },
+          });
+          customerId = updated.customerId;
+          nextCustomer = updated.customer;
+        }
+      }
+      rows.push({
+        ...rest,
+        customerId,
+        customer: nextCustomer,
         unreadCount: _count.messages,
-      }))
-    );
+      });
+    }
+
+    return NextResponse.json(rows);
   } catch {
     return unauthorizedResponse();
   }
@@ -204,17 +238,40 @@ export async function POST(request: NextRequest) {
     const user = await requireSessionUser();
     const body = (await request.json()) as SendSmsBody;
     const {
-      to,
+      conversationId: requestedConversationId,
       body: messageBody = "",
-      customerId,
       scope: scopeParam,
       title,
       userId,
       media = [],
     } = body;
+    let { to, customerId } = body;
 
     const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
     const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
+
+    if (requestedConversationId) {
+      const existing = await prisma.conversation.findFirst({
+        where: {
+          id: requestedConversationId,
+          companyId: user.companyId,
+          channel: Channel.SMS,
+        },
+        select: {
+          participantPhone: true,
+          customerId: true,
+        },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      if (!existing.participantPhone) {
+        return badRequestResponse("Recipient phone required");
+      }
+      // An open thread is the source of truth — ignore leftover compose `to` / customerId.
+      to = existing.participantPhone;
+      customerId = existing.customerId ?? undefined;
+    }
 
     if (!to) return badRequestResponse("Recipient phone required");
 
@@ -222,12 +279,11 @@ export async function POST(request: NextRequest) {
       const { canAccessFieldCustomerComms, FIELD_CUSTOMER_COMMS_FORBIDDEN } = await import(
         "@/lib/field/access"
       );
-      const { findCustomerByPhone } = await import("@/lib/inbox/customer-lookup");
-      let resolvedCustomerId = customerId;
-      if (!resolvedCustomerId) {
-        const customer = await findCustomerByPhone(user.companyId, normalizePhone(to));
-        resolvedCustomerId = customer?.id;
-      }
+      const resolvedCustomerId = await resolveCustomerIdForSmsPhone(
+        user.companyId,
+        normalizePhone(to),
+        customerId
+      );
       if (!(await canAccessFieldCustomerComms(user, resolvedCustomerId))) {
         return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
       }
@@ -241,7 +297,7 @@ export async function POST(request: NextRequest) {
       media: Array.isArray(media) ? media : [],
       statusCallback,
       customerId,
-      title,
+      title: requestedConversationId ? undefined : title,
       userId,
     });
 

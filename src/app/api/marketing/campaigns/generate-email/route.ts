@@ -3,14 +3,13 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { resolveCampaignAllowedLinks } from "@/lib/marketing/campaign-links";
 import { generateCampaignEmail } from "@/lib/marketing/email-ai";
-import { isEmailTemplateId } from "@/lib/marketing/email-templates";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { prompt, subject, existingHtml, existingText, brandPalette, templateId, imageUrls } = body;
+    const { prompt, subject, existingText } = body;
 
     if (!prompt?.trim()) {
       return badRequestResponse("prompt is required");
@@ -52,19 +51,15 @@ export async function POST(request: NextRequest) {
     });
 
     const logoUrl = absolutePublicBlobUrl(company.emailLogoUrl) ?? company.emailLogoUrl;
-    const images = Array.isArray(imageUrls)
-      ? imageUrls.map(String).filter(Boolean).slice(0, 6)
-      : [];
 
     const result = await generateCampaignEmail({
       prompt: String(prompt),
       subject: subject ? String(subject) : undefined,
       companyName: company.name,
-      existingHtml: existingHtml ? String(existingHtml) : undefined,
       existingText: existingText ? String(existingText) : undefined,
-      templateId: isEmailTemplateId(templateId) ? templateId : null,
+      templateId: "plain",
       allowedLinks,
-      imageUrls: images,
+      imageUrls: [],
       logoUrl,
       companyPhone: company.phone,
       companyEmail: company.supportEmail,
@@ -73,22 +68,6 @@ export async function POST(request: NextRequest) {
       companyCity: company.city,
       companyState: company.state,
       companyZip: company.zip,
-      brandPalette:
-        brandPalette && typeof brandPalette === "object"
-          ? {
-              primary: String((brandPalette as { primary?: string }).primary ?? ""),
-              secondary: String((brandPalette as { secondary?: string }).secondary ?? ""),
-              soft: String((brandPalette as { soft?: string }).soft ?? ""),
-              panel: String((brandPalette as { panel?: string }).panel ?? ""),
-              accent:
-                (brandPalette as { accent?: string | null }).accent != null
-                  ? String((brandPalette as { accent?: string | null }).accent)
-                  : null,
-              extras: Array.isArray((brandPalette as { extras?: unknown }).extras)
-                ? ((brandPalette as { extras: unknown[] }).extras.map(String) as string[])
-                : undefined,
-            }
-          : undefined,
     });
 
     return NextResponse.json(result);

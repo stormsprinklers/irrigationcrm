@@ -44,12 +44,12 @@ export async function POST(request: NextRequest) {
       target.email.toLowerCase() === current.email.toLowerCase();
     const link = sameEmail
       ? null
-      : await prisma.userAccountLink.findUnique({
+      : await prisma.userAccountLink.findFirst({
           where: {
-            userId_linkedUserId: {
-              userId: user.id,
-              linkedUserId: targetUserId,
-            },
+            OR: [
+              { userId: user.id, linkedUserId: targetUserId },
+              { userId: targetUserId, linkedUserId: user.id },
+            ],
           },
         });
 

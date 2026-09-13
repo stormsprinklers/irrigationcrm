@@ -64,10 +64,9 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
 
       <div className="rounded-lg border border-border bg-white">
         <div className="border-b px-4 py-3">
-          <h3 className="font-medium">Email open rates</h3>
+          <h3 className="font-medium">Email performance</h3>
           <p className="text-xs text-muted-foreground">
-            Opens are counted when the tracking pixel loads (and when they click a link). Some
-            inboxes block images, so open rate can still undercount.
+            Campaigns send as plain text, so open rate is not tracked. CTR is clicks on wrapped links.
           </p>
         </div>
         <Table>
@@ -76,15 +75,13 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
               <TableHead>Email</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Delivered</TableHead>
-              <TableHead>Opened</TableHead>
-              <TableHead>Open rate</TableHead>
               <TableHead>CTR</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {emails.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
+                <TableCell colSpan={4} className="text-muted-foreground">
                   No email sends in this campaign yet.
                 </TableCell>
               </TableRow>
@@ -94,8 +91,6 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
                   <TableCell className="max-w-sm truncate font-medium">{row.label}</TableCell>
                   <TableCell>{row.sent}</TableCell>
                   <TableCell>{row.delivered}</TableCell>
-                  <TableCell>{row.opened}</TableCell>
-                  <TableCell>{fmtRate(row.openRate)}</TableCell>
                   <TableCell>{fmtRate(row.ctr)}</TableCell>
                 </TableRow>
               ))
@@ -134,8 +129,8 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Link click-through rates</h3>
           <p className="text-xs text-muted-foreground">
-            Overall CTR {fmtRate(performance.overallCtr)}. HTML and plain-text email links are
-            wrapped with a tracking URL at send time. SMS links are not tracked.
+            Overall CTR {fmtRate(performance.overallCtr)}. Links in the email body are wrapped with a
+            tracking URL at send time. SMS links are not tracked.
           </p>
         </div>
         <Table>

@@ -7,7 +7,7 @@ import {
   looksLikePlainEmail,
   textToPlainEmailHtml,
 } from "../email-templates";
-import { buildMarketingEmailPayload } from "../outbound-email";
+import { buildMarketingEmailPayload, ensureCampaignGreeting } from "../outbound-email";
 
 test("isHtmlEmailBody treats empty and tagless bodies as plain text", () => {
   assert.equal(isHtmlEmailBody(""), false);
@@ -27,61 +27,60 @@ test("looksLikePlainEmail detects stored plain HTML and text-only drafts", () =>
   assert.equal(isPlainEmailHtml(textToPlainEmailHtml("Hi")), true);
 });
 
-test("buildMarketingEmailPayload sends HTML with an open pixel for unformatted bodies", () => {
+test("buildMarketingEmailPayload sends plaintext only with unsubscribe and no open pixel", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "",
     bodyText: "Hi neighbor,\n\nJust a note.",
     unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
+    signature: { companyName: "Storm Sprinklers", phone: "801-555-0100" },
   });
 
   assert.equal(out.unbranded, true);
+  assert.equal(out.omitHtml, true);
+  assert.equal(out.html, undefined);
   assert.match(out.text, /Hi neighbor/);
+  assert.match(out.text, /Storm Sprinklers/);
+  assert.match(out.text, /801-555-0100/);
   assert.match(
     out.text,
     /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/
   );
   assert.doesNotMatch(out.text, /This is a marketing message/);
-  assert.match(out.html ?? "", /Hi neighbor/);
-  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
-  assert.match(
-    out.html ?? "",
-    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe<\/a>/
-  );
-  assert.doesNotMatch(out.html ?? "", /background-color:#4C9BC8/);
-  assert.doesNotMatch(out.html ?? "", /This is a marketing message/);
-  assert.doesNotMatch(out.html ?? "", /Unsubscribe from marketing emails/);
+  assert.doesNotMatch(out.text, /track\/open/);
 });
 
-test("buildMarketingEmailPayload keeps bold formatting and a text unsubscribe link", () => {
+test("buildMarketingEmailPayload converts leftover HTML drafts to text", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<div data-plain-email="true"><p>Hello <strong>there</strong></p></div>',
-    bodyText: "Hello there",
+    bodyText: "",
     unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
 
-  assert.equal(out.unbranded, true);
-  assert.match(out.html ?? "", /<strong>there<\/strong>/);
-  assert.match(
-    out.html ?? "",
-    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe<\/a>/
-  );
-  assert.doesNotMatch(out.html ?? "", /background-color:#4C9BC8/);
-  assert.doesNotMatch(out.html ?? "", /&lt;strong&gt;/);
+  assert.equal(out.html, undefined);
+  assert.match(out.text, /Hello there/);
+  assert.match(out.text, /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
+  assert.doesNotMatch(out.text, /<strong>/);
+  assert.doesNotMatch(out.text, /This is a marketing message/);
 });
 
-test("buildMarketingEmailPayload keeps HTML for formatted bodies", () => {
+test("buildMarketingEmailPayload tracks URLs in the text part only", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "<p>Hello <a href=\"https://stormsprinklers.com\">site</a></p>",
-    bodyText: "Hello",
+    bodyText: "Hello https://stormsprinklers.com",
     unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
 
-  assert.match(out.html ?? "", /<p>Hello/);
-  assert.match(out.html ?? "", /\/api\/marketing\/track\/click\?r=rec_1/);
-  assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
-  assert.match(out.html ?? "", /Unsubscribe from marketing emails/);
-  assert.match(out.text, /Unsubscribe from marketing emails/);
+  assert.equal(out.html, undefined);
+  assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.text, /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
+  assert.doesNotMatch(out.text, /This is a marketing message/);
+});
+
+test("ensureCampaignGreeting prepends Hey {customer_first_name} when missing", () => {
+  assert.equal(ensureCampaignGreeting(""), "Hey {customer_first_name},\n\n");
+  assert.match(ensureCampaignGreeting("Winterization is open."), /^Hey \{customer_first_name\},/);
+  assert.equal(ensureCampaignGreeting("Hey Jordan,\n\nWe are booked."), "Hey Jordan,\n\nWe are booked.");
 });
