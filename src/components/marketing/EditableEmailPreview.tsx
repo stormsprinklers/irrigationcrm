@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MergeTokenFallbackEditor } from "@/components/communications/MergeTokenFallbackEditor";
 import { formatMergeToken, mergeTokenKeyFromInsert, type ParsedMergeToken } from "@/lib/notifications/merge-tokens";
+import { sanitizeEmailHref } from "@/lib/marketing/email-href";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -186,7 +187,8 @@ const EDITOR_SCRIPT = `
     var sel = window.getSelection();
     window.parent.postMessage({
       type: 'email-editor-selection',
-      hasSelection: !!(sel && !sel.isCollapsed)
+      hasSelection: !!(sel && !sel.isCollapsed),
+      text: sel ? String(sel.toString() || '') : ''
     }, '*');
   });
 
@@ -202,12 +204,25 @@ const EDITOR_SCRIPT = `
         } else if (data.command === 'fontSize') {
           document.execCommand('fontSize', false, data.value);
         } else if (data.command === 'setLink') {
-          var a = document.querySelector('a[data-editing-link="1"]') || document.activeElement;
+          var href = data.href || '#';
+          var text = String(data.text || '').trim();
+          var a = document.querySelector('a[data-editing-link="1"]');
           if (a && a.tagName === 'A') {
-            a.setAttribute('href', data.href || '#');
+            a.setAttribute('href', href);
+            if (text) a.textContent = text;
             a.removeAttribute('data-editing-link');
           } else {
-            document.execCommand('createLink', false, data.href || '#');
+            var sel = window.getSelection();
+            if (text && (!sel || sel.isCollapsed)) {
+              document.execCommand('insertHTML', false, '<a href="' + escapeAttr(href) + '">' + escapeAttr(text) + '</a>');
+            } else {
+              document.execCommand('createLink', false, href);
+              if (text) {
+                var node = sel && sel.anchorNode;
+                var created = node && node.parentElement ? node.parentElement.closest('a') : null;
+                if (created && text) created.textContent = text;
+              }
+            }
           }
         } else if (data.command === 'insertText') {
           document.execCommand('insertText', false, data.value || '');
@@ -289,6 +304,8 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
   const applyingRef = useRef(false);
   const [linkDialog, setLinkDialog] = useState<{ href: string; text: string } | null>(null);
   const [linkHref, setLinkHref] = useState("");
+  const [linkText, setLinkText] = useState("");
+  const lastSelectionText = useRef("");
   const [mergeToken, setMergeToken] = useState<ParsedMergeToken | null>(null);
   const [fontFamily, setFontFamily] = useState("Arial");
   const [fontSize, setFontSize] = useState("3");
@@ -316,8 +333,12 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
       if (data.type === "email-editor-focus") {
         onFocusEditor?.();
       }
+      if (data.type === "email-editor-selection") {
+        lastSelectionText.current = String(data.text ?? "");
+      }
       if (data.type === "email-editor-link") {
         setLinkHref(String(data.href ?? ""));
+        setLinkText(String(data.text ?? "").trim() || "click here");
         setLinkDialog({ href: String(data.href ?? ""), text: String(data.text ?? "") });
         iframeRef.current?.contentWindow?.postMessage(
           {
@@ -363,8 +384,14 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
   }));
 
   function saveLink() {
+    const href = sanitizeEmailHref(linkHref) || "#";
     iframeRef.current?.contentWindow?.postMessage(
-      { type: "email-editor-command", command: "setLink", href: linkHref.trim() || "#" },
+      {
+        type: "email-editor-command",
+        command: "setLink",
+        href,
+        text: linkText.trim() || "click here",
+      },
       "*"
     );
     setLinkDialog(null);
@@ -428,8 +455,10 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
           size="sm"
           variant="outline"
           onClick={() => {
+            const selected = lastSelectionText.current.trim();
             setLinkHref("https://");
-            setLinkDialog({ href: "https://", text: "" });
+            setLinkText(selected || "click here");
+            setLinkDialog({ href: "https://", text: selected });
           }}
         >
           <Link2 className="mr-1 h-3.5 w-3.5" />
@@ -482,22 +511,27 @@ export const EditableEmailPreview = forwardRef<EditableEmailPreviewHandle, Props
       {linkDialog ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-lg border bg-white p-4 shadow-lg">
-            <h3 className="text-sm font-semibold">Edit link URL</h3>
-            {linkDialog.text ? (
-              <p className="mt-1 text-xs text-muted-foreground">Link text: {linkDialog.text}</p>
-            ) : null}
+            <h3 className="text-sm font-semibold">Insert link</h3>
+            <label className="mt-3 block text-xs text-muted-foreground">Link text</label>
             <Input
-              className="mt-3"
+              className="mt-1"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+              placeholder="click here"
+              autoFocus
+            />
+            <label className="mt-3 block text-xs text-muted-foreground">URL</label>
+            <Input
+              className="mt-1"
               value={linkHref}
               onChange={(e) => setLinkHref(e.target.value)}
               placeholder="https://"
-              autoFocus
             />
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setLinkDialog(null)}>
                 Cancel
               </Button>
-              <Button type="button" onClick={saveLink}>
+              <Button type="button" onClick={saveLink} disabled={!sanitizeEmailHref(linkHref)}>
                 Save link
               </Button>
             </div>

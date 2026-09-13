@@ -387,7 +387,7 @@ function EmailCampaignEditorInner({
           <h3 className="text-sm font-semibold">Email builder</h3>
           <p className="text-xs text-muted-foreground">
             {isPlain
-              ? "Simple formatted email — bold, italic, and underline. A small Unsubscribe link is added at the bottom when it sends."
+              ? "Simple formatted email — bold, italic, underline, and links like “click here”. A small Unsubscribe link is added at the bottom when it sends."
               : (
                 <>
                   Pick a template, add photos, then let AI write the copy. CTA links come from{" "}
@@ -687,8 +687,8 @@ function EmailCampaignEditorInner({
                 <div className="border-b px-3 py-2">
                   <h3 className="text-sm font-semibold">Message</h3>
                   <p className="text-xs text-muted-foreground">
-                    No photos or layout — just the email, with optional bold, italic, and underline.
-                    A small Unsubscribe link is added at the bottom when it sends.
+                    No photos or layout — just the email, with optional bold, italic, underline, and
+                    links. A small Unsubscribe link is added at the bottom when it sends.
                   </p>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto">

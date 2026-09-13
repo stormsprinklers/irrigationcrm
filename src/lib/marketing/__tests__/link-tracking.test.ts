@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { getAppBaseUrl } from "@/lib/app-url";
 import {
   appendOpenTrackingPixel,
+  htmlToPlainText,
   rewriteTrackedLinks,
   rewriteTrackedUrlsInText,
   shouldSkipTrackedUrl,
@@ -41,6 +42,17 @@ test("buildMarketingEmailPayload tracks links in HTML and in the text part", () 
   assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
+});
+
+test("htmlToPlainText keeps hyperlink text and URL", () => {
+  assert.equal(
+    htmlToPlainText('<p>Please <a href="https://stormsprinklers.com/booking">click here</a> to book.</p>'),
+    "Please click here (https://stormsprinklers.com/booking) to book."
+  );
+  assert.equal(
+    htmlToPlainText('<a href="https://stormsprinklers.com">https://stormsprinklers.com</a>'),
+    "https://stormsprinklers.com"
+  );
 });
 
 test("appendOpenTrackingPixel inserts a 1x1 image once", () => {
