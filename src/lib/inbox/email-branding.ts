@@ -42,6 +42,8 @@ export function resolveFromAddress(branding: EmailBranding, fallbackEmail?: stri
 }
 
 export function wrapBrandedEmailHtml(html: string, branding: EmailBranding) {
+  if (html.includes("data-plain-email")) return html;
+
   const withSignature = applyCompanyEmailSignature(html, branding);
   const logoSrc = absolutePublicBlobUrl(branding.emailLogoUrl) ?? branding.emailLogoUrl;
   const logoBlock = logoSrc
@@ -119,6 +121,8 @@ export async function sendCompanyEmail(
     }>;
     /** Skip the outbound-comms freeze (admin diagnostics only). */
     bypassCommsFreeze?: boolean;
+    /** Send HTML as-is — no logo, signature, or branded wrapper. */
+    skipBranding?: boolean;
   }
 ): Promise<SendEmailResult> {
   if (!params.bypassCommsFreeze) {
@@ -134,14 +138,19 @@ export async function sendCompanyEmail(
   }
 
   const html = params.html?.trim()
-    ? wrapBrandedEmailHtml(params.html, resolved)
+    ? params.skipBranding
+      ? params.html
+      : wrapBrandedEmailHtml(params.html, resolved)
     : undefined;
 
   return sendEmail({
     from,
     to: params.to,
     subject: params.subject,
-    text: html ? applyCompanyEmailSignatureText(params.text, resolved) : params.text,
+    text:
+      params.skipBranding || !html
+        ? params.text
+        : applyCompanyEmailSignatureText(params.text, resolved),
     html,
     replyTo: params.replyTo,
     attachments: params.attachments,

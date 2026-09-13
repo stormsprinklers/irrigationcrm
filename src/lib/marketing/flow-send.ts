@@ -163,6 +163,7 @@ export async function sendCampaignMessage(params: {
         subject: subject || campaign.name,
         text: outbound.text,
         html: outbound.html,
+        skipBranding: outbound.unbranded,
       }
     );
 

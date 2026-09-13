@@ -2,17 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
-import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { buildMarketingEmailPayload } from "@/lib/marketing/outbound-email";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 import { resolveMarketingEmailFrom } from "@/lib/marketing/sender";
-import {
-  appendMarketingUnsubscribeFooter,
-  appendMarketingUnsubscribeText,
-  marketingUnsubscribeUrl,
-} from "@/lib/marketing/unsubscribe";
+import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import { prisma } from "@/lib/prisma";
-import { plainTextAsEmailHtml } from "@/lib/inbox/email";
 
 function looksLikeEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -91,11 +86,13 @@ export async function POST(request: NextRequest) {
       ? marketingUnsubscribeUrl(matchedCustomer.id, user.companyId, company.customerBaseUrl)
       : `${getCustomerBaseUrl(company)}/api/marketing/unsubscribe`;
 
-    const htmlSource = isHtmlEmailBody(personalized.bodyHtml)
-      ? personalized.bodyHtml ?? ""
-      : plainTextAsEmailHtml(personalized.bodyText);
-    const html = appendMarketingUnsubscribeFooter(htmlSource, unsubscribeUrl);
-    const text = appendMarketingUnsubscribeText(personalized.bodyText, unsubscribeUrl);
+    const outbound = buildMarketingEmailPayload({
+      bodyHtml: personalized.bodyHtml,
+      bodyText: personalized.bodyText,
+      unsubscribeUrl,
+      recipientId: "test",
+      publicBaseUrl: company.customerBaseUrl,
+    });
 
     const result = await sendCompanyEmail(
       {
@@ -108,9 +105,10 @@ export async function POST(request: NextRequest) {
         companyId: user.companyId,
         to: [to],
         subject: personalized.subject || company.name,
-        text,
-        html,
+        text: outbound.text,
+        html: outbound.html,
         bypassCommsFreeze: true,
+        skipBranding: outbound.unbranded,
       }
     );
 

@@ -306,6 +306,7 @@ async function sendToRecipient(
     subject,
     text: outbound.text,
     html: outbound.html,
+    skipBranding: outbound.unbranded,
   });
   await prisma.campaignRecipient.update({
     where: { id: recipient.id },

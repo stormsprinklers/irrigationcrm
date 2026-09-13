@@ -1,5 +1,5 @@
 import { plainTextAsEmailHtml } from "@/lib/inbox/email";
-import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
+import { isHtmlEmailBody, looksLikePlainEmail } from "@/lib/marketing/email-templates";
 import {
   appendOpenTrackingPixel,
   rewriteTrackedLinks,
@@ -8,6 +8,8 @@ import {
 import {
   appendMarketingUnsubscribeFooter,
   appendMarketingUnsubscribeText,
+  appendPlainUnsubscribeFooter,
+  appendPlainUnsubscribeText,
 } from "@/lib/marketing/unsubscribe";
 
 /** Build the HTML and/or plain-text parts for a campaign send. */
@@ -17,28 +19,37 @@ export function buildMarketingEmailPayload(params: {
   unsubscribeUrl: string;
   recipientId: string;
   publicBaseUrl?: string | null;
-}): { text: string; html?: string } {
+}): { text: string; html?: string; unbranded: boolean } {
+  const unbranded = looksLikePlainEmail(params.bodyHtml, params.bodyText);
   const text = rewriteTrackedUrlsInText(
-    appendMarketingUnsubscribeText(params.bodyText, params.unsubscribeUrl),
+    unbranded
+      ? appendPlainUnsubscribeText(params.bodyText, params.unsubscribeUrl)
+      : appendMarketingUnsubscribeText(params.bodyText, params.unsubscribeUrl),
     params.recipientId
   );
-  if (!isHtmlEmailBody(params.bodyHtml)) {
-    const html = appendMarketingUnsubscribeFooter(
-      plainTextAsEmailHtml(params.bodyText),
-      params.unsubscribeUrl
-    );
+
+  if (unbranded) {
+    const htmlSource = isHtmlEmailBody(params.bodyHtml)
+      ? params.bodyHtml ?? ""
+      : plainTextAsEmailHtml(params.bodyText);
+    const html = appendPlainUnsubscribeFooter(htmlSource, params.unsubscribeUrl);
     return {
       text,
-      html: appendOpenTrackingPixel(html, params.recipientId),
+      unbranded: true,
+      html: appendOpenTrackingPixel(
+        /<a\s/i.test(html) ? rewriteTrackedLinks(html, params.recipientId) : html,
+        params.recipientId
+      ),
     };
   }
 
-  const rawHtml = appendMarketingUnsubscribeFooter(
-    params.bodyHtml ?? "",
-    params.unsubscribeUrl
-  );
+  const rawHtml = appendMarketingUnsubscribeFooter(params.bodyHtml ?? "", params.unsubscribeUrl);
   return {
     text,
-    html: appendOpenTrackingPixel(rewriteTrackedLinks(rawHtml, params.recipientId), params.recipientId),
+    unbranded: false,
+    html: appendOpenTrackingPixel(
+      rewriteTrackedLinks(rawHtml, params.recipientId),
+      params.recipientId
+    ),
   };
 }

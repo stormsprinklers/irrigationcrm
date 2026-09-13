@@ -85,7 +85,32 @@ export function marketingUnsubscribeUrl(
   return `${base}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
-/** Append a preferences line to a plain-text marketing email. */
+/** Small text unsubscribe line for unformatted campaign emails. */
+export function appendPlainUnsubscribeText(text: string, unsubscribeUrl: string): string {
+  const existing = text.trimEnd();
+  if (!unsubscribeUrl) return existing;
+  if (existing.includes(unsubscribeUrl)) return existing;
+  if (/\bunsubscribe\b/i.test(existing.slice(-200))) return existing;
+  const footer = `Unsubscribe: ${unsubscribeUrl}`;
+  return existing ? `${existing}\n\n${footer}` : footer;
+}
+
+/** Small text unsubscribe link — no button, logo, or “marketing email” copy. */
+export function appendPlainUnsubscribeFooter(html: string, unsubscribeUrl: string): string {
+  if (!unsubscribeUrl) return html;
+  if (html.includes(unsubscribeUrl) && /\bunsubscribe\b/i.test(html)) {
+    return html;
+  }
+
+  const footer = `<p data-marketing-unsubscribe="true" style="margin:16px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.4"><a href="${unsubscribeUrl}" style="color:#666666;text-decoration:underline">Unsubscribe</a></p>`;
+
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${footer}</body>`);
+  }
+  return `${html}${footer}`;
+}
+
+/** Append a preferences line to a designed (HTML template) marketing email. */
 export function appendMarketingUnsubscribeText(text: string, unsubscribeUrl: string): string {
   const existing = text.trimEnd();
   if (!unsubscribeUrl) return existing;
@@ -95,7 +120,7 @@ export function appendMarketingUnsubscribeText(text: string, unsubscribeUrl: str
   return existing ? `${existing}\n\n${footer}` : footer;
 }
 
-/** Append a preferences footer to marketing campaign HTML. */
+/** Append a preferences footer to designed marketing campaign HTML. */
 export function appendMarketingUnsubscribeFooter(
   html: string,
   unsubscribeUrl: string

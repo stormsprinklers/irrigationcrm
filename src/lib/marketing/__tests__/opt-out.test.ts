@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isMarketingOptedOut, marketingConsentLabel } from "../opt-out";
-import { appendMarketingUnsubscribeText, prefsAllOptedOut } from "../unsubscribe";
+import { appendMarketingUnsubscribeText, appendPlainUnsubscribeText, prefsAllOptedOut } from "../unsubscribe";
 import {
   isExactSmsStart,
   isExactSmsStop,
@@ -64,7 +64,13 @@ test("STOP and START auto-replies mention the company and the other keyword", ()
   assert.match(start, /STOP/);
 });
 
-test("appendMarketingUnsubscribeText adds a working unsubscribe URL", () => {
+test("appendPlainUnsubscribeText adds a working unsubscribe URL", () => {
+  const out = appendPlainUnsubscribeText("Hi there", "https://example.com/unsub?token=abc");
+  assert.match(out, /Unsubscribe: https:\/\/example.com\/unsub\?token=abc/);
+  assert.doesNotMatch(out, /marketing message/);
+});
+
+test("appendMarketingUnsubscribeText keeps the designed-email footer", () => {
   const out = appendMarketingUnsubscribeText("Hi there", "https://example.com/unsub?token=abc");
   assert.match(out, /Unsubscribe from marketing emails: https:\/\/example.com\/unsub\?token=abc/);
 });

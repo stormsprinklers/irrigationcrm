@@ -35,21 +35,25 @@ test("buildMarketingEmailPayload sends HTML with an open pixel for unformatted b
     recipientId: "rec_1",
   });
 
+  assert.equal(out.unbranded, true);
   assert.match(out.text, /Hi neighbor/);
   assert.match(
     out.text,
-    /Unsubscribe from marketing emails: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/
+    /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/
   );
+  assert.doesNotMatch(out.text, /This is a marketing message/);
   assert.match(out.html ?? "", /Hi neighbor/);
   assert.match(out.html ?? "", /\/api\/marketing\/track\/open\?r=rec_1/);
   assert.match(
     out.html ?? "",
-    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe from marketing emails<\/a>/
+    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe<\/a>/
   );
-  assert.doesNotMatch(out.html ?? "", /Unsubscribe from marketing emails: https:\/\/example.com/);
+  assert.doesNotMatch(out.html ?? "", /background-color:#4C9BC8/);
+  assert.doesNotMatch(out.html ?? "", /This is a marketing message/);
+  assert.doesNotMatch(out.html ?? "", /Unsubscribe from marketing emails/);
 });
 
-test("buildMarketingEmailPayload keeps bold formatting and an unsubscribe button", () => {
+test("buildMarketingEmailPayload keeps bold formatting and a text unsubscribe link", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<div data-plain-email="true"><p>Hello <strong>there</strong></p></div>',
     bodyText: "Hello there",
@@ -57,12 +61,13 @@ test("buildMarketingEmailPayload keeps bold formatting and an unsubscribe button
     recipientId: "rec_1",
   });
 
+  assert.equal(out.unbranded, true);
   assert.match(out.html ?? "", /<strong>there<\/strong>/);
   assert.match(
     out.html ?? "",
-    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"/
+    /<a href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe<\/a>/
   );
-  assert.match(out.html ?? "", /background-color:#4C9BC8/);
+  assert.doesNotMatch(out.html ?? "", /background-color:#4C9BC8/);
   assert.doesNotMatch(out.html ?? "", /&lt;strong&gt;/);
 });
 
