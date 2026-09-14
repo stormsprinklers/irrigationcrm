@@ -144,7 +144,7 @@ export const PlainEmailEditor = forwardRef<PlainEmailEditorHandle, Props>(
 
     return (
       <>
-        <div className="flex items-center gap-1 border-b px-3 py-2">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-1 border-b bg-white px-3 py-2" aria-label="Email formatting toolbar">
           <Button
             type="button"
             size="sm"
@@ -153,7 +153,8 @@ export const PlainEmailEditor = forwardRef<PlainEmailEditorHandle, Props>(
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => run("bold")}
           >
-            <Bold className="h-3.5 w-3.5" />
+            <Bold className="mr-1 h-3.5 w-3.5" />
+            Bold
           </Button>
           <Button
             type="button"
@@ -163,7 +164,8 @@ export const PlainEmailEditor = forwardRef<PlainEmailEditorHandle, Props>(
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => run("italic")}
           >
-            <Italic className="h-3.5 w-3.5" />
+            <Italic className="mr-1 h-3.5 w-3.5" />
+            Italic
           </Button>
           <Button
             type="button"
@@ -173,7 +175,8 @@ export const PlainEmailEditor = forwardRef<PlainEmailEditorHandle, Props>(
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => run("underline")}
           >
-            <Underline className="h-3.5 w-3.5" />
+            <Underline className="mr-1 h-3.5 w-3.5" />
+            Underline
           </Button>
           <Button
             type="button"

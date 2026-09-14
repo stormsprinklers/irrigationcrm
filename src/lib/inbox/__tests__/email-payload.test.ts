@@ -35,7 +35,7 @@ test("Twilio email payload uses unformatted html when sending plain text", () =>
   assert.doesNotMatch(String(content.html), /<br/i);
 });
 
-test("Twilio email payload can omit html for plaintext campaigns", () => {
+test("Twilio email payload uses only an unstyled required HTML twin for plaintext campaigns", () => {
   const payload = buildTwilioEmailPayload({
     from: "Storm Sprinklers <hello@stormsprinklers.com>",
     to: ["jordan@example.com"],
@@ -46,7 +46,8 @@ test("Twilio email payload can omit html for plaintext campaigns", () => {
 
   const content = payload.content as Record<string, unknown>;
   assert.equal(content.text, "Just the words.\n\nThanks");
-  assert.equal(content.html, undefined);
+  assert.equal(content.html, "Just the words.<br><br>Thanks");
+  assert.doesNotMatch(String(content.html), /<div|style=|data-marketing-unsubscribe/i);
 });
 
 test("campaign payload disables SendGrid tracking and injected footers per message", () => {
@@ -60,7 +61,11 @@ test("campaign payload disables SendGrid tracking and injected footers per messa
   });
 
   const content = payload.content as { html?: string; headers?: Record<string, string> };
-  assert.equal(content.html, undefined);
+  assert.equal(
+    content.html,
+    "Book at https://stormsprinklers.com/book-winterization"
+  );
+  assert.doesNotMatch(String(content.html), /<div|style=|data-marketing-unsubscribe/i);
   const smtpApi = JSON.parse(content.headers?.["X-SMTPAPI"] ?? "{}") as {
     filters?: Record<string, { settings?: Record<string, unknown> }>;
   };

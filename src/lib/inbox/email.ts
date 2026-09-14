@@ -126,6 +126,11 @@ export function plainTextAsEmailHtml(text: string) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;white-space:pre-wrap;">${escapeEmailText(text)}</div>`;
 }
 
+/** Twilio Email requires an HTML field, even for a plain campaign. Keep its twin completely unstyled. */
+export function minimalPlainTextEmailHtml(text: string) {
+  return escapeEmailText(text).replace(/\r?\n/g, "<br>");
+}
+
 export function buildTwilioEmailPayload(params: {
   from: string;
   to: string[];
@@ -152,9 +157,9 @@ export function buildTwilioEmailPayload(params: {
     params.text ??
     html?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() ??
     "";
-  // Inbox/transactional: Twilio still wants an html twin. Campaigns omit it on purpose.
+  // Twilio's v1/Emails API requires HTML. Campaigns get only an unstyled text twin.
   const htmlOut = params.omitHtml
-    ? undefined
+    ? minimalPlainTextEmailHtml(text)
     : html ?? (text ? plainTextAsEmailHtml(text) : undefined);
 
   return {
