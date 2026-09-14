@@ -1,4 +1,5 @@
 const TWILIO_EMAIL_API = "https://comms.twilio.com/v1/Emails";
+const SENDGRID_MAIL_SEND_API = "https://api.sendgrid.com/v3/mail/send";
 
 export type SendEmailResult = {
   statusCode: number;
@@ -111,6 +112,85 @@ function parseFromAddress(from: string): { address: string; name: string } {
     return { name: parsed[1].replace(/^"|"$/g, "").trim(), address: parsed[2].trim() };
   }
   return { name: "", address: from.trim() };
+}
+
+/**
+ * SendGrid's v3 Mail Send API is the only delivery route we use for campaign
+ * messages that must be free of click redirects and open pixels. The Twilio
+ * Email API does not expose SendGrid's per-message tracking_settings object.
+ */
+export function buildUntrackedSendGridPayload(params: {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html?: string;
+}): Record<string, unknown> {
+  const from = parseFromAddress(params.from);
+  return {
+    personalizations: [
+      {
+        to: params.to.map((email) => ({ email: email.trim() })),
+      },
+    ],
+    from: {
+      email: from.address,
+      ...(from.name ? { name: from.name } : {}),
+    },
+    subject: params.subject,
+    content: [
+      { type: "text/plain", value: params.text },
+      ...(params.html?.trim() ? [{ type: "text/html", value: params.html }] : []),
+    ],
+    tracking_settings: {
+      click_tracking: { enable: false, enable_text: false },
+      open_tracking: { enable: false },
+      subscription_tracking: { enable: false },
+    },
+    mail_settings: {
+      footer: { enable: false },
+    },
+  };
+}
+
+export async function sendUntrackedCampaignEmail(params: {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html?: string;
+}): Promise<SendEmailResult> {
+  const apiKey = process.env.SENDGRID_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "SENDGRID_API_KEY is required for campaign email delivery without open or click tracking. Add a SendGrid Mail Send API key to the deployment environment before sending campaigns."
+    );
+  }
+
+  const res = await fetch(SENDGRID_MAIL_SEND_API, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(buildUntrackedSendGridPayload(params)),
+  });
+  const bodyText = await res.text();
+  let body: unknown = bodyText;
+  try {
+    body = bodyText ? JSON.parse(bodyText) : null;
+  } catch {
+    // SendGrid commonly responds with an empty 202 body.
+  }
+  if (!res.ok) {
+    throw new Error(`SendGrid Mail Send API error (${res.status}): ${typeof body === "string" ? body : JSON.stringify(body)}`);
+  }
+
+  return {
+    statusCode: res.status,
+    messageId: res.headers.get("x-message-id"),
+    body,
+  };
 }
 
 function escapeEmailText(value: string) {

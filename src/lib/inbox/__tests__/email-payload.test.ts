@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTwilioEmailPayload } from "../email";
+import { buildTwilioEmailPayload, buildUntrackedSendGridPayload } from "../email";
 
 test("Twilio email payload omits unsupported replyTo field", () => {
   const payload = buildTwilioEmailPayload({
@@ -74,4 +74,23 @@ test("campaign payload disables SendGrid tracking and injected footers per messa
   assert.equal(smtpApi.filters?.opentrack?.settings?.enable, 0);
   assert.equal(smtpApi.filters?.subscriptiontrack?.settings?.enable, 0);
   assert.equal(smtpApi.filters?.footer?.settings?.enable, 0);
+});
+
+test("untracked campaign payload uses SendGrid's API-level tracking settings", () => {
+  const payload = buildUntrackedSendGridPayload({
+    from: "Austin <hello@stormsprinklers.com>",
+    to: ["jordan@example.com"],
+    subject: "Plain note",
+    text: "Book at https://stormsprinklers.com/book-winterization",
+  });
+
+  assert.deepEqual(payload.tracking_settings, {
+    click_tracking: { enable: false, enable_text: false },
+    open_tracking: { enable: false },
+    subscription_tracking: { enable: false },
+  });
+  assert.deepEqual(payload.mail_settings, { footer: { enable: false } });
+  assert.deepEqual(payload.content, [
+    { type: "text/plain", value: "Book at https://stormsprinklers.com/book-winterization" },
+  ]);
 });

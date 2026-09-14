@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
         skipBranding: true,
         omitHtml: outbound.omitHtml,
         disableTracking: true,
+        untrackedCampaign: true,
       }
     );
 

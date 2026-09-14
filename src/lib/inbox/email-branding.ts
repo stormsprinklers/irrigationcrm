@@ -1,4 +1,9 @@
-import { getDefaultFromEmail, sendEmail, type SendEmailResult } from "@/lib/inbox/email";
+import {
+  getDefaultFromEmail,
+  sendEmail,
+  sendUntrackedCampaignEmail,
+  type SendEmailResult,
+} from "@/lib/inbox/email";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { prisma } from "@/lib/prisma";
@@ -127,6 +132,8 @@ export async function sendCompanyEmail(
     omitHtml?: boolean;
     /** Disable provider open/click tracking and injected provider footers for this message. */
     disableTracking?: boolean;
+    /** Deliver through SendGrid Mail Send with tracking disabled at the API level. */
+    untrackedCampaign?: boolean;
   }
 ): Promise<SendEmailResult> {
   if (!params.bypassCommsFreeze) {
@@ -148,14 +155,26 @@ export async function sendCompanyEmail(
         ? params.html
         : wrapBrandedEmailHtml(params.html, resolved);
 
+  const text =
+    params.skipBranding || params.omitHtml || !html
+      ? params.text
+      : applyCompanyEmailSignatureText(params.text, resolved);
+
+  if (params.untrackedCampaign) {
+    return sendUntrackedCampaignEmail({
+      from,
+      to: params.to,
+      subject: params.subject,
+      text: text ?? "",
+      html,
+    });
+  }
+
   return sendEmail({
     from,
     to: params.to,
     subject: params.subject,
-    text:
-      params.skipBranding || params.omitHtml || !html
-        ? params.text
-        : applyCompanyEmailSignatureText(params.text, resolved),
+    text,
     html,
     omitHtml: params.omitHtml,
     disableTracking: params.disableTracking,
