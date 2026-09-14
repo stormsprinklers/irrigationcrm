@@ -48,3 +48,25 @@ test("Twilio email payload can omit html for plaintext campaigns", () => {
   assert.equal(content.text, "Just the words.\n\nThanks");
   assert.equal(content.html, undefined);
 });
+
+test("campaign payload disables SendGrid tracking and injected footers per message", () => {
+  const payload = buildTwilioEmailPayload({
+    from: "Austin <hello@stormsprinklers.com>",
+    to: ["jordan@example.com"],
+    subject: "Plain note",
+    text: "Book at https://stormsprinklers.com/book-winterization",
+    omitHtml: true,
+    disableTracking: true,
+  });
+
+  const content = payload.content as { html?: string; headers?: Record<string, string> };
+  assert.equal(content.html, undefined);
+  const smtpApi = JSON.parse(content.headers?.["X-SMTPAPI"] ?? "{}") as {
+    filters?: Record<string, { settings?: Record<string, unknown> }>;
+  };
+  assert.equal(smtpApi.filters?.clicktrack?.settings?.enable, 0);
+  assert.equal(smtpApi.filters?.clicktrack?.settings?.enable_text, false);
+  assert.equal(smtpApi.filters?.opentrack?.settings?.enable, 0);
+  assert.equal(smtpApi.filters?.subscriptiontrack?.settings?.enable, 0);
+  assert.equal(smtpApi.filters?.footer?.settings?.enable, 0);
+});

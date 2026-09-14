@@ -31,7 +31,7 @@ test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", ()
   assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
 });
 
-test("buildMarketingEmailPayload tracks links in both email parts", () => {
+test("buildMarketingEmailPayload leaves campaign links direct", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<p>Hello <a href="https://stormsprinklers.com">site</a></p>',
     bodyText: "Hello https://stormsprinklers.com",
@@ -39,7 +39,10 @@ test("buildMarketingEmailPayload tracks links in both email parts", () => {
     recipientId: "rec_1",
   });
   assert.match(out.html, />Unsubscribe</);
-  assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.html, /clicktracking=off href="https:\/\/stormsprinklers.com"/);
+  assert.match(out.text, /https:\/\/stormsprinklers.com/);
+  assert.doesNotMatch(out.html, /\/api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
+  assert.doesNotMatch(out.text, /\/api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
   assert.doesNotMatch(out.text, /track\/open/);
 });

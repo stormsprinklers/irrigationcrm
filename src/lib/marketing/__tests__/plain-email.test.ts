@@ -15,18 +15,17 @@ test("editing preserves spaces, consecutive enters, tabs, and an emptied body", 
   }
 });
 
-test("HTML keeps the unsubscribe URL behind a small link and escapes typed markup", () => {
+test("plain campaign text produces no HTML alternative or rewritten links", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "",
     bodyText: 'Hi there,\n\n<script>alert("x")</script>\nBook https://example.com/book?a=1&b=2',
     unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
-  assert.match(out.html, /font-size:12px/);
-  assert.match(out.html, /href="https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t"[^>]*>Unsubscribe<\/a>/);
-  assert.doesNotMatch(out.html, /Unsubscribe:|<script>|track\/open/);
-  assert.match(out.html, /&lt;script&gt;/);
-  assert.match(out.html, /href="[^"]*\/api\/marketing\/track\/click/);
+  assert.equal(out.omitHtml, true);
+  assert.equal(out.html, undefined);
+  assert.match(out.text, /https:\/\/example.com\/book\?a=1&b=2/);
+  assert.doesNotMatch(out.text, /api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
 });
 
 test("isHtmlEmailBody treats empty and tagless bodies as plain text", () => {
@@ -47,7 +46,7 @@ test("looksLikePlainEmail detects stored plain HTML and text-only drafts", () =>
   assert.equal(isPlainEmailHtml(textToPlainEmailHtml("Hi")), true);
 });
 
-test("buildMarketingEmailPayload sends simple HTML and a text fallback with unsubscribe and no open pixel", () => {
+test("buildMarketingEmailPayload sends unformatted drafts as text only", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "",
     bodyText: "Hi neighbor,\n\nJust a note.",
@@ -57,8 +56,8 @@ test("buildMarketingEmailPayload sends simple HTML and a text fallback with unsu
   });
 
   assert.equal(out.unbranded, true);
-  assert.equal(out.omitHtml, false);
-  assert.match(out.html, />Unsubscribe</);
+  assert.equal(out.omitHtml, true);
+  assert.equal(out.html, undefined);
   assert.match(out.text, /Hi neighbor/);
   assert.match(out.text, /Storm Sprinklers/);
   assert.match(out.text, /801-555-0100/);
@@ -70,22 +69,25 @@ test("buildMarketingEmailPayload sends simple HTML and a text fallback with unsu
   assert.doesNotMatch(out.text, /track\/open/);
 });
 
-test("buildMarketingEmailPayload converts leftover HTML drafts to text", () => {
+test("buildMarketingEmailPayload preserves safe editor formatting and removes unsafe markup", () => {
   const out = buildMarketingEmailPayload({
-    bodyHtml: '<div data-plain-email="true"><p>Hello <strong>there</strong></p></div>',
-    bodyText: "",
+    bodyHtml: '<div data-plain-email="true"><p>Hello <strong>there</strong> <a href="https://stormsprinklers.com/book">Book now</a><script>alert("x")</script></p></div>',
+    bodyText: "Hello there Book now",
     unsubscribeUrl: "https://example.com/api/marketing/unsubscribe?token=t",
     recipientId: "rec_1",
   });
 
   assert.match(out.html, />Unsubscribe</);
+  assert.match(out.html, /<strong>there<\/strong>/);
+  assert.match(out.html, /clicktracking=off href="https:\/\/stormsprinklers.com\/book"/);
+  assert.doesNotMatch(out.html, /api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
+  assert.doesNotMatch(out.html, /<script>|alert\(/);
   assert.match(out.text, /Hello there/);
   assert.match(out.text, /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
-  assert.doesNotMatch(out.text, /<strong>/);
   assert.doesNotMatch(out.text, /This is a marketing message/);
 });
 
-test("buildMarketingEmailPayload tracks URLs in both email parts", () => {
+test("buildMarketingEmailPayload leaves URLs direct in both email parts", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: "<p>Hello <a href=\"https://stormsprinklers.com\">site</a></p>",
     bodyText: "Hello https://stormsprinklers.com",
@@ -94,7 +96,10 @@ test("buildMarketingEmailPayload tracks URLs in both email parts", () => {
   });
 
   assert.match(out.html, />Unsubscribe</);
-  assert.match(out.text, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out.html, /clicktracking=off href="https:\/\/stormsprinklers.com"/);
+  assert.match(out.text, /https:\/\/stormsprinklers.com/);
+  assert.doesNotMatch(out.html, /api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
+  assert.doesNotMatch(out.text, /api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
   assert.match(out.text, /Unsubscribe: https:\/\/example.com\/api\/marketing\/unsubscribe\?token=t/);
   assert.doesNotMatch(out.text, /This is a marketing message/);
 });

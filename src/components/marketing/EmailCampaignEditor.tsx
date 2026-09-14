@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InsertVariableButton, applyTokenToInput } from "@/components/communications/InsertVariableButton";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
+import { PlainEmailEditor, type PlainEmailEditorHandle } from "@/components/marketing/PlainEmailEditor";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { buildCompanySignatureText } from "@/lib/inbox/company-email-signature";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
@@ -17,6 +18,7 @@ import {
   campaignPlainBodyText,
   signatureFieldsFromCompany,
 } from "@/lib/marketing/outbound-email";
+import { textToPlainEmailHtml } from "@/lib/marketing/email-templates";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -30,6 +32,7 @@ type Props = {
   defaultExpanded?: boolean;
   hideExpandToggle?: boolean;
   senderName?: string;
+  onSenderNameChange?: (senderName: string) => void;
 };
 
 type CompanyContact = {
@@ -58,9 +61,11 @@ function EmailCampaignEditorInner({
   defaultExpanded = true,
   hideExpandToggle = false,
   senderName,
+  onSenderNameChange,
 }: Props) {
   const { brand } = useCompanyBrand();
   const [generating, setGenerating] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [companyContact, setCompanyContact] = useState<CompanyContact>({
     phone: null,
@@ -77,19 +82,18 @@ function EmailCampaignEditorInner({
   const [sendingTest, setSendingTest] = useState(false);
   const [seeded, setSeeded] = useState(false);
   const subjectRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
-  const bodyRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const bodyRef = useRef<PlainEmailEditorHandle>(null);
 
   // Keep the controlled value verbatim: normalization during typing removes spaces,
   // blank lines, and moves the caret. Seed the greeting only on initial mount.
-  const plainDraft = seeded
-    ? campaignPlainBodyText(bodyHtml, bodyText)
-    : seedPlainBody(bodyHtml, bodyText);
+  const plainDraft = seeded ? campaignPlainBodyText(bodyHtml, bodyText) : seedPlainBody(bodyHtml, bodyText);
+  const editorHtml = bodyHtml.trim() ? bodyHtml : textToPlainEmailHtml(plainDraft);
 
   useEffect(() => {
     if (seeded) return;
     const next = seedPlainBody(bodyHtml, bodyText);
     if (next !== (bodyText || htmlToPlainText(bodyHtml))) {
-      onBodyChange("", next);
+      onBodyChange(textToPlainEmailHtml(next), next);
     }
     setSeeded(true);
   }, [bodyHtml, bodyText, onBodyChange, seeded]);
@@ -117,8 +121,8 @@ function EmailCampaignEditorInner({
       .catch(() => {});
   }, []);
 
-  function applyPlain(next: string) {
-    onBodyChange("", next);
+  function applyRichHtml(next: string) {
+    onBodyChange(next, htmlToPlainText(next));
   }
 
   function insertIntoSubject(token: string) {
@@ -127,8 +131,7 @@ function EmailCampaignEditorInner({
   }
 
   function insertIntoBody(token: string) {
-    const { next } = applyTokenToInput(bodyRef.current, plainDraft, token);
-    applyPlain(next);
+    bodyRef.current?.insertMergeToken(token);
   }
 
   const signaturePreview = buildCompanySignatureText(
@@ -158,7 +161,8 @@ function EmailCampaignEditorInner({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "AI request failed");
       onSubjectChange(data.subject ?? subject);
-      applyPlain(typeof data.bodyText === "string" ? data.bodyText : plainDraft);
+      applyRichHtml(textToPlainEmailHtml(typeof data.bodyText === "string" ? data.bodyText : plainDraft));
+      setAssistantOpen(false);
       toast.success(plainDraft.trim() ? "Email updated" : "Email generated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "AI request failed");
@@ -185,7 +189,7 @@ function EmailCampaignEditorInner({
         body: JSON.stringify({
           to,
           subject,
-          bodyHtml: "",
+          bodyHtml: editorHtml,
           bodyText: plainDraft,
           senderName,
         }),
@@ -276,53 +280,23 @@ function EmailCampaignEditorInner({
         </div>
       </div>
 
-      <div
-        className={cn(
-          "grid gap-4",
-          expanded ? "lg:grid-cols-[280px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"
-        )}
-      >
-        <div className="space-y-3 rounded-lg border bg-white p-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
-          <h3 className="text-sm font-semibold">AI assistant</h3>
-          <textarea
-            className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-            value={aiPrompt}
-            onChange={(e) => onAiPromptChange(e.target.value)}
-            placeholder={
-              hasExistingBody
-                ? "Describe edits: shorter, warmer tone…"
-                : "Describe the email: offer, tone, what they should do next…"
-            }
-          />
-          <Button type="button" className="w-full" onClick={() => void runAi()} disabled={generating}>
-            {generating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Working…
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                {hasExistingBody ? "Fill / edit with AI" : "Generate email"}
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Booking and other links come from{" "}
-            <Link href="/settings/campaign-links" className="underline">
-              Campaign links
-            </Link>
-            . Write them as full URLs in the message.
-          </p>
-        </div>
-
+      <div className="flex min-h-0 flex-col gap-4">
         <div className="flex min-h-0 flex-col gap-4">
           <div className="flex min-h-[min(70vh,720px)] flex-1 flex-col overflow-hidden rounded-lg border bg-white">
             <div className="border-b px-3 py-2">
               <label className="text-xs font-medium text-muted-foreground">From</label>
-              <p className="mt-1 text-sm text-foreground">
-                {senderName?.trim() || companySenderName || brand.companyName}
-              </p>
+              {onSenderNameChange ? (
+                <Input
+                  className="mt-1 h-9 max-w-sm"
+                  value={senderName ?? ""}
+                  onChange={(event) => onSenderNameChange(event.target.value)}
+                  placeholder={companySenderName || brand.companyName}
+                  aria-label="Sender name"
+                />
+              ) : (
+                <p className="mt-1 text-sm text-foreground">{senderName?.trim() || companySenderName || brand.companyName}</p>
+              )}
+              {onSenderNameChange ? <p className="mt-1 text-xs text-muted-foreground">Leave blank to use the company default.</p> : null}
             </div>
             <div className="border-b px-3 py-2">
               <div className="flex items-center justify-between gap-2">
@@ -341,19 +315,23 @@ function EmailCampaignEditorInner({
             <div className="border-b px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold">Message</h3>
-                <InsertVariableButton onInsert={insertIntoBody} />
+                <div className="flex items-center gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => setAssistantOpen(true)}>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    AI Assistant
+                  </Button>
+                  <InsertVariableButton onInsert={insertIntoBody} />
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Starts with a greeting. Signature and unsubscribe are appended automatically — don’t paste
-                HTML.
+                Use the toolbar for bold, italic, underline, and links. Signature and unsubscribe are appended automatically.
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <MergeTokenTextField
+              <PlainEmailEditor
                 ref={bodyRef}
-                className="min-h-[min(50vh,520px)] w-full resize-none border-0 px-4 py-3 text-sm leading-relaxed outline-none"
-                value={plainDraft}
-                onChange={applyPlain}
+                html={editorHtml}
+                onChange={applyRichHtml}
                 placeholder={`${DEFAULT_CAMPAIGN_GREETING}\n\nWrite the rest of the email here…`}
               />
             </div>
@@ -367,6 +345,28 @@ function EmailCampaignEditorInner({
           </div>
         </div>
       </div>
+      {assistantOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-lg border bg-white p-4 shadow-lg">
+            <h3 className="text-sm font-semibold">AI assistant</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Describe the email or the edit you want to make.</p>
+            <textarea
+              className="mt-3 min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              value={aiPrompt}
+              onChange={(e) => onAiPromptChange(e.target.value)}
+              placeholder={hasExistingBody ? "Make this warmer and shorter…" : "Describe the email: offer, tone, and call to action…"}
+              autoFocus
+            />
+            <p className="mt-2 text-xs text-muted-foreground">Booking and other links come from <Link href="/settings/campaign-links" className="underline">Campaign links</Link>.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setAssistantOpen(false)} disabled={generating}>Cancel</Button>
+              <Button type="button" onClick={() => void runAi()} disabled={generating}>
+                {generating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Working…</> : <><Sparkles className="mr-2 h-4 w-4" />{hasExistingBody ? "Fill / edit with AI" : "Generate email"}</>}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

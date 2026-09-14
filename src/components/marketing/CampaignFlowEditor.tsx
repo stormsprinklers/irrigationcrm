@@ -1380,6 +1380,9 @@ function NodeConfigEditor({
             onConfigChange({ ...config, bodyHtml: nextBodyHtml, bodyText })
           }
           senderName={senderName}
+          onSenderNameChange={(nextSenderName) =>
+            onSettingsChange({ emailsPerDay, smsPerDay, startAt, senderName: nextSenderName })
+          }
         />
       </div>
     );

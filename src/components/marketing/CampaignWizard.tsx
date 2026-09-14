@@ -233,6 +233,8 @@ export function CampaignWizard({ initial, onSaved }: Props) {
               update("bodyHtml", bodyHtml);
               update("bodyText", bodyText);
             }}
+            senderName={form.dripSettings.senderName}
+            onSenderNameChange={(senderName) => update("dripSettings", { ...form.dripSettings, senderName })}
           />
         ) : (
           <div className="space-y-4 rounded-lg border bg-white p-6">

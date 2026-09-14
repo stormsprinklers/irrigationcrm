@@ -181,6 +181,7 @@ async function sendToRecipient(
   let bodyText = ensureCampaignGreeting(
     campaignPlainBodyText(content?.bodyHtml ?? campaign.bodyHtml, content?.bodyText ?? campaign.bodyText)
   );
+  let bodyHtml = content?.bodyHtml ?? campaign.bodyHtml;
   const fromEmail = resolveMarketingEmailFrom(campaign.company);
   const branding = {
     companyName: campaign.company.name,
@@ -243,10 +244,11 @@ async function sendToRecipient(
     property: customerRecord?.properties[0] ?? null,
     subject,
     bodyText,
-    bodyHtml: "",
+    bodyHtml,
   });
   subject = personalized.subject;
   bodyText = personalized.bodyText;
+  bodyHtml = personalized.bodyHtml;
 
   const blocked = await isContactBlocked(
     campaign.companyId,
@@ -305,7 +307,7 @@ async function sendToRecipient(
     : `mailto:${fromEmail}?subject=unsubscribe%20marketing`;
 
   const outbound = buildMarketingEmailPayload({
-    bodyHtml: "",
+    bodyHtml,
     bodyText,
     unsubscribeUrl,
     recipientId: recipient.id,
@@ -321,6 +323,7 @@ async function sendToRecipient(
     html: outbound.html,
     skipBranding: true,
     omitHtml: outbound.omitHtml,
+    disableTracking: true,
   });
   await prisma.campaignRecipient.update({
     where: { id: recipient.id },

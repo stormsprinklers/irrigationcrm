@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       property: matchedCustomer?.properties[0] ?? null,
       subject,
       bodyText: ensureCampaignGreeting(campaignPlainBodyText(bodyHtml, bodyText)),
-      bodyHtml: "",
+      bodyHtml,
     });
 
     const unsubscribeUrl = matchedCustomer?.id
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       : `${getCustomerBaseUrl(company)}/api/marketing/unsubscribe`;
 
     const outbound = buildMarketingEmailPayload({
-      bodyHtml: "",
+      bodyHtml: personalized.bodyHtml,
       bodyText: personalized.bodyText,
       unsubscribeUrl,
       recipientId: "test",
@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
         bypassCommsFreeze: true,
         skipBranding: true,
         omitHtml: outbound.omitHtml,
+        disableTracking: true,
       }
     );
 

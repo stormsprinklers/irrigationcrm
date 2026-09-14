@@ -79,11 +79,11 @@ export async function sendCampaignMessage(params: {
     property: params.property,
     subject: params.subject,
     bodyText: ensureCampaignGreeting(campaignPlainBodyText(params.bodyHtml, params.bodyText)),
-    bodyHtml: "",
+    bodyHtml: params.bodyHtml,
   });
   const subject = personalized.subject;
   const bodyText = personalized.bodyText;
-  const bodyHtml = "";
+  const bodyHtml = personalized.bodyHtml;
 
   if (customer.doNotService) {
     return false;
@@ -178,6 +178,7 @@ export async function sendCampaignMessage(params: {
         html: outbound.html,
         skipBranding: true,
         omitHtml: outbound.omitHtml,
+        disableTracking: true,
       }
     );
 

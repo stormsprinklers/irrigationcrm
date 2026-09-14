@@ -134,6 +134,8 @@ export function buildTwilioEmailPayload(params: {
   html?: string;
   /** Marketing campaigns: send text/plain only so Gmail does not treat it as HTML. */
   omitHtml?: boolean;
+  /** Disable SendGrid link rewriting, open pixels, subscription injection, and account footers. */
+  disableTracking?: boolean;
   attachments?: Array<{
     filename: string;
     contentType: string;
@@ -162,6 +164,20 @@ export function buildTwilioEmailPayload(params: {
       subject: params.subject,
       ...(htmlOut ? { html: htmlOut } : {}),
       ...(text ? { text } : {}),
+      ...(params.disableTracking
+        ? {
+            headers: {
+              "X-SMTPAPI": JSON.stringify({
+                filters: {
+                  clicktrack: { settings: { enable: 0, enable_text: false } },
+                  opentrack: { settings: { enable: 0 } },
+                  subscriptiontrack: { settings: { enable: 0 } },
+                  footer: { settings: { enable: 0 } },
+                },
+              }),
+            },
+          }
+        : {}),
       ...(params.attachments?.length ? { attachments: params.attachments } : {}),
     },
   };
@@ -197,6 +213,7 @@ export async function sendEmail(params: {
   text?: string;
   html?: string;
   omitHtml?: boolean;
+  disableTracking?: boolean;
   replyTo?: string;
   attachments?: Array<{
     filename: string;
@@ -217,6 +234,7 @@ export async function sendEmail(params: {
     text: params.text,
     html: params.omitHtml ? undefined : params.html,
     omitHtml: params.omitHtml,
+    disableTracking: params.disableTracking,
     attachments: params.attachments,
   });
 

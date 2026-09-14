@@ -125,6 +125,8 @@ export async function sendCompanyEmail(
     skipBranding?: boolean;
     /** Do not send an HTML MIME part (campaign plaintext). */
     omitHtml?: boolean;
+    /** Disable provider open/click tracking and injected provider footers for this message. */
+    disableTracking?: boolean;
   }
 ): Promise<SendEmailResult> {
   if (!params.bypassCommsFreeze) {
@@ -156,6 +158,7 @@ export async function sendCompanyEmail(
         : applyCompanyEmailSignatureText(params.text, resolved),
     html,
     omitHtml: params.omitHtml,
+    disableTracking: params.disableTracking,
     replyTo: params.replyTo,
     attachments: params.attachments,
   });
