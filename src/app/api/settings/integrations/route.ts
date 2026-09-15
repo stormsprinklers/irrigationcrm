@@ -14,19 +14,29 @@ export async function GET() {
     const user = await requireSessionUser();
     if (user.role !== "ADMIN") return forbiddenResponse();
 
-    const credentials = await prisma.integrationCredential.findMany({
-      where: { companyId: user.companyId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        type: true,
-        label: true,
-        keyPrefix: true,
-        enabled: true,
-        lastUsedAt: true,
-        createdAt: true,
-      },
-    });
+    const [credentials, company] = await Promise.all([
+      prisma.integrationCredential.findMany({
+        where: { companyId: user.companyId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          type: true,
+          label: true,
+          keyPrefix: true,
+          enabled: true,
+          lastUsedAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: {
+          website: true,
+          organicSearchWebsiteUrl: true,
+        },
+      }),
+    ]);
+    const websiteUrl = company?.website?.trim() || company?.organicSearchWebsiteUrl?.trim() || "";
 
     return NextResponse.json({
       credentials,
@@ -34,7 +44,7 @@ export async function GET() {
         crm: process.env.NEXT_PUBLIC_APP_URL ?? "",
         lms: process.env.NEXT_PUBLIC_LMS_URL ?? "",
         design: process.env.NEXT_PUBLIC_DESIGN_URL ?? "",
-        website: process.env.NEXT_PUBLIC_WEBSITE_URL ?? "",
+        website: websiteUrl,
       },
     });
   } catch {

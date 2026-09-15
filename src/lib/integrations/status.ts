@@ -26,13 +26,12 @@ const TYPE_LABELS: Record<IntegrationType, string> = {
 };
 
 const SPOKE_URL_ENV: Partial<Record<IntegrationType, string>> = {
-  WEBSITE: "NEXT_PUBLIC_WEBSITE_URL",
   DESIGN: "NEXT_PUBLIC_DESIGN_URL",
   LMS: "NEXT_PUBLIC_LMS_URL",
 };
 
-function spokeUrlFor(type: IntegrationType): string | null {
-  if (type === "WEBSITE") return process.env.NEXT_PUBLIC_WEBSITE_URL?.trim() || null;
+function spokeUrlFor(type: IntegrationType, websiteUrl?: string | null): string | null {
+  if (type === "WEBSITE") return websiteUrl?.trim() || null;
   if (type === "DESIGN") return process.env.NEXT_PUBLIC_DESIGN_URL?.trim() || null;
   if (type === "LMS") return process.env.NEXT_PUBLIC_LMS_URL?.trim() || null;
   return null;
@@ -172,21 +171,31 @@ async function testLmsOutboundConnection(): Promise<Pick<IntegrationStatus, "sta
 }
 
 export async function getIntegrationStatuses(companyId: string): Promise<IntegrationStatus[]> {
-  const credentials = await prisma.integrationCredential.findMany({
-    where: { companyId },
-    select: {
-      type: true,
-      enabled: true,
-      lastUsedAt: true,
-    },
-  });
+  const [credentials, company] = await Promise.all([
+    prisma.integrationCredential.findMany({
+      where: { companyId },
+      select: {
+        type: true,
+        enabled: true,
+        lastUsedAt: true,
+      },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        website: true,
+        organicSearchWebsiteUrl: true,
+      },
+    }),
+  ]);
+  const websiteUrl = company?.website?.trim() || company?.organicSearchWebsiteUrl?.trim() || null;
 
   const types: IntegrationType[] = ["WEBSITE", "LMS", "DESIGN", "MAPS"];
 
   return Promise.all(
     types.map(async (type) => {
       const ofType = credentials.filter((c) => c.type === type);
-      const url = spokeUrlFor(type);
+      const url = spokeUrlFor(type, websiteUrl);
       const envKey = SPOKE_URL_ENV[type];
 
       if (type === "LMS") {
