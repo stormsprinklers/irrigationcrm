@@ -21,16 +21,25 @@ export function HomePageInner() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
-    fetch(`/api/home/summary?range=${range}`)
-      .then((r) => r.json())
+    fetch(`/api/home/summary?range=${range}`, { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load dashboard");
+        return r.json();
+      })
       .then((data) => {
         setGreeting(data.greeting ?? "");
         setCards(data.cards ?? []);
         setKpis(data.kpis ?? []);
       })
-      .catch(() => toast.error("Failed to load dashboard"))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) toast.error("Failed to load dashboard");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [range]);
 
   return (

@@ -82,11 +82,11 @@ export default function CustomersPageContent({ segment }: Props) {
     [filters]
   );
 
-  const load = useCallback(async (queryFilters: CustomerListFilters) => {
-    const res = await fetch(`/api/customers${buildQuery(queryFilters)}`);
+  const load = useCallback(async (queryFilters: CustomerListFilters, signal?: AbortSignal) => {
+    const res = await fetch(`/api/customers${buildQuery(queryFilters)}`, { signal });
     if (!res.ok) throw new Error("Failed to load");
     const data = await res.json();
-    setCustomers(data.customers ?? []);
+    if (!signal?.aborted) setCustomers(data.customers ?? []);
   }, []);
 
   useEffect(() => {
@@ -100,18 +100,22 @@ export default function CustomersPageContent({ segment }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      load(filters)
-        .catch(() => toast.error(isContacts ? "Failed to load contacts" : "Failed to load customers"))
+      load(filters, controller.signal)
+        .catch(() => {
+          if (!controller.signal.aborted) toast.error(isContacts ? "Failed to load contacts" : "Failed to load customers");
+        })
         .finally(() => {
           if (!cancelled) setLoading(false);
         });
     }, 300);
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
-  }, [filters, load]);
+  }, [filters, load, isContacts]);
 
   const selectedCustomers = useMemo(
     () => customers.filter((c) => selectedIds.includes(c.id)),

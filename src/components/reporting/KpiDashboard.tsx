@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Wrench, Headphones, UsersRound, TrendingUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import type {
   KpiPersonCard,
 } from "@/lib/reporting/kpi-dashboard";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type KpiDashboardProps = {
   /** Admin home uses "home"; reporting module uses "reporting" (default). */
@@ -128,7 +129,6 @@ function CrewKpiCard({ crew }: { crew: KpiCrewCard }) {
           </div>
           <div className="min-w-0">
             <p className="truncate font-semibold">{crew.name}</p>
-            <p className="text-xs text-muted-foreground">Crew</p>
           </div>
         </div>
         <KpiCardGrid metrics={crew.metrics} />
@@ -172,23 +172,26 @@ export function KpiDashboard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const load = useCallback(async (nextRange: ReportRangeInput) => {
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(false);
-    try {
-      const res = await fetch(`/api/reporting/kpi-dashboard?${buildReportRangeQuery(nextRange)}`);
-      if (!res.ok) throw new Error("Failed to load");
-      setData(await res.json());
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load(rangeInput);
-  }, [rangeInput, load]);
+    const query = buildReportRangeQuery(rangeInput);
+    const url = `/api/reporting/kpi-dashboard?${query}${variant === "home" ? "&overview=1" : ""}`;
+    fetch(url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load");
+        return res.json() as Promise<KpiDashboardReport>;
+      })
+      .then(setData)
+      .catch(() => {
+        if (!controller.signal.aborted) setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [rangeInput, variant]);
 
   const rangeLabel =
     data?.rangeLabel ??
@@ -201,9 +204,7 @@ export function KpiDashboard({
   return (
     <ContentArea className="max-w-[1400px]">
       <PageHeader
-        breadcrumb={isHome ? ["Dashboard"] : ["Reporting", "KPI Dashboard"]}
         title={isHome ? "Dashboard" : "KPI Dashboard"}
-        subtitle="Team performance across technicians, CSRs, crews, and sales"
         actions={
           <ReportDateRangeControl
             value={rangeInput}
@@ -228,7 +229,7 @@ export function KpiDashboard({
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading dashboard…</p>
+        <div className="h-40 rounded-lg border border-border bg-muted/50 motion-safe:animate-pulse" role="status" aria-label="Loading dashboard" />
       ) : error || !data ? (
         <p className="text-sm text-destructive">Failed to load KPI dashboard.</p>
       ) : (
@@ -236,12 +237,15 @@ export function KpiDashboard({
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base font-medium text-muted-foreground">
-                Company overview · {data.rangeLabel}
+                Company overview
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                {data.company.map((metric, index) => (
+                {(isHome
+                  ? data.company.filter((metric) => ["Total revenue", "Booking rate", "Service conversion rate", "Active maintenance plans"].includes(metric.label))
+                  : data.company
+                ).map((metric, index) => (
                   <div
                     key={metric.label}
                     className={cn(
@@ -257,6 +261,12 @@ export function KpiDashboard({
             </CardContent>
           </Card>
 
+          {isHome ? (
+            <Link href="/reporting" className="inline-flex text-sm font-medium text-primary transition-colors hover:text-foreground hover:underline">
+              View full report
+            </Link>
+          ) : (
+            <>
           <Section
             title="Technicians"
             icon={Wrench}
@@ -308,6 +318,8 @@ export function KpiDashboard({
               ))}
             </div>
           </Section>
+            </>
+          )}
         </div>
       )}
     </ContentArea>

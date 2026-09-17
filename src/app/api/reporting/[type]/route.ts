@@ -40,7 +40,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (type === "kpi-dashboard") {
       try {
         const rangeInput = parseReportRangeFromSearchParams(request.nextUrl.searchParams);
-        const data = await getKpiDashboardReport(user.companyId, rangeInput);
+        const data = await getKpiDashboardReport(
+          user.companyId,
+          rangeInput,
+          request.nextUrl.searchParams.get("overview") === "1"
+        );
         return NextResponse.json(data);
       } catch {
         return NextResponse.json({ error: "Invalid date range" }, { status: 400 });

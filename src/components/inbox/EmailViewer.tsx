@@ -12,11 +12,11 @@ import {
   type EmailRecipient,
 } from "@/components/inbox/EmailRecipientPicker";
 import { InboxAttachmentPicker } from "@/components/inbox/InboxAttachmentPicker";
+import { SafeEmailHtml } from "@/components/inbox/SafeEmailHtml";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
   isImageMimeType,
   plainTextToEmailHtml,
-  sanitizeEmailHtml,
   type PendingAttachment,
 } from "@/lib/inbox/attachments";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
@@ -261,7 +261,7 @@ export function EmailViewer({
     return <div className="p-6 text-sm text-muted-foreground">Loading...</div>;
   }
 
-  const htmlBody = email.bodyHtml ? sanitizeEmailHtml(email.bodyHtml) : null;
+  const htmlBody = email.bodyHtml;
 
   return (
     <div className="flex h-full flex-col">
@@ -292,9 +292,9 @@ export function EmailViewer({
       </div>
       <div className="flex-1 overflow-auto p-4">
         {htmlBody ? (
-          <div
+          <SafeEmailHtml
+            html={htmlBody}
             className="crm-rich-html prose prose-sm max-w-none rounded-md border border-border p-4 text-sm"
-            dangerouslySetInnerHTML={{ __html: htmlBody }}
           />
         ) : (
           <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm">

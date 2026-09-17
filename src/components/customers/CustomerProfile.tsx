@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -173,7 +173,7 @@ export function CustomerProfile({ customerId }: Props) {
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: holidayEnabled } = useHolidayLightingFeatures();
   const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
-  const validTabs = new Set([
+  const validTabs = useMemo(() => new Set([
     "profile",
     "properties",
     "visits",
@@ -181,7 +181,7 @@ export function CustomerProfile({ customerId }: Props) {
     "estimates",
     "invoices",
     ...(maintenanceEnabled ? (["maintenance"] as const) : []),
-  ]);
+  ]), [maintenanceEnabled]);
   const tabFromUrl = searchParams.get("tab");
   const propertyIdFromUrl = searchParams.get("propertyId");
   const initialTab =
@@ -276,7 +276,7 @@ export function CustomerProfile({ customerId }: Props) {
     } else if (propertyIdFromUrl) {
       setActiveTab("properties");
     }
-  }, [tabFromUrl, propertyIdFromUrl, canViewInvoices]);
+  }, [tabFromUrl, propertyIdFromUrl, canViewInvoices, validTabs]);
 
   useEffect(() => {
     if (activeTab !== "properties" || !propertyIdFromUrl || loading) return;

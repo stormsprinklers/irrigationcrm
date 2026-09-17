@@ -60,8 +60,8 @@ export default function SettingsLeadSourcesPage() {
     void loadNumbers();
   }, [loadNumbers]);
 
-  const activeSources = company?.leadSources ?? [];
-  const archivedSources = company?.archivedLeadSources ?? [];
+  const activeSources = useMemo(() => company?.leadSources ?? [], [company?.leadSources]);
+  const archivedSources = useMemo(() => company?.archivedLeadSources ?? [], [company?.archivedLeadSources]);
 
   const numbersBySource = useMemo(() => {
     const map = new Map<string, PhoneNumberRow[]>();

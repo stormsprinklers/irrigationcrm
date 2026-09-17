@@ -12,7 +12,7 @@ import { InboxListDetailShell } from "@/components/inbox/InboxListDetailShell";
 import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
-import { sanitizeEmailHtml } from "@/lib/inbox/attachments";
+import { SafeEmailHtml } from "@/components/inbox/SafeEmailHtml";
 import { leadAddressQueryParams, parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
@@ -858,11 +858,9 @@ export function WebsiteLeadsInbox() {
             {submissionText}
           </div>
         ) : emailDetail?.bodyHtml ? (
-          <div
+          <SafeEmailHtml
+            html={emailDetail.bodyHtml}
             className="crm-rich-html prose prose-sm max-w-none break-words rounded-md border border-border p-4 text-sm"
-            dangerouslySetInnerHTML={{
-              __html: sanitizeEmailHtml(emailDetail.bodyHtml),
-            }}
           />
         ) : (
           <p className="text-sm text-muted-foreground">No additional details in this submission.</p>

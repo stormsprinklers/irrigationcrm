@@ -102,7 +102,8 @@ function isSalesperson(user: {
 
 export async function getKpiDashboardReport(
   companyId: string,
-  rangeInput: ReportRangeInput = { preset: "ytd" }
+  rangeInput: ReportRangeInput = { preset: "ytd" },
+  overviewOnly = false
 ): Promise<KpiDashboardReport> {
   const { start, end, label: rangeLabel, preset: range } = resolveReportRange(rangeInput);
 
@@ -118,7 +119,7 @@ export async function getKpiDashboardReport(
     activePlanCount,
     googleReviewAssignments,
   ] = await Promise.all([
-    prisma.user.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.user.findMany({
       where: { companyId, status: "ACTIVE" },
       select: {
         id: true,
@@ -132,7 +133,7 @@ export async function getKpiDashboardReport(
         crewMemberships: { select: { crewId: true } },
       },
     }),
-    prisma.crew.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.crew.findMany({
       where: { companyId },
       select: {
         id: true,
@@ -169,7 +170,7 @@ export async function getKpiDashboardReport(
         visit: { select: { division: true, assignedUserId: true, crewId: true } },
       },
     }),
-    prisma.feedbackSurveyResponse.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.feedbackSurveyResponse.findMany({
       where: {
         companyId,
         submittedAt: { gte: start, lte: end },
@@ -197,7 +198,7 @@ export async function getKpiDashboardReport(
         },
       },
     }),
-    prisma.maintenancePlanEnrollment.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.maintenancePlanEnrollment.findMany({
       where: {
         companyId,
         acceptedAt: { gte: start, lte: end },
@@ -209,10 +210,14 @@ export async function getKpiDashboardReport(
         template: { select: { basePrice: true } },
       },
     }),
-    prisma.lead.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.lead.findMany({
       where: {
         companyId,
         assignedUserId: { not: null },
+        OR: [
+          { createdAt: { gte: start, lte: end } },
+          { contactedAt: { gte: start, lte: end } },
+        ],
       },
       select: {
         assignedUserId: true,
@@ -229,7 +234,7 @@ export async function getKpiDashboardReport(
         status: { in: [EnrollmentStatus.ACTIVE, EnrollmentStatus.RENEWED] },
       },
     }),
-    prisma.gbpReviewAssignment.findMany({
+    overviewOnly ? Promise.resolve([]) : prisma.gbpReviewAssignment.findMany({
       where: {
         review: {
           companyId,
@@ -347,6 +352,10 @@ export async function getKpiDashboardReport(
       value: formatRatio(ltvCacAllTime),
     },
   ];
+
+  if (overviewOnly) {
+    return { range, rangeLabel, company, technicians: [], csrs: [], crews: [], salespeople: [] };
+  }
 
   function buildSoloFieldWorkerCards(
     role: "TECH" | "INSTALLER",

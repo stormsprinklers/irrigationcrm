@@ -9,10 +9,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
+import { blobPathnameFromUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import {
   EMAIL_ATTACHMENT_MAX_TOTAL_BYTES,
   fetchBlobAsBase64,
+  isAllowedEmailMimeType,
   plainTextToEmailHtml,
   type PendingAttachment,
 } from "@/lib/inbox/attachments";
@@ -135,6 +137,30 @@ export async function POST(request: NextRequest) {
       (value): value is string => Boolean(value)
     );
     const pendingAttachments = Array.isArray(attachments) ? attachments : [];
+    if (
+      pendingAttachments.length > 10 ||
+      pendingAttachments.some((item) =>
+        item.mimeType !== "text/uri-list" &&
+        (!isAllowedEmailMimeType(item.mimeType) ||
+          !Number.isFinite(item.sizeBytes) ||
+          item.sizeBytes < 0 ||
+          !isBlobStorageUrl(item.blobUrl) ||
+          !blobPathnameFromUrl(item.blobUrl)?.startsWith(`inbox/${user.companyId}/email/outbound/`))
+      )
+    ) {
+      return badRequestResponse("Invalid email attachments");
+    }
+    if (pendingAttachments.some((item) => item.mimeType === "text/uri-list" &&
+      !/^https?:\/\//i.test(item.publicUrl ?? ""))) {
+      return badRequestResponse("Links must use http or https");
+    }
+    if (customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, companyId: user.companyId },
+        select: { id: true },
+      });
+      if (!customer) return badRequestResponse("Customer not found");
+    }
     const { html, text, fileAttachments } = buildEmailContent({
       bodyText,
       bodyHtml,
@@ -185,7 +211,7 @@ export async function POST(request: NextRequest) {
         fileAttachments.map(async (item) => ({
           filename: item.fileName,
           contentType: item.mimeType,
-          content: await fetchBlobAsBase64(item.blobUrl),
+          content: await fetchBlobAsBase64(item.blobUrl, user.companyId),
         }))
       );
 

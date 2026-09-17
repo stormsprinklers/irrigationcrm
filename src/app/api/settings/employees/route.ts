@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { EmployeeStatus, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, redactEmployeeForRole, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
@@ -51,7 +52,8 @@ export async function POST(request: NextRequest) {
     });
     if (existing) return badRequestResponse("Email already in use at this company");
 
-    let plainPassword = "password123";
+    const generatedPassword = body.password == null || String(body.password).length === 0;
+    let plainPassword = generatedPassword ? randomBytes(18).toString("base64url") : "";
     if (body.password != null && String(body.password).length > 0) {
       if (!canSetEmployeePassword(user.role)) {
         return forbiddenResponse("Only admins can set a custom login password");
@@ -146,7 +148,7 @@ export async function POST(request: NextRequest) {
         ...(refreshed ?? employee),
         lmsSyncStatus: lmsSync.ok ? "synced" : "error",
         lmsSyncError: lmsSync.ok ? undefined : lmsSync.error,
-        tempPassword: plainPassword === "password123" ? "password123" : undefined,
+        tempPassword: generatedPassword ? plainPassword : undefined,
       },
       { status: 201 }
     );

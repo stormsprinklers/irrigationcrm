@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
 import { ArrowLeft, CheckCircle2, Trash2, Wrench } from "lucide-react";
@@ -13,16 +14,16 @@ import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
-import { PartsRunDialog } from "@/components/visits/PartsRunDialog";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSection";
 import { VisitEstimatesSection } from "@/components/visits/VisitEstimatesSection";
 import { VisitMaintenancePlanSection } from "@/components/visits/VisitMaintenancePlanSection";
-import { VisitIrrigationSection } from "@/components/visits/VisitIrrigationSection";
-import { VisitInstallPlanSection } from "@/components/visits/VisitInstallPlanSection";
-import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { VisitScheduleSection } from "@/components/visits/VisitScheduleSection";
 import { VisitNotesSection, type VisitNoteItem } from "@/components/visits/VisitNotesSection";
+const PartsRunDialog = dynamic(() => import("@/components/visits/PartsRunDialog").then((mod) => mod.PartsRunDialog));
+const VisitIrrigationSection = dynamic(() => import("@/components/visits/VisitIrrigationSection").then((mod) => mod.VisitIrrigationSection));
+const VisitInstallPlanSection = dynamic(() => import("@/components/visits/VisitInstallPlanSection").then((mod) => mod.VisitInstallPlanSection));
+const HolidayLightingPlanSection = dynamic(() => import("@/components/holiday-lighting/HolidayLightingPlanSection").then((mod) => mod.HolidayLightingPlanSection));
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -388,7 +389,7 @@ export function VisitDetail({ visitId }: Props) {
         </div>
       ) : null}
 
-      {irrigationEnabled ? (
+      {irrigationEnabled && partsRunOpen ? (
         <PartsRunDialog
           visitId={visit.id}
           open={partsRunOpen}

@@ -382,7 +382,14 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         return;
       }
       if (data.tempPassword) {
-        toast.message(`Employee created. Default login password: ${data.tempPassword}`);
+        toast.message("Employee created. Copy the temporary login password.", {
+          description: data.tempPassword,
+          duration: 30_000,
+          action: {
+            label: "Copy",
+            onClick: () => void navigator.clipboard.writeText(data.tempPassword),
+          },
+        });
       } else if (employee && isAdmin && password) {
         toast.success("Employee updated and login password set");
       } else {
@@ -726,7 +733,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           <p className="mt-1 text-xs text-muted-foreground">
             {employee
               ? "Set a new password for this employee to sign in. Leave blank to keep their current password."
-              : "Set the password this employee will use to sign in. Leave blank to use the default password123."}
+              : "Set a password for this employee, or leave blank to generate a secure temporary password."}
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>

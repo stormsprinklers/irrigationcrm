@@ -47,6 +47,7 @@
 }
 
 :root {
+  --font-inter: "Inter";
   --radius: 0.5rem;
   --background: #ffffff;
   --foreground: #102341;
@@ -74,11 +75,11 @@
 .dark {
   color-scheme: dark;
   --background: #0f1729;
-  --foreground: #f8fafc;
+  --foreground: #f8fafc !important;
   --card: #162033;
-  --card-foreground: #f8fafc;
+  --card-foreground: #f8fafc !important;
   --popover: #1a2740;
-  --popover-foreground: #f8fafc;
+  --popover-foreground: #f8fafc !important;
   --primary: #5eb0d9;
   --primary-foreground: #0c1526;
   --secondary: #1e3a52;
@@ -106,6 +107,10 @@
 
 .dark .text-storm-sky {
   color: #7ec8ea;
+}
+
+.dark .bg-storm-ice {
+  background-color: #1e3a52;
 }
 
 /*
@@ -157,19 +162,28 @@
 
 .dark .text-green-800,
 .dark .text-green-700,
+.dark .text-green-900,
+.dark .text-green-600,
 .dark .text-emerald-800,
-.dark .text-emerald-700 {
+.dark .text-emerald-700,
+.dark .text-emerald-900,
+.dark .text-emerald-950,
+.dark .text-emerald-600 {
   color: #86efac;
 }
 
 .dark .text-red-800,
 .dark .text-red-700,
-.dark .text-red-600 {
+.dark .text-red-600,
+.dark .text-red-900,
+.dark .text-red-950,
+.dark .text-red-500 {
   color: #fca5a5;
 }
 
 .dark .text-blue-800,
-.dark .text-blue-700 {
+.dark .text-blue-700,
+.dark .text-blue-600 {
   color: #93c5fd;
 }
 
@@ -250,6 +264,17 @@
     font-weight: 700;
     letter-spacing: -0.02em;
   }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .crm-page-enter {
+    animation: crm-page-enter 180ms ease-out both;
+  }
+}
+
+@keyframes crm-page-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .portal-container {

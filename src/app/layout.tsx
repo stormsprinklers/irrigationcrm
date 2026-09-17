@@ -1,14 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-500.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
 import Providers from "@/components/providers/SessionProvider";
 import { stormBrand } from "@/lib/branding";
 import { RADAR_APP_NAME, getRadarDocumentTitle } from "@/lib/radar-title";
 import "./globals.css";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const title = await getRadarDocumentTitle();
@@ -82,7 +80,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

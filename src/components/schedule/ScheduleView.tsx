@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   addDays,
   addMonths,
@@ -18,9 +19,9 @@ import {
 } from "date-fns";
 import { toast } from "sonner";
 import { ScheduleFilterSidebar } from "./ScheduleFilterSidebar";
-import { ScheduleQuickAddDialog } from "./ScheduleQuickAddDialog";
 import { ScheduleToolbar } from "./ScheduleToolbar";
-import { TeamSchedulePanel } from "./TeamSchedulePanel";
+const TeamSchedulePanel = dynamic(() => import("./TeamSchedulePanel").then((mod) => mod.TeamSchedulePanel));
+const ScheduleQuickAddDialog = dynamic(() => import("./ScheduleQuickAddDialog").then((mod) => mod.ScheduleQuickAddDialog));
 import { WeekGrid, type ScheduleViewMode, type TechColumn } from "./WeekGrid";
 import {
   DEFAULT_SCHEDULE_FILTERS,
@@ -424,7 +425,7 @@ export function ScheduleView({
         )}
       </div>
 
-      {onSelectSlot ? null : (
+      {onSelectSlot || quickAddSlot === null ? null : (
       <ScheduleQuickAddDialog
         open={quickAddSlot !== null}
         slot={quickAddSlot}

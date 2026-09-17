@@ -83,34 +83,24 @@ export function stripHtmlToText(html: string) {
     .trim();
 }
 
-/** Minimal sanitization for displaying inbound HTML. */
-export function sanitizeEmailHtml(html: string) {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/javascript:/gi, "");
-}
-
-export async function fetchBlobAsBase64(blobUrl: string) {
-  if (isBlobStorageUrl(blobUrl)) {
-    const pathname = blobPathnameFromUrl(blobUrl);
-    if (!pathname) throw new Error("Invalid blob URL");
-
-    const token = getBlobToken();
-    if (!token) throw new Error("Blob storage not configured");
-
-    const result = await get(pathname, { access: "private", token });
-    if (!result || result.statusCode !== 200) {
-      throw new Error("Failed to read attachment");
-    }
-
-    const buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
-    return buffer.toString("base64");
+export async function fetchBlobAsBase64(blobUrl: string, companyId: string) {
+  const pathname = blobPathnameFromUrl(blobUrl);
+  if (
+    !isBlobStorageUrl(blobUrl) ||
+    !pathname?.startsWith(`inbox/${companyId}/email/outbound/`)
+  ) {
+    throw new Error("Invalid email attachment URL");
   }
 
-  const res = await fetch(blobUrl);
-  if (!res.ok) throw new Error("Failed to read attachment");
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const token = getBlobToken();
+  if (!token) throw new Error("Blob storage not configured");
+
+  const result = await get(pathname, { access: "private", token });
+  if (!result || result.statusCode !== 200) {
+    throw new Error("Failed to read attachment");
+  }
+
+  const buffer = Buffer.from(await new Response(result.stream).arrayBuffer());
   return buffer.toString("base64");
 }
 
