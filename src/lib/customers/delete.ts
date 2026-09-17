@@ -16,6 +16,10 @@ export async function deleteCustomerForCompany(companyId: string, customerId: st
 
   try {
     await prisma.$transaction(async (tx) => {
+      const propertyIds = (await tx.customerProperty.findMany({
+        where: { companyId, customerId },
+        select: { id: true },
+      })).map((property) => property.id);
       // Careers / website leads often leave convertedCustomerId pointing here.
       await tx.lead.updateMany({
         where: { companyId, convertedCustomerId: customerId },
@@ -54,7 +58,16 @@ export async function deleteCustomerForCompany(companyId: string, customerId: st
       });
 
       await tx.customer.delete({ where: { id: customerId } });
-    });
+      await tx.hcpEntityMapping.deleteMany({
+        where: {
+          companyId,
+          OR: [
+            { entityType: "CUSTOMER", localId: customerId },
+            ...(propertyIds.length ? [{ entityType: "PROPERTY" as const, localId: { in: propertyIds } }] : []),
+          ],
+        },
+      });
+    }, { timeout: 15_000 });
 
     return { ok: true as const };
   } catch (error) {
@@ -79,16 +92,16 @@ export async function deleteCustomerForCompany(companyId: string, customerId: st
 }
 
 export async function bulkDeleteCustomers(companyId: string, customerIds: string[]) {
-  const results = { deleted: 0, failed: [] as string[] };
+  const results = { deleted: 0, failed: [] as Array<{ id: string; reason: string }> };
   for (const id of customerIds) {
     const result = await deleteCustomerForCompany(companyId, id);
     if (result.ok) results.deleted += 1;
-    else results.failed.push(id);
-  }
-  if (results.deleted === 0 && results.failed.length) {
-    throw new Error(
-      "Could not delete the selected customers. They may have related records that block removal — try archiving instead."
-    );
+    else results.failed.push({
+      id,
+      reason: "notFound" in result && result.notFound
+        ? "The selected customer was not found. Refresh the list and try again."
+        : "error" in result ? result.error : "Could not delete this customer.",
+    });
   }
   return results;
 }

@@ -5,13 +5,12 @@ import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { CustomerDTO } from "@/lib/customers/types";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
@@ -32,13 +31,26 @@ export function CustomerTable({
   selectedIds = [],
   onSelectedIdsChange,
   nameColumnLabel = "Customer name",
+  pageIndex,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+  sorting,
+  onSortingChange,
 }: {
   data: CustomerDTO[];
   selectedIds?: string[];
   onSelectedIdsChange?: (ids: string[]) => void;
   nameColumnLabel?: string;
+  pageIndex: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (pageIndex: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  sorting: SortingState;
+  onSortingChange: (sorting: SortingState) => void;
 }) {
-  const [sorting, setSorting] = useState<SortingState>([]);
   const rowSelection = useMemo(() => {
     const selection: Record<string, boolean> = {};
     for (const id of selectedIds) selection[id] = true;
@@ -160,14 +172,15 @@ export function CustomerTable({
 
   const table = useReactTable({
     data,
+    getRowId: (row) => row.id,
     columns,
-    state: { sorting, rowSelection },
-    onSortingChange: setSorting,
+    state: { sorting, rowSelection, pagination: { pageIndex, pageSize } },
+    onSortingChange: (updater) => onSortingChange(typeof updater === "function" ? updater(sorting) : updater),
     onRowSelectionChange: setRowSelection,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: 25 } },
+    manualPagination: true,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
   });
 
   return (
@@ -214,8 +227,8 @@ export function CustomerTable({
           <span>Rows per page</span>
           <select
             className="rounded border border-border bg-white px-2 py-1 text-sm"
-            value={table.getState().pagination.pageSize}
-            onChange={(e) => table.setPageSize(Number(e.target.value))}
+            value={pageSize}
+            onChange={(e) => onPageSizeChange(Number(e.target.value))}
           >
             {[10, 25, 50].map((size) => (
               <option key={size} value={size}>
@@ -225,15 +238,15 @@ export function CustomerTable({
           </select>
         </div>
         <span>
-          Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          Page {pageIndex + 1} of {Math.max(1, Math.ceil(total / pageSize))} · {total} total
         </span>
         <div className="flex gap-1">
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
+            onClick={() => onPageChange(pageIndex - 1)}
+            disabled={pageIndex === 0}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -241,8 +254,8 @@ export function CustomerTable({
             variant="outline"
             size="icon"
             className="h-8 w-8"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
+            onClick={() => onPageChange(pageIndex + 1)}
+            disabled={(pageIndex + 1) * pageSize >= total}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>

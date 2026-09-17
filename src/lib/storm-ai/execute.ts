@@ -134,7 +134,7 @@ export async function runStormAiTool(
           city,
           zip,
           status: "ACTIVE",
-        });
+        }, { take: 20 });
         return ok({
           customers: rows.slice(0, 20).map((c) => ({
             id: c.id,

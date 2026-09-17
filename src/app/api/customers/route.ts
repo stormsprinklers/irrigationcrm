@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { listCustomers, serializeCustomer } from "@/lib/customers/queries";
+import { countCustomers, listCustomers, serializeCustomer } from "@/lib/customers/queries";
 import { parseCustomerRecordSegment } from "@/lib/customers/lifetime-value";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const { searchParams } = request.nextUrl;
-    const customers = await listCustomers(user.companyId, {
+    const filters = {
       search: searchParams.get("search") ?? undefined,
       city: searchParams.get("city") ?? undefined,
       zip: searchParams.get("zip") ?? undefined,
@@ -17,8 +17,16 @@ export async function GET(request: NextRequest) {
       company: searchParams.get("company") ?? undefined,
       status: (searchParams.get("status") as "ACTIVE" | "ARCHIVED" | "ALL" | null) ?? undefined,
       segment: parseCustomerRecordSegment(searchParams.get("segment")),
-    });
-    return NextResponse.json({ customers, total: customers.length });
+    };
+    const page = Math.max(1, Math.min(100_000, Math.floor(Number(searchParams.get("page")) || 1)));
+    const pageSize = Math.max(10, Math.min(100, Math.floor(Number(searchParams.get("pageSize")) || 25)));
+    const requestedSort = searchParams.get("sortBy");
+    const sortBy = requestedSort === "phone" || requestedSort === "email" ? requestedSort : "name";
+    const [customers, total] = await Promise.all([
+      listCustomers(user.companyId, filters, { skip: (page - 1) * pageSize, take: pageSize, sortBy, sortDesc: searchParams.get("sortDesc") === "true" }),
+      countCustomers(user.companyId, filters),
+    ]);
+    return NextResponse.json({ customers, total, page, pageSize });
   } catch {
     return unauthorizedResponse();
   }

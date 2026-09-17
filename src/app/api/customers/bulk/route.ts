@@ -21,17 +21,19 @@ type BulkAction =
   | "setDoNotService"
   | "clearDoNotService";
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
     const action = body.action as BulkAction | undefined;
-    const customerIds = Array.isArray(body.customerIds)
-      ? body.customerIds.filter((id: unknown): id is string => typeof id === "string")
-      : [];
+    const rawCustomerIds: unknown[] = Array.isArray(body.customerIds) ? body.customerIds : [];
+    const customerIds = [...new Set(rawCustomerIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
 
     if (!action) return badRequestResponse("action is required");
     if (customerIds.length === 0) return badRequestResponse("customerIds is required");
+    if (customerIds.length > 100) return badRequestResponse("Select up to 100 customers at a time");
 
     if (action === "setDoNotService" || action === "clearDoNotService") {
       if (!canFlagDoNotService(user.role)) return forbiddenResponse();
@@ -46,8 +48,8 @@ export async function POST(request: NextRequest) {
     if (!canManageCustomers(user.role)) return forbiddenResponse();
 
     if (action === "delete") {
-      await bulkDeleteCustomers(user.companyId, customerIds);
-      return NextResponse.json({ ok: true, count: customerIds.length });
+      const result = await bulkDeleteCustomers(user.companyId, customerIds);
+      return NextResponse.json({ ok: result.failed.length === 0, ...result });
     }
 
     if (action === "archive") {

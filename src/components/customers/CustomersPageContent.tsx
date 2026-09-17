@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import type { SortingState } from "@tanstack/react-table";
 import { CustomerTable } from "@/components/customers/CustomerTable";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -31,7 +32,7 @@ type Props = {
   segment: "CUSTOMERS" | "CONTACTS";
 };
 
-function buildQuery(filters: CustomerListFilters) {
+function buildQuery(filters: CustomerListFilters, pageIndex: number, pageSize: number, sorting: SortingState) {
   const params = new URLSearchParams();
   if (filters.search?.trim()) params.set("search", filters.search.trim());
   if (filters.city?.trim()) params.set("city", filters.city.trim());
@@ -40,6 +41,12 @@ function buildQuery(filters: CustomerListFilters) {
   if (filters.company?.trim()) params.set("company", filters.company.trim());
   if (filters.status && filters.status !== "ACTIVE") params.set("status", filters.status);
   if (filters.segment) params.set("segment", filters.segment);
+  params.set("page", String(pageIndex + 1));
+  params.set("pageSize", String(pageSize));
+  if (sorting[0]?.id) {
+    params.set("sortBy", sorting[0].id);
+    params.set("sortDesc", String(sorting[0].desc));
+  }
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -53,6 +60,10 @@ export default function CustomersPageContent({ segment }: Props) {
 
   const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<CustomerDTO[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [listTab, setListTab] = useState<"ACTIVE" | "ARCHIVED">("ACTIVE");
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -85,11 +96,17 @@ export default function CustomersPageContent({ segment }: Props) {
   );
 
   const load = useCallback(async (queryFilters: CustomerListFilters, signal?: AbortSignal) => {
-    const res = await fetch(`/api/customers${buildQuery(queryFilters)}`, { signal });
+    const res = await fetch(`/api/customers${buildQuery(queryFilters, pageIndex, pageSize, sorting)}`, { signal });
     if (!res.ok) throw new Error("Failed to load");
     const data = await res.json();
-    if (!signal?.aborted) setCustomers(data.customers ?? []);
-  }, []);
+    if (!signal?.aborted) {
+      setCustomers(data.customers ?? []);
+      setTotal(data.total ?? 0);
+      if (pageIndex > 0 && data.total > 0 && !data.customers?.length) {
+        setPageIndex(Math.max(0, Math.ceil(data.total / pageSize) - 1));
+      }
+    }
+  }, [pageIndex, pageSize, sorting]);
 
   useEffect(() => {
     setFilters((prev) => ({
@@ -98,6 +115,7 @@ export default function CustomersPageContent({ segment }: Props) {
       segment,
     }));
     setSelectedIds([]);
+    setPageIndex(0);
   }, [listTab, segment]);
 
   useEffect(() => {
@@ -136,22 +154,37 @@ export default function CustomersPageContent({ segment }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, customerIds: selectedIds, ...extra }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         toast.error(data.error ?? "Bulk action failed");
         return;
       }
-      toast.success("Updated successfully");
-      setSelectedIds([]);
+      if (action === "delete") {
+        const failed = Array.isArray(data.failed) ? data.failed as Array<{ id: string; reason: string }> : [];
+        if (failed.length) {
+          toast.error(`${data.deleted ?? 0} deleted; ${failed.length} could not be deleted. ${failed[0]?.reason ?? ""}`);
+          setSelectedIds(failed.map((item) => item.id));
+        } else {
+          toast.success(`${data.deleted ?? selectedIds.length} deleted`);
+          setSelectedIds([]);
+        }
+      } else {
+        toast.success("Updated successfully");
+        setSelectedIds([]);
+      }
       setMergeOpen(false);
       setDeleteOpen(false);
       await load(filters);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Bulk action failed");
     } finally {
       setBulkLoading(false);
     }
   }
 
   function updateFilter<K extends keyof CustomerListFilters>(key: K, value: CustomerListFilters[K]) {
+    setPageIndex(0);
+    setSelectedIds([]);
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -176,8 +209,8 @@ export default function CustomersPageContent({ segment }: Props) {
           loading
             ? "Loading..."
             : isContacts
-              ? `${customers.length} people with no lifetime value — never billed for work`
-              : `${customers.length} customers with paid work`
+              ? `${total} people with no lifetime value — never billed for work`
+              : `${total} customers with paid work`
         }
         actions={<div className="flex gap-2">
           {canManage ? <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import customers</Button> : null}
@@ -224,7 +257,7 @@ export default function CustomersPageContent({ segment }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setFilters({ ...emptyFilters, segment })}
+            onClick={() => { setPageIndex(0); setFilters({ ...emptyFilters, segment }); }}
           >
             Clear filters
           </Button>
@@ -409,6 +442,13 @@ export default function CustomersPageContent({ segment }: Props) {
           selectedIds={selectedIds}
           onSelectedIdsChange={setSelectedIds}
           nameColumnLabel={isContacts ? "Contact name" : "Customer name"}
+          pageIndex={pageIndex}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(nextPage) => { setSelectedIds([]); setPageIndex(nextPage); }}
+          onPageSizeChange={(nextSize) => { setSelectedIds([]); setPageIndex(0); setPageSize(nextSize); }}
+          sorting={sorting}
+          onSortingChange={(nextSorting) => { setSelectedIds([]); setPageIndex(0); setSorting(nextSorting); }}
         />
       )}
     </ContentArea>

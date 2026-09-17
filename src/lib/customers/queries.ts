@@ -76,7 +76,7 @@ export function serializeProperty(property: {
   };
 }
 
-export async function listCustomers(companyId: string, filters: CustomerListFilters = {}) {
+function customerListWhere(companyId: string, filters: CustomerListFilters = {}) {
   const where: Prisma.CustomerWhereInput = { companyId };
   const and: Prisma.CustomerWhereInput[] = [];
 
@@ -140,11 +140,24 @@ export async function listCustomers(companyId: string, filters: CustomerListFilt
     where.AND = and;
   }
 
+  return where;
+}
+
+export async function countCustomers(companyId: string, filters: CustomerListFilters = {}) {
+  return prisma.customer.count({ where: customerListWhere(companyId, filters) });
+}
+
+export async function listCustomers(
+  companyId: string,
+  filters: CustomerListFilters = {},
+  options: { skip?: number; take?: number; sortBy?: "name" | "phone" | "email"; sortDesc?: boolean } = {}
+) {
   const customers = await prisma.customer.findMany({
-    where,
+    where: customerListWhere(companyId, filters),
     include: customerInclude,
-    orderBy: { name: "asc" },
-    take: 500,
+    orderBy: [{ [options.sortBy ?? "name"]: options.sortDesc ? "desc" : "asc" }, { id: "asc" }],
+    skip: options.skip ?? 0,
+    take: options.take ?? 25,
   });
 
   return customers.map((customer) => ({
