@@ -21,7 +21,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
-import type { HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
+import { optionDetail, type HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import { pruneStrands } from "@/lib/holiday-lighting/strands";
 import {
   DEFAULT_HOLIDAY_CATALOG,
@@ -36,6 +36,8 @@ import {
   type HolidayLightingCatalog,
   type HolidayMeasurements,
   type HolidayQuoteSelections,
+  type HolidayQuoteOptionKey,
+  type HolidayOptionAdjustment,
 } from "@/lib/holiday-lighting/types";
 import { getBrowserMapsApiKey } from "@/lib/holiday-lighting/load-maps";
 import { cn } from "@/lib/utils";
@@ -343,11 +345,23 @@ export function HolidayLightingQuoter({
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       if (data.pricing) setPricing(data.pricing);
       if (!opts?.quiet) toast.success("Quote saved");
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  function patchOption(key: HolidayQuoteOptionKey, patch: Partial<HolidayOptionAdjustment>) {
+    setSelections((current) => ({
+      ...current,
+      optionAdjustments: {
+        ...current.optionAdjustments,
+        [key]: { ...current.optionAdjustments?.[key], ...patch },
+      },
+    }));
   }
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
@@ -581,7 +595,7 @@ export function HolidayLightingQuoter({
         toast.error("Enter an address or pick a customer");
         return;
       }
-      await save(undefined, { quiet: true });
+      if (!(await save(undefined, { quiet: true }))) return;
       setStep(2);
       return;
     }
@@ -643,7 +657,7 @@ export function HolidayLightingQuoter({
     setCreating(true);
     try {
       const id = await ensureQuote();
-      await save(undefined, { quiet: true });
+      if (!(await save(undefined, { quiet: true }))) return;
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/create-estimate`, {
         method: "POST",
       });
@@ -682,6 +696,13 @@ export function HolidayLightingQuoter({
     );
     toast.success("Quote measurements cleared");
   }
+
+  const draftPricing = pricing ? {
+    buy: optionDetail(pricing.optionDetails.buy.calculated, selections, "buy"),
+    lease: optionDetail(pricing.optionDetails.lease.calculated, selections, "lease"),
+    permanent: optionDetail(pricing.optionDetails.permanent.calculated, selections, "permanent"),
+  } : null;
+  const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -1016,6 +1037,50 @@ export function HolidayLightingQuoter({
               <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
             </section>
           ) : null}
+          {pricing && draftPricing ? (
+            <section className="space-y-4 rounded-lg border border-border bg-background p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Prices and discounts</h3>
+                <p className="text-xs text-muted-foreground">Leave a price blank to use the calculated price. Discounts apply to each option separately.</p>
+              </div>
+              {([ ["buy", "Buy Lights"], ["lease", "Lease Lights"], ["permanent", "Permanent Lights"] ] as const).map(([key, label]) => {
+                const adjustment = selections.optionAdjustments?.[key];
+                const detail = draftPricing[key];
+                return <div key={key} className="space-y-2 rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between text-sm font-medium"><span>{label}</span><span>{money(detail.total)}</span></div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <label className="text-xs text-muted-foreground">Price ($)
+                      <input type="number" min={0} max={9999999} step="0.01" placeholder={detail.calculated.toFixed(2)}
+                        value={adjustment?.price ?? ""}
+                        onChange={(event) => patchOption(key, { price: event.target.value === "" ? null : Number(event.target.value) })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
+                    </label>
+                    <label className="text-xs text-muted-foreground">Discount
+                      <select value={adjustment?.discountType ?? "fixed"}
+                        onChange={(event) => patchOption(key, { discountType: event.target.value === "percent" ? "percent" : "fixed" })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground">
+                        <option value="fixed">Amount ($)</option><option value="percent">Percent (%)</option>
+                      </select>
+                    </label>
+                    <label className="text-xs text-muted-foreground">Amount
+                      <input type="number" min={0} max={adjustment?.discountType === "percent" ? 100 : 9999999} step="0.01"
+                        value={adjustment?.discountAmount ?? 0}
+                        onChange={(event) => patchOption(key, { discountAmount: Number(event.target.value) || 0 })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
+                    </label>
+                  </div>
+                  {detail.discountTotal > 0 ? <p className="text-xs text-muted-foreground">{money(detail.subtotal)} minus {money(detail.discountTotal)} discount</p> : null}
+                </div>;
+              })}
+              <label className="block text-xs text-muted-foreground">Buy Lights future years ($)
+                <input type="number" min={0} max={9999999} step="0.01" placeholder={pricing.calculatedReinstallTotal.toFixed(2)}
+                  value={selections.reinstallPrice ?? ""}
+                  onChange={(event) => setSelections((current) => ({ ...current, reinstallPrice: event.target.value === "" ? null : Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
+              </label>
+              <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>Save prices and discounts</Button>
+            </section>
+          ) : null}
           <section className="space-y-3 rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Quote</h3>
             {pricing ? (
@@ -1023,10 +1088,10 @@ export function HolidayLightingQuoter({
                 <div>
                   <div className="flex justify-between">
                     <span>Buy Lights</span>
-                    <span className="font-semibold">{money(pricing.year1Total)}</span>
+                    <span className="font-semibold">{money(draftPricing?.buy.total ?? pricing.year1Total)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Future years: {money(pricing.reinstallTotal)}. Front-loads the cost so you own
+                    Future years: {money(draftReinstall)}. Front-loads the cost so you own
                     the lights and pay less later. Includes installation, take-down, and bulb
                     replacements during the season.
                   </p>
@@ -1039,7 +1104,7 @@ export function HolidayLightingQuoter({
                         Most popular
                       </span>
                     </span>
-                    <span className="font-semibold">{money(pricing.leaseTotal)}</span>
+                    <span className="font-semibold">{money(draftPricing?.lease.total ?? pricing.leaseTotal)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     No commitments. Lower up front, can cost more long-term, and you can change
@@ -1050,7 +1115,7 @@ export function HolidayLightingQuoter({
                 <div>
                   <div className="flex justify-between">
                     <span>Permanent Lights</span>
-                    <span className="font-semibold">{money(pricing.permanentTotal)}</span>
+                    <span className="font-semibold">{money(draftPricing?.permanent.total ?? pricing.permanentTotal)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Fit your vibe year-round. Highest up-front cost, then change colors with an
@@ -1064,7 +1129,7 @@ export function HolidayLightingQuoter({
                     : ""}
                   {pricing.year1MinimumApplied ? " · buy first-year minimum applied" : ""}
                 </p>
-                {pricing.year1Total > 0 && pricing.leaseTotal <= 0 ? (
+                {pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
                   <p className="text-xs text-amber-800">
                     Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
                     lighting before sending this quote.

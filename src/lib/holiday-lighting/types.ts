@@ -66,6 +66,15 @@ export type HolidayQuoteSelections = {
   /** @deprecated Company minimums replace per-quote margin. */
   marginPct?: number;
   includeLease?: boolean;
+  optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
+  reinstallPrice?: number | null;
+};
+
+export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent";
+export type HolidayOptionAdjustment = {
+  price?: number | null;
+  discountType?: "fixed" | "percent";
+  discountAmount?: number;
 };
 
 export type HolidayLightStyle = {
@@ -351,6 +360,8 @@ export function applyHolidayCatalogPolicy(
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
     installKind: selections.installKind === "permanent" ? "permanent" : "temporary",
     notes: selections.notes,
+    optionAdjustments: selections.optionAdjustments,
+    reinstallPrice: selections.reinstallPrice,
   };
 }
 
@@ -384,11 +395,31 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
 export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_HOLIDAY_SELECTIONS };
   const obj = raw as Partial<HolidayQuoteSelections>;
+  const adjustments: HolidayQuoteSelections["optionAdjustments"] = {};
+  for (const key of ["buy", "lease", "permanent"] as const) {
+    const item = obj.optionAdjustments?.[key];
+    if (!item || typeof item !== "object") continue;
+    const rawPrice: unknown = item.price;
+    const price = rawPrice == null || rawPrice === "" ? null : Number(rawPrice);
+    const discountAmount = Number(item.discountAmount ?? 0);
+    adjustments[key] = {
+      price: price != null && Number.isFinite(price) && price >= 0 && price <= 9_999_999 ? Math.round(price * 100) / 100 : null,
+      discountType: item.discountType === "percent" ? "percent" : "fixed",
+      discountAmount: Number.isFinite(discountAmount) && discountAmount >= 0
+        ? Math.round(Math.min(discountAmount, item.discountType === "percent" ? 100 : 9_999_999) * 100) / 100
+        : 0,
+    };
+  }
+  const rawReinstallPrice: unknown = obj.reinstallPrice;
+  const reinstallPrice = rawReinstallPrice == null || rawReinstallPrice === "" ? null : Number(rawReinstallPrice);
   return {
     defaultLightStyleKey:
       obj.defaultLightStyleKey ?? DEFAULT_HOLIDAY_SELECTIONS.defaultLightStyleKey,
     installKind: parseInstallKind(obj.installKind),
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
+    optionAdjustments: adjustments,
+    reinstallPrice: reinstallPrice != null && Number.isFinite(reinstallPrice) && reinstallPrice >= 0 && reinstallPrice <= 9_999_999
+      ? Math.round(reinstallPrice * 100) / 100 : null,
   };
 }
 

@@ -1,4 +1,4 @@
-import { EstimateStatus, HolidayLightingQuoteStatus } from "@prisma/client";
+import { DiscountType, EstimateStatus, HolidayLightingQuoteStatus } from "@prisma/client";
 import { allocateEstimateNumber } from "@/lib/estimates/numbering";
 import { computeEstimateExpiry } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
@@ -106,6 +106,9 @@ export async function createEstimateFromHolidayQuote(params: {
 
   const createdOptions = [];
   for (const pack of packages) {
+    const key = pack.letter === "A" ? "buy" : pack.letter === "B" ? "lease" : "permanent";
+    const detail = priced.optionDetails[key];
+    const adjustment = selections.optionAdjustments?.[key];
     const option = await prisma.estimateOption.create({
       data: {
         estimateId: estimate.id,
@@ -113,7 +116,8 @@ export async function createEstimateFromHolidayQuote(params: {
         label: pack.label,
         description: pack.description,
         sortOrder: pack.sortOrder,
-        subtotal: pack.total,
+        subtotal: detail.subtotal,
+        discountTotal: detail.discountTotal,
         total: pack.total,
         photoUrl: quote.previewImageUrl,
       },
@@ -125,23 +129,39 @@ export async function createEstimateFromHolidayQuote(params: {
         name: pack.label,
         description: pack.tagline,
         quantity: 1,
-        unitPrice: pack.total,
+        unitPrice: detail.subtotal,
         unit: "each",
-        total: pack.total,
+        total: detail.subtotal,
         sortOrder: 0,
       },
     });
+    if (detail.discountTotal > 0 && adjustment) {
+      await prisma.discount.create({
+        data: {
+          estimateId: estimate.id,
+          optionId: option.id,
+          label: "Holiday lighting discount",
+          type: adjustment.discountType === "percent" ? DiscountType.PERCENT : DiscountType.FIXED,
+          amount: adjustment.discountType === "percent"
+            ? adjustment.discountAmount ?? 0
+            : Math.min(detail.subtotal, adjustment.discountAmount ?? 0),
+        },
+      });
+    }
     createdOptions.push({ ...pack, id: option.id });
   }
 
   const selected = createdOptions.find((o) => o.letter === "B") ?? createdOptions[0];
   const selectedTotal = selected?.total ?? priced.leaseTotal;
+  const selectedKey = selected?.letter === "A" ? "buy" : selected?.letter === "C" ? "permanent" : "lease";
+  const selectedDetail = priced.optionDetails[selectedKey];
 
   await prisma.estimate.update({
     where: { id: estimate.id },
     data: {
       selectedOptionId: selected?.id ?? createdOptions[0]?.id,
-      subtotal: selectedTotal,
+      subtotal: selectedDetail.subtotal,
+      discountTotal: selectedDetail.discountTotal,
       total: selectedTotal,
       premiumOptionTotal: priced.permanentTotal,
     },

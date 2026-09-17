@@ -2,6 +2,7 @@ import type {
   HolidayLightingCatalog,
   HolidayMeasurements,
   HolidayQuoteSelections,
+  HolidayQuoteOptionKey,
 } from "./types";
 import { findPlacementCatalogItem } from "./types";
 import { billedSegmentLengthFt } from "./pitch-match";
@@ -36,10 +37,21 @@ export type HolidayPricingResult = {
   purchaseSubtotal: number;
   leaseSubtotal: number;
   marginPct: number;
+  optionDetails: Record<HolidayQuoteOptionKey, { calculated: number; subtotal: number; discountTotal: number; total: number }>;
+  calculatedReinstallTotal: number;
 };
 
 function money(n: number) {
   return Math.round(n * 100) / 100;
+}
+
+export function optionDetail(calculated: number, selections: HolidayQuoteSelections, key: HolidayQuoteOptionKey) {
+  const adjustment = selections.optionAdjustments?.[key];
+  const subtotal = adjustment?.price == null || !Number.isFinite(adjustment.price)
+    ? calculated : money(Math.max(0, Math.min(9_999_999, adjustment.price)));
+  const requested = Math.max(0, Math.min(adjustment?.discountType === "percent" ? 100 : 9_999_999, adjustment?.discountAmount ?? 0));
+  const discountTotal = money(Math.min(subtotal, adjustment?.discountType === "percent" ? subtotal * requested / 100 : requested));
+  return { calculated, subtotal, discountTotal, total: money(subtotal - discountTotal) };
 }
 
 function lookup(prices: PriceLookup, sku: string | undefined) {
@@ -126,13 +138,22 @@ export function computeHolidayQuotePricing(params: {
   }
 
   const year1BeforeMin = money(billedLengthFt * year1Rate + placementsYear1);
-  const reinstallTotal = money(billedLengthFt * reinstallRate + placementsReinstall);
-  const leaseTotal = money(billedLengthFt * leaseRate + placementsLease);
+  const calculatedReinstallTotal = money(billedLengthFt * reinstallRate + placementsReinstall);
+  const calculatedLeaseTotal = money(billedLengthFt * leaseRate + placementsLease);
   const permanentBeforeMin = money(billedLengthFt * permanentRate + placementsPermanent);
   const year1Min = defaults?.temporaryYear1Minimum ?? 0;
   const permMin = defaults?.permanentYear1Minimum ?? 0;
-  const year1Total = money(Math.max(year1BeforeMin, year1Min));
-  const permanentTotal = money(Math.max(permanentBeforeMin, permMin));
+  const calculatedYear1Total = money(Math.max(year1BeforeMin, year1Min));
+  const calculatedPermanentTotal = money(Math.max(permanentBeforeMin, permMin));
+  const optionDetails = {
+    buy: optionDetail(calculatedYear1Total, selections, "buy"),
+    lease: optionDetail(calculatedLeaseTotal, selections, "lease"),
+    permanent: optionDetail(calculatedPermanentTotal, selections, "permanent"),
+  };
+  const year1Total = optionDetails.buy.total;
+  const leaseTotal = optionDetails.lease.total;
+  const permanentTotal = optionDetails.permanent.total;
+  const reinstallTotal = selections.reinstallPrice == null ? calculatedReinstallTotal : money(selections.reinstallPrice);
 
   return {
     lines,
@@ -142,12 +163,14 @@ export function computeHolidayQuotePricing(params: {
     reinstallTotal,
     leaseTotal,
     permanentTotal,
-    year1MinimumApplied: year1Total > year1BeforeMin,
-    permanentMinimumApplied: permanentTotal > permanentBeforeMin,
+    year1MinimumApplied: calculatedYear1Total > year1BeforeMin,
+    permanentMinimumApplied: calculatedPermanentTotal > permanentBeforeMin,
     purchaseTotal: year1Total,
     purchaseSubtotal: year1BeforeMin,
     leaseSubtotal: leaseTotal,
     marginPct: 0,
+    optionDetails,
+    calculatedReinstallTotal,
   };
 }
 
