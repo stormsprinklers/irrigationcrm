@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderMarketingMergeFields } from "../render-merge";
+import { marketingProperCase } from "../proper-case";
 
 test("renderMarketingMergeFields personalizes subject, SMS, and HTML", () => {
   const out = renderMarketingMergeFields({
@@ -70,4 +71,49 @@ test("renderMarketingMergeFields fills {customer_city} from the property when th
 
   assert.equal(out.subject, "Neighbors in Draper");
   assert.equal(out.bodyText, "We're in Draper this week.");
+});
+
+test("campaign merge fields use readable names and places without changing authored copy", () => {
+  const out = renderMarketingMergeFields({
+    company: { name: "STORM Sprinklers" },
+    customer: {
+      name: "LISA O'NEIL",
+      address: "123 MAIN ST",
+      city: "SALT LAKE CITY",
+      state: "ut",
+      zip: "84101",
+    },
+    subject: "Hello {customer_first_name} {customer_last_name} from {company_name}",
+    bodyText: "Hi {customer_first_name} {customer_last_name}, we're coming to {customer_city}.",
+    bodyHtml: "<p>{customer_address}</p>",
+  });
+
+  assert.equal(out.subject, "Hello Lisa O'Neil from STORM Sprinklers");
+  assert.equal(out.bodyText, "Hi Lisa O'Neil, we're coming to Salt Lake City.");
+  assert.equal(out.bodyHtml, "<p>123 Main St, Salt Lake City, UT 84101</p>");
+});
+
+test("campaign merge fields format property addresses when used for a customer", () => {
+  const out = renderMarketingMergeFields({
+    company: { name: "Storm Sprinklers" },
+    customer: { name: "MARY-JANE DOE" },
+    property: {
+      address: "456 WEST CENTER ST",
+      city: "WEST JORDAN",
+      state: "UT",
+      zip: "84084",
+    },
+    subject: "Hi {customer_first_name}",
+    bodyText: "Your home: {customer_address}",
+    bodyHtml: null,
+  });
+
+  assert.equal(out.subject, "Hi Mary-Jane");
+  assert.equal(out.bodyText, "Your home: 456 West Center St, West Jordan, UT 84084");
+});
+
+test("marketingProperCase handles apostrophes and mixed capitalization", () => {
+  assert.equal(marketingProperCase("D'ANGELO'S PLACE"), "D'Angelo's Place");
+  assert.equal(marketingProperCase("sAlT lAkE cItY"), "Salt Lake City");
+  assert.equal(marketingProperCase("  "), null);
 });

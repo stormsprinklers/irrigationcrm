@@ -1,6 +1,7 @@
 import { buildNotificationContext } from "@/lib/notifications/context";
 import { unwrapMergeTokenSpans } from "@/lib/notifications/merge-tokens";
 import { renderTemplate } from "@/lib/notifications/templates";
+import { marketingProperCase, marketingStateCase } from "@/lib/marketing/proper-case";
 
 export type MarketingMergeCompany = {
   name: string;
@@ -32,21 +33,21 @@ export function renderMarketingMergeFields(params: {
   bodyText: string;
   bodyHtml: string | null;
 }) {
-  const name = params.customer?.name?.trim() || "";
+  const name = marketingProperCase(params.customer?.name) || "";
   const ctx = buildNotificationContext({
     company: params.company,
     customer: {
       name,
-      address: params.customer?.address,
-      city: params.customer?.city,
-      state: params.customer?.state,
+      address: marketingProperCase(params.customer?.address),
+      city: marketingProperCase(params.customer?.city),
+      state: marketingStateCase(params.customer?.state),
       zip: params.customer?.zip,
     },
     property: params.property
       ? {
-          address: params.property.address,
-          city: params.property.city,
-          state: params.property.state,
+          address: marketingProperCase(params.property.address),
+          city: marketingProperCase(params.property.city),
+          state: marketingStateCase(params.property.state),
           zip: params.property.zip,
         }
       : undefined,
