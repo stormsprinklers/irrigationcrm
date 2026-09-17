@@ -238,8 +238,9 @@ export async function assignPendingGbpReviews(companyId: string) {
 
 /**
  * Keep the assignment inbox actionable. Reviews that could not be matched to a
- * technician after a full calendar month are retained, but no longer treated
- * as work awaiting assignment.
+ * technician after a full calendar month are retained as Unknown, but no
+ * longer treated as work awaiting assignment. Older imported reviews may not
+ * include Google's creation time, so their CRM creation time is the fallback.
  */
 export async function markExpiredUnassignedGbpReviews(
   companyId: string,
@@ -251,7 +252,10 @@ export async function markExpiredUnassignedGbpReviews(
       companyId,
       assignedManually: false,
       status: GbpReviewAssignStatus.NEEDS_REVIEW,
-      createTime: { not: null, lt: cutoff },
+      OR: [
+        { createTime: { lt: cutoff } },
+        { createTime: null, createdAt: { lt: cutoff } },
+      ],
       assignments: { none: {} },
     },
     data: { status: GbpReviewAssignStatus.UNKNOWN },

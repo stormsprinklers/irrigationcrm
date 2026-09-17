@@ -8,7 +8,10 @@ import {
 } from "@/lib/api-auth";
 import { canHandleGbpReviews } from "@/lib/google-business/permissions";
 import { REVIEW_MANUAL_ASSIGNMENT_ROLES } from "@/lib/google-business/review-aliases";
-import { manuallyAssignGbpReview } from "@/lib/google-business/review-assigner";
+import {
+  manuallyAssignGbpReview,
+  markExpiredUnassignedGbpReviews,
+} from "@/lib/google-business/review-assigner";
 import { prisma } from "@/lib/prisma";
 
 function serializeReview(
@@ -46,6 +49,9 @@ function serializeReview(
 export async function GET() {
   try {
     const user = await requireSessionUser();
+    // Apply expiry on every inbox read so existing backlogs are immediately
+    // cleared even if the scheduled Google sync has not run yet.
+    await markExpiredUnassignedGbpReviews(user.companyId);
     const [needsReview, assigned, technicians] = await Promise.all([
       prisma.gbpReview.findMany({
         where: { companyId: user.companyId, status: GbpReviewAssignStatus.NEEDS_REVIEW },
