@@ -3,7 +3,9 @@ export {
   getDefaultFromEmail,
   isEmailConfigured,
   sendEmail,
-  validateEmailWebhook,
-  validateEmailWebhook as validateSendGridWebhook,
   type SendEmailResult,
 } from "./email";
+export {
+  validateEmailWebhook,
+  validateEmailWebhook as validateSendGridWebhook,
+} from "./email-webhook";

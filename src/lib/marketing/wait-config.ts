@@ -17,6 +17,7 @@ export type ParsedWaitConfig = {
   sendAt: Date | null;
   sendAtRaw: string | null;
   keywords: string[];
+  replyChannel: "any" | "sms";
   action: WaitAction;
   usesReply: boolean;
   usesAction: boolean;
@@ -99,6 +100,7 @@ export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
   const sendAt = parseCampaignInstant(sendAtRaw);
 
   const keywords = parseReplyKeywords(config.replyKeyword);
+  const replyChannel = config.replyChannel === "sms" ? "sms" : "any";
   const action = asAction(config.action);
   const usesReply = mode === "reply" || mode === "delay_or_reply";
   const usesAction = mode === "action";
@@ -115,6 +117,7 @@ export function parseWaitConfig(raw: unknown): ParsedWaitConfig {
     sendAt: sendAt && !Number.isNaN(sendAt.getTime()) ? sendAt : null,
     sendAtRaw,
     keywords,
+    replyChannel,
     action,
     usesReply,
     usesAction,
@@ -194,7 +197,7 @@ export function waitSummary(config: unknown, timeZone?: string | null): string {
   const keywordLabel =
     wait.keywords.length > 0
       ? `reply containing “${wait.keywords.join(", ")}”`
-      : "any customer reply";
+      : wait.replyChannel === "sms" ? "any SMS reply" : "any customer reply";
 
   if (wait.mode === "date") {
     if (!wait.sendAtRaw && !wait.sendAt) return "Until a specific date/time";

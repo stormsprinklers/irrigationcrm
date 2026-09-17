@@ -204,6 +204,7 @@ export async function activateFlowCampaign(campaignId: string) {
     when: intendedStart,
   });
   const entryNode =
+    (trigger ? nextLinearNode(flowNodes.map((n) => ({ ...n, config: asConfig(n.config) })), trigger.id) : null) ??
     flowNodes.find((n) => n.type !== CampaignFlowNodeType.TRIGGER) ?? flowNodes[0];
 
   await prisma.campaignEnrollment.deleteMany({ where: { campaignId } });
@@ -419,6 +420,7 @@ async function customerReplyMatch(params: {
   customerId: string;
   since: Date;
   keywords: string[];
+  replyChannel?: "any" | "sms";
 }): Promise<string | null> {
   const messages = await prisma.message.findMany({
     where: {
@@ -437,6 +439,8 @@ async function customerReplyMatch(params: {
     const hit = matchingReplyKeyword(message.body, params.keywords);
     if (hit) return hit;
   }
+
+  if (params.replyChannel === "sms") return null;
 
   const emails = await prisma.emailMessage.findMany({
     where: {
@@ -520,6 +524,7 @@ export async function advanceWaitOnCustomerReply(params: {
     if (node.type === CampaignFlowNodeType.WAIT) {
       const wait = parseWaitConfig(node.config);
       if (!wait.usesReply) continue;
+      if (wait.replyChannel === "sms" && params.channel === "email") continue;
 
       const keywordHit = matchingReplyKeyword(params.text, wait.keywords);
       if (!keywordHit) continue;
@@ -692,6 +697,8 @@ async function logEvent(
 function nextLinearNode(nodes: FlowNodeRow[], currentId: string): FlowNodeRow | null {
   const idx = nodes.findIndex((n) => n.id === currentId);
   if (idx < 0) return null;
+  const explicit = nodes[idx].config.nextId;
+  if (typeof explicit === "string") return nodes.find((n) => n.id === explicit) ?? null;
   return nodes[idx + 1] ?? null;
 }
 
@@ -893,6 +900,7 @@ async function processOneDueEnrollment(
             customerId: enrollment.customerId,
             since,
             keywords: wait.keywords,
+            replyChannel: wait.replyChannel,
           });
           if (hit) {
             await completeWaitAndAdvance({
@@ -912,6 +920,7 @@ async function processOneDueEnrollment(
           until: until?.toISOString() ?? null,
           mode: wait.mode,
           keywords: wait.keywords,
+          replyChannel: wait.replyChannel,
           action: wait.action,
         });
         await prisma.campaignEnrollment.update({
@@ -967,6 +976,7 @@ async function processOneDueEnrollment(
           customerId: enrollment.customerId,
           since,
           keywords: wait.keywords,
+          replyChannel: wait.replyChannel,
         });
         if (hit) {
           await completeWaitAndAdvance({
@@ -1357,6 +1367,7 @@ export async function processCampaignTriggers(companyId?: string) {
     if (kind === "manual_audience") continue;
 
     const entry =
+      nextLinearNode(campaign.flowNodes.map((n) => ({ ...n, config: asConfig(n.config) })), trigger.id) ??
       campaign.flowNodes.find((n) => n.type !== CampaignFlowNodeType.TRIGGER) ??
       campaign.flowNodes[0];
     if (!entry) continue;

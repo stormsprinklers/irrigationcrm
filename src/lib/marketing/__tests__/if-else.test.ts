@@ -337,4 +337,8 @@ test("parseIfElseConfig and remapFlowNextIds keep timeoutNextId", () => {
     ])
   );
   assert.equal(remapped.timeoutNextId, "real-timeout");
+  assert.equal(
+    remapFlowNextIds({ nextId: "tmp-inserted" }, new Map([["tmp-inserted", "real-inserted"]])).nextId,
+    "real-inserted"
+  );
 });

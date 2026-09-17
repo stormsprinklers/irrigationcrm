@@ -41,7 +41,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   const [selectedItems, setSelectedItems] = useState<Array<{ id: string; name: string }>>([]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [manualMode, setManualMode] = useState(
-    Boolean(filters.includeCustomerIds?.length || filters.excludeCustomerIds?.length)
+    Boolean(filters.includeCustomerIds?.length || filters.excludeCustomerIds?.length || filters.selectNone)
   );
 
   useEffect(() => {
@@ -68,6 +68,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
             // Preview base list without include/exclude so user can pick from filter results
             includeCustomerIds: undefined,
             excludeCustomerIds: undefined,
+            selectNone: false,
           },
           includeCustomers: true,
         }),
@@ -150,11 +151,16 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   }, [baseCustomers, customerSearch]);
 
   function isSelected(id: string) {
+    if (filters.selectNone) return false;
     if (includeSet.size > 0) return includeSet.has(id) && !excluded.has(id);
     return !excluded.has(id);
   }
 
   function toggleCustomer(id: string) {
+    if (filters.selectNone) {
+      update({ selectNone: false, includeCustomerIds: [id], excludeCustomerIds: undefined });
+      return;
+    }
     if (includeSet.size > 0) {
       // Explicit include mode
       if (includeSet.has(id)) {
@@ -162,11 +168,13 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
         update({
           includeCustomerIds: next.length ? next : undefined,
           excludeCustomerIds: undefined,
+          selectNone: next.length === 0,
         });
       } else {
         update({
           includeCustomerIds: [...included, id],
           excludeCustomerIds: undefined,
+          selectNone: false,
         });
       }
       return;
@@ -184,20 +192,23 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
     }
   }
 
-  function selectAllVisible() {
-    update({
-      includeCustomerIds: filteredCustomers.map((c) => c.id),
-      excludeCustomerIds: undefined,
-    });
+  function selectAllMatching() {
+    update({ includeCustomerIds: undefined, excludeCustomerIds: undefined, selectNone: false });
+    setManualMode(false);
+  }
+
+  function deselectAll() {
+    update({ includeCustomerIds: undefined, excludeCustomerIds: undefined, selectNone: true });
     setManualMode(true);
   }
 
   function clearSelectionOverrides() {
-    update({ includeCustomerIds: undefined, excludeCustomerIds: undefined });
+    update({ includeCustomerIds: undefined, excludeCustomerIds: undefined, selectNone: false });
     setManualMode(false);
   }
 
   const effectiveCount = (() => {
+    if (filters.selectNone) return 0;
     if (!baseCustomers.length) return preview?.count ?? 0;
     return baseCustomers.filter((c) => isSelected(c.id)).length;
   })();
@@ -422,12 +433,16 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
                 } selected`}
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={selectAllVisible}>
+            <Button type="button" size="sm" variant="outline" onClick={selectAllMatching}>
               Select all matching
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={deselectAll}>
+              Deselect all
             </Button>
             {(manualMode ||
               filters.includeCustomerIds?.length ||
-              filters.excludeCustomerIds?.length) && (
+              filters.excludeCustomerIds?.length ||
+              filters.selectNone) && (
               <Button type="button" size="sm" variant="ghost" onClick={clearSelectionOverrides}>
                 Reset picks
               </Button>

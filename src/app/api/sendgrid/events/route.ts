@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { validateEmailWebhook } from "@/lib/inbox/email";
+import { validateEmailWebhook } from "@/lib/inbox/email-webhook";
 import { trackCampaignEngagement } from "@/lib/marketing/engagement";
 
 type EmailEvent = {

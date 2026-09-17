@@ -15,7 +15,10 @@ export default function NewMarketingCampaignPage() {
         title="New campaign"
         subtitle="Open the campaign builder to filter your audience and design the sequence."
       />
-      <CampaignWizard onSaved={(id) => router.push(`/marketing/campaigns/${id}`)} />
+      <CampaignWizard
+        onSaved={(id) => router.push(`/marketing/campaigns/${id}`)}
+        onDraftCreated={(id) => router.replace(`/marketing/campaigns/${id}/edit`)}
+      />
     </ContentArea>
   );
 }

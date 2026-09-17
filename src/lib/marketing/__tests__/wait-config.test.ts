@@ -99,6 +99,19 @@ test("reply and action waits honor an explicit timeout", () => {
   assert.equal(waitTimeoutAt(action, from)?.toISOString(), "2026-09-10T12:00:00.000Z");
 });
 
+test("SMS-only reply waits keep their channel and show the reply window", () => {
+  const config = {
+    mode: "reply",
+    replyChannel: "sms",
+    timeoutEnabled: true,
+    delayAmount: 2,
+    delayUnit: "days",
+  };
+  assert.equal(parseWaitConfig(config).replyChannel, "sms");
+  assert.equal(waitSummary(config), "Until any SMS reply or 2 days");
+  assert.equal(parseWaitConfig({ mode: "reply" }).replyChannel, "any");
+});
+
 test("recipientMatchesWaitAction only counts clicks", () => {
   assert.equal(recipientMatchesWaitAction({ openedAt: new Date(), clickCount: 0 }, "clicked"), false);
   assert.equal(recipientMatchesWaitAction({ clickedAt: new Date(), clickCount: 1 }, "clicked"), true);

@@ -98,6 +98,7 @@ export async function queryAudienceCustomers(
   filters?: AudienceFilters | null,
   take?: number
 ) {
+  if (filters?.selectNone) return [];
   const where = await buildAudienceWhere(companyId, channel, filters);
 
   const includeIds = filters?.includeCustomerIds?.filter(Boolean) ?? [];

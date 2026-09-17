@@ -17,6 +17,7 @@ import type {
 type Props = {
   initial?: Partial<CampaignFormState> & { id?: string; status?: string };
   onSaved: (campaignId: string) => void;
+  onDraftCreated?: (campaignId: string) => void;
 };
 
 function defaultTriggerNode(): CampaignFlowNodeInput {
@@ -47,8 +48,10 @@ const defaultForm: CampaignFormState = {
   flowNodes: [defaultTriggerNode()],
 };
 
-export function CampaignWizard({ initial, onSaved }: Props) {
+export function CampaignWizard({ initial, onSaved, onDraftCreated }: Props) {
   const [saving, setSaving] = useState(false);
+  const draftIdRef = useRef<string | null>(initial?.id ?? null);
+  const savingRef = useRef(false);
   const [form, setForm] = useState<CampaignFormState>({
     ...defaultForm,
     ...initial,
@@ -75,7 +78,6 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           ? initial.flowNodes ?? []
           : [defaultTriggerNode()],
   });
-  const campaignId = initial?.id;
   const existingStatus = initial?.status;
   const alreadyLive = existingStatus === "ACTIVE";
   const smsRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
@@ -91,7 +93,8 @@ export function CampaignWizard({ initial, onSaved }: Props) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function saveDraft() {
+  async function saveDraft(navigateToDraft = false) {
+    if (savingRef.current) return null;
     if (!form.name.trim()) {
       toast.error("Campaign name is required");
       return null;
@@ -105,8 +108,10 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       return null;
     }
 
+    savingRef.current = true;
     setSaving(true);
     try {
+      const existingId = draftIdRef.current;
       const payload = {
         name: form.name,
         type: isBlast ? "BLAST" : "DRIP",
@@ -120,8 +125,8 @@ export function CampaignWizard({ initial, onSaved }: Props) {
         steps: isBlast ? undefined : form.steps,
       };
 
-      const url = campaignId ? `/api/marketing/campaigns/${campaignId}` : "/api/marketing/campaigns";
-      const method = campaignId ? "PATCH" : "POST";
+      const url = existingId ? `/api/marketing/campaigns/${existingId}` : "/api/marketing/campaigns";
+      const method = existingId ? "PATCH" : "POST";
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -130,7 +135,8 @@ export function CampaignWizard({ initial, onSaved }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Save failed");
 
-      const id = (data.id ?? campaignId) as string;
+      const id = (data.id ?? existingId) as string;
+      draftIdRef.current = id;
 
       if (!isBlast && form.flowNodes.length > 0) {
         const flowRes = await fetch(`/api/marketing/campaigns/${id}/flow`, {
@@ -166,18 +172,20 @@ export function CampaignWizard({ initial, onSaved }: Props) {
         });
       }
 
-      toast.success(campaignId ? "Campaign saved" : "Draft saved");
+      toast.success(existingId ? "Campaign saved" : "Draft saved");
+      if (!existingId && navigateToDraft) onDraftCreated?.(id);
       return id;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
       return null;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   async function finish(action: "send" | "activate") {
-    const id = (await saveDraft()) ?? campaignId;
+    const id = await saveDraft();
     if (!id) return;
 
     setSaving(true);
@@ -260,7 +268,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled={saving} onClick={() => saveDraft()}>
+          <Button type="button" variant="outline" disabled={saving} onClick={() => { void saveDraft(true); }}>
             Save draft
           </Button>
           {alreadyLive ? null : (
@@ -286,7 +294,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
           />
         </div>
         <div className="ml-auto flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => saveDraft()}>
+          <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => { void saveDraft(true); }}>
             Save draft
           </Button>
           {alreadyLive ? (
@@ -295,7 +303,7 @@ export function CampaignWizard({ initial, onSaved }: Props) {
               size="sm"
               disabled={saving}
               onClick={async () => {
-                const id = (await saveDraft()) ?? campaignId;
+                const id = await saveDraft();
                 if (id) onSaved(id);
               }}
             >

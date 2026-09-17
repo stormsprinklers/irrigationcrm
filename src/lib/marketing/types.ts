@@ -17,6 +17,8 @@ export type AudienceFilters = {
   includeCustomerIds?: string[];
   /** Always removed from the audience after filters apply. */
   excludeCustomerIds?: string[];
+  /** Explicit empty audience, distinct from no manual selection. */
+  selectNone?: boolean;
 };
 
 export type CampaignFlowNodeType =

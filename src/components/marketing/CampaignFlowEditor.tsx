@@ -9,6 +9,7 @@ import {
   Mail,
   Maximize2,
   MessageSquare,
+  Plus,
   Tag,
   Trash2,
   X,
@@ -244,6 +245,15 @@ function createNode(
   return { id, type, sortOrder, config: defaultConfig(type) };
 }
 
+function setInsertedContinuation(node: CampaignFlowNodeInput & { id: string }, nextId: string) {
+  return {
+    ...node,
+    config: node.type === "BRANCH"
+      ? { ...node.config, noneNextId: nextId }
+      : { ...node.config, nextId },
+  };
+}
+
 function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
   switch (type) {
     case "TRIGGER":
@@ -263,6 +273,7 @@ function defaultConfig(type: CampaignFlowNodeType): Record<string, unknown> {
         delayUnit: "days",
         sendAt: undefined,
         replyKeyword: "",
+        replyChannel: "any",
         action: "clicked",
         timeoutEnabled: false,
       };
@@ -295,6 +306,8 @@ function ensureNodeId(node: CampaignFlowNodeInput): string {
 function linearNext(nodes: CampaignFlowNodeInput[], nodeId: string) {
   const idx = nodes.findIndex((n) => ensureNodeId(n) === nodeId);
   if (idx < 0) return null;
+  const explicit = nodeConfig(nodes[idx]).nextId;
+  if (typeof explicit === "string") return nodes.find((n) => ensureNodeId(n) === explicit) ?? null;
   return nodes[idx + 1] ?? null;
 }
 
@@ -391,6 +404,37 @@ function AddStepMenu({
           + {nodeMeta(type).label}
         </Button>
       ))}
+    </div>
+  );
+}
+
+function InsertStepControl({ onPick }: { onPick: (type: CampaignFlowNodeType) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative flex flex-col items-center" onPointerDown={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        className="flex h-6 w-6 items-center justify-center rounded-full border border-primary/60 bg-background text-primary shadow-sm transition-colors hover:bg-primary hover:text-primary-foreground"
+        aria-label="Insert step here"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      {open ? (
+        <div className="absolute top-7 z-30 w-44 rounded-md border border-border bg-popover p-1 shadow-lg">
+          {ADDABLE_TYPES.filter((type) => type !== "EXIT").map((type) => (
+            <button
+              key={type}
+              type="button"
+              className="block w-full rounded px-2 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
+              onClick={() => { onPick(type); setOpen(false); }}
+            >
+              {nodeMeta(type).label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -496,10 +540,26 @@ export function CampaignFlowEditor({
   }
 
   function removeNode(id: string) {
+    const removed = byId.get(id);
+    const successor = removed && removed.type !== "BRANCH" ? linearNext(nodes, id) : null;
+    const successorId = successor ? ensureNodeId(successor) : "";
     const next = reindex(
       nodes
         .filter((n) => ensureNodeId(n) !== id)
-        .map((n) => ({ ...n, config: scrubIfElseNextIds(nodeConfig(n), id) }))
+        .map((n) => {
+          const config = scrubIfElseNextIds(nodeConfig(n), id);
+          if (successorId && nodeConfig(n).nextId === id) config.nextId = successorId;
+          if (successorId && n.type === "BRANCH") {
+            const parsed = parseIfElseConfig(nodeConfig(n));
+            config.branches = parsed.branches.map((branch) => ({
+              ...branch,
+              nextId: branch.nextId === id ? successorId : branch.nextId,
+            }));
+            if (parsed.noneNextId === id) config.noneNextId = successorId;
+            if (parsed.timeoutNextId === id) config.timeoutNextId = successorId;
+          }
+          return { ...n, config };
+        })
     );
     onChange(next);
     setSelectionId((prev) => (prev === id ? next[0] ? ensureNodeId(next[0]) : null : prev));
@@ -508,8 +568,16 @@ export function CampaignFlowEditor({
   function insertAfter(parentId: string, type: CampaignFlowNodeType) {
     const idx = nodes.findIndex((n) => ensureNodeId(n) === parentId);
     if (idx < 0) return;
-    const child = createNode(type, idx + 1);
-    onChange(reindex([...nodes.slice(0, idx + 1), child, ...nodes.slice(idx + 1)]));
+    const created = createNode(type, idx + 1);
+    const target = linearNext(nodes, parentId);
+    const child = setInsertedContinuation(created, target ? ensureNodeId(target) : "");
+    const parent = nodes[idx];
+    onChange(reindex([
+      ...nodes.slice(0, idx),
+      { ...parent, config: { ...nodeConfig(parent), nextId: child.id } },
+      child,
+      ...nodes.slice(idx + 1),
+    ]));
     setSelectionId(child.id);
   }
 
@@ -520,8 +588,10 @@ export function CampaignFlowEditor({
   ) {
     const parent = byId.get(parentId);
     if (!parent || parent.type !== "BRANCH") return;
-    const child = createNode(type, nodes.length);
+    const created = createNode(type, nodes.length);
     const parsed = parseIfElseConfig(nodeConfig(parent));
+    const currentEdge = outgoingEdges(parent, nodes).find((edge) => edge.key === edgeKey);
+    const child = setInsertedContinuation(created, currentEdge?.nextId ?? "");
     const nextConfig =
       edgeKey === "none"
         ? { ...parsed, noneNextId: child.id }
@@ -593,7 +663,7 @@ export function CampaignFlowEditor({
         <button
           type="button"
           className={cn(
-            "relative z-[1] w-64 rounded-lg border bg-white p-3 text-left shadow-sm transition-shadow",
+            "relative z-[1] w-64 rounded-lg border bg-card p-3 text-left shadow-sm transition-shadow",
             meta.tone,
             selectedCard && "ring-2 ring-primary ring-offset-2"
           )}
@@ -632,11 +702,16 @@ export function CampaignFlowEditor({
             {edges[0].nextId && byId.has(edges[0].nextId) ? (
               primaryParent.get(edges[0].nextId) === nodeId ? (
                 <>
-                  <VerticalConnector taller />
+                  <VerticalConnector />
+                  {readOnly ? null : <InsertStepControl onPick={(type) => insertAfter(nodeId, type)} />}
+                  <VerticalConnector />
                   {renderNode(edges[0].nextId, nextSeen, rendered)}
                 </>
               ) : (
-                renderJump(edges[0].nextId)
+                <>
+                  {readOnly ? null : <InsertStepControl onPick={(type) => insertAfter(nodeId, type)} />}
+                  {renderJump(edges[0].nextId)}
+                </>
               )
             ) : (
               <>
@@ -672,10 +747,15 @@ export function CampaignFlowEditor({
                     primaryParent.get(edge.nextId) === nodeId ? (
                       <>
                         <VerticalConnector />
+                        {readOnly ? null : <InsertStepControl onPick={(type) => addFromBranch(nodeId, edge.key, type)} />}
+                        <VerticalConnector />
                         {renderNode(edge.nextId, nextSeen, rendered)}
                       </>
                     ) : (
-                      renderJump(edge.nextId)
+                      <>
+                        {readOnly ? null : <InsertStepControl onPick={(type) => addFromBranch(nodeId, edge.key, type)} />}
+                        {renderJump(edge.nextId)}
+                      </>
                     )
                   ) : (
                     <>
@@ -1210,7 +1290,7 @@ function NodeConfigEditor({
           >
             <option value="delay">For a set period of time</option>
             <option value="date">Until a specific date/time</option>
-            <option value="reply">Until the customer replies (SMS or email)</option>
+            <option value="reply">Until the customer replies</option>
             <option value="action">Until the customer takes action</option>
             {mode === "delay_or_reply" ? (
               <option value="delay_or_reply">Until delay or reply (legacy)</option>
@@ -1251,6 +1331,15 @@ function NodeConfigEditor({
         ) : null}
         {mode === "reply" || mode === "delay_or_reply" ? (
           <div>
+            <label className="text-xs text-muted-foreground">Reply channel</label>
+            <select
+              className="mt-1 mb-3 flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={wait.replyChannel}
+              onChange={(e) => onConfigChange({ ...config, replyChannel: e.target.value })}
+            >
+              <option value="sms">SMS only</option>
+              <option value="any">SMS or email</option>
+            </select>
             <label className="text-xs text-muted-foreground">
               Continue when the customer replies with
             </label>
@@ -1261,7 +1350,7 @@ function NodeConfigEditor({
               placeholder="yes, interested, sounds good"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Comma-separated words or phrases. Leave blank to continue on any SMS or email
+              Comma-separated words or phrases. Leave blank to continue on any matching
               reply.{mode === "delay_or_reply" ? " Whichever happens first wins." : ""}
             </p>
           </div>
@@ -1284,7 +1373,7 @@ function NodeConfigEditor({
           </div>
         ) : null}
         {mode === "reply" || mode === "action" || mode === "delay_or_reply" ? (
-          <div className="rounded-lg border bg-white px-3 py-3">
+          <div className="rounded-lg border bg-card px-3 py-3">
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"
@@ -1319,6 +1408,13 @@ function NodeConfigEditor({
                   }
                 />
               </div>
+            ) : null}
+            {mode === "reply" || mode === "delay_or_reply" ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                For an SMS reply path: Send SMS → Wait for any SMS reply with a timeout → If/Else
+                using an SMS reply condition. The Wait ends on a reply or when the time runs out;
+                If/Else then checks the reply received and takes None when no condition matches.
+              </p>
             ) : null}
           </div>
         ) : null}

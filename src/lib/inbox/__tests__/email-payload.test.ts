@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { buildTwilioEmailPayload, validateEmailWebhook } from "../email";
+import { buildTwilioEmailPayload } from "../email";
+import { validateEmailWebhook } from "../email-webhook";
 
 test("Twilio email payload omits unsupported replyTo field", () => {
   const payload = buildTwilioEmailPayload({

@@ -259,6 +259,7 @@ export function remapFlowNextIds(
     return idMap.get(value) ?? value;
   };
   const next = { ...config };
+  next.nextId = mapId(next.nextId);
   next.yesNextId = mapId(next.yesNextId);
   next.noNextId = mapId(next.noNextId);
   next.noneNextId = mapId(next.noneNextId);
@@ -277,6 +278,7 @@ export function scrubIfElseNextIds(
   removedId: string
 ): Record<string, unknown> {
   const next = { ...config };
+  if (next.nextId === removedId) next.nextId = "";
   if (next.yesNextId === removedId) next.yesNextId = "";
   if (next.noNextId === removedId) next.noNextId = "";
   if (next.noneNextId === removedId) next.noneNextId = "";
