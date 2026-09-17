@@ -40,9 +40,14 @@ function formatPageUrl(url: string) {
   }
 }
 
-function gscInspectionUrl(siteUrl: string, pageUrl: string) {
-  const params = new URLSearchParams({ resource_id: siteUrl, id: pageUrl });
-  return `https://search.google.com/search-console/inspect?${params.toString()}`;
+function trustedInspectionLink(link: string | null) {
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    return url.protocol === "https:" && url.hostname === "search.google.com" && url.pathname.startsWith("/search-console/") ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 export function SearchConsolePanel() {
@@ -122,14 +127,35 @@ export function SearchConsolePanel() {
   const loadIndexCoverage = useCallback(async () => {
     setLoadingIndexCoverage(true);
     setIndexCoverageError("");
+    setIndexCoverage(null);
     try {
-      const res = await fetch("/api/marketing/search-console/index-coverage");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to check index coverage");
-      setIndexCoverage(data as GscIndexCoverageData);
+      let offset: number | null = 0;
+      let combined: GscIndexCoverageData | null = null;
+      while (offset !== null) {
+        const res = await fetch(`/api/marketing/search-console/index-coverage?offset=${offset}`);
+        const raw = await res.text();
+        let data: GscIndexCoverageData & { error?: string };
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error("Search Console coverage check timed out or returned an invalid response. Please try again.");
+        }
+        if (!res.ok) throw new Error(data.error ?? "Failed to check index coverage");
+        combined = combined ? {
+          ...(combined as GscIndexCoverageData),
+          discoveredCount: data.discoveredCount,
+          checkedCount: combined.checkedCount + data.checkedCount,
+          excludedNoindexCount: combined.excludedNoindexCount + data.excludedNoindexCount,
+          inspectionErrorCount: combined.inspectionErrorCount + data.inspectionErrorCount,
+          notIndexedPages: [...combined.notIndexedPages, ...data.notIndexedPages],
+          nextOffset: data.nextOffset,
+        } : data;
+        setIndexCoverage(combined);
+        if (data.nextOffset !== null && data.nextOffset <= offset) throw new Error("Search Console coverage check stopped unexpectedly. Please try again.");
+        offset = data.nextOffset;
+      }
     } catch (err) {
       setIndexCoverageError(err instanceof Error ? err.message : "Index coverage unavailable");
-      setIndexCoverage(null);
     } finally {
       setLoadingIndexCoverage(false);
     }
@@ -432,6 +458,8 @@ export function SearchConsolePanel() {
             <p role="alert" className="text-sm text-destructive">{indexCoverageError}</p>
           ) : indexCoverage ? (
             <div className="space-y-4">
+              {loadingIndexCoverage ? <p className="text-sm text-muted-foreground">Checking more sitemap pages…</p> : null}
+              {indexCoverageError ? <p role="alert" className="text-sm text-destructive">{indexCoverageError}</p> : null}
               <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <Badge variant={indexCoverage.notIndexedPages.length > 0 ? "outline" : "secondary"}>
                   {indexCoverage.notIndexedPages.length} not indexed
@@ -443,7 +471,9 @@ export function SearchConsolePanel() {
               </div>
               {indexCoverage.notIndexedPages.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Every currently indexable sitemap page inspected is listed as indexed by Google.
+                  {loadingIndexCoverage || indexCoverageError || indexCoverage.inspectionErrorCount > 0
+                    ? "No unindexed pages found among the pages inspected so far."
+                    : "Every currently indexable sitemap page inspected is listed as indexed by Google."}
                 </p>
               ) : (
                 <details className="rounded-md border border-border">
@@ -468,15 +498,15 @@ export function SearchConsolePanel() {
                               {page.lastCrawlTime ? ` · Last crawled ${format(new Date(page.lastCrawlTime), "MMM d, yyyy")}` : ""}
                             </p>
                           </div>
-                          <a
-                            href={gscInspectionUrl(indexCoverage.siteUrl, page.url)}
+                          {trustedInspectionLink(page.inspectionResultLink) ? <a
+                            href={trustedInspectionLink(page.inspectionResultLink)!}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline"
                           >
                             Inspect in GSC
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                          </a>
+                          </a> : null}
                         </div>
                       </div>
                     ))}

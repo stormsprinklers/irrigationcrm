@@ -18,3 +18,14 @@ test("daily series includes empty dates and deduplicates visitors independently 
   assert.equal(summarizeWebsiteEvents(events).totalVisitors, 1);
   assert.equal(daily[1].homepage.avgDwellSeconds, null);
 });
+
+test("dwell time uses the latest snapshot from each page visit", () => {
+  const visits = [
+    { ...event("a", "2026-09-01", "TIME_ON_PAGE"), metadata: { seconds: 10, page_view_id: "first" } },
+    { ...event("a", "2026-09-01", "TIME_ON_PAGE"), metadata: { seconds: 42, page_view_id: "first" } },
+    { ...event("b", "2026-09-01", "TIME_ON_PAGE"), metadata: { seconds: 20, page_view_id: "second" } },
+  ];
+  const result = summarizeWebsiteEvents(visits);
+  assert.equal(result.homepage.dwellSamples, 2);
+  assert.equal(result.homepage.avgDwellSeconds, 31);
+});

@@ -60,6 +60,7 @@ export type GscDashboardData = {
 
 export type GscNotIndexedPage = {
   url: string;
+  inspectionResultLink: string | null;
   coverageState: string | null;
   verdict: string | null;
   indexingState: string | null;
@@ -76,6 +77,7 @@ export type GscIndexCoverageData = {
   excludedNoindexCount: number;
   inspectionErrorCount: number;
   truncated: boolean;
+  nextOffset: number | null;
   notIndexedPages: GscNotIndexedPage[];
 };
 

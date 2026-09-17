@@ -29,6 +29,7 @@ const WEBMASTERS_API = "https://www.googleapis.com/webmasters/v3";
 const SEARCH_ANALYTICS_API = "https://searchconsole.googleapis.com/webmasters/v3";
 const URL_INSPECTION_API = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect";
 const INDEX_COVERAGE_MAX_URLS = 150;
+const INDEX_COVERAGE_PAGE_SIZE = 10;
 const INDEX_COVERAGE_CONCURRENCY = 5;
 const LIVE_PAGE_TIMEOUT_MS = 12_000;
 
@@ -394,6 +395,7 @@ async function getLiveIndexability(pageUrl: string): Promise<LiveIndexability> {
 async function inspectUrlIndexStatus(accessToken: string, siteUrl: string, inspectionUrl: string) {
   return googleFetch<{
     inspectionResult?: {
+      inspectionResultLink?: string;
       indexStatusResult?: {
         coverageState?: string;
         verdict?: string;
@@ -425,7 +427,8 @@ function isIndexedByGoogle(status: {
  * report, even when Google has not recrawled that directive yet.
  */
 export async function getSearchConsoleIndexCoverage(
-  companyId: string
+  companyId: string,
+  offset = 0
 ): Promise<GscIndexCoverageData> {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -454,7 +457,8 @@ export async function getSearchConsoleIndexCoverage(
     throw new GoogleSearchConsoleApiError("Could not read a live sitemap for this website", 502);
   }
 
-  const sitemapUrls = snapshot.pageUrls.filter((url) => belongsToWebsite(url, websiteUrl));
+  const allSitemapUrls = snapshot.pageUrls.filter((url) => belongsToWebsite(url, websiteUrl));
+  const sitemapUrls = allSitemapUrls.slice(offset, offset + INDEX_COVERAGE_PAGE_SIZE);
   const liveChecks: Array<{ url: string; indexability: LiveIndexability }> = [];
   for (let index = 0; index < sitemapUrls.length; index += INDEX_COVERAGE_CONCURRENCY) {
     const batch = sitemapUrls.slice(index, index + INDEX_COVERAGE_CONCURRENCY);
@@ -476,7 +480,11 @@ export async function getSearchConsoleIndexCoverage(
       batch.map(async (url) => {
         try {
           const response = await inspectUrlIndexStatus(accessToken, siteUrl, url);
-          return { url, status: response.inspectionResult?.indexStatusResult ?? {} };
+          return {
+            url,
+            status: response.inspectionResult?.indexStatusResult ?? {},
+            inspectionResultLink: response.inspectionResult?.inspectionResultLink ?? null,
+          };
         } catch {
           inspectionErrorCount += 1;
           return null;
@@ -488,6 +496,7 @@ export async function getSearchConsoleIndexCoverage(
       if (!result || isIndexedByGoogle(result.status)) continue;
       notIndexedPages.push({
         url: result.url,
+        inspectionResultLink: result.inspectionResultLink,
         coverageState: result.status.coverageState ?? null,
         verdict: result.status.verdict ?? null,
         indexingState: result.status.indexingState ?? null,
@@ -501,11 +510,12 @@ export async function getSearchConsoleIndexCoverage(
   return {
     siteUrl,
     sitemapUrl: snapshot.sourceUrl,
-    discoveredCount: sitemapUrls.length,
+    discoveredCount: allSitemapUrls.length,
     checkedCount: indexableUrls.length,
     excludedNoindexCount,
     inspectionErrorCount,
     truncated: snapshot.truncated,
+    nextOffset: offset + sitemapUrls.length < allSitemapUrls.length ? offset + sitemapUrls.length : null,
     notIndexedPages: notIndexedPages.sort((a, b) => a.url.localeCompare(b.url)),
   };
 }

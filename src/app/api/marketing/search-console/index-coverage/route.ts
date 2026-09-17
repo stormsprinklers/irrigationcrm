@@ -7,10 +7,15 @@ import {
 
 export const maxDuration = 60;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireSessionUser();
-    const data = await getSearchConsoleIndexCoverage(user.companyId);
+    const rawOffset = new URL(request.url).searchParams.get("offset") ?? "0";
+    const offset = Number(rawOffset);
+    if (!Number.isInteger(offset) || offset < 0 || offset > 150) {
+      return NextResponse.json({ error: "Invalid coverage offset" }, { status: 400 });
+    }
+    const data = await getSearchConsoleIndexCoverage(user.companyId, offset);
     return NextResponse.json(data);
   } catch (error) {
     if (error instanceof GoogleSearchConsoleApiError) {

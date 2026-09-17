@@ -234,8 +234,8 @@ export function WebsiteAnalyticsPanel() {
                   value: formatDuration(report.homepage.avgDwellSeconds),
                   hint:
                     report.homepage.dwellSamples > 0
-                      ? `${formatCount(report.homepage.dwellSamples)} samples (10s+ on page)`
-                      : "Fires after 10 seconds on homepage",
+                      ? `${formatCount(report.homepage.dwellSamples)} homepage visits measured`
+                      : "No measured homepage visits yet",
                 },
               ].map((metric, index) => ({ ...metric, unit: index === 2 ? "seconds" : "events", trend: report.daily.map((r) => ({ date: r.date, value: [r.homepage.scroll50, r.homepage.scroll90, r.homepage.avgDwellSeconds][index] })) }))}
             />

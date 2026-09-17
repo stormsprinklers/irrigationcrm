@@ -82,6 +82,7 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
   let homepageScroll90 = 0;
   let homepageDwellSamples = 0;
   let homepageDwellTotalSeconds = 0;
+  const dwellByPageView = new Map<string, number>();
   let phoneClicks = 0;
   let smsClicks = 0;
   let formSubmits = 0;
@@ -113,9 +114,16 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
 
     if (event.eventType === "TIME_ON_PAGE" && isHomePath(path)) {
       const seconds = metaNumber(event.metadata, "seconds");
-      if (seconds != null) {
-        homepageDwellSamples += 1;
-        homepageDwellTotalSeconds += seconds;
+      if (seconds != null && seconds >= 0) {
+        const pageViewId = metaString(event.metadata, "page_view_id");
+        if (pageViewId) {
+          const key = `${event.sessionId ?? "anon"}:${pageViewId}`;
+          dwellByPageView.set(key, Math.max(dwellByPageView.get(key) ?? 0, seconds));
+        } else {
+          // Historical events have one sample per page view and no page_view_id.
+          homepageDwellSamples += 1;
+          homepageDwellTotalSeconds += seconds;
+        }
       }
     }
 
@@ -148,6 +156,8 @@ export function summarizeWebsiteEvents(events: EventRow[]) {
 
   const totalPageViews = [...pageViews.values()].reduce((sum, n) => sum + n, 0);
   const totalSessions = [...landingPages.values()].reduce((sum, n) => sum + n, 0);
+  homepageDwellSamples += dwellByPageView.size;
+  homepageDwellTotalSeconds += [...dwellByPageView.values()].reduce((sum, seconds) => sum + seconds, 0);
 
   return {
     totalEvents: events.filter((e) => e.eventType !== "VISITOR_HEARTBEAT").length,
