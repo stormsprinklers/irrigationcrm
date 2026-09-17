@@ -171,7 +171,7 @@ export async function createLeadFromIntegration(
           leadSource: input.source ?? "website",
         },
         sessionId,
-        phone: input.phone,
+        phone: input.source === "share-the-cheer-nomination" || input.source === "share-the-cheer-partner" ? null : input.phone,
         metadata: {
           formSource: input.source ?? "website",
           externalId: input.externalId,

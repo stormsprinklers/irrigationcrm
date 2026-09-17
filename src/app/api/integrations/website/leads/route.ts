@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       companyId: auth.companyId,
       integrationType: IntegrationType.WEBSITE,
       action: "website.leads.create",
-      payload: body,
+      payload: { externalId: parsed.data.externalId },
       status: "error",
       error: message,
     });

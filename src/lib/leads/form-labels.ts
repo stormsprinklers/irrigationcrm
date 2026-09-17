@@ -8,6 +8,8 @@ const FORM_LABELS: Record<string, string> = {
   "unbooked-estimate": "Unbooked Estimate",
   "christmas-estimate": "Christmas Lighting Estimate",
   "christmas-lighting-estimate": "Christmas Lighting Estimate",
+  "share-the-cheer-nomination": "Share the Cheer Nomination",
+  "share-the-cheer-partner": "Share the Cheer Partner Offer",
   careers: "New Job Applicant",
 };
 

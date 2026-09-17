@@ -60,7 +60,9 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
     lead.source ? `Source: ${lead.source}` : null,
   ];
 
-  if (isPricingQuoteLead(lead.source)) {
+  if (lead.source === "share-the-cheer-nomination" || lead.source === "share-the-cheer-partner") {
+    bodyLines.push("", "Please review this submission privately in the CRM. Details are intentionally omitted from this email.");
+  } else if (isPricingQuoteLead(lead.source)) {
     const estimate =
       (typeof meta.formattedEstimate === "string" && meta.formattedEstimate) ||
       formatQuoteEstimate(meta.quote ?? meta.pricing_quote_snapshot) ||
@@ -100,7 +102,7 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
       to: [to],
       subject,
       text: body,
-      html: body.replace(/\n/g, "<br>"),
+      html: body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>"),
     }
   );
 }
