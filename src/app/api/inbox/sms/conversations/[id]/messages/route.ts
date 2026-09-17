@@ -82,11 +82,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       },
       orderBy: { sentAt: "asc" },
     });
+    const sids = messages.map((message) => message.twilioMessageSid).filter((sid): sid is string => Boolean(sid));
+    const campaignSends = sids.length ? await prisma.campaignRecipient.findMany({
+      where: { campaign: { companyId: user.companyId }, twilioMessageSid: { in: sids } },
+      select: { twilioMessageSid: true, campaign: { select: { name: true } } },
+    }) : [];
+    const campaignBySid = new Map(campaignSends.map((send) => [send.twilioMessageSid, send.campaign.name]));
 
     return NextResponse.json({
       conversation,
       messages: messages.map((msg) => ({
         ...msg,
+        campaignName: msg.twilioMessageSid ? campaignBySid.get(msg.twilioMessageSid) ?? null : null,
         sentAt: msg.sentAt.toISOString(),
         readAt: msg.readAt?.toISOString() ?? null,
         contactInfoAppliedAt: msg.contactInfoAppliedAt?.toISOString() ?? null,

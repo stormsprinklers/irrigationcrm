@@ -16,6 +16,17 @@ export async function findSmsConversationByPhone(params: {
   const normalized = normalizePhone(params.participantPhone);
   const digits = normalized.replace(/\D/g, "").slice(-10);
 
+  const exact = await prisma.conversation.findFirst({
+    where: {
+      companyId: params.companyId,
+      channel: Channel.SMS,
+      scope: params.scope,
+      participantPhone: { in: phoneLookupVariants(params.participantPhone) },
+    },
+    orderBy: { lastMessageAt: "desc" },
+  });
+  if (exact) return exact;
+
   const candidates = await prisma.conversation.findMany({
     where: {
       companyId: params.companyId,

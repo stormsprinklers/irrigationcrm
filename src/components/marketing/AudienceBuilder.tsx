@@ -40,9 +40,16 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Array<{ id: string; name: string }>>([]);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(100);
   const [manualMode, setManualMode] = useState(
     Boolean(filters.includeCustomerIds?.length || filters.excludeCustomerIds?.length || filters.selectNone)
   );
+  const baseFilterKey = JSON.stringify({
+    ...filters,
+    includeCustomerIds: undefined,
+    excludeCustomerIds: undefined,
+    selectNone: false,
+  });
 
   useEffect(() => {
     fetch("/api/marketing/audience/filters")
@@ -62,14 +69,8 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channel,
-          filters: {
-            ...filters,
-            priceBookItemIds: selectedItems.map((i) => i.id),
-            // Preview base list without include/exclude so user can pick from filter results
-            includeCustomerIds: undefined,
-            excludeCustomerIds: undefined,
-            selectNone: false,
-          },
+          // Selection clicks do not change the eligible base list.
+          filters: JSON.parse(baseFilterKey),
           includeCustomers: true,
         }),
       });
@@ -77,7 +78,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
     } finally {
       setLoadingPreview(false);
     }
-  }, [channel, filters, selectedItems]);
+  }, [channel, baseFilterKey]);
 
   useEffect(() => {
     const timer = setTimeout(refreshPreview, 300);
@@ -135,7 +136,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItems]);
 
-  const baseCustomers = preview?.customers ?? preview?.sample ?? [];
+  const baseCustomers = useMemo(() => preview?.customers ?? preview?.sample ?? [], [preview]);
   const excluded = new Set(filters.excludeCustomerIds ?? []);
   const included = filters.includeCustomerIds ?? [];
   const includeSet = new Set(included);
@@ -149,6 +150,8 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
         .includes(q);
     });
   }, [baseCustomers, customerSearch]);
+
+  useEffect(() => setVisibleCount(100), [customerSearch, baseCustomers]);
 
   function isSelected(id: string) {
     if (filters.selectNone) return false;
@@ -459,7 +462,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
           placeholder="Search customers…"
         />
         <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto">
-          {filteredCustomers.map((c) => {
+          {filteredCustomers.slice(0, visibleCount).map((c) => {
             const selected = isSelected(c.id);
             return (
               <li key={c.id}>
@@ -496,6 +499,13 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
               </li>
             );
           })}
+          {filteredCustomers.length > visibleCount && (
+            <li className="py-2 text-center">
+              <Button type="button" variant="outline" size="sm" onClick={() => setVisibleCount((count) => count + 100)}>
+                Show more ({filteredCustomers.length - visibleCount} remaining)
+              </Button>
+            </li>
+          )}
           {!loadingPreview && filteredCustomers.length === 0 ? (
             <li className="py-4 text-center text-sm text-muted-foreground">
               No matching customers for these filters.

@@ -20,8 +20,7 @@ export async function POST(request: NextRequest) {
       const customers = await queryAudienceCustomers(
         user.companyId,
         channel,
-        filters ?? null,
-        500
+        filters ?? null
       );
       return NextResponse.json({
         count: customers.length,

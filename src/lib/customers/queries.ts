@@ -127,6 +127,9 @@ function customerListWhere(companyId: string, filters: CustomerListFilters = {})
     });
   }
 
+  if (filters.doNotService === "true") and.push({ doNotService: true });
+  if (filters.doNotService === "false") and.push({ doNotService: false });
+
   if (filters.status === "ARCHIVED") {
     and.push({ status: "ARCHIVED" });
   } else if (filters.status !== "ALL") {

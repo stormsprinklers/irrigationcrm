@@ -85,7 +85,7 @@ export async function optInCustomerMarketingSms(params: {
   companyId: string;
 }) {
   await prisma.customer.updateMany({
-    where: { id: params.customerId, companyId: params.companyId },
+    where: { id: params.customerId, companyId: params.companyId, doNotService: false },
     data: { marketingSmsOptOut: false },
   });
 }

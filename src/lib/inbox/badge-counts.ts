@@ -30,6 +30,10 @@ export async function getInboxBadgeCounts(
 
   const customerFilter =
     eligibleCustomerIds != null ? { customerId: { in: eligibleCustomerIds } } : {};
+  const blockedPhones = (await prisma.blockedContact.findMany({
+    where: { companyId, phone: { not: null } },
+    select: { phone: true },
+  })).map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone));
 
   const [sms, social, leads, missedLogs, googleReviews] = await Promise.all([
     prisma.conversation.count({
@@ -38,6 +42,7 @@ export async function getInboxBadgeCounts(
         channel: Channel.SMS,
         scope: Scope.EXTERNAL,
         ...customerFilter,
+        ...(blockedPhones.length ? { OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] } : {}),
         messages: {
           some: unreadCustomerSmsWhere,
         },

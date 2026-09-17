@@ -1,3 +1,4 @@
+import { CampaignEnrollmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function mergeCustomers(params: {
@@ -32,8 +33,10 @@ export async function mergeCustomers(params: {
         zip: target.zip ?? source.zip,
         leadSource: target.leadSource ?? source.leadSource,
         stripeCustomerId: target.stripeCustomerId ?? source.stripeCustomerId,
-        marketingEmailOptOut: target.marketingEmailOptOut || source.marketingEmailOptOut,
-        marketingSmsOptOut: target.marketingSmsOptOut || source.marketingSmsOptOut,
+        marketingEmailOptOut: target.doNotService || source.doNotService || target.marketingEmailOptOut || source.marketingEmailOptOut,
+        marketingSmsOptOut: target.doNotService || source.doNotService || target.marketingSmsOptOut || source.marketingSmsOptOut,
+        appointmentReminderEmailOptOut: target.doNotService || source.doNotService || target.appointmentReminderEmailOptOut || source.appointmentReminderEmailOptOut,
+        appointmentReminderSmsOptOut: target.doNotService || source.doNotService || target.appointmentReminderSmsOptOut || source.appointmentReminderSmsOptOut,
         doNotService: target.doNotService || source.doNotService,
         tags: [...new Set([...target.tags, ...source.tags])],
       },
@@ -88,6 +91,17 @@ export async function mergeCustomers(params: {
       }),
     ];
     await Promise.all(moveCustomerId);
+
+    if (target.doNotService || source.doNotService) {
+      await tx.campaignEnrollment.updateMany({
+        where: { customerId: targetId, campaign: { companyId }, status: { in: [CampaignEnrollmentStatus.ACTIVE, CampaignEnrollmentStatus.PAUSED] } },
+        data: { status: CampaignEnrollmentStatus.CANCELLED },
+      });
+      await tx.campaignRecipient.updateMany({
+        where: { customerId: targetId, campaign: { companyId }, status: "pending" },
+        data: { status: "opt_out", error: "Do not service" },
+      });
+    }
 
     const sourceEmails = await tx.customerEmail.findMany({ where: { customerId: sourceId } });
     const targetEmails = await tx.customerEmail.findMany({ where: { customerId: targetId } });

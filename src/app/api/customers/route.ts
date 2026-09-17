@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
       zip: searchParams.get("zip") ?? undefined,
       leadSource: searchParams.get("leadSource") ?? undefined,
       company: searchParams.get("company") ?? undefined,
+      doNotService: searchParams.get("doNotService") === "true" ? "true" as const : searchParams.get("doNotService") === "false" ? "false" as const : undefined,
       status: (searchParams.get("status") as "ACTIVE" | "ARCHIVED" | "ALL" | null) ?? undefined,
       segment: parseCustomerRecordSegment(searchParams.get("segment")),
     };

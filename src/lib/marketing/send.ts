@@ -28,6 +28,7 @@ import {
 import { notifyAdminsCampaignQuietHours } from "@/lib/marketing/quiet-hours-notify";
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
+import { recordCampaignSmsInThread } from "@/lib/marketing/sms-thread";
 
 const BATCH_SIZE = 50;
 
@@ -217,6 +218,36 @@ async function sendToRecipient(
       })
     : null;
 
+  // Imported list rows can lack a customerId. Respect a matching saved contact's
+  // opt-out before sending to that address or number as well.
+  if (!recipient.customerId) {
+    const contactAddress = channel === CampaignChannel.EMAIL
+      ? recipient.email?.trim()
+      : recipient.phone ? normalizePhone(recipient.phone) : null;
+    if (contactAddress) {
+      const optedOutContact = await prisma.customer.findFirst({
+        where: {
+          companyId: campaign.companyId,
+          AND: [
+            { OR: channel === CampaignChannel.EMAIL
+              ? [{ email: { equals: contactAddress, mode: "insensitive" } }, { emails: { some: { email: { equals: contactAddress, mode: "insensitive" } } } }]
+              : [{ phone: contactAddress }, { phones: { some: { phone: contactAddress } } }] },
+            { OR: [{ doNotService: true }, channel === CampaignChannel.EMAIL
+              ? { marketingEmailOptOut: true } : { marketingSmsOptOut: true }] },
+          ],
+        },
+        select: { id: true },
+      });
+      if (optedOutContact) {
+        await prisma.campaignRecipient.update({
+          where: { id: recipient.id },
+          data: { status: "opt_out", error: "Marketing opt-out" },
+        });
+        return false;
+      }
+    }
+  }
+
   if (customerRecord?.doNotService) {
     await prisma.campaignRecipient.update({
       where: { id: recipient.id },
@@ -282,6 +313,13 @@ async function sendToRecipient(
       to: normalizePhone(phone),
       body,
       statusCallback: twilioSmsStatusCallbackUrl(),
+    });
+    await recordCampaignSmsInThread({
+      companyId: campaign.companyId,
+      customerId: recipient.customerId,
+      phone,
+      body: msg.body || body,
+      twilioMessageSid: msg.sid,
     });
     await prisma.campaignRecipient.update({
       where: { id: recipient.id },

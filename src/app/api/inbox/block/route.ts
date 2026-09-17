@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, badRequestResponse, unauthorizedResponse } from "@/lib/api-auth";
-import { blockCustomer, isContactBlocked, unblockCustomer } from "@/lib/inbox/contacts";
+import { blockCustomer, isContactBlocked, normalizePhone, unblockCustomer } from "@/lib/inbox/contacts";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -21,7 +21,16 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { customerId, phone, email, reason } = body;
+    const { customerId, phone, email, reason, spam } = body;
+
+    if (spam) {
+      if (!phone || typeof phone !== "string") return badRequestResponse("Phone required for SMS spam");
+      const normalizedPhone = normalizePhone(phone);
+      const existing = await prisma.blockedContact.findFirst({ where: { companyId: user.companyId, phone: normalizedPhone } });
+      if (existing) return NextResponse.json(existing);
+      const blocked = await blockCustomer({ companyId: user.companyId, blockedBy: user.id, phone: normalizedPhone, reason: "SMS spam" });
+      return NextResponse.json(blocked);
+    }
 
     if (!customerId && !phone && !email) {
       return badRequestResponse("customerId, phone, or email required");
@@ -59,7 +68,18 @@ export async function DELETE(request: NextRequest) {
     const user = await requireSessionUser();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return badRequestResponse("id required");
+    const phone = searchParams.get("phone");
+    if (phone) {
+      const normalizedPhone = normalizePhone(phone);
+      const entries = await prisma.blockedContact.findMany({ where: { companyId: user.companyId, phone: normalizedPhone } });
+      await prisma.$transaction(entries.map((entry) =>
+        entry.email
+          ? prisma.blockedContact.update({ where: { id: entry.id }, data: { phone: null, customerId: null } })
+          : prisma.blockedContact.delete({ where: { id: entry.id } })
+      ));
+      return NextResponse.json({ success: true });
+    }
+    if (!id) return badRequestResponse("id or phone required");
 
     await unblockCustomer(user.companyId, id);
     return NextResponse.json({ success: true });

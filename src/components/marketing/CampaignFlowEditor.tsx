@@ -42,6 +42,7 @@ import {
   defaultIfElseConfig,
   emptyIfElseBranch,
   ifElseSummary,
+  ifElseWaitsForSmsReply,
   parseIfElseConfig,
   scrubIfElseNextIds,
 } from "@/lib/marketing/if-else";
@@ -322,17 +323,17 @@ function outgoingEdges(node: CampaignFlowNodeInput, nodes: CampaignFlowNodeInput
         nextId: branch.nextId,
         kind: "branch" as const,
       })),
-      {
+      ...(!ifElseWaitsForSmsReply(parsed) || !parsed.timeoutEnabled ? [{
         key: "none",
         label: "None",
         nextId: parsed.noneNextId,
         kind: "none" as const,
-      },
+      }] : []),
       ...(parsed.timeoutEnabled
         ? [
             {
               key: "timeout",
-              label: "Timeout",
+              label: ifElseWaitsForSmsReply(parsed) ? "No matching reply by deadline" : "Timeout",
               nextId: parsed.timeoutNextId,
               kind: "timeout" as const,
             },
@@ -1411,9 +1412,8 @@ function NodeConfigEditor({
             ) : null}
             {mode === "reply" || mode === "delay_or_reply" ? (
               <p className="mt-3 text-xs text-muted-foreground">
-                For an SMS reply path: Send SMS → Wait for any SMS reply with a timeout → If/Else
-                using an SMS reply condition. The Wait ends on a reply or when the time runs out;
-                If/Else then checks the reply received and takes None when no condition matches.
+                A Wait step continues on a single path. For YES versus no reply, put an If/Else
+                after Send SMS, choose SMS reply as its condition, and set its reply deadline there.
               </p>
             ) : null}
           </div>

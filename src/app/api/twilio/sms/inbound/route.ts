@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { MessageDirection, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
@@ -28,6 +29,8 @@ import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
 import { notifyInboundSms } from "@/lib/notifications/in-app";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -90,7 +93,12 @@ export async function POST(request: NextRequest) {
       return twilioSmsReply(marketingSmsStopReply(companyName));
     }
 
-    if (isExactSmsStart(body)) {
+    const isStart = isExactSmsStart(body);
+    const spamBlock = isStart ? await prisma.blockedContact.findFirst({
+        where: { companyId: company.id, phone: normalizedFrom, reason: "SMS spam" },
+        select: { id: true },
+      }) : null;
+    if (isStart && !spamBlock) {
       const customer = await findCustomerByPhone(company.id, normalizedFrom);
       if (customer) {
         await optInCustomerMarketingSms({
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     const blocked = await isContactBlocked(company.id, normalizedFrom, null);
-    if (blocked) return NextResponse.json({ ok: true });
+    // Keep blocked inbound messages visible in Spam without notifying or triggering flows.
 
     const customer = await findCustomerByPhone(company.id, normalizedFrom);
 
@@ -163,7 +171,7 @@ export async function POST(request: NextRequest) {
     const mediaItems = parseTwilioMediaParams(params);
 
     const contactInfoDetected =
-      scope === Scope.EXTERNAL && body.trim() ? messageSharesContactInfo(body) : false;
+      !blocked && scope === Scope.EXTERNAL && body.trim() ? messageSharesContactInfo(body) : false;
 
     const trimmedBody = body.trim() || (mediaItems.length ? "[Media message]" : "");
     const viaPrefix = inboundSmsViaLinePrefix(inboundLine);
@@ -213,7 +221,7 @@ export async function POST(request: NextRequest) {
     });
 
     // First-touch attribution from dialed tracking number / LSA caller match
-    void (async () => {
+    if (!blocked) void (async () => {
       try {
         const { AttributionFirstTouchMethod } = await import("@prisma/client");
         const {
@@ -282,7 +290,7 @@ export async function POST(request: NextRequest) {
       }
     })();
 
-    notifyInboundSms({
+    if (!blocked) notifyInboundSms({
       companyId: company.id,
       conversationId: conversation.id,
       fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
@@ -298,17 +306,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (customer?.id && trimmedBody) {
-      void import("@/lib/marketing/flow-engine")
-        .then(({ advanceWaitOnCustomerReply }) =>
-          advanceWaitOnCustomerReply({
+    if (!blocked && customer?.id && trimmedBody) {
+      after(async () => {
+        try {
+          const { advanceWaitOnCustomerReply } = await import("@/lib/marketing/flow-engine");
+          await advanceWaitOnCustomerReply({
             companyId: company.id,
             customerId: customer.id,
             text: trimmedBody,
             channel: "sms",
-          })
-        )
-        .catch((err) => console.error("Campaign wait reply check failed", err));
+            receivedAt: message.sentAt,
+          });
+        } catch (err) {
+          console.error("Campaign wait reply processing failed", err);
+        }
+      });
     }
 
     return NextResponse.json({ ok: true });

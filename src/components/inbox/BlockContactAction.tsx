@@ -20,6 +20,7 @@ type BlockContactActionProps = {
   /** Smaller trigger for inline placement next to phone numbers. */
   inline?: boolean;
   onBlocked?: () => void;
+  spam?: boolean;
 };
 
 export function BlockContactAction({
@@ -29,13 +30,14 @@ export function BlockContactAction({
   name,
   inline = false,
   onBlocked,
+  spam = false,
 }: BlockContactActionProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const blockLabel = phone ? "Block number" : "Block contact";
+  const blockLabel = spam ? "Block and move to spam" : phone ? "Block number" : "Block contact";
   const confirmDescription = phone
-    ? "Are you sure you want to block this number?"
+    ? spam ? "Block this number and move its SMS conversation to Spam?" : "Are you sure you want to block this number?"
     : `Are you sure you want to block ${name ?? "this contact"}?`;
 
   async function handleBlock() {
@@ -49,6 +51,7 @@ export function BlockContactAction({
           phone,
           email,
           reason: "Blocked from inbox",
+          ...(spam ? { spam: true } : {}),
         }),
       });
 
@@ -57,9 +60,11 @@ export function BlockContactAction({
         return;
       }
 
-      toast.success(phone ? "Number blocked" : `${name ?? "Contact"} blocked`);
+      toast.success(spam ? "Number blocked and moved to spam" : phone ? "Number blocked" : `${name ?? "Contact"} blocked`);
       setConfirmOpen(false);
       onBlocked?.();
+    } catch {
+      toast.error("Failed to block contact");
     } finally {
       setBusy(false);
     }
@@ -94,7 +99,7 @@ export function BlockContactAction({
         open={confirmOpen}
         title={blockLabel}
         description={confirmDescription}
-        confirmLabel="Yes, block"
+        confirmLabel={spam ? "Block and move" : "Yes, block"}
         confirmVariant="destructive"
         busy={busy}
         onConfirm={() => void handleBlock()}

@@ -250,6 +250,10 @@ export function ifElseTimeoutAt(
   return new Date(from.getTime() + delayMs(config.timeoutAmount, config.timeoutUnit));
 }
 
+export function replyWithinDeadline(receivedAt: Date, deadline: Date | null): boolean {
+  return !deadline || receivedAt.getTime() <= deadline.getTime();
+}
+
 export function remapFlowNextIds(
   config: Record<string, unknown>,
   idMap: Map<string, string>
@@ -368,6 +372,7 @@ function evaluateSmsReply(contact: IfElseContact, condition: IfElseCondition): b
   if (contact.smsReply == null) return false;
   const reply = contact.smsReply;
   const op = condition.operator;
+  if (operatorNeedsValue(op) && !condition.value.trim()) return false;
   if (!reply.trim()) {
     return op === "is_empty";
   }

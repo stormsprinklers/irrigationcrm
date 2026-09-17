@@ -57,6 +57,7 @@ export type CustomerListFilters = {
   leadSource?: string;
   company?: string;
   status?: "ACTIVE" | "ARCHIVED" | "ALL";
+  doNotService?: "true" | "false";
   /** Paying customers vs never-paid contacts. Omit to include both. */
   segment?: "CUSTOMERS" | "CONTACTS";
 };

@@ -32,7 +32,7 @@ import type { WaitDurationUnit } from "@/lib/marketing/wait-config";
 import { cn } from "@/lib/utils";
 
 const selectClass =
-  "flex h-9 w-full rounded-md border border-input bg-white px-2 text-sm";
+  "flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground";
 
 type Props = {
   config: Record<string, unknown>;
@@ -43,7 +43,7 @@ type Props = {
 
 function operatorsForField(field: IfElseCondition["field"]) {
   if (field === "smsReply") {
-    return IF_ELSE_OPERATORS.filter((operator) => operator.id !== "lt" && operator.id !== "gt");
+    return IF_ELSE_OPERATORS.filter((operator) => operator.id !== "lt" && operator.id !== "gt" && operator.id !== "is_empty");
   }
   return IF_ELSE_OPERATORS;
 }
@@ -110,7 +110,7 @@ function BooleanOpToggle({
 }) {
   return (
     <div
-      className="inline-flex rounded-md border border-input bg-white p-0.5"
+      className="inline-flex rounded-md border border-input bg-background p-0.5"
       role="group"
       aria-label={ariaLabel}
     >
@@ -121,7 +121,7 @@ function BooleanOpToggle({
           className={cn(
             "min-w-[3.25rem] rounded px-2 py-1 text-[11px] font-semibold tracking-wide",
             value === op
-              ? "bg-slate-900 text-white"
+              ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:bg-muted hover:text-foreground"
           )}
           aria-pressed={value === op}
@@ -232,7 +232,7 @@ function SegmentEditor({
   }
 
   return (
-    <div className="rounded-md border bg-white p-3">
+    <div className="rounded-md border bg-card p-3">
       <div className="space-y-2">
         {segment.conditions.map((condition, index) => (
           <div key={condition.id}>
@@ -283,7 +283,7 @@ function BranchCard({
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="rounded-lg border bg-slate-50/80">
+    <div className="rounded-lg border bg-card">
       <div className="flex items-center gap-2 px-3 py-2">
         <GripVertical className="h-4 w-4 text-muted-foreground" />
         <p className="flex-1 text-sm font-semibold">
@@ -292,14 +292,14 @@ function BranchCard({
         <div className="relative">
           <button
             type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-white"
+            className="rounded p-1 text-muted-foreground hover:bg-muted"
             onClick={() => setMenuOpen((value) => !value)}
             aria-label="Branch options"
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
           {menuOpen ? (
-            <div className="absolute right-0 z-10 mt-1 w-36 rounded-md border bg-white py-1 text-sm shadow-md">
+            <div className="absolute right-0 z-10 mt-1 w-36 rounded-md border bg-popover py-1 text-sm text-popover-foreground shadow-md">
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left hover:bg-muted disabled:opacity-40"
@@ -337,7 +337,7 @@ function BranchCard({
         </div>
         <button
           type="button"
-          className="rounded p-1 text-muted-foreground hover:bg-white"
+          className="rounded p-1 text-muted-foreground hover:bg-muted"
           onClick={() => setOpen((value) => !value)}
           aria-label={open ? "Collapse branch" : "Expand branch"}
         >
@@ -430,7 +430,15 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
   }, []);
 
   function commit(patch: Partial<IfElseConfig>) {
-    onChange({ ...parsed, ...patch, kind: "if_else" });
+    const next = { ...parsed, ...patch, kind: "if_else" as const };
+    if (ifElseWaitsForSmsReply(next) && !ifElseWaitsForSmsReply(parsed)) {
+      next.timeoutEnabled = true;
+      next.timeoutNextId = next.noneNextId;
+    }
+    if (patch.noneNextId !== undefined && parsed.timeoutNextId === parsed.noneNextId) {
+      next.timeoutNextId = patch.noneNextId;
+    }
+    onChange(next);
   }
 
   function moveBranch(index: number, direction: -1 | 1) {
@@ -449,11 +457,8 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
           Branches
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Fork the contact journey based on conditions. Use SMS reply to split on what they
-          already texted back (not case sensitive — Yes and yes match the same branch). First
-          matching branch wins. This step checks replies already received; it does not wait on its
-          own. To allow time for an SMS reply, place a Wait step before it, choose SMS only, and
-          turn on a timeout for the maximum wait (for example, 2 days).
+          First matching branch wins. Choose SMS reply as a condition to wait for a response and
+          route it by the words received. Replies are not case sensitive.
         </p>
       </div>
 
@@ -508,11 +513,13 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
         <p className="text-xs text-muted-foreground">Maximum of {IF_ELSE_MAX_BRANCHES} branches.</p>
       ) : null}
 
-      <div className="rounded-lg border bg-card px-3 py-3">
+      {(!ifElseWaitsForSmsReply(parsed) || !parsed.timeoutEnabled) && <div className="rounded-lg border bg-card px-3 py-3">
         <p className="text-sm font-semibold">None branch</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {ifElseWaitsForSmsReply(parsed)
-            ? "Used when none of the SMS / condition branches above match the reply they already sent."
+            ? parsed.timeoutEnabled
+              ? "Replies that do not match keep waiting until the deadline. This path is used if waiting is turned off."
+              : "Used when no SMS reply condition matches."
             : "Used when none of the conditions above are satisfied."}
         </p>
         <div className="mt-2">
@@ -524,21 +531,27 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
             onChange={(noneNextId) => commit({ noneNextId })}
           />
         </div>
-      </div>
-      {parsed.timeoutEnabled ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3">
-          <p className="text-sm font-semibold">Timeout path (older campaigns)</p>
+      </div>}
+      {(ifElseWaitsForSmsReply(parsed) || parsed.timeoutEnabled) ? (
+        <div className="rounded-lg border bg-card px-3 py-3">
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            <input type="checkbox" checked={parsed.timeoutEnabled} onChange={(e) => commit({ timeoutEnabled: e.target.checked })} />
+            {ifElseWaitsForSmsReply(parsed) ? "Wait for a matching SMS reply" : "Wait before taking the timeout path"}
+          </label>
+          {parsed.timeoutEnabled && <>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            New timeouts belong on a Wait step. This path is only here because this If/Else
-            already had one.
+            {ifElseWaitsForSmsReply(parsed)
+              ? "A matching reply takes its branch as soon as it arrives. Other replies keep waiting. If no matching reply arrives by the deadline, use the path below."
+              : "Unmatched contacts take this path after the chosen time."}
           </p>
+          <label className="mt-3 block text-xs font-medium text-muted-foreground">Wait up to</label>
           <div className="mt-3 grid grid-cols-[1fr_8rem] gap-2">
             <Input
               type="number"
-              min={0}
+              min={ifElseWaitsForSmsReply(parsed) ? 1 : 0}
               className="h-9"
               value={parsed.timeoutAmount}
-              onChange={(e) => commit({ timeoutAmount: Number(e.target.value) || 0 })}
+              onChange={(e) => commit({ timeoutAmount: Math.max(ifElseWaitsForSmsReply(parsed) ? 1 : 0, Number(e.target.value) || 0) })}
             />
             <select
               className={selectClass}
@@ -552,6 +565,9 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
               <option value="days">Days</option>
             </select>
           </div>
+          <label className="mt-3 block text-xs font-medium text-muted-foreground">
+            {ifElseWaitsForSmsReply(parsed) ? "No matching reply by deadline" : "Timeout path"}
+          </label>
           <div className="mt-2">
             <NextStepSelect
               value={parsed.timeoutNextId}
@@ -561,13 +577,7 @@ export function IfElseBranchEditor({ config, otherNodes, labelForNode, onChange 
               onChange={(timeoutNextId) => commit({ timeoutNextId })}
             />
           </div>
-          <button
-            type="button"
-            className="mt-2 text-xs font-medium text-muted-foreground hover:underline"
-            onClick={() => commit({ timeoutEnabled: false, timeoutNextId: "" })}
-          >
-            Remove timeout path
-          </button>
+          </>}
         </div>
       ) : null}
     </div>

@@ -39,6 +39,7 @@ function buildQuery(filters: CustomerListFilters, pageIndex: number, pageSize: n
   if (filters.zip?.trim()) params.set("zip", filters.zip.trim());
   if (filters.leadSource?.trim()) params.set("leadSource", filters.leadSource.trim());
   if (filters.company?.trim()) params.set("company", filters.company.trim());
+  if (filters.doNotService) params.set("doNotService", filters.doNotService);
   if (filters.status && filters.status !== "ACTIVE") params.set("status", filters.status);
   if (filters.segment) params.set("segment", filters.segment);
   params.set("page", String(pageIndex + 1));
@@ -76,6 +77,7 @@ export default function CustomersPageContent({ segment }: Props) {
     zip: searchParams.get("zip") ?? "",
     leadSource: searchParams.get("leadSource") ?? "",
     company: searchParams.get("company") ?? "",
+    doNotService: searchParams.get("doNotService") === "true" ? "true" : searchParams.get("doNotService") === "false" ? "false" : undefined,
     status: "ACTIVE",
     segment,
   }));
@@ -90,7 +92,8 @@ export default function CustomersPageContent({ segment }: Props) {
           filters.city?.trim() ||
           filters.zip?.trim() ||
           filters.leadSource?.trim() ||
-          filters.company?.trim()
+          filters.company?.trim() ||
+          filters.doNotService
       ),
     [filters]
   );
@@ -252,6 +255,16 @@ export default function CustomersPageContent({ segment }: Props) {
             onChange={(e) => updateFilter("company", e.target.value)}
           />
         </div>
+        <select
+          aria-label="Do not service filter"
+          className="h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          value={filters.doNotService ?? ""}
+          onChange={(e) => updateFilter("doNotService", e.target.value === "" ? undefined : e.target.value as "true" | "false")}
+        >
+          <option value="">All service statuses</option>
+          <option value="true">Do not service</option>
+          <option value="false">Service allowed</option>
+        </select>
         {hasActiveFilters && (
           <Button
             type="button"

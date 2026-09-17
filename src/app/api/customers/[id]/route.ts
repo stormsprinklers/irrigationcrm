@@ -88,13 +88,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.zip !== undefined ? { zip: body.zip ?? null } : {}),
         ...(body.leadSource !== undefined ? { leadSource: body.leadSource ?? null } : {}),
         ...(body.doNotService !== undefined ? { doNotService: Boolean(body.doNotService) } : {}),
-        ...(marketingEmailOptOut !== undefined ? { marketingEmailOptOut } : {}),
-        ...(marketingSmsOptOut !== undefined ? { marketingSmsOptOut } : {}),
+        ...(marketingEmailOptOut !== undefined || body.doNotService === true
+          ? { marketingEmailOptOut: body.doNotService === true || marketingEmailOptOut === true }
+          : {}),
+        ...(marketingSmsOptOut !== undefined || body.doNotService === true
+          ? { marketingSmsOptOut: body.doNotService === true || marketingSmsOptOut === true }
+          : {}),
         ...(body.appointmentReminderEmailOptOut !== undefined
-          ? { appointmentReminderEmailOptOut: Boolean(body.appointmentReminderEmailOptOut) }
+          || body.doNotService === true
+          ? { appointmentReminderEmailOptOut: body.doNotService === true || Boolean(body.appointmentReminderEmailOptOut) }
           : {}),
         ...(body.appointmentReminderSmsOptOut !== undefined
-          ? { appointmentReminderSmsOptOut: Boolean(body.appointmentReminderSmsOptOut) }
+          || body.doNotService === true
+          ? { appointmentReminderSmsOptOut: body.doNotService === true || Boolean(body.appointmentReminderSmsOptOut) }
           : {}),
         ...(body.tags !== undefined
           ? {
@@ -112,7 +118,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
-    if (marketingEmailOptOut === true) {
+    if (body.doNotService === true) {
+      await unenrollCustomerFromCampaigns({
+        customerId: id,
+        companyId: user.companyId,
+        reason: "Do not service",
+      });
+    } else if (marketingEmailOptOut === true) {
       await unenrollCustomerFromCampaigns({
         customerId: id,
         companyId: user.companyId,
@@ -120,7 +132,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         reason: "Marketing email opt-out",
       });
     }
-    if (marketingSmsOptOut === true) {
+    if (body.doNotService !== true && marketingSmsOptOut === true) {
       await unenrollCustomerFromCampaigns({
         customerId: id,
         companyId: user.companyId,

@@ -36,6 +36,7 @@ type Message = {
   deliveryErrorCode?: string | null;
   deliveryError?: string | null;
   sender?: { name: string } | null;
+  campaignName?: string | null;
   media?: MessageMediaItem[];
   contactInfoDetected?: boolean;
   contactInfoAppliedAt?: string | null;
@@ -117,6 +118,9 @@ export function SmsMessagePane({
   initialCustomerId,
   initialName,
   onSent,
+  spam = false,
+  onMovedToSpam,
+  onRestoredFromSpam,
 }: {
   conversationId: string | null;
   scope: CustomerTeamScope;
@@ -124,6 +128,9 @@ export function SmsMessagePane({
   initialCustomerId?: string | null;
   initialName?: string | null;
   onSent?: (conversationId: string) => void;
+  spam?: boolean;
+  onMovedToSpam?: () => void;
+  onRestoredFromSpam?: () => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -134,6 +141,7 @@ export function SmsMessagePane({
   const [contactInfoMessageId, setContactInfoMessageId] = useState<string | null>(null);
   const [deliveryDetailMsg, setDeliveryDetailMsg] = useState<Message | null>(null);
   const [resending, setResending] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const badgesNotifiedFor = useRef<string | null>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
@@ -305,9 +313,9 @@ export function SmsMessagePane({
     displayName && displayPhone && displayName !== displayPhone ? displayPhone : null;
 
   const blockPhone =
-    thread?.customer?.phone ?? thread?.participantPhone ?? null;
+    thread?.participantPhone ?? thread?.customer?.phone ?? null;
   const showBlockAction =
-    scope === "customers" && Boolean(conversationId) && Boolean(blockPhone);
+    scope === "customers" && !spam && Boolean(conversationId) && Boolean(blockPhone);
 
   function PhoneRow({
     phone,
@@ -326,6 +334,8 @@ export function SmsMessagePane({
             phone={blockPhone}
             email={thread?.customer?.email}
             name={thread?.customer?.name ?? phone}
+            spam
+            onBlocked={onMovedToSpam}
           />
         ) : null}
       </div>
@@ -354,6 +364,8 @@ export function SmsMessagePane({
                     inline
                     phone={blockPhone}
                     name={displayPhone}
+                    spam
+                    onBlocked={onMovedToSpam}
                   />
                 </div>
               ) : (
@@ -363,6 +375,23 @@ export function SmsMessagePane({
             </>
           )}
         </div>
+        {spam && blockPhone && (
+          <Button type="button" variant="outline" size="sm" disabled={restoring} onClick={async () => {
+            setRestoring(true);
+            try {
+              const res = await fetch(`/api/inbox/block?phone=${encodeURIComponent(blockPhone)}`, { method: "DELETE" });
+              if (!res.ok) throw new Error("Could not restore this number");
+              toast.success("Moved to inbox");
+              onRestoredFromSpam?.();
+            } catch {
+              toast.error("Could not restore this number");
+            } finally {
+              setRestoring(false);
+            }
+          }}>
+            {restoring ? "Restoring…" : "Unblock and move to inbox"}
+          </Button>
+        )}
       </div>
 
       {isCompose && (
@@ -379,7 +408,7 @@ export function SmsMessagePane({
                 {threadMessages.map((msg) => {
                   const attribution =
                     msg.direction === "OUTBOUND"
-                      ? msg.sender?.name ?? "Team"
+                      ? msg.campaignName ? `Campaign: ${msg.campaignName}` : msg.sender?.name ?? "Team"
                       : scope === "customers"
                         ? thread?.customer?.name ??
                           (thread?.participantPhone
@@ -478,7 +507,7 @@ export function SmsMessagePane({
         </ScrollArea>
       </div>
 
-      <ComposeBar
+      {!spam && <ComposeBar
         body={body}
         onBodyChange={setBody}
         onSubmit={handleSend}
@@ -487,7 +516,7 @@ export function SmsMessagePane({
         attachments={attachments}
         onAttachmentsChange={setAttachments}
         multiline
-      />
+      />}
 
       {contactInfoMessageId ? (
         <AddContactInfoDialog

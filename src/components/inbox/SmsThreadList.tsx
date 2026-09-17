@@ -30,10 +30,14 @@ export function SmsThreadList({
   scope,
   selectedId,
   onSelect,
+  spam = false,
+  unreadOnly = false,
 }: {
   scope: CustomerTeamScope;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  spam?: boolean;
+  unreadOnly?: boolean;
 }) {
   const [threads, setThreads] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +45,7 @@ export function SmsThreadList({
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const res = await fetch(`/api/inbox/sms/conversations?scope=${scope === "customers" ? "external" : "internal"}`);
+      const res = await fetch(`/api/inbox/sms/conversations?scope=${scope === "customers" ? "external" : "internal"}&folder=${spam ? "spam" : "inbox"}&unreadOnly=${unreadOnly}`);
       if (res.ok) {
         setThreads(await res.json());
       }
@@ -50,7 +54,7 @@ export function SmsThreadList({
     load();
     const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
-  }, [scope]);
+  }, [scope, spam, unreadOnly]);
 
   if (loading && !threads.length) {
     return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
@@ -59,7 +63,7 @@ export function SmsThreadList({
   if (!threads.length) {
     return (
       <div className="p-4 text-sm text-muted-foreground">
-        No conversations yet. Click the compose icon above to start a new message.
+        {unreadOnly ? "No unread conversations." : spam ? "No spam messages." : "No conversations yet. Click the compose icon above to start a new message."}
       </div>
     );
   }

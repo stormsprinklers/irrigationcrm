@@ -1,4 +1,4 @@
-import { CustomerStatus } from "@prisma/client";
+import { CampaignEnrollmentStatus, CustomerStatus } from "@prisma/client";
 import { bulkDeleteCustomers } from "@/lib/customers/delete";
 import { mergeCustomers } from "@/lib/customers/merge";
 import { prisma } from "@/lib/prisma";
@@ -17,9 +17,29 @@ export async function bulkSetDoNotService(
   customerIds: string[],
   doNotService: boolean
 ) {
-  await prisma.customer.updateMany({
-    where: { companyId, id: { in: customerIds } },
-    data: { doNotService },
+  await prisma.$transaction(async (tx) => {
+    await tx.customer.updateMany({
+      where: { companyId, id: { in: customerIds } },
+      data: {
+        doNotService,
+        ...(doNotService ? {
+          marketingEmailOptOut: true,
+          marketingSmsOptOut: true,
+          appointmentReminderEmailOptOut: true,
+          appointmentReminderSmsOptOut: true,
+        } : {}),
+      },
+    });
+    if (doNotService) {
+      await tx.campaignEnrollment.updateMany({
+        where: { customerId: { in: customerIds }, campaign: { companyId }, status: { in: [CampaignEnrollmentStatus.ACTIVE, CampaignEnrollmentStatus.PAUSED] } },
+        data: { status: CampaignEnrollmentStatus.CANCELLED },
+      });
+      await tx.campaignRecipient.updateMany({
+        where: { customerId: { in: customerIds }, campaign: { companyId }, status: "pending" },
+        data: { status: "opt_out", error: "Do not service" },
+      });
+    }
   });
 }
 

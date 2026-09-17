@@ -102,10 +102,12 @@ function MarketingConsentSelect({
   label,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: boolean;
   onChange: (next: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -113,6 +115,7 @@ function MarketingConsentSelect({
       <select
         className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
         value={value ? "out" : "in"}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value === "out")}
       >
         <option value="in">Opted in</option>
@@ -1012,10 +1015,14 @@ export function CustomerProfile({ customerId }: Props) {
                             setDraftCustomer({
                               ...profileCustomer,
                               doNotService: Boolean(checked),
+                              marketingEmailOptOut: Boolean(checked) || profileCustomer.marketingEmailOptOut,
+                              marketingSmsOptOut: Boolean(checked) || profileCustomer.marketingSmsOptOut,
+                              appointmentReminderEmailOptOut: Boolean(checked) || profileCustomer.appointmentReminderEmailOptOut,
+                              appointmentReminderSmsOptOut: Boolean(checked) || profileCustomer.appointmentReminderSmsOptOut,
                             })
                           }
                         />
-                        Mark as DO NOT SERVICE (blocks all appointment booking)
+                        Mark as DO NOT SERVICE (blocks booking and opts out of marketing email and SMS)
                       </label>
                     </div>
                   )}
@@ -1029,6 +1036,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <MarketingConsentSelect
                         label="Marketing email"
                         value={profileCustomer.marketingEmailOptOut}
+                        disabled={profileCustomer.doNotService}
                         onChange={(marketingEmailOptOut) =>
                           setDraftCustomer({ ...profileCustomer, marketingEmailOptOut })
                         }
@@ -1036,6 +1044,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <MarketingConsentSelect
                         label="Marketing SMS"
                         value={profileCustomer.marketingSmsOptOut}
+                        disabled={profileCustomer.doNotService}
                         onChange={(marketingSmsOptOut) =>
                           setDraftCustomer({ ...profileCustomer, marketingSmsOptOut })
                         }
@@ -1043,6 +1052,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={!profileCustomer.appointmentReminderEmailOptOut}
+                          disabled={profileCustomer.doNotService}
                           onCheckedChange={(checked) =>
                             setDraftCustomer({
                               ...profileCustomer,
@@ -1055,6 +1065,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <label className="flex items-center gap-2 text-sm">
                         <Checkbox
                           checked={!profileCustomer.appointmentReminderSmsOptOut}
+                          disabled={profileCustomer.doNotService}
                           onCheckedChange={(checked) =>
                             setDraftCustomer({
                               ...profileCustomer,

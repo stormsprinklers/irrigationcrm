@@ -9,6 +9,7 @@ import {
   pickIfElseNextId,
   remapFlowNextIds,
   resolveIfElseBranch,
+  replyWithinDeadline,
   type IfElseBranch,
   type IfElseConfig,
   type IfElseContact,
@@ -292,6 +293,9 @@ test("SMS reply matching is case-insensitive and splits into separate branches",
     "none-step"
   );
   assert.equal(resolveIfElseBranch(contact, config, "immediate").reason, "none");
+  const emptyKeyword = smsReplyConfig();
+  emptyKeyword.branches[0].segments[0].conditions[0].value = "";
+  assert.equal(resolveIfElseBranch({ ...contact, smsReply: "YES" }, emptyKeyword, "reply").reason, "none");
   assert.equal(branchMatches(contact, config.branches[0]), false);
   assert.equal(branchMatches({ ...contact, smsReply: undefined }, config.branches[0]), false);
 });
@@ -304,6 +308,24 @@ test("timeout is a separate unmatched path from None", () => {
   const unmatchedReply = resolveIfElseBranch({ ...contact, smsReply: "later" }, config, "reply");
   assert.equal(unmatchedReply.reason, "none");
   assert.equal(unmatchedReply.nextId, "none-step");
+});
+
+test("YES within the reply window and no matching reply use the configured paths", () => {
+  const config = smsReplyConfig({
+    branches: [smsReplyConfig().branches[0]],
+    noneNextId: "other-step",
+    timeoutNextId: "other-step",
+    timeoutAmount: 30,
+    timeoutUnit: "minutes",
+  });
+  const started = new Date("2026-09-17T12:00:00.000Z");
+  assert.equal(ifElseTimeoutAt(config, started)?.toISOString(), "2026-09-17T12:30:00.000Z");
+  assert.equal(resolveIfElseBranch({ ...contact, smsReply: "YES" }, config, "reply").nextId, "yes-step");
+  assert.equal(resolveIfElseBranch({ ...contact, smsReply: "maybe" }, config, "reply").nextId, "other-step");
+  assert.equal(resolveIfElseBranch(contact, config, "timeout").nextId, "other-step");
+  const deadline = ifElseTimeoutAt(config, started)!;
+  assert.equal(replyWithinDeadline(new Date("2026-09-17T12:29:59.000Z"), deadline), true);
+  assert.equal(replyWithinDeadline(new Date("2026-09-17T12:30:01.000Z"), deadline), false);
 });
 
 test("parseIfElseConfig and remapFlowNextIds keep timeoutNextId", () => {

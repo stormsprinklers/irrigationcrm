@@ -14,6 +14,7 @@ import {
 import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
+import { recordCampaignSmsInThread } from "@/lib/marketing/sms-thread";
 
 /** Send one marketing message for a flow enrollment and record a CampaignRecipient. */
 export async function sendCampaignMessage(params: {
@@ -141,6 +142,13 @@ export async function sendCampaignMessage(params: {
         to: normalizePhone(customer.phone),
         body,
         statusCallback: twilioSmsStatusCallbackUrl(),
+      });
+      await recordCampaignSmsInThread({
+        companyId: campaign.companyId,
+        customerId: customer.id,
+        phone: customer.phone,
+        body: msg.body || body,
+        twilioMessageSid: msg.sid,
       });
       await prisma.campaignRecipient.update({
         where: { id: recipient.id },

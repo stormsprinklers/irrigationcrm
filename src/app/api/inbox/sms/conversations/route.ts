@@ -147,6 +147,12 @@ export async function GET(request: NextRequest) {
     const user = await requireSessionUser();
     const scopeParam = request.nextUrl.searchParams.get("scope") ?? "external";
     const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
+    const spam = scope === Scope.EXTERNAL && request.nextUrl.searchParams.get("folder") === "spam";
+    const unreadOnly = request.nextUrl.searchParams.get("unreadOnly") === "true";
+    const blockedPhones = scope === Scope.EXTERNAL
+      ? (await prisma.blockedContact.findMany({ where: { companyId: user.companyId, phone: { not: null } }, select: { phone: true } }))
+          .map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone))
+      : [];
 
     const { fieldCustomerCommsWhere } = await import("@/lib/field/access");
     const fieldCommsWhere =
@@ -160,14 +166,20 @@ export async function GET(request: NextRequest) {
         companyId: user.companyId,
         channel: Channel.SMS,
         scope,
+        ...(spam
+          ? { participantPhone: { in: blockedPhones } }
+          : blockedPhones.length ? { OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] } : {}),
         ...(fieldCommsWhere ?? {}),
+        ...(unreadOnly ? { messages: { some: {
+          direction: MessageDirection.INBOUND,
+          readAt: null,
+          NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+        } } } : {}),
         ...(scope === Scope.EXTERNAL
           ? {
-              messages: {
-                some: {
-                  NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-                },
-              },
+              AND: [{ messages: { some: {
+                NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+              } } }],
             }
           : {}),
       },

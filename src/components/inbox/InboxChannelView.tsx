@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
 import { SmsThreadList } from "@/components/inbox/SmsThreadList";
 import { SmsMessagePane } from "@/components/inbox/SmsMessagePane";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { isCustomerTeamScope, parseInboxRoute } from "@/lib/inbox/types";
 
@@ -33,6 +35,8 @@ export function InboxChannelView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [smsFolder, setSmsFolder] = useState<"inbox" | "spam">("inbox");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const userOverrideRef = useRef(false);
 
   const ch = parsed?.channel;
@@ -107,6 +111,7 @@ export function InboxChannelView({
         composing={isComposing && !selectedId}
         onCompose={() => {
           userOverrideRef.current = true;
+          setSmsFolder("inbox");
           setSelectedId(null);
           setIsComposing(true);
           clearInboxDeepLink();
@@ -119,9 +124,31 @@ export function InboxChannelView({
         }}
         list={
           <div className="flex h-full flex-col">
+            {teamScope === "customers" && (
+              <Tabs value={smsFolder} onValueChange={(value) => {
+                setSmsFolder(value as "inbox" | "spam");
+                setSelectedId(null);
+                setIsComposing(false);
+                clearInboxDeepLink();
+              }} className="shrink-0 border-b px-3 py-2">
+                <TabsList className="w-full">
+                  <TabsTrigger value="inbox" className="flex-1">Inbox</TabsTrigger>
+                  <TabsTrigger value="spam" className="flex-1">Spam</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+            <div className="shrink-0 border-b px-3 py-2">
+              <Button type="button" variant={unreadOnly ? "secondary" : "outline"} size="sm" onClick={() => {
+                setUnreadOnly((value) => !value);
+                setSelectedId(null);
+                setIsComposing(false);
+              }} aria-pressed={unreadOnly}>Unread only</Button>
+            </div>
             <SmsThreadList
-              key={refreshKey}
+              key={`${refreshKey}-${smsFolder}`}
               scope={teamScope}
+              spam={teamScope === "customers" && smsFolder === "spam"}
+              unreadOnly={unreadOnly}
               selectedId={selectedId}
               onSelect={(id) => {
                 userOverrideRef.current = true;
@@ -140,6 +167,17 @@ export function InboxChannelView({
               initialPhone={selectedId ? null : deepLink.phone}
               initialCustomerId={selectedId ? null : deepLink.customerId}
               initialName={selectedId ? null : deepLink.name}
+              spam={teamScope === "customers" && smsFolder === "spam"}
+              onMovedToSpam={() => {
+                setSmsFolder("spam");
+                setRefreshKey((key) => key + 1);
+                clearInboxDeepLink();
+              }}
+              onRestoredFromSpam={() => {
+                setSmsFolder("inbox");
+                setRefreshKey((key) => key + 1);
+                clearInboxDeepLink();
+              }}
               onSent={(id) => {
                 userOverrideRef.current = true;
                 setSelectedId(id);

@@ -3,7 +3,7 @@
  * (@default(cuid()) is applied in the client, not in PostgreSQL).
  * Run before `prisma db push` on deploy.
  */
-import { PrismaClient } from "@prisma/client";
+import { CampaignEnrollmentStatus, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -112,6 +112,37 @@ async function restoreMarketingOptOutDefaults() {
   }
 }
 
+/** Existing Do Not Service records must carry explicit marketing opt-outs too. */
+async function backfillDoNotServiceOptOuts() {
+  if (!(await columnExists("Customer", "doNotService")) ||
+      !(await columnExists("Customer", "marketingEmailOptOut")) ||
+      !(await columnExists("Customer", "marketingSmsOptOut")) ||
+      !(await columnExists("Customer", "appointmentReminderEmailOptOut")) ||
+      !(await columnExists("Customer", "appointmentReminderSmsOptOut"))) return;
+  const updated = await prisma.customer.updateMany({
+    where: {
+      doNotService: true,
+      OR: [
+        { marketingEmailOptOut: false }, { marketingSmsOptOut: false },
+        { appointmentReminderEmailOptOut: false }, { appointmentReminderSmsOptOut: false },
+      ],
+    },
+    data: {
+      marketingEmailOptOut: true, marketingSmsOptOut: true,
+      appointmentReminderEmailOptOut: true, appointmentReminderSmsOptOut: true,
+    },
+  });
+  await prisma.campaignEnrollment.updateMany({
+    where: { customer: { doNotService: true }, status: { in: [CampaignEnrollmentStatus.ACTIVE, CampaignEnrollmentStatus.PAUSED] } },
+    data: { status: CampaignEnrollmentStatus.CANCELLED },
+  });
+  await prisma.campaignRecipient.updateMany({
+    where: { customer: { doNotService: true }, status: "pending" },
+    data: { status: "opt_out", error: "Do not service" },
+  });
+  console.log(`Backfilled Do Not Service marketing opt-outs (${updated.count} customers)`);
+}
+
 async function main() {
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
@@ -120,6 +151,7 @@ async function main() {
   } catch (err) {
     console.warn("Marketing opt-out default restore skipped:", err);
   }
+  await backfillDoNotServiceOptOuts();
   try {
     await backfillCallCustomers();
   } catch (err) {
