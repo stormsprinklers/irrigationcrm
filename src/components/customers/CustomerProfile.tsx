@@ -863,6 +863,9 @@ export function CustomerProfile({ customerId }: Props) {
                       />
                     }
                   />
+                  {customer.secondaryEmails?.length ? (
+                    <ProfileDetail label="Secondary emails" value={customer.secondaryEmails.join(", ")} />
+                  ) : null}
                   <div className="sm:col-span-2">
                     <ProfileDetail
                       label="Address"

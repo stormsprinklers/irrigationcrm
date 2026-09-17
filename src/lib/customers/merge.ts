@@ -32,6 +32,10 @@ export async function mergeCustomers(params: {
         zip: target.zip ?? source.zip,
         leadSource: target.leadSource ?? source.leadSource,
         stripeCustomerId: target.stripeCustomerId ?? source.stripeCustomerId,
+        marketingEmailOptOut: target.marketingEmailOptOut || source.marketingEmailOptOut,
+        marketingSmsOptOut: target.marketingSmsOptOut || source.marketingSmsOptOut,
+        doNotService: target.doNotService || source.doNotService,
+        tags: [...new Set([...target.tags, ...source.tags])],
       },
     });
 
@@ -84,6 +88,24 @@ export async function mergeCustomers(params: {
       }),
     ];
     await Promise.all(moveCustomerId);
+
+    const sourceEmails = await tx.customerEmail.findMany({ where: { customerId: sourceId } });
+    const targetEmails = await tx.customerEmail.findMany({ where: { customerId: targetId } });
+    const knownEmails = new Set([target.email ?? source.email, ...targetEmails.map((item) => item.email)].filter(Boolean).map((email) => email!.toLowerCase()));
+    for (const item of sourceEmails) {
+      if (knownEmails.has(item.email.toLowerCase())) await tx.customerEmail.delete({ where: { id: item.id } });
+      else {
+        await tx.customerEmail.update({ where: { id: item.id }, data: { customerId: targetId } });
+        knownEmails.add(item.email.toLowerCase());
+      }
+    }
+    if (source.email && !knownEmails.has(source.email.toLowerCase())) {
+      await tx.customerEmail.create({ data: { companyId, customerId: targetId, email: source.email, note: "Merged from duplicate customer" } });
+    }
+    await tx.hcpEntityMapping.updateMany({
+      where: { companyId, entityType: "CUSTOMER", localId: sourceId },
+      data: { localId: targetId, migrationId: null },
+    });
 
     const sourceMembers = await tx.contactListMember.findMany({ where: { customerId: sourceId } });
     for (const member of sourceMembers) {

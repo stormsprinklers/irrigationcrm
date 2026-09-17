@@ -23,8 +23,14 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const customer = await getCustomerForCompany(user.companyId, id);
     if (!customer) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const { canAccessFieldCustomerComms } = await import("@/lib/field/access");
+    const secondaryEmails = await prisma.customerEmail.findMany({
+      where: { companyId: user.companyId, customerId: id },
+      select: { email: true },
+      orderBy: { createdAt: "asc" },
+    });
     return NextResponse.json({
       ...serializeCustomer(customer),
+      secondaryEmails: secondaryEmails.map((item) => item.email),
       isContact: await customerIsContact(user.companyId, id),
       canViewCustomerComms: await canAccessFieldCustomerComms(user, id),
     });

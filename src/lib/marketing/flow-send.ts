@@ -3,6 +3,8 @@ import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { phoneDigitsKey } from "@/lib/inbox/phone";
+import { Prisma } from "@prisma/client";
 import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
@@ -98,7 +100,12 @@ export async function sendCampaignMessage(params: {
   const blocked = await isContactBlocked(campaign.companyId, customer.phone, customer.email);
   if (blocked) return false;
 
-  const recipient = await prisma.campaignRecipient.create({
+  const dedupeKey = channel === CampaignChannel.EMAIL
+    ? customer.email?.trim().toLowerCase()
+    : phoneDigitsKey(customer.phone);
+  let recipient;
+  try {
+    recipient = await prisma.campaignRecipient.create({
     data: {
       campaignId: campaign.id,
       customerId: customer.id,
@@ -106,9 +113,14 @@ export async function sendCampaignMessage(params: {
       phone: customer.phone,
       status: "pending",
       flowNodeId: params.flowNodeId ?? null,
+      dedupeKey: params.flowNodeId ? dedupeKey : null,
       channel,
     },
   });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
+    throw error;
+  }
 
   try {
     if (channel === CampaignChannel.SMS) {

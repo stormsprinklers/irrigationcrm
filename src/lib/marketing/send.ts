@@ -8,6 +8,7 @@ import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
+import { phoneDigitsKey } from "@/lib/inbox/phone";
 import { assertOutboundCommsEnabled, getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import {
   clampToCampaignSendWindow,
@@ -88,8 +89,8 @@ export async function buildCampaignRecipients(campaignId: string) {
   for (const entry of entries) {
     const key =
       campaign.channel === CampaignChannel.EMAIL
-        ? entry.email?.toLowerCase()
-        : entry.phone;
+        ? entry.email?.trim().toLowerCase()
+        : phoneDigitsKey(entry.phone);
     if (!key) continue;
     if (!unique.has(key)) unique.set(key, entry);
   }

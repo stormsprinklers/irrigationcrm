@@ -8,6 +8,7 @@ export type CustomerDTO = {
   zip: string | null;
   phone: string | null;
   email: string | null;
+  secondaryEmails?: string[];
   leadSource: string | null;
   attributionChannel: string | null;
   attributionCampaign: string | null;

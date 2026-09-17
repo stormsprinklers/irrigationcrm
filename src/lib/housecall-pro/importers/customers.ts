@@ -1,60 +1,23 @@
-import { CustomerStatus, HcpEntityType } from "@prisma/client";
-import {
-  emptyBatchResult,
-  pushDebug,
-  pushEntityDebug,
-  summarizeHcpRecord,
-} from "@/lib/housecall-pro/debug";
+import { emptyBatchResult, pushDebug, pushEntityDebug, summarizeHcpRecord } from "@/lib/housecall-pro/debug";
 import type { BatchResult, ImportContext, HcpRecord } from "@/lib/housecall-pro/types";
-import { upsertMapping } from "@/lib/housecall-pro/mapping";
 import {
-  addressFromRecord,
-  hcpAddressRecords,
-  hcpCreatedAt,
-  hcpCustomerCompanyName,
-  hcpId,
-  hcpString,
-  hcpTags,
-  primaryAddressFromHcpRecord,
-  hasHcpAddressData,
+  hcpCreatedAt, hcpCustomerCompanyName, hcpId, hcpString, hcpTags,
+  primaryAddressFromHcpRecord, hasHcpAddressData, hcpAddressRecords, addressFromRecord,
 } from "@/lib/housecall-pro/utils";
+import { importCustomerRow } from "@/lib/customers/import-customers";
+import { validCustomerName } from "@/lib/customers/import-matching";
 import { prisma } from "@/lib/prisma";
 
-function customerName(record: HcpRecord, id: string) {
-  const fullName = [hcpString(record.first_name), hcpString(record.last_name)]
-    .filter(Boolean)
-    .join(" ");
-  return (
-    hcpString(record.name) ??
-    (fullName || null) ??
-    hcpString(record.display_name) ??
-    hcpString(record.email) ??
-    hcpString(record.phone) ??
-    hcpString(record.mobile_number) ??
-    `Customer ${id}`
-  );
+export function hcpCustomerName(record: HcpRecord) {
+  const fullName = [hcpString(record.first_name), hcpString(record.last_name)].filter(Boolean).join(" ");
+  return [hcpString(record.name), fullName, hcpString(record.display_name)]
+    .find((candidate) => validCustomerName(candidate)) ?? "";
 }
 
-function propertyLabel(record: HcpRecord, index: number): string {
-  const explicit = hcpString(record.name);
-  if (explicit) return explicit;
-
-  const type = hcpString(record.type)?.toLowerCase();
-  if (type === "service") return "Service address";
-  if (type === "billing") return "Billing address";
-  return index === 0 ? "Primary" : `Property ${index + 1}`;
-}
-
-async function enrichCustomerRecord(
-  ctx: ImportContext,
-  record: HcpRecord,
-  id: string
-): Promise<HcpRecord> {
-  const needsDetail = !hcpCreatedAt(record) || !hasHcpAddressData(record);
-  if (!needsDetail) return record;
-
+async function enrichCustomerRecord(ctx: ImportContext, record: HcpRecord, id: string): Promise<HcpRecord> {
+  if (hcpCreatedAt(record) && hasHcpAddressData(record)) return record;
   try {
-    const detail = await ctx.client.get<HcpRecord>(`/customers/${id}`);
+    const detail = await ctx.client.get<HcpRecord>(`/customers/${encodeURIComponent(id)}`);
     const customer = ((detail.customer as HcpRecord | undefined) ?? detail) as HcpRecord;
     return { ...record, ...customer };
   } catch {
@@ -62,210 +25,73 @@ async function enrichCustomerRecord(
   }
 }
 
+function contactValues(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    if (typeof entry === "string") return entry;
+    if (entry && typeof entry === "object") {
+      const item = entry as HcpRecord;
+      return hcpString(item.email) ?? hcpString(item.address) ?? hcpString(item.phone) ?? hcpString(item.number) ?? "";
+    }
+    return "";
+  }).filter(Boolean);
+}
+
 export async function importCustomersBatch(ctx: ImportContext): Promise<BatchResult> {
   const debugEnabled = Boolean(ctx.options.debugMode);
   const result = emptyBatchResult(ctx.cursor);
-
   const page = await ctx.client.getPaginated("/customers", {
-    cursor: ctx.cursor,
-    pageSize: ctx.batchSize,
-    arrayKeys: ["customers"],
+    cursor: ctx.cursor, pageSize: ctx.batchSize, arrayKeys: ["customers"],
   });
-
-  pushDebug(
-    result,
-    {
-      action: "pulled",
-      label: `HCP returned ${page.items.length} customer(s)`,
-      detail: {
-        nextCursor: page.nextCursor,
-        totalEstimate: page.totalEstimate ?? null,
-        sample: page.items.slice(0, 3).map((r) => summarizeHcpRecord(r as HcpRecord)),
-      },
-    },
-    { enabled: debugEnabled }
-  );
-
+  pushDebug(result, {
+    action: "pulled", label: `HCP returned ${page.items.length} customer(s)`,
+    detail: { nextCursor: page.nextCursor, totalEstimate: page.totalEstimate ?? null, sample: page.items.slice(0, 3).map((r) => summarizeHcpRecord(r as HcpRecord)) },
+  }, { enabled: debugEnabled });
   if (page.totalEstimate != null && !ctx.cursor) {
     await prisma.housecallProMigrationStep.updateMany({
-      where: { migrationId: ctx.migrationId, step: ctx.step },
-      data: { totalEstimate: page.totalEstimate },
+      where: { migrationId: ctx.migrationId, step: ctx.step }, data: { totalEstimate: page.totalEstimate },
     });
   }
-
   for (const listRecord of page.items) {
     result.processed++;
     const id = hcpId(listRecord);
-    if (!id) {
+    if (!id) { result.skipped++; continue; }
+    const record = await enrichCustomerRecord(ctx, listRecord, id);
+    const name = hcpCustomerName(record);
+    if (!validCustomerName(name)) {
       result.skipped++;
-      pushEntityDebug(result, {
-        enabled: debugEnabled,
-        action: "skipped",
-        kind: "Customer",
-        record: listRecord,
-        fields: { reason: "Missing id" },
-      });
+      pushEntityDebug(result, { enabled: debugEnabled, action: "skipped", kind: "Customer", record, fields: { reason: "Missing or invalid name" } });
       continue;
     }
-    const record = await enrichCustomerRecord(ctx, listRecord, id);
-    const name = customerName(record, id);
-
+    const primary = primaryAddressFromHcpRecord(record);
     try {
-      const primary = primaryAddressFromHcpRecord(record);
-      const importedCreatedAt = hcpCreatedAt(record);
-      const customerData = {
-        name,
-        email: hcpString(record.email),
-        phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
+      const imported = await importCustomerRow(ctx.companyId, {
+        name, hcpId: id, migrationId: ctx.migrationId, createdAt: hcpCreatedAt(record) ?? undefined,
+        email: hcpString(record.email), emails: contactValues(record.email_addresses ?? record.emails),
+        phone: hcpString(record.phone) ?? hcpString(record.mobile_number), phones: contactValues(record.phone_numbers),
+        address: primary?.address, city: primary?.city, state: primary?.state, zip: primary?.zip,
         companyName: hcpCustomerCompanyName(record, name, ctx.options.excludeCompanyNames ?? []),
-        address: primary?.address ?? null,
-        city: primary?.city ?? null,
-        state: primary?.state ?? null,
-        zip: primary?.zip ?? null,
-        tags: hcpTags(record),
-        status: record.archived === true ? CustomerStatus.ARCHIVED : CustomerStatus.ACTIVE,
-        ...(importedCreatedAt ? { createdAt: importedCreatedAt } : {}),
-      };
-
-      const mapping = await prisma.hcpEntityMapping.findUnique({
-        where: {
-          companyId_entityType_hcpId: {
-            companyId: ctx.companyId,
-            entityType: HcpEntityType.CUSTOMER,
-            hcpId: id,
-          },
-        },
+        tags: hcpTags(record), archived: record.archived === true,
+        properties: hcpAddressRecords(record).map((property, index) => ({
+          hcpId: hcpId(property) || `${id}-property-${index}`,
+          name: hcpString(property.name) ?? (index === 0 ? "Primary" : `Property ${index + 1}`),
+          ...addressFromRecord(property),
+        })),
       });
-
-      const customerDebugFields = {
-        name,
-        email: customerData.email,
-        phone: customerData.phone,
-        street: primary?.address ?? null,
-        city: primary?.city ?? null,
-        state: primary?.state ?? null,
-        zip: primary?.zip ?? null,
-      };
-
-      let customerId: string;
-      if (mapping) {
-        await prisma.customer.update({
-          where: { id: mapping.localId },
-          data: customerData,
-        });
-        customerId = mapping.localId;
-        result.updated++;
-        pushEntityDebug(result, {
-          enabled: debugEnabled,
-          action: "updated",
-          kind: "Customer",
-          record,
-          fields: customerDebugFields,
-        });
-      } else {
-        const customer = await prisma.customer.create({
-          data: { companyId: ctx.companyId, ...customerData },
-        });
-        customerId = customer.id;
-        await upsertMapping({
-          companyId: ctx.companyId,
-          migrationId: ctx.migrationId,
-          entityType: HcpEntityType.CUSTOMER,
-          hcpId: id,
-          localId: customerId,
-        });
-        result.created++;
-        pushEntityDebug(result, {
-          enabled: debugEnabled,
-          action: "created",
-          kind: "Customer",
-          record,
-          fields: { ...customerDebugFields, localId: customerId },
-        });
-      }
-
-      const phones = Array.isArray(record.phone_numbers)
-        ? (record.phone_numbers as HcpRecord[])
-        : [];
-      if (customerData.phone) {
-        phones.push({ phone: customerData.phone, note: "Primary" });
-      }
-      for (const phoneRecord of phones) {
-        const phone = hcpString(phoneRecord.phone) ?? hcpString(phoneRecord.number);
-        if (!phone) continue;
-        const existingPhone = await prisma.customerPhone.findFirst({
-          where: { customerId, phone },
-        });
-        if (!existingPhone) {
-          await prisma.customerPhone.create({
-            data: {
-              companyId: ctx.companyId,
-              customerId,
-              phone,
-              note: hcpString(phoneRecord.note),
-            },
-          });
-        }
-      }
-
-      const properties = hcpAddressRecords(record);
-      for (let i = 0; i < properties.length; i++) {
-        const prop = properties[i];
-        const propHcpId = hcpId(prop) || `${id}-property-${i}`;
-        const propMapping = await prisma.hcpEntityMapping.findUnique({
-          where: {
-            companyId_entityType_hcpId: {
-              companyId: ctx.companyId,
-              entityType: HcpEntityType.PROPERTY,
-              hcpId: propHcpId,
-            },
-          },
-        });
-        const addr = addressFromRecord(prop);
-        const propertyData = {
-          companyId: ctx.companyId,
-          customerId,
-          name: propertyLabel(prop, i),
-          ...addr,
-          isPrimary: i === 0,
-        };
-
-        if (propMapping) {
-          await prisma.customerProperty.update({
-            where: { id: propMapping.localId },
-            data: propertyData,
-          });
-        } else {
-          const property = await prisma.customerProperty.create({ data: propertyData });
-          await upsertMapping({
-            companyId: ctx.companyId,
-            migrationId: ctx.migrationId,
-            entityType: HcpEntityType.PROPERTY,
-            hcpId: propHcpId,
-            localId: property.id,
-          });
-        }
-      }
-
-    } catch (err) {
-      result.failed++;
-      const message = err instanceof Error ? err.message : "Customer import failed";
-      result.errors.push(message);
+      if (imported.action === "created") result.created++;
+      else if (imported.action === "merged") result.updated++;
+      else result.skipped++;
       pushEntityDebug(result, {
-        enabled: debugEnabled,
-        action: "failed",
-        kind: "Customer",
-        record,
-        fields: {
-          name,
-          email: hcpString(record.email),
-          phone: hcpString(record.phone) ?? hcpString(record.mobile_number),
-        },
-        error: message,
+        enabled: debugEnabled, action: imported.action === "merged" ? "updated" : imported.action,
+        kind: "Customer", record, fields: { name, localId: imported.customerId, reason: imported.reason },
       });
+    } catch (error) {
+      result.failed++;
+      const message = error instanceof Error ? error.message : "Customer import failed";
+      result.errors.push(message);
+      pushEntityDebug(result, { enabled: debugEnabled, action: "failed", kind: "Customer", record, fields: { name }, error: message });
     }
   }
-
   result.cursor = page.nextCursor;
   result.done = !page.nextCursor;
   return result;

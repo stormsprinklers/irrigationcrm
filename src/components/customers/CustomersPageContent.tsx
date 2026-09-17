@@ -13,6 +13,7 @@ import { GitMerge, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
 import type { CustomerDTO, CustomerListFilters } from "@/lib/customers/types";
 import { createDraftCustomer } from "@/lib/schedule/create-draft";
 
@@ -69,6 +70,7 @@ export default function CustomersPageContent({ segment }: Props) {
   }));
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const hasActiveFilters = useMemo(
     () =>
@@ -177,13 +179,16 @@ export default function CustomersPageContent({ segment }: Props) {
               ? `${customers.length} people with no lifetime value — never billed for work`
               : `${customers.length} customers with paid work`
         }
-        actions={
+        actions={<div className="flex gap-2">
+          {canManage ? <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import customers</Button> : null}
           <Button size="sm" onClick={() => void createCustomer()} disabled={creating}>
             <Plus className="h-4 w-4" />
             {creating ? "Creating…" : isContacts ? "Create contact" : "Create customer"}
           </Button>
-        }
+        </div>}
       />
+
+      <CustomerImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void load(filters)} />
 
       <div className="mb-4 space-y-3">
         <Input

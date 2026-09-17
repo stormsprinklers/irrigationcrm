@@ -100,6 +100,7 @@ export class HousecallProClient {
           Accept: "application/json",
         },
         cache: "no-store",
+        redirect: "error",
       });
 
       if (response.status === 429) {
@@ -135,6 +136,10 @@ export class HousecallProClient {
 
     if (options.cursor) {
       if (options.cursor.startsWith("http")) {
+        const cursorUrl = new URL(options.cursor);
+        if (cursorUrl.origin !== HCP_BASE_URL) {
+          throw new Error("Invalid Housecall Pro pagination URL");
+        }
         const response = await fetch(options.cursor, {
           method: "GET",
           headers: {
@@ -142,6 +147,7 @@ export class HousecallProClient {
             Accept: "application/json",
           },
           cache: "no-store",
+          redirect: "error",
         });
         if (!response.ok) {
           throw new Error(`HCP pagination failed: ${response.status}`);

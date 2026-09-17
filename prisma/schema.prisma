@@ -760,6 +760,7 @@ model Company {
   customers              Customer[]
   winterizationRequests  WinterizationRequest[]
   customerPhones         CustomerPhone[]
+  customerEmails         CustomerEmail[]
   mediaAssets            CompanyMediaAsset[]
   blockedContacts        BlockedContact[]
   callLogs               CallLog[]
@@ -1452,6 +1453,7 @@ model Customer {
   campaignRecipients     CampaignRecipient[]
   campaignEnrollments    CampaignEnrollment[]
   phones                 CustomerPhone[]
+  emails                 CustomerEmail[]
   notes                  CustomerNote[]
   attachments            CustomerAttachment[]
   portalLoginTokens      CustomerPortalLoginToken[]
@@ -1517,6 +1519,22 @@ model CustomerPhone {
 
   @@index([companyId, phone])
   @@index([customerId])
+}
+
+model CustomerEmail {
+  id         String   @id @default(cuid())
+  companyId  String
+  customerId String
+  email      String
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, email])
+  @@index([companyId, email])
 }
 
 model CustomerNote {
@@ -2270,6 +2288,7 @@ model CampaignRecipient {
   status            String           @default("pending")
   /// SEND_EMAIL / SEND_SMS node that produced this send (automations).
   flowNodeId        String?
+  dedupeKey         String?
   channel           CampaignChannel?
   sentAt            DateTime?
   deliveredAt       DateTime?
@@ -2285,6 +2304,7 @@ model CampaignRecipient {
 
   @@index([campaignId, status])
   @@index([campaignId, customerId])
+  @@unique([campaignId, flowNodeId, dedupeKey])
   @@index([flowNodeId])
   @@index([twilioMessageSid])
 }
