@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
       recipientId: "test",
       publicBaseUrl: company.customerBaseUrl,
       signature: signatureFieldsFromCompany(company),
+      trackEngagement: false,
     });
 
     const result = await sendCompanyEmail(
@@ -121,7 +122,6 @@ export async function POST(request: NextRequest) {
         skipBranding: true,
         omitHtml: outbound.omitHtml,
         disableTracking: true,
-        untrackedCampaign: true,
       }
     );
 

@@ -14,18 +14,15 @@ type EmailEvent = {
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-twilio-email-event-webhook-signature") ?? "";
   const timestamp = request.headers.get("x-twilio-email-event-webhook-timestamp") ?? "";
-  const rawBody = await request.text();
+  const rawBody = Buffer.from(await request.arrayBuffer());
 
-  if (
-    process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY &&
-    !validateEmailWebhook(rawBody, signature, timestamp)
-  ) {
+  if (!validateEmailWebhook(rawBody, signature, timestamp)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
   let events: EmailEvent[];
   try {
-    events = JSON.parse(rawBody) as EmailEvent[];
+    events = JSON.parse(rawBody.toString("utf8")) as EmailEvent[];
   } catch {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }

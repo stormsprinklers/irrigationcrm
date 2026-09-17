@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildTwilioEmailPayload, buildUntrackedSendGridPayload } from "../email";
+import { generateKeyPairSync, sign } from "node:crypto";
+import { buildTwilioEmailPayload, validateEmailWebhook } from "../email";
 
 test("Twilio email payload omits unsupported replyTo field", () => {
   const payload = buildTwilioEmailPayload({
@@ -76,21 +77,19 @@ test("campaign payload disables SendGrid tracking and injected footers per messa
   assert.equal(smtpApi.filters?.footer?.settings?.enable, 0);
 });
 
-test("untracked campaign payload uses SendGrid's API-level tracking settings", () => {
-  const payload = buildUntrackedSendGridPayload({
-    from: "Austin <hello@stormsprinklers.com>",
-    to: ["jordan@example.com"],
-    subject: "Plain note",
-    text: "Book at https://stormsprinklers.com/book-winterization",
-  });
-
-  assert.deepEqual(payload.tracking_settings, {
-    click_tracking: { enable: false, enable_text: false },
-    open_tracking: { enable: false },
-    subscription_tracking: { enable: false },
-  });
-  assert.deepEqual(payload.mail_settings, { footer: { enable: false } });
-  assert.deepEqual(payload.content, [
-    { type: "text/plain", value: "Book at https://stormsprinklers.com/book-winterization" },
-  ]);
+test("signed email webhook verifies raw payload and rejects tampering", () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const prior = process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY;
+  process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY = publicKey.export({ format: "der", type: "spki" }).toString("base64");
+  try {
+    const timestamp = "1726500000";
+    const payload = Buffer.from('[{"event":"open"}]\r\n');
+    const signature = sign("sha256", Buffer.concat([Buffer.from(timestamp), payload]), privateKey).toString("base64");
+    assert.equal(validateEmailWebhook(payload, signature, timestamp), true);
+    assert.equal(validateEmailWebhook(Buffer.from('[{"event":"click"}]\r\n'), signature, timestamp), false);
+    assert.equal(validateEmailWebhook(payload, "bad", timestamp), false);
+  } finally {
+    if (prior === undefined) delete process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY;
+    else process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY = prior;
+  }
 });

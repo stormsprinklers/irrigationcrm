@@ -62,12 +62,10 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         />
       </div>
 
-      <div className="rounded-lg border border-border bg-white">
+      <div className="rounded-lg border border-border bg-card">
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Email performance</h3>
-          <p className="text-xs text-muted-foreground">
-            Campaigns send as plain text, so open rate is not tracked. CTR is clicks on wrapped links.
-          </p>
+          <p className="text-xs text-muted-foreground">Opens depend on images loading in the recipient’s email app.</p>
         </div>
         <Table>
           <TableHeader>
@@ -75,13 +73,16 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
               <TableHead>Email</TableHead>
               <TableHead>Sent</TableHead>
               <TableHead>Delivered</TableHead>
+              <TableHead>Opened</TableHead>
+              <TableHead>Open rate</TableHead>
+              <TableHead>Clicked</TableHead>
               <TableHead>CTR</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {emails.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-muted-foreground">
+                <TableCell colSpan={7} className="text-muted-foreground">
                   No email sends in this campaign yet.
                 </TableCell>
               </TableRow>
@@ -91,6 +92,9 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
                   <TableCell className="max-w-sm truncate font-medium">{row.label}</TableCell>
                   <TableCell>{row.sent}</TableCell>
                   <TableCell>{row.delivered}</TableCell>
+                  <TableCell>{row.opened}</TableCell>
+                  <TableCell>{fmtRate(row.openRate)}</TableCell>
+                  <TableCell>{row.clicked}</TableCell>
                   <TableCell>{fmtRate(row.ctr)}</TableCell>
                 </TableRow>
               ))
@@ -100,7 +104,7 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
       </div>
 
       {sms.length > 0 ? (
-        <div className="rounded-lg border border-border bg-white">
+        <div className="rounded-lg border border-border bg-card">
           <div className="border-b px-4 py-3">
             <h3 className="font-medium">SMS sends</h3>
           </div>
@@ -125,7 +129,7 @@ export function CampaignPerformanceDashboard({ performance }: Props) {
         </div>
       ) : null}
 
-      <div className="rounded-lg border border-border bg-white">
+      <div className="rounded-lg border border-border bg-card">
         <div className="border-b px-4 py-3">
           <h3 className="font-medium">Link click-through rates</h3>
           <p className="text-xs text-muted-foreground">

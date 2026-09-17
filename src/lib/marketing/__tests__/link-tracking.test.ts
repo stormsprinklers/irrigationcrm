@@ -6,6 +6,7 @@ import {
   htmlToPlainText,
   rewriteTrackedLinks,
   rewriteTrackedUrlsInText,
+  safeTrackedDestination,
   shouldSkipTrackedUrl,
 } from "../link-tracking";
 import { buildMarketingEmailPayload } from "../outbound-email";
@@ -21,6 +22,11 @@ test("rewriteTrackedLinks wraps http hrefs and skips unsubscribe", () => {
   assert.match(out, /href="https:\/\/crm.example.com\/api\/marketing\/unsubscribe\?token=abc"/);
 });
 
+test("rewriteTrackedLinks preserves ampersands in destination query strings", () => {
+  const out = rewriteTrackedLinks('<a href="https://example.com/book?a=1&amp;b=2">Book</a>', "rec_1");
+  assert.match(out, /u=https%3A%2F%2Fexample.com%2Fbook%3Fa%3D1%26b%3D2/);
+});
+
 test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", () => {
   const text =
     "Book here https://stormsprinklers.com/book.\nUnsubscribe from marketing emails: https://crm.example.com/api/marketing/unsubscribe?token=abc";
@@ -31,7 +37,7 @@ test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", ()
   assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
 });
 
-test("buildMarketingEmailPayload leaves campaign links direct", () => {
+test("buildMarketingEmailPayload tracks campaign links and opens", () => {
   const out = buildMarketingEmailPayload({
     bodyHtml: '<p>Hello <a href="https://stormsprinklers.com">site</a></p>',
     bodyText: "Hello https://stormsprinklers.com",
@@ -39,12 +45,17 @@ test("buildMarketingEmailPayload leaves campaign links direct", () => {
     recipientId: "rec_1",
   });
   assert.match(out.html, />Unsubscribe</);
-  assert.match(out.html, /clicktracking=off href="https:\/\/stormsprinklers.com"/);
-  assert.match(out.text, /https:\/\/stormsprinklers.com/);
-  assert.doesNotMatch(out.html, /\/api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
-  assert.doesNotMatch(out.text, /\/api\/marketing\/track\/click|ct\.sendgrid\.net|wf\/open/);
+  assert.match(out.html, /\/api\/marketing\/track\/click/);
+  assert.match(out.text, /\/api\/marketing\/track\/click/);
   assert.match(out.text, /\/api\/marketing\/unsubscribe\?token=t/);
+  assert.match(out.html, /track\/open/);
   assert.doesNotMatch(out.text, /track\/open/);
+});
+
+test("tracked redirects accept only absolute web URLs", () => {
+  assert.equal(safeTrackedDestination("javascript:alert(1)"), null);
+  assert.equal(safeTrackedDestination("//evil.example"), null);
+  assert.equal(safeTrackedDestination("https://example.com/a%20b"), "https://example.com/a%20b");
 });
 
 test("htmlToPlainText keeps hyperlink text and URL", () => {

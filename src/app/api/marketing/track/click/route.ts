@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { trackCampaignEngagement } from "@/lib/marketing/engagement";
+import { safeTrackedDestination } from "@/lib/marketing/link-tracking";
 
 export async function GET(request: NextRequest) {
   const recipientId = request.nextUrl.searchParams.get("r");
@@ -10,10 +11,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  let targetUrl: string;
-  try {
-    targetUrl = decodeURIComponent(encodedUrl);
-  } catch {
+  const targetUrl = safeTrackedDestination(encodedUrl);
+  if (!targetUrl) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -22,7 +21,7 @@ export async function GET(request: NextRequest) {
     select: { id: true },
   });
   if (!recipient) {
-    return NextResponse.redirect(targetUrl);
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   try {

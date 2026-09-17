@@ -1,7 +1,6 @@
 import {
   getDefaultFromEmail,
   sendEmail,
-  sendUntrackedCampaignEmail,
   type SendEmailResult,
 } from "@/lib/inbox/email";
 import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
@@ -132,8 +131,6 @@ export async function sendCompanyEmail(
     omitHtml?: boolean;
     /** Disable provider open/click tracking and injected provider footers for this message. */
     disableTracking?: boolean;
-    /** Deliver through SendGrid Mail Send with tracking disabled at the API level. */
-    untrackedCampaign?: boolean;
   }
 ): Promise<SendEmailResult> {
   if (!params.bypassCommsFreeze) {
@@ -159,16 +156,6 @@ export async function sendCompanyEmail(
     params.skipBranding || params.omitHtml || !html
       ? params.text
       : applyCompanyEmailSignatureText(params.text, resolved);
-
-  if (params.untrackedCampaign) {
-    return sendUntrackedCampaignEmail({
-      from,
-      to: params.to,
-      subject: params.subject,
-      text: text ?? "",
-      html,
-    });
-  }
 
   return sendEmail({
     from,

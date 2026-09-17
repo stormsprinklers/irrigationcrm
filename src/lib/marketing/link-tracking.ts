@@ -15,6 +15,15 @@ export function shouldSkipTrackedUrl(url: string) {
   );
 }
 
+export function safeTrackedDestination(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function trackedClickUrl(recipientId: string, url: string) {
   return `${trackingBaseUrl()}/api/marketing/track/click?r=${encodeURIComponent(recipientId)}&u=${encodeURIComponent(url)}`;
 }
@@ -34,8 +43,9 @@ export function rewriteTrackedLinks(html: string, recipientId: string) {
   return html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>/gi,
     (match, before, url, after) => {
-      if (shouldSkipTrackedUrl(url)) return match;
-      return `<a ${before}href="${trackedClickUrl(recipientId, url)}"${after}>`;
+      const destination = url.replace(/&amp;/gi, "&");
+      if (shouldSkipTrackedUrl(destination) || !safeTrackedDestination(destination)) return match;
+      return `<a ${before}href="${trackedClickUrl(recipientId, destination)}"${after}>`;
     }
   );
 }
@@ -46,7 +56,7 @@ export function rewriteTrackedUrlsInText(text: string, recipientId: string) {
   return text.replace(/https?:\/\/[^\s<>"']+/gi, (raw) => {
     const trailing = raw.match(/[).,;:!?]+$/)?.[0] ?? "";
     const url = trailing ? raw.slice(0, -trailing.length) : raw;
-    if (!url || shouldSkipTrackedUrl(url)) return raw;
+    if (!url || shouldSkipTrackedUrl(url) || !safeTrackedDestination(url)) return raw;
     return `${trackedClickUrl(recipientId, url)}${trailing}`;
   });
 }

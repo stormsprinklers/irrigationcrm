@@ -1,5 +1,5 @@
 import { applyCompanyEmailSignatureText, type CompanySignatureFields } from "@/lib/inbox/company-email-signature";
-import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { appendOpenTrackingPixel, htmlToPlainText, rewriteTrackedLinks, rewriteTrackedUrlsInText } from "@/lib/marketing/link-tracking";
 import { escapeEmailHtml, sanitizeEmailHref } from "@/lib/marketing/email-href";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { appendPlainUnsubscribeFooter, appendPlainUnsubscribeText } from "@/lib/marketing/unsubscribe";
@@ -80,19 +80,32 @@ export function buildMarketingEmailPayload(params: {
   recipientId: string;
   publicBaseUrl?: string | null;
   signature?: CompanySignatureFields | null;
-}):
-  | { text: string; html: string; unbranded: true; omitHtml: false }
-  | { text: string; html?: undefined; unbranded: true; omitHtml: true } {
+  trackEngagement?: boolean;
+}): { text: string; html: string; unbranded: true; omitHtml: false } {
   const body = ensureCampaignGreeting(campaignPlainBodyText(params.bodyHtml, params.bodyText));
   const withSignature = params.signature
     ? applyCompanyEmailSignatureText(body, params.signature) ?? body
     : body;
   const withUnsubscribe = appendPlainUnsubscribeText(withSignature, params.unsubscribeUrl);
+  const track = params.trackEngagement !== false;
+  const text = track ? rewriteTrackedUrlsInText(withUnsubscribe, params.recipientId) : withUnsubscribe;
   if (!hasRichFormatting(params.bodyHtml)) {
+    const linkedBody = withSignature.split(/(https?:\/\/[^\s<>"']+)/gi).map((part, index) => {
+      if (index % 2 === 0) return escapeHtml(part);
+      const trailing = part.match(/[).,;:!?]+$/)?.[0] ?? "";
+      const url = trailing ? part.slice(0, -trailing.length) : part;
+      const href = sanitizeEmailHref(url);
+      return href ? `<a clicktracking=off href="${escapeEmailHtml(href)}">${escapeHtml(url)}</a>${escapeHtml(trailing)}` : escapeHtml(part);
+    }).join("");
+    const html = appendPlainUnsubscribeFooter(
+      `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;white-space:pre-wrap">${linkedBody}</div>`,
+      escapeHtml(params.unsubscribeUrl)
+    ).replace(/<a\s/gi, "<a clicktracking=off ");
     return {
-      text: withUnsubscribe,
+      text,
+      html: track ? appendOpenTrackingPixel(rewriteTrackedLinks(html, params.recipientId), params.recipientId) : html,
       unbranded: true,
-      omitHtml: true,
+      omitHtml: false,
     };
   }
 
@@ -109,8 +122,8 @@ export function buildMarketingEmailPayload(params: {
     escapeHtml(params.unsubscribeUrl)
   ).replace(/<a\s/gi, "<a clicktracking=off ");
   return {
-    text: withUnsubscribe,
-    html,
+    text,
+    html: track ? appendOpenTrackingPixel(rewriteTrackedLinks(html, params.recipientId), params.recipientId) : html,
     unbranded: true,
     omitHtml: false,
   };

@@ -179,7 +179,6 @@ export async function sendCampaignMessage(params: {
         skipBranding: true,
         omitHtml: outbound.omitHtml,
         disableTracking: true,
-        untrackedCampaign: true,
       }
     );
 
