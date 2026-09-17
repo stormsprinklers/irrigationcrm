@@ -1,10 +1,11 @@
 import { GbpReviewAssignStatus, UserRole, VisitStatus } from "@prisma/client";
-import { endOfDay, startOfDay, subDays } from "date-fns";
+import { endOfDay, startOfDay, subDays, subMonths } from "date-fns";
 import type { GbpReviewDto } from "@/lib/google-business/engagement-types";
 import {
   commentMentionsName,
   ensureCompanyReviewAliases,
   REVIEW_ALIAS_ROLES,
+  REVIEW_MANUAL_ASSIGNMENT_ROLES,
   tokenizeName,
 } from "@/lib/google-business/review-aliases";
 import { listGbpReviews } from "@/lib/google-business/v4-api";
@@ -235,6 +236,29 @@ export async function assignPendingGbpReviews(companyId: string) {
   }
 }
 
+/**
+ * Keep the assignment inbox actionable. Reviews that could not be matched to a
+ * technician after a full calendar month are retained, but no longer treated
+ * as work awaiting assignment.
+ */
+export async function markExpiredUnassignedGbpReviews(
+  companyId: string,
+  now: Date = new Date()
+) {
+  const cutoff = subMonths(now, 1);
+  const result = await prisma.gbpReview.updateMany({
+    where: {
+      companyId,
+      assignedManually: false,
+      status: GbpReviewAssignStatus.NEEDS_REVIEW,
+      createTime: { not: null, lt: cutoff },
+      assignments: { none: {} },
+    },
+    data: { status: GbpReviewAssignStatus.UNKNOWN },
+  });
+  return result.count;
+}
+
 export async function syncAndAssignGbpReviews(companyId: string, options?: { maxPages?: number }) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
@@ -269,7 +293,8 @@ export async function syncAndAssignGbpReviews(companyId: string, options?: { max
 
   await upsertGbpReviews(companyId, reviews);
   await assignPendingGbpReviews(companyId);
-  return { upserted: reviews.length };
+  const expiredUnassigned = await markExpiredUnassignedGbpReviews(companyId);
+  return { upserted: reviews.length, expiredUnassigned };
 }
 
 export async function manuallyAssignGbpReview(
@@ -298,7 +323,11 @@ export async function manuallyAssignGbpReview(
     where: {
       companyId,
       id: { in: userIds },
-      role: { in: REVIEW_ALIAS_ROLES },
+      status: "ACTIVE",
+      OR: [
+        { role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES } },
+        { crewsAsForeman: { some: { companyId, division: "INSTALL" } } },
+      ],
     },
     select: { id: true },
   });

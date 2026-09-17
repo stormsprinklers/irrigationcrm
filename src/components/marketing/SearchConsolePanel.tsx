@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { Globe, Loader2, RefreshCw, Search, Unplug } from "lucide-react";
+import { ExternalLink, Globe, Loader2, RefreshCw, Search, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import type {
   GscConnectionStatus,
   GscDashboardData,
+  GscIndexCoverageData,
   GscSite,
 } from "@/lib/google-search-console/types";
 
@@ -39,18 +40,26 @@ function formatPageUrl(url: string) {
   }
 }
 
+function gscInspectionUrl(siteUrl: string, pageUrl: string) {
+  const params = new URLSearchParams({ resource_id: siteUrl, id: pageUrl });
+  return `https://search.google.com/search-console/inspect?${params.toString()}`;
+}
+
 export function SearchConsolePanel() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<GscConnectionStatus | null>(null);
   const [sites, setSites] = useState<GscSite[]>([]);
   const [dashboard, setDashboard] = useState<GscDashboardData | null>(null);
+  const [indexCoverage, setIndexCoverage] = useState<GscIndexCoverageData | null>(null);
   const [websiteConversions, setWebsiteConversions] = useState<number | null>(null);
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [loadingSites, setLoadingSites] = useState(false);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [loadingIndexCoverage, setLoadingIndexCoverage] = useState(false);
   const [savingSite, setSavingSite] = useState(false);
   const [dashboardError, setDashboardError] = useState("");
+  const [indexCoverageError, setIndexCoverageError] = useState("");
   const [permissionError, setPermissionError] = useState(false);
   const [conversionTrend, setConversionTrend] = useState<{ date: string; value: number }[]>([]);
 
@@ -110,6 +119,22 @@ export function SearchConsolePanel() {
     }
   }, []);
 
+  const loadIndexCoverage = useCallback(async () => {
+    setLoadingIndexCoverage(true);
+    setIndexCoverageError("");
+    try {
+      const res = await fetch("/api/marketing/search-console/index-coverage");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to check index coverage");
+      setIndexCoverage(data as GscIndexCoverageData);
+    } catch (err) {
+      setIndexCoverageError(err instanceof Error ? err.message : "Index coverage unavailable");
+      setIndexCoverage(null);
+    } finally {
+      setLoadingIndexCoverage(false);
+    }
+  }, []);
+
   useEffect(() => {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
@@ -143,6 +168,11 @@ export function SearchConsolePanel() {
     void loadDashboard(days);
     void loadWebsiteConversions(days);
   }, [status?.connected, status?.siteUrl, days, loadDashboard, loadWebsiteConversions]);
+
+  useEffect(() => {
+    if (!status?.connected || !status.siteUrl) return;
+    void loadIndexCoverage();
+  }, [status?.connected, status?.siteUrl, loadIndexCoverage]);
 
   async function saveSite(siteUrl: string) {
     setSavingSite(true);
@@ -380,6 +410,89 @@ export function SearchConsolePanel() {
             },
           ].map((metric, index) => ({ ...metric, unit: index === 3 ? "%" : undefined, trend: index === 5 ? conversionTrend : (dashboard?.daily ?? []).map((r) => ({ date: r.date, value: [r.clicks, r.impressions, r.position || null, r.ctr * 100, r.pagesWithImpressions][index] })) }))}
         />
+      ) : null}
+
+      {status.siteUrl ? (
+        <MarketingSectionCard
+          title="Indexable pages Google has not indexed"
+          description="Live sitemap URLs that are currently indexable, but Search Console reports as not indexed. Pages with a live noindex directive are intentionally excluded."
+          action={
+            <Button size="sm" variant="outline" disabled={loadingIndexCoverage} onClick={() => loadIndexCoverage()}>
+              <RefreshCw className={`mr-1 h-4 w-4 ${loadingIndexCoverage ? "animate-spin" : ""}`} />
+              Check now
+            </Button>
+          }
+        >
+          {loadingIndexCoverage && !indexCoverage ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking live sitemap pages in Search Console…
+            </div>
+          ) : indexCoverageError ? (
+            <p role="alert" className="text-sm text-destructive">{indexCoverageError}</p>
+          ) : indexCoverage ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                <Badge variant={indexCoverage.notIndexedPages.length > 0 ? "outline" : "secondary"}>
+                  {indexCoverage.notIndexedPages.length} not indexed
+                </Badge>
+                <Badge variant="secondary">{indexCoverage.checkedCount} indexable pages checked</Badge>
+                {indexCoverage.excludedNoindexCount > 0 ? (
+                  <Badge variant="secondary">{indexCoverage.excludedNoindexCount} noindex pages excluded</Badge>
+                ) : null}
+              </div>
+              {indexCoverage.notIndexedPages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Every currently indexable sitemap page inspected is listed as indexed by Google.
+                </p>
+              ) : (
+                <details className="rounded-md border border-border">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium hover:bg-muted/50">
+                    View {indexCoverage.notIndexedPages.length} page{indexCoverage.notIndexedPages.length === 1 ? "" : "s"} that need attention
+                  </summary>
+                  <div className="max-h-96 overflow-y-auto border-t border-border">
+                    {indexCoverage.notIndexedPages.map((page) => (
+                      <div key={page.url} className="border-b border-border px-3 py-3 last:border-b-0">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <a
+                              href={page.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="break-all text-sm font-medium text-primary hover:underline"
+                            >
+                              {formatPageUrl(page.url)}
+                            </a>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {page.coverageState || "Google has not listed this URL as indexed."}
+                              {page.lastCrawlTime ? ` · Last crawled ${format(new Date(page.lastCrawlTime), "MMM d, yyyy")}` : ""}
+                            </p>
+                          </div>
+                          <a
+                            href={gscInspectionUrl(indexCoverage.siteUrl, page.url)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline"
+                          >
+                            Inspect in GSC
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Open a page in Search Console to review Google&apos;s full reason and request indexing after fixing an issue.
+                {indexCoverage.truncated ? " This check is limited to the first 150 sitemap URLs." : ""}
+                {indexCoverage.inspectionErrorCount > 0 ? ` ${indexCoverage.inspectionErrorCount} page inspection${indexCoverage.inspectionErrorCount === 1 ? "" : "s"} could not be completed.` : ""}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Select a Search Console property to check page indexing.</p>
+          )}
+        </MarketingSectionCard>
       ) : null}
 
       {dashboard ? (

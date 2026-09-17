@@ -17,6 +17,9 @@ export async function GET(request: Request) {
   }
 
   const now = new Date();
+  const expiredImportantUpdates = await prisma.importantUpdate.deleteMany({
+    where: { expiresAt: { lte: now } },
+  });
   const jobs = await prisma.notificationJob.findMany({
     where: { processedAt: null, runAt: { lte: now } },
     take: 50,
@@ -99,5 +102,10 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ processed, deferred, total: jobs.length });
+  return NextResponse.json({
+    processed,
+    deferred,
+    total: jobs.length,
+    expiredImportantUpdates: expiredImportantUpdates.count,
+  });
 }

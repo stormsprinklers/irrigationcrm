@@ -6,6 +6,7 @@ import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { KpiStrip } from "@/components/home/KpiStrip";
 import { MaintenancePlansHomeCard } from "@/components/home/MaintenancePlansHomeCard";
 import { OfficeTodoList } from "@/components/home/OfficeTodoList";
+import { ImportantUpdatesPanel } from "@/components/home/ImportantUpdatesPanel";
 import { SummaryCard } from "@/components/home/SummaryCard";
 import { useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { HomeDateRange, HomeKpi, HomeSummaryCard } from "@/lib/home/types";
@@ -40,7 +41,10 @@ export function HomePageInner() {
 
       <ClockInOutButton />
 
-      <OfficeTodoList />
+      <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <OfficeTodoList className="mb-0" />
+        <ImportantUpdatesPanel className="mb-0" />
+      </div>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading dashboard...</p>

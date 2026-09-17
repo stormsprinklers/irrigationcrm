@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
+import { InvoiceNotesDialog } from "@/components/invoices/InvoiceNotesDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -58,6 +59,7 @@ export default function CustomerInvoicesPage() {
   const [refundInvoice, setRefundInvoice] = useState<InvoiceRow | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<InvoiceRow | null>(null);
   const [voidInvoice, setVoidInvoice] = useState<InvoiceRow | null>(null);
+  const [notesInvoice, setNotesInvoice] = useState<InvoiceRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -241,6 +243,13 @@ export default function CustomerInvoicesPage() {
                           >
                             Remind
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setNotesInvoice(invoice)}
+                          >
+                            Notes
+                          </Button>
                         </>
                       ) : null}
                       {invoice.status !== "VOID" && invoice.status !== "REFUNDED" ? (
@@ -308,6 +317,14 @@ export default function CustomerInvoicesPage() {
           open
           onClose={() => setRefundInvoice(null)}
           onRefunded={() => load()}
+        />
+      ) : null}
+      {notesInvoice ? (
+        <InvoiceNotesDialog
+          invoiceId={notesInvoice.id}
+          invoiceNumber={notesInvoice.invoiceNumber}
+          open
+          onClose={() => setNotesInvoice(null)}
         />
       ) : null}
       {voidInvoice ? (

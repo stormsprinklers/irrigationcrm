@@ -419,7 +419,7 @@ function ReviewAssigneeSearch({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Search technicians…"
+          placeholder="Search eligible staff…"
           className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
         {open ? (
@@ -453,7 +453,7 @@ function ReviewAssigneeSearch({
                 </button>
               </li>
               {results.length === 0 ? (
-                <li className="px-3 py-2 text-sm text-muted-foreground">No technicians found.</li>
+                <li className="px-3 py-2 text-sm text-muted-foreground">No eligible staff found.</li>
               ) : (
                 results.map((tech) => {
                   const checked = selected.includes(tech.id);
@@ -513,7 +513,7 @@ function AssignmentPanel({
 
   async function assign() {
     if (!selected.length) {
-      toast.error("Select at least one technician, or None / Unknown");
+      toast.error("Select at least one eligible staff member, or None / Unknown");
       return;
     }
     const unknown = selected.includes(UNKNOWN_ASSIGNEE_ID);
@@ -562,7 +562,7 @@ function AssignmentPanel({
         <span>
           <span className="block text-sm font-medium text-amber-950">Assign credit</span>
           <span className="block text-xs text-amber-900/80">
-            Could not match a technician automatically — search who should get credit, or None / Unknown.
+            Could not match a team member automatically — search who should get credit, or None / Unknown.
           </span>
         </span>
         <ChevronDown

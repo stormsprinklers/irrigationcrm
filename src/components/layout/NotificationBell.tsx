@@ -234,8 +234,11 @@ export function NotificationBell() {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel className="flex items-center justify-between gap-2">
+      <DropdownMenuContent
+        align="end"
+        className="flex max-h-[min(32rem,calc(100dvh-5rem))] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:w-80"
+      >
+        <DropdownMenuLabel className="flex shrink-0 items-center justify-between gap-2">
           <span>Notifications</span>
           {unreadCount > 0 ? (
             <button
@@ -248,38 +251,40 @@ export function NotificationBell() {
             </button>
           ) : null}
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {notifications.length === 0 ? (
-          <p className="px-2 py-4 text-center text-sm text-muted-foreground">No notifications yet.</p>
-        ) : (
-          notifications.map((item) => {
-            const Icon = notificationIcon(item.type);
-            return (
-              <DropdownMenuItem
-                key={item.id}
-                className="relative cursor-pointer overflow-hidden"
-                disabled={switching}
-                onClick={() => {
-                  void openNotification(item);
-                }}
-              >
-                <div className="flex w-full gap-2 py-0.5 pr-1.5">
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("text-sm leading-snug", !item.isRead && "font-medium")}>
-                      {item.title}
-                    </p>
-                    {item.body ? (
-                      <p className="truncate text-xs text-muted-foreground">{item.body}</p>
-                    ) : null}
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">{formatWhen(item.createdAt)}</p>
+        <DropdownMenuSeparator className="shrink-0" />
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {notifications.length === 0 ? (
+            <p className="px-2 py-4 text-center text-sm text-muted-foreground">No notifications yet.</p>
+          ) : (
+            notifications.map((item) => {
+              const Icon = notificationIcon(item.type);
+              return (
+                <DropdownMenuItem
+                  key={item.id}
+                  className="relative cursor-pointer overflow-hidden"
+                  disabled={switching}
+                  onClick={() => {
+                    void openNotification(item);
+                  }}
+                >
+                  <div className="flex w-full gap-2 py-0.5 pr-1.5">
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className={cn("text-sm leading-snug", !item.isRead && "font-medium")}>
+                        {item.title}
+                      </p>
+                      {item.body ? (
+                        <p className="truncate text-xs text-muted-foreground">{item.body}</p>
+                      ) : null}
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">{formatWhen(item.createdAt)}</p>
+                    </div>
                   </div>
-                </div>
-                <CompanyColorBar color={item.brandPrimary} companyName={item.companyName} />
-              </DropdownMenuItem>
-            );
-          })
-        )}
+                  <CompanyColorBar color={item.brandPrimary} companyName={item.companyName} />
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Grid3x3,
+  GripHorizontal,
   Mic,
   MicOff,
   Pause,
@@ -30,6 +31,11 @@ function formatDuration(seconds: number) {
   const s = seconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
+
+const CALL_BOX_POSITION_KEY = "storm-crm-active-call-position";
+const VIEWPORT_MARGIN = 8;
+
+type CallBoxPosition = { left: number; top: number };
 
 function CallActionButton({
   label,
@@ -74,6 +80,10 @@ export function ActiveCallBar() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [keypadOpen, setKeypadOpen] = useState(false);
   const [dtmfSent, setDtmfSent] = useState("");
+  const [boxPosition, setBoxPosition] = useState<CallBoxPosition | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null);
   const [waitingQueue, setWaitingQueue] = useState<
     Array<{ id: string; fromNumber: string; customer?: { name: string | null } | null }>
   >([]);
@@ -91,6 +101,53 @@ export function ActiveCallBar() {
     }, 1000);
     return () => clearInterval(timer);
   }, [activeCall]);
+
+  const clampToViewport = useCallback((left: number, top: number): CallBoxPosition => {
+    const box = boxRef.current;
+    const width = box?.offsetWidth ?? Math.min(window.innerWidth - VIEWPORT_MARGIN * 2, 352);
+    const height = box?.offsetHeight ?? 280;
+    return {
+      left: Math.max(VIEWPORT_MARGIN, Math.min(left, Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN))),
+      top: Math.max(VIEWPORT_MARGIN, Math.min(top, Math.max(VIEWPORT_MARGIN, window.innerHeight - height - VIEWPORT_MARGIN))),
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(CALL_BOX_POSITION_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Partial<CallBoxPosition>;
+      if (typeof parsed.left === "number" && typeof parsed.top === "number") {
+        setBoxPosition(clampToViewport(parsed.left, parsed.top));
+      }
+    } catch {
+      // A malformed local preference should never affect calls.
+    }
+  }, [clampToViewport]);
+
+  useEffect(() => {
+    const keepInViewport = () => {
+      setBoxPosition((position) => {
+        if (!position) return position;
+        const clamped = clampToViewport(position.left, position.top);
+        return clamped.left === position.left && clamped.top === position.top ? position : clamped;
+      });
+    };
+    window.addEventListener("resize", keepInViewport);
+    return () => window.removeEventListener("resize", keepInViewport);
+  }, [clampToViewport]);
+
+  useEffect(() => {
+    if (!boxPosition) return;
+    const frame = window.requestAnimationFrame(() => {
+      setBoxPosition((position) => {
+        if (!position) return position;
+        const clamped = clampToViewport(position.left, position.top);
+        return clamped.left === position.left && clamped.top === position.top ? position : clamped;
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [boxPosition, clampToViewport, keypadOpen, waitingQueue.length]);
 
   useEffect(() => {
     if (!keypadOpen || !activeCall) return;
@@ -178,13 +235,70 @@ export function ActiveCallBar() {
     }
   }
 
+  function startDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const box = boxRef.current;
+    if (!box) return;
+    event.preventDefault();
+    const rect = box.getBoundingClientRect();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setBoxPosition({ left: rect.left, top: rect.top });
+    setDragging(true);
+  }
+
+  function moveDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setBoxPosition(clampToViewport(event.clientX - drag.offsetX, event.clientY - drag.offsetY));
+  }
+
+  function endDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    setDragging(false);
+    setBoxPosition((position) => {
+      if (position) {
+        window.localStorage.setItem(CALL_BOX_POSITION_KEY, JSON.stringify(position));
+      }
+      return position;
+    });
+  }
+
   return (
     <>
       <div
-        className="fixed right-3 top-[calc(3.5rem+0.75rem)] z-[60] w-[min(100vw-1.5rem,22rem)] rounded-lg border border-border bg-card p-3 shadow-lg sm:right-4 sm:top-[calc(4.5rem+0.75rem)]"
+        ref={boxRef}
+        className={cn(
+          "fixed z-[60] w-[min(100vw-1.5rem,22rem)] rounded-lg border border-border bg-card p-3 shadow-lg",
+          boxPosition ? "" : "right-3 top-[calc(3.5rem+0.75rem)] sm:right-4 sm:top-[calc(4.5rem+0.75rem)]"
+        )}
+        style={boxPosition ? { left: boxPosition.left, top: boxPosition.top } : undefined}
         role="status"
         aria-label="Active call"
       >
+        <div
+          className={cn(
+            "mb-2 flex touch-none select-none items-center justify-between rounded-md px-1 py-0.5 text-xs text-muted-foreground",
+            dragging ? "cursor-grabbing bg-muted" : "cursor-grab hover:bg-muted/70"
+          )}
+          onPointerDown={startDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          aria-label="Drag live call box to move it"
+        >
+          <span>Drag to move</span>
+          <GripHorizontal className="h-4 w-4" aria-hidden />
+        </div>
         <div className="mb-3 min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {activeCall.transferring

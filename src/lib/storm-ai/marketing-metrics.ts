@@ -46,7 +46,10 @@ function normalizeChannelFilter(raw?: string) {
   const s = raw?.trim().toLowerCase() ?? "";
   if (!s) return null;
   if (s.includes("lsa") || s.includes("local service")) return "google_lsa";
-  if (s.includes("meta") || s.includes("facebook") || s.includes("instagram")) return "meta_ads";
+  if (s.includes("meta ads") || s.includes("facebook ads") || s.includes("instagram ads")) {
+    return "meta_ads";
+  }
+  if (s.includes("meta") || s.includes("facebook") || s.includes("instagram")) return "meta";
   if (s.includes("google ads") || s === "google" || s === "google_ads" || s.includes("ppc")) {
     return "google_ads";
   }

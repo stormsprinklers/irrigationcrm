@@ -43,6 +43,7 @@ import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
+import { InvoiceNotesDialog } from "@/components/invoices/InvoiceNotesDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { canAccessInvoices, canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
@@ -242,6 +243,7 @@ export function CustomerProfile({ customerId }: Props) {
   const [refundInvoiceId, setRefundInvoiceId] = useState<string | null>(null);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [voidInvoiceId, setVoidInvoiceId] = useState<string | null>(null);
+  const [notesInvoiceId, setNotesInvoiceId] = useState<string | null>(null);
   const [invoiceActingId, setInvoiceActingId] = useState<string | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -1525,6 +1527,18 @@ export function CustomerProfile({ customerId }: Props) {
                                 Remind
                               </Button>
                             ) : null}
+                            {balanceDue > 0 &&
+                            invoice.status !== "VOID" &&
+                            invoice.status !== "REFUNDED" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setNotesInvoiceId(invoice.id)}
+                              >
+                                Notes
+                              </Button>
+                            ) : null}
                             {invoice.status !== "VOID" && invoice.status !== "REFUNDED" ? (
                               <Button
                                 type="button"
@@ -1690,6 +1704,17 @@ export function CustomerProfile({ customerId }: Props) {
           open
           onClose={() => setRefundInvoiceId(null)}
           onRefunded={() => void refreshInvoices()}
+        />
+      ) : null}
+
+      {notesInvoiceId ? (
+        <InvoiceNotesDialog
+          invoiceId={notesInvoiceId}
+          invoiceNumber={
+            invoices.find((invoice) => invoice.id === notesInvoiceId)?.invoiceNumber ?? ""
+          }
+          open
+          onClose={() => setNotesInvoiceId(null)}
         />
       ) : null}
 

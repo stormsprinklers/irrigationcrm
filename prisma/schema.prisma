@@ -815,6 +815,7 @@ model Company {
   employeeWorkSchedules  EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]
   officeTodos            OfficeTodo[]
+  importantUpdates       ImportantUpdate[]
   checklistTemplates     ChecklistTemplate[]
   portalLoginTokens      CustomerPortalLoginToken[]
   portalOffers           PortalOffer[]
@@ -1008,6 +1009,7 @@ model User {
   visitNotes         VisitNote[]
   visitAttachments   VisitAttachment[]
   customerNotes      CustomerNote[]
+  invoiceNotes       InvoiceNote[]
   customerAttachments CustomerAttachment[]
   mediaAssets        CompanyMediaAsset[]
   agentPresence      AgentPresence?
@@ -1030,6 +1032,7 @@ model User {
   createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
   createdOfficeTodos     OfficeTodo[]         @relation("OfficeTodoCreator")
   completedOfficeTodos   OfficeTodo[]         @relation("OfficeTodoCompleter")
+  createdImportantUpdates ImportantUpdate[]    @relation("ImportantUpdateCreator")
   lmsUserId              String?
   lmsSyncStatus          String?
   lmsLastSyncedAt        DateTime?
@@ -2970,6 +2973,24 @@ model OfficeTodo {
   @@index([companyId, sortOrder])
 }
 
+/// A short-lived, office-only dashboard announcement. Expired rows are removed automatically.
+model ImportantUpdate {
+  id          String   @id @default(cuid())
+  companyId   String
+  createdById String
+  title       String
+  body        String?
+  color       String   @default("AMBER")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("ImportantUpdateCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([companyId, expiresAt])
+}
+
 model TimeOffRequest {
   id            String        @id @default(cuid())
   companyId     String
@@ -3352,11 +3373,28 @@ model Invoice {
   estimate  Estimate?         @relation(fields: [estimateId], references: [id], onDelete: SetNull)
   lineItems InvoiceLineItem[]
   payments  Payment[]
+  notes     InvoiceNote[]
   maintenanceBillingPeriods MaintenancePlanBillingPeriod[]
 
   @@unique([companyId, invoiceNumber])
   @@index([companyId, status])
   @@index([customerId])
+}
+
+/// Private office follow-up history. Never included in public invoice or portal queries.
+model InvoiceNote {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  authorId    String?
+  body        String
+  automated   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId, createdAt])
+  @@index([authorId])
 }
 
 model InvoiceLineItem {

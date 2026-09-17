@@ -7,7 +7,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { canHandleGbpReviews } from "@/lib/google-business/permissions";
-import { REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
+import { REVIEW_MANUAL_ASSIGNMENT_ROLES } from "@/lib/google-business/review-aliases";
 import { manuallyAssignGbpReview } from "@/lib/google-business/review-assigner";
 import { prisma } from "@/lib/prisma";
 
@@ -60,7 +60,14 @@ export async function GET() {
         include: { assignments: { include: { user: { select: { id: true, name: true } } } } },
       }),
       prisma.user.findMany({
-        where: { companyId: user.companyId, role: { in: REVIEW_ALIAS_ROLES } },
+        where: {
+          companyId: user.companyId,
+          status: "ACTIVE",
+          OR: [
+            { role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES } },
+            { crewsAsForeman: { some: { companyId: user.companyId, division: "INSTALL" } } },
+          ],
+        },
         select: { id: true, name: true, status: true },
         orderBy: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
       }),

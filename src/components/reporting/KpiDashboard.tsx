@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
 import { StripePayoutsCard } from "@/components/reporting/StripePayoutsCard";
 import { OfficeTodoList } from "@/components/home/OfficeTodoList";
+import { ImportantUpdatesPanel } from "@/components/home/ImportantUpdatesPanel";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
   ADMIN_HOME_KPI_PRESETS,
@@ -219,7 +220,10 @@ export function KpiDashboard({
           <div className="mb-8">
             <StripePayoutsCard />
           </div>
-          <OfficeTodoList />
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <OfficeTodoList className="mb-0" />
+            <ImportantUpdatesPanel className="mb-0" />
+          </div>
         </>
       ) : null}
 

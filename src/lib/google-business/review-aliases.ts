@@ -4,6 +4,12 @@ import { prisma } from "@/lib/prisma";
 
 export const REVIEW_ALIAS_ROLES: UserRole[] = [UserRole.TECH, UserRole.INSTALLER];
 
+/** Roles that can receive manual review credit, in addition to installation crew foremen. */
+export const REVIEW_MANUAL_ASSIGNMENT_ROLES: UserRole[] = [
+  ...REVIEW_ALIAS_ROLES,
+  UserRole.CSR,
+];
+
 export function normalizeNameToken(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

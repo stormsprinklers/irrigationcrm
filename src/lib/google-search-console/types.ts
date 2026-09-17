@@ -58,6 +58,27 @@ export type GscDashboardData = {
   sitemaps: GscSitemap[];
 };
 
+export type GscNotIndexedPage = {
+  url: string;
+  coverageState: string | null;
+  verdict: string | null;
+  indexingState: string | null;
+  robotsTxtState: string | null;
+  pageFetchState: string | null;
+  lastCrawlTime: string | null;
+};
+
+export type GscIndexCoverageData = {
+  siteUrl: string;
+  sitemapUrl: string | null;
+  discoveredCount: number;
+  checkedCount: number;
+  excludedNoindexCount: number;
+  inspectionErrorCount: number;
+  truncated: boolean;
+  notIndexedPages: GscNotIndexedPage[];
+};
+
 export type GscConnectionStatus = {
   connected: boolean;
   siteUrl: string | null;

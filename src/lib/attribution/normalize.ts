@@ -5,6 +5,7 @@ export const ATTRIBUTION_CHANNELS = [
   "google_ads",
   "google_lsa",
   "meta_ads",
+  "meta",
   "organic",
   "direct",
   "referral",
@@ -81,6 +82,9 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   const tracking = lower(trackingSource);
   const leadSource = lower(input.leadSource ?? input.formSource);
   const conversionPage = lower(input.conversionPage ?? input.landingPage);
+  const sourceValue = lower(source);
+  const hasMetaSource = /facebook|instagram|meta/.test(sourceValue);
+  const hasPaidMedium = /cpc|ppc|paid/.test(lower(medium));
 
   let channel: AttributionChannel = "unknown";
 
@@ -104,14 +108,25 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   ) {
     channel = "google_ads";
   } else if (
-    fbclid ||
+    bucket === "meta_ads" ||
     bucket === "facebook_ads" ||
+    (hasMetaSource && hasPaidMedium) ||
+    tracking.includes("meta ads") ||
+    tracking.includes("facebook ads") ||
+    tracking.includes("instagram ads")
+  ) {
+    channel = "meta_ads";
+  } else if (
+    fbclid ||
+    bucket === "meta" ||
+    bucket === "facebook" ||
     bucket === "instagram" ||
+    hasMetaSource ||
     tracking.includes("meta") ||
     tracking.includes("facebook") ||
     tracking.includes("instagram")
   ) {
-    channel = "meta_ads";
+    channel = "meta";
   } else if (bucket === "google_organic" || (lower(medium) === "organic" && lower(source).includes("google"))) {
     channel = "organic";
   } else if (leadSource === "referral" || bucket === "referral" || lower(medium) === "referral") {
@@ -149,6 +164,8 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
         ? source || "Google Ads"
         : channel === "meta_ads"
           ? source || "Meta Ads"
+          : channel === "meta"
+            ? source || "Meta"
           : channel === "organic"
             ? "Organic Search"
             : channel === "referral"
@@ -186,6 +203,8 @@ export function attributionChannelLabel(channel: string | null | undefined): str
       return "Google LSA";
     case "meta_ads":
       return "Meta Ads";
+    case "meta":
+      return "Meta";
     case "organic":
       return "Organic";
     case "direct":

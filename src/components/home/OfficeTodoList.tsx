@@ -33,7 +33,7 @@ function firstName(name: string) {
   return name.split(/\s+/)[0] ?? name;
 }
 
-export function OfficeTodoList() {
+export function OfficeTodoList({ className }: { className?: string }) {
   const { data: session } = useSession();
   const allowed = canUseOfficeTodos(session?.user?.role ?? "");
   const [todos, setTodos] = useState<OfficeTodoDTO[]>([]);
@@ -194,7 +194,7 @@ export function OfficeTodoList() {
   if (!allowed) return null;
 
   return (
-    <Card className="mb-6">
+    <Card className={cn("mb-6", className)}>
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
         <div>
           <div className="flex items-center gap-2">

@@ -39,6 +39,17 @@ export async function deliverInvoice(params: {
     };
   }
 
+  if (params.kind === "remind") {
+    const method = emailSent && smsSent ? "email and SMS" : emailSent ? "email" : "SMS";
+    await prisma.invoiceNote.create({
+      data: {
+        invoiceId: invoice.id,
+        automated: true,
+        body: `Automated invoice follow-up sent via ${method}.`,
+      },
+    });
+  }
+
   await prisma.invoice.update({
     where: { id: invoice.id },
     data: {
