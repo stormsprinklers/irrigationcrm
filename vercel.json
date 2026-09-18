@@ -3,12 +3,8 @@
   "buildCommand": "npm run vercel-build",
   "crons": [
     {
-      "path": "/api/cron/marketing/flow",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cron/marketing/drip",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/cron/notifications",

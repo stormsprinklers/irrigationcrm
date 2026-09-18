@@ -14,13 +14,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const triggers = await processCampaignTriggers();
-    const flow = await processFlowEnrollments();
-    // Keep legacy linear drip processor for campaigns that still only have CampaignStep rows
-    // and no flow activity this run.
-    const legacy = await processDripSends();
-    const blast = await processPendingBlastSends();
-    return NextResponse.json({ ok: true, triggers, flow, legacy, blast });
+    // This already deployed route is called every minute. Keep the expensive
+    // trigger, legacy, and blast work at its previous five-minute cadence.
+    const fullRun = new Date().getUTCMinutes() % 5 === 0;
+    const triggers = fullRun ? await processCampaignTriggers() : null;
+    const flow = await processFlowEnrollments(fullRun ? undefined : { maxRunMs: 45_000 });
+    const legacy = fullRun ? await processDripSends() : null;
+    const blast = fullRun ? await processPendingBlastSends() : null;
+    return NextResponse.json({ ok: true, mode: fullRun ? "full" : "flow", triggers, flow, legacy, blast });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Drip processing failed";
     return NextResponse.json({ error: message }, { status: 500 });
