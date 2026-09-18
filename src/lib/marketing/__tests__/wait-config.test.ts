@@ -8,6 +8,7 @@ import {
   waitTimeoutAt,
   parseBranchWaitMs,
   recipientMatchesWaitAction,
+  ACTION_POLL_MS,
   REPLY_POLL_MS,
 } from "../wait-config";
 
@@ -54,6 +55,7 @@ test("delay_or_reply summary and next check uses the earlier of timeout and poll
   const from = new Date("2026-09-08T12:00:00.000Z");
   const timeout = waitTimeoutAt(wait, from)!;
   const check = nextWaitCheckAt(wait, timeout, from);
+  assert.equal(REPLY_POLL_MS, 60 * 1000);
   assert.equal(check.getTime() - from.getTime(), REPLY_POLL_MS);
 });
 
@@ -69,7 +71,7 @@ test("action wait maps open tracking to click tracking", () => {
   );
   const from = new Date("2026-09-08T12:00:00.000Z");
   assert.equal(waitTimeoutAt(wait, from), null);
-  assert.equal(nextWaitCheckAt(wait, null, from).getTime() - from.getTime(), REPLY_POLL_MS);
+  assert.equal(nextWaitCheckAt(wait, null, from).getTime() - from.getTime(), ACTION_POLL_MS);
 });
 
 test("reply and action waits honor an explicit timeout", () => {

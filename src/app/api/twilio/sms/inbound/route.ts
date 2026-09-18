@@ -306,13 +306,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!blocked && customer?.id && trimmedBody) {
+    if (!blocked && trimmedBody) {
       after(async () => {
         try {
           const { advanceWaitOnCustomerReply } = await import("@/lib/marketing/flow-engine");
           await advanceWaitOnCustomerReply({
             companyId: company.id,
-            customerId: customer.id,
+            customerId: customer?.id,
+            fromPhone: normalizedFrom,
             text: trimmedBody,
             channel: "sms",
             receivedAt: message.sentAt,

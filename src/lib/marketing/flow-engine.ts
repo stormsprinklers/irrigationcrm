@@ -48,6 +48,7 @@ import {
   type IfElseResolvePhase,
 } from "@/lib/marketing/if-else";
 import { loadIfElseContact } from "@/lib/marketing/if-else-contact";
+import { phoneDigitsKey, phoneLookupVariants } from "@/lib/inbox/phone";
 
 type FlowNodeRow = {
   id: string;
@@ -334,16 +335,21 @@ async function enrollmentLookbackSince(enrollmentId: string, fallback: Date) {
 async function latestInboundSmsBody(params: {
   companyId: string;
   customerId: string;
+  phone?: string | null;
   since: Date;
   until?: Date | null;
 }): Promise<string | null> {
+  const phoneVariants = params.phone ? phoneLookupVariants(params.phone) : [];
   const message = await prisma.message.findFirst({
     where: {
       direction: MessageDirection.INBOUND,
       sentAt: { gte: params.since, ...(params.until ? { lte: params.until } : {}) },
       conversation: {
         companyId: params.companyId,
-        customerId: params.customerId,
+        OR: [
+          { customerId: params.customerId },
+          ...(phoneVariants.length ? [{ participantPhone: { in: phoneVariants } }] : []),
+        ],
       },
     },
     select: { body: true },
@@ -420,17 +426,23 @@ async function finishIfElseBranch(params: {
 async function customerReplyMatch(params: {
   companyId: string;
   customerId: string;
+  phone?: string | null;
   since: Date;
+  until?: Date | null;
   keywords: string[];
   replyChannel?: "any" | "sms";
 }): Promise<string | null> {
+  const phoneVariants = params.phone ? phoneLookupVariants(params.phone) : [];
   const messages = await prisma.message.findMany({
     where: {
       direction: MessageDirection.INBOUND,
-      sentAt: { gte: params.since },
+      sentAt: { gte: params.since, ...(params.until ? { lte: params.until } : {}) },
       conversation: {
         companyId: params.companyId,
-        customerId: params.customerId,
+        OR: [
+          { customerId: params.customerId },
+          ...(phoneVariants.length ? [{ participantPhone: { in: phoneVariants } }] : []),
+        ],
       },
     },
     select: { body: true },
@@ -449,7 +461,7 @@ async function customerReplyMatch(params: {
       companyId: params.companyId,
       customerId: params.customerId,
       folder: EmailFolder.INBOX,
-      createdAt: { gte: params.since },
+      createdAt: { gte: params.since, ...(params.until ? { lte: params.until } : {}) },
     },
     select: { subject: true, bodyText: true },
     orderBy: { createdAt: "desc" },
@@ -484,7 +496,8 @@ async function customerActionMatch(params: {
 
 export async function advanceWaitOnCustomerReply(params: {
   companyId: string;
-  customerId: string;
+  customerId?: string | null;
+  fromPhone?: string;
   text: string;
   channel?: "sms" | "email";
   receivedAt?: Date;
@@ -492,9 +505,36 @@ export async function advanceWaitOnCustomerReply(params: {
   const matchedPreview = matchingReplyKeyword(params.text, []);
   if (!matchedPreview) return { advanced: 0 };
 
+  // A phone can belong to more than one saved customer. Attribute an SMS reply
+  // to active enrollments that actually sent a campaign SMS to this number.
+  const phoneKey = params.channel === "sms" ? phoneDigitsKey(params.fromPhone) : null;
+  const sentToPhone = phoneKey && phoneKey.length === 10
+    ? await prisma.$queryRaw<Array<{ customerId: string; campaignId: string }>>`
+        SELECT DISTINCT r."customerId", r."campaignId"
+        FROM "CampaignRecipient" r
+        JOIN "Campaign" c ON c.id = r."campaignId"
+        JOIN "CampaignEnrollment" e
+          ON e."campaignId" = r."campaignId" AND e."customerId" = r."customerId"
+        WHERE c."companyId" = ${params.companyId}
+          AND c.status = 'ACTIVE' AND c.type = 'DRIP'
+          AND e.status = 'ACTIVE'
+          AND r.channel = 'SMS' AND r.status IN ('sent', 'delivered')
+          AND r."sentAt" >= e."createdAt"
+          AND r."sentAt" <= ${params.receivedAt ?? new Date()}
+          AND r.phone IS NOT NULL
+          AND right(regexp_replace(r.phone, '[^0-9]', '', 'g'), 10) = ${phoneKey}
+        LIMIT 100
+      `
+    : [];
+  const customerIds = sentToPhone.length
+    ? [...new Set(sentToPhone.map((row) => row.customerId))]
+    : params.customerId ? [params.customerId] : [];
+  if (!customerIds.length) return { advanced: 0 };
+  const sentPairs = new Set(sentToPhone.map((row) => `${row.campaignId}:${row.customerId}`));
+
   const enrollments = await prisma.campaignEnrollment.findMany({
     where: {
-      customerId: params.customerId,
+      customerId: { in: customerIds },
       status: CampaignEnrollmentStatus.ACTIVE,
       campaign: {
         companyId: params.companyId,
@@ -510,12 +550,13 @@ export async function advanceWaitOnCustomerReply(params: {
         },
       },
     },
-    take: 20,
+    take: 100,
   });
 
   let advanced = 0;
   const advancedEnrollmentIds: string[] = [];
   for (const enrollment of enrollments) {
+    if (sentPairs.size && !sentPairs.has(`${enrollment.campaignId}:${enrollment.customerId}`)) continue;
     const nodes = enrollment.campaign.flowNodes.map((n) => ({
       id: n.id,
       type: n.type,
@@ -591,7 +632,7 @@ export async function advanceWaitOnCustomerReply(params: {
     });
     if (alreadyDone) continue;
 
-    const contact = await loadIfElseContact(params.companyId, params.customerId);
+    const contact = await loadIfElseContact(params.companyId, enrollment.customerId);
     const contactWithReply = withSmsReply(contact, params.text);
     if (!contactWithReply || !parsed.branches.some((branch) => branchMatches(contactWithReply, branch))) continue;
     if (!(await claimReplyEnrollment(enrollment))) continue;
@@ -788,12 +829,13 @@ async function processReplyEnrollmentImmediately(enrollmentId: string) {
 }
 
 export async function processFlowEnrollments(
-  limitOrOptions: number | { limit?: number; campaignId?: string } = 40
+  limitOrOptions: number | { limit?: number; campaignId?: string; maxRunMs?: number } = 40
 ) {
   const options =
     typeof limitOrOptions === "number" ? { limit: limitOrOptions } : limitOrOptions;
   const limit = options.limit ?? 40;
   const campaignId = options.campaignId;
+  const deadline = options.maxRunMs ? Date.now() + options.maxRunMs : Number.POSITIVE_INFINITY;
 
   let processed = 0;
   const quietHoursNotified = new Set<string>();
@@ -822,9 +864,40 @@ export async function processFlowEnrollments(
     });
   }
 
+  // Existing reply waits may have a 15-minute check scheduled by an older
+  // deployment. Bring them onto the shorter fallback cadence without altering
+  // their original timeout deadline.
+  const replyWaitNodes = await prisma.campaignFlowNode.findMany({
+    where: {
+      type: CampaignFlowNodeType.WAIT,
+      ...(campaignId ? { campaignId } : {}),
+      campaign: { status: CampaignStatus.ACTIVE, type: CampaignType.DRIP },
+    },
+    select: { id: true, config: true },
+  });
+  const replyWaitIds = [
+    ...replyWaitNodes.filter((node) => parseWaitConfig(node.config).usesReply).map((node) => node.id),
+    ...branchNodes
+      .filter((node) => !isLegacyReactionBranch(node.config) && ifElseWaitsForSmsReply(parseIfElseConfig(node.config)))
+      .map((node) => node.id),
+  ];
+  if (replyWaitIds.length) {
+    const nextCheck = new Date(Date.now() + REPLY_POLL_MS);
+    await prisma.campaignEnrollment.updateMany({
+      where: {
+        status: CampaignEnrollmentStatus.ACTIVE,
+        currentNodeId: { in: replyWaitIds },
+        nextSendAt: { gt: nextCheck },
+        ...(campaignId ? { campaignId } : {}),
+      },
+      data: { nextSendAt: nextCheck },
+    });
+  }
+
   // Run enough rounds that SEND → WAIT (start) or SEND → next SEND can happen
   // in the same request instead of waiting for the next cron tick.
   for (let round = 0; round < 8; round++) {
+    if (Date.now() >= deadline) break;
   const due = await prisma.campaignEnrollment.findMany({
     where: {
       status: CampaignEnrollmentStatus.ACTIVE,
@@ -857,6 +930,7 @@ export async function processFlowEnrollments(
     const processedBeforeRound = processed;
 
   for (const enrollment of due) {
+      if (Date.now() >= deadline) break;
       if (!(await claimDueEnrollment(enrollment.id))) continue;
       try {
         await processOneDueEnrollment(enrollment as DueEnrollment, quietHoursNotified);
@@ -975,6 +1049,7 @@ async function processOneDueEnrollment(
           const hit = await customerReplyMatch({
             companyId: enrollment.campaign.companyId,
             customerId: enrollment.customerId,
+            phone: enrollment.customer.phone,
             since,
             keywords: wait.keywords,
             replyChannel: wait.replyChannel,
@@ -1051,7 +1126,9 @@ async function processOneDueEnrollment(
         const hit = await customerReplyMatch({
           companyId: enrollment.campaign.companyId,
           customerId: enrollment.customerId,
+          phone: enrollment.customer.phone,
           since,
+          until,
           keywords: wait.keywords,
           replyChannel: wait.replyChannel,
         });
@@ -1300,14 +1377,36 @@ async function processOneDueEnrollment(
       const replyDeadline = entered && typeof enteredMeta.until === "string"
         ? new Date(enteredMeta.until)
         : entered ? ifElseTimeoutAt(parsed, entered.createdAt, companyTz) : null;
+      // When a linear reply Wait led here by timing out, a later SMS must not
+      // turn its "no reply" path into a YES branch.
+      const precedingReplyWait = waitsForSms && !parsed.timeoutEnabled
+        ? nodes.find((candidate) =>
+            candidate.type === CampaignFlowNodeType.WAIT &&
+            parseWaitConfig(candidate.config).usesReply &&
+            nextLinearNode(nodes, candidate.id)?.id === node.id
+          )
+        : null;
+      const precedingWaitResult = precedingReplyWait
+        ? await prisma.campaignEnrollmentEvent.findFirst({
+            where: {
+              enrollmentId: enrollment.id,
+              nodeId: precedingReplyWait.id,
+              eventType: "wait_completed",
+            },
+            orderBy: { createdAt: "desc" },
+            select: { meta: true },
+          })
+        : null;
+      const precedingWaitTimedOut = eventMeta(precedingWaitResult?.meta).reason === "timeout";
       const smsSince = waitsForSms
         ? await enrollmentLookbackSince(enrollment.id, enrollment.createdAt)
         : null;
       const smsReply =
-        waitsForSms && smsSince
+        waitsForSms && smsSince && !precedingWaitTimedOut
           ? await latestInboundSmsBody({
               companyId: enrollment.campaign.companyId,
               customerId: enrollment.customerId,
+              phone: enrollment.customer.phone,
               since: smsSince,
               until: replyDeadline,
             })

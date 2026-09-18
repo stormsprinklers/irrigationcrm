@@ -31,7 +31,8 @@ const UNIT_MS: Record<WaitDurationUnit, number> = {
   days: 24 * 60 * 60 * 1000,
 };
 
-export const REPLY_POLL_MS = 15 * 60 * 1000;
+export const REPLY_POLL_MS = 60 * 1000;
+export const ACTION_POLL_MS = 15 * 60 * 1000;
 
 function asUnit(value: unknown): WaitDurationUnit {
   if (value === "minutes" || value === "days" || value === "hours") return value;
@@ -158,7 +159,7 @@ export function nextWaitCheckAt(
   from = new Date()
 ): Date {
   if (wait.usesReply || wait.usesAction) {
-    const poll = new Date(from.getTime() + REPLY_POLL_MS);
+    const poll = new Date(from.getTime() + (wait.usesReply ? REPLY_POLL_MS : ACTION_POLL_MS));
     if (timeoutAt && timeoutAt.getTime() < poll.getTime()) return timeoutAt;
     return poll;
   }
