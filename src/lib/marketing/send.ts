@@ -585,10 +585,9 @@ export async function processDripSends() {
     const todaySent = await prisma.campaignRecipient.count({
       where: {
         campaignId: campaign.id,
+        channel: step.channel,
         sentAt: { gte: startOfZonedDay(now, companyTz) },
-        ...(step.channel === CampaignChannel.EMAIL
-          ? { email: { not: null } }
-          : { phone: { not: null } }),
+        status: { in: ["sent", "delivered"] },
       },
     });
     if (step.channel === CampaignChannel.EMAIL && todaySent >= emailsPerDay) continue;

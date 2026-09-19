@@ -25,6 +25,10 @@ import { mergeCustomerTags, parseAddTagConfig } from "@/lib/marketing/add-tag";
 import { resolveCampaignStartAt } from "@/lib/marketing/campaign-time";
 import { startOfZonedDay } from "@/lib/datetime/zoned";
 import {
+  campaignDailySentWhere,
+  isInitialChannelOutreachNode,
+} from "@/lib/marketing/daily-limits";
+import {
   matchingReplyKeyword,
   nextWaitCheckAt,
   parseBranchWaitMs,
@@ -999,14 +1003,6 @@ async function processOneDueEnrollment(
     // Daily rate limits
     const settings = (enrollment.campaign.dripSettings ?? {}) as DripSettings;
     const startOfDay = startOfZonedDay(new Date(), companyTz);
-    const sentToday = await prisma.campaignRecipient.count({
-      where: {
-        campaignId: enrollment.campaignId,
-        sentAt: { gte: startOfDay },
-        status: { in: ["sent", "delivered"] },
-      },
-    });
-
     let node =
       findNode(nodes, enrollment.currentNodeId) ??
       nodes.find((n) => n.type !== CampaignFlowNodeType.TRIGGER) ??
@@ -1216,20 +1212,32 @@ async function processOneDueEnrollment(
       }
 
       const isSms = node.type === CampaignFlowNodeType.SEND_SMS;
+      const sendChannel = isSms ? CampaignChannel.SMS : CampaignChannel.EMAIL;
       const cap = dailySendCap(isSms ? settings.smsPerDay : settings.emailsPerDay);
-      if (sentToday >= cap) {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: { nextSendAt: nextLocalMorningAtHour(new Date(), 8, companyTz) },
+      const isInitialOutreach = isInitialChannelOutreachNode(nodes, node.id, sendChannel);
+      if (isInitialOutreach) {
+        const sentToday = await prisma.campaignRecipient.count({
+          where: campaignDailySentWhere({
+            campaignId: enrollment.campaignId,
+            channel: sendChannel,
+            flowNodeId: node.id,
+            startOfDay,
+          }),
         });
-        return;
+        if (sentToday >= cap) {
+          await prisma.campaignEnrollment.update({
+            where: { id: enrollment.id },
+            data: { nextSendAt: nextLocalMorningAtHour(new Date(), 8, companyTz) },
+          });
+          return;
+        }
       }
 
       const ok = await sendCampaignMessage({
         campaign: enrollment.campaign,
         customer: enrollment.customer,
         property: enrollment.customer.properties[0] ?? null,
-        channel: isSms ? CampaignChannel.SMS : CampaignChannel.EMAIL,
+        channel: sendChannel,
         subject: String(node.config.subject ?? enrollment.campaign.subject ?? ""),
         bodyText: String(node.config.bodyText ?? ""),
         bodyHtml: (node.config.bodyHtml as string | undefined) ?? null,

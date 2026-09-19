@@ -803,11 +803,11 @@ export function CampaignFlowEditor({
         <div className="grid shrink-0 gap-3 border-b border-border bg-card px-4 py-3 sm:grid-cols-3">
         <div>
           <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <span>Emails per day</span>
-            <FieldTip label="About emails per day">
-              This is the most emails this campaign will send in one day (company timezone). Extra
-              contacts stay enrolled and are sent starting at 8:00 a.m. the next morning. Nobody is
-              skipped.
+            <span>New email contacts per day</span>
+            <FieldTip label="About new email contacts per day">
+              This is how many people can receive the campaign’s first email each day (company
+              timezone). Follow-ups do not use this allowance. Extra new contacts stay enrolled and
+              start at 8:00 a.m. the next morning.
             </FieldTip>
           </label>
           <Input
@@ -819,11 +819,11 @@ export function CampaignFlowEditor({
         </div>
         <div>
           <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <span>SMS per day</span>
-            <FieldTip label="About SMS per day">
-              This is the most texts this campaign will send in one day (company timezone). Extra
-              contacts stay enrolled and are sent starting at 8:00 a.m. the next morning. Nobody is
-              skipped.
+            <span>New SMS contacts per day</span>
+            <FieldTip label="About new SMS contacts per day">
+              This is how many people can receive the campaign’s first text each day (company
+              timezone). Replies and follow-up texts do not use this allowance. Extra new contacts
+              stay enrolled and start at 8:00 a.m. the next morning.
             </FieldTip>
           </label>
           <Input

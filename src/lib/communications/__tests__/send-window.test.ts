@@ -89,3 +89,21 @@ test("campaign window blocks 9pm–8am and resumes at 8am", () => {
     "2026-06-24T14:00:00.000Z"
   );
 });
+
+test("campaign window runs on Saturday and Sunday", () => {
+  // Saturday, Sep 19 2026 at 8:00 AM MDT.
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-09-19T14:00:00.000Z"), TZ),
+    true
+  );
+  // Sunday, Sep 20 2026 at 8:00 AM MDT.
+  assert.equal(
+    isWithinCampaignSendWindow(new Date("2026-09-20T14:00:00.000Z"), TZ),
+    true
+  );
+  // Saturday at 9:00 PM holds until Sunday at 8:00 AM.
+  assert.equal(
+    nextCampaignSendWindowStart(new Date("2026-09-20T03:00:00.000Z"), TZ).toISOString(),
+    "2026-09-20T14:00:00.000Z"
+  );
+});
