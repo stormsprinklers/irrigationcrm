@@ -62,6 +62,7 @@ import {
 import { addTagSummary, parseAddTagConfig } from "@/lib/marketing/add-tag";
 import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
+import { campaignFlowChannels } from "@/lib/marketing/flow-channels";
 
 type Props = {
   nodes: CampaignFlowNodeInput[];
@@ -1182,10 +1183,12 @@ function NodeConfigEditor({
             )}
             <p className="text-sm font-medium">Audience</p>
             <p className="text-xs text-muted-foreground">
-              Filter who is enrolled when this campaign is activated.
+              Filter who is enrolled when this campaign is activated. A customer only needs one
+              usable channel in this flow; unavailable email or SMS steps are skipped.
             </p>
             <AudienceBuilder
               channel={channel}
+              channels={campaignFlowChannels(allNodes)}
               filters={audienceFilters}
               onChange={onAudienceChange}
             />

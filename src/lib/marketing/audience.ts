@@ -155,6 +155,33 @@ export async function queryAudienceCustomers(
   });
 }
 
+export async function queryAudienceCustomersForChannels(
+  companyId: string,
+  channels: CampaignChannel[],
+  filters?: AudienceFilters | null
+) {
+  if (filters?.selectNone) return [];
+  const uniqueChannels = Array.from(new Set(channels));
+  const groups = await Promise.all(
+    uniqueChannels.map((channel) => queryAudienceCustomers(companyId, channel, filters))
+  );
+  const byId = new Map<string, (typeof groups)[number][number]>();
+  for (const customer of groups.flat()) byId.set(customer.id, customer);
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function previewAudienceForChannels(
+  companyId: string,
+  channels: CampaignChannel[],
+  filters?: AudienceFilters | null
+) {
+  const customers = await queryAudienceCustomersForChannels(companyId, channels, filters);
+  return {
+    count: customers.length,
+    sample: customers.slice(0, 10),
+  };
+}
+
 export async function previewAudience(
   companyId: string,
   channel: CampaignChannel,

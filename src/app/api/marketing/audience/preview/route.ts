@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CampaignChannel } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { previewAudience, queryAudienceCustomers } from "@/lib/marketing/audience";
+import {
+  previewAudienceForChannels,
+  queryAudienceCustomersForChannels,
+} from "@/lib/marketing/audience";
 import type { AudienceFilters } from "@/lib/marketing/types";
 
 export async function POST(request: NextRequest) {
@@ -9,17 +12,22 @@ export async function POST(request: NextRequest) {
     const user = await requireSessionUser();
     const body = await request.json();
     const channel = body.channel as CampaignChannel;
+    const requestedChannels = Array.isArray(body.channels) ? body.channels : [channel];
+    const channels = Array.from(new Set(requestedChannels)) as CampaignChannel[];
     const filters = body.filters as AudienceFilters | undefined;
     const includeCustomers = Boolean(body.includeCustomers);
 
-    if (!channel || !Object.values(CampaignChannel).includes(channel)) {
-      return badRequestResponse("Valid channel is required");
+    if (
+      channels.length === 0 ||
+      channels.some((item) => !Object.values(CampaignChannel).includes(item))
+    ) {
+      return badRequestResponse("At least one valid channel is required");
     }
 
     if (includeCustomers) {
-      const customers = await queryAudienceCustomers(
+      const customers = await queryAudienceCustomersForChannels(
         user.companyId,
-        channel,
+        channels,
         filters ?? null
       );
       return NextResponse.json({
@@ -29,7 +37,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const result = await previewAudience(user.companyId, channel, filters ?? null);
+    const result = await previewAudienceForChannels(user.companyId, channels, filters ?? null);
     return NextResponse.json(result);
   } catch {
     return unauthorizedResponse();

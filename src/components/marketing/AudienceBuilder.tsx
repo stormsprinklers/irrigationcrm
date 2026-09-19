@@ -13,6 +13,7 @@ import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type Props = {
   channel: "EMAIL" | "SMS";
+  channels?: Array<"EMAIL" | "SMS">;
   filters: AudienceFilters;
   onChange: (filters: AudienceFilters) => void;
 };
@@ -25,7 +26,12 @@ function asStringList(value: unknown): string[] {
   return [];
 }
 
-export function AudienceBuilder({ channel, filters, onChange }: Props) {
+export function AudienceBuilder({ channel, channels, filters, onChange }: Props) {
+  const channelKey = (channels?.length ? channels : [channel]).join(",");
+  const previewChannels = useMemo(
+    () => channelKey.split(",").filter(Boolean) as Array<"EMAIL" | "SMS">,
+    [channelKey]
+  );
   const [cities, setCities] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [cityInput, setCityInput] = useState("");
@@ -69,6 +75,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channel,
+          channels: previewChannels,
           // Selection clicks do not change the eligible base list.
           filters: JSON.parse(baseFilterKey),
           includeCustomers: true,
@@ -78,7 +85,7 @@ export function AudienceBuilder({ channel, filters, onChange }: Props) {
     } finally {
       setLoadingPreview(false);
     }
-  }, [channel, baseFilterKey]);
+  }, [channel, previewChannels, baseFilterKey]);
 
   useEffect(() => {
     const timer = setTimeout(refreshPreview, 300);

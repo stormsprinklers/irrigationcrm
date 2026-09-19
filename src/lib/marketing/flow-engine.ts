@@ -14,7 +14,7 @@ import {
   nextLocalMorningAtHour,
 } from "@/lib/communications/send-window";
 import { prisma } from "@/lib/prisma";
-import { queryAudienceCustomers } from "@/lib/marketing/audience";
+import { queryAudienceCustomersForChannels } from "@/lib/marketing/audience";
 import type { AudienceFilters, CampaignFlowNodeInput, DripSettings } from "@/lib/marketing/types";
 import { sendCampaignMessage } from "@/lib/marketing/flow-send";
 import {
@@ -28,6 +28,10 @@ import {
   campaignDailySentWhere,
   isInitialChannelOutreachNode,
 } from "@/lib/marketing/daily-limits";
+import {
+  campaignFlowChannels,
+  unavailableCampaignChannelReason,
+} from "@/lib/marketing/flow-channels";
 import {
   matchingReplyKeyword,
   nextWaitCheckAt,
@@ -190,9 +194,10 @@ export async function activateFlowCampaign(campaignId: string) {
 
   let customers: Array<{ id: string; email: string | null; phone: string | null }> = [];
   if (triggerKind === "manual_audience" || !trigger) {
-    customers = await queryAudienceCustomers(
+    const flowChannels = campaignFlowChannels(flowNodes);
+    customers = await queryAudienceCustomersForChannels(
       campaign.companyId,
-      campaign.channel,
+      flowChannels.length ? flowChannels : [campaign.channel],
       filters
     );
   }
@@ -298,6 +303,37 @@ async function completeWaitAndAdvance(params: {
     data: {
       currentNodeId: next.id,
       nextSendAt,
+    },
+  });
+}
+
+async function advanceEnrollmentAfterNode(params: {
+  enrollmentId: string;
+  campaignId: string;
+  companyId: string;
+  campaignName: string;
+  timezone?: string | null;
+  node: FlowNodeRow;
+  nodes: FlowNodeRow[];
+}) {
+  const next = nextLinearNode(params.nodes, params.node.id);
+  if (!next) {
+    await prisma.campaignEnrollment.update({
+      where: { id: params.enrollmentId },
+      data: { status: CampaignEnrollmentStatus.COMPLETED },
+    });
+    return;
+  }
+  await prisma.campaignEnrollment.update({
+    where: { id: params.enrollmentId },
+    data: {
+      currentNodeId: next.id,
+      nextSendAt: await scheduleOrHoldCampaignSend({
+        companyId: params.companyId,
+        campaignId: params.campaignId,
+        campaignName: params.campaignName,
+        timeZone: params.timezone,
+      }),
     },
   });
 }
@@ -1191,6 +1227,29 @@ async function processOneDueEnrollment(
       node.type === CampaignFlowNodeType.SEND_EMAIL ||
       node.type === CampaignFlowNodeType.SEND_SMS
     ) {
+      const isSms = node.type === CampaignFlowNodeType.SEND_SMS;
+      const sendChannel = isSms ? CampaignChannel.SMS : CampaignChannel.EMAIL;
+      const unavailableReason = unavailableCampaignChannelReason(
+        enrollment.customer,
+        sendChannel
+      );
+      if (unavailableReason) {
+        await logEvent(enrollment.id, node.id, "skipped", {
+          channel: sendChannel,
+          reason: unavailableReason,
+        });
+        await advanceEnrollmentAfterNode({
+          enrollmentId: enrollment.id,
+          campaignId: enrollment.campaignId,
+          companyId: enrollment.campaign.companyId,
+          campaignName: enrollment.campaign.name,
+          timezone: companyTz,
+          node,
+          nodes,
+        });
+        return;
+      }
+
       if (!isWithinCampaignSendWindow(new Date(), companyTz)) {
         const now = new Date();
         const resumeAt = clampToCampaignSendWindow(now, companyTz);
@@ -1211,8 +1270,6 @@ async function processOneDueEnrollment(
         return;
       }
 
-      const isSms = node.type === CampaignFlowNodeType.SEND_SMS;
-      const sendChannel = isSms ? CampaignChannel.SMS : CampaignChannel.EMAIL;
       const cap = dailySendCap(isSms ? settings.smsPerDay : settings.emailsPerDay);
       const isInitialOutreach = isInitialChannelOutreachNode(nodes, node.id, sendChannel);
       if (isInitialOutreach) {
@@ -1245,27 +1302,15 @@ async function processOneDueEnrollment(
       });
 
       await logEvent(enrollment.id, node.id, ok ? "sent" : "send_failed");
-
-      const next = nextLinearNode(nodes, node.id);
-      if (!next) {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: { status: CampaignEnrollmentStatus.COMPLETED },
-        });
-      } else {
-        await prisma.campaignEnrollment.update({
-          where: { id: enrollment.id },
-          data: {
-            currentNodeId: next.id,
-            nextSendAt: await scheduleOrHoldCampaignSend({
-                companyId: enrollment.campaign.companyId,
-                campaignId: enrollment.campaignId,
-                campaignName: enrollment.campaign.name,
-                timeZone: companyTz,
-              }),
-          },
-        });
-      }
+      await advanceEnrollmentAfterNode({
+        enrollmentId: enrollment.id,
+        campaignId: enrollment.campaignId,
+        companyId: enrollment.campaign.companyId,
+        campaignName: enrollment.campaign.name,
+        timezone: companyTz,
+        node,
+        nodes,
+      });
       return;
     }
 
