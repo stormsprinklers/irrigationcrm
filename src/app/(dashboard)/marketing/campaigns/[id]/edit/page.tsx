@@ -116,7 +116,7 @@ export default function EditMarketingCampaignPage() {
         title={`Edit ${campaign.name}`}
         subtitle={
           campaign.status === "ACTIVE"
-            ? "This campaign is live. Saving updates the sequence without re-enrolling everyone."
+            ? "This campaign is live. Saving customer changes adds newly selected people and stops future steps for anyone you remove. Sent history is preserved."
             : "Open campaigns can be edited until they are sent, completed, cancelled, or archived."
         }
       />

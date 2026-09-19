@@ -172,7 +172,25 @@ export function CampaignWizard({ initial, onSaved, onDraftCreated }: Props) {
         });
       }
 
-      toast.success(existingId ? "Campaign saved" : "Draft saved");
+      const audienceChanges = data.audienceReconciliation as
+        | { added?: number; removed?: number; restored?: number }
+        | null
+        | undefined;
+      const changedAudience =
+        (audienceChanges?.added ?? 0) +
+        (audienceChanges?.removed ?? 0) +
+        (audienceChanges?.restored ?? 0);
+      const addedToCampaign =
+        (audienceChanges?.added ?? 0) + (audienceChanges?.restored ?? 0);
+      toast.success(
+        alreadyLive && changedAudience > 0
+          ? `Campaign saved · ${addedToCampaign} added, ${
+              audienceChanges?.removed ?? 0
+            } removed`
+          : existingId
+            ? "Campaign saved"
+            : "Draft saved"
+      );
       if (!existingId && navigateToDraft) onDraftCreated?.(id);
       return id;
     } catch (err) {

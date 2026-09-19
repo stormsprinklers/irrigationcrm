@@ -123,6 +123,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
+    const audienceFiltersChanged =
+      body.audienceFilters !== undefined &&
+      JSON.stringify(existing.audienceFilters ?? null) !==
+        JSON.stringify(body.audienceFilters ?? null);
+
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = String(body.name);
     if (body.type !== undefined && existing.status === CampaignStatus.DRAFT) {
@@ -150,7 +155,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       include: { steps: { orderBy: { sortOrder: "asc" } } },
     });
 
-    return NextResponse.json(campaign);
+    let audienceReconciliation = null;
+    if (
+      audienceFiltersChanged &&
+      existing.status === CampaignStatus.ACTIVE &&
+      existing.type === CampaignType.DRIP
+    ) {
+      const { reconcileActiveCampaignAudience } = await import(
+        "@/lib/marketing/campaign-audience-reconciliation"
+      );
+      audienceReconciliation = await reconcileActiveCampaignAudience(id);
+    }
+
+    return NextResponse.json({ ...campaign, audienceReconciliation });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
