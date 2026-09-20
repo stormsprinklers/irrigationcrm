@@ -39,6 +39,7 @@ export async function canAccessPropertyAsField(
     select: {
       companyId: true,
       assignedUserId: true,
+      additionalAssignees: { select: { userId: true } },
       crewId: true,
       createdByUserId: true,
     },

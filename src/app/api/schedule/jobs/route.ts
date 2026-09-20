@@ -12,6 +12,7 @@ import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
+import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 
 function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest) {
       division,
       serviceAreaId,
       assignedUserId,
+      assignedUserIds,
       crewId,
       customerId,
       propertyId,
@@ -81,12 +83,20 @@ export async function POST(request: NextRequest) {
       callSessionId,
     } = body;
 
+    const requestedAssigneeIds = normalizeVisitAssigneeIds(
+      assignedUserIds,
+      assignedUserId
+    );
+    if (requestedAssigneeIds.length > 20) {
+      return badRequestResponse("A visit can have up to 20 assigned technicians");
+    }
+
     if (isFieldRole(user.role)) {
       // Field self-schedule: must assign only to self, no crew.
       if (crewId) {
         return forbiddenResponse("Field roles may not assign crew on self-scheduled visits");
       }
-      if (assignedUserId && assignedUserId !== user.id) {
+      if (requestedAssigneeIds.some((id) => id !== user.id)) {
         return forbiddenResponse("Field roles may only assign visits to themselves");
       }
     } else {
@@ -98,7 +108,12 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("title, startAt, endAt, and division are required");
     }
 
-    const effectiveAssignee = isFieldRole(user.role) ? user.id : assignedUserId;
+    if (crewId && requestedAssigneeIds.length) {
+      return badRequestResponse("Assign either a crew or individual technicians, not both");
+    }
+
+    const effectiveAssigneeIds = isFieldRole(user.role) ? [user.id] : requestedAssigneeIds;
+    const effectiveAssignee = effectiveAssigneeIds[0] ?? null;
     const nextStatus =
       body.status === VisitStatus.UNSCHEDULED ? VisitStatus.UNSCHEDULED : VisitStatus.SCHEDULED;
 
@@ -135,17 +150,17 @@ export async function POST(request: NextRequest) {
 
     const jobStart = new Date(startAt);
     const jobEnd = new Date(endAt);
-    let assignmentWarning: string | null = null;
-    if (effectiveAssignee) {
-      const availability = await validateAssignmentUpdate(
-        user.companyId,
-        effectiveAssignee,
-        jobStart,
-        jobEnd
-      );
-      if (availability.error) return badRequestResponse(availability.error);
-      assignmentWarning = availability.warning;
-    }
+    const availabilityChecks = await Promise.all(
+      effectiveAssigneeIds.map((employeeId) =>
+        validateAssignmentUpdate(user.companyId, employeeId, jobStart, jobEnd)
+      )
+    );
+    const assignmentErrorMessage = availabilityChecks.find((result) => result.error)?.error;
+    if (assignmentErrorMessage) return badRequestResponse(assignmentErrorMessage);
+    const assignmentWarnings = availabilityChecks
+      .map((result) => result.warning)
+      .filter((warning): warning is string => Boolean(warning));
+    const assignmentWarning = assignmentWarnings.length ? assignmentWarnings.join(" ") : null;
 
     const isCallback = Boolean(body.isCallback);
     const rawTags = Array.isArray(tags) ? tags : [];
@@ -160,6 +175,11 @@ export async function POST(request: NextRequest) {
         division: division as Division,
         serviceAreaId: resolvedServiceAreaId,
         assignedUserId: effectiveAssignee ?? null,
+        additionalAssignees: effectiveAssigneeIds.length > 1
+          ? {
+              create: effectiveAssigneeIds.slice(1).map((userId) => ({ userId })),
+            }
+          : undefined,
         crewId: isFieldRole(user.role) ? null : crewId ?? null,
         createdByUserId: user.id,
         customerId: customerId ?? null,
@@ -184,7 +204,7 @@ export async function POST(request: NextRequest) {
       entityType: "Visit",
       entityId: visit.id,
       action: "create",
-      after: { title: visit.title, assignedUserId: visit.assignedUserId },
+      after: { title: visit.title, assignedUserIds: effectiveAssigneeIds },
       visitId: visit.id,
       customerId: visit.customerId,
     });

@@ -86,9 +86,11 @@ function isMultiDayBarJob(job: ScheduleJobDTO) {
   return endDay.getTime() > startDay.getTime();
 }
 
-function getJobColumnId(job: ScheduleJobDTO) {
-  if (job.crew?.id) return scheduleCrewColumnId(job.crew.id);
-  return job.assignedUser?.id ?? "__unassigned__";
+function getJobColumnIds(job: ScheduleJobDTO) {
+  if (job.crew?.id) return [scheduleCrewColumnId(job.crew.id)];
+  const ids = job.assignedUsers?.map((employee) => employee.id) ?? [];
+  if (ids.length) return ids;
+  return [job.assignedUser?.id ?? "__unassigned__"];
 }
 
 function assignLanes(jobs: ScheduleJobDTO[]) {
@@ -157,19 +159,21 @@ function JobBlock({
       <div className="flex h-full flex-col p-1 text-[9px]">
         <div className="flex items-center gap-0.5">
           <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
-          {job.assignedUser ? (
-            <Avatar className="h-3.5 w-3.5 shrink-0">
-              {job.assignedUser.photoUrl ? (
-                <AvatarImage src={blobProxyUrl(job.assignedUser.photoUrl)} alt={job.assignedUser.name} />
-              ) : null}
-              <AvatarFallback
-                className="text-[6px]"
-                style={{ backgroundColor: job.assignedUser.color ?? "#64748B", color: "#fff" }}
-              >
-                {getInitials(job.assignedUser.name)}
-              </AvatarFallback>
-            </Avatar>
-          ) : null}
+          {(job.assignedUsers?.length ? job.assignedUsers : job.assignedUser ? [job.assignedUser] : [])
+            .slice(0, 3)
+            .map((employee, index) => (
+              <Avatar key={employee.id} className={cn("h-3.5 w-3.5 shrink-0", index > 0 && "-ml-1")}>
+                {employee.photoUrl ? (
+                  <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
+                ) : null}
+                <AvatarFallback
+                  className="text-[6px]"
+                  style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}
+                >
+                  {getInitials(employee.name)}
+                </AvatarFallback>
+              </Avatar>
+            ))}
         </div>
         {height >= 40 ? (
           <p className="mt-0.5 truncate font-medium leading-tight">
@@ -664,7 +668,7 @@ function TimeGrid({
                   >
                     {columns.map((col) => {
                       const colJobs = hourlyJobs.filter((job) => {
-                        if (getJobColumnId(job) !== col.id) return false;
+                        if (!getJobColumnIds(job).includes(col.id)) return false;
                         if (!visibleColumnIds.has(col.id)) return false;
                         return startOfDay(new Date(job.startAt)).toDateString() === dayKey;
                       });

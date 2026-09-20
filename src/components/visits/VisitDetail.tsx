@@ -77,6 +77,12 @@ type VisitDetailData = {
   designProjectId?: string | null;
   serviceArea: { id: string; name: string; color: string } | null;
   assignedUser: { id: string; name: string; color: string | null; photoUrl: string | null } | null;
+  assignedUsers: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    photoUrl: string | null;
+  }>;
   lineItems: Array<{
     id: string;
     name: string;
@@ -474,6 +480,7 @@ export function VisitDetail({ visitId }: Props) {
                   }
                 : null
             }
+            assignedUsers={visit.assignedUsers ?? (visit.assignedUser ? [visit.assignedUser] : [])}
             canEdit={canEditSchedule}
             onUpdated={load}
           />

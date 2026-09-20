@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
-import { EmployeeSearchPicker } from "@/components/schedule/EmployeeSearchPicker";
+import { EmployeeMultiSelect } from "@/components/schedule/EmployeeMultiSelect";
 import type { CustomerDTO } from "@/lib/customers/types";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import { assignmentOffMessage } from "@/lib/schedule/open-time-slots";
@@ -39,8 +39,7 @@ export function ScheduleQuickAddDialog({
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDTO | null>(null);
-  const [assignedUserId, setAssignedUserId] = useState("");
-  const [assignedUserName, setAssignedUserName] = useState("");
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [crewId, setCrewId] = useState<string | null>(null);
   const [crewName, setCrewName] = useState<string | null>(null);
   const [division, setDivision] = useState<"SERVICE" | "INSTALL">("SERVICE");
@@ -59,8 +58,7 @@ export function ScheduleQuickAddDialog({
     const preassignedId =
       slot?.assignedUserId && slot.assignedUserId !== "__unassigned__" ? slot.assignedUserId : "";
     const preassignedEmployee = employees.find((employee) => employee.id === preassignedId);
-    setAssignedUserId(preassignedId);
-    setAssignedUserName(preassignedEmployee?.name ?? slot?.assignedUserName ?? "");
+    setAssignedUserIds(preassignedEmployee ? [preassignedEmployee.id] : []);
   }, [open, slot, employees]);
 
   if (!open || !slot) return null;
@@ -70,15 +68,18 @@ export function ScheduleQuickAddDialog({
     ? `${arrivalWindowHours}h`
     : `${arrivalWindowHours.toFixed(1)}h`;
 
-  const offMessage =
-    !crewId && assignedUserId
-      ? assignmentOffMessage(
-          assignedUserName || "This technician",
-          workSchedules?.[assignedUserId],
+  const offMessages = !crewId
+    ? assignedUserIds.flatMap((employeeId) => {
+        const employee = employees.find((item) => item.id === employeeId);
+        const message = assignmentOffMessage(
+          employee?.name || "This technician",
+          workSchedules?.[employeeId],
           slot.startAt.getDay(),
           slot.startAt.getHours() * 60 + slot.startAt.getMinutes()
-        )
-      : null;
+        );
+        return message ? [message] : [];
+      })
+    : [];
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -87,7 +88,7 @@ export function ScheduleQuickAddDialog({
       toast.error("Select a customer");
       return;
     }
-    if (!crewId && !assignedUserId) {
+    if (!crewId && assignedUserIds.length === 0) {
       toast.error("Assign a technician or crew");
       return;
     }
@@ -105,7 +106,7 @@ export function ScheduleQuickAddDialog({
           startAt: slot.startAt.toISOString(),
           endAt: slot.endAt.toISOString(),
           division,
-          assignedUserId: assignedUserId || undefined,
+          assignedUserIds: assignedUserIds.length ? assignedUserIds : undefined,
           crewId: crewId || undefined,
           customerId,
           zip: selectedCustomer?.zip || undefined,
@@ -144,11 +145,11 @@ export function ScheduleQuickAddDialog({
               {format(slot.startAt, "EEE, MMM d")} · {format(slot.startAt, "h:mm a")} –{" "}
               {format(slot.endAt, "h:mm a")} ({arrivalWindowLabel} arrival window)
             </p>
-            {offMessage ? (
-              <p className="mt-1 text-xs font-medium text-amber-700">
-                {offMessage}. You can still book this visit.
+            {offMessages.map((message) => (
+              <p key={message} className="mt-1 text-xs font-medium text-amber-700">
+                {message}. You can still book this visit.
               </p>
-            ) : null}
+            ))}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -172,6 +173,7 @@ export function ScheduleQuickAddDialog({
               <div className="mt-1">
                 <CustomerSearchPicker
                   compact
+                  showAddCustomerButton
                   value={customerId}
                   selectedName={customerName}
                   onValueChange={(id, name) => {
@@ -191,18 +193,17 @@ export function ScheduleQuickAddDialog({
               </div>
             ) : (
               <div className="relative z-20">
-                <label className="text-xs font-medium text-muted-foreground">Technician</label>
+                <label className="text-xs font-medium text-muted-foreground">Technicians</label>
                 <div className="mt-1">
-                  <EmployeeSearchPicker
-                    value={assignedUserId}
-                    selectedName={assignedUserName}
+                  <EmployeeMultiSelect
+                    values={assignedUserIds}
                     employees={employees}
-                    onValueChange={(id, name) => {
-                      setAssignedUserId(id);
-                      setAssignedUserName(name);
-                    }}
+                    onValuesChange={setAssignedUserIds}
                   />
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The first technician selected is the primary assignee.
+                </p>
               </div>
             )}
 

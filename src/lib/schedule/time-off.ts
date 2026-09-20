@@ -196,7 +196,10 @@ export async function assertEmployeeAvailableForAssignment(
 
   const conflictWhere = {
     companyId,
-    assignedUserId: userId,
+    OR: [
+      { assignedUserId: userId },
+      { additionalAssignees: { some: { userId } } },
+    ],
     status: { not: "CANCELLED" as const },
     startAt: { lt: endAt },
     endAt: { gt: startAt },

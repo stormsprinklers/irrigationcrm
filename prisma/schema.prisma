@@ -999,6 +999,7 @@ model User {
   crewMemberships    CrewMember[]
   crewsAsForeman     Crew[]               @relation("CrewForeman")
   assignedVisits     Visit[]              @relation("AssignedVisits")
+  additionalVisitAssignments VisitAssignee[]
   createdVisits      Visit[]              @relation("CreatedVisits")
   assignedLeads      Lead[]               @relation("AssignedLeads")
   mobileSessions     MobileSession[]
@@ -2783,6 +2784,7 @@ model Visit {
   property             CustomerProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   serviceArea          ServiceArea?            @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
   assignedUser         User?                   @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  additionalAssignees  VisitAssignee[]
   createdByUser        User?                   @relation("CreatedVisits", fields: [createdByUserId], references: [id], onDelete: SetNull)
   crew                 Crew?                   @relation(fields: [crewId], references: [id], onDelete: SetNull)
   maintenancePlanVisit MaintenancePlanVisit?   @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
@@ -2809,6 +2811,20 @@ model Visit {
   @@index([crewId])
   @@index([customerId])
   @@map("ScheduledJob")
+}
+
+/// Additional technicians assigned to a visit. `Visit.assignedUserId` remains
+/// the primary technician for compatibility with reporting and integrations.
+model VisitAssignee {
+  visitId  String
+  userId   String
+  createdAt DateTime @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([visitId, userId])
+  @@index([userId])
 }
 
 model VisitTimeEvent {

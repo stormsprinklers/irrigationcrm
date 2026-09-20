@@ -42,6 +42,12 @@ export type VisitDTO = {
     color: string | null;
     photoUrl: string | null;
   } | null;
+  assignedUsers: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    photoUrl: string | null;
+  }>;
   crew: { id: string; name: string; color: string } | null;
   subtotal?: number;
   total?: number;

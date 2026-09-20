@@ -82,12 +82,8 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
       toast.error("Address is required");
       return;
     }
-    if (!email.trim()) {
-      toast.error("Email is required");
-      return;
-    }
-    if (!phone.trim()) {
-      toast.error("Phone number is required");
+    if (!email.trim() && !phone.trim()) {
+      toast.error("Enter a phone number or email address");
       return;
     }
 
@@ -98,8 +94,8 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          phone: phone.trim(),
-          email: email.trim(),
+          phone: phone.trim() || undefined,
+          email: email.trim() || undefined,
           address: address.address.trim(),
           city: address.city.trim() || undefined,
           state: address.state.trim() || undefined,
@@ -170,7 +166,6 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                required
               />
             </div>
 
@@ -181,7 +176,6 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 autoComplete="tel"
-                required
               />
               {callPhone ? (
                 <Button
@@ -196,6 +190,9 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
                   <span className="text-muted-foreground">({formatPhoneDisplay(callPhone)})</span>
                 </Button>
               ) : null}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Enter at least a phone number or email address.
+              </p>
             </div>
           </div>
 

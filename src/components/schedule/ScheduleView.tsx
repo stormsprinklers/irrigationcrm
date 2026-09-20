@@ -215,8 +215,10 @@ export function ScheduleView({
         if (hiddenUserIds.includes(columnId)) return false;
         return true;
       }
-      if (!showUnassigned && !job.assignedUser) return false;
-      if (job.assignedUser && hiddenUserIds.includes(job.assignedUser.id)) return false;
+      const assignedIds = job.assignedUsers?.map((employee) => employee.id) ??
+        (job.assignedUser ? [job.assignedUser.id] : []);
+      if (!showUnassigned && assignedIds.length === 0) return false;
+      if (assignedIds.length && assignedIds.every((id) => hiddenUserIds.includes(id))) return false;
       return true;
     });
   }, [jobs, showUnassigned, hiddenUserIds]);

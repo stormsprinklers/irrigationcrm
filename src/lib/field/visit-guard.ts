@@ -19,6 +19,7 @@ export async function requireFieldVisitAccess(
       id: true,
       companyId: true,
       assignedUserId: true,
+      additionalAssignees: { select: { userId: true } },
       crewId: true,
       createdByUserId: true,
     },

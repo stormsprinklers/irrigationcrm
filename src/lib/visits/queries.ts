@@ -37,6 +37,12 @@ export const visitInclude = {
   },
   serviceArea: { select: { id: true, name: true, color: true } },
   assignedUser: { select: { id: true, name: true, color: true, photoUrl: true } },
+  additionalAssignees: {
+    include: {
+      user: { select: { id: true, name: true, color: true, photoUrl: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
   crew: { select: { id: true, name: true, color: true } },
   lineItems: {
     orderBy: { sortOrder: "asc" as const },
@@ -107,6 +113,10 @@ type VisitPayload = Prisma.VisitGetPayload<{ include: typeof visitInclude }>;
 export function serializeVisit(visit: VisitPayload): VisitDTO {
   const subtotal = sumLineItems(visit.lineItems ?? []);
   const discountTotal = sumDiscounts(subtotal, visit.discounts ?? []);
+  const assignedUsers = [
+    ...(visit.assignedUser ? [visit.assignedUser] : []),
+    ...visit.additionalAssignees.map((assignment) => assignment.user),
+  ];
   return {
     id: visit.id,
     title: visit.title,
@@ -124,6 +134,7 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     property: visit.property,
     serviceArea: visit.serviceArea,
     assignedUser: visit.assignedUser,
+    assignedUsers,
     crew: visit.crew,
     subtotal,
     total: Math.max(0, subtotal - discountTotal),
@@ -150,7 +161,10 @@ function buildVisitWhere(
     where.serviceAreaId = { in: filters.serviceAreaIds };
   }
   if (filters?.userIds?.length) {
-    where.assignedUserId = { in: filters.userIds };
+    where.OR = [
+      { assignedUserId: { in: filters.userIds } },
+      { additionalAssignees: { some: { userId: { in: filters.userIds } } } },
+    ];
   }
   if (filters?.crewIds?.length) {
     where.crewId = { in: filters.crewIds };
@@ -388,10 +402,15 @@ export async function serializeVisitDetail(
   extras?: { etaWarning?: string }
 ) {
   const property = await resolveVisitProperty(visit);
+  const assignedUsers = [
+    ...(visit.assignedUser ? [visit.assignedUser] : []),
+    ...visit.additionalAssignees.map((assignment) => assignment.user),
+  ];
 
   return {
     ...visit,
     property,
+    assignedUsers,
     estimates: visit.estimates.map(serializeVisitEstimateSummary),
     startAt: visit.startAt.toISOString(),
     endAt: visit.endAt.toISOString(),

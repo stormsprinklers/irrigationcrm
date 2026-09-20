@@ -9,6 +9,7 @@ import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,7 +19,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
 
     const { id } = await params;
-    const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
+    const existing = await prisma.visit.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { additionalAssignees: { select: { userId: true } } },
+    });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
@@ -37,22 +41,39 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
-    const nextAssignedUserId =
-      body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
+    const assignmentChanged = body.assignedUserIds !== undefined || body.assignedUserId !== undefined;
+    const nextAssignedUserIds = normalizeVisitAssigneeIds(
+      body.assignedUserIds,
+      body.assignedUserId,
+      [
+        ...(existing.assignedUserId ? [existing.assignedUserId] : []),
+        ...existing.additionalAssignees.map((entry) => entry.userId),
+      ]
+    );
+    if (nextAssignedUserIds.length > 20) {
+      return badRequestResponse("A visit can have up to 20 assigned technicians");
+    }
+    const nextAssignedUserId = nextAssignedUserIds[0] ?? null;
     const nextCrewId =
-      body.crewId !== undefined ? (body.crewId as string | null) : existing.crewId;
+      body.crewId !== undefined ? (body.crewId ? String(body.crewId) : null) : existing.crewId;
 
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
 
-    const availability = await validateAssignmentUpdate(
-      user.companyId,
-      nextAssignedUserId,
-      nextStart,
-      nextEnd,
-      id
+    if (nextCrewId && nextAssignedUserIds.length) {
+      return badRequestResponse("Assign either a crew or individual technicians, not both");
+    }
+
+    const availabilityChecks = await Promise.all(
+      nextAssignedUserIds.map((employeeId) =>
+        validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
+      )
     );
-    if (availability.error) return badRequestResponse(availability.error);
+    const availabilityError = availabilityChecks.find((result) => result.error)?.error;
+    if (availabilityError) return badRequestResponse(availabilityError);
+    const availabilityWarnings = availabilityChecks
+      .map((result) => result.warning)
+      .filter((warning): warning is string => Boolean(warning));
 
     const assignmentError = validateScheduledVisitAssignment(
       nextStatus,
@@ -61,9 +82,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     );
     if (assignmentError) return badRequestResponse(assignmentError);
 
-    const visit = await prisma.visit.update({
-      where: { id },
-      data: {
+    const visit = await prisma.$transaction(async (tx) => {
+      if (assignmentChanged) {
+        await tx.visitAssignee.deleteMany({ where: { visitId: id } });
+        if (nextAssignedUserIds.length > 1) {
+          await tx.visitAssignee.createMany({
+            data: nextAssignedUserIds.slice(1).map((userId) => ({ visitId: id, userId })),
+          });
+        }
+      }
+      return tx.visit.update({
+        where: { id },
+        data: {
         ...(body.title !== undefined ? { title: String(body.title) } : {}),
         ...(body.startAt !== undefined ? { startAt: new Date(body.startAt) } : {}),
         ...(body.endAt !== undefined ? { endAt: new Date(body.endAt) } : {}),
@@ -73,7 +103,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.customerId !== undefined ? { customerId: body.customerId ?? null } : {}),
         ...(body.tags !== undefined ? { tags: Array.isArray(body.tags) ? body.tags : [] } : {}),
         serviceAreaId,
-        ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId ?? null } : {}),
+          ...(assignmentChanged ? { assignedUserId: nextAssignedUserId } : {}),
         ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
         ...(body.address !== undefined ? { address: body.address ?? null } : {}),
         ...(body.city !== undefined ? { city: body.city ?? null } : {}),
@@ -82,8 +112,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.installDurationDays !== undefined
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
           : {}),
-      },
-      include: jobInclude,
+        },
+        include: jobInclude,
+      });
     });
 
     await clearNeedsSchedulingForVisit(id);
@@ -100,7 +131,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
     }
 
-    return NextResponse.json({ ...serializeJob(visit), warning: availability.warning });
+    return NextResponse.json({
+      ...serializeJob(visit),
+      warning: availabilityWarnings.length ? availabilityWarnings.join(" ") : null,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
     return NextResponse.json({ error: "Failed to update visit" }, { status: 500 });

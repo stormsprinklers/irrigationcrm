@@ -7,13 +7,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
+import { EmployeeMultiSelect } from "@/components/schedule/EmployeeMultiSelect";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import type { VisitStatus } from "@prisma/client";
-
-const selectClassName =
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 type EmployeeOption = {
   id: string;
@@ -29,6 +27,7 @@ type Props = {
   endAt: string;
   status: string;
   assignedUser: EmployeeOption | null;
+  assignedUsers: EmployeeOption[];
   canEdit: boolean;
   onUpdated: () => Promise<void>;
 };
@@ -84,6 +83,7 @@ export function VisitScheduleSection({
   endAt,
   status,
   assignedUser,
+  assignedUsers,
   canEdit,
   onUpdated,
 }: Props) {
@@ -91,7 +91,9 @@ export function VisitScheduleSection({
   const [date, setDate] = useState(toDateInput(startAt));
   const [startTime, setStartTime] = useState(toTimeInput(startAt));
   const [endTime, setEndTime] = useState(toTimeInput(endAt));
-  const [assignedUserId, setAssignedUserId] = useState(assignedUser?.id ?? "");
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>(
+    assignedUsers.length ? assignedUsers.map((employee) => employee.id) : assignedUser ? [assignedUser.id] : []
+  );
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -101,8 +103,10 @@ export function VisitScheduleSection({
     setDate(toDateInput(startAt));
     setStartTime(toTimeInput(startAt));
     setEndTime(toTimeInput(endAt));
-    setAssignedUserId(assignedUser?.id ?? "");
-  }, [title, startAt, endAt, assignedUser?.id]);
+    setAssignedUserIds(
+      assignedUsers.length ? assignedUsers.map((employee) => employee.id) : assignedUser ? [assignedUser.id] : []
+    );
+  }, [title, startAt, endAt, assignedUser, assignedUsers]);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -114,14 +118,15 @@ export function VisitScheduleSection({
 
   const employeeOptions = useMemo(() => {
     const list = [...employees];
-    if (assignedUser && !list.some((e) => e.id === assignedUser.id)) {
-      list.unshift(assignedUser);
+    for (const employee of assignedUsers.length ? assignedUsers : assignedUser ? [assignedUser] : []) {
+      if (!list.some((option) => option.id === employee.id)) list.unshift(employee);
     }
     return list;
-  }, [employees, assignedUser]);
+  }, [employees, assignedUser, assignedUsers]);
 
-  const selectedEmployee =
-    employeeOptions.find((e) => e.id === assignedUserId) ?? assignedUser ?? null;
+  const selectedEmployees = assignedUserIds
+    .map((id) => employeeOptions.find((employee) => employee.id === id))
+    .filter((employee): employee is EmployeeOption => Boolean(employee));
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -145,7 +150,7 @@ export function VisitScheduleSection({
 
     const assignmentError = validateScheduledVisitAssignment(
       "SCHEDULED" as VisitStatus,
-      assignedUserId || null
+      assignedUserIds[0] || null
     );
     if (assignmentError) {
       toast.error(assignmentError);
@@ -161,7 +166,7 @@ export function VisitScheduleSection({
           title: visitTitle.trim(),
           startAt: nextStart.toISOString(),
           endAt: nextEnd.toISOString(),
-          assignedUserId: assignedUserId || null,
+          assignedUserIds,
           status: "SCHEDULED",
         }),
       });
@@ -191,7 +196,10 @@ export function VisitScheduleSection({
     setStartTime(toTimeInput(nextStart.toISOString()));
     setEndTime(toTimeInput(nextEnd.toISOString()));
     if (slot.assignedUserId && slot.assignedUserId !== "__unassigned__") {
-      setAssignedUserId(slot.assignedUserId);
+      setAssignedUserIds((current) => [
+        slot.assignedUserId!,
+        ...current.filter((id) => id !== slot.assignedUserId),
+      ]);
     }
   }
 
@@ -254,24 +262,16 @@ export function VisitScheduleSection({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              Assigned technician
+              Assigned technicians
             </label>
-            <div className="flex items-center gap-2">
-              {selectedEmployee ? <TechnicianAvatar employee={selectedEmployee} /> : null}
-              <select
-                value={assignedUserId}
-                onChange={(e) => setAssignedUserId(e.target.value)}
-                className={selectClassName}
-                required
-              >
-                <option value="">Select technician</option>
-                {employeeOptions.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <EmployeeMultiSelect
+              values={assignedUserIds}
+              employees={employeeOptions}
+              onValuesChange={setAssignedUserIds}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              The first technician selected is the primary assignee.
+            </p>
           </div>
           <Button type="submit" size="sm" className="w-full" disabled={saving}>
             {saving ? "Saving..." : status === "UNSCHEDULED" ? "Save to schedule" : "Save schedule"}
@@ -304,12 +304,16 @@ export function VisitScheduleSection({
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-muted-foreground">Technician</dt>
+            <dt className="text-xs text-muted-foreground">Technicians</dt>
             <dd className="font-medium">
-              {assignedUser ? (
-                <span className="flex items-center gap-2">
-                  <TechnicianAvatar employee={assignedUser} />
-                  {assignedUser.name}
+              {selectedEmployees.length ? (
+                <span className="flex flex-col gap-2">
+                  {selectedEmployees.map((employee) => (
+                    <span key={employee.id} className="flex items-center gap-2">
+                      <TechnicianAvatar employee={employee} />
+                      {employee.name}
+                    </span>
+                  ))}
                 </span>
               ) : (
                 "Unassigned"

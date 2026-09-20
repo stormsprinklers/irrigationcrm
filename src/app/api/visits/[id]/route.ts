@@ -12,6 +12,7 @@ import { onVisitCancelled, onVisitCompleted, onVisitTimeChanged } from "@/lib/no
 import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,7 +38,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const access = await requireFieldVisitAccess(user, id);
     if (!access.ok) return access.response;
 
-    const existing = await prisma.visit.findFirst({ where: { id, companyId: user.companyId } });
+    const existing = await prisma.visit.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { additionalAssignees: { select: { userId: true } } },
+    });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
@@ -80,23 +84,43 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
-    const nextAssignedUserId =
-      body.assignedUserId !== undefined ? (body.assignedUserId as string | null) : existing.assignedUserId;
+    const assignmentChanged = body.assignedUserIds !== undefined || body.assignedUserId !== undefined;
+    const nextAssignedUserIds = normalizeVisitAssigneeIds(
+      body.assignedUserIds,
+      body.assignedUserId,
+      [
+        ...(existing.assignedUserId ? [existing.assignedUserId] : []),
+        ...existing.additionalAssignees.map((entry) => entry.userId),
+      ]
+    );
+    if (nextAssignedUserIds.length > 20) {
+      return NextResponse.json({ error: "A visit can have up to 20 assigned technicians" }, { status: 400 });
+    }
+    const nextAssignedUserId = nextAssignedUserIds[0] ?? null;
     const nextCrewId =
-      body.crewId !== undefined ? (body.crewId as string | null) : existing.crewId;
+      body.crewId !== undefined ? (body.crewId ? String(body.crewId) : null) : existing.crewId;
     const nextStatus =
       body.status !== undefined ? (body.status as VisitStatus) : existing.status;
 
-    const availability = await validateAssignmentUpdate(
-      user.companyId,
-      nextAssignedUserId,
-      nextStart,
-      nextEnd,
-      id
-    );
-    if (availability.error) {
-      return NextResponse.json({ error: availability.error }, { status: 400 });
+    if (nextCrewId && nextAssignedUserIds.length) {
+      return NextResponse.json(
+        { error: "Assign either a crew or individual technicians, not both" },
+        { status: 400 }
+      );
     }
+
+    const availabilityChecks = await Promise.all(
+      nextAssignedUserIds.map((employeeId) =>
+        validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
+      )
+    );
+    const availabilityError = availabilityChecks.find((result) => result.error)?.error;
+    if (availabilityError) {
+      return NextResponse.json({ error: availabilityError }, { status: 400 });
+    }
+    const availabilityWarnings = availabilityChecks
+      .map((result) => result.warning)
+      .filter((warning): warning is string => Boolean(warning));
 
     const assignmentError = validateScheduledVisitAssignment(
       nextStatus,
@@ -127,9 +151,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       nextIsCallback = nextTags.some((t) => t.toLowerCase() === "callback");
     }
 
-    await prisma.visit.update({
-      where: { id },
-      data: {
+    await prisma.$transaction(async (tx) => {
+      if (assignmentChanged) {
+        await tx.visitAssignee.deleteMany({ where: { visitId: id } });
+        if (nextAssignedUserIds.length > 1) {
+          await tx.visitAssignee.createMany({
+            data: nextAssignedUserIds.slice(1).map((userId) => ({ visitId: id, userId })),
+          });
+        }
+      }
+      await tx.visit.update({
+        where: { id },
+        data: {
         ...(body.title !== undefined ? { title: String(body.title) } : {}),
         ...(body.startAt !== undefined ? { startAt: new Date(body.startAt) } : {}),
         ...(body.endAt !== undefined ? { endAt: new Date(body.endAt) } : {}),
@@ -139,7 +172,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(body.customerId !== undefined ? { customerId: body.customerId ?? null } : {}),
         ...(body.tags !== undefined || body.isCallback !== undefined ? { tags: nextTags } : {}),
         ...(body.isCallback !== undefined ? { isCallback: nextIsCallback } : {}),
-        ...(body.assignedUserId !== undefined ? { assignedUserId: body.assignedUserId ?? null } : {}),
+          ...(assignmentChanged ? { assignedUserId: nextAssignedUserId } : {}),
         ...(body.crewId !== undefined ? { crewId: body.crewId ?? null } : {}),
         ...(body.installDurationDays !== undefined
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
@@ -150,7 +183,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
               customerWorkSummary: null,
             }
           : {}),
-      },
+        },
+      });
     });
 
     await clearNeedsSchedulingForVisit(id);
@@ -212,7 +246,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({
       ...(await serializeVisitDetail(visit)),
-      warning: availability.warning,
+      warning: availabilityWarnings.length ? availabilityWarnings.join(" ") : null,
     });
   } catch {
     return unauthorizedResponse();

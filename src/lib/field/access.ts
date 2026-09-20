@@ -26,6 +26,7 @@ export async function getUserCrewIds(companyId: string, userId: string) {
 export type VisitAccessFields = {
   companyId: string;
   assignedUserId: string | null;
+  additionalAssignees?: Array<{ userId: string }>;
   crewId: string | null;
   createdByUserId?: string | null;
 };
@@ -37,6 +38,7 @@ export async function canAccessVisitAsField(
   if (!isFieldRole(user.role)) return true;
   if (visit.companyId !== user.companyId) return false;
   if (visit.assignedUserId === user.id) return true;
+  if (visit.additionalAssignees?.some((assignment) => assignment.userId === user.id)) return true;
   if (visit.createdByUserId && visit.createdByUserId === user.id) return true;
   if (visit.crewId) {
     const crewIds = await getUserCrewIds(user.companyId, user.id);
@@ -60,6 +62,7 @@ export async function fieldVisitAssigneeWhere(companyId: string, userId: string)
   const crewIds = await getUserCrewIds(companyId, userId);
   const or: Array<Record<string, unknown>> = [
     { assignedUserId: userId },
+    { additionalAssignees: { some: { userId } } },
     { createdByUserId: userId },
   ];
   if (crewIds.length) {

@@ -23,6 +23,8 @@ type Props = {
   placeholder?: string;
   /** Single-line control with dropdown results (no always-visible results panel). */
   compact?: boolean;
+  /** Keeps an explicit add action visible below the compact picker. */
+  showAddCustomerButton?: boolean;
   className?: string;
 };
 
@@ -34,6 +36,7 @@ export function CustomerSearchPicker({
   minQueryLength = 2,
   placeholder = "Search customers by name, phone, email…",
   compact = false,
+  showAddCustomerButton = false,
   className,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -245,6 +248,17 @@ export function CustomerSearchPicker({
               document.body
             )
           : null}
+
+        {showAddCustomerButton && !selected ? (
+          <button
+            type="button"
+            onClick={openCreate}
+            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add a new customer
+          </button>
+        ) : null}
 
         <AddCustomerQuickDialog
           open={createOpen}
