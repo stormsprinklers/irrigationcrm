@@ -22,6 +22,7 @@ import {
 import {
   buildControllerGuide,
   defaultWeatherFallback,
+  propertyLocationFromRecord,
   propertySettingsFromRecord,
   resolveZoneGpm,
   zoneInputFromMapZone,
@@ -103,6 +104,10 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     droughtRestrictionsActive: true,
     cycleSoakEnabled: false,
   });
+  const [propertyLocation, setPropertyLocation] = useState({
+    address: null as string | null,
+    city: null as string | null,
+  });
   const autoCaptureAttempted = useRef(false);
 
   const loadProperty = useCallback(
@@ -132,6 +137,10 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
           grassSeason: (p.grassSeason as "COOL" | "WARM") ?? "COOL",
           droughtRestrictionsActive: p.droughtRestrictionsActive ?? true,
           cycleSoakEnabled: p.cycleSoakEnabled ?? false,
+        });
+        setPropertyLocation({
+          address: p.address ?? null,
+          city: p.city ?? null,
         });
         const savedStep = Math.min(p.irrigationWizardStep ?? 1, MAX_STEP);
         if (!options.keepStep) {
@@ -389,6 +398,7 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
     if (step !== 6) return null;
     const weather = defaultWeatherFallback();
     const settings = propertySettingsFromRecord(scheduleSettings);
+    const location = propertyLocationFromRecord(propertyLocation);
     return buildControllerGuide({
       propertyId,
       settings,
@@ -413,8 +423,9 @@ export function PropertyIrrigationWizard({ customerId, propertyId }: Props) {
         totalRainfallInches: weather.totalRainfallInches,
         source: "open_meteo",
       },
+      location,
     });
-  }, [step, propertyId, zones, scheduleSettings]);
+  }, [step, propertyId, zones, scheduleSettings, propertyLocation]);
 
   if (!propertyLoaded) {
     return (

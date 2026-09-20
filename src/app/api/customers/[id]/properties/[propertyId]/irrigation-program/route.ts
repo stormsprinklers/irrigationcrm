@@ -4,6 +4,7 @@ import {
   buildControllerGuide,
   defaultWeatherFallback,
   fetchWeeklyWeather,
+  propertyLocationFromRecord,
   propertySettingsFromRecord,
   zoneInputFromMapZone,
   type ControllerProgramGuide,
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     }
 
     const settings = propertySettingsFromRecord(property);
+    const location = propertyLocationFromRecord(property);
     const zones = property.irrigationMapZones.map((z) => zoneInputFromMapZone(z));
 
     const guide: ControllerProgramGuide = buildControllerGuide({
@@ -113,6 +115,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       settings,
       zones,
       weather,
+      location,
     });
 
     return NextResponse.json({
@@ -159,6 +162,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const weather = await resolveWeather(updated);
     const settings = propertySettingsFromRecord(updated);
+    const location = propertyLocationFromRecord(updated);
     const zones = updated.irrigationMapZones.map((z) => zoneInputFromMapZone(z));
 
     const guide = buildControllerGuide({
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       settings,
       zones,
       weather,
+      location,
     });
 
     await prisma.customerProperty.update({
