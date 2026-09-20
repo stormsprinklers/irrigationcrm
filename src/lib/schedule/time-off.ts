@@ -187,19 +187,12 @@ export async function assertEmployeeAvailableForAssignment(
   const schedule = await getEmployeeWorkSchedule(companyId, userId);
   const timezone = company?.timezone;
   const startParts = localTimeParts(timezone, startAt);
-  const endParts = localTimeParts(timezone, endAt);
-  const endsNextDay = endParts.day !== startParts.day;
-  const endMinutes = endsNextDay ? endParts.minutes + 24 * 60 : endParts.minutes;
   const offMessage = assignmentOffMessage(
     employee.name,
     schedule,
     startParts.day,
-    startParts.minutes,
-    endMinutes
+    startParts.minutes
   );
-  if (offMessage) {
-    return { error: offMessage, warning: null };
-  }
 
   const conflictWhere = {
     companyId,
@@ -220,7 +213,7 @@ export async function assertEmployeeAvailableForAssignment(
     };
   }
 
-  return { error: null, warning: null };
+  return { error: null, warning: offMessage };
 }
 
 export async function validateAssignmentUpdate(

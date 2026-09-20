@@ -67,7 +67,7 @@ const EVENT_TIMING_FIELDS: Partial<Record<NotificationEvent, TimingField[]>> = {
     {
       key: "arrivalWindowHours",
       label: "Arrival window (hours)",
-      hint: "Used in scheduled and rescheduled visit messages.",
+      hint: "Shared with Settings → Booking. Used for new schedule-grid visits and appointment messages.",
       min: 1,
       max: 12,
     },

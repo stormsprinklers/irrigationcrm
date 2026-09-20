@@ -65,16 +65,18 @@ export function ScheduleQuickAddDialog({
 
   if (!open || !slot) return null;
 
+  const arrivalWindowHours = (slot.endAt.getTime() - slot.startAt.getTime()) / (60 * 60 * 1000);
+  const arrivalWindowLabel = Number.isInteger(arrivalWindowHours)
+    ? `${arrivalWindowHours}h`
+    : `${arrivalWindowHours.toFixed(1)}h`;
+
   const offMessage =
     !crewId && assignedUserId
       ? assignmentOffMessage(
           assignedUserName || "This technician",
           workSchedules?.[assignedUserId],
           slot.startAt.getDay(),
-          slot.startAt.getHours() * 60 + slot.startAt.getMinutes(),
-          slot.endAt.getHours() * 60 +
-            slot.endAt.getMinutes() +
-            (slot.endAt.getDate() !== slot.startAt.getDate() ? 24 * 60 : 0)
+          slot.startAt.getHours() * 60 + slot.startAt.getMinutes()
         )
       : null;
 
@@ -93,11 +95,6 @@ export function ScheduleQuickAddDialog({
       toast.error("This customer is marked DO NOT SERVICE");
       return;
     }
-    if (offMessage) {
-      toast.error(offMessage);
-      return;
-    }
-
     setSaving(true);
     try {
       const res = await fetch("/api/schedule/jobs", {
@@ -145,10 +142,12 @@ export function ScheduleQuickAddDialog({
             <h2 className="font-semibold">Schedule visit</h2>
             <p className="text-xs text-muted-foreground">
               {format(slot.startAt, "EEE, MMM d")} · {format(slot.startAt, "h:mm a")} –{" "}
-              {format(slot.endAt, "h:mm a")} (3h arrival window)
+              {format(slot.endAt, "h:mm a")} ({arrivalWindowLabel} arrival window)
             </p>
             {offMessage ? (
-              <p className="mt-1 text-xs font-medium text-destructive">{offMessage}. Pick another technician or day.</p>
+              <p className="mt-1 text-xs font-medium text-amber-700">
+                {offMessage}. You can still book this visit.
+              </p>
             ) : null}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}>
@@ -224,7 +223,7 @@ export function ScheduleQuickAddDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || Boolean(offMessage)}>
+            <Button type="submit" disabled={saving}>
               {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
               Create visit
             </Button>

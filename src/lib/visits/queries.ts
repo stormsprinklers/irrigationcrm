@@ -280,6 +280,7 @@ export async function getScheduleFilters(
       select: {
         openTimeSlotsEnabled: true,
         divisionBookingWindows: true,
+        arrivalWindowHours: true,
       },
     }),
   ]);
@@ -335,6 +336,7 @@ export async function getScheduleFilters(
       windows: parseDivisionBookingWindows(company?.divisionBookingWindows),
       workSchedules: Object.fromEntries(workSchedulesEntries),
     },
+    arrivalWindowHours: company?.arrivalWindowHours ?? 3,
   };
 }
 

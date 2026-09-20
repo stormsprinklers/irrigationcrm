@@ -27,7 +27,17 @@ export async function POST(request: NextRequest) {
       if (!phone || typeof phone !== "string") return badRequestResponse("Phone required for SMS spam");
       const normalizedPhone = normalizePhone(phone);
       const existing = await prisma.blockedContact.findFirst({ where: { companyId: user.companyId, phone: normalizedPhone } });
-      if (existing) return NextResponse.json(existing);
+      if (existing) {
+        const blocked = await prisma.blockedContact.update({
+          where: { id: existing.id },
+          data: {
+            blockedBy: user.id,
+            blockedAt: new Date(),
+            reason: "SMS spam",
+          },
+        });
+        return NextResponse.json(blocked);
+      }
       const blocked = await blockCustomer({ companyId: user.companyId, blockedBy: user.id, phone: normalizedPhone, reason: "SMS spam" });
       return NextResponse.json(blocked);
     }

@@ -254,6 +254,24 @@ export default function SettingsBookingPage() {
             with these division booking windows.
           </p>
         </div>
+        <div>
+          <label className="text-sm font-medium">Default arrival window (hours)</label>
+          <Input
+            type="number"
+            min={1}
+            max={12}
+            step={1}
+            className="mt-1 max-w-[120px]"
+            value={company.arrivalWindowHours}
+            onChange={(e) =>
+              setCompany({ ...company, arrivalWindowHours: Number(e.target.value) })
+            }
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Used when an employee clicks the schedule to add a visit and in appointment
+            notifications. Existing visits keep their current start and end times.
+          </p>
+        </div>
         <label className="flex items-center gap-3 text-sm">
           <Checkbox
             checked={company.openTimeSlotsEnabled !== false}

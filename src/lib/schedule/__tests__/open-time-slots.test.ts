@@ -35,11 +35,16 @@ test("offWindowsForDay is empty when work hours cover the grid", () => {
   assert.deepEqual(offWindowsForDay(allDay, 3), []);
 });
 
-test("assignmentOffMessage blocks off days and hours outside the window", () => {
-  assert.equal(assignmentOffMessage("Mike", weekendOff, 0, 9 * 60, 12 * 60), "Mike is off this day");
+test("assignmentOffMessage warns only when the arrival window starts outside work hours", () => {
+  assert.equal(assignmentOffMessage("Mike", weekendOff, 0, 9 * 60), "Mike is off this day");
+  assert.equal(assignmentOffMessage("Mike", weekendOff, 1, 15 * 60), null);
   assert.equal(
-    assignmentOffMessage("Mike", weekendOff, 1, 15 * 60, 18 * 60),
-    "Mike is only working 08:00–16:00 this day"
+    assignmentOffMessage("Mike", weekendOff, 1, 16 * 60),
+    "The arrival window for Mike starts outside scheduled hours (08:00–16:00)"
   );
-  assert.equal(assignmentOffMessage("Mike", weekendOff, 1, 9 * 60, 12 * 60), null);
+  assert.equal(
+    assignmentOffMessage("Mike", weekendOff, 1, 7 * 60),
+    "The arrival window for Mike starts outside scheduled hours (08:00–16:00)"
+  );
+  assert.equal(assignmentOffMessage("Mike", weekendOff, 1, 9 * 60), null);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, X } from "lucide-react";
@@ -16,6 +16,7 @@ type ModuleSidebarProps = {
   sections: NavSection[];
   open?: boolean;
   onClose?: () => void;
+  headerContent?: ReactNode;
 };
 
 function itemOrChildActive(pathname: string, item: NavItem) {
@@ -136,7 +137,13 @@ function ExpandableNavItem({
   );
 }
 
-export function ModuleSidebar({ title, sections, open = false, onClose }: ModuleSidebarProps) {
+export function ModuleSidebar({
+  title,
+  sections,
+  open = false,
+  onClose,
+  headerContent,
+}: ModuleSidebarProps) {
   const pathname = usePathname();
   const inboxBadges = useInboxBadges();
   const countForHref = title === "Inbox" ? inboxBadges?.countForHref : undefined;
@@ -167,6 +174,10 @@ export function ModuleSidebar({ title, sections, open = false, onClose }: Module
           </button>
         ) : null}
       </div>
+
+      {headerContent ? (
+        <div className="border-b border-border px-3 py-3">{headerContent}</div>
+      ) : null}
 
       <nav className="flex-1 overflow-y-auto py-2" aria-label={`${title} navigation`}>
         {sections.map((section, sectionIndex) => (

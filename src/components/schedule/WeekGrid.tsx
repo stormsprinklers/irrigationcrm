@@ -195,6 +195,7 @@ type TimeGridProps = {
   openTimeSlotsEnabled?: boolean;
   divisionBookingWindows?: DivisionBookingWindows | null;
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
+  arrivalWindowHours?: number;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
 
@@ -343,6 +344,7 @@ function handleGridClick(
   event: React.MouseEvent<HTMLElement>,
   day: Date,
   column: TechColumn | null,
+  arrivalWindowHours: number,
   onSlotClick?: (slot: ScheduleSlotClick) => void
 ) {
   if (!onSlotClick) return;
@@ -364,7 +366,7 @@ function handleGridClick(
       SCHEDULE_END_HOUR,
       userId,
       column && !column.isCrew && !column.isUnassigned ? column.name : null,
-      DEFAULT_ARRIVAL_WINDOW_HOURS,
+      arrivalWindowHours,
       crewId,
       column?.isCrew ? column.name : null
     )
@@ -382,6 +384,7 @@ function TimeGrid({
   openTimeSlotsEnabled = false,
   divisionBookingWindows = null,
   workSchedules,
+  arrivalWindowHours = DEFAULT_ARRIVAL_WINDOW_HOURS,
   onSlotClick,
 }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -483,9 +486,11 @@ function TimeGrid({
           <div className="sticky top-0 z-30 border-b border-border bg-white shadow-sm">
             <div className="flex w-full border-b border-border">
               <div
-                className="sticky left-0 z-40 shrink-0 border-r border-border bg-muted/30"
+                className="sticky left-0 z-40 flex shrink-0 items-end justify-end border-r border-border bg-muted/30 px-1 pb-1 text-[9px] text-muted-foreground"
                 style={{ width: TIME_GUTTER }}
-              />
+              >
+                GMT-6
+              </div>
               {days.map((day) => {
                 const isToday = startOfDay(day).getTime() === startOfDay(new Date()).getTime();
                 return (
@@ -631,13 +636,11 @@ function TimeGrid({
           </div>
 
           <div className="relative flex w-full">
+            {/* Keep gutter rows one-to-one with grid rows so their lines stay aligned while scrolling. */}
             <div
               className="sticky left-0 z-20 shrink-0 border-r border-border bg-white"
               style={{ width: TIME_GUTTER }}
             >
-              <div className="border-b border-border px-1 py-1 text-[10px] text-muted-foreground">
-                GMT-6
-              </div>
               {SCHEDULE_HOURS.map((hour) => (
                 <div
                   key={hour}
@@ -682,7 +685,7 @@ function TimeGrid({
                             className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
                             aria-label={`Add visit for ${col.name} at ${format(day, "MMM d")}`}
                             onClick={(e) =>
-                              handleGridClick(e, day, col, onSlotClick)
+                              handleGridClick(e, day, col, arrivalWindowHours, onSlotClick)
                             }
                           />
                           <OffTimeBlocks
@@ -746,7 +749,9 @@ function TimeGrid({
                     type="button"
                     className="absolute inset-0 z-[1] cursor-cell border-0 bg-transparent p-0 hover:bg-primary/5"
                     aria-label={`Add visit on ${format(day, "MMM d")}`}
-                    onClick={(e) => handleGridClick(e, day, null, onSlotClick)}
+                    onClick={(e) =>
+                      handleGridClick(e, day, null, arrivalWindowHours, onSlotClick)
+                    }
                   />
                   {SCHEDULE_HOURS.map((hour) => (
                     <div
@@ -775,7 +780,7 @@ function TimeGrid({
             <div
               className="pointer-events-none absolute z-20 border-t-2 border-red-500"
               style={{
-                top: stickyHeaderHeight + 24 + currentLineTop,
+                top: stickyHeaderHeight + currentLineTop,
                 left: TIME_GUTTER,
                 right: 0,
               }}
@@ -913,6 +918,7 @@ type Props = {
   openTimeSlotsEnabled?: boolean;
   divisionBookingWindows?: DivisionBookingWindows | null;
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
+  arrivalWindowHours?: number;
   onDayClick?: (day: Date) => void;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
 };
@@ -929,6 +935,7 @@ export function WeekGrid({
   openTimeSlotsEnabled,
   divisionBookingWindows,
   workSchedules,
+  arrivalWindowHours,
   onDayClick,
   onSlotClick,
 }: Props) {
@@ -948,6 +955,7 @@ export function WeekGrid({
       openTimeSlotsEnabled={openTimeSlotsEnabled}
       divisionBookingWindows={divisionBookingWindows}
       workSchedules={workSchedules}
+      arrivalWindowHours={arrivalWindowHours}
       onSlotClick={onSlotClick}
     />
   );

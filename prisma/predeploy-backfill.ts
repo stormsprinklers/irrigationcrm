@@ -143,6 +143,15 @@ async function backfillDoNotServiceOptOuts() {
   console.log(`Backfilled Do Not Service marketing opt-outs (${updated.count} customers)`);
 }
 
+/** STOP is a marketing preference; undo the former behavior that also moved threads to Spam. */
+async function removeLegacySmsStopBlocks() {
+  if (!(await columnExists("BlockedContact", "reason"))) return;
+  const removed = await prisma.blockedContact.deleteMany({
+    where: { reason: "SMS STOP opt-out" },
+  });
+  console.log(`Removed legacy SMS STOP spam blocks (${removed.count} contacts)`);
+}
+
 async function main() {
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
@@ -152,6 +161,7 @@ async function main() {
     console.warn("Marketing opt-out default restore skipped:", err);
   }
   await backfillDoNotServiceOptOuts();
+  await removeLegacySmsStopBlocks();
   try {
     await backfillCallCustomers();
   } catch (err) {

@@ -7,7 +7,7 @@ import {
   getTwilioWebhookUrlCandidates,
   isValidTwilioWebhookRequest,
 } from "@/lib/inbox/twilio";
-import { isContactBlocked, normalizePhone, blockCustomer, unblockContactByPhone } from "@/lib/inbox/contacts";
+import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import {
   optInCustomerMarketingSms,
   optOutCustomerMarketingSms,
@@ -68,52 +68,62 @@ export async function POST(request: NextRequest) {
 
     const normalizedFrom = normalizePhone(from);
     const companyName = company.name?.trim() || "us";
+    const customer = await findCustomerByPhone(company.id, normalizedFrom);
+    const isStop = isExactSmsStop(body);
+    const isStart = isExactSmsStart(body);
+    let keywordReply: string | null = null;
 
-    if (isExactSmsStop(body)) {
-      const customer = await findCustomerByPhone(company.id, normalizedFrom);
+    if (isStop) {
       if (customer) {
         await optOutCustomerMarketingSms({
           customerId: customer.id,
           companyId: company.id,
         });
       }
-      const admin = await prisma.user.findFirst({
-        where: { companyId: company.id, role: "ADMIN" },
-        select: { id: true },
-      });
-      if (admin) {
-        await blockCustomer({
+      // STOP is a marketing preference, not spam. Remove only legacy auto-blocks;
+      // manually blocked numbers remain blocked and continue to appear in Spam.
+      await prisma.blockedContact.deleteMany({
+        where: {
           companyId: company.id,
-          blockedBy: admin.id,
-          customerId: customer?.id,
           phone: normalizedFrom,
           reason: "SMS STOP opt-out",
-        });
-      }
-      return twilioSmsReply(marketingSmsStopReply(companyName));
+        },
+      });
+      keywordReply = marketingSmsStopReply(companyName);
     }
 
-    const isStart = isExactSmsStart(body);
-    const spamBlock = isStart ? await prisma.blockedContact.findFirst({
-        where: { companyId: company.id, phone: normalizedFrom, reason: "SMS spam" },
-        select: { id: true },
-      }) : null;
-    if (isStart && !spamBlock) {
-      const customer = await findCustomerByPhone(company.id, normalizedFrom);
-      if (customer) {
-        await optInCustomerMarketingSms({
-          customerId: customer.id,
+    if (isStart) {
+      const manualBlock = await prisma.blockedContact.findFirst({
+        where: {
           companyId: company.id,
+          phone: normalizedFrom,
+          OR: [
+            { reason: null },
+            { reason: { not: "SMS STOP opt-out" } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!manualBlock) {
+        if (customer) {
+          await optInCustomerMarketingSms({
+            customerId: customer.id,
+            companyId: company.id,
+          });
+        }
+        await prisma.blockedContact.deleteMany({
+          where: {
+            companyId: company.id,
+            phone: normalizedFrom,
+            reason: "SMS STOP opt-out",
+          },
         });
+        keywordReply = marketingSmsStartReply(companyName);
       }
-      await unblockContactByPhone(company.id, normalizedFrom);
-      return twilioSmsReply(marketingSmsStartReply(companyName));
     }
 
     const blocked = await isContactBlocked(company.id, normalizedFrom, null);
     // Keep blocked inbound messages visible in Spam without notifying or triggering flows.
-
-    const customer = await findCustomerByPhone(company.id, normalizedFrom);
 
     const existingConversation = await findExistingSmsConversationAnyScope({
       companyId: company.id,
@@ -306,7 +316,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!blocked && trimmedBody) {
+    if (!blocked && trimmedBody && !isStop && !isStart) {
       after(async () => {
         try {
           const { advanceWaitOnCustomerReply } = await import("@/lib/marketing/flow-engine");
@@ -324,7 +334,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ok: true });
+    return keywordReply
+      ? twilioSmsReply(keywordReply)
+      : NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Twilio SMS inbound handler error", error);
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });

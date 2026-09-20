@@ -66,6 +66,7 @@ type FilterOptions = {
     windows: DivisionBookingWindows;
     workSchedules: Record<string, WorkScheduleDayDTO[]>;
   };
+  arrivalWindowHours?: number;
 };
 
 export function ScheduleView({
@@ -262,6 +263,7 @@ export function ScheduleView({
           employees: data.employees,
           crews: data.crews,
           openTimeSlots: data.openTimeSlots,
+          arrivalWindowHours: data.arrivalWindowHours,
         });
       }
     } catch {
@@ -410,6 +412,7 @@ export function ScheduleView({
             openTimeSlotsEnabled={filterOptions.openTimeSlots?.enabled ?? true}
             divisionBookingWindows={filterOptions.openTimeSlots?.windows ?? null}
             workSchedules={filterOptions.openTimeSlots?.workSchedules}
+            arrivalWindowHours={filterOptions.arrivalWindowHours}
             onDayClick={(day) => {
               setFocusDay(startOfDay(day));
               setViewMode("day");

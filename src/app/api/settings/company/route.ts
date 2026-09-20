@@ -141,6 +141,13 @@ export async function PATCH(request: NextRequest) {
       data.onlineBookingSlotMinutes = clampOnlineBookingSlotMinutes(data.onlineBookingSlotMinutes);
     }
 
+    if ("arrivalWindowHours" in data) {
+      const hours = Number(data.arrivalWindowHours);
+      data.arrivalWindowHours = Number.isFinite(hours)
+        ? Math.min(12, Math.max(1, Math.round(hours)))
+        : 3;
+    }
+
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data,

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ModuleSidebar } from "@/components/layout/ModuleSidebar";
+import { SettingsSearch } from "@/components/settings/SettingsSearch";
 import {
   useHolidayLightingFeatures,
   useIrrigationFeatures,
@@ -104,7 +105,12 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
       ) : null}
 
       <div className="hidden lg:flex">
-        <ModuleSidebar title="Settings" sections={rootSections} open />
+        <ModuleSidebar
+          title="Settings"
+          sections={rootSections}
+          open
+          headerContent={<SettingsSearch sections={rootSections} />}
+        />
       </div>
 
       <div className="lg:hidden">
@@ -113,6 +119,9 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
           sections={rootSections}
           open={open}
           onClose={() => setOpen(false)}
+          headerContent={
+            <SettingsSearch sections={rootSections} onNavigate={() => setOpen(false)} />
+          }
         />
       </div>
 

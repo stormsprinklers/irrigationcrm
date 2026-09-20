@@ -151,13 +151,12 @@ export function offWindowsForDay(
   return windows;
 }
 
-/** Client/server copy for why a visit cannot be assigned on this work schedule. */
+/** Client/server warning when an arrival window starts outside an employee's work schedule. */
 export function assignmentOffMessage(
   employeeName: string,
   schedule: WorkScheduleDayDTO[] | undefined,
   dayOfWeek: number,
-  startMinutes: number,
-  endMinutes: number
+  startMinutes: number
 ): string | null {
   const days = schedule && schedule.length > 0 ? schedule : defaultEmployeeWorkSchedule();
   const day = workDayForDate(days, dayOfWeek);
@@ -167,8 +166,8 @@ export function assignmentOffMessage(
   if (!day.startTime || !day.endTime) return null;
   const windowStart = toMinutes(day.startTime);
   const windowEnd = toMinutes(day.endTime);
-  if (startMinutes < windowStart || endMinutes > windowEnd) {
-    return `${employeeName} is only working ${day.startTime}–${day.endTime} this day`;
+  if (startMinutes < windowStart || startMinutes >= windowEnd) {
+    return `The arrival window for ${employeeName} starts outside scheduled hours (${day.startTime}–${day.endTime})`;
   }
   return null;
 }
