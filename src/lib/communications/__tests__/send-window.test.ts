@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   clampToAutomatedSendWindow,
+  clampToCampaignInitialOutreachWindow,
   clampToCampaignSendWindow,
   isWithinAutomatedSendWindow,
+  isWithinCampaignInitialOutreachWindow,
   isWithinCampaignSendWindow,
   nextAutomatedSendWindowStart,
   nextCampaignSendWindowStart,
@@ -105,5 +107,23 @@ test("campaign window runs on Saturday and Sunday", () => {
   assert.equal(
     nextCampaignSendWindowStart(new Date("2026-09-20T03:00:00.000Z"), TZ).toISOString(),
     "2026-09-20T14:00:00.000Z"
+  );
+});
+
+test("initial campaign outreach pauses on Sunday while follow-ups remain allowed", () => {
+  const saturdayMorning = new Date("2026-09-19T14:00:00.000Z");
+  const saturdayNight = new Date("2026-09-20T03:00:00.000Z");
+  const sundayMorning = new Date("2026-09-20T14:00:00.000Z");
+
+  assert.equal(isWithinCampaignInitialOutreachWindow(saturdayMorning, TZ), true);
+  assert.equal(isWithinCampaignInitialOutreachWindow(sundayMorning, TZ), false);
+  assert.equal(isWithinCampaignSendWindow(sundayMorning, TZ), true);
+  assert.equal(
+    clampToCampaignInitialOutreachWindow(sundayMorning, TZ).toISOString(),
+    "2026-09-21T14:00:00.000Z"
+  );
+  assert.equal(
+    clampToCampaignInitialOutreachWindow(saturdayNight, TZ).toISOString(),
+    "2026-09-21T14:00:00.000Z"
   );
 });

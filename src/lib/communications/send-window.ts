@@ -1,6 +1,7 @@
 import {
   addZonedDays,
   getZonedParts,
+  getZonedWeekdayIndex,
   zonedWallTimeToUtc,
 } from "@/lib/datetime/zoned";
 import { resolveNotificationTimezone } from "@/lib/notifications/timezone";
@@ -91,6 +92,18 @@ export function isWithinCampaignSendWindow(
 }
 
 /**
+ * Initial campaign outreach runs during normal campaign hours Monday through Saturday.
+ * Sunday remains available for follow-ups and replies in conversations already underway.
+ */
+export function isWithinCampaignInitialOutreachWindow(
+  at: Date = new Date(),
+  timeZone?: string | null
+): boolean {
+  const tz = resolveNotificationTimezone(timeZone);
+  return isWithinCampaignSendWindow(at, tz) && getZonedWeekdayIndex(at, tz) !== 0;
+}
+
+/**
  * Earliest 5:00 AM local time that is still in the future relative to quiet hours.
  * - Before 5:00 AM → today at 5:00 AM
  * - From 9:00 PM onward → tomorrow at 5:00 AM
@@ -143,6 +156,28 @@ export function clampToCampaignSendWindow(
 ): Date {
   if (isWithinCampaignSendWindow(when, timeZone)) return when;
   return nextCampaignSendWindowStart(when, timeZone);
+}
+
+/** Hold initial campaign outreach until Monday at 8:00 AM when it lands on Sunday. */
+export function clampToCampaignInitialOutreachWindow(
+  when: Date,
+  timeZone?: string | null
+): Date {
+  const tz = resolveNotificationTimezone(timeZone);
+  const candidate = clampToCampaignSendWindow(when, tz);
+  if (getZonedWeekdayIndex(candidate, tz) !== 0) return candidate;
+
+  const monday = addZonedDays(candidate, 1, tz);
+  const parts = getZonedParts(monday, tz);
+  return zonedWallTimeToUtc(
+    tz,
+    parts.year,
+    parts.month,
+    parts.day,
+    CAMPAIGN_SEND_WINDOW_START_HOUR,
+    0,
+    0
+  );
 }
 
 /** Tomorrow (or today if still before) 8:00 AM local — used for daily rate-limit deferrals. */

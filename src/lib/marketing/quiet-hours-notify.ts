@@ -1,5 +1,6 @@
 import { AppNotificationType, UserRole } from "@prisma/client";
 import {
+  clampToCampaignInitialOutreachWindow,
   clampToCampaignSendWindow,
   isWithinCampaignSendWindow,
 } from "@/lib/communications/send-window";
@@ -75,6 +76,34 @@ export async function scheduleOrHoldCampaignSend(params: {
   const resumeAt = clampToCampaignSendWindow(when, params.timeZone);
   const dueNow = when.getTime() <= Date.now() + 60_000;
   if (dueNow) {
+    await notifyAdminsCampaignQuietHours({
+      companyId: params.companyId,
+      campaignId: params.campaignId,
+      campaignName: params.campaignName,
+      resumeAt,
+      timeZone: params.timeZone,
+    });
+  }
+  return resumeAt;
+}
+
+/** Schedule the first campaign activity, holding Sunday starts until Monday morning. */
+export async function scheduleOrHoldCampaignStart(params: {
+  companyId: string;
+  campaignId: string;
+  campaignName: string;
+  timeZone?: string | null;
+  when?: Date;
+}): Promise<Date> {
+  const when = params.when ?? new Date();
+  const resumeAt = clampToCampaignInitialOutreachWindow(when, params.timeZone);
+  if (resumeAt.getTime() === when.getTime()) return when;
+
+  // Preserve the existing quiet-hours notification when Sunday is not the reason
+  // for the hold. Sunday starts are shown through the campaign's scheduled time.
+  const quietHoursResumeAt = clampToCampaignSendWindow(when, params.timeZone);
+  const dueNow = when.getTime() <= Date.now() + 60_000;
+  if (dueNow && quietHoursResumeAt.getTime() === resumeAt.getTime()) {
     await notifyAdminsCampaignQuietHours({
       companyId: params.companyId,
       campaignId: params.campaignId,

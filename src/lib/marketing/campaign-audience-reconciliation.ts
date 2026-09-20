@@ -7,7 +7,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { queryAudienceCustomersForChannels } from "@/lib/marketing/audience";
 import { campaignFlowChannels } from "@/lib/marketing/flow-channels";
-import { scheduleOrHoldCampaignSend } from "@/lib/marketing/quiet-hours-notify";
+import { scheduleOrHoldCampaignStart } from "@/lib/marketing/quiet-hours-notify";
 import type { AudienceFilters } from "@/lib/marketing/types";
 
 type EnrollmentForAudiencePlan = {
@@ -125,7 +125,7 @@ export async function reconcileActiveCampaignAudience(campaignId: string) {
 
   const resumeAt =
     plan.addCustomerIds.length || plan.restoreEnrollmentIds.length
-      ? await scheduleOrHoldCampaignSend({
+      ? await scheduleOrHoldCampaignStart({
           companyId: campaign.companyId,
           campaignId: campaign.id,
           campaignName: campaign.name,

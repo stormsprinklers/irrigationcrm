@@ -9,7 +9,9 @@ import {
   Prisma,
 } from "@prisma/client";
 import {
+  clampToCampaignInitialOutreachWindow,
   clampToCampaignSendWindow,
+  isWithinCampaignInitialOutreachWindow,
   isWithinCampaignSendWindow,
   nextLocalMorningAtHour,
 } from "@/lib/communications/send-window";
@@ -19,6 +21,7 @@ import type { AudienceFilters, CampaignFlowNodeInput, DripSettings } from "@/lib
 import { sendCampaignMessage } from "@/lib/marketing/flow-send";
 import {
   notifyAdminsCampaignQuietHours,
+  scheduleOrHoldCampaignStart,
   scheduleOrHoldCampaignSend,
 } from "@/lib/marketing/quiet-hours-notify";
 import { mergeCustomerTags, parseAddTagConfig } from "@/lib/marketing/add-tag";
@@ -207,7 +210,7 @@ export async function activateFlowCampaign(campaignId: string) {
     dripSettings,
     timeZone: campaign.company.timezone,
   });
-  const startAt = await scheduleOrHoldCampaignSend({
+  const startAt = await scheduleOrHoldCampaignStart({
     companyId: campaign.companyId,
     campaignId,
     campaignName: campaign.name,
@@ -1250,14 +1253,23 @@ async function processOneDueEnrollment(
         return;
       }
 
-      if (!isWithinCampaignSendWindow(new Date(), companyTz)) {
-        const now = new Date();
-        const resumeAt = clampToCampaignSendWindow(now, companyTz);
+      const isInitialOutreach = isInitialChannelOutreachNode(nodes, node.id, sendChannel);
+      const now = new Date();
+      const isAllowedNow = isInitialOutreach
+        ? isWithinCampaignInitialOutreachWindow(now, companyTz)
+        : isWithinCampaignSendWindow(now, companyTz);
+      if (!isAllowedNow) {
+        const resumeAt = isInitialOutreach
+          ? clampToCampaignInitialOutreachWindow(now, companyTz)
+          : clampToCampaignSendWindow(now, companyTz);
         await prisma.campaignEnrollment.update({
           where: { id: enrollment.id },
           data: { nextSendAt: resumeAt },
         });
-        if (!quietHoursNotified.has(enrollment.campaignId)) {
+        if (
+          !isWithinCampaignSendWindow(now, companyTz) &&
+          !quietHoursNotified.has(enrollment.campaignId)
+        ) {
           quietHoursNotified.add(enrollment.campaignId);
           await notifyAdminsCampaignQuietHours({
             companyId: enrollment.campaign.companyId,
@@ -1271,7 +1283,6 @@ async function processOneDueEnrollment(
       }
 
       const cap = dailySendCap(isSms ? settings.smsPerDay : settings.emailsPerDay);
-      const isInitialOutreach = isInitialChannelOutreachNode(nodes, node.id, sendChannel);
       if (isInitialOutreach) {
         const sentToday = await prisma.campaignRecipient.count({
           where: campaignDailySentWhere({
@@ -1284,7 +1295,12 @@ async function processOneDueEnrollment(
         if (sentToday >= cap) {
           await prisma.campaignEnrollment.update({
             where: { id: enrollment.id },
-            data: { nextSendAt: nextLocalMorningAtHour(new Date(), 8, companyTz) },
+            data: {
+              nextSendAt: clampToCampaignInitialOutreachWindow(
+                nextLocalMorningAtHour(new Date(), 8, companyTz),
+                companyTz
+              ),
+            },
           });
           return;
         }
@@ -1703,7 +1719,7 @@ export async function processCampaignTriggers(companyId?: string) {
           campaignId: campaign.id,
           customerId,
           currentNodeId: entry.id,
-          nextSendAt: await scheduleOrHoldCampaignSend({
+          nextSendAt: await scheduleOrHoldCampaignStart({
             companyId: campaign.companyId,
             campaignId: campaign.id,
             campaignName: campaign.name,

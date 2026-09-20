@@ -11,7 +11,9 @@ import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { phoneDigitsKey } from "@/lib/inbox/phone";
 import { assertOutboundCommsEnabled, getOutboundCommsState } from "@/lib/communications/outbound-guard";
 import {
+  clampToCampaignInitialOutreachWindow,
   clampToCampaignSendWindow,
+  isWithinCampaignInitialOutreachWindow,
   isWithinCampaignSendWindow,
 } from "@/lib/communications/send-window";
 import { addZonedCalendarDays, startOfZonedDay } from "@/lib/datetime/zoned";
@@ -379,6 +381,7 @@ export async function sendCampaignBatch(campaignId: string): Promise<{
   done: boolean;
   stats: CampaignStats;
   deferredForQuietHours?: boolean;
+  deferredUntil?: string;
 }> {
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -397,21 +400,29 @@ export async function sendCampaignBatch(campaignId: string): Promise<{
   }
 
   const companyTz = campaign.company.timezone;
-  if (!isWithinCampaignSendWindow(new Date(), companyTz)) {
-    const resumeAt = clampToCampaignSendWindow(new Date(), companyTz);
+  const now = new Date();
+  if (!isWithinCampaignInitialOutreachWindow(now, companyTz)) {
+    const resumeAt = clampToCampaignInitialOutreachWindow(now, companyTz);
     await prisma.campaign.update({
       where: { id: campaignId },
       data: { status: CampaignStatus.SENDING },
     });
-    await notifyAdminsCampaignQuietHours({
-      companyId: campaign.companyId,
-      campaignId: campaign.id,
-      campaignName: campaign.name,
-      resumeAt,
-      timeZone: companyTz,
-    });
+    if (!isWithinCampaignSendWindow(now, companyTz)) {
+      await notifyAdminsCampaignQuietHours({
+        companyId: campaign.companyId,
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        resumeAt,
+        timeZone: companyTz,
+      });
+    }
     const stats = await refreshCampaignStats(campaignId);
-    return { done: false, stats, deferredForQuietHours: true };
+    return {
+      done: false,
+      stats,
+      deferredForQuietHours: !isWithinCampaignSendWindow(now, companyTz),
+      deferredUntil: resumeAt.toISOString(),
+    };
   }
 
   await prisma.campaign.update({
@@ -477,19 +488,21 @@ export async function sendCampaign(campaignId: string) {
   let iterations = 0;
   const maxIterations = 200;
   let deferredForQuietHours = false;
+  let scheduledFor: string | null = null;
 
   while (!done && iterations < maxIterations) {
     const result = await sendCampaignBatch(campaignId);
     done = result.done;
     stats = result.stats;
     iterations++;
-    if (result.deferredForQuietHours) {
-      deferredForQuietHours = true;
+    if (result.deferredUntil) {
+      deferredForQuietHours = result.deferredForQuietHours === true;
+      scheduledFor = result.deferredUntil;
       break;
     }
   }
 
-  return { stats, deferredForQuietHours };
+  return { stats, deferredForQuietHours, scheduledFor };
 }
 
 export async function processPendingBlastSends() {
@@ -547,13 +560,19 @@ export async function processDripSends() {
     }
     if (frozen) continue;
     const companyTz = campaign.company.timezone;
-    if (!isWithinCampaignSendWindow(now, companyTz)) {
-      const resumeAt = clampToCampaignSendWindow(now, companyTz);
+    const isInitialOutreach = enrollment.currentStepIndex === 0;
+    const isAllowedNow = isInitialOutreach
+      ? isWithinCampaignInitialOutreachWindow(now, companyTz)
+      : isWithinCampaignSendWindow(now, companyTz);
+    if (!isAllowedNow) {
+      const resumeAt = isInitialOutreach
+        ? clampToCampaignInitialOutreachWindow(now, companyTz)
+        : clampToCampaignSendWindow(now, companyTz);
       await prisma.campaignEnrollment.update({
         where: { id: enrollment.id },
         data: { nextSendAt: resumeAt },
       });
-      if (!quietHoursNotified.has(campaign.id)) {
+      if (!isWithinCampaignSendWindow(now, companyTz) && !quietHoursNotified.has(campaign.id)) {
         quietHoursNotified.add(campaign.id);
         await notifyAdminsCampaignQuietHours({
           companyId: campaign.companyId,
