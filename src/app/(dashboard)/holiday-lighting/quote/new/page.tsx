@@ -13,6 +13,8 @@ function NewQuoteInner() {
   const searchParams = useSearchParams();
   const customerId = searchParams.get("customerId");
   const customerName = searchParams.get("customerName");
+  const propertyId = searchParams.get("propertyId");
+  const visitId = searchParams.get("visitId");
   const address = searchParams.get("address");
   const city = searchParams.get("city");
   const state = searchParams.get("state");
@@ -42,6 +44,8 @@ function NewQuoteInner() {
       <HolidayLightingQuoter
         initialCustomerId={customerId}
         initialCustomerName={customerName}
+        initialPropertyId={propertyId}
+        initialVisitId={visitId}
         initialAddress={address}
         initialCity={city}
         initialState={state}

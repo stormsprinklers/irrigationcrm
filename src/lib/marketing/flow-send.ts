@@ -15,6 +15,7 @@ import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeti
 import { prisma } from "@/lib/prisma";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 import { recordCampaignSmsInThread } from "@/lib/marketing/sms-thread";
+import { isMarketingPhoneSuppressed } from "@/lib/marketing/opt-out";
 
 /** Send one marketing message for a flow enrollment and record a CampaignRecipient. */
 export async function sendCampaignMessage(params: {
@@ -89,6 +90,9 @@ export async function sendCampaignMessage(params: {
   const bodyHtml = personalized.bodyHtml;
 
   if (customer.doNotService) {
+    return false;
+  }
+  if (await isMarketingPhoneSuppressed(campaign.companyId, customer.phone)) {
     return false;
   }
   if (channel === CampaignChannel.EMAIL && customer.marketingEmailOptOut) {

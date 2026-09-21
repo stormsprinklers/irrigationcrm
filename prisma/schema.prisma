@@ -763,6 +763,7 @@ model Company {
   customerEmails         CustomerEmail[]
   mediaAssets            CompanyMediaAsset[]
   blockedContacts        BlockedContact[]
+  marketingSmsSuppressions MarketingSmsSuppression[]
   callLogs               CallLog[]
   callConversions        CallConversion[]
   conversations          Conversation[]
@@ -1789,6 +1790,19 @@ model BlockedContact {
   @@index([companyId, email])
 }
 
+/// Phone-level STOP suppression. Kept separate from blocked contacts so opt-outs stay in the normal inbox.
+model MarketingSmsSuppression {
+  id          String   @id @default(cuid())
+  companyId   String
+  phone       String
+  optedOutAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, phone])
+  @@index([companyId, optedOutAt])
+}
+
 model CallLog {
   id            String        @id @default(cuid())
   companyId     String
@@ -2518,6 +2532,8 @@ model Conversation {
   participantPhone String?
   participantMetaId String?
   title            String?
+  /// Explicit CSR workflow state for external SMS. Null preserves legacy conversations until opened or closed.
+  smsOpen          Boolean?
   lastMessageAt    DateTime @default(now())
   createdAt        DateTime @default(now())
 
@@ -2526,6 +2542,7 @@ model Conversation {
   messages Message[]
 
   @@index([companyId, channel, scope, lastMessageAt])
+  @@index([companyId, channel, scope, smsOpen, lastMessageAt])
   @@index([companyId, channel, participantMetaId])
 }
 
@@ -2803,6 +2820,7 @@ model Visit {
   notificationJobs NotificationJob[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
   feedbackSurveyTokens FeedbackSurveyToken[]
+  holidayLightingQuotes HolidayLightingQuote[]
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])
@@ -3277,6 +3295,7 @@ model HolidayLightingQuote {
   companyId        String
   customerId       String?
   propertyId       String?
+  visitId          String?
   estimateId       String?                    @unique
   createdById      String?
   address          String?
@@ -3298,12 +3317,14 @@ model HolidayLightingQuote {
   company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer  Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   property  CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  visit     Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
   estimate  Estimate?          @relation(fields: [estimateId], references: [id], onDelete: SetNull)
   createdBy User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([companyId, status])
   @@index([customerId])
   @@index([propertyId])
+  @@index([visitId])
 }
 
 /// A priced package within an estimate (EST-1012, EST-1012A, EST-1012B, …).

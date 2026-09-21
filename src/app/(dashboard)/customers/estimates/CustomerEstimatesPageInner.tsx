@@ -20,6 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
+import { holidayEstimateWizardUrl } from "@/lib/holiday-lighting/routes";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
@@ -27,6 +29,10 @@ function formatCurrency(value: number) {
 
 export default function CustomerEstimatesPageInner() {
   const searchParams = useSearchParams();
+  const {
+    enabled: holidayLightingEnabled,
+    loading: holidayLightingFeaturesLoading,
+  } = useHolidayLightingFeatures();
   const visitId = searchParams.get("visitId");
   const [estimates, setEstimates] = useState<
     Array<{
@@ -64,6 +70,19 @@ export default function CustomerEstimatesPageInner() {
       toast.error("Visit must have a customer");
       return;
     }
+    if (holidayLightingEnabled) {
+      window.location.href = holidayEstimateWizardUrl({
+        customerId: visit.customer.id,
+        customerName: visit.customer.name,
+        propertyId: visit.property?.id,
+        visitId,
+        address: visit.address ?? visit.property?.address,
+        city: visit.city ?? visit.property?.city,
+        state: visit.state ?? visit.property?.state,
+        zip: visit.zip ?? visit.property?.zip,
+      });
+      return;
+    }
     const res = await fetch("/api/estimates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -88,13 +107,21 @@ export default function CustomerEstimatesPageInner() {
         title="Estimates"
         actions={
           visitId ? (
-            <Button size="sm" onClick={createFromVisit}>
+            <Button
+              size="sm"
+              onClick={createFromVisit}
+              disabled={holidayLightingFeaturesLoading}
+            >
               <Plus className="h-4 w-4" />
               Create from visit
             </Button>
           ) : (
             <Button size="sm" asChild>
-              <Link href="/estimates/new">
+              <Link
+                href={
+                  holidayLightingEnabled ? holidayEstimateWizardUrl() : "/estimates/new"
+                }
+              >
                 <Plus className="h-4 w-4" />
                 New estimate
               </Link>

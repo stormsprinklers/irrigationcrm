@@ -11,6 +11,8 @@ import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import {
   optInCustomerMarketingSms,
   optOutCustomerMarketingSms,
+  restoreMarketingPhone,
+  suppressMarketingPhone,
 } from "@/lib/marketing/opt-out";
 import {
   isExactSmsStart,
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
     let keywordReply: string | null = null;
 
     if (isStop) {
+      await suppressMarketingPhone(company.id, normalizedFrom);
       if (customer) {
         await optOutCustomerMarketingSms({
           customerId: customer.id,
@@ -105,6 +108,7 @@ export async function POST(request: NextRequest) {
         select: { id: true },
       });
       if (!manualBlock) {
+        await restoreMarketingPhone(company.id, normalizedFrom);
         if (customer) {
           await optInCustomerMarketingSms({
             customerId: customer.id,
@@ -226,6 +230,7 @@ export async function POST(request: NextRequest) {
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
+        smsOpen: blocked ? false : true,
         ...(customer && !conversation.customerId ? { customerId: customer.id } : {}),
       },
     });

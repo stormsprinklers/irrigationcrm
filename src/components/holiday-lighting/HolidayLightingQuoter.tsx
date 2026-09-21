@@ -52,6 +52,7 @@ type QuoteRecord = {
   lng: number | null;
   customerId: string | null;
   propertyId: string | null;
+  visitId: string | null;
   measurements: unknown;
   selections: unknown;
   previewImageUrl: string | null;
@@ -65,6 +66,8 @@ type Props = {
   quoteId?: string;
   initialCustomerId?: string | null;
   initialCustomerName?: string | null;
+  initialPropertyId?: string | null;
+  initialVisitId?: string | null;
   initialAddress?: string | null;
   initialCity?: string | null;
   initialState?: string | null;
@@ -118,6 +121,8 @@ export function HolidayLightingQuoter({
   quoteId: initialId,
   initialCustomerId,
   initialCustomerName,
+  initialPropertyId,
+  initialVisitId,
   initialAddress,
   initialCity,
   initialState,
@@ -146,7 +151,7 @@ export function HolidayLightingQuoter({
   );
   const [customerId, setCustomerId] = useState(initialCustomerId ?? "");
   const [customerName, setCustomerName] = useState(initialCustomerName ?? "");
-  const [propertyId, setPropertyId] = useState("");
+  const [propertyId, setPropertyId] = useState(initialPropertyId ?? "");
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
   const [center, setCenter] = useState<HolidayLatLng | null>(null);
   const [measurements, setMeasurements] = useState<HolidayMeasurements>(EMPTY_HOLIDAY_MEASUREMENTS);
@@ -287,6 +292,7 @@ export function HolidayLightingQuoter({
       body: JSON.stringify({
         customerId: customerId || null,
         propertyId: propertyId || null,
+        visitId: initialVisitId || null,
         address,
         city,
         state,

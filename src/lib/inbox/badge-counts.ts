@@ -1,4 +1,4 @@
-import { Channel, MessageDirection, Scope } from "@prisma/client";
+import { Channel, MessageDirection, Prisma, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isFieldRole } from "@/lib/employees";
 import { listEligibleCustomerIdsForFieldSms, type FieldAccessUser } from "@/lib/field/access";
@@ -15,6 +15,16 @@ const unreadCustomerSmsWhere = {
   readAt: null,
   NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
 } as const;
+
+const openCustomerSmsWhere: Prisma.ConversationWhereInput = {
+  OR: [
+    { smsOpen: true },
+    {
+      smsOpen: null,
+      messages: { some: unreadCustomerSmsWhere },
+    },
+  ],
+};
 
 export async function getInboxBadgeCounts(
   companyId: string,
@@ -42,10 +52,12 @@ export async function getInboxBadgeCounts(
         channel: Channel.SMS,
         scope: Scope.EXTERNAL,
         ...customerFilter,
-        ...(blockedPhones.length ? { OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] } : {}),
-        messages: {
-          some: unreadCustomerSmsWhere,
-        },
+        AND: [
+          ...(blockedPhones.length
+            ? [{ OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] }]
+            : []),
+          openCustomerSmsWhere,
+        ],
       },
     }),
     field

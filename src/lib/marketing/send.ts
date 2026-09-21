@@ -22,6 +22,7 @@ import { buildCampaignStats, mergeCampaignStatsJson } from "@/lib/marketing/stat
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
 import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
+import { isMarketingPhoneSuppressed } from "@/lib/marketing/opt-out";
 import {
   resolveMarketingEmailFrom,
   resolveMarketingSenderName,
@@ -204,6 +205,7 @@ async function sendToRecipient(
         where: { id: recipient.customerId, companyId: campaign.companyId },
         select: {
           name: true,
+          phone: true,
           address: true,
           city: true,
           state: true,
@@ -254,6 +256,18 @@ async function sendToRecipient(
     await prisma.campaignRecipient.update({
       where: { id: recipient.id },
       data: { status: "opt_out", error: "Do not service" },
+    });
+    return false;
+  }
+  if (
+    await isMarketingPhoneSuppressed(
+      campaign.companyId,
+      customerRecord?.phone ?? recipient.phone
+    )
+  ) {
+    await prisma.campaignRecipient.update({
+      where: { id: recipient.id },
+      data: { status: "opt_out", error: "STOP reply — opted out of marketing" },
     });
     return false;
   }

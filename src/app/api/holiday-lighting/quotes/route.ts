@@ -57,18 +57,79 @@ export async function POST(request: NextRequest) {
     assertHolidayLightingEnabled(company ?? {});
 
     const body = await request.json().catch(() => ({}));
+    const requestedCustomerId =
+      typeof body.customerId === "string" && body.customerId.trim()
+        ? body.customerId.trim()
+        : null;
+    const requestedPropertyId =
+      typeof body.propertyId === "string" && body.propertyId.trim()
+        ? body.propertyId.trim()
+        : null;
+    const requestedVisitId =
+      typeof body.visitId === "string" && body.visitId.trim() ? body.visitId.trim() : null;
+
+    const visit = requestedVisitId
+      ? await prisma.visit.findFirst({
+          where: { id: requestedVisitId, companyId: user.companyId },
+          select: {
+            customerId: true,
+            propertyId: true,
+            address: true,
+            city: true,
+            state: true,
+            zip: true,
+          },
+        })
+      : null;
+    if (requestedVisitId && !visit) {
+      return badRequestResponse("Visit not found");
+    }
+    if (requestedCustomerId && visit?.customerId && requestedCustomerId !== visit.customerId) {
+      return badRequestResponse("The visit belongs to a different customer");
+    }
+    if (requestedPropertyId && visit?.propertyId && requestedPropertyId !== visit.propertyId) {
+      return badRequestResponse("The visit belongs to a different property");
+    }
+
+    const customerId = requestedCustomerId ?? visit?.customerId ?? null;
+    const propertyId = requestedPropertyId ?? visit?.propertyId ?? null;
+    const [customer, property] = await Promise.all([
+      customerId
+        ? prisma.customer.findFirst({
+            where: { id: customerId, companyId: user.companyId },
+            select: { id: true },
+          })
+        : null,
+      propertyId
+        ? prisma.customerProperty.findFirst({
+            where: { id: propertyId, companyId: user.companyId },
+            select: { id: true, customerId: true },
+          })
+        : null,
+    ]);
+    if (customerId && !customer) {
+      return badRequestResponse("Customer not found");
+    }
+    if (propertyId && !property) {
+      return badRequestResponse("Property not found");
+    }
+    if (customerId && property && property.customerId !== customerId) {
+      return badRequestResponse("The property belongs to a different customer");
+    }
+
     const catalog = await loadHolidayCatalog(user.companyId);
     await ensureHolidayPriceBookItems(user.companyId, catalog);
     const quote = await prisma.holidayLightingQuote.create({
       data: {
         companyId: user.companyId,
         createdById: user.id,
-        customerId: typeof body.customerId === "string" ? body.customerId : null,
-        propertyId: typeof body.propertyId === "string" ? body.propertyId : null,
-        address: typeof body.address === "string" ? body.address : null,
-        city: typeof body.city === "string" ? body.city : null,
-        state: typeof body.state === "string" ? body.state : null,
-        zip: typeof body.zip === "string" ? body.zip : null,
+        customerId,
+        propertyId,
+        visitId: requestedVisitId,
+        address: typeof body.address === "string" ? body.address : visit?.address ?? null,
+        city: typeof body.city === "string" ? body.city : visit?.city ?? null,
+        state: typeof body.state === "string" ? body.state : visit?.state ?? null,
+        zip: typeof body.zip === "string" ? body.zip : visit?.zip ?? null,
         lat: typeof body.lat === "number" ? body.lat : null,
         lng: typeof body.lng === "number" ? body.lng : null,
         measurements: body.measurements

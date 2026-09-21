@@ -12,9 +12,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { createDraftCustomer, createDraftVisit } from "@/lib/schedule/create-draft";
+import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
+import { holidayEstimateWizardUrl } from "@/lib/holiday-lighting/routes";
 
 export function NewMenu() {
   const router = useRouter();
+  const { enabled: holidayLightingEnabled } = useHolidayLightingFeatures();
   const [creating, setCreating] = useState(false);
 
   async function runCreate(action: () => Promise<void>) {
@@ -63,7 +66,14 @@ export function NewMenu() {
           <Calendar />
           New visit
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={creating} onSelect={() => router.push("/estimates/new")}>
+        <DropdownMenuItem
+          disabled={creating}
+          onSelect={() =>
+            router.push(
+              holidayLightingEnabled ? holidayEstimateWizardUrl() : "/estimates/new"
+            )
+          }
+        >
           <FileText />
           New estimate
         </DropdownMenuItem>

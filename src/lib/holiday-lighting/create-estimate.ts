@@ -72,6 +72,7 @@ export async function createEstimateFromHolidayQuote(params: {
       companyId: params.companyId,
       customerId: quote.customerId,
       propertyId: quote.propertyId,
+      visitId: quote.visitId,
       estimateNumber,
       status: EstimateStatus.DRAFT,
       expiresAt,

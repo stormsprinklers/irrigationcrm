@@ -56,6 +56,7 @@ import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 import { createDraftVisit } from "@/lib/schedule/create-draft";
+import { holidayEstimateWizardUrl } from "@/lib/holiday-lighting/routes";
 
 const EMPTY_PROPERTY_FORM = {
   name: "",
@@ -174,7 +175,8 @@ export function CustomerProfile({ customerId }: Props) {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
-  const { enabled: holidayEnabled } = useHolidayLightingFeatures();
+  const { enabled: holidayEnabled, loading: holidayFeaturesLoading } =
+    useHolidayLightingFeatures();
   const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const validTabs = useMemo(() => new Set([
     "profile",
@@ -619,6 +621,17 @@ export function CustomerProfile({ customerId }: Props) {
   }
 
   async function createEstimate() {
+    if (holidayEnabled) {
+      window.location.href = holidayEstimateWizardUrl({
+        customerId,
+        customerName: customer?.name,
+        address: customer?.address,
+        city: customer?.city,
+        state: customer?.state,
+        zip: customer?.zip,
+      });
+      return;
+    }
     const res = await fetch("/api/estimates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1029,8 +1042,9 @@ export function CustomerProfile({ customerId }: Props) {
                   <div className="sm:col-span-2 rounded-md border p-3">
                     <p className="mb-2 text-sm font-medium">Messaging preferences</p>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      New customers are opted in. Texting STOP (nothing else) opts them out of
-                      marketing SMS; START opts them back in.
+                      New customers are opted in. Texting STOP (nothing else) removes them from
+                      active campaigns and opts them out of marketing email and SMS. START restores
+                      marketing SMS only.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <MarketingConsentSelect
@@ -1444,7 +1458,7 @@ export function CustomerProfile({ customerId }: Props) {
 
         <TabsContent value="estimates" className="space-y-4">
           <div className="flex justify-end">
-            <Button onClick={createEstimate}>
+            <Button onClick={createEstimate} disabled={holidayFeaturesLoading}>
               <Plus className="h-4 w-4" />
               Create estimate
             </Button>

@@ -1,5 +1,6 @@
 import { CampaignChannel, CampaignEnrollmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { normalizePhone } from "@/lib/inbox/phone";
 
 export type MarketingOptOut = boolean;
 
@@ -9,6 +10,31 @@ export function isMarketingOptedOut(value: MarketingOptOut | null | undefined) {
 
 export function marketingConsentLabel(value: MarketingOptOut | null | undefined) {
   return value === true ? "Opted out" : "Opted in";
+}
+
+export async function suppressMarketingPhone(companyId: string, phone: string) {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return;
+  await prisma.marketingSmsSuppression.upsert({
+    where: { companyId_phone: { companyId, phone: normalizedPhone } },
+    update: { optedOutAt: new Date() },
+    create: { companyId, phone: normalizedPhone },
+  });
+}
+
+export async function restoreMarketingPhone(companyId: string, phone: string) {
+  await prisma.marketingSmsSuppression.deleteMany({
+    where: { companyId, phone: normalizePhone(phone) },
+  });
+}
+
+export async function isMarketingPhoneSuppressed(companyId: string, phone?: string | null) {
+  if (!phone) return false;
+  const suppression = await prisma.marketingSmsSuppression.findUnique({
+    where: { companyId_phone: { companyId, phone: normalizePhone(phone) } },
+    select: { id: true },
+  });
+  return Boolean(suppression);
 }
 
 /** Cancel active/paused enrollments and pending sends for a customer. */
@@ -70,13 +96,13 @@ export async function optOutCustomerMarketingSms(params: {
 }) {
   await prisma.customer.updateMany({
     where: { id: params.customerId, companyId: params.companyId },
-    data: { marketingSmsOptOut: true },
+    data: { marketingSmsOptOut: true, marketingEmailOptOut: true },
   });
   await unenrollCustomerFromCampaigns({
     customerId: params.customerId,
     companyId: params.companyId,
-    channel: CampaignChannel.SMS,
-    reason: "Marketing SMS opt-out",
+    channel: "ALL",
+    reason: "STOP reply — opted out of marketing",
   });
 }
 

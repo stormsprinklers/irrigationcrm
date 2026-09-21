@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Search } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
@@ -26,51 +27,79 @@ type Conversation = {
   }[];
 };
 
+export type SmsFolder = "open" | "general" | "spam";
+
 export function SmsThreadList({
   scope,
   selectedId,
   onSelect,
-  spam = false,
-  unreadOnly = false,
+  folder = "general",
 }: {
   scope: CustomerTeamScope;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  spam?: boolean;
-  unreadOnly?: boolean;
+  folder?: SmsFolder;
 }) {
   const [threads, setThreads] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
-      const res = await fetch(`/api/inbox/sms/conversations?scope=${scope === "customers" ? "external" : "internal"}&folder=${spam ? "spam" : "inbox"}&unreadOnly=${unreadOnly}`);
+      const params = new URLSearchParams({
+        scope: scope === "customers" ? "external" : "internal",
+        folder,
+      });
+      if (search.trim()) params.set("search", search.trim());
+      const res = await fetch(`/api/inbox/sms/conversations?${params.toString()}`);
       if (res.ok) {
-        setThreads(await res.json());
+        const rows = await res.json();
+        if (!cancelled) setThreads(rows);
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
-    load();
+    const initial = window.setTimeout(() => void load(), search.trim() ? 250 : 0);
     const interval = setInterval(load, 4000);
-    return () => clearInterval(interval);
-  }, [scope, spam, unreadOnly]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, [scope, folder, search]);
 
-  if (loading && !threads.length) {
-    return <div className="p-4 text-sm text-muted-foreground">Loading...</div>;
-  }
-
-  if (!threads.length) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        {unreadOnly ? "No unread conversations." : spam ? "No spam messages." : "No conversations yet. Click the compose icon above to start a new message."}
-      </div>
-    );
-  }
+  const emptyMessage = search.trim()
+    ? "No matching conversations."
+    : folder === "open"
+      ? "No open messages."
+      : folder === "spam"
+        ? "No spam messages."
+        : "No conversations yet.";
 
   return (
-    <ScrollArea className="h-full">
-      <ul>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {scope === "customers" && folder === "general" ? (
+        <div className="shrink-0 border-b px-3 py-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search customers or phone numbers"
+              className="h-9 pl-8"
+            />
+          </div>
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        {loading && !threads.length ? (
+          <div className="p-4 text-sm text-muted-foreground">Loading...</div>
+        ) : !threads.length ? (
+          <div className="p-4 text-sm text-muted-foreground">{emptyMessage}</div>
+        ) : (
+          <ScrollArea className="h-full">
+            <ul>
         {threads.map((thread) => {
           const displayPhone = thread.participantPhone
             ? formatPhoneDisplay(thread.participantPhone)
@@ -154,7 +183,10 @@ export function SmsThreadList({
             </li>
           );
         })}
-      </ul>
-    </ScrollArea>
+            </ul>
+          </ScrollArea>
+        )}
+      </div>
+    </div>
   );
 }

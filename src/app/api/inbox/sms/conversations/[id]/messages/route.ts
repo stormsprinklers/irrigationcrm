@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { nextCustomerIdForSmsPhone } from "@/lib/inbox/conversations";
 import { phonesMatch } from "@/lib/inbox/phone";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
+import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import {
   canAccessFieldSmsConversation,
   FIELD_CUSTOMER_COMMS_FORBIDDEN,
@@ -70,6 +71,29 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     if (!(await canAccessFieldSmsConversation(user, conversation))) {
       return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+    }
+
+    if (
+      conversation.channel === "SMS" &&
+      conversation.scope === "EXTERNAL" &&
+      conversation.smsOpen === null
+    ) {
+      const promoted = await prisma.conversation.updateMany({
+        where: {
+          id,
+          companyId: user.companyId,
+          smsOpen: null,
+          messages: {
+            some: {
+              direction: "INBOUND",
+              readAt: null,
+              NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+            },
+          },
+        },
+        data: { smsOpen: true },
+      });
+      if (promoted.count) conversation = { ...conversation, smsOpen: true };
     }
 
     await markInboundConversationRead(user.companyId, id);

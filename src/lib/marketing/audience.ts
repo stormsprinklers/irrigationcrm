@@ -2,6 +2,7 @@ import type { CampaignChannel, Prisma } from "@prisma/client";
 import type { AudienceFilters } from "@/lib/marketing/types";
 import { prisma } from "@/lib/prisma";
 import { customerSegmentWhere } from "@/lib/customers/lifetime-value";
+import { normalizePhone } from "@/lib/inbox/phone";
 
 export async function buildAudienceWhere(
   companyId: string,
@@ -132,10 +133,16 @@ export async function queryAudienceCustomers(
     ...(take ? { take } : {}),
   });
 
-  const blocked = await prisma.blockedContact.findMany({
-    where: { companyId },
-    select: { email: true, phone: true, customerId: true },
-  });
+  const [blocked, suppressions] = await Promise.all([
+    prisma.blockedContact.findMany({
+      where: { companyId },
+      select: { email: true, phone: true, customerId: true },
+    }),
+    prisma.marketingSmsSuppression.findMany({
+      where: { companyId },
+      select: { phone: true },
+    }),
+  ]);
   const blockedEmails = new Set(
     blocked.map((b) => b.email?.toLowerCase()).filter(Boolean) as string[]
   );
@@ -143,10 +150,12 @@ export async function queryAudienceCustomers(
   const blockedCustomerIds = new Set(
     blocked.map((b) => b.customerId).filter(Boolean) as string[]
   );
+  const suppressedPhones = new Set(suppressions.map((entry) => entry.phone));
 
   return customers.filter((c) => {
     if (excludeIds.has(c.id)) return false;
     if (blockedCustomerIds.has(c.id)) return false;
+    if (c.phone && suppressedPhones.has(normalizePhone(c.phone))) return false;
     if (channel === "EMAIL" && c.marketingEmailOptOut) return false;
     if (channel === "SMS" && c.marketingSmsOptOut) return false;
     if (channel === "EMAIL" && c.email && blockedEmails.has(c.email.toLowerCase())) return false;

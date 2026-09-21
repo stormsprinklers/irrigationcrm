@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
-import { Send, AlertCircle } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,6 +44,8 @@ type Message = {
 
 type Conversation = {
   id: string;
+  smsOpen?: boolean | null;
+  lastMessageAt: string;
   participantPhone?: string | null;
   title?: string | null;
   customer?: {
@@ -121,6 +123,7 @@ export function SmsMessagePane({
   spam = false,
   onMovedToSpam,
   onRestoredFromSpam,
+  onConversationClosed,
 }: {
   conversationId: string | null;
   scope: CustomerTeamScope;
@@ -131,6 +134,7 @@ export function SmsMessagePane({
   spam?: boolean;
   onMovedToSpam?: () => void;
   onRestoredFromSpam?: () => void;
+  onConversationClosed?: () => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -142,6 +146,7 @@ export function SmsMessagePane({
   const [deliveryDetailMsg, setDeliveryDetailMsg] = useState<Message | null>(null);
   const [resending, setResending] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [closingConversation, setClosingConversation] = useState(false);
   const badgesNotifiedFor = useRef<string | null>(null);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
@@ -317,6 +322,33 @@ export function SmsMessagePane({
   const showBlockAction =
     scope === "customers" && !spam && Boolean(conversationId) && Boolean(blockPhone);
 
+  async function closeConversation() {
+    if (!conversationId || !thread) return;
+    setClosingConversation(true);
+    try {
+      const res = await fetch(`/api/inbox/sms/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ open: false, lastMessageAt: thread.lastMessageAt }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not close this conversation");
+        return;
+      }
+      setConversation((current) =>
+        current?.id === conversationId ? { ...current, smsOpen: false } : current
+      );
+      notifyInboxBadgesChanged();
+      toast.success("Conversation closed");
+      onConversationClosed?.();
+    } catch {
+      toast.error("Could not close this conversation");
+    } finally {
+      setClosingConversation(false);
+    }
+  }
+
   function PhoneRow({
     phone,
     className,
@@ -375,8 +407,21 @@ export function SmsMessagePane({
             </>
           )}
         </div>
-        {spam && blockPhone && (
-          <Button type="button" variant="outline" size="sm" disabled={restoring} onClick={async () => {
+        <div className="flex shrink-0 items-center gap-2">
+          {scope === "customers" && !spam && thread?.smsOpen === true ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={closingConversation}
+              onClick={() => void closeConversation()}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {closingConversation ? "Closing…" : "Mark closed"}
+            </Button>
+          ) : null}
+          {spam && blockPhone && (
+            <Button type="button" variant="outline" size="sm" disabled={restoring} onClick={async () => {
             setRestoring(true);
             try {
               const res = await fetch(`/api/inbox/block?phone=${encodeURIComponent(blockPhone)}`, { method: "DELETE" });
@@ -390,8 +435,9 @@ export function SmsMessagePane({
             }
           }}>
             {restoring ? "Restoring…" : "Unblock and move to inbox"}
-          </Button>
-        )}
+            </Button>
+          )}
+        </div>
       </div>
 
       {isCompose && (

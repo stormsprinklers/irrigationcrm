@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Scope, Channel, MessageDirection } from "@prisma/client";
+import { Scope, Channel, MessageDirection, Prisma } from "@prisma/client";
 import {
   requireSessionUser,
   unauthorizedResponse,
@@ -8,7 +8,7 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
-import { phonesMatch } from "@/lib/inbox/phone";
+import { phoneDigitsKey, phonesMatch } from "@/lib/inbox/phone";
 import { sendSms } from "@/lib/inbox/twilio";
 import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
@@ -147,8 +147,15 @@ export async function GET(request: NextRequest) {
     const user = await requireSessionUser();
     const scopeParam = request.nextUrl.searchParams.get("scope") ?? "external";
     const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
-    const spam = scope === Scope.EXTERNAL && request.nextUrl.searchParams.get("folder") === "spam";
-    const unreadOnly = request.nextUrl.searchParams.get("unreadOnly") === "true";
+    const requestedFolder = request.nextUrl.searchParams.get("folder");
+    const folder =
+      scope === Scope.EXTERNAL && requestedFolder === "spam"
+        ? "spam"
+        : scope === Scope.EXTERNAL && requestedFolder !== "general"
+          ? "open"
+          : "general";
+    const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
+    const searchPhoneDigits = phoneDigitsKey(search);
     const blockedPhones = scope === Scope.EXTERNAL
       ? (await prisma.blockedContact.findMany({ where: { companyId: user.companyId, phone: { not: null } }, select: { phone: true } }))
           .map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone))
@@ -161,27 +168,74 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
 
+    const and: Prisma.ConversationWhereInput[] = [];
+    if (scope === Scope.EXTERNAL && folder !== "spam" && blockedPhones.length) {
+      and.push({
+        OR: [
+          { participantPhone: null },
+          { participantPhone: { notIn: blockedPhones } },
+        ],
+      });
+    }
+    if (scope === Scope.EXTERNAL) {
+      and.push({
+        messages: {
+          some: {
+            NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+          },
+        },
+      });
+    }
+    if (scope === Scope.EXTERNAL && folder === "open") {
+      and.push({
+        OR: [
+          { smsOpen: true },
+          {
+            smsOpen: null,
+            messages: {
+              some: {
+                direction: MessageDirection.INBOUND,
+                readAt: null,
+                NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+              },
+            },
+          },
+        ],
+      });
+    }
+    if (search) {
+      and.push({
+        OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { participantPhone: { contains: search } },
+          ...(searchPhoneDigits
+            ? [{ participantPhone: { contains: searchPhoneDigits } }]
+            : []),
+          {
+            customer: {
+              is: {
+                OR: [
+                  { name: { contains: search, mode: "insensitive" } },
+                  { phone: { contains: search } },
+                  { email: { contains: search, mode: "insensitive" } },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    }
+
     const conversations = await prisma.conversation.findMany({
       where: {
         companyId: user.companyId,
         channel: Channel.SMS,
         scope,
-        ...(spam
+        ...(folder === "spam"
           ? { participantPhone: { in: blockedPhones } }
-          : blockedPhones.length ? { OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] } : {}),
-        ...(fieldCommsWhere ?? {}),
-        ...(unreadOnly ? { messages: { some: {
-          direction: MessageDirection.INBOUND,
-          readAt: null,
-          NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-        } } } : {}),
-        ...(scope === Scope.EXTERNAL
-          ? {
-              AND: [{ messages: { some: {
-                NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-              } } }],
-            }
           : {}),
+        ...(fieldCommsWhere ?? {}),
+        ...(and.length ? { AND: and } : {}),
       },
       include: {
         customer: true,

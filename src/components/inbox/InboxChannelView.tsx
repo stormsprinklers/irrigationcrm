@@ -6,7 +6,6 @@ import { InboxChannelLayout } from "@/components/inbox/InboxChannelLayout";
 import { SmsThreadList } from "@/components/inbox/SmsThreadList";
 import { SmsMessagePane } from "@/components/inbox/SmsMessagePane";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 import { isCustomerTeamScope, parseInboxRoute } from "@/lib/inbox/types";
 
@@ -35,8 +34,7 @@ export function InboxChannelView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [smsFolder, setSmsFolder] = useState<"inbox" | "spam">("inbox");
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [smsFolder, setSmsFolder] = useState<"open" | "general" | "spam">("open");
   const userOverrideRef = useRef(false);
 
   const ch = parsed?.channel;
@@ -57,6 +55,7 @@ export function InboxChannelView({
     if (ch !== "sms" || sc !== "customers") return;
     const conversationId = searchParams.get("conversationId");
     if (conversationId) {
+      setSmsFolder("general");
       setSelectedId(conversationId);
       setIsComposing(false);
     }
@@ -77,6 +76,7 @@ export function InboxChannelView({
       .then((data) => {
         if (cancelled || userOverrideRef.current) return;
         if (data.conversation?.id) {
+          setSmsFolder("general");
           setSelectedId(data.conversation.id);
           setIsComposing(false);
         } else if (deepLink.phone || deepLink.customerId) {
@@ -111,7 +111,7 @@ export function InboxChannelView({
         composing={isComposing && !selectedId}
         onCompose={() => {
           userOverrideRef.current = true;
-          setSmsFolder("inbox");
+          setSmsFolder("general");
           setSelectedId(null);
           setIsComposing(true);
           clearInboxDeepLink();
@@ -126,29 +126,22 @@ export function InboxChannelView({
           <div className="flex h-full flex-col">
             {teamScope === "customers" && (
               <Tabs value={smsFolder} onValueChange={(value) => {
-                setSmsFolder(value as "inbox" | "spam");
+                setSmsFolder(value as "open" | "general" | "spam");
                 setSelectedId(null);
                 setIsComposing(false);
                 clearInboxDeepLink();
               }} className="shrink-0 border-b px-3 py-2">
                 <TabsList className="w-full">
-                  <TabsTrigger value="inbox" className="flex-1">Inbox</TabsTrigger>
+                  <TabsTrigger value="open" className="flex-1">Open</TabsTrigger>
+                  <TabsTrigger value="general" className="flex-1">General</TabsTrigger>
                   <TabsTrigger value="spam" className="flex-1">Spam</TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
-            <div className="shrink-0 border-b px-3 py-2">
-              <Button type="button" variant={unreadOnly ? "secondary" : "outline"} size="sm" onClick={() => {
-                setUnreadOnly((value) => !value);
-                setSelectedId(null);
-                setIsComposing(false);
-              }} aria-pressed={unreadOnly}>Unread only</Button>
-            </div>
             <SmsThreadList
               key={`${refreshKey}-${smsFolder}`}
               scope={teamScope}
-              spam={teamScope === "customers" && smsFolder === "spam"}
-              unreadOnly={unreadOnly}
+              folder={teamScope === "customers" ? smsFolder : "general"}
               selectedId={selectedId}
               onSelect={(id) => {
                 userOverrideRef.current = true;
@@ -174,9 +167,16 @@ export function InboxChannelView({
                 clearInboxDeepLink();
               }}
               onRestoredFromSpam={() => {
-                setSmsFolder("inbox");
+                setSmsFolder("general");
                 setRefreshKey((key) => key + 1);
                 clearInboxDeepLink();
+              }}
+              onConversationClosed={() => {
+                setRefreshKey((key) => key + 1);
+                if (smsFolder === "open") {
+                  setSelectedId(null);
+                  setIsComposing(false);
+                }
               }}
               onSent={(id) => {
                 userOverrideRef.current = true;
