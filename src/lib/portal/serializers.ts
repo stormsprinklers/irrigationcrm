@@ -1,4 +1,5 @@
 import type { VisitStatus } from "@prisma/client";
+import { holidayBuyBreakdownLines } from "@/lib/holiday-lighting/pricing";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { toNumber } from "@/lib/visits/totals";
@@ -188,7 +189,10 @@ export function serializePortalEstimate(estimate: {
       : holidayPreviewImageUrl
         ? HOLIDAY_PREVIEW_DISCLAIMER
         : null;
-  const hasHolidayLighting = Boolean(holidayStrandMap || holidayPreviewImageUrl);
+  const isHolidayLightingQuote = meta?.source === "holiday-lighting-quote";
+  const hasHolidayLighting = Boolean(
+    isHolidayLightingQuote || holidayStrandMap || holidayPreviewImageUrl
+  );
   const optionCount = estimate.options?.length ?? 0;
   const options = (estimate.options ?? []).map((option) => {
     const letter = option.letter;
@@ -210,7 +214,7 @@ export function serializePortalEstimate(estimate: {
     };
   });
 
-  const lineItems = estimate.lineItems.map((item) => ({
+  let lineItems = estimate.lineItems.map((item) => ({
     optionId: item.optionId ?? null,
     name: item.name,
     description: item.description,
@@ -221,6 +225,47 @@ export function serializePortalEstimate(estimate: {
     sortOrder: item.sortOrder,
     itemType: item.priceBookItem?.type ?? "SERVICE",
   }));
+
+  // Older holiday estimates stored Buy Lights as one generic row. Present the
+  // same parts/labor breakdown as new estimates without exposing per-foot rates.
+  const buyOption = options.find(
+    (option) => option.letter === "A" || option.label.trim().toLowerCase() === "buy lights"
+  );
+  const year2LaborTotal =
+    typeof meta?.reinstallTotal === "number" && Number.isFinite(meta.reinstallTotal)
+      ? meta.reinstallTotal
+      : null;
+  const legacyBuyItems = buyOption
+    ? lineItems.filter((item) => item.optionId === buyOption.id)
+    : [];
+  if (
+    isHolidayLightingQuote &&
+    buyOption &&
+    year2LaborTotal != null &&
+    legacyBuyItems.length === 1 &&
+    legacyBuyItems[0]?.name.trim().toLowerCase() === "buy lights"
+  ) {
+    const legacyItem = legacyBuyItems[0];
+    const breakdown = holidayBuyBreakdownLines({
+      year1Subtotal: buyOption.subtotal,
+      year2LaborTotal,
+    });
+    lineItems = lineItems.flatMap((item) =>
+      item === legacyItem
+        ? breakdown.map((line, index) => ({
+            optionId: buyOption.id,
+            name: line.name,
+            description: line.description,
+            quantity: 1,
+            unitPrice: line.total,
+            unit: "each",
+            total: line.total,
+            sortOrder: index,
+            itemType: line.itemType,
+          }))
+        : [item]
+    );
+  }
 
   const discounts = (estimate.discounts ?? []).map((d) => ({
     optionId: d.optionId ?? null,

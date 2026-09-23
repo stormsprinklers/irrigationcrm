@@ -4,7 +4,12 @@ import { computeEstimateExpiry } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { loadHolidayPriceLookup } from "./catalog";
-import { computeHolidayQuotePricing, holidayCustomerPackages, holidayOptionSummary } from "./pricing";
+import {
+  computeHolidayQuotePricing,
+  holidayBuyBreakdownLines,
+  holidayCustomerPackages,
+  holidayOptionSummary,
+} from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
 import {
   HOLIDAY_PREVIEW_DISCLAIMER,
@@ -124,19 +129,39 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: quote.previewImageUrl,
       },
     });
-    await prisma.estimateLineItem.create({
-      data: {
-        estimateId: estimate.id,
-        optionId: option.id,
-        name: pack.label,
-        description: pack.tagline,
-        quantity: 1,
-        unitPrice: detail.subtotal,
-        unit: "each",
-        total: detail.subtotal,
-        sortOrder: 0,
-      },
-    });
+    if (key === "buy") {
+      const breakdown = holidayBuyBreakdownLines({
+        year1Subtotal: detail.subtotal,
+        year2LaborTotal: priced.reinstallTotal,
+      });
+      await prisma.estimateLineItem.createMany({
+        data: breakdown.map((line, index) => ({
+          estimateId: estimate.id,
+          optionId: option.id,
+          name: line.name,
+          description: line.description,
+          quantity: 1,
+          unitPrice: line.total,
+          unit: "each",
+          total: line.total,
+          sortOrder: index,
+        })),
+      });
+    } else {
+      await prisma.estimateLineItem.create({
+        data: {
+          estimateId: estimate.id,
+          optionId: option.id,
+          name: pack.label,
+          description: pack.tagline,
+          quantity: 1,
+          unitPrice: detail.subtotal,
+          unit: "each",
+          total: detail.subtotal,
+          sortOrder: 0,
+        },
+      });
+    }
     if (detail.discountTotal > 0 && adjustment) {
       await prisma.discount.create({
         data: {

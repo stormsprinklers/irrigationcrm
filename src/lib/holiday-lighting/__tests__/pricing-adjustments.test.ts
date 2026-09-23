@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeHolidayQuotePricing } from "../pricing";
+import { computeHolidayQuotePricing, holidayBuyBreakdownLines } from "../pricing";
 import { DEFAULT_HOLIDAY_CATALOG, parseHolidaySelections } from "../types";
 
 const style = DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!;
@@ -38,4 +38,20 @@ test("discounts cannot reduce an option below zero", () => {
   const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
   assert.equal(result.optionDetails.buy.discountTotal, 20);
   assert.equal(result.year1Total, 0);
+});
+
+test("buy breakdown treats the Year 2 cost as labor and the remainder as parts", () => {
+  const lines = holidayBuyBreakdownLines({
+    year1Subtotal: 1_250,
+    year2LaborTotal: 475,
+  });
+  assert.deepEqual(
+    lines.map(({ name, total }) => ({ name, total })),
+    [
+      { name: "Parts", total: 775 },
+      { name: "Labor (Year 2 cost)", total: 475 },
+    ]
+  );
+  assert.equal(lines.reduce((sum, line) => sum + line.total, 0), 1_250);
+  assert.doesNotMatch(lines.map((line) => `${line.name} ${line.description}`).join(" "), /per foot|\/ft/i);
 });

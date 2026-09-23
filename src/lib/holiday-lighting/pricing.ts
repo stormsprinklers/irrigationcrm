@@ -203,6 +203,28 @@ function formatHolidayMoney(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
 
+export function holidayBuyBreakdownLines(params: {
+  year1Subtotal: number;
+  year2LaborTotal: number;
+}) {
+  const laborTotal = money(Math.max(0, params.year2LaborTotal));
+  const partsTotal = money(Math.max(0, params.year1Subtotal) - laborTotal);
+  return [
+    {
+      name: "Parts",
+      description: "Customer-owned holiday lighting and materials.",
+      total: partsTotal,
+      itemType: "PRODUCT" as const,
+    },
+    {
+      name: "Labor (Year 2 cost)",
+      description: "Installation and take-down labor. This same amount is the Year 2 service cost.",
+      total: laborTotal,
+      itemType: "SERVICE" as const,
+    },
+  ];
+}
+
 export const HOLIDAY_BUY_DETAIL =
   "Purchasing lights front-loads the cost, but allows you to own the lights so you pay less in future years. This includes installation and take-down as well as any bulb replacements during the season.";
 
