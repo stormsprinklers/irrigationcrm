@@ -81,6 +81,38 @@ async function ensureVehicleNotesColumn() {
   }
 }
 
+/**
+ * Introduce the estimate deposit threshold and move companies that still use
+ * the legacy untouched deposit defaults to the new 50%-over-$999 policy.
+ * The settings are only changed when the threshold column is first added, so
+ * later administrator edits are preserved on subsequent deploys.
+ */
+async function ensureEstimateDepositThresholds() {
+  const companyHasThreshold = await columnExists("Company", "estimateDepositThreshold");
+  if (!companyHasThreshold) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Company" ADD COLUMN "estimateDepositThreshold" DECIMAL(10,2) NOT NULL DEFAULT 999`
+    );
+    const updated = await prisma.$executeRawUnsafe(`
+      UPDATE "Company"
+      SET "estimateDepositRequired" = true,
+          "estimateDepositType" = 'PERCENT'::"DepositType",
+          "estimateDepositAmount" = 50
+      WHERE "estimateDepositRequired" = false
+        AND "estimateDepositType" IS NULL
+        AND "estimateDepositAmount" IS NULL
+    `);
+    console.log(`Enabled default estimate deposits (${updated} companies)`);
+  }
+
+  if (!(await columnExists("Estimate", "depositThreshold"))) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Estimate" ADD COLUMN "depositThreshold" DECIMAL(10,2) NOT NULL DEFAULT 999`
+    );
+    console.log('Added "Estimate"."depositThreshold" column');
+  }
+}
+
 async function isColumnNullable(table: string, column: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<{ is_nullable: string }[]>`
     SELECT is_nullable
@@ -171,6 +203,11 @@ async function main() {
     await ensureVehicleNotesColumn();
   } catch (err) {
     console.warn("Vehicle notes column ensure skipped:", err);
+  }
+  try {
+    await ensureEstimateDepositThresholds();
+  } catch (err) {
+    console.warn("Estimate deposit threshold ensure skipped:", err);
   }
 }
 

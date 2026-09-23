@@ -12,6 +12,7 @@ import {
   Copy,
   FileText,
   Loader2,
+  Pencil,
   Plus,
   Presentation,
   Send,
@@ -232,6 +233,9 @@ export function EstimateDetail({ estimateId }: Props) {
   const [loading, setLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteBody, setEditNoteBody] = useState("");
+  const [noteActionId, setNoteActionId] = useState<string | null>(null);
   const [discountLabel, setDiscountLabel] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
@@ -370,6 +374,52 @@ export function EstimateDetail({ estimateId }: Props) {
     }
     setNoteBody("");
     setEstimate(await res.json());
+  }
+
+  async function updateNote(noteId: string) {
+    const trimmed = editNoteBody.trim();
+    if (!trimmed) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId, body: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update note");
+      setEstimate(data as EstimateData);
+      setEditingNoteId(null);
+      setEditNoteBody("");
+      toast.success("Note updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update note");
+    } finally {
+      setNoteActionId(null);
+    }
+  }
+
+  async function removeNote(noteId: string) {
+    if (!window.confirm("Delete this note?")) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(
+        `/api/estimates/${estimateId}/notes?noteId=${encodeURIComponent(noteId)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete note");
+      setEstimate(data as EstimateData);
+      if (editingNoteId === noteId) {
+        setEditingNoteId(null);
+        setEditNoteBody("");
+      }
+      toast.success("Note deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete note");
+    } finally {
+      setNoteActionId(null);
+    }
   }
 
   async function uploadAttachment(file: File) {
@@ -961,10 +1011,72 @@ export function EstimateDetail({ estimateId }: Props) {
               </form>
               {estimate.notes.map((note) => (
                 <div key={note.id} className="rounded-md border p-3 text-sm">
-                  <p>{note.body}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {note.author?.name ?? "Unknown"} · {format(new Date(note.createdAt), "MMM d, yyyy h:mm a")}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {note.author?.name ?? "Unknown"} ·{" "}
+                      {format(new Date(note.createdAt), "MMM d, yyyy h:mm a")}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label="Edit note"
+                        disabled={noteActionId === note.id}
+                        onClick={() => {
+                          setEditingNoteId(note.id);
+                          setEditNoteBody(note.body);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        aria-label="Delete note"
+                        disabled={noteActionId === note.id}
+                        onClick={() => void removeNote(note.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  {editingNoteId === note.id ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        value={editNoteBody}
+                        onChange={(event) => setEditNoteBody(event.target.value)}
+                        rows={3}
+                        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setEditNoteBody("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!editNoteBody.trim() || noteActionId === note.id}
+                          onClick={() => void updateNote(note.id)}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 whitespace-pre-wrap">{note.body}</p>
+                  )}
                 </div>
               ))}
             </CardContent>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EstimateStatus, IntegrationType, DepositType, Prisma } from "@prisma/client";
+import { EstimateStatus, IntegrationType, Prisma } from "@prisma/client";
 import { authenticateIntegration, isIntegrationContext } from "@/lib/integrations/auth";
 import { uploadIntegrationAttachment } from "@/lib/integrations/attachments";
 import { logIntegrationAudit } from "@/lib/integrations/audit";
@@ -95,9 +95,10 @@ export async function POST(request: NextRequest) {
         estimateNumber,
         status,
         expiresAt,
-        depositRequired: true,
-        depositType: DepositType.PERCENT,
-        depositAmount: 50,
+        depositRequired: company.estimateDepositRequired,
+        depositType: company.estimateDepositType,
+        depositAmount: company.estimateDepositAmount,
+        depositThreshold: company.estimateDepositThreshold,
         designProjectId: input.designProjectId ?? null,
         designVersionId: input.designVersionId ?? null,
         quoteTier: input.quoteTier ?? "STANDARD",

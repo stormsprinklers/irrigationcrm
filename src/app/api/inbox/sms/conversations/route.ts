@@ -186,7 +186,9 @@ export async function GET(request: NextRequest) {
         },
       });
     }
-    if (scope === Scope.EXTERNAL && folder === "open") {
+    // Searching from Open or General searches the full non-spam SMS inbox so a
+    // customer can be found even when their workflow folder differs from the active tab.
+    if (scope === Scope.EXTERNAL && folder === "open" && !search) {
       and.push({
         OR: [
           { smsOpen: true },
@@ -240,6 +242,9 @@ export async function GET(request: NextRequest) {
       include: {
         customer: true,
         messages: {
+          where: {
+            NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+          },
           orderBy: { sentAt: "desc" },
           take: 1,
           include: { media: true },
@@ -290,6 +295,10 @@ export async function GET(request: NextRequest) {
         customerId,
         customer: nextCustomer,
         unreadCount: _count.messages,
+        needsResponse:
+          (conversation.smsOpen === true ||
+            (conversation.smsOpen === null && _count.messages > 0)) &&
+          conversation.messages[0]?.direction === MessageDirection.INBOUND,
       });
     }
 

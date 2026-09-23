@@ -9,6 +9,7 @@ const estimateSettingsSelect = {
   estimateDepositRequired: true,
   estimateDepositType: true,
   estimateDepositAmount: true,
+  estimateDepositThreshold: true,
   deferredVisitDepositThreshold: true,
   deferredVisitDepositPercent: true,
   estimateWarrantyText: true,
@@ -53,6 +54,14 @@ export async function PATCH(request: NextRequest) {
           : {}),
         ...(body.estimateDepositAmount !== undefined
           ? { estimateDepositAmount: body.estimateDepositAmount ?? null }
+          : {}),
+        ...(body.estimateDepositThreshold !== undefined
+          ? {
+              estimateDepositThreshold: Math.max(
+                0,
+                Number(body.estimateDepositThreshold)
+              ),
+            }
           : {}),
         ...(body.deferredVisitDepositThreshold !== undefined
           ? {

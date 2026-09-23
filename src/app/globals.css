@@ -268,7 +268,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .crm-page-enter {
-    animation: crm-page-enter 180ms ease-out both;
+    animation: crm-page-enter 180ms ease-out;
   }
 }
 

@@ -54,3 +54,49 @@ export async function POST(request: NextRequest, { params }: Params) {
     return unauthorizedResponse();
   }
 }
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    const noteId = typeof body.noteId === "string" ? body.noteId : "";
+    const noteBody = typeof body.body === "string" ? body.body.trim() : "";
+    if (!noteId) return badRequestResponse("Note id is required");
+    if (!noteBody) return badRequestResponse("Note body is required");
+
+    const note = await prisma.estimateNote.findFirst({
+      where: { id: noteId, estimateId: id, estimate: { companyId: user.companyId } },
+    });
+    if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    await prisma.estimateNote.update({
+      where: { id: note.id },
+      data: { body: noteBody },
+    });
+    const updated = await getEstimateForCompany(user.companyId, id);
+    return NextResponse.json(updated);
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const noteId = request.nextUrl.searchParams.get("noteId");
+    if (!noteId) return badRequestResponse("Note id is required");
+
+    const result = await prisma.estimateNote.deleteMany({
+      where: { id: noteId, estimateId: id, estimate: { companyId: user.companyId } },
+    });
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const updated = await getEstimateForCompany(user.companyId, id);
+    return NextResponse.json(updated);
+  } catch {
+    return unauthorizedResponse();
+  }
+}

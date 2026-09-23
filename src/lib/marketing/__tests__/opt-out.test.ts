@@ -53,15 +53,15 @@ test("STOP and START match only when they are the whole message", () => {
   assert.equal(isExactSmsStart("start again"), false);
 });
 
-test("STOP and START auto-replies mention the company and the other keyword", () => {
-  const stop = marketingSmsStopReply("Storm Sprinklers");
-  const start = marketingSmsStartReply("Storm Sprinklers");
-  assert.match(stop, /Storm Sprinklers/);
-  assert.match(stop, /opted out/i);
-  assert.match(stop, /START/);
-  assert.match(start, /Storm Sprinklers/);
-  assert.match(start, /opted in/i);
-  assert.match(start, /STOP/);
+test("STOP and START auto-replies use the company-branded confirmation copy", () => {
+  assert.equal(
+    marketingSmsStopReply("Storm Sprinklers"),
+    "Storm Sprinklers: You have unsubscribed and will no longer receive messages, including appointment reminders. Reply START at any time to resubscribe."
+  );
+  assert.equal(
+    marketingSmsStartReply("Storm Sprinklers"),
+    "Storm Sprinklers: You have resubscribed and will receive messages, including appointment reminders. Reply STOP at any time to unsubscribe."
+  );
 });
 
 test("appendPlainUnsubscribeText adds a working unsubscribe URL", () => {

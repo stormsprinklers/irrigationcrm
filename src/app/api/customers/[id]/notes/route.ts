@@ -41,3 +41,48 @@ export async function POST(request: NextRequest, { params }: Params) {
     return unauthorizedResponse();
   }
 }
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    const noteId = typeof body.noteId === "string" ? body.noteId : "";
+    const noteBody = typeof body.body === "string" ? body.body.trim() : "";
+    if (!noteId) return badRequestResponse("Note id is required");
+    if (!noteBody) return badRequestResponse("Note body is required");
+
+    const note = await prisma.customerNote.findFirst({
+      where: { id: noteId, customerId: id, customer: { companyId: user.companyId } },
+    });
+    if (!note) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const updated = await prisma.customerNote.update({
+      where: { id: note.id },
+      data: { body: noteBody },
+      include: { author: { select: { id: true, name: true, photoUrl: true, color: true } } },
+    });
+    return NextResponse.json(updated);
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const noteId = request.nextUrl.searchParams.get("noteId");
+    if (!noteId) return badRequestResponse("Note id is required");
+
+    const result = await prisma.customerNote.deleteMany({
+      where: { id: noteId, customerId: id, customer: { companyId: user.companyId } },
+    });
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch {
+    return unauthorizedResponse();
+  }
+}

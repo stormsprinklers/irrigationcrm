@@ -79,6 +79,7 @@ export async function createEstimateFromHolidayQuote(params: {
       depositRequired: company.estimateDepositRequired,
       depositType: company.estimateDepositType,
       depositAmount: company.estimateDepositAmount,
+      depositThreshold: company.estimateDepositThreshold,
       designExportMetadata: {
         source: "holiday-lighting-quote",
         quoteId: quote.id,

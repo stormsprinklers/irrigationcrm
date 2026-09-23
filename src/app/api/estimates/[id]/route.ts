@@ -24,7 +24,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
 
     const { id } = await params;
-    const existing = await prisma.estimate.findFirst({ where: { id, companyId: user.companyId } });
+    const existing = await prisma.estimate.findFirst({
+      where: { id, companyId: user.companyId },
+      include: {
+        company: {
+          select: {
+            estimateDepositRequired: true,
+            estimateDepositType: true,
+            estimateDepositAmount: true,
+            estimateDepositThreshold: true,
+          },
+        },
+      },
+    });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
@@ -41,12 +53,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       data: {
         ...(newStatus !== undefined ? { status: newStatus } : {}),
+        ...(newStatus === EstimateStatus.SENT
+          ? {
+              sentAt: new Date(),
+              depositRequired: existing.company.estimateDepositRequired,
+              depositType: existing.company.estimateDepositType,
+              depositAmount: existing.company.estimateDepositAmount,
+              depositThreshold: existing.company.estimateDepositThreshold,
+            }
+          : {}),
         ...(body.propertyId !== undefined ? { propertyId: body.propertyId ?? null } : {}),
         ...(body.visitId !== undefined ? { visitId: body.visitId ?? null } : {}),
         ...(body.expiresAt !== undefined ? { expiresAt: body.expiresAt ? new Date(body.expiresAt) : null } : {}),
         ...(body.depositRequired !== undefined ? { depositRequired: Boolean(body.depositRequired) } : {}),
         ...(body.depositType !== undefined ? { depositType: body.depositType as DepositType | null } : {}),
         ...(body.depositAmount !== undefined ? { depositAmount: body.depositAmount ?? null } : {}),
+        ...(body.depositThreshold !== undefined
+          ? { depositThreshold: Math.max(0, Number(body.depositThreshold)) }
+          : {}),
         ...(body.installDurationDays !== undefined
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
           : {}),

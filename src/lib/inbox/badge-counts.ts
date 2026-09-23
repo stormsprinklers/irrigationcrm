@@ -45,8 +45,8 @@ export async function getInboxBadgeCounts(
     select: { phone: true },
   })).map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone));
 
-  const [sms, social, leads, missedLogs, googleReviews] = await Promise.all([
-    prisma.conversation.count({
+  const [smsCandidates, social, leads, missedLogs, googleReviews] = await Promise.all([
+    prisma.conversation.findMany({
       where: {
         companyId,
         channel: Channel.SMS,
@@ -58,6 +58,16 @@ export async function getInboxBadgeCounts(
             : []),
           openCustomerSmsWhere,
         ],
+      },
+      select: {
+        messages: {
+          where: {
+            NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+          },
+          orderBy: { sentAt: "desc" },
+          take: 1,
+          select: { direction: true },
+        },
       },
     }),
     field
@@ -90,6 +100,11 @@ export async function getInboxBadgeCounts(
     field ? Promise.resolve(0) : countGbpInboxAttention(companyId),
   ]);
 
+  // Open is the workflow folder; the badge is narrower and only signals a
+  // conversation whose most recent customer SMS still needs a team reply.
+  const sms = smsCandidates.filter(
+    (conversation) => conversation.messages[0]?.direction === MessageDirection.INBOUND
+  ).length;
   const missedCalls = field ? 0 : missedLogs.filter((log) => isMissedInboundLog(log)).length;
   const total = sms + social + leads + missedCalls + googleReviews;
 

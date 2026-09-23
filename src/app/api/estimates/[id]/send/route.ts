@@ -19,7 +19,17 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const estimate = await prisma.estimate.findFirst({
       where: { id, companyId: user.companyId },
-      include: { customer: true },
+      include: {
+        customer: true,
+        company: {
+          select: {
+            estimateDepositRequired: true,
+            estimateDepositType: true,
+            estimateDepositAmount: true,
+            estimateDepositThreshold: true,
+          },
+        },
+      },
     });
 
     if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -44,6 +54,17 @@ export async function POST(request: NextRequest, { params }: Params) {
       return badRequestResponse("Customer must have an email or phone to send estimate");
     }
 
+    // Snapshot the current company policy before rendering or sending customer documents.
+    await prisma.estimate.update({
+      where: { id },
+      data: {
+        depositRequired: estimate.company.estimateDepositRequired,
+        depositType: estimate.company.estimateDepositType,
+        depositAmount: estimate.company.estimateDepositAmount,
+        depositThreshold: estimate.company.estimateDepositThreshold,
+      },
+    });
+
     const result = await notifyEstimateViaTemplates(id, user.companyId, channel);
     if (!result.emailSent && !result.smsSent) {
       return NextResponse.json(
@@ -54,7 +75,10 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await prisma.estimate.update({
       where: { id },
-      data: { status: EstimateStatus.SENT, sentAt: new Date() },
+      data: {
+        status: EstimateStatus.SENT,
+        sentAt: new Date(),
+      },
     });
 
     void onEstimateSent(id, user.companyId).catch((err) =>

@@ -41,7 +41,7 @@ export async function createEstimateDepositCheckout(params: {
           create: [
             {
               name: "Installation deposit",
-              description: `50% deposit to book — estimate approval`,
+              description: "Deposit",
               quantity: 1,
               unitPrice: depositAmount,
               total: depositAmount,

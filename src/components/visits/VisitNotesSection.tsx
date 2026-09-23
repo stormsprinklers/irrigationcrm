@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,9 @@ export function VisitNotesSection({ visitId, customerId, notes, onUpdated }: Pro
   const [callOptions, setCallOptions] = useState<CallOption[]>([]);
   const [selectedCallId, setSelectedCallId] = useState("");
   const [loadingCalls, setLoadingCalls] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteBody, setEditNoteBody] = useState("");
+  const [noteActionId, setNoteActionId] = useState<string | null>(null);
 
   async function addNote(e: React.FormEvent) {
     e.preventDefault();
@@ -128,6 +132,52 @@ export function VisitNotesSection({ visitId, customerId, notes, onUpdated }: Pro
       toast.error(err instanceof Error ? err.message : "Failed to link call");
     } finally {
       setLinking(false);
+    }
+  }
+
+  async function updateNote(noteId: string) {
+    const trimmed = editNoteBody.trim();
+    if (!trimmed) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(`/api/visits/${visitId}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId, body: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update note");
+      setEditingNoteId(null);
+      setEditNoteBody("");
+      await onUpdated();
+      toast.success("Note updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update note");
+    } finally {
+      setNoteActionId(null);
+    }
+  }
+
+  async function removeNote(noteId: string) {
+    if (!window.confirm("Delete this note?")) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(
+        `/api/visits/${visitId}/notes?noteId=${encodeURIComponent(noteId)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete note");
+      if (editingNoteId === noteId) {
+        setEditingNoteId(null);
+        setEditNoteBody("");
+      }
+      await onUpdated();
+      toast.success("Note deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete note");
+    } finally {
+      setNoteActionId(null);
     }
   }
 
@@ -209,11 +259,72 @@ export function VisitNotesSection({ visitId, customerId, notes, onUpdated }: Pro
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{note.author.name}</span>
-                    <span>{new Date(note.createdAt).toLocaleString()}</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{note.author.name}</span>
+                      <span>{new Date(note.createdAt).toLocaleString()}</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label="Edit note"
+                        disabled={noteActionId === note.id}
+                        onClick={() => {
+                          setEditingNoteId(note.id);
+                          setEditNoteBody(note.body);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        aria-label="Delete note"
+                        disabled={noteActionId === note.id}
+                        onClick={() => void removeNote(note.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm whitespace-pre-wrap">{note.body}</p>
+                  {editingNoteId === note.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editNoteBody}
+                        onChange={(event) => setEditNoteBody(event.target.value)}
+                        rows={3}
+                        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setEditNoteBody("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!editNoteBody.trim() || noteActionId === note.id}
+                          onClick={() => void updateNote(note.id)}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{note.body}</p>
+                  )}
                   {note.callLog ? (
                     <div className="space-y-2 rounded-md border bg-muted/20 p-3 text-sm">
                       <p className="font-medium">

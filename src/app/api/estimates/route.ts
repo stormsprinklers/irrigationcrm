@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
         depositRequired: company.estimateDepositRequired,
         depositType: company.estimateDepositType,
         depositAmount: company.estimateDepositAmount,
+        depositThreshold: company.estimateDepositThreshold,
       },
     });
 

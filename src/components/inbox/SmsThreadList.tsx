@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Search } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { cn } from "@/lib/utils";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { formatSmsMessageTime } from "@/lib/inbox/message-time";
 import { isSmsNotDelivered } from "@/lib/inbox/sms-delivery";
 import type { CustomerTeamScope } from "@/lib/inbox/types";
 
@@ -18,6 +17,7 @@ type Conversation = {
   participantPhone?: string | null;
   title?: string | null;
   unreadCount?: number;
+  needsResponse?: boolean;
   customer?: { name: string; phone?: string | null; doNotService?: boolean } | null;
   messages: {
     body: string;
@@ -79,7 +79,7 @@ export function SmsThreadList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {scope === "customers" && folder === "general" ? (
+      {scope === "customers" && folder !== "spam" ? (
         <div className="shrink-0 border-b px-3 py-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -114,7 +114,7 @@ export function SmsThreadList({
           const latest = thread.messages[0];
           const latestNotDelivered =
             latest?.direction === "OUTBOUND" && isSmsNotDelivered(latest.deliveryStatus);
-          const unreadCount = thread.unreadCount ?? 0;
+          const needsResponse = thread.needsResponse === true;
 
           return (
             <li key={thread.id}>
@@ -123,8 +123,7 @@ export function SmsThreadList({
                 onClick={() => onSelect(thread.id)}
                 className={cn(
                   "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
-                  selectedId === thread.id && "bg-highlight",
-                  unreadCount > 0 && selectedId !== thread.id && "bg-primary/5"
+                  selectedId === thread.id && "bg-highlight"
                 )}
               >
                 <Avatar className="h-10 w-10">
@@ -133,51 +132,48 @@ export function SmsThreadList({
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  {thread.customer?.name ? (
-                    <>
-                      <CustomerNameWithBadge
-                        name={thread.customer.name}
-                        doNotService={thread.customer.doNotService}
-                        nameClassName={cn("truncate text-sm", unreadCount > 0 ? "font-bold" : "font-semibold")}
-                        className="max-w-full"
-                      />
-                      {displayPhone ? (
-                        <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {needsResponse ? (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-primary"
+                          role="img"
+                          aria-label="Needs reply"
+                          title="Needs reply"
+                        />
                       ) : null}
-                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
-                        {snippet}
-                      </p>
-                      {latestNotDelivered ? (
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
-                          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
-                          Not delivered
-                        </p>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-bold" : "font-semibold")}>
-                        {label}
-                      </p>
-                      <p className={cn("truncate text-sm", unreadCount > 0 ? "font-medium text-foreground" : "text-muted-foreground")}>
-                        {snippet}
-                      </p>
-                      {latestNotDelivered ? (
-                        <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
-                          <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
-                          Not delivered
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  {unreadCount > 0 ? <InboxCountOrb count={unreadCount} tone="unread" /> : null}
-                  {scope === "customers" && thread.participantPhone && (
-                    <Badge variant="outline" className="text-[10px]">
-                      SMS
-                    </Badge>
-                  )}
+                      {thread.customer?.name ? (
+                        <CustomerNameWithBadge
+                          name={thread.customer.name}
+                          doNotService={thread.customer.doNotService}
+                          nameClassName="truncate text-sm font-semibold"
+                          className="min-w-0 max-w-full"
+                        />
+                      ) : (
+                        <p className="truncate text-sm font-semibold">{label}</p>
+                      )}
+                    </div>
+                    {latest?.sentAt ? (
+                      <time
+                        dateTime={latest.sentAt}
+                        className="shrink-0 text-[11px] text-muted-foreground"
+                      >
+                        {formatSmsMessageTime(latest.sentAt)}
+                      </time>
+                    ) : null}
+                  </div>
+                  {thread.customer?.name && displayPhone ? (
+                    <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+                  ) : null}
+                  <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted-foreground">
+                    {snippet || "Media message"}
+                  </p>
+                  {latestNotDelivered ? (
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-destructive">
+                      <AlertCircle className="h-3 w-3 shrink-0" aria-hidden />
+                      Not delivered
+                    </p>
+                  ) : null}
                 </div>
               </button>
             </li>

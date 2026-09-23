@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, Trash2, Upload } from "lucide-react";
+import { FileText, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,9 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [noteBody, setNoteBody] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteBody, setEditNoteBody] = useState("");
+  const [noteActionId, setNoteActionId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -108,6 +111,52 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
     }
   }
 
+  async function updateNote(noteId: string) {
+    const trimmed = editNoteBody.trim();
+    if (!trimmed) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId, body: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update note");
+      setNotes((current) => current.map((note) => (note.id === noteId ? data : note)));
+      setEditingNoteId(null);
+      setEditNoteBody("");
+      toast.success("Note updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update note");
+    } finally {
+      setNoteActionId(null);
+    }
+  }
+
+  async function removeNote(noteId: string) {
+    if (!window.confirm("Delete this note?")) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/notes?noteId=${encodeURIComponent(noteId)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete note");
+      setNotes((current) => current.filter((note) => note.id !== noteId));
+      if (editingNoteId === noteId) {
+        setEditingNoteId(null);
+        setEditNoteBody("");
+      }
+      toast.success("Note deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete note");
+    } finally {
+      setNoteActionId(null);
+    }
+  }
+
   async function removeAttachment(attachmentId: string) {
     const res = await fetch(
       `/api/customers/${customerId}/attachments?attachmentId=${encodeURIComponent(attachmentId)}`,
@@ -153,12 +202,73 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
                       {getInitials(note.author.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{note.author.name}</span>
-                      <span>{new Date(note.createdAt).toLocaleString()}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{note.author.name}</span>
+                        <span>{new Date(note.createdAt).toLocaleString()}</span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label="Edit note"
+                          disabled={noteActionId === note.id}
+                          onClick={() => {
+                            setEditingNoteId(note.id);
+                            setEditNoteBody(note.body);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          aria-label="Delete note"
+                          disabled={noteActionId === note.id}
+                          onClick={() => void removeNote(note.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm">{note.body}</p>
+                    {editingNoteId === note.id ? (
+                      <div className="mt-2 space-y-2">
+                        <textarea
+                          value={editNoteBody}
+                          onChange={(event) => setEditNoteBody(event.target.value)}
+                          rows={3}
+                          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditingNoteId(null);
+                              setEditNoteBody("");
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={!editNoteBody.trim() || noteActionId === note.id}
+                            onClick={() => void updateNote(note.id)}
+                          >
+                            Save
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 whitespace-pre-wrap text-sm">{note.body}</p>
+                    )}
                   </div>
                 </div>
               ))}

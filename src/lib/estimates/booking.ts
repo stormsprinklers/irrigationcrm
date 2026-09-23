@@ -8,10 +8,13 @@ export function computeDepositAmount(estimate: {
   total: unknown;
   depositType: DepositType | null;
   depositAmount: unknown | null;
+  depositThreshold: unknown;
   depositRequired: boolean;
 }) {
   if (!estimate.depositRequired) return 0;
   const total = toNumber(estimate.total);
+  const threshold = Math.max(0, toNumber(estimate.depositThreshold));
+  if (total <= threshold) return 0;
   if (estimate.depositType === DepositType.PERCENT && estimate.depositAmount != null) {
     return Math.round(total * (toNumber(estimate.depositAmount) / 100) * 100) / 100;
   }

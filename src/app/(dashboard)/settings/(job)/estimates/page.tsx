@@ -13,6 +13,7 @@ type EstimateSettings = {
   estimateDepositRequired: boolean;
   estimateDepositType: "PERCENT" | "FIXED" | null;
   estimateDepositAmount: string | number | null;
+  estimateDepositThreshold: string | number;
   deferredVisitDepositThreshold: string | number;
   deferredVisitDepositPercent: string | number;
   estimateWarrantyText: string | null;
@@ -132,7 +133,29 @@ export default function SettingsEstimatesPage() {
               <label className="text-sm">Require deposit on estimates</label>
             </div>
             {settings.estimateDepositRequired && (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium">
+                    Require when total is over
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={Number(settings.estimateDepositThreshold ?? 999)}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        estimateDepositThreshold: e.target.value
+                          ? Number(e.target.value)
+                          : 0,
+                      })
+                    }
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Estimates at or below this amount do not require a deposit.
+                  </p>
+                </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium">Deposit type</label>
                   <select
@@ -150,10 +173,15 @@ export default function SettingsEstimatesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Deposit amount</label>
+                  <label className="mb-1 block text-sm font-medium">
+                    {settings.estimateDepositType === "PERCENT"
+                      ? "Deposit percent"
+                      : "Deposit amount"}
+                  </label>
                   <Input
                     type="number"
                     min={0}
+                    max={settings.estimateDepositType === "PERCENT" ? 100 : undefined}
                     step="0.01"
                     value={settings.estimateDepositAmount ?? ""}
                     onChange={(e) =>

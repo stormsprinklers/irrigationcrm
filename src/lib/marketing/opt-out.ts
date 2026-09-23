@@ -96,13 +96,16 @@ export async function optOutCustomerMarketingSms(params: {
 }) {
   await prisma.customer.updateMany({
     where: { id: params.customerId, companyId: params.companyId },
-    data: { marketingSmsOptOut: true, marketingEmailOptOut: true },
+    data: {
+      marketingSmsOptOut: true,
+      appointmentReminderSmsOptOut: true,
+    },
   });
   await unenrollCustomerFromCampaigns({
     customerId: params.customerId,
     companyId: params.companyId,
-    channel: "ALL",
-    reason: "STOP reply — opted out of marketing",
+    channel: CampaignChannel.SMS,
+    reason: "STOP reply — opted out of SMS",
   });
 }
 
@@ -112,6 +115,9 @@ export async function optInCustomerMarketingSms(params: {
 }) {
   await prisma.customer.updateMany({
     where: { id: params.customerId, companyId: params.companyId, doNotService: false },
-    data: { marketingSmsOptOut: false },
+    data: {
+      marketingSmsOptOut: false,
+      appointmentReminderSmsOptOut: false,
+    },
   });
 }

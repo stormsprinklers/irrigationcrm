@@ -67,6 +67,7 @@ export function serializeEstimate(
     depositRequired: estimate.depositRequired,
     depositType: estimate.depositType,
     depositAmount: estimate.depositAmount != null ? toNumber(estimate.depositAmount) : null,
+    depositThreshold: toNumber(estimate.depositThreshold),
     signatureBlobUrl: estimate.signatureBlobUrl,
     signedAt: estimate.signedAt?.toISOString() ?? null,
     approvedAt: estimate.approvedAt?.toISOString() ?? null,

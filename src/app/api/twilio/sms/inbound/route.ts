@@ -69,10 +69,14 @@ export async function POST(request: NextRequest) {
     const company = inboundLine.company;
 
     const normalizedFrom = normalizePhone(from);
-    const companyName = company.name?.trim() || "us";
+    const companyName = company.name?.trim() || "Company";
     const customer = await findCustomerByPhone(company.id, normalizedFrom);
-    const isStop = isExactSmsStop(body);
-    const isStart = isExactSmsStart(body);
+    const optOutType = params.OptOutType?.trim().toUpperCase();
+    const isStop = optOutType === "STOP" || isExactSmsStop(body);
+    const isStart = optOutType === "START" || isExactSmsStart(body);
+    // Advanced Opt-Out has already sent Twilio's configured confirmation by the
+    // time it adds OptOutType to this webhook, so do not send a second reply.
+    const twilioHandledKeyword = optOutType === "STOP" || optOutType === "START";
     let keywordReply: string | null = null;
 
     if (isStop) {
@@ -96,34 +100,22 @@ export async function POST(request: NextRequest) {
     }
 
     if (isStart) {
-      const manualBlock = await prisma.blockedContact.findFirst({
+      await restoreMarketingPhone(company.id, normalizedFrom);
+      if (customer) {
+        await optInCustomerMarketingSms({
+          customerId: customer.id,
+          companyId: company.id,
+        });
+      }
+      // Preserve manual spam blocks; this only cleans up the legacy STOP block.
+      await prisma.blockedContact.deleteMany({
         where: {
           companyId: company.id,
           phone: normalizedFrom,
-          OR: [
-            { reason: null },
-            { reason: { not: "SMS STOP opt-out" } },
-          ],
+          reason: "SMS STOP opt-out",
         },
-        select: { id: true },
       });
-      if (!manualBlock) {
-        await restoreMarketingPhone(company.id, normalizedFrom);
-        if (customer) {
-          await optInCustomerMarketingSms({
-            customerId: customer.id,
-            companyId: company.id,
-          });
-        }
-        await prisma.blockedContact.deleteMany({
-          where: {
-            companyId: company.id,
-            phone: normalizedFrom,
-            reason: "SMS STOP opt-out",
-          },
-        });
-        keywordReply = marketingSmsStartReply(companyName);
-      }
+      keywordReply = marketingSmsStartReply(companyName);
     }
 
     const blocked = await isContactBlocked(company.id, normalizedFrom, null);
@@ -230,13 +222,30 @@ export async function POST(request: NextRequest) {
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
-        smsOpen: blocked ? false : true,
+        // STOP/START are resolved automatically, so they belong in General and
+        // must not count as conversations awaiting a staff response.
+        smsOpen: blocked || isStop || isStart ? false : true,
         ...(customer && !conversation.customerId ? { customerId: customer.id } : {}),
       },
     });
 
+    if (keywordReply && !twilioHandledKeyword) {
+      const automaticReply = await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          direction: MessageDirection.OUTBOUND,
+          body: keywordReply,
+          deliveryStatus: "sent",
+        },
+      });
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: automaticReply.sentAt, smsOpen: false },
+      });
+    }
+
     // First-touch attribution from dialed tracking number / LSA caller match
-    if (!blocked) void (async () => {
+    if (!blocked && !isStop && !isStart) void (async () => {
       try {
         const { AttributionFirstTouchMethod } = await import("@prisma/client");
         const {
@@ -305,7 +314,7 @@ export async function POST(request: NextRequest) {
       }
     })();
 
-    if (!blocked) notifyInboundSms({
+    if (!blocked && !isStop && !isStart) notifyInboundSms({
       companyId: company.id,
       conversationId: conversation.id,
       fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
@@ -339,7 +348,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return keywordReply
+    return keywordReply && !twilioHandledKeyword
       ? twilioSmsReply(keywordReply)
       : NextResponse.json({ ok: true });
   } catch (error) {

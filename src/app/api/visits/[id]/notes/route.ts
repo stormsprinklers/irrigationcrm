@@ -166,3 +166,66 @@ export async function POST(request: NextRequest, { params }: Params) {
     return unauthorizedResponse();
   }
 }
+
+export async function PATCH(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
+
+    const body = await request.json().catch(() => ({}));
+    const noteId = typeof body.noteId === "string" ? body.noteId : "";
+    const noteBody = typeof body.body === "string" ? body.body.trim() : "";
+    if (!noteId) return badRequestResponse("Note id is required");
+    if (!noteBody) return badRequestResponse("Note body is required");
+
+    const existing = await prisma.visitNote.findFirst({
+      where: { id: noteId, visitId: id, visit: { companyId: user.companyId } },
+    });
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const note = await prisma.visitNote.update({
+      where: { id: existing.id },
+      data: { body: noteBody },
+      include: noteInclude,
+    });
+    return NextResponse.json(serializeNote(note));
+  } catch {
+    return unauthorizedResponse();
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const access = await requireFieldVisitAccess(user, id);
+    if (!access.ok) return access.response;
+    const noteId = request.nextUrl.searchParams.get("noteId");
+    if (!noteId) return badRequestResponse("Note id is required");
+
+    const existing = await prisma.visitNote.findFirst({
+      where: { id: noteId, visitId: id, visit: { companyId: user.companyId } },
+      select: { id: true, callLogId: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    await prisma.$transaction([
+      prisma.visitNote.delete({ where: { id: existing.id } }),
+      ...(existing.callLogId
+        ? [
+            prisma.callLog.updateMany({
+              where: { id: existing.callLogId, visitId: id, companyId: user.companyId },
+              data: { visitId: null },
+            }),
+          ]
+        : []),
+    ]);
+    return NextResponse.json({ ok: true });
+  } catch {
+    return unauthorizedResponse();
+  }
+}

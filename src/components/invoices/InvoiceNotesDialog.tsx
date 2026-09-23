@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquareText, X } from "lucide-react";
+import { MessageSquareText, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
@@ -35,10 +35,15 @@ export function InvoiceNotesDialog({ invoiceId, invoiceNumber, open, onClose }: 
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [noteActionId, setNoteActionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setBody("");
+    setEditingNoteId(null);
+    setEditBody("");
     setLoading(true);
     fetch(`/api/invoices/${invoiceId}/notes`)
       .then(async (res) => {
@@ -71,6 +76,52 @@ export function InvoiceNotesDialog({ invoiceId, invoiceNumber, open, onClose }: 
       toast.error(error instanceof Error ? error.message : "Failed to save private note");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function updateNote(noteId: string) {
+    const trimmed = editBody.trim();
+    if (!trimmed) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ noteId, body: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to update private note");
+      setNotes((current) => current.map((note) => (note.id === noteId ? data : note)));
+      setEditingNoteId(null);
+      setEditBody("");
+      toast.success("Private invoice note updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update private note");
+    } finally {
+      setNoteActionId(null);
+    }
+  }
+
+  async function removeNote(noteId: string) {
+    if (!window.confirm("Delete this private invoice note?")) return;
+    setNoteActionId(noteId);
+    try {
+      const res = await fetch(
+        `/api/invoices/${invoiceId}/notes?noteId=${encodeURIComponent(noteId)}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete private note");
+      setNotes((current) => current.filter((note) => note.id !== noteId));
+      if (editingNoteId === noteId) {
+        setEditingNoteId(null);
+        setEditBody("");
+      }
+      toast.success("Private invoice note deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete private note");
+    } finally {
+      setNoteActionId(null);
     }
   }
 
@@ -130,12 +181,78 @@ export function InvoiceNotesDialog({ invoiceId, invoiceNumber, open, onClose }: 
             <div className="space-y-3">
               {notes.map((note) => (
                 <article key={note.id} className="rounded-md border bg-muted/20 p-3">
-                  <p className="whitespace-pre-wrap text-sm">{note.body}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {note.automated ? "Automated follow-up" : note.author?.name ?? "Office staff"}
-                    {" · "}
-                    {formatNoteTime(note.createdAt)}
-                  </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {note.automated
+                        ? "Automated follow-up"
+                        : note.author?.name ?? "Office staff"}
+                      {" · "}
+                      {formatNoteTime(note.createdAt)}
+                    </p>
+                    {!note.automated ? (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label="Edit private note"
+                          disabled={noteActionId === note.id}
+                          onClick={() => {
+                            setEditingNoteId(note.id);
+                            setEditBody(note.body);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          aria-label="Delete private note"
+                          disabled={noteActionId === note.id}
+                          onClick={() => void removeNote(note.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {editingNoteId === note.id ? (
+                    <div className="mt-2 space-y-2">
+                      <textarea
+                        value={editBody}
+                        onChange={(event) => setEditBody(event.target.value)}
+                        maxLength={4_000}
+                        rows={3}
+                        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingNoteId(null);
+                            setEditBody("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!editBody.trim() || noteActionId === note.id}
+                          onClick={() => void updateNote(note.id)}
+                        >
+                          Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-2 whitespace-pre-wrap text-sm">{note.body}</p>
+                  )}
                 </article>
               ))}
             </div>

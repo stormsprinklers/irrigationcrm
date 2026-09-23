@@ -25,6 +25,7 @@ export type EstimateDTO = {
   depositRequired: boolean;
   depositType: string | null;
   depositAmount: number | null;
+  depositThreshold: number;
   signatureBlobUrl: string | null;
   signedAt: string | null;
   approvedAt: string | null;

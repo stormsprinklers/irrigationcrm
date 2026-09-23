@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
-import { Send, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -78,6 +78,8 @@ function ComposeBar({
   placeholder?: string;
   multiline?: boolean;
 }) {
+  const submitDisabled = sending || !canSend || (!body.trim() && !attachments.length);
+
   return (
     <form
       onSubmit={onSubmit}
@@ -96,16 +98,26 @@ function ComposeBar({
           placeholder={placeholder}
           value={body}
           onChange={onBodyChange}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.ctrlKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (!submitDisabled) event.currentTarget.form?.requestSubmit();
+          }}
         />
       ) : (
         <MergeTokenTextField multiline={false}
           placeholder={placeholder}
           value={body}
           onChange={onBodyChange}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.ctrlKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            if (!submitDisabled) event.currentTarget.form?.requestSubmit();
+          }}
           className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
-      <Button type="submit" size="icon" className="shrink-0" disabled={sending || !canSend || (!body.trim() && !attachments.length)}>
+      <Button type="submit" size="icon" className="shrink-0" disabled={submitDisabled}>
         <Send className="h-4 w-4" />
       </Button>
       </div>
@@ -294,6 +306,7 @@ export function SmsMessagePane({
     setAttachments([]);
     setRecipient(null);
     toast.success("Message sent");
+    notifyInboxBadgesChanged();
     onSent?.(data.conversation.id);
   }
 
@@ -475,27 +488,47 @@ export function SmsMessagePane({
                   >
                     <div
                       className={cn(
-                        "rounded-2xl px-4 py-2 text-sm",
+                        "select-text rounded-2xl px-4 py-2 text-sm",
                         msg.direction === "OUTBOUND"
                           ? "bg-primary text-primary-foreground"
                           : "border border-border bg-muted text-foreground shadow-sm"
                       )}
                     >
                       {msg.body && msg.body !== "[Media message]" ? (
-                        <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                        <p className="select-text whitespace-pre-wrap break-words">{msg.body}</p>
                       ) : null}
                       <MessageMediaGallery media={msg.media ?? []} />
-                      <p
+                      <div
                         className={cn(
-                          "mt-1 text-[10px] leading-snug",
+                          "mt-1 flex items-center gap-1 text-[10px] leading-snug",
                           msg.direction === "OUTBOUND"
-                            ? "text-right text-primary-foreground/70"
+                            ? "justify-end text-primary-foreground/70"
                             : "text-muted-foreground"
                         )}
                       >
-                        <span className="font-medium">{attribution}</span>
-                        <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
-                      </p>
+                        <p>
+                          <span className="font-medium">{attribution}</span>
+                          <span className="opacity-70"> · {formatSmsMessageTime(msg.sentAt)}</span>
+                        </p>
+                        {msg.body && msg.body !== "[Media message]" ? (
+                          <button
+                            type="button"
+                            className="rounded p-0.5 opacity-70 hover:opacity-100"
+                            aria-label="Copy message"
+                            title="Copy message"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(msg.body);
+                                toast.success("Message copied");
+                              } catch {
+                                toast.error("Could not copy message");
+                              }
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
 
                     {msg.direction === "OUTBOUND" && isSmsNotDelivered(msg.deliveryStatus) ? (

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { ArrowLeft, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permiss
 import { marketingConsentLabel } from "@/lib/marketing/opt-out";
 import { canViewMaintenancePlansNav } from "@/lib/settings/access";
 import { useIrrigationFeatures, useHolidayLightingFeatures, useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
-import { buildGoogleMapsUrl, formatCustomerAddress, pickBestAddressForMap } from "@/lib/customers/maps";
+import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps";
 import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
@@ -52,7 +52,6 @@ import { PropertyIrrigationWizard } from "@/components/customers/PropertyIrrigat
 import { PropertyIrrigationSummary } from "@/components/customers/PropertyIrrigationSummary";
 import { formatCurrency } from "@/lib/maintenance-plans/format";
 import { CustomerMaintenancePlansTab } from "@/components/customers/CustomerMaintenancePlansTab";
-import { nativeSelectClassName } from "@/components/ui/native-select";
 import type { EnrollmentDTO } from "@/lib/maintenance-plans/types";
 import type { CustomerDTO, CustomerPhoneDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 import { createDraftVisit } from "@/lib/schedule/create-draft";
@@ -66,6 +65,7 @@ const EMPTY_PROPERTY_FORM = {
   zip: "",
   latitude: null as number | null,
   longitude: null as number | null,
+  isPrimary: false,
 };
 
 type Props = { customerId: string };
@@ -180,7 +180,6 @@ export function CustomerProfile({ customerId }: Props) {
   const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const validTabs = useMemo(() => new Set([
     "profile",
-    "properties",
     "visits",
     "calls",
     "estimates",
@@ -190,13 +189,11 @@ export function CustomerProfile({ customerId }: Props) {
   const tabFromUrl = searchParams.get("tab");
   const propertyIdFromUrl = searchParams.get("propertyId");
   const initialTab =
-    tabFromUrl === "notes"
+    tabFromUrl === "notes" || tabFromUrl === "properties" || propertyIdFromUrl
       ? "profile"
       : tabFromUrl && validTabs.has(tabFromUrl)
         ? tabFromUrl
-        : propertyIdFromUrl
-          ? "properties"
-          : "profile";
+        : "profile";
   const [activeTab, setActiveTab] = useState(initialTab);
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
@@ -205,6 +202,7 @@ export function CustomerProfile({ customerId }: Props) {
   const canRefund = canIssueRefunds(userRole);
   const canManagePayments =
     userRole === "CSR" || userRole === "MANAGER" || userRole === "ADMIN";
+  const canManageProperties = userRole !== "TECH" && userRole !== "INSTALLER";
   const showMaintenance = maintenanceEnabled && canViewMaintenancePlansNav(userRole);
   const [customer, setCustomer] = useState<CustomerDTO | null>(null);
   const [properties, setProperties] = useState<CustomerPropertyDTO[]>([]);
@@ -257,8 +255,15 @@ export function CustomerProfile({ customerId }: Props) {
   const [newProperty, setNewProperty] = useState(EMPTY_PROPERTY_FORM);
   const [addPropertyOpen, setAddPropertyOpen] = useState(false);
   const [addingProperty, setAddingProperty] = useState(false);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
-  const [propertySearch, setPropertySearch] = useState("");
+  const [editingProperty, setEditingProperty] = useState<CustomerPropertyDTO | null>(null);
+  const [propertyDraft, setPropertyDraft] = useState(EMPTY_PROPERTY_FORM);
+  const [savingProperty, setSavingProperty] = useState(false);
+  const [propertyPendingDelete, setPropertyPendingDelete] =
+    useState<CustomerPropertyDTO | null>(null);
+  const [deletingProperty, setDeletingProperty] = useState(false);
+  const [expandedPropertyIds, setExpandedPropertyIds] = useState<Set<string>>(
+    () => new Set(propertyIdFromUrl ? [propertyIdFromUrl] : [])
+  );
   const [newPhone, setNewPhone] = useState({ phone: "", note: "" });
   const [editMode, setEditMode] = useState(false);
   const [draftCustomer, setDraftCustomer] = useState<CustomerDTO | null>(null);
@@ -278,30 +283,32 @@ export function CustomerProfile({ customerId }: Props) {
       } else {
         setActiveTab(tabFromUrl);
       }
-    } else if (propertyIdFromUrl) {
-      setActiveTab("properties");
+    } else if (tabFromUrl === "properties" || propertyIdFromUrl) {
+      setActiveTab("profile");
     }
   }, [tabFromUrl, propertyIdFromUrl, canViewInvoices, validTabs]);
 
   useEffect(() => {
-    if (activeTab !== "properties" || !propertyIdFromUrl || loading) return;
-    setSelectedPropertyId(propertyIdFromUrl);
-  }, [activeTab, propertyIdFromUrl, loading]);
-
-  useEffect(() => {
-    if (!properties.length) {
-      setSelectedPropertyId(null);
+    if (!propertyIdFromUrl || loading || !properties.some((p) => p.id === propertyIdFromUrl)) {
       return;
     }
-    setSelectedPropertyId((prev) => {
-      if (prev && properties.some((p) => p.id === prev)) return prev;
-      if (propertyIdFromUrl && properties.some((p) => p.id === propertyIdFromUrl)) {
-        return propertyIdFromUrl;
-      }
-      const primary = properties.find((p) => p.isPrimary);
-      return primary?.id ?? properties[0].id;
+    setExpandedPropertyIds((current) => new Set(current).add(propertyIdFromUrl));
+    window.requestAnimationFrame(() => {
+      document.getElementById(`property-${propertyIdFromUrl}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
     });
-  }, [properties, propertyIdFromUrl]);
+  }, [propertyIdFromUrl, properties, loading]);
+
+  function setPropertyExpanded(propertyId: string, expanded: boolean) {
+    setExpandedPropertyIds((current) => {
+      const next = new Set(current);
+      if (expanded) next.add(propertyId);
+      else next.delete(propertyId);
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
@@ -438,13 +445,10 @@ export function CustomerProfile({ customerId }: Props) {
         zip: customer.zip,
       })
     : null;
-  const primaryProperty = properties.find((p) => p.isPrimary) ?? properties[0];
-  const mapLocation = pickBestAddressForMap(customer, properties);
-
   async function addProperty(e: React.FormEvent) {
     e.preventDefault();
     if (!newProperty.name.trim()) return;
-    const payload = { ...newProperty };
+    const payload = { ...newProperty, isPrimary: newProperty.isPrimary || properties.length === 0 };
     setAddingProperty(true);
     try {
       const res = await fetch(`/api/customers/${customerId}/properties`, {
@@ -456,7 +460,7 @@ export function CustomerProfile({ customerId }: Props) {
         toast.error("Failed to add property");
         return;
       }
-      const created = await res.json().catch(() => null);
+      await res.json().catch(() => null);
       setNewProperty(EMPTY_PROPERTY_FORM);
       setAddPropertyOpen(false);
       const propsRes = await fetch(`/api/customers/${customerId}/properties`);
@@ -464,12 +468,6 @@ export function CustomerProfile({ customerId }: Props) {
         const data = await propsRes.json();
         const list: CustomerPropertyDTO[] = Array.isArray(data) ? data : [];
         setProperties(list);
-        const nextId =
-          (created && typeof created.id === "string" && created.id) ||
-          list.find((p) => p.name === payload.name)?.id ||
-          list[list.length - 1]?.id ||
-          null;
-        if (nextId) setSelectedPropertyId(nextId);
       }
       toast.success("Property added");
     } finally {
@@ -477,22 +475,81 @@ export function CustomerProfile({ customerId }: Props) {
     }
   }
 
-  async function deleteProperty(propertyId: string) {
-    const res = await fetch(`/api/customers/${customerId}/properties/${propertyId}`, {
-      method: "DELETE",
+  function startEditingProperty(property: CustomerPropertyDTO) {
+    setEditingProperty(property);
+    setPropertyDraft({
+      name: property.name,
+      address: property.address ?? "",
+      city: property.city ?? "",
+      state: property.state ?? "",
+      zip: property.zip ?? "",
+      latitude: null,
+      longitude: null,
+      isPrimary: property.isPrimary,
     });
-    if (!res.ok) {
-      toast.error("Failed to delete property");
-      return;
+  }
+
+  async function saveProperty(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingProperty || !propertyDraft.name.trim()) return;
+    setSavingProperty(true);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/properties/${editingProperty.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(propertyDraft),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to update property");
+        return;
+      }
+      const updated = data as CustomerPropertyDTO;
+      setProperties((current) =>
+        current.map((property) => {
+          if (property.id === updated.id) return updated;
+          return updated.isPrimary ? { ...property, isPrimary: false } : property;
+        })
+      );
+      setEditingProperty(null);
+      toast.success("Property updated");
+    } catch {
+      toast.error("Failed to update property");
+    } finally {
+      setSavingProperty(false);
     }
-    setProperties((prev) => {
-      const next = prev.filter((p) => p.id !== propertyId);
-      setSelectedPropertyId((current) => {
-        if (current !== propertyId) return current;
-        return next.find((p) => p.isPrimary)?.id ?? next[0]?.id ?? null;
+  }
+
+  async function deleteProperty() {
+    if (!propertyPendingDelete) return;
+    setDeletingProperty(true);
+    try {
+      const res = await fetch(
+        `/api/customers/${customerId}/properties/${propertyPendingDelete.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to delete property");
+        return;
+      }
+      setProperties((current) => {
+        const next = current.filter((property) => property.id !== propertyPendingDelete.id);
+        if (propertyPendingDelete.isPrimary && next.length > 0) {
+          return next.map((property, index) => ({ ...property, isPrimary: index === 0 }));
+        }
+        return next;
       });
-      return next;
-    });
+      setPropertyPendingDelete(null);
+      toast.success("Property deleted");
+    } catch {
+      toast.error("Failed to delete property");
+    } finally {
+      setDeletingProperty(false);
+    }
   }
 
   async function refreshInvoices() {
@@ -591,7 +648,7 @@ export function CustomerProfile({ customerId }: Props) {
     if (properties.length === 0) {
       const hasAddress = Boolean(customer.address || customer.city || customer.zip);
       if (!hasAddress) {
-        toast.error("Add a property on the Properties tab before enrolling in a plan.");
+        toast.error("Add a property on the customer profile before enrolling in a plan.");
         return;
       }
 
@@ -811,12 +868,6 @@ export function CustomerProfile({ customerId }: Props) {
       )}
 
       <CustomerSummaryCard customerId={customerId} />
-      {activeTab !== "properties" ? (
-        <CustomerPropertyMap
-          title={primaryProperty ? `${primaryProperty.name} location` : "Property location"}
-          location={mapLocation}
-        />
-      ) : null}
 
       <Tabs
         value={activeTab}
@@ -830,7 +881,6 @@ export function CustomerProfile({ customerId }: Props) {
       >
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="properties">Properties</TabsTrigger>
           <TabsTrigger value="visits">Visits</TabsTrigger>
           {canViewComms ? <TabsTrigger value="calls">Calls</TabsTrigger> : null}
           <TabsTrigger value="estimates">Estimates</TabsTrigger>
@@ -1161,6 +1211,135 @@ export function CustomerProfile({ customerId }: Props) {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+              <CardTitle className="text-base">Properties</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                {holidayEnabled ? (
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href={`/holiday-lighting/quote/new?customerId=${customerId}`}>
+                      Holiday lighting quote
+                    </Link>
+                  </Button>
+                ) : null}
+                {canManageProperties ? (
+                  <Button type="button" size="sm" onClick={() => setAddPropertyOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Add property
+                  </Button>
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {properties.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {irrigationEnabled
+                    ? "No properties yet. Add one to manage irrigation, Rachio, and service locations."
+                    : "No properties yet. Add one to manage service locations."}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {properties.map((property) => (
+                    <div
+                      key={property.id}
+                      id={`property-${property.id}`}
+                      className="relative scroll-mt-6 rounded-md border"
+                    >
+                      <details
+                        className="group"
+                        open={expandedPropertyIds.has(property.id)}
+                        onToggle={(event) =>
+                          setPropertyExpanded(property.id, event.currentTarget.open)
+                        }
+                      >
+                        <summary className="flex cursor-pointer list-none items-start gap-3 p-4 pr-24 marker:hidden">
+                          <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+                          <div className="min-w-0">
+                            <div className="font-medium">
+                              {property.name}
+                              {property.isPrimary ? (
+                                <Badge variant="outline" className="ml-2">
+                                  Primary
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {formatCustomerAddress(property) ?? "No address on file"}
+                            </p>
+                          </div>
+                        </summary>
+
+                        {expandedPropertyIds.has(property.id) ? (
+                          <div className="space-y-4 border-t p-4">
+                            <CustomerPropertyMap
+                              title={`${property.name} location`}
+                              location={property}
+                            />
+                            {irrigationEnabled ? (
+                              <>
+                                <PropertyIrrigationSummary
+                                  zoneCount={property.irrigationZoneCount}
+                                  shutoffValveLocation={property.shutoffValveLocation}
+                                  controllerLocation={property.controllerLocation}
+                                  irrigationMapStatus={property.irrigationMapStatus}
+                                />
+                                <RachioPropertyPanel
+                                  customerId={customerId}
+                                  propertyId={property.id}
+                                  propertyName={property.name}
+                                />
+                                <PropertyIrrigationWizard
+                                  customerId={customerId}
+                                  propertyId={property.id}
+                                />
+                              </>
+                            ) : null}
+                            {irrigationEnabled &&
+                            property.designProjectId &&
+                            process.env.NEXT_PUBLIC_DESIGN_URL ? (
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-primary underline"
+                              >
+                                Open design project
+                              </a>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </details>
+
+                      {canManageProperties ? (
+                        <div className="absolute right-2 top-2 flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={`Edit ${property.name}`}
+                            onClick={() => startEditingProperty(property)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${property.name}`}
+                            onClick={() => setPropertyPendingDelete(property)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
           {customer && (
             <CustomerTagsSection
               customerId={customer.id}
@@ -1181,218 +1360,6 @@ export function CustomerProfile({ customerId }: Props) {
             />
           )}
           <CustomerNotesAttachmentsTab customerId={customerId} />
-        </TabsContent>
-
-        <TabsContent value="properties" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-              <CardTitle className="text-base">Properties</CardTitle>
-              <div className="flex flex-wrap gap-2">
-                {holidayEnabled ? (
-                  <Button type="button" size="sm" variant="outline" asChild>
-                    <Link href={`/holiday-lighting/quote/new?customerId=${customerId}`}>
-                      Holiday lighting quote
-                    </Link>
-                  </Button>
-                ) : null}
-                <Button type="button" size="sm" onClick={() => setAddPropertyOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Add property
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {properties.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {irrigationEnabled
-                    ? "No properties yet. Add one to manage irrigation, Rachio, and service locations."
-                    : "No properties yet. Add one to manage service locations."}
-                </p>
-              ) : (
-                <>
-                  {properties.length > 1 ? (
-                    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
-                      <label className="text-sm font-medium" htmlFor="property-picker">
-                        Select property
-                      </label>
-                      <Input
-                        value={propertySearch}
-                        onChange={(e) => setPropertySearch(e.target.value)}
-                        placeholder="Search by name or address..."
-                      />
-                      <select
-                        id="property-picker"
-                        className={nativeSelectClassName}
-                        value={selectedPropertyId ?? ""}
-                        onChange={(e) => {
-                          setSelectedPropertyId(e.target.value);
-                          setPropertySearch("");
-                        }}
-                      >
-                        {(() => {
-                          const q = propertySearch.trim().toLowerCase();
-                          const filtered = properties.filter((property) => {
-                            if (!q) return true;
-                            const haystack = [
-                              property.name,
-                              property.address,
-                              property.city,
-                              property.state,
-                              property.zip,
-                            ]
-                              .filter(Boolean)
-                              .join(" ")
-                              .toLowerCase();
-                            return haystack.includes(q);
-                          });
-                          const selected = properties.find((p) => p.id === selectedPropertyId);
-                          const options =
-                            selected && !filtered.some((p) => p.id === selected.id)
-                              ? [selected, ...filtered]
-                              : filtered;
-                          return options.map((property) => (
-                            <option key={property.id} value={property.id}>
-                              {property.name}
-                              {property.isPrimary ? " (Primary)" : ""}
-                              {property.address
-                                ? ` — ${[property.address, property.city, property.state]
-                                    .filter(Boolean)
-                                    .join(", ")}`
-                                : ""}
-                            </option>
-                          ));
-                        })()}
-                      </select>
-                    </div>
-                  ) : null}
-
-                  {(() => {
-                    const property =
-                      properties.find((p) => p.id === selectedPropertyId) ?? properties[0];
-                    if (!property) return null;
-                    return (
-                      <div
-                        key={property.id}
-                        id={`property-${property.id}`}
-                        className="scroll-mt-6 space-y-3"
-                      >
-                        <div className="flex items-start justify-between rounded-md border p-3">
-                          <div>
-                            <div className="font-medium">
-                              {property.name}
-                              {property.isPrimary && (
-                                <Badge variant="outline" className="ml-2">
-                                  Primary
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {[property.address, property.city, property.state, property.zip]
-                                .filter(Boolean)
-                                .join(", ")}
-                            </p>
-                            {irrigationEnabled ? (
-                              <PropertyIrrigationSummary
-                                zoneCount={property.irrigationZoneCount}
-                                shutoffValveLocation={property.shutoffValveLocation}
-                                controllerLocation={property.controllerLocation}
-                                irrigationMapStatus={property.irrigationMapStatus}
-                              />
-                            ) : null}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteProperty(property.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        {irrigationEnabled ? (
-                          <>
-                            <RachioPropertyPanel
-                              customerId={customerId}
-                              propertyId={property.id}
-                              propertyName={property.name}
-                            />
-                            <PropertyIrrigationWizard
-                              customerId={customerId}
-                              propertyId={property.id}
-                            />
-                          </>
-                        ) : null}
-                        {irrigationEnabled &&
-                        property.designProjectId &&
-                        process.env.NEXT_PUBLIC_DESIGN_URL ? (
-                          <a
-                            href={`${process.env.NEXT_PUBLIC_DESIGN_URL.replace(/\/$/, "")}/projects/${property.designProjectId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-primary underline"
-                          >
-                            Open design project
-                          </a>
-                        ) : null}
-                      </div>
-                    );
-                  })()}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {addPropertyOpen ? (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <button
-                type="button"
-                className="absolute inset-0 bg-black/40"
-                aria-label="Close"
-                onClick={() => !addingProperty && setAddPropertyOpen(false)}
-              />
-              <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background shadow-lg">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <h2 className="font-semibold">Add property</h2>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={addingProperty}
-                    onClick={() => setAddPropertyOpen(false)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <form onSubmit={addProperty} className="grid gap-3 p-4 sm:grid-cols-2">
-                  <Input
-                    value={newProperty.name}
-                    onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
-                    placeholder="Property name"
-                    required
-                    className="sm:col-span-2"
-                    autoFocus
-                  />
-                  <AddressFields
-                    addressLabel="Property address"
-                    value={newProperty}
-                    onChange={(fields) => setNewProperty((prev) => ({ ...prev, ...fields }))}
-                  />
-                  <div className="flex justify-end gap-2 sm:col-span-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={addingProperty}
-                      onClick={() => setAddPropertyOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={addingProperty}>
-                      {addingProperty ? "Adding…" : "Add property"}
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          ) : null}
         </TabsContent>
 
         <TabsContent value="visits" className="space-y-4">
@@ -1636,6 +1603,139 @@ export function CustomerProfile({ customerId }: Props) {
         ) : null}
       </Tabs>
 
+      {addPropertyOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => !addingProperty && setAddPropertyOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="font-semibold">Add property</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={addingProperty}
+                onClick={() => setAddPropertyOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form onSubmit={addProperty} className="grid gap-3 p-4 sm:grid-cols-2">
+              <Input
+                value={newProperty.name}
+                onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
+                placeholder="Property name"
+                required
+                className="sm:col-span-2"
+                autoFocus
+              />
+              <AddressFields
+                addressLabel="Property address"
+                value={newProperty}
+                onChange={(fields) => setNewProperty((prev) => ({ ...prev, ...fields }))}
+              />
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <Checkbox
+                  checked={newProperty.isPrimary || properties.length === 0}
+                  disabled={properties.length === 0}
+                  onCheckedChange={(checked) =>
+                    setNewProperty((current) => ({ ...current, isPrimary: Boolean(checked) }))
+                  }
+                />
+                Primary property
+              </label>
+              <div className="flex justify-end gap-2 sm:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={addingProperty}
+                  onClick={() => setAddPropertyOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={addingProperty}>
+                  {addingProperty ? "Adding…" : "Add property"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {editingProperty ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => !savingProperty && setEditingProperty(null)}
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h2 className="font-semibold">Edit property</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={savingProperty}
+                onClick={() => setEditingProperty(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form onSubmit={saveProperty} className="grid gap-3 p-4 sm:grid-cols-2">
+              <Input
+                value={propertyDraft.name}
+                onChange={(e) =>
+                  setPropertyDraft((current) => ({ ...current, name: e.target.value }))
+                }
+                placeholder="Property name"
+                required
+                className="sm:col-span-2"
+                autoFocus
+              />
+              <AddressFields
+                addressLabel="Property address"
+                value={propertyDraft}
+                onChange={(fields) =>
+                  setPropertyDraft((current) => ({ ...current, ...fields }))
+                }
+              />
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <Checkbox
+                  checked={propertyDraft.isPrimary}
+                  disabled={editingProperty.isPrimary}
+                  onCheckedChange={(checked) =>
+                    setPropertyDraft((current) => ({
+                      ...current,
+                      isPrimary: Boolean(checked),
+                    }))
+                  }
+                />
+                Primary property
+              </label>
+              <div className="flex justify-end gap-2 sm:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={savingProperty}
+                  onClick={() => setEditingProperty(null)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingProperty || !propertyDraft.name.trim()}>
+                  {savingProperty ? "Saving…" : "Save changes"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       <ConfirmModal
         title="Delete customer?"
         message="Are you sure you want to delete this customer? All related records will be removed or unlinked. This cannot be undone."
@@ -1645,6 +1745,17 @@ export function CustomerProfile({ customerId }: Props) {
         onConfirm={deleteCustomer}
         destructive
         loading={actionLoading}
+      />
+
+      <ConfirmModal
+        title="Delete property?"
+        message={`Delete ${propertyPendingDelete?.name ?? "this property"}? Visits and estimates will remain, but property-specific irrigation, controller, and maintenance-plan data will be removed. This cannot be undone.`}
+        confirmLabel="Delete property"
+        open={Boolean(propertyPendingDelete)}
+        onClose={() => !deletingProperty && setPropertyPendingDelete(null)}
+        onConfirm={() => void deleteProperty()}
+        destructive
+        loading={deletingProperty}
       />
 
       {mergeOpen && (

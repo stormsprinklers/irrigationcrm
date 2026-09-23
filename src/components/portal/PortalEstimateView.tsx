@@ -40,6 +40,7 @@ type Estimate = {
   expiresAt: string | null;
   signedAt: string | null;
   depositRequired: boolean;
+  depositThreshold: number;
   hasDesign: boolean;
   hasHolidayLighting?: boolean;
   holidayPreviewImageUrl?: string | null;
@@ -335,7 +336,9 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   }
 
   const canSign = estimate.status === "SENT";
-  const needsDeposit = estimate.status === "APPROVED" && estimate.depositRequired;
+  const requiresDeposit =
+    estimate.depositRequired && displayTotal() > estimate.depositThreshold;
+  const needsDeposit = estimate.status === "APPROVED" && requiresDeposit;
   const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
@@ -522,7 +525,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
               <Button onClick={() => void sign()} disabled={loading}>
                 {loading
                   ? "Submitting..."
-                  : estimate.depositRequired
+                  : requiresDeposit
                     ? "Approve & pay deposit"
                     : "Approve estimate"}
               </Button>

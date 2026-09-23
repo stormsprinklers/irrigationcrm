@@ -12,9 +12,9 @@ export function isExactSmsStart(body: string) {
 }
 
 export function marketingSmsStopReply(companyName: string) {
-  return `You're opted out of marketing texts from ${companyName}. We won't send campaign SMS to this number. Reply START if you want them again.`;
+  return `${companyName}: You have unsubscribed and will no longer receive messages, including appointment reminders. Reply START at any time to resubscribe.`;
 }
 
 export function marketingSmsStartReply(companyName: string) {
-  return `You're opted in to marketing texts from ${companyName}. Reply STOP (by itself) anytime to opt out.`;
+  return `${companyName}: You have resubscribed and will receive messages, including appointment reminders. Reply STOP at any time to unsubscribe.`;
 }

@@ -27,6 +27,7 @@ const HolidayLightingPlanSection = dynamic(() => import("@/components/holiday-li
 import { VisitTagsSection } from "@/components/visits/VisitTagsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 import { requestCurrentPosition } from "@/lib/maps/geolocation";
@@ -539,31 +540,16 @@ export function VisitDetail({ visitId }: Props) {
         </div>
       </div>
 
-      {deleteOpen ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/40"
-            aria-label="Close"
-            onClick={() => setDeleteOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-            <h2 className="text-lg font-semibold">Delete visit?</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This will permanently delete &ldquo;{visit.title}&rdquo; and its line items, notes, and
-              attachments. This cannot be undone.
-            </p>
-            <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
-                Cancel
-              </Button>
-              <Button type="button" variant="destructive" onClick={deleteVisit} disabled={deleting}>
-                {deleting ? "Deleting..." : "Delete visit"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete visit?"
+        description={`This will permanently delete “${visit.title}” and its line items, notes, and attachments. This cannot be undone.`}
+        confirmLabel="Delete visit"
+        confirmVariant="destructive"
+        busy={deleting}
+        onConfirm={deleteVisit}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </div>
   );
 }

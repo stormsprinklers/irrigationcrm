@@ -202,7 +202,9 @@ async function renderEstimatePdf(
   }
 
   if (estimate.depositRequired) {
-    pdf.addMuted("A deposit is required to approve this proposal. Approve online to pay the deposit.");
+    pdf.addMuted(
+      `Approved options over ${money(toNumber(estimate.depositThreshold))} require a deposit. Approve online to pay the deposit.`
+    );
   }
 
   return pdf.toBuffer();

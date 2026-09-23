@@ -577,9 +577,11 @@ model Company {
   /// Audio clip played when a CSR puts a live call on hold.
   holdMusicClipId          String?
   estimateExpiryDays       Int      @default(14)
-  estimateDepositRequired  Boolean  @default(false)
-  estimateDepositType      DepositType?
-  estimateDepositAmount    Decimal? @db.Decimal(10, 2)
+  estimateDepositRequired  Boolean  @default(true)
+  estimateDepositType      DepositType? @default(PERCENT)
+  estimateDepositAmount    Decimal? @default(50) @db.Decimal(10, 2)
+  /// Estimates above this total require the configured deposit upon approval.
+  estimateDepositThreshold Decimal  @default(999) @db.Decimal(10, 2)
   /// After estimate approval, when work is booked for another day: require a deposit if visit total exceeds this amount (USD).
   deferredVisitDepositThreshold Decimal @default(1000) @db.Decimal(10, 2)
   /// Percent of visit total to collect as deposit when over the deferred-visit threshold (e.g. 50 = 50%).
@@ -3241,9 +3243,11 @@ model Estimate {
   publicToken     String         @unique @default(cuid())
   status          EstimateStatus @default(DRAFT)
   expiresAt       DateTime?
-  depositRequired Boolean        @default(false)
-  depositType     DepositType?
-  depositAmount   Decimal?       @db.Decimal(10, 2)
+  depositRequired  Boolean        @default(true)
+  depositType      DepositType?   @default(PERCENT)
+  depositAmount    Decimal?       @default(50) @db.Decimal(10, 2)
+  /// Snapshot of the company threshold when the estimate is created.
+  depositThreshold Decimal        @default(999) @db.Decimal(10, 2)
   signatureBlobUrl String?
   signedAt        DateTime?
   approvedAt      DateTime?
