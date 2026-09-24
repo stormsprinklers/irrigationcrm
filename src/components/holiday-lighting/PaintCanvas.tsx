@@ -7,9 +7,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Eraser, Paintbrush, RotateCcw, Trash2 } from "lucide-react";
+import { Eraser, Hand, Paintbrush, RotateCcw, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 
-type ToolMode = "paint" | "erase";
+type ToolMode = "paint" | "erase" | "pan";
 
 type PaintCanvasProps = {
   imageUrl: string;
@@ -33,7 +33,7 @@ export function PaintCanvas({
 }: PaintCanvasProps & {
   canvasRef: React.MutableRefObject<PaintCanvasHandle | null>;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
   const paintCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -42,6 +42,7 @@ export function PaintCanvas({
   const historyRef = useRef<ImageData[]>([]);
 
   const [mode, setMode] = useState<ToolMode>("paint");
+  const [zoom, setZoom] = useState(1);
   const [brushSize, setBrushSize] = useState(28);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
   const [hasPaint, setHasPaint] = useState(false);
@@ -51,10 +52,10 @@ export function PaintCanvas({
     const img = imageRef.current;
     const imageCanvas = imageCanvasRef.current;
     const paintCanvas = paintCanvasRef.current;
-    const container = containerRef.current;
-    if (!img || !imageCanvas || !paintCanvas || !container) return;
+    const stage = stageRef.current;
+    if (!img || !imageCanvas || !paintCanvas || !stage) return;
 
-    const displayW = container.clientWidth;
+    const displayW = stage.clientWidth;
     const scale = displayW / img.naturalWidth;
     const displayH = Math.round(img.naturalHeight * scale);
 
@@ -83,6 +84,7 @@ export function PaintCanvas({
   }, []);
 
   useEffect(() => {
+    setZoom(1);
     const img = new Image();
     img.onload = () => {
       imageRef.current = img;
@@ -123,6 +125,10 @@ export function PaintCanvas({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [syncCanvasSize]);
+
+  useEffect(() => {
+    syncCanvasSize();
+  }, [syncCanvasSize, zoom]);
 
   const getPaintCtx = () => paintCanvasRef.current?.getContext("2d") ?? null;
 
@@ -167,7 +173,7 @@ export function PaintCanvas({
   };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (disabled) return;
+    if (disabled || mode === "pan") return;
     e.preventDefault();
     const point = pointerToCanvas(e);
     if (!point) return;
@@ -190,6 +196,10 @@ export function PaintCanvas({
   };
 
   const handlePointerUp = () => {
+    if (!drawingRef.current) {
+      lastPointRef.current = null;
+      return;
+    }
     drawingRef.current = false;
     lastPointRef.current = null;
     const canvas = paintCanvasRef.current;
@@ -273,19 +283,24 @@ export function PaintCanvas({
   return (
     <div className="space-y-3">
       <div
-        ref={containerRef}
-        className="relative w-full overflow-hidden rounded-2xl border border-border bg-muted/40"
+        className="relative max-h-[70vh] w-full overflow-auto rounded-2xl border border-border bg-muted/40"
       >
-        <canvas ref={imageCanvasRef} className="block w-full" aria-hidden />
-        <canvas
-          ref={paintCanvasRef}
-          className="absolute inset-0 touch-none cursor-crosshair"
-          style={{ touchAction: "none" }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        />
+        <div
+          ref={stageRef}
+          className="relative"
+          style={{ width: `${zoom * 100}%` }}
+        >
+          <canvas ref={imageCanvasRef} className="block w-full" aria-hidden />
+          <canvas
+            ref={paintCanvasRef}
+            className={`absolute inset-0 ${mode === "pan" ? "cursor-grab" : "cursor-crosshair"}`}
+            style={{ touchAction: mode === "pan" ? "pan-x pan-y" : "none" }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -317,6 +332,19 @@ export function PaintCanvas({
         </button>
         <button
           type="button"
+          onClick={() => setMode("pan")}
+          disabled={disabled}
+          className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold touch-manipulation ${
+            mode === "pan"
+              ? "bg-primary text-primary-foreground"
+              : "border border-border bg-white text-foreground"
+          }`}
+        >
+          <Hand className="h-4 w-4" aria-hidden />
+          Move
+        </button>
+        <button
+          type="button"
           onClick={undo}
           disabled={disabled || !canUndo}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-white px-4 text-sm font-semibold text-foreground disabled:opacity-40 touch-manipulation"
@@ -332,6 +360,26 @@ export function PaintCanvas({
         >
           <Trash2 className="h-4 w-4" aria-hidden />
           Clear
+        </button>
+        <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+        <button
+          type="button"
+          onClick={() => setZoom((value) => Math.max(1, value - 0.5))}
+          disabled={disabled || zoom <= 1}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-border bg-white text-foreground disabled:opacity-40 touch-manipulation"
+          aria-label="Zoom out"
+        >
+          <ZoomOut className="h-4 w-4" aria-hidden />
+        </button>
+        <span className="min-w-12 text-center text-sm font-medium">{Math.round(zoom * 100)}%</span>
+        <button
+          type="button"
+          onClick={() => setZoom((value) => Math.min(3, value + 0.5))}
+          disabled={disabled || zoom >= 3}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-border bg-white text-foreground disabled:opacity-40 touch-manipulation"
+          aria-label="Zoom in"
+        >
+          <ZoomIn className="h-4 w-4" aria-hidden />
         </button>
       </div>
 

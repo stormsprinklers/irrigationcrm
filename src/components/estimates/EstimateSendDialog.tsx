@@ -152,7 +152,8 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Failed to send estimate");
+        const reason = Array.isArray(data.skipped) ? data.skipped[0] : null;
+        toast.error(reason || data.error || "Failed to send estimate");
         return;
       }
       toast.success(channel === "email" ? "Estimate emailed" : "Estimate texted");

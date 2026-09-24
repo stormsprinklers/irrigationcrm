@@ -28,10 +28,17 @@ export async function ensureHolidayPriceBookItems(
   for (const row of skus) {
     const found = bySku.get(row.sku);
     if (found) {
-      if (found.name !== row.name || found.unit !== row.unit) {
+      const shouldApplyDefaultPrice =
+        (row.defaultUnitPrice ?? 0) > 0 && Number(found.unitPrice) === 0;
+      if (found.name !== row.name || found.unit !== row.unit || shouldApplyDefaultPrice) {
         const updated = await prisma.priceBookItem.update({
           where: { id: found.id },
-          data: { name: row.name, unit: row.unit, active: true },
+          data: {
+            name: row.name,
+            unit: row.unit,
+            active: true,
+            ...(shouldApplyDefaultPrice ? { unitPrice: row.defaultUnitPrice } : {}),
+          },
           select: {
             id: true,
             sku: true,
@@ -52,7 +59,7 @@ export async function ensureHolidayPriceBookItems(
         name: row.name,
         sku: row.sku,
         unit: row.unit,
-        unitPrice: 0,
+        unitPrice: row.defaultUnitPrice ?? 0,
         unitCost: 0,
         pricingMode: "MANUAL",
         active: true,

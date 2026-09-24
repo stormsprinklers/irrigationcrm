@@ -4,6 +4,7 @@ import {
   parseHolidayCatalog,
   type HolidayLightingCatalog,
 } from "./types";
+import { ensureHolidayPriceBookItems } from "./price-book";
 
 export { pathLengthFeet } from "./geo";
 
@@ -16,21 +17,16 @@ export async function loadHolidayCatalog(companyId: string): Promise<HolidayLigh
 }
 
 export async function loadHolidayPriceLookup(companyId: string): Promise<PriceLookup> {
-  const items = await prisma.priceBookItem.findMany({
-    where: {
-      category: { companyId },
-      sku: { not: null },
-    },
-    select: { id: true, name: true, sku: true, unitPrice: true, unitCost: true },
-  });
+  const catalog = await loadHolidayCatalog(companyId);
+  const items = await ensureHolidayPriceBookItems(companyId, catalog);
   const map: PriceLookup = new Map();
   for (const item of items) {
-    if (!item.sku) continue;
+    if (!item.priceBookItemId) continue;
     map.set(item.sku, {
-      id: item.id,
+      id: item.priceBookItemId,
       name: item.name,
-      unitPrice: Number(item.unitPrice),
-      unitCost: item.unitCost != null ? Number(item.unitCost) : null,
+      unitPrice: item.unitPrice,
+      unitCost: item.unitCost,
     });
   }
   return map;

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { computeHolidayQuotePricing, holidayBuyBreakdownLines } from "../pricing";
-import { DEFAULT_HOLIDAY_CATALOG, parseHolidaySelections } from "../types";
+import {
+  DEFAULT_HOLIDAY_CATALOG,
+  holidayCatalogSkus,
+  parseHolidaySelections,
+} from "../types";
 
 const style = DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!;
 const prices = new Map([
@@ -54,4 +58,15 @@ test("buy breakdown treats the Year 2 cost as labor and the remainder as parts",
   );
   assert.equal(lines.reduce((sum, line) => sum + line.total, 0), 1_250);
   assert.doesNotMatch(lines.map((line) => `${line.name} ${line.description}`).join(" "), /per foot|\/ft/i);
+});
+
+test("permanent holiday lighting defaults to $25 per foot", () => {
+  const permanentSkus = new Set(
+    DEFAULT_HOLIDAY_CATALOG.lightStyles.map((lightStyle) => lightStyle.permanentSku)
+  );
+  const rows = holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG).filter((row) =>
+    permanentSkus.has(row.sku)
+  );
+  assert.ok(rows.length > 0);
+  assert.ok(rows.every((row) => row.unit === "ft" && row.defaultUnitPrice === 25));
 });

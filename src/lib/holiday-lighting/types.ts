@@ -118,6 +118,7 @@ export type HolidayCatalogSku = {
   sku: string;
   name: string;
   unit: "ft" | "each";
+  defaultUnitPrice?: number;
 };
 
 export type HolidayPriceBookRow = HolidayCatalogSku & {
@@ -318,17 +319,22 @@ function mergePlacements(raw: unknown[]): HolidayPlacementCatalogItem[] {
 export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCatalogSku[] {
   const rows: HolidayCatalogSku[] = [];
   const seen = new Set<string>();
-  function add(sku: string | undefined, name: string, unit: "ft" | "each") {
+  function add(
+    sku: string | undefined,
+    name: string,
+    unit: "ft" | "each",
+    defaultUnitPrice?: number
+  ) {
     const code = sku?.trim();
     if (!code || seen.has(code)) return;
     seen.add(code);
-    rows.push({ sku: code, name, unit });
+    rows.push({ sku: code, name, unit, defaultUnitPrice });
   }
   for (const style of catalog.lightStyles) {
     add(style.temporaryYear1Sku, `${style.label} — buy, first year / ft`, "ft");
     add(style.temporaryReinstallSku, `${style.label} — buy, future years / ft`, "ft");
     add(style.leaseSku, `${style.label} — lease, seasonal / ft`, "ft");
-    add(style.permanentSku, `${style.label} — permanent / ft`, "ft");
+    add(style.permanentSku, `${style.label} — permanent / ft`, "ft", 25);
   }
   for (const placement of catalog.placements) {
     add(placement.sku, placement.label, "each");

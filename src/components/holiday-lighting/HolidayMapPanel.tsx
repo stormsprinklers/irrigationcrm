@@ -226,7 +226,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     useEffect(() => {
       redrawOverlays();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [measurements, ready, activeSegmentId, activePlacementId, highlightSegmentIds]);
+    }, [measurements, ready, mode, activeSegmentId, activePlacementId, highlightSegmentIds]);
 
     function handleMapClick(latLng: HolidayLatLng) {
       const currentMode = modeRef.current;
@@ -338,13 +338,17 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           : -1;
         const baseColor =
           strandIndex >= 0 ? holidayStrandColorAt(strandIndex) : "#4C9BC8";
+        const selectable = modeRef.current === "select";
         const line = new g.maps.Polyline({
           path: segment.path,
           strokeColor: highlighted || active ? "#F17388" : baseColor,
           strokeWeight: highlighted || active ? 5 : 3,
+          clickable: selectable,
           map,
         });
-        line.addListener("click", () => selectSegment(segment.id));
+        if (selectable) {
+          line.addListener("click", () => selectSegment(segment.id));
+        }
         polylines.current.push(line);
       }
 
@@ -358,13 +362,15 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           fillOpacity: active ? 0.45 : 0.28,
           strokeColor: active ? "#1A3D2C" : "#2F6B4F",
           strokeWeight: active ? 3 : 2,
-          clickable: true,
+          clickable: modeRef.current === "select",
         });
-        circle.addListener("click", () => {
-          setActivePlacementId(placement.id);
-          setActiveSegmentId(null);
-          onSelectSegment?.(null);
-        });
+        if (modeRef.current === "select") {
+          circle.addListener("click", () => {
+            setActivePlacementId(placement.id);
+            setActiveSegmentId(null);
+            onSelectSegment?.(null);
+          });
+        }
         circles.current.push(circle);
       }
     }

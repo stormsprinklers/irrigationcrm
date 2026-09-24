@@ -60,6 +60,9 @@ export type SendOptions = {
     contentType: string;
     content: string;
   }>;
+  /** A staff member explicitly chose this channel, so its branded template may
+   * be used even when the per-channel automation rule is disabled. */
+  explicitChannelSend?: boolean;
 };
 
 const EVENT_TOGGLE_MAP: Record<NotificationEvent, keyof CompanyNotifyFlags | null> = {
@@ -179,10 +182,30 @@ export async function sendOperationalNotification(params: {
     return result;
   }
 
-  const rules = await prisma.notificationRule.findMany({
-    where: { companyId: params.companyId, event: params.event, enabled: true },
+  const requestedChannel = options.emailOnly
+    ? Channel.EMAIL
+    : options.smsOnly
+      ? Channel.SMS
+      : null;
+  let rules = await prisma.notificationRule.findMany({
+    where: {
+      companyId: params.companyId,
+      event: params.event,
+      enabled: true,
+      ...(requestedChannel ? { template: { channel: requestedChannel } } : {}),
+    },
     include: { template: true },
   });
+  if (rules.length === 0 && options.explicitChannelSend) {
+    rules = await prisma.notificationRule.findMany({
+      where: {
+        companyId: params.companyId,
+        event: params.event,
+        ...(requestedChannel ? { template: { channel: requestedChannel } } : {}),
+      },
+      include: { template: true },
+    });
+  }
   if (rules.length === 0) return result;
 
   let technicianPhotoUrl: string | null = null;
@@ -414,6 +437,7 @@ export async function ensureDefaultNotificationTemplates(companyId: string) {
     "REVIEW_REQUEST",
     "INVOICE_PAID_RECEIPT",
     "INVOICE_PAYMENT_FAILED",
+    "ESTIMATE_SENT",
     "FEEDBACK_SURVEY",
     "ESTIMATE_FOLLOW_UP",
     "LEAD_ACKNOWLEDGED",

@@ -3,7 +3,11 @@ import { toNumber } from "@/lib/visits/totals";
 import { customerEstimateUrl } from "@/lib/company/customer-url";
 import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
-import { sendOperationalNotification, type SendResult } from "./send";
+import {
+  ensureDefaultNotificationTemplates,
+  sendOperationalNotification,
+  type SendResult,
+} from "./send";
 
 export type EstimateSendChannel = "email" | "sms";
 
@@ -12,6 +16,10 @@ export async function notifyEstimateViaTemplates(
   companyId: string,
   channel?: EstimateSendChannel
 ): Promise<SendResult> {
+  // Older companies may predate the estimate-sent rules. Explicit sends should
+  // always have a branded channel template available.
+  await ensureDefaultNotificationTemplates(companyId);
+
   const estimate = await prisma.estimate.findFirst({
     where: { id: estimateId, companyId },
     include: {
@@ -84,6 +92,7 @@ export async function notifyEstimateViaTemplates(
       emailAttachments,
       ...(channel === "email" ? { emailOnly: true } : {}),
       ...(channel === "sms" ? { smsOnly: true } : {}),
+      ...(channel ? { explicitChannelSend: true } : {}),
     },
   });
 }
