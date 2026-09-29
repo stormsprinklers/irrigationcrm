@@ -98,7 +98,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
         title="Holiday lighting"
-        subtitle="Price-book SKUs are created automatically for buy, lease, and permanent lighting. Enter internal cost and customer price per foot (or each for trees and bushes)."
+        subtitle="Edit roofline parts, installation, lease, permanent, and tree/bush pricing. Trees and bushes have separate size and difficulty SKUs."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -113,7 +113,7 @@ export default function HolidayLightingCatalogSettingsPage() {
             <h3 className="text-sm font-semibold">Quote defaults</h3>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-xs text-muted-foreground">Default light color</label>
+                <label className="text-xs text-muted-foreground">Default light type</label>
                 <select
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={defaults.defaultLightStyleKey}

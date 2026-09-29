@@ -6,7 +6,7 @@ import type { RolePreviewUser } from "@/lib/role-preview";
 
 export type GlobalSearchCustomerHit = {
   id: string;
-  type: "customer";
+  type: "customer" | "contact";
   title: string;
   href: string;
   subtitle: string | null;
@@ -132,6 +132,14 @@ export async function globalSearch(
           take: 1,
           select: { address: true, city: true, zip: true },
         },
+        invoices: {
+          where: {
+            status: { not: "VOID" },
+            payments: { some: { refundedAt: null } },
+          },
+          take: 1,
+          select: { id: true },
+        },
       },
     }),
     prisma.user.findMany({
@@ -201,7 +209,7 @@ export async function globalSearch(
         joinMeta([primary?.address, primary?.city, primary?.zip]);
       return {
         id: c.id,
-        type: "customer" as const,
+        type: c.invoices.length > 0 ? "customer" as const : "contact" as const,
         title: c.name,
         href: `/customers/${c.id}`,
         subtitle: joinMeta([

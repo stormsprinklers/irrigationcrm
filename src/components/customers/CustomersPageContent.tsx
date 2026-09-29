@@ -41,7 +41,8 @@ function buildQuery(filters: CustomerListFilters, pageIndex: number, pageSize: n
   if (filters.company?.trim()) params.set("company", filters.company.trim());
   if (filters.doNotService) params.set("doNotService", filters.doNotService);
   if (filters.status && filters.status !== "ACTIVE") params.set("status", filters.status);
-  if (filters.segment) params.set("segment", filters.segment);
+  // Typed searches span paying customers and never-paid contacts.
+  if (filters.segment && !filters.search?.trim()) params.set("segment", filters.segment);
   params.set("page", String(pageIndex + 1));
   params.set("pageSize", String(pageSize));
   if (sorting[0]?.id) {
@@ -97,6 +98,7 @@ export default function CustomersPageContent({ segment }: Props) {
       ),
     [filters]
   );
+  const searchingAllPeople = Boolean(filters.search?.trim());
 
   const load = useCallback(async (queryFilters: CustomerListFilters, signal?: AbortSignal) => {
     const res = await fetch(`/api/customers${buildQuery(queryFilters, pageIndex, pageSize, sorting)}`, { signal });
@@ -212,8 +214,12 @@ export default function CustomersPageContent({ segment }: Props) {
           loading
             ? "Loading..."
             : isContacts
-              ? `${total} people with no lifetime value — never billed for work`
-              : `${total} customers with paid work`
+              ? searchingAllPeople
+                ? `${total} matching customers and contacts`
+                : `${total} people with no lifetime value — never billed for work`
+              : searchingAllPeople
+                ? `${total} matching customers and contacts`
+                : `${total} customers with paid work`
         }
         actions={<div className="flex gap-2">
           {canManage ? <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import customers</Button> : null}
@@ -454,7 +460,8 @@ export default function CustomersPageContent({ segment }: Props) {
           data={customers}
           selectedIds={selectedIds}
           onSelectedIdsChange={setSelectedIds}
-          nameColumnLabel={isContacts ? "Contact name" : "Customer name"}
+          nameColumnLabel={searchingAllPeople ? "Name" : isContacts ? "Contact name" : "Customer name"}
+          showRecordType={searchingAllPeople}
           pageIndex={pageIndex}
           pageSize={pageSize}
           total={total}

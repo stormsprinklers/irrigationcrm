@@ -31,6 +31,7 @@ export function CustomerTable({
   selectedIds = [],
   onSelectedIdsChange,
   nameColumnLabel = "Customer name",
+  showRecordType = false,
   pageIndex,
   pageSize,
   total,
@@ -43,6 +44,7 @@ export function CustomerTable({
   selectedIds?: string[];
   onSelectedIdsChange?: (ids: string[]) => void;
   nameColumnLabel?: string;
+  showRecordType?: boolean;
   pageIndex: number;
   pageSize: number;
   total: number;
@@ -106,6 +108,7 @@ export function CustomerTable({
               name={row.original.name}
               doNotService={row.original.doNotService}
               isContact={row.original.isContact}
+              showCustomerBadge={showRecordType}
             />
           </Link>
         ),
@@ -167,7 +170,7 @@ export function CustomerTable({
             : "—"),
       },
     ],
-    [nameColumnLabel]
+    [nameColumnLabel, showRecordType]
   );
 
   const table = useReactTable({

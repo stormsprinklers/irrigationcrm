@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendApnsNotification, isApnsConfigured } from "@/lib/mobile-push/apns";
+import { expandPushRecipientUserIds } from "@/lib/push/recipient-identities";
 
 export async function registerMobilePushDevice(params: {
   userId: string;
@@ -54,12 +55,11 @@ export async function sendMobilePushToUsers(params: {
   deepLink?: string;
 }) {
   if (!isApnsConfigured()) return;
-  const uniqueUserIds = [...new Set(params.userIds.filter(Boolean))];
+  const uniqueUserIds = await expandPushRecipientUserIds(params.userIds);
   if (!uniqueUserIds.length) return;
 
   const devices = await prisma.mobilePushDevice.findMany({
     where: {
-      companyId: params.companyId,
       userId: { in: uniqueUserIds },
       platform: "ios",
     },

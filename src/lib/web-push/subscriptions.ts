@@ -6,6 +6,7 @@ import {
   getVapidSubject,
   isWebPushConfigured,
 } from "@/lib/web-push/config";
+import { expandPushRecipientUserIds } from "@/lib/push/recipient-identities";
 
 let vapidConfigured = false;
 
@@ -70,14 +71,13 @@ export async function sendWebPushToUsers(params: {
 }) {
   if (!isWebPushConfigured()) return;
 
-  const uniqueUserIds = [...new Set(params.userIds.filter(Boolean))];
+  const uniqueUserIds = await expandPushRecipientUserIds(params.userIds);
   if (!uniqueUserIds.length) return;
 
   ensureVapid();
 
   const subscriptions = await prisma.webPushSubscription.findMany({
     where: {
-      companyId: params.companyId,
       userId: { in: uniqueUserIds },
     },
     select: { id: true, endpoint: true, p256dh: true, auth: true },

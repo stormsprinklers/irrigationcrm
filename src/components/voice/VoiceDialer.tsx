@@ -227,7 +227,7 @@ export function VoiceDialer({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search customers by name, phone, email…"
+              placeholder="Search customers and contacts by name, phone, email…"
               value={customerSearch}
               onChange={(e) => setCustomerSearch(e.target.value)}
               className="pl-9"
@@ -240,7 +240,7 @@ export function VoiceDialer({
             ) : customerSearch.trim().length < 2 ? (
               <p className="p-2 text-sm text-muted-foreground">Type at least 2 characters to search.</p>
             ) : customers.length === 0 ? (
-              <p className="p-2 text-sm text-muted-foreground">No customers with phone numbers found.</p>
+              <p className="p-2 text-sm text-muted-foreground">No customers or contacts with phone numbers found.</p>
             ) : (
               <ul className="divide-y">
                 {customers.map((customer) => (
@@ -249,6 +249,8 @@ export function VoiceDialer({
                       <CustomerNameWithBadge
                         name={customer.name}
                         doNotService={customer.doNotService}
+                        isContact={customer.isContact}
+                        showCustomerBadge
                         nameClassName="text-sm font-medium"
                       />
                       <p className="truncate text-xs text-muted-foreground">

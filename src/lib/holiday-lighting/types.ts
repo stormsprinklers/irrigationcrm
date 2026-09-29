@@ -5,6 +5,20 @@ export type HolidaySegmentKind = "roofline" | "peak" | "garland" | "custom";
 export const PEAK_LENGTH_MULTIPLIER = 1.5;
 
 export type HolidayInstallKind = "temporary" | "permanent";
+export type HolidayDifficulty = 1 | 2 | 3;
+
+export const HOLIDAY_COLOR_PATTERNS = [
+  "Warm White",
+  "Winter White",
+  "Champagne",
+  "Red",
+  "Green",
+  "Blue",
+  "Yellow",
+  "Pink",
+  "Orange",
+  "Other",
+] as const;
 
 export type HolidayMeasurementSegment = {
   id: string;
@@ -14,6 +28,7 @@ export type HolidayMeasurementSegment = {
   /** Satellite plan length (horizontal run). */
   lengthFt: number;
   lightStyleKey?: string;
+  colorPattern?: string;
   horizontalLengthFt?: number;
   /** When true, billed length is plan length × 1.5 (simple peak). */
   hasPeak?: boolean;
@@ -57,11 +72,15 @@ export type HolidayMeasurementPlacement = {
   size: HolidayTreeSize;
   label: string;
   latLng: HolidayLatLng;
+  difficulty?: HolidayDifficulty;
+  lightStyleKey?: string;
+  colorPattern?: string;
 };
 
 export type HolidayQuoteSelections = {
   defaultLightStyleKey: string;
   installKind: HolidayInstallKind;
+  defaultColorPattern?: string;
   notes?: string;
   /** @deprecated Company minimums replace per-quote margin. */
   marginPct?: number;
@@ -86,6 +105,7 @@ export type HolidayLightStyle = {
   permanentSku: string;
   partsSku?: string;
   installSku?: string;
+  kind?: HolidayInstallKind;
 };
 
 export type HolidayPlacementCatalogItem = {
@@ -95,6 +115,9 @@ export type HolidayPlacementCatalogItem = {
   label: string;
   sku: string;
   leaseSku?: string;
+  difficulty?: HolidayDifficulty;
+  partsSku?: string;
+  installSku?: string;
 };
 
 export type HolidayQuoteDefaults = {
@@ -130,76 +153,59 @@ export type HolidayPriceBookRow = HolidayCatalogSku & {
 export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
   lightStyles: [
     {
-      key: "c9-warm-white",
-      label: "C9 Warm White",
-      temporaryYear1Sku: "HL-WW-YR1-FT",
-      temporaryReinstallSku: "HL-WW-REINSTALL-FT",
-      leaseSku: "HL-WW-LEASE-FT",
-      permanentSku: "HL-WW-PERM-FT",
+      key: "c9",
+      label: "C9",
+      temporaryYear1Sku: "HL-C9-PARTS-FT",
+      temporaryReinstallSku: "HL-TEMP-INSTALL-FT",
+      leaseSku: "HL-C9-LEASE-FT",
+      permanentSku: "HL-PERM-FT",
+      partsSku: "HL-C9-PARTS-FT",
+      installSku: "HL-TEMP-INSTALL-FT",
+      kind: "temporary",
     },
     {
-      key: "c9-multicolor",
-      label: "C9 Multicolor",
-      temporaryYear1Sku: "HL-MC-YR1-FT",
-      temporaryReinstallSku: "HL-MC-REINSTALL-FT",
-      leaseSku: "HL-MC-LEASE-FT",
-      permanentSku: "HL-MC-PERM-FT",
+      key: "c7",
+      label: "C7",
+      temporaryYear1Sku: "HL-C7-PARTS-FT",
+      temporaryReinstallSku: "HL-TEMP-INSTALL-FT",
+      leaseSku: "HL-C7-LEASE-FT",
+      permanentSku: "HL-PERM-FT",
+      partsSku: "HL-C7-PARTS-FT",
+      installSku: "HL-TEMP-INSTALL-FT",
+      kind: "temporary",
     },
     {
-      key: "c9-cool-white",
-      label: "C9 Cool White",
-      temporaryYear1Sku: "HL-CW-YR1-FT",
-      temporaryReinstallSku: "HL-CW-REINSTALL-FT",
-      leaseSku: "HL-CW-LEASE-FT",
-      permanentSku: "HL-CW-PERM-FT",
+      key: "permanent",
+      label: "Permanent",
+      temporaryYear1Sku: "HL-PERM-FT",
+      temporaryReinstallSku: "HL-PERM-SERVICE-FT",
+      leaseSku: "HL-PERM-FT",
+      permanentSku: "HL-PERM-FT",
+      kind: "permanent",
     },
   ],
-  placements: [
-    {
-      key: "tree-small",
-      kind: "tree",
-      size: "small",
-      label: "Tree wrap — small",
-      sku: "HL-TREE-S",
-    },
-    {
-      key: "tree-medium",
-      kind: "tree",
-      size: "medium",
-      label: "Tree wrap — medium",
-      sku: "HL-TREE-M",
-    },
-    {
-      key: "tree-large",
-      kind: "tree",
-      size: "large",
-      label: "Tree wrap — large",
-      sku: "HL-TREE-L",
-    },
-    {
-      key: "bush-small",
-      kind: "bush",
-      size: "small",
-      label: "Bush wrap — small",
-      sku: "HL-BUSH-S",
-    },
-    {
-      key: "bush-medium",
-      kind: "bush",
-      size: "medium",
-      label: "Bush wrap — medium",
-      sku: "HL-BUSH-M",
-    },
-    {
-      key: "bush-large",
-      kind: "bush",
-      size: "large",
-      label: "Bush wrap — large",
-      sku: "HL-BUSH-L",
-    },
-  ],
+  placements: (["tree", "bush"] as const).flatMap((kind) =>
+    (["small", "medium", "large"] as const).flatMap((size) =>
+      ([1, 2, 3] as const).map((difficulty) => {
+        const prefix = kind === "tree" ? "TREE" : "BUSH";
+        const sizeCode = size === "small" ? "S" : size === "medium" ? "M" : "L";
+        const legacyPartsSku = `HL-${prefix}-${sizeCode}`;
+        return {
+          key: `${kind}-${size}-d${difficulty}`,
+          kind,
+          size,
+          difficulty,
+          label: `${kind === "tree" ? "Tree" : "Bush"} wrap — ${size}, difficulty ${difficulty}`,
+          sku: difficulty === 1 ? legacyPartsSku : `${legacyPartsSku}-D${difficulty}-PARTS`,
+          partsSku: difficulty === 1 ? legacyPartsSku : `${legacyPartsSku}-D${difficulty}-PARTS`,
+          installSku: `${legacyPartsSku}-D${difficulty}-LABOR`,
+          leaseSku: `${legacyPartsSku}-D${difficulty}-LEASE`,
+        };
+      })
+    )
+  ),
   quoteDefaults: {
-    defaultLightStyleKey: "c9-warm-white",
+    defaultLightStyleKey: "c9",
     defaultInstallKind: "temporary",
     temporaryYear1Minimum: 0,
     permanentYear1Minimum: 0,
@@ -207,8 +213,9 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
 };
 
 export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
-  defaultLightStyleKey: "c9-warm-white",
+  defaultLightStyleKey: "c9",
   installKind: "temporary",
+  defaultColorPattern: "Warm White",
 };
 
 export const EMPTY_HOLIDAY_MEASUREMENTS: HolidayMeasurements = {
@@ -259,6 +266,9 @@ function parseLightStyle(raw: unknown, fallback: HolidayLightStyle): HolidayLigh
       obj.temporaryReinstallSku || obj.installSku || fallback.temporaryReinstallSku,
     leaseSku: obj.leaseSku || fallback.leaseSku,
     permanentSku: obj.permanentSku || fallback.permanentSku,
+    partsSku: obj.partsSku || fallback.partsSku,
+    installSku: obj.installSku || fallback.installSku,
+    kind: obj.kind === "permanent" ? "permanent" : fallback.kind ?? "temporary",
   };
 }
 
@@ -275,6 +285,8 @@ function parsePlacement(
         : obj.size
       : fallback.size;
   const kind: HolidayPlacementKind = obj.kind === "bush" ? "bush" : "tree";
+  const rawDifficulty = Number(obj.difficulty ?? fallback.difficulty ?? 1);
+  const difficulty: HolidayDifficulty = rawDifficulty === 2 ? 2 : rawDifficulty === 3 ? 3 : 1;
   return {
     key: typeof obj.key === "string" && obj.key ? obj.key : fallback.key,
     kind,
@@ -282,26 +294,42 @@ function parsePlacement(
     label: typeof obj.label === "string" && obj.label ? obj.label : fallback.label,
     sku: typeof obj.sku === "string" && obj.sku ? obj.sku : fallback.sku,
     leaseSku: typeof obj.leaseSku === "string" && obj.leaseSku ? obj.leaseSku : fallback.leaseSku,
+    difficulty,
+    partsSku: typeof obj.partsSku === "string" && obj.partsSku ? obj.partsSku : obj.sku || fallback.partsSku || fallback.sku,
+    installSku: typeof obj.installSku === "string" && obj.installSku ? obj.installSku : fallback.installSku,
   };
 }
 
 export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   if (!raw || typeof raw !== "object") return DEFAULT_HOLIDAY_CATALOG;
   const obj = raw as Partial<HolidayLightingCatalog>;
+  const hasCurrentStyles = Array.isArray(obj.lightStyles) && ["c9", "c7", "permanent"].every(
+    (key) => obj.lightStyles!.some((style) => style && typeof style === "object" && (style as HolidayLightStyle).key === key)
+  );
   const styles =
-    Array.isArray(obj.lightStyles) && obj.lightStyles.length > 0
-      ? obj.lightStyles.map((style, i) =>
+    hasCurrentStyles
+      ? (obj.lightStyles as HolidayLightStyle[]).map((style, i) =>
           parseLightStyle(style, DEFAULT_HOLIDAY_CATALOG.lightStyles[i] ?? DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!)
         )
       : DEFAULT_HOLIDAY_CATALOG.lightStyles;
+  const hasCurrentPlacements = Array.isArray(obj.placements) && obj.placements.some(
+    (placement) => placement && typeof placement === "object" && typeof (placement as HolidayPlacementCatalogItem).difficulty === "number"
+  );
   const placements =
-    Array.isArray(obj.placements) && obj.placements.length > 0
-      ? mergePlacements(obj.placements)
+    hasCurrentPlacements
+      ? mergePlacements(obj.placements as HolidayPlacementCatalogItem[])
       : DEFAULT_HOLIDAY_CATALOG.placements;
+  const parsedDefaults = parseQuoteDefaults(obj.quoteDefaults);
+  const quoteDefaults = {
+    ...parsedDefaults,
+    defaultLightStyleKey: styles.some((style) => style.key === parsedDefaults.defaultLightStyleKey)
+      ? parsedDefaults.defaultLightStyleKey
+      : DEFAULT_HOLIDAY_CATALOG.quoteDefaults!.defaultLightStyleKey,
+  };
   return {
     lightStyles: styles,
     placements,
-    quoteDefaults: parseQuoteDefaults(obj.quoteDefaults),
+    quoteDefaults,
   };
 }
 
@@ -331,13 +359,18 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     rows.push({ sku: code, name, unit, defaultUnitPrice });
   }
   for (const style of catalog.lightStyles) {
-    add(style.temporaryYear1Sku, `${style.label} — buy, first year / ft`, "ft");
-    add(style.temporaryReinstallSku, `${style.label} — buy, future years / ft`, "ft");
-    add(style.leaseSku, `${style.label} — lease, seasonal / ft`, "ft");
-    add(style.permanentSku, `${style.label} — permanent / ft`, "ft", 25);
+    if (style.kind !== "permanent") {
+      add(style.partsSku ?? style.temporaryYear1Sku, `${style.label} bulbs and materials / ft`, "ft", style.key === "c9" ? 2.25 : 2.15);
+      add(style.installSku ?? style.temporaryReinstallSku, "Temporary lighting installation and take-down / ft", "ft", 2.99);
+      add(style.leaseSku, `${style.label} — lease, seasonal / ft`, "ft", style.key === "c9" ? 4.59 : 4.29);
+    }
+    if (style.kind === "permanent") {
+      add(style.permanentSku, `${style.label} lighting / ft`, "ft", 25);
+    }
   }
   for (const placement of catalog.placements) {
-    add(placement.sku, placement.label, "each");
+    add(placement.partsSku ?? placement.sku, `${placement.label} — parts`, "each");
+    add(placement.installSku, `${placement.label} — labor`, "each");
     add(placement.leaseSku, `${placement.label} — lease`, "each");
   }
   return rows;
@@ -350,6 +383,7 @@ export function holidaySelectionsFromCatalog(
   return {
     defaultLightStyleKey: d.defaultLightStyleKey,
     installKind: d.defaultInstallKind,
+    defaultColorPattern: "Warm White",
   };
 }
 
@@ -364,8 +398,9 @@ export function applyHolidayCatalogPolicy(
     catalog.lightStyles[0];
   return {
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
-    installKind: selections.installKind === "permanent" ? "permanent" : "temporary",
+    installKind: style?.kind === "permanent" ? "permanent" : "temporary",
     notes: selections.notes,
+    defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
     reinstallPrice: selections.reinstallPrice,
   };
@@ -388,11 +423,23 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
     ? obj.segments.map((seg) => ({
         ...seg,
         hasPeak: Boolean((seg as HolidayMeasurementSegment).hasPeak),
+        colorPattern: (seg as HolidayMeasurementSegment).colorPattern || "Warm White",
       }))
     : [];
   return {
     segments,
-    placements: Array.isArray(obj.placements) ? obj.placements : [],
+    placements: Array.isArray(obj.placements)
+      ? obj.placements.map((placement) => ({
+          ...placement,
+          difficulty: Number((placement as HolidayMeasurementPlacement).difficulty) === 2
+            ? 2 as const
+            : Number((placement as HolidayMeasurementPlacement).difficulty) === 3
+              ? 3 as const
+              : 1 as const,
+          lightStyleKey: (placement as HolidayMeasurementPlacement).lightStyleKey || "c9",
+          colorPattern: (placement as HolidayMeasurementPlacement).colorPattern || "Warm White",
+        }))
+      : [],
     streetTraces: Array.isArray(obj.streetTraces) ? obj.streetTraces : [],
     strands,
   };
@@ -423,6 +470,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
       obj.defaultLightStyleKey ?? DEFAULT_HOLIDAY_SELECTIONS.defaultLightStyleKey,
     installKind: parseInstallKind(obj.installKind),
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
+    defaultColorPattern:
+      typeof obj.defaultColorPattern === "string" && obj.defaultColorPattern.trim()
+        ? obj.defaultColorPattern.trim()
+        : "Warm White",
     optionAdjustments: adjustments,
     reinstallPrice: reinstallPrice != null && Number.isFinite(reinstallPrice) && reinstallPrice >= 0 && reinstallPrice <= 9_999_999
       ? Math.round(reinstallPrice * 100) / 100 : null,
@@ -431,10 +482,11 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
 
 export function findPlacementCatalogItem(
   catalog: HolidayLightingCatalog,
-  placement: Pick<HolidayMeasurementPlacement, "kind" | "size">
+  placement: Pick<HolidayMeasurementPlacement, "kind" | "size" | "difficulty">
 ) {
   const size = placement.size === "xl" ? "large" : placement.size;
   return (
+    catalog.placements.find((p) => p.kind === placement.kind && p.size === size && (p.difficulty ?? 1) === (placement.difficulty ?? 1)) ??
     catalog.placements.find((p) => p.kind === placement.kind && p.size === size) ??
     catalog.placements.find((p) => p.kind === placement.kind) ??
     null

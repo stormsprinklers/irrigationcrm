@@ -19,6 +19,12 @@ export type HolidayPricedLine = {
   staffDetail: string;
   purchaseTotal: number;
   leaseTotal: number;
+  partsTotal: number;
+  laborTotal: number;
+  reinstallTotal: number;
+  colorPattern?: string;
+  lightStyleLabel?: string;
+  kind: "roofline" | "tree" | "bush";
   priceBookItemId?: string | null;
 };
 
@@ -86,11 +92,12 @@ export function computeHolidayQuotePricing(params: {
   const defaults = catalog.quoteDefaults;
   const billedLengthFt = totalBilledLengthFt(measurements);
 
-  const year1Rate = rate(prices, style?.temporaryYear1Sku);
-  const reinstallRate = rate(prices, style?.temporaryReinstallSku);
-  const leaseRate = rate(prices, style?.leaseSku);
-  const permanentRate = rate(prices, style?.permanentSku);
+  const permanentStyle = catalog.lightStyles.find((item) => item.kind === "permanent" || item.key === "permanent");
+  const permanentRate = rate(prices, permanentStyle?.permanentSku);
 
+  let roofYear1 = 0;
+  let roofReinstall = 0;
+  let roofLease = 0;
   let placementsYear1 = 0;
   let placementsReinstall = 0;
   let placementsLease = 0;
@@ -101,6 +108,16 @@ export function computeHolidayQuotePricing(params: {
     const lengthFt = billedSegmentLengthFt(segment);
     if (lengthFt <= 0) continue;
     const plan = Number(segment.horizontalLengthFt ?? segment.lengthFt) || 0;
+    const segmentStyle = catalog.lightStyles.find((item) => item.key === (segment.lightStyleKey ?? style?.key)) ?? style;
+    const partsRate = rate(prices, segmentStyle?.partsSku ?? segmentStyle?.temporaryYear1Sku);
+    const laborRate = rate(prices, segmentStyle?.installSku ?? segmentStyle?.temporaryReinstallSku);
+    const segmentLeaseRate = rate(prices, segmentStyle?.leaseSku);
+    const partsTotal = money(lengthFt * partsRate);
+    const laborTotal = money(lengthFt * laborRate);
+    const leaseTotal = money(lengthFt * segmentLeaseRate);
+    roofYear1 += partsTotal + laborTotal;
+    roofReinstall += laborTotal;
+    roofLease += leaseTotal;
     lines.push({
       key: segment.id,
       name: segment.label,
@@ -108,38 +125,54 @@ export function computeHolidayQuotePricing(params: {
       staffDetail: segment.hasPeak
         ? `${plan.toFixed(1)} ft × 1.5 peak = ${lengthFt.toFixed(1)} ft`
         : `${lengthFt.toFixed(1)} ft`,
-      purchaseTotal: money(lengthFt * year1Rate),
-      leaseTotal: money(lengthFt * leaseRate),
-      priceBookItemId: itemId(prices, style?.temporaryYear1Sku),
+      purchaseTotal: money(partsTotal + laborTotal),
+      leaseTotal,
+      partsTotal,
+      laborTotal,
+      reinstallTotal: laborTotal,
+      colorPattern: segment.colorPattern ?? selections.defaultColorPattern,
+      lightStyleLabel: segmentStyle?.label,
+      kind: "roofline",
+      priceBookItemId: itemId(prices, segmentStyle?.partsSku ?? segmentStyle?.temporaryYear1Sku),
     });
   }
 
   for (const placement of measurements.placements) {
     const catalogItem = findPlacementCatalogItem(catalog, placement);
     if (!catalogItem) continue;
-    const item = lookup(prices, catalogItem.sku);
+    const item = lookup(prices, catalogItem.partsSku ?? catalogItem.sku);
+    const laborItem = lookup(prices, catalogItem.installSku);
     const leaseItem = lookup(prices, catalogItem.leaseSku);
-    const amount = item?.unitPrice ?? 0;
+    const partsAmount = item?.unitPrice ?? 0;
+    const laborAmount = laborItem?.unitPrice ?? 0;
+    const amount = partsAmount + laborAmount;
+    const placementStyle = catalog.lightStyles.find((item) => item.key === placement.lightStyleKey);
     const leaseAmount =
       leaseItem && leaseItem.unitPrice > 0 ? leaseItem.unitPrice : amount;
     placementsYear1 += amount;
-    placementsReinstall += amount;
+    placementsReinstall += laborAmount;
     placementsLease += leaseAmount;
     placementsPermanent += amount;
     lines.push({
       key: placement.id,
-      name: `${catalogItem.label} — ${placement.label}`,
+      name: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.size} — ${placement.label}`,
       description: placement.label,
-      staffDetail: `Each @ $${amount.toFixed(2)}`,
+      staffDetail: `Difficulty ${placement.difficulty ?? 1} · each @ $${amount.toFixed(2)}`,
       purchaseTotal: money(amount),
       leaseTotal: money(leaseAmount),
+      partsTotal: money(partsAmount),
+      laborTotal: money(laborAmount),
+      reinstallTotal: money(laborAmount),
+      colorPattern: placement.colorPattern,
+      lightStyleLabel: placementStyle?.label,
+      kind: placement.kind,
       priceBookItemId: item?.id ?? null,
     });
   }
 
-  const year1BeforeMin = money(billedLengthFt * year1Rate + placementsYear1);
-  const calculatedReinstallTotal = money(billedLengthFt * reinstallRate + placementsReinstall);
-  const calculatedLeaseTotal = money(billedLengthFt * leaseRate + placementsLease);
+  const year1BeforeMin = money(roofYear1 + placementsYear1);
+  const calculatedReinstallTotal = money(roofReinstall + placementsReinstall);
+  const calculatedLeaseTotal = money(roofLease + placementsLease);
   const permanentBeforeMin = money(billedLengthFt * permanentRate + placementsPermanent);
   const year1Min = defaults?.temporaryYear1Minimum ?? 0;
   const permMin = defaults?.permanentYear1Minimum ?? 0;
@@ -224,6 +257,52 @@ export function holidayBuyBreakdownLines(params: {
     },
   ];
 }
+
+export function holidayDetailedBuyLines(params: {
+  lines: HolidayPricedLine[];
+  targetSubtotal: number;
+}) {
+  const result: Array<{
+    name: string;
+    description: string;
+    total: number;
+    itemType: "PRODUCT" | "SERVICE";
+  }> = [];
+  for (const line of params.lines) {
+    const subject = line.kind === "roofline" ? `Roofline — ${line.name}` : line.name;
+    const selection = [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · ");
+    const color = selection ? ` Lights: ${selection}.` : "";
+    result.push({
+      name: `${subject} — parts`,
+      description: `Customer-owned holiday lighting and materials.${color}`,
+      total: line.partsTotal,
+      itemType: "PRODUCT",
+    });
+    result.push({
+      name: `${subject} — labor (Year 2 cost)`,
+      description: `Installation and take-down labor. This amount is the Year 2 service cost for this item.${color}`,
+      total: line.laborTotal,
+      itemType: "SERVICE",
+    });
+  }
+  const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
+  const adjustment = money(params.targetSubtotal - detailedTotal);
+  if (adjustment !== 0) {
+    result.push({
+      name: "Quote adjustment",
+      description: "Adjustment for the quoted package price or minimum.",
+      total: adjustment,
+      itemType: "SERVICE",
+    });
+  }
+  return result;
+}
+
+export const HOLIDAY_INCLUDED_LINES = [
+  { name: "Storage", description: "Included with this holiday lighting package." },
+  { name: "Maintenance", description: "Included bulb and lighting maintenance during the season." },
+  { name: "3-year warranty", description: "Included three-year warranty." },
+] as const;
 
 export const HOLIDAY_BUY_DETAIL =
   "Purchasing lights front-loads the cost, but allows you to own the lights so you pay less in future years. This includes installation and take-down as well as any bulb replacements during the season.";

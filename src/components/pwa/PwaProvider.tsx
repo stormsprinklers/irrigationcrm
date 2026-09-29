@@ -27,7 +27,7 @@ function isEmployeeAppPath(pathname: string | null): boolean {
 
 export function PwaProvider() {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { status, data: session } = useSession();
   const authenticated = status === "authenticated";
   const employeeSurface = isEmployeeAppPath(pathname);
   const [standalone, setStandalone] = useState(false);
@@ -67,7 +67,7 @@ export function PwaProvider() {
   }, [authenticated, employeeSurface, standalone, ios]);
 
   const refreshPushState = useCallback(async () => {
-    if (!authenticated || !employeeSurface || !canUseNotifications) {
+    if (!authenticated || !session?.user?.id || !employeeSurface || !canUseNotifications) {
       setPushState(canUseNotifications ? "loading" : "unsupported");
       return;
     }
@@ -86,6 +86,12 @@ export function PwaProvider() {
       const registration = await navigator.serviceWorker.ready;
       const existing = await registration.pushManager.getSubscription();
       if (existing) {
+        const json = existing.toJSON();
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+        });
         setPushState("subscribed");
         return;
       }
@@ -93,7 +99,7 @@ export function PwaProvider() {
     } catch {
       setPushState("unsupported");
     }
-  }, [authenticated, employeeSurface, canUseNotifications, ios, standalone]);
+  }, [authenticated, employeeSurface, canUseNotifications, ios, standalone, session?.user?.id]);
 
   useEffect(() => {
     void refreshPushState();

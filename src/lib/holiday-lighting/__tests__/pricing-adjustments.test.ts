@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeHolidayQuotePricing, holidayBuyBreakdownLines } from "../pricing";
+import { computeHolidayQuotePricing, holidayBuyBreakdownLines, holidayDetailedBuyLines } from "../pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   holidayCatalogSkus,
@@ -31,7 +31,7 @@ test("quote-specific prices and discounts survive parsing and affect each option
     },
   });
   const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.deepEqual(result.optionDetails.buy, { calculated: 100, subtotal: 120, discountTotal: 30, total: 90 });
+  assert.deepEqual(result.optionDetails.buy, { calculated: 150, subtotal: 120, discountTotal: 30, total: 90 });
   assert.deepEqual(result.optionDetails.lease, { calculated: 80, subtotal: 80, discountTotal: 20, total: 60 });
   assert.equal(result.permanentTotal, 180);
   assert.equal(result.reinstallTotal, 45);
@@ -69,4 +69,38 @@ test("permanent holiday lighting defaults to $25 per foot", () => {
   );
   assert.ok(rows.length > 0);
   assert.ok(rows.every((row) => row.unit === "ft" && row.defaultUnitPrice === 25));
+});
+
+test("C9 and C7 default prices are independent of color", () => {
+  const rows = new Map(holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG).map((row) => [row.sku, row]));
+  const c9 = DEFAULT_HOLIDAY_CATALOG.lightStyles.find((item) => item.key === "c9")!;
+  const c7 = DEFAULT_HOLIDAY_CATALOG.lightStyles.find((item) => item.key === "c7")!;
+  assert.equal(rows.get(c9.partsSku!)?.defaultUnitPrice, 2.25);
+  assert.equal(rows.get(c7.partsSku!)?.defaultUnitPrice, 2.15);
+  assert.equal(rows.get(c9.installSku!)?.defaultUnitPrice, 2.99);
+  assert.equal(rows.get(c9.leaseSku)?.defaultUnitPrice, 4.59);
+  assert.equal(rows.get(c7.leaseSku)?.defaultUnitPrice, 4.29);
+});
+
+test("detailed buy lines show parts and year-two labor without per-foot pricing", () => {
+  const lines = holidayDetailedBuyLines({
+    targetSubtotal: 52.4,
+    lines: [{
+      key: "roof",
+      name: "Roofline 1",
+      description: "10 ft",
+      staffDetail: "10 ft",
+      purchaseTotal: 52.4,
+      leaseTotal: 45.9,
+      partsTotal: 22.5,
+      laborTotal: 29.9,
+      reinstallTotal: 29.9,
+      colorPattern: "Warm White",
+      lightStyleLabel: "C9",
+      kind: "roofline",
+    }],
+  });
+  assert.deepEqual(lines.map((line) => line.total), [22.5, 29.9]);
+  assert.match(lines[1]!.name, /Year 2 cost/);
+  assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
 });

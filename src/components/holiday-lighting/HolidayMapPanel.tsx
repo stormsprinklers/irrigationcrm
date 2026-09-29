@@ -27,6 +27,7 @@ type Props = {
   measurements: HolidayMeasurements;
   onChange: (next: HolidayMeasurements) => void;
   defaultLightStyleKey: string;
+  defaultColorPattern?: string;
   /** Controlled selection — keeps satellite highlight in sync with pitch-match list. */
   selectedSegmentId?: string | null;
   onSelectSegment?: (id: string | null) => void;
@@ -74,6 +75,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       measurements,
       onChange,
       defaultLightStyleKey,
+      defaultColorPattern = "Warm White",
       selectedSegmentId,
       onSelectSegment,
       selectedStrandId = null,
@@ -243,6 +245,9 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           size,
           label: `${kind === "bush" ? "Bush" : "Tree"} ${count}`,
           latLng,
+          difficulty: 1,
+          lightStyleKey: defaultLightStyleKey === "permanent" ? "c9" : defaultLightStyleKey,
+          colorPattern: defaultColorPattern,
         };
         onChange({
           ...measurementsRef.current,

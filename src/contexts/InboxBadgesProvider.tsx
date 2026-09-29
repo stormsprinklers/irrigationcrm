@@ -58,7 +58,7 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (status !== "authenticated") return;
     try {
-      const inboxRes = await fetch("/api/inbox/badges");
+      const inboxRes = await fetch("/api/inbox/badges", { cache: "no-store" });
       if (inboxRes.ok) {
         const data = (await inboxRes.json()) as InboxBadgeCounts;
         setCounts({
@@ -79,7 +79,7 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const timeOffRes = await fetch("/api/schedule/time-off/pending");
+      const timeOffRes = await fetch("/api/schedule/time-off/pending", { cache: "no-store" });
       if (!timeOffRes.ok) {
         setTimeOffPending(0);
         return;
@@ -95,14 +95,27 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), 15_000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, 5_000);
     const onChanged = () => void refresh();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     window.addEventListener(BADGES_CHANGED_EVENT, onChanged);
     window.addEventListener(TIME_OFF_CHANGED_EVENT, onChanged);
+    window.addEventListener("focus", onChanged);
+    window.addEventListener("pageshow", onChanged);
+    window.addEventListener("online", onChanged);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener(BADGES_CHANGED_EVENT, onChanged);
       window.removeEventListener(TIME_OFF_CHANGED_EVENT, onChanged);
+      window.removeEventListener("focus", onChanged);
+      window.removeEventListener("pageshow", onChanged);
+      window.removeEventListener("online", onChanged);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [refresh, pathname]);
 

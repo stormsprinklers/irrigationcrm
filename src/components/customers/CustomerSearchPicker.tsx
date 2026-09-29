@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { CustomerDTO } from "@/lib/customers/types";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import {
   AddCustomerQuickDialog,
   prefillFromSearchQuery,
@@ -34,7 +35,7 @@ export function CustomerSearchPicker({
   onValueChange,
   onCustomerSelect,
   minQueryLength = 2,
-  placeholder = "Search customers by name, phone, email…",
+  placeholder = "Search customers or contacts by name, phone, email…",
   compact = false,
   showAddCustomerButton = false,
   className,
@@ -202,7 +203,9 @@ export function CustomerSearchPicker({
                       Type at least {minQueryLength} characters to search, or add a new customer.
                     </li>
                   ) : results.length === 0 ? (
-                    <li className="px-3 py-2 text-sm text-muted-foreground">No customers found.</li>
+                    <li className="px-3 py-2 text-sm text-muted-foreground">
+                      No customers or contacts found.
+                    </li>
                   ) : (
                     results.map((customer) => (
                       <li key={customer.id}>
@@ -218,8 +221,12 @@ export function CustomerSearchPicker({
                           )}
                         >
                           <span className="font-medium">
-                            {customer.name}
-                            {customer.doNotService ? " (do not service)" : ""}
+                            <CustomerNameWithBadge
+                              name={customer.name}
+                              isContact={customer.isContact}
+                              showCustomerBadge
+                              doNotService={customer.doNotService}
+                            />
                           </span>
                           {(customer.phone || customer.email) && (
                             <span className="text-xs text-muted-foreground">
@@ -299,7 +306,7 @@ export function CustomerSearchPicker({
             Type at least {minQueryLength} characters to search.
           </p>
         ) : results.length === 0 ? (
-          <p className="p-3 text-sm text-muted-foreground">No customers found.</p>
+          <p className="p-3 text-sm text-muted-foreground">No customers or contacts found.</p>
         ) : (
           <ul>
             {results.map((customer) => (
@@ -315,8 +322,12 @@ export function CustomerSearchPicker({
                   )}
                 >
                   <span className="font-medium">
-                    {customer.name}
-                    {customer.doNotService ? " (do not service)" : ""}
+                    <CustomerNameWithBadge
+                      name={customer.name}
+                      isContact={customer.isContact}
+                      showCustomerBadge
+                      doNotService={customer.doNotService}
+                    />
                   </span>
                   {(customer.phone || customer.email) && (
                     <span className="text-xs text-muted-foreground">

@@ -673,10 +673,16 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onVisibilityChange);
+    window.addEventListener("pageshow", onVisibilityChange);
+    window.addEventListener("online", onVisibilityChange);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onVisibilityChange);
+      window.removeEventListener("pageshow", onVisibilityChange);
+      window.removeEventListener("online", onVisibilityChange);
       if (heartbeat) clearInterval(heartbeat);
       void patchPresence("OFFLINE");
       for (const extra of extraDevicesRef.current) {

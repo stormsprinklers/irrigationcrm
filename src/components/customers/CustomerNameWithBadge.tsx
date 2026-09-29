@@ -7,6 +7,7 @@ type Props = {
   isContact?: boolean;
   className?: string;
   nameClassName?: string;
+  showCustomerBadge?: boolean;
 };
 
 export function CustomerNameWithBadge({
@@ -15,6 +16,7 @@ export function CustomerNameWithBadge({
   isContact,
   className,
   nameClassName,
+  showCustomerBadge = false,
 }: Props) {
   return (
     <span className={cn("inline-flex flex-wrap items-center gap-2", className)}>
@@ -25,6 +27,13 @@ export function CustomerNameWithBadge({
           className="text-[10px] font-semibold uppercase tracking-wide"
         >
           Contact
+        </Badge>
+      ) : showCustomerBadge ? (
+        <Badge
+          variant="outline"
+          className="text-[10px] font-semibold uppercase tracking-wide"
+        >
+          Customer
         </Badge>
       ) : null}
       {doNotService ? (

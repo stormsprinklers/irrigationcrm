@@ -16,7 +16,7 @@ export const maxDuration = 60;
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
-function lightingPrompt(styleLabel: string) {
+function lightingPrompt(styleLabel: string, colorPattern: string) {
   return `You are given TWO images of the same residential property:
 
 IMAGE 1 — PROPERTY (clean): a photo of the house (uploaded or Google Street View). Use this as the geometric base — same architecture, camera angle, windows, driveway, landscaping, and layout.
@@ -24,8 +24,8 @@ IMAGE 1 — PROPERTY (clean): a photo of the house (uploaded or Google Street Vi
 IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights. Those painted strokes are the ONLY places that should receive holiday lighting.
 
 Instructions — holiday lights:
-- Add professional ${styleLabel} C9-style LED Christmas lights strictly inside the brush-marked regions from IMAGE 2.
-- Match the requested color: ${styleLabel}.
+- Add professional ${styleLabel} LED holiday lights strictly inside the brush-marked regions from IMAGE 2.
+- Match the requested color/pattern: ${colorPattern}.
 - Do NOT invent extra holiday lighting anywhere that is not marked.
 - Replace the brushstroke paint with realistic installed lights (evenly spaced, neatly clipped, soft evening glow).
 
@@ -85,10 +85,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       catalog.lightStyles.find((s) => s.key === styleKey)?.label ??
       catalog.lightStyles[0]?.label ??
       "warm white";
+    const colorPattern = String(form.get("colorPattern") ?? "Warm White").slice(0, 120);
 
     const outbound = new FormData();
     outbound.append("model", "gpt-image-1");
-    outbound.append("prompt", lightingPrompt(styleLabel));
+    outbound.append("prompt", lightingPrompt(styleLabel, colorPattern));
     outbound.append("size", "1024x1024");
     outbound.append("input_fidelity", "high");
     // First image = clean property (high-fidelity base). Second = brush-marked guide.

@@ -28,6 +28,7 @@ import {
   DEFAULT_HOLIDAY_SELECTIONS,
   EMPTY_HOLIDAY_MEASUREMENTS,
   HOLIDAY_PREVIEW_DISCLAIMER,
+  HOLIDAY_COLOR_PATTERNS,
   applyHolidayCatalogPolicy,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
@@ -38,6 +39,8 @@ import {
   type HolidayQuoteSelections,
   type HolidayQuoteOptionKey,
   type HolidayOptionAdjustment,
+  type HolidayDifficulty,
+  type HolidayTreeSize,
 } from "@/lib/holiday-lighting/types";
 import { getBrowserMapsApiKey } from "@/lib/holiday-lighting/load-maps";
 import { cn } from "@/lib/utils";
@@ -630,6 +633,31 @@ export function HolidayLightingQuoter({
     setStep((prev) => (prev - 1) as WizardStep);
   }
 
+  function updateMeasurementsAndSelection(next: HolidayMeasurements) {
+    updateMeasurements(next);
+  }
+
+  function addPlacement(kind: "tree" | "bush") {
+    const count = measurements.placements.filter((item) => item.kind === kind).length + 1;
+    const anchor = center ?? measurements.segments[0]?.path[0] ?? { lat: 0, lng: 0 };
+    updateMeasurementsAndSelection({
+      ...measurements,
+      placements: [
+        ...measurements.placements,
+        {
+          id: crypto.randomUUID(),
+          kind,
+          size: "medium",
+          difficulty: 1,
+          label: `${kind === "tree" ? "Tree" : "Bush"} ${count}`,
+          latLng: anchor,
+          lightStyleKey: selections.defaultLightStyleKey === "permanent" ? "c9" : selections.defaultLightStyleKey,
+          colorPattern: selections.defaultColorPattern ?? "Warm White",
+        },
+      ],
+    });
+  }
+
   async function runVisualize() {
     if (!paintRef.current?.hasPaint()) {
       toast.error("Paint the areas where lights should go");
@@ -644,6 +672,7 @@ export function HolidayLightingQuoter({
       form.set("clean", exported.cleanBlob, "property.png");
       form.set("marked", exported.markedBlob, "property-marked.png");
       form.set("lightStyle", selections.defaultLightStyleKey);
+      form.set("colorPattern", selections.defaultColorPattern ?? "Warm White");
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
         method: "POST",
         body: form,
@@ -709,6 +738,11 @@ export function HolidayLightingQuoter({
     permanent: optionDetail(pricing.optionDetails.permanent.calculated, selections, "permanent"),
   } : null;
   const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
+  const selectedStyle = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey);
+  const permanentSelected = selectedStyle?.kind === "permanent";
+  const visibleQuoteOptions = permanentSelected
+    ? ([ ["permanent", "Permanent Lights"] ] as const)
+    : ([ ["buy", "Buy Lights"], ["lease", "Lease Lights"] ] as const);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -909,6 +943,7 @@ export function HolidayLightingQuoter({
           center={center}
           measurements={measurements}
           defaultLightStyleKey={selections.defaultLightStyleKey}
+          defaultColorPattern={selections.defaultColorPattern}
           onSelectSegment={setSelectedSegmentId}
           selectedSegmentId={selectedSegmentId}
           showStreetView={step === 4 && previewSource === "street"}
@@ -939,9 +974,9 @@ export function HolidayLightingQuoter({
 
       {step === 3 ? (
         <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
-          <h3 className="text-sm font-semibold">Light color</h3>
-          <div>
-            <label className="text-xs text-muted-foreground">Color</label>
+          <h3 className="text-sm font-semibold">Lighting selections</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-muted-foreground">Light type
             <select
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={selections.defaultLightStyleKey}
@@ -950,8 +985,16 @@ export function HolidayLightingQuoter({
                   { ...selections, defaultLightStyleKey: e.target.value },
                   catalog
                 );
+                const nextMeasurements = {
+                  ...measurements,
+                  segments: measurements.segments.map((segment) => ({
+                    ...segment,
+                    lightStyleKey: e.target.value,
+                  })),
+                };
                 setSelections(next);
-                void save({ selections: next }, { quiet: true });
+                updateMeasurements(nextMeasurements);
+                void save({ selections: next, measurements: nextMeasurements }, { quiet: true });
               }}
             >
               {catalog.lightStyles.map((s) => (
@@ -960,10 +1003,93 @@ export function HolidayLightingQuoter({
                 </option>
               ))}
             </select>
+            </label>
+            {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" ? (
+              <label className="text-xs text-muted-foreground">Color / pattern
+                <select
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) ? selections.defaultColorPattern : "Other"}
+                  onChange={(event) => {
+                    const colorPattern = event.target.value;
+                    const nextSelections = { ...selections, defaultColorPattern: colorPattern };
+                    const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
+                    setSelections(nextSelections);
+                    updateMeasurements(nextMeasurements);
+                    void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
+                  }}
+                >
+                  {HOLIDAY_COLOR_PATTERNS.map((color) => <option key={color} value={color}>{color}</option>)}
+                </select>
+              </label>
+            ) : null}
+          </div>
+          {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" &&
+          (!HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) || selections.defaultColorPattern === "Other") ? (
+            <label className="block text-xs text-muted-foreground">Custom color / pattern
+              <input
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={selections.defaultColorPattern === "Other" ? "" : selections.defaultColorPattern ?? ""}
+                placeholder="Describe the color or alternating pattern"
+                onChange={(event) => {
+                  const colorPattern = event.target.value || "Other";
+                  const nextSelections = { ...selections, defaultColorPattern: colorPattern };
+                  const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
+                  setSelections(nextSelections);
+                  updateMeasurements(nextMeasurements);
+                  void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
+                }}
+              />
+            </label>
+          ) : null}
+
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold">Trees and bushes</h4>
+                <p className="text-xs text-muted-foreground">Difficulty is internal and is not shown to the customer.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => addPlacement("tree")}>Add tree</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => addPlacement("bush")}>Add bush</Button>
+              </div>
+            </div>
+            {measurements.placements.map((placement) => (
+              <div key={placement.id} className="space-y-2 rounded-md border border-border p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-md border border-input px-2 py-1.5 text-sm"
+                    value={placement.label}
+                    onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, label: event.target.value } : item) })}
+                  />
+                  <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.filter((item) => item.id !== placement.id) })}>Remove</Button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  <label className="text-xs text-muted-foreground">Size
+                    <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.size} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, size: event.target.value as HolidayTreeSize } : item) })}>
+                      <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-muted-foreground">Difficulty
+                    <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.difficulty ?? 1} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, difficulty: Number(event.target.value) as HolidayDifficulty } : item) })}>
+                      <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-muted-foreground">Bulb type
+                    <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.lightStyleKey ?? "c9"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, lightStyleKey: event.target.value } : item) })}>
+                      {catalog.lightStyles.filter((item) => item.kind !== "permanent").map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-xs text-muted-foreground">Color / pattern
+                    <input className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" list="holiday-color-patterns" value={placement.colorPattern ?? "Warm White"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, colorPattern: event.target.value } : item) })} />
+                  </label>
+                </div>
+              </div>
+            ))}
+            <datalist id="holiday-color-patterns">{HOLIDAY_COLOR_PATTERNS.filter((color) => color !== "Other").map((color) => <option key={color} value={color} />)}</datalist>
           </div>
           {pricing ? (
             <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
-              <div>
+              {!permanentSelected ? <><div>
                 <div className="flex justify-between">
                   <span>Buy Lights</span>
                   <span className="font-semibold">{money(pricing.year1Total)}</span>
@@ -983,11 +1109,11 @@ export function HolidayLightingQuoter({
                   <span className="font-semibold">{money(pricing.leaseTotal)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">No commitments</p>
-              </div>
-              <div className="flex justify-between text-muted-foreground">
+              </div></> : null}
+              {permanentSelected ? <div className="flex justify-between">
                 <span>Permanent Lights</span>
-                <span>{money(pricing.permanentTotal)}</span>
-              </div>
+                <span className="font-semibold">{money(pricing.permanentTotal)}</span>
+              </div> : null}
             </div>
           ) : null}
         </section>
@@ -1049,7 +1175,7 @@ export function HolidayLightingQuoter({
                 <h3 className="text-sm font-semibold">Prices and discounts</h3>
                 <p className="text-xs text-muted-foreground">Leave a price blank to use the calculated price. Discounts apply to each option separately.</p>
               </div>
-              {([ ["buy", "Buy Lights"], ["lease", "Lease Lights"], ["permanent", "Permanent Lights"] ] as const).map(([key, label]) => {
+              {visibleQuoteOptions.map(([key, label]) => {
                 const adjustment = selections.optionAdjustments?.[key];
                 const detail = draftPricing[key];
                 return <div key={key} className="space-y-2 rounded-md border border-border p-3">
@@ -1078,12 +1204,12 @@ export function HolidayLightingQuoter({
                   {detail.discountTotal > 0 ? <p className="text-xs text-muted-foreground">{money(detail.subtotal)} minus {money(detail.discountTotal)} discount</p> : null}
                 </div>;
               })}
-              <label className="block text-xs text-muted-foreground">Buy Lights future years ($)
+              {!permanentSelected ? <label className="block text-xs text-muted-foreground">Buy Lights future years ($)
                 <input type="number" min={0} max={9999999} step="0.01" placeholder={pricing.calculatedReinstallTotal.toFixed(2)}
                   value={selections.reinstallPrice ?? ""}
                   onChange={(event) => setSelections((current) => ({ ...current, reinstallPrice: event.target.value === "" ? null : Number(event.target.value) }))}
                   className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
-              </label>
+              </label> : null}
               <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>Save prices and discounts</Button>
             </section>
           ) : null}
@@ -1091,7 +1217,7 @@ export function HolidayLightingQuoter({
             <h3 className="text-sm font-semibold">Quote</h3>
             {pricing ? (
               <div className="space-y-3 text-sm">
-                <div>
+                {!permanentSelected ? <><div>
                   <div className="flex justify-between">
                     <span>Buy Lights</span>
                     <span className="font-semibold">{money(draftPricing?.buy.total ?? pricing.year1Total)}</span>
@@ -1117,8 +1243,8 @@ export function HolidayLightingQuoter({
                     colors and design each year. Includes installation, take-down, and bulb
                     replacements during the season.
                   </p>
-                </div>
-                <div>
+                </div></> : null}
+                {permanentSelected ? <div>
                   <div className="flex justify-between">
                     <span>Permanent Lights</span>
                     <span className="font-semibold">{money(draftPricing?.permanent.total ?? pricing.permanentTotal)}</span>
@@ -1127,7 +1253,7 @@ export function HolidayLightingQuoter({
                     Fit your vibe year-round. Highest up-front cost, then change colors with an
                     app for teams, causes, and holidays — not just Christmas.
                   </p>
-                </div>
+                </div> : null}
                 <p className="text-xs text-muted-foreground">
                   {Math.round(pricing.billedLengthFt)} ft billed
                   {pricing.placementCount
@@ -1135,7 +1261,7 @@ export function HolidayLightingQuoter({
                     : ""}
                   {pricing.year1MinimumApplied ? " · buy first-year minimum applied" : ""}
                 </p>
-                {pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
+                {!permanentSelected && pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
                   <p className="text-xs text-amber-800">
                     Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
                     lighting before sending this quote.

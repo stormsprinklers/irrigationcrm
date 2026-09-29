@@ -163,6 +163,21 @@ export async function listCustomers(
     take: options.take ?? 25,
   });
 
+  let paidCustomerIds: Set<string> | null = null;
+  if (!filters.segment && customers.length > 0) {
+    const paid = await prisma.invoice.findMany({
+      where: {
+        companyId,
+        customerId: { in: customers.map((customer) => customer.id) },
+        status: { not: "VOID" },
+        payments: { some: { refundedAt: null } },
+      },
+      distinct: ["customerId"],
+      select: { customerId: true },
+    });
+    paidCustomerIds = new Set(paid.map((invoice) => invoice.customerId));
+  }
+
   return customers.map((customer) => ({
     ...serializeCustomer(customer),
     isContact:
@@ -170,7 +185,7 @@ export async function listCustomers(
         ? true
         : filters.segment === "CUSTOMERS"
           ? false
-          : undefined,
+          : !paidCustomerIds?.has(customer.id),
   }));
 }
 

@@ -27,6 +27,7 @@ type FlatHit = {
   subtitle: string | null;
   meta: string | null;
   path?: string;
+  recordType?: "customer" | "contact";
 };
 
 const SECTION_META: Record<
@@ -34,7 +35,7 @@ const SECTION_META: Record<
   { label: string; icon: typeof User; badgeClass: string; iconClass: string }
 > = {
   customers: {
-    label: "Customers",
+    label: "Customers & contacts",
     icon: User,
     badgeClass: "bg-sky-100 text-sky-800 border-sky-200",
     iconClass: "text-sky-700",
@@ -70,6 +71,7 @@ function flattenResults(data: GlobalSearchResult | null): FlatHit[] {
       title: c.title,
       subtitle: c.subtitle,
       meta: c.meta,
+      recordType: c.type,
     });
   }
   for (const e of data.employees) {
@@ -238,7 +240,7 @@ function GlobalSearchDialog({
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search customers, employees, price book, pages…"
+            placeholder="Search customers, contacts, employees, price book, pages…"
             className="h-9 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
             aria-autocomplete="list"
             aria-controls={listId}
@@ -254,7 +256,7 @@ function GlobalSearchDialog({
         <div id={listId} className="max-h-[min(28rem,55vh)] overflow-y-auto" role="listbox">
           {!hasQuery ? (
             <p className="px-4 py-6 text-sm text-muted-foreground">
-              Type at least 2 characters. Find customers by name, phone, email, or address —
+              Type at least 2 characters. Find customers and contacts by name, phone, email, or address —
               plus employees, price book items, and CRM pages.
             </p>
           ) : empty ? (
@@ -305,7 +307,7 @@ function GlobalSearchDialog({
                                 {section.key === "priceBook"
                                   ? "Item"
                                   : section.key === "customers"
-                                    ? "Cust"
+                                    ? hit.recordType === "contact" ? "Contact" : "Cust"
                                     : section.key === "employees"
                                       ? "Emp"
                                       : "Page"}

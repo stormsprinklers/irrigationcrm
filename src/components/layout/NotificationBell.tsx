@@ -177,7 +177,7 @@ export function NotificationBell() {
 
   const loadNotifications = useCallback(async (showToasts = false) => {
     try {
-      const res = await fetch("/api/notifications?limit=20");
+      const res = await fetch("/api/notifications?limit=20", { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
       const items = (data.notifications ?? []) as AppNotification[];
@@ -218,8 +218,24 @@ export function NotificationBell() {
 
   useEffect(() => {
     void loadNotifications(false);
-    const interval = setInterval(() => loadNotifications(true), 20_000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void loadNotifications(true);
+    }, 5_000);
+    const refresh = () => void loadNotifications(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [loadNotifications, session?.user?.id]);
 
   const markRead = useCallback(async (ids: string[]) => {

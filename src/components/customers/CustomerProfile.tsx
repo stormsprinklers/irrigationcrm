@@ -1782,13 +1782,13 @@ export function CustomerProfile({ customerId }: Props) {
               <Input
                 value={mergeSearch}
                 onChange={(e) => searchMergeCandidates(e.target.value)}
-                placeholder="Search customers by name, email, or phone..."
+                placeholder="Search customers and contacts by name, email, or phone..."
                 autoFocus
               />
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border">
                 {mergeCandidates.length === 0 ? (
                   <p className="p-3 text-sm text-muted-foreground">
-                    {mergeSearch.trim() ? "No matching customers." : "Type to search."}
+                    {mergeSearch.trim() ? "No matching customers or contacts." : "Type to search."}
                   </p>
                 ) : (
                   mergeCandidates.map((candidate) => (
@@ -1800,7 +1800,11 @@ export function CustomerProfile({ customerId }: Props) {
                       }`}
                       onClick={() => setMergeTargetId(candidate.id)}
                     >
-                      {candidate.name}
+                      <CustomerNameWithBadge
+                        name={candidate.name}
+                        isContact={candidate.isContact}
+                        showCustomerBadge
+                      />
                       {candidate.email ? ` · ${candidate.email}` : ""}
                       {candidate.phone ? ` · ${formatPhoneDisplay(candidate.phone)}` : ""}
                     </button>

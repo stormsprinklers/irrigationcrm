@@ -161,12 +161,6 @@ export function buildHolidayStrandMap(params: {
 
   for (const placement of measurements.placements) {
     allPoints.push(placement.latLng);
-    const catalogItem =
-      catalog.placements.find(
-        (p) => p.kind === placement.kind && p.size === placement.size
-      ) ??
-      catalog.placements.find((p) => p.kind === placement.kind) ??
-      null;
     const totals = lineTotals(pricedLines, placement.id, marginPct);
     const radiusMeters =
       placement.size === "small"
@@ -183,8 +177,8 @@ export function buildHolidayStrandMap(params: {
       paths: [],
       lengthFt: 0,
       lengthFtWithMargin: 0,
-      lightStyleKey: selections.defaultLightStyleKey,
-      lightStyleLabel: catalogItem?.label ?? "Tree/shrub",
+      lightStyleKey: placement.lightStyleKey ?? selections.defaultLightStyleKey,
+      lightStyleLabel: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.size}${placement.colorPattern ? ` · ${placement.colorPattern}` : ""}`,
       purchaseTotal: totals.purchaseTotal,
       leaseTotal: totals.leaseTotal,
       kind: "placement",
