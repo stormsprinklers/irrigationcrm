@@ -30,6 +30,7 @@ import { UserAccountMenu } from "@/components/layout/UserAccountMenu";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { GlobalSearchButton } from "@/components/layout/GlobalSearch";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
+import { CompanyInboxCountOrbs } from "@/components/layout/CompanyInboxCountOrbs";
 import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 import { isStandaloneDisplay } from "@/lib/pwa/client";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { CompanyInboxBadgeCounts } from "@/lib/inbox/badge-types";
 
 function filterOtherNav(
   items: NavItem[],
@@ -62,12 +64,14 @@ function NavLink({
   onNavigate,
   className,
   badgeCount = 0,
+  companyBadgeCounts,
 }: {
   item: NavItem;
   pathname: string;
   onNavigate?: () => void;
   className?: string;
   badgeCount?: number;
+  companyBadgeCounts?: CompanyInboxBadgeCounts[];
 }) {
   const active = getPrimaryNavActive(pathname, item.href);
   return (
@@ -81,9 +85,13 @@ function NavLink({
         className
       )}
     >
-      <span className="relative inline-flex items-center pr-1">
+      <span className="relative inline-flex items-center gap-1 pr-1">
         {item.label}
-        <InboxCountOrb count={badgeCount} className="absolute -right-3.5 -top-2" />
+        {companyBadgeCounts ? (
+          <CompanyInboxCountOrbs companies={companyBadgeCounts} />
+        ) : (
+          <InboxCountOrb count={badgeCount} className="absolute -right-3.5 -top-2" />
+        )}
       </span>
       {active ? (
         <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary" />
@@ -161,6 +169,9 @@ export function TopNav() {
                   : item.href === "/schedule"
                     ? inboxBadges?.timeOffPending ?? 0
                     : 0
+              }
+              companyBadgeCounts={
+                item.href === "/inbox" ? inboxBadges?.companyCountsForHref(item.href) : undefined
               }
             />
           ))}
@@ -306,7 +317,13 @@ export function TopNav() {
                   <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r bg-primary" />
                 ) : null}
                 <span>{item.label}</span>
-                <InboxCountOrb count={badgeCount} />
+                {item.href === "/inbox" ? (
+                  <CompanyInboxCountOrbs
+                    companies={inboxBadges?.companyCountsForHref(item.href) ?? []}
+                  />
+                ) : (
+                  <InboxCountOrb count={badgeCount} />
+                )}
               </Link>
             );
           })}

@@ -13,7 +13,9 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
   inboxCountForHref,
+  type CompanyInboxBadgeCounts,
   type InboxBadgeCounts,
+  type InboxBadgeResponse,
 } from "@/lib/inbox/badge-types";
 
 const EMPTY: InboxBadgeCounts = {
@@ -27,9 +29,11 @@ const EMPTY: InboxBadgeCounts = {
 
 type InboxBadgesContextValue = {
   counts: InboxBadgeCounts;
+  companies: CompanyInboxBadgeCounts[];
   timeOffPending: number;
   refresh: () => Promise<void>;
   countForHref: (href: string) => number;
+  companyCountsForHref: (href: string) => CompanyInboxBadgeCounts[];
 };
 
 const InboxBadgesContext = createContext<InboxBadgesContextValue | null>(null);
@@ -52,6 +56,7 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
   const { status, data: session } = useSession();
   const pathname = usePathname();
   const [counts, setCounts] = useState<InboxBadgeCounts>(EMPTY);
+  const [companies, setCompanies] = useState<CompanyInboxBadgeCounts[]>([]);
   const [timeOffPending, setTimeOffPending] = useState(0);
   const canReviewTimeOff = TIME_OFF_REVIEW_ROLES.has(session?.user?.role ?? "");
 
@@ -60,7 +65,7 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
     try {
       const inboxRes = await fetch("/api/inbox/badges", { cache: "no-store" });
       if (inboxRes.ok) {
-        const data = (await inboxRes.json()) as InboxBadgeCounts;
+        const data = (await inboxRes.json()) as InboxBadgeResponse;
         setCounts({
           sms: Number(data.sms) || 0,
           social: Number(data.social) || 0,
@@ -69,6 +74,24 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
           googleReviews: Number(data.googleReviews) || 0,
           total: Number(data.total) || 0,
         });
+        setCompanies(
+          Array.isArray(data.companies)
+            ? data.companies.map((company) => ({
+                companyId: company.companyId,
+                companyName: company.companyName,
+                brandPrimary: company.brandPrimary,
+                switchUserId: company.switchUserId,
+                counts: {
+                  sms: Number(company.counts?.sms) || 0,
+                  social: Number(company.counts?.social) || 0,
+                  leads: Number(company.counts?.leads) || 0,
+                  missedCalls: Number(company.counts?.missedCalls) || 0,
+                  googleReviews: Number(company.counts?.googleReviews) || 0,
+                  total: Number(company.counts?.total) || 0,
+                },
+              }))
+            : []
+        );
       }
     } catch {
       /* ignore poll errors */
@@ -122,11 +145,22 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       counts,
+      companies,
       timeOffPending,
       refresh,
       countForHref: (href: string) => inboxCountForHref(href, counts),
+      companyCountsForHref: (href: string) =>
+        companies
+          .map((company) => ({
+            ...company,
+            counts: {
+              ...company.counts,
+              total: inboxCountForHref(href, company.counts),
+            },
+          }))
+          .filter((company) => company.counts.total > 0),
     }),
-    [counts, timeOffPending, refresh]
+    [counts, companies, timeOffPending, refresh]
   );
 
   return <InboxBadgesContext.Provider value={value}>{children}</InboxBadgesContext.Provider>;

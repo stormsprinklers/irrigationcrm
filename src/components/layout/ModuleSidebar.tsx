@@ -9,7 +9,9 @@ import { isNavActive } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
+import { CompanyInboxCountOrbs } from "@/components/layout/CompanyInboxCountOrbs";
 import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
+import type { CompanyInboxBadgeCounts } from "@/lib/inbox/badge-types";
 
 type ModuleSidebarProps = {
   title: string;
@@ -32,12 +34,14 @@ function NavLink({
   onClose,
   nested,
   badgeCount = 0,
+  companyBadgeCounts,
 }: {
   item: NavItem;
   pathname: string;
   onClose?: () => void;
   nested?: boolean;
   badgeCount?: number;
+  companyBadgeCounts?: CompanyInboxBadgeCounts[];
 }) {
   const active = isNavActive(pathname, item.href, item.exact, item.activePrefixes);
   return (
@@ -56,7 +60,11 @@ function NavLink({
       ) : null}
       <span>{item.label}</span>
       <span className="flex items-center gap-1.5">
-        <InboxCountOrb count={badgeCount} />
+        {companyBadgeCounts ? (
+          <CompanyInboxCountOrbs companies={companyBadgeCounts} />
+        ) : (
+          <InboxCountOrb count={badgeCount} />
+        )}
         {item.badge ? (
           <Badge variant={item.badge === "Add on" ? "addon" : "new"} className="text-[10px]">
             {item.badge}
@@ -72,11 +80,13 @@ function ExpandableNavItem({
   pathname,
   onClose,
   countForHref,
+  companyCountsForHref,
 }: {
   item: NavItem;
   pathname: string;
   onClose?: () => void;
   countForHref?: (href: string) => number;
+  companyCountsForHref?: (href: string) => CompanyInboxBadgeCounts[];
 }) {
   const children = item.children ?? [];
   const groupActive = itemOrChildActive(pathname, item);
@@ -94,6 +104,7 @@ function ExpandableNavItem({
           pathname={pathname}
           onClose={onClose}
           badgeCount={countForHref?.(item.href) ?? 0}
+          companyBadgeCounts={companyCountsForHref?.(item.href)}
         />
       </li>
     );
@@ -128,6 +139,7 @@ function ExpandableNavItem({
                 onClose={onClose}
                 nested
                 badgeCount={countForHref?.(child.href) ?? 0}
+                companyBadgeCounts={companyCountsForHref?.(child.href)}
               />
             </li>
           ))}
@@ -147,6 +159,8 @@ export function ModuleSidebar({
   const pathname = usePathname();
   const inboxBadges = useInboxBadges();
   const countForHref = title === "Inbox" ? inboxBadges?.countForHref : undefined;
+  const companyCountsForHref =
+    title === "Inbox" ? inboxBadges?.companyCountsForHref : undefined;
   const hasExpandable = useMemo(
     () => sections.some((section) => section.items.some((item) => (item.children?.length ?? 0) > 0)),
     [sections]
@@ -195,6 +209,7 @@ export function ModuleSidebar({
                   pathname={pathname}
                   onClose={onClose}
                   countForHref={countForHref}
+                  companyCountsForHref={companyCountsForHref}
                 />
               ))}
             </ul>

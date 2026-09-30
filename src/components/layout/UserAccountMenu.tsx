@@ -87,7 +87,9 @@ export function UserAccountMenu() {
           trueRole: null,
         },
       });
-      window.location.href = "/home";
+      // Reload the same URL so all server and client data is resolved for the
+      // newly selected company without losing the user's current page context.
+      window.location.reload();
     } finally {
       setSwitching(false);
     }

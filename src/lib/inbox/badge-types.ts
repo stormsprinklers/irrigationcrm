@@ -7,6 +7,18 @@ export type InboxBadgeCounts = {
   total: number;
 };
 
+export type CompanyInboxBadgeCounts = {
+  companyId: string;
+  companyName: string;
+  brandPrimary: string;
+  switchUserId: string;
+  counts: InboxBadgeCounts;
+};
+
+export type InboxBadgeResponse = InboxBadgeCounts & {
+  companies: CompanyInboxBadgeCounts[];
+};
+
 export function inboxCountForHref(href: string, counts: InboxBadgeCounts): number {
   if (href.startsWith("/inbox/voice")) return counts.missedCalls;
   if (href.startsWith("/inbox/sms")) return counts.sms;
