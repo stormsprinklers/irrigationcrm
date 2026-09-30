@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         select: {
           id: true,
+          serpApiId: true,
           name: true,
           canonicalName: true,
           latitude: true,

@@ -95,13 +95,22 @@ export async function fetchGoogleLocalResults(params: {
 
 export async function fetchGoogleOrganicResults(params: {
   keyword: string;
-  location: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
 }) {
   const apiKey = getSerpApiApiKey();
   const url = new URL("https://serpapi.com/search.json");
   url.searchParams.set("engine", "google");
   url.searchParams.set("q", params.keyword);
-  url.searchParams.set("location", params.location);
+  if (Number.isFinite(params.latitude) && Number.isFinite(params.longitude)) {
+    url.searchParams.set("lat", String(params.latitude));
+    url.searchParams.set("lon", String(params.longitude));
+  } else if (params.location?.trim()) {
+    url.searchParams.set("location", params.location.trim());
+  } else {
+    throw new Error("A SerpAPI location or latitude/longitude is required");
+  }
   applyCommonSearchParams(url);
 
   const data = await serpApiFetch<SerpApiResponse>(url, {
@@ -119,9 +128,11 @@ export async function fetchGoogleOrganicResults(params: {
 export async function fetchLocalPackRankings(params: {
   keyword: string;
   canonicalName: string;
+  serpApiId?: string | null;
   businessName: string;
 }) {
-  const location = canonicalNameToSerpLocation(params.canonicalName);
+  // SerpAPI's location ID is unambiguous; canonical text can match a more popular place.
+  const location = params.serpApiId?.trim() || canonicalNameToSerpLocation(params.canonicalName);
   const localResults = await fetchGoogleLocalResults({
     keyword: params.keyword,
     location,
@@ -139,18 +150,25 @@ export async function fetchLocalPackRankings(params: {
 export async function fetchOrganicRankings(params: {
   keyword: string;
   canonicalName: string;
+  latitude?: number;
+  longitude?: number;
   websiteUrl: string;
 }) {
   const location = canonicalNameToSerpLocation(params.canonicalName);
   const organicResults = await fetchGoogleOrganicResults({
     keyword: params.keyword,
     location,
+    latitude: params.latitude,
+    longitude: params.longitude,
   });
 
   const parsed = parseOrganicRankings(organicResults, params.websiteUrl);
 
   return {
-    locationUsed: location,
+    locationUsed:
+      Number.isFinite(params.latitude) && Number.isFinite(params.longitude)
+        ? `${params.latitude},${params.longitude}`
+        : location,
     ourRank: parsed.ourRank,
     topBusinesses: parsed.topBusinesses as SerpApiRankingBusiness[],
   };

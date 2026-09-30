@@ -16,6 +16,9 @@ import {
 import type { SerpApiCityRanking, SerpApiRankingsResponse } from "@/lib/serpapi/types";
 import { prisma } from "@/lib/prisma";
 
+/** One-time cache invalidation for the switch from ambiguous location names to precise IDs/GPS. */
+const PRECISE_LOCATION_TARGETING_ROLLOUT = new Date("2026-09-30T23:30:00.000Z");
+
 type GetRankingsOptions = {
   companyId: string;
   channel: LocalSeoChannel;
@@ -129,7 +132,11 @@ export async function getSerpRankings(options: GetRankingsOptions): Promise<Serp
   const citiesNeedingFetch = refresh
     ? cities.filter((city) => {
         const cached = cacheByCityId.get(city.id);
-        return !cached || !isCacheFresh(cached.fetchedAt, now);
+        return (
+          !cached ||
+          cached.fetchedAt < PRECISE_LOCATION_TARGETING_ROLLOUT ||
+          !isCacheFresh(cached.fetchedAt, now)
+        );
       })
     : [];
 
@@ -145,11 +152,14 @@ export async function getSerpRankings(options: GetRankingsOptions): Promise<Serp
         ? await fetchOrganicRankings({
             keyword,
             canonicalName: city.canonicalName,
+            latitude: city.latitude,
+            longitude: city.longitude,
             websiteUrl: websiteUrl!,
           })
         : await fetchLocalPackRankings({
             keyword,
             canonicalName: city.canonicalName,
+            serpApiId: city.serpApiId,
             businessName: trackedName,
           });
 
