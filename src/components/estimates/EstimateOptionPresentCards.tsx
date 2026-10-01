@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
 import { cn } from "@/lib/utils";
 
 export type PresentOption = {
@@ -119,7 +120,9 @@ export function defaultPresentOptionId<
 }
 
 function optionLineItems(optionId: string, lineItems: PresentLineItem[]) {
-  return lineItems.filter((item) => !item.optionId || item.optionId === optionId);
+  return customerFacingEstimateLines(
+    lineItems.filter((item) => !item.optionId || item.optionId === optionId)
+  );
 }
 
 function optionDiscounts(optionId: string, discounts: PresentDiscount[]) {

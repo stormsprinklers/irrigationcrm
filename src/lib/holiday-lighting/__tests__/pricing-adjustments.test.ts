@@ -33,13 +33,14 @@ test("quote-specific prices and discounts survive parsing and affect each option
     reinstallPrice: 45,
     optionAdjustments: {
       buy: { price: 120, discountType: "fixed", discountAmount: 30 },
-      lease: { discountType: "percent", discountAmount: 25 },
+      lease: { discountLabel: "Early booking", discountType: "percent", discountAmount: 25 },
       permanent: { discountType: "percent", discountAmount: 10 },
     },
   });
   const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
   assert.deepEqual(result.optionDetails.buy, { calculated: 150, subtotal: 120, discountTotal: 30, total: 90 });
   assert.deepEqual(result.optionDetails.lease, { calculated: 80, subtotal: 80, discountTotal: 20, total: 60 });
+  assert.equal(selections.optionAdjustments?.lease?.discountLabel, "Early booking");
   assert.equal(result.permanentTotal, 180);
   assert.equal(result.reinstallTotal, 45);
 });
@@ -110,6 +111,88 @@ test("detailed buy lines show parts and year-two labor without per-foot pricing"
   assert.deepEqual(lines.map((line) => line.total), [22.5, 29.9]);
   assert.match(lines[1]!.name, /Year 2 cost/);
   assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
+});
+
+test("branded estimate combines every roofline segment into one parts and labor breakdown", () => {
+  const baseLine = {
+    key: "roof-1",
+    name: "Front eave",
+    description: "10 ft",
+    staffDetail: "10 ft",
+    purchaseTotal: 52.4,
+    leaseTotal: 45.9,
+    partsTotal: 22.5,
+    laborTotal: 29.9,
+    reinstallTotal: 29.9,
+    colorPattern: "Warm White",
+    lightStyleLabel: "C9",
+    kind: "roofline" as const,
+  };
+  const lines = holidayDetailedBuyLines({
+    targetSubtotal: 104.8,
+    lines: [baseLine, { ...baseLine, key: "roof-2", name: "Garage eave" }],
+  });
+  assert.deepEqual(lines.map(({ name, total }) => ({ name, total })), [
+    { name: "Roofline — parts", total: 45 },
+    { name: "Roofline — labor (Year 2 cost)", total: 59.8 },
+  ]);
+  assert.doesNotMatch(JSON.stringify(lines), /Front eave|Garage eave/);
+});
+
+test("labor-only branded estimate combines every roofline segment into one line", () => {
+  const baseLine = {
+    key: "roof-1",
+    name: "Front eave",
+    description: "10 ft",
+    staffDetail: "10 ft",
+    purchaseTotal: 29.9,
+    leaseTotal: 45.9,
+    partsTotal: 0,
+    laborTotal: 29.9,
+    reinstallTotal: 29.9,
+    colorPattern: "Warm White",
+    lightStyleLabel: "C9",
+    kind: "roofline" as const,
+  };
+  const lines = holidayDetailedLaborOnlyLines({
+    targetSubtotal: 59.8,
+    lines: [baseLine, { ...baseLine, key: "roof-2", name: "Garage eave" }],
+  });
+  assert.deepEqual(lines.map(({ name, total }) => ({ name, total })), [
+    { name: "Roofline — labor only", total: 59.8 },
+  ]);
+  assert.doesNotMatch(JSON.stringify(lines), /Front eave|Garage eave/);
+});
+
+test("customer-facing breakdown hides internal price and minimum adjustments", () => {
+  const pricedLine = {
+    key: "roof-1",
+    name: "Front eave",
+    description: "10 ft",
+    staffDetail: "10 ft",
+    purchaseTotal: 52.4,
+    leaseTotal: 45.9,
+    partsTotal: 22.5,
+    laborTotal: 29.9,
+    reinstallTotal: 29.9,
+    colorPattern: "Warm White",
+    lightStyleLabel: "C9",
+    kind: "roofline" as const,
+  };
+  const laborLines = holidayDetailedLaborOnlyLines({
+    targetSubtotal: 25,
+    lines: [pricedLine],
+  });
+  assert.equal(laborLines.length, 1);
+  assert.equal(laborLines[0]!.total, 25);
+  assert.doesNotMatch(JSON.stringify(laborLines), /adjustment|minimum/i);
+
+  const buyLines = holidayDetailedBuyLines({
+    targetSubtotal: 45,
+    lines: [pricedLine],
+  });
+  assert.equal(buyLines.reduce((sum, line) => sum + line.total, 0), 45);
+  assert.doesNotMatch(JSON.stringify(buyLines), /adjustment|minimum/i);
 });
 
 test("labor-only quotes charge installation labor and omit parts", () => {

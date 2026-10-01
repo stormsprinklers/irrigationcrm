@@ -41,6 +41,20 @@ export async function findEstimateByPublicToken(token: string) {
   return estimate;
 }
 
+/** Staff-only customer-view preview, including estimates that are still drafts. */
+export async function findEstimateForStaffPreview(companyId: string, idOrToken: string) {
+  return prisma.estimate.findFirst({
+    where: {
+      companyId,
+      OR: [{ id: idOrToken }, { publicToken: idOrToken }],
+    },
+    include: {
+      ...estimateLineItemsInclude,
+      company: { select: portalCompanySelect },
+    },
+  });
+}
+
 export function portalCompanyPayload(company: PortalCompany) {
   return {
     name: company.name,

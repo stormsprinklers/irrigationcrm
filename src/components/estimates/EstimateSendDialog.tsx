@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
+import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type EstimatePreview = {
@@ -45,6 +46,12 @@ type EstimatePreview = {
     blobUrl: string;
     fileName: string;
     mimeType: string;
+  }>;
+  discounts?: Array<{
+    optionId: string | null;
+    label: string | null;
+    type: string;
+    amount: number;
   }>;
   designExportMetadata?: Record<string, unknown> | null;
 };
@@ -125,9 +132,18 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
 
   const lines = useMemo(() => {
     if (!estimate) return [];
-    if (!activeOption) return estimate.lineItems;
-    return estimate.lineItems.filter(
-      (item) => !item.optionId || item.optionId === activeOption.id
+    if (!activeOption) return customerFacingEstimateLines(estimate.lineItems);
+    return customerFacingEstimateLines(
+      estimate.lineItems.filter(
+        (item) => !item.optionId || item.optionId === activeOption.id
+      )
+    );
+  }, [estimate, activeOption]);
+
+  const activeDiscounts = useMemo(() => {
+    if (!estimate) return [];
+    return (estimate.discounts ?? []).filter(
+      (discount) => !discount.optionId || discount.optionId === activeOption?.id
     );
   }, [estimate, activeOption]);
 
@@ -280,7 +296,11 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                   </div>
                   {estimate.discountTotal > 0 ? (
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Discounts</span>
+                      <span>
+                        {activeDiscounts.length === 1
+                          ? activeDiscounts[0]?.label || "Discount"
+                          : "Discounts"}
+                      </span>
                       <span>-{money(estimate.discountTotal)}</span>
                     </div>
                   ) : null}

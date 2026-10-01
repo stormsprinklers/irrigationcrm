@@ -269,32 +269,54 @@ export function holidayDetailedBuyLines(params: {
     total: number;
     itemType: "PRODUCT" | "SERVICE";
   }> = [];
-  for (const line of params.lines) {
-    const subject = line.kind === "roofline" ? `Roofline — ${line.name}` : line.name;
-    const selection = [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · ");
-    const color = selection ? ` Lights: ${selection}.` : "";
+
+  const rooflines = params.lines.filter((line) => line.kind === "roofline");
+  const placements = params.lines.filter((line) => line.kind !== "roofline");
+  if (rooflines.length) {
+    const selections = [...new Set(
+      rooflines
+        .map((line) => [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · "))
+        .filter(Boolean)
+    )];
+    const lights = selections.length ? ` Lights: ${selections.join("; ")}.` : "";
     result.push({
-      name: `${subject} — parts`,
-      description: `Customer-owned holiday lighting and materials.${color}`,
+      name: "Roofline — parts",
+      description: `Customer-owned holiday lighting and materials.${lights}`,
+      total: money(rooflines.reduce((sum, line) => sum + line.partsTotal, 0)),
+      itemType: "PRODUCT",
+    });
+    result.push({
+      name: "Roofline — labor (Year 2 cost)",
+      description: `Installation and take-down labor. This amount is the Year 2 service cost for the roofline.${lights}`,
+      total: money(rooflines.reduce((sum, line) => sum + line.laborTotal, 0)),
+      itemType: "SERVICE",
+    });
+  }
+
+  for (const line of placements) {
+    const selection = [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · ");
+    const lights = selection ? ` Lights: ${selection}.` : "";
+    result.push({
+      name: `${line.name} — parts`,
+      description: `Customer-owned holiday lighting and materials.${lights}`,
       total: line.partsTotal,
       itemType: "PRODUCT",
     });
     result.push({
-      name: `${subject} — labor (Year 2 cost)`,
-      description: `Installation and take-down labor. This amount is the Year 2 service cost for this item.${color}`,
+      name: `${line.name} — labor (Year 2 cost)`,
+      description: `Installation and take-down labor. This amount is the Year 2 service cost for this item.${lights}`,
       total: line.laborTotal,
       itemType: "SERVICE",
     });
   }
   const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
   const adjustment = money(params.targetSubtotal - detailedTotal);
-  if (adjustment !== 0) {
-    result.push({
-      name: "Quote adjustment",
-      description: "Adjustment for the quoted package price or minimum.",
-      total: adjustment,
-      itemType: "SERVICE",
-    });
+  if (adjustment !== 0 && result.length) {
+    // Quote/minimum reconciliation is internal. Fold it into the roofline parts
+    // amount (or the first available row) instead of exposing an adjustment.
+    const index = result.findIndex((line) => line.name === "Roofline — parts");
+    const target = index >= 0 ? index : 0;
+    result[target] = { ...result[target]!, total: money(result[target]!.total + adjustment) };
   }
   return result;
 }
@@ -308,26 +330,43 @@ export function holidayDetailedLaborOnlyLines(params: {
     description: string;
     total: number;
     itemType: "SERVICE";
-  }> = params.lines.map((line) => {
-    const subject = line.kind === "roofline" ? `Roofline — ${line.name}` : line.name;
+  }> = [];
+  const rooflines = params.lines.filter((line) => line.kind === "roofline");
+  const placements = params.lines.filter((line) => line.kind !== "roofline");
+
+  if (rooflines.length) {
+    const selections = [...new Set(
+      rooflines
+        .map((line) => [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · "))
+        .filter(Boolean)
+    )];
+    const lights = selections.length ? ` Customer-supplied lights: ${selections.join("; ")}.` : "";
+    result.push({
+      name: "Roofline — labor only",
+      description: `Installation and take-down labor for customer-supplied lights. Lights and materials are not included.${lights}`,
+      total: money(rooflines.reduce((sum, line) => sum + line.laborTotal, 0)),
+      itemType: "SERVICE",
+    });
+  }
+
+  for (const line of placements) {
     const selection = [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · ");
     const lights = selection ? ` Customer-supplied lights: ${selection}.` : "";
-    return {
-      name: `${subject} — labor only`,
+    result.push({
+      name: `${line.name} — labor only`,
       description: `Installation and take-down labor for customer-supplied lights. Lights and materials are not included.${lights}`,
       total: line.laborTotal,
       itemType: "SERVICE" as const,
-    };
-  });
+    });
+  }
   const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
   const adjustment = money(params.targetSubtotal - detailedTotal);
-  if (adjustment !== 0) {
-    result.push({
-      name: "Labor minimum adjustment",
-      description: "Adjustment to the quoted labor-only package price or minimum.",
-      total: adjustment,
-      itemType: "SERVICE",
-    });
+  if (adjustment !== 0 && result.length) {
+    // Keep minimum/manual-price reconciliation internal and make the visible
+    // labor rows add up to the customer-facing option subtotal.
+    const index = result.findIndex((line) => line.name === "Roofline — labor only");
+    const target = index >= 0 ? index : 0;
+    result[target] = { ...result[target]!, total: money(result[target]!.total + adjustment) };
   }
   return result;
 }

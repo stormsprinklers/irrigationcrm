@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/api-auth";
 import {
   requirePortalCustomer,
   portalForbiddenResponse,
@@ -9,6 +10,7 @@ import { portalFeatureEnabled } from "@/lib/portal/permissions";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
 import {
   findEstimateByPublicToken,
+  findEstimateForStaffPreview,
   portalCompanyPayload,
 } from "@/lib/portal/public-estimate";
 
@@ -58,6 +60,21 @@ export async function GET(_request: NextRequest, { params }: Params) {
       company: portalCompanyPayload(ctx.company),
       authenticated: true,
     });
+  }
+
+  // The staff send dialog opens the branded customer view while the estimate
+  // is still a draft. Keep that preview private to a signed-in company user.
+  const staff = await getSessionUser(_request);
+  if (staff) {
+    const estimate = await findEstimateForStaffPreview(staff.companyId, id);
+    if (estimate) {
+      return NextResponse.json({
+        estimate: serializePortalEstimate(estimate),
+        company: portalCompanyPayload(estimate.company),
+        authenticated: false,
+        staffPreview: true,
+      });
+    }
   }
 
   // Unauthenticated: estimate link from SMS/email uses publicToken only.

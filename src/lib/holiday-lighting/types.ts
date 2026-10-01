@@ -94,6 +94,7 @@ export type HolidayQuoteSelections = {
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent";
 export type HolidayOptionAdjustment = {
   price?: number | null;
+  discountLabel?: string;
   discountType?: "fixed" | "percent";
   discountAmount?: number;
 };
@@ -465,6 +466,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     const discountAmount = Number(item.discountAmount ?? 0);
     adjustments[key] = {
       price: price != null && Number.isFinite(price) && price >= 0 && price <= 9_999_999 ? Math.round(price * 100) / 100 : null,
+      discountLabel:
+        typeof item.discountLabel === "string" && item.discountLabel.trim()
+          ? item.discountLabel.trim().slice(0, 80)
+          : undefined,
       discountType: item.discountType === "percent" ? "percent" : "fixed",
       discountAmount: Number.isFinite(discountAmount) && discountAmount >= 0
         ? Math.round(Math.min(discountAmount, item.discountType === "percent" ? 100 : 9_999_999) * 100) / 100

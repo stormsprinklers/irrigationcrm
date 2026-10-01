@@ -133,7 +133,6 @@ export function HolidayLightingQuoter({
 }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
-  const [quoteId, setQuoteId] = useState(initialId ?? "");
   const [loading, setLoading] = useState(Boolean(initialId));
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -173,6 +172,9 @@ export function HolidayLightingQuoter({
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const quoteIdRef = useRef(initialId ?? "");
+  const quoteCreationRef = useRef<Promise<string> | null>(null);
+  const quoteRouteReplacedRef = useRef(Boolean(initialId));
   const lastGeocodedKey = useRef("");
   const geocodeSeq = useRef(0);
 
@@ -183,7 +185,8 @@ export function HolidayLightingQuoter({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load quote");
       const q = data.quote as QuoteRecord;
-      setQuoteId(q.id);
+      quoteIdRef.current = q.id;
+      quoteRouteReplacedRef.current = true;
       setAddress(q.address ?? "");
       setCity(q.city ?? "");
       setState(q.state ?? "UT");
@@ -288,29 +291,40 @@ export function HolidayLightingQuoter({
   }, [customerId]);
 
   async function ensureQuote(): Promise<string> {
-    if (quoteId) return quoteId;
-    const res = await fetch("/api/holiday-lighting/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId: customerId || null,
-        propertyId: propertyId || null,
-        visitId: initialVisitId || null,
-        address,
-        city,
-        state,
-        zip,
-        lat: center?.lat ?? null,
-        lng: center?.lng ?? null,
-        measurements,
-        selections,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? "Failed to create quote");
-    setQuoteId(data.quote.id);
-    router.replace(`/holiday-lighting/quote/${data.quote.id}`);
-    return data.quote.id as string;
+    if (quoteIdRef.current) return quoteIdRef.current;
+    if (quoteCreationRef.current) return quoteCreationRef.current;
+
+    const creation = (async () => {
+      const res = await fetch("/api/holiday-lighting/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: customerId || null,
+          propertyId: propertyId || null,
+          visitId: initialVisitId || null,
+          address,
+          city,
+          state,
+          zip,
+          lat: center?.lat ?? null,
+          lng: center?.lng ?? null,
+          measurements,
+          selections,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to create quote");
+      const createdId = data.quote.id as string;
+      quoteIdRef.current = createdId;
+      return createdId;
+    })();
+
+    quoteCreationRef.current = creation;
+    try {
+      return await creation;
+    } finally {
+      quoteCreationRef.current = null;
+    }
   }
 
   async function save(
@@ -353,6 +367,10 @@ export function HolidayLightingQuoter({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       if (data.pricing) setPricing(data.pricing);
+      if (!quoteRouteReplacedRef.current) {
+        quoteRouteReplacedRef.current = true;
+        router.replace(`/holiday-lighting/quote/${id}`);
+      }
       if (!opts?.quiet) toast.success("Quote saved");
       return true;
     } catch (err) {
@@ -384,7 +402,7 @@ export function HolidayLightingQuoter({
     city: string;
     state: string;
     zip: string;
-  }) {
+  }, linkPatch?: { customerId?: string | null; propertyId?: string | null }) {
     const payload = fields ?? { address, city, state, zip };
     const query =
       formatAddressLine(payload.address, payload.city, payload.state, payload.zip).trim() ||
@@ -414,6 +432,7 @@ export function HolidayLightingQuoter({
           zip: payload.zip,
           lat: data.lat,
           lng: data.lng,
+          ...linkPatch,
         },
         { quiet: true }
       );
@@ -531,7 +550,7 @@ export function HolidayLightingQuoter({
         city: customer.city ?? "",
         state: customer.state ?? "UT",
         zip: customer.zip ?? "",
-      });
+      }, { customerId: customer.id });
     } else {
       void save({ customerId: customer.id }, { quiet: true });
     }
@@ -668,17 +687,37 @@ export function HolidayLightingQuoter({
       const id = await ensureQuote();
       const exported = await paintRef.current.exportForApi();
       if (!exported) throw new Error("Could not export paint mask");
+      const uploadBytes = exported.cleanBlob.size + exported.markedBlob.size;
+      if (uploadBytes > 4 * 1024 * 1024) {
+        throw new Error("This photo is too large to process. Try a smaller photo.");
+      }
       const form = new FormData();
-      form.set("clean", exported.cleanBlob, "property.png");
-      form.set("marked", exported.markedBlob, "property-marked.png");
+      form.set("clean", exported.cleanBlob, "property.jpg");
+      form.set("marked", exported.markedBlob, "property-marked.jpg");
       form.set("lightStyle", selections.defaultLightStyleKey);
       form.set("colorPattern", selections.defaultColorPattern ?? "Warm White");
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
         method: "POST",
         body: form,
       });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: { error?: string; previewImageUrl?: string } = {};
+      if (responseText.trim()) {
+        try {
+          data = JSON.parse(responseText) as typeof data;
+        } catch {
+          if (!res.ok) {
+            throw new Error(
+              res.status === 413 || /request ent/i.test(responseText)
+                ? "The preview image was too large to upload. Try again with a smaller photo."
+                : responseText.slice(0, 180)
+            );
+          }
+          throw new Error("The preview service returned an invalid response. Please try again.");
+        }
+      }
       if (!res.ok) throw new Error(data.error ?? "Preview failed");
+      if (!data.previewImageUrl) throw new Error("Preview completed without an image URL");
       setPreviewUrl(data.previewImageUrl);
       toast.success("Lighting preview ready");
     } catch (err) {
@@ -1217,7 +1256,7 @@ export function HolidayLightingQuoter({
                 const detail = draftPricing[key];
                 return <div key={key} className="space-y-2 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between text-sm font-medium"><span>{label}</span><span>{money(detail.total)}</span></div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <label className="text-xs text-muted-foreground">Price ($)
                       <input type="number" min={0} max={9999999} step="0.01" placeholder={detail.calculated.toFixed(2)}
                         value={adjustment?.price ?? ""}
@@ -1235,6 +1274,12 @@ export function HolidayLightingQuoter({
                       <input type="number" min={0} max={adjustment?.discountType === "percent" ? 100 : 9999999} step="0.01"
                         value={adjustment?.discountAmount ?? 0}
                         onChange={(event) => patchOption(key, { discountAmount: Number(event.target.value) || 0 })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
+                    </label>
+                    <label className="text-xs text-muted-foreground">Discount name
+                      <input type="text" maxLength={80} placeholder="Holiday discount"
+                        value={adjustment?.discountLabel ?? ""}
+                        onChange={(event) => patchOption(key, { discountLabel: event.target.value })}
                         className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
                     </label>
                   </div>

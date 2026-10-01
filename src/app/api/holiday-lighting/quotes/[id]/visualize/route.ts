@@ -14,7 +14,20 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_REQUEST_IMAGE_BYTES = 4 * 1024 * 1024;
+
+function supportedImageType(file: File) {
+  return file.type === "image/jpeg" || file.type === "image/webp" || file.type === "image/png"
+    ? file.type
+    : "image/png";
+}
+
+function imageExtension(type: string) {
+  if (type === "image/jpeg") return "jpg";
+  if (type === "image/webp") return "webp";
+  return "png";
+}
 
 function lightingPrompt(styleLabel: string, colorPattern: string) {
   return `You are given TWO images of the same residential property:
@@ -75,8 +88,11 @@ export async function POST(request: NextRequest, { params }: Params) {
         "Both a clean property image and a brush-marked overlay image are required"
       );
     }
-    if (clean.size > MAX_BYTES || marked.size > MAX_BYTES) {
-      return badRequestResponse("Image files must be under 8MB each");
+    if (clean.size > MAX_FILE_BYTES || marked.size > MAX_FILE_BYTES) {
+      return badRequestResponse("Image files must be under 4MB each");
+    }
+    if (clean.size + marked.size > MAX_REQUEST_IMAGE_BYTES) {
+      return badRequestResponse("Combined preview images must be under 4MB");
     }
 
     const catalog = parseHolidayCatalog(company?.holidayLightingCatalog);
@@ -93,15 +109,17 @@ export async function POST(request: NextRequest, { params }: Params) {
     outbound.append("size", "1024x1024");
     outbound.append("input_fidelity", "high");
     // First image = clean property (high-fidelity base). Second = brush-marked guide.
+    const cleanType = supportedImageType(clean);
+    const markedType = supportedImageType(marked);
     outbound.append(
       "image[]",
-      new Blob([await clean.arrayBuffer()], { type: "image/png" }),
-      "property.png"
+      new Blob([await clean.arrayBuffer()], { type: cleanType }),
+      `property.${imageExtension(cleanType)}`
     );
     outbound.append(
       "image[]",
-      new Blob([await marked.arrayBuffer()], { type: "image/png" }),
-      "property-marked.png"
+      new Blob([await marked.arrayBuffer()], { type: markedType }),
+      `property-marked.${imageExtension(markedType)}`
     );
 
     const res = await fetch("https://api.openai.com/v1/images/edits", {
@@ -138,7 +156,6 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     return NextResponse.json({
       previewImageUrl: updated.previewImageUrl,
-      previewBase64: b64,
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {

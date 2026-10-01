@@ -22,7 +22,10 @@ export type PaintCanvasHandle = {
   hasPaint: () => boolean;
 };
 
-const MAX_EDGE = 1536;
+// The preview endpoint receives both the clean and marked copies in one request.
+// Keep their combined payload comfortably below Vercel's request-size limit.
+const MAX_EDGE = 1280;
+const EXPORT_QUALITY = 0.85;
 const PAINT_COLOR = "rgba(230, 194, 122, 0.85)";
 
 export function PaintCanvas({
@@ -263,10 +266,10 @@ export function PaintCanvas({
     markedCtx.drawImage(paintCanvas, 0, 0, w, h);
 
     const cleanBlob = await new Promise<Blob | null>((resolve) =>
-      cleanCanvas.toBlob((b) => resolve(b), "image/png")
+      cleanCanvas.toBlob((b) => resolve(b), "image/jpeg", EXPORT_QUALITY)
     );
     const markedBlob = await new Promise<Blob | null>((resolve) =>
-      markedCanvas.toBlob((b) => resolve(b), "image/png")
+      markedCanvas.toBlob((b) => resolve(b), "image/jpeg", EXPORT_QUALITY)
     );
 
     if (!cleanBlob || !markedBlob) return null;

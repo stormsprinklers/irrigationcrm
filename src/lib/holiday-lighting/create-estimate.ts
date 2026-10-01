@@ -223,7 +223,7 @@ export async function createEstimateFromHolidayQuote(params: {
         data: {
           estimateId: estimate.id,
           optionId: option.id,
-          label: "Holiday lighting discount",
+          label: adjustment.discountLabel?.trim() || "Holiday lighting discount",
           type: adjustment.discountType === "percent" ? DiscountType.PERCENT : DiscountType.FIXED,
           amount: adjustment.discountType === "percent"
             ? adjustment.discountAmount ?? 0
