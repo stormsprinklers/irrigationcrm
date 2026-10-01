@@ -222,16 +222,15 @@ export function applyMarginToLines(
 }
 
 export function holidayOptionSummary(params: {
-  billedLengthFt: number;
   placementCount: number;
   styleLabel: string;
 }) {
-  const feet = `${Math.round(params.billedLengthFt)} ft of ${params.styleLabel} roofline lighting`;
+  const roofline = `${params.styleLabel} roofline lighting`;
   const plants =
     params.placementCount > 0
       ? ` plus ${params.placementCount} tree${params.placementCount === 1 ? "" : "s"}/bush${params.placementCount === 1 ? "" : "es"}`
       : "";
-  return `${feet}${plants}.`;
+  return `${roofline}${plants}.`;
 }
 
 function formatHolidayMoney(n: number) {
@@ -373,9 +372,27 @@ export function holidayDetailedLaborOnlyLines(params: {
 }
 
 export const HOLIDAY_INCLUDED_LINES = [
-  { name: "Storage", description: "Included with this holiday lighting package." },
-  { name: "Maintenance", description: "Included bulb and lighting maintenance during the season." },
-  { name: "3-year warranty", description: "Included three-year warranty." },
+  {
+    name: "Storage",
+    description: "We keep your lights in our warehouse in their own labeled bin so they never get lost, and so we can streamline your lighting installation next year.",
+  },
+  {
+    name: "Maintenance",
+    description: "If a bulb goes out or a cord gets out of place, call us and we will be there within 48 hours to fix the issue at no cost.",
+  },
+  {
+    name: "3-year parts and labor warranty",
+    description: "If anything goes wrong during the three-year warranty period, we will make it right at no cost to you.",
+  },
+] as const;
+
+export const HOLIDAY_PERMANENT_INCLUDED_LINES = [
+  HOLIDAY_INCLUDED_LINES[0],
+  HOLIDAY_INCLUDED_LINES[1],
+  {
+    name: "5-year parts and labor warranty",
+    description: "If anything goes wrong during the five-year warranty period, we will make it right at no cost to you.",
+  },
 ] as const;
 
 export const HOLIDAY_BUY_DETAIL =

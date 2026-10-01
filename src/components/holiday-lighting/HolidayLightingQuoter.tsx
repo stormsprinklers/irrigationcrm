@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -18,6 +18,12 @@ import {
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ModalPortal } from "@/components/ui/ModalPortal";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
@@ -173,7 +179,6 @@ export function HolidayLightingQuoter({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [addOptionOpen, setAddOptionOpen] = useState(false);
   const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
@@ -499,10 +504,22 @@ export function HolidayLightingQuoter({
     const baseSelections = copyCurrent
       ? { ...selections, designOptions: undefined }
       : holidaySelectionsFromCatalog(catalog);
+    const normalized = applyHolidayCatalogPolicy(baseSelections, catalog);
     const baseMeasurements = copyCurrent
       ? structuredClone(measurements)
-      : structuredClone(EMPTY_HOLIDAY_MEASUREMENTS);
-    const normalized = applyHolidayCatalogPolicy(baseSelections, catalog);
+      : pruneStrands({
+          segments: structuredClone(measurements.segments).map((segment) => ({
+            ...segment,
+            lightStyleKey: normalized.defaultLightStyleKey,
+            colorPattern: normalized.defaultColorPattern ?? "Warm White",
+          })),
+          placements: [],
+          streetTraces: structuredClone(measurements.streetTraces ?? []),
+          strands: structuredClone(measurements.strands ?? []).map((strand) => ({
+            ...strand,
+            lightStyleKey: normalized.defaultLightStyleKey,
+          })),
+        });
     const nextOption: HolidayQuoteDesignOption = {
       id,
       label: `Option ${number}`,
@@ -519,7 +536,6 @@ export function HolidayLightingQuoter({
       },
     };
     const nextOptions = [...snapshot, nextOption];
-    setAddOptionOpen(false);
     setDesignOptions(nextOptions);
     setActiveOptionId(id);
     setMeasurements(baseMeasurements);
@@ -550,6 +566,14 @@ export function HolidayLightingQuoter({
       { measurements: target.measurements, selections: { ...target.selections, designOptions: remaining, activeDesignOptionId: target.id } },
       { quiet: true, designOptions: remaining, activeOptionId: target.id }
     );
+  }
+
+  function updateActiveDesignOptionLabel(label: string) {
+    const nextOptions = currentOptions().map((option) =>
+      option.id === activeOptionId ? { ...option, label } : option
+    );
+    setDesignOptions(nextOptions);
+    setSelections((current) => ({ ...current, designOptions: nextOptions }));
   }
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
@@ -969,6 +993,11 @@ export function HolidayLightingQuoter({
   const visibleQuoteOptions: Array<readonly [HolidayQuoteOptionKey, string]> = [
     [activePricingKey, activePricingLabel],
   ];
+  const renderedDesignOptions = designOptions.length
+    ? currentOptions()
+    : holidayDesignOptionsFromQuote({ measurements, selections, catalog });
+  const activeDesignOption = renderedDesignOptions.find((option) => option.id === activeOptionId)
+    ?? renderedDesignOptions[0];
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -1029,10 +1058,7 @@ export function HolidayLightingQuoter({
 
       <div className="rounded-lg border border-border bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {(designOptions.length
-            ? currentOptions()
-            : holidayDesignOptionsFromQuote({ measurements, selections, catalog })
-          ).map((option) => (
+          {renderedDesignOptions.map((option) => (
             <Button
               key={option.id}
               type="button"
@@ -1043,16 +1069,39 @@ export function HolidayLightingQuoter({
               {option.label}
             </Button>
           ))}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={designOptions.length >= 5}
-            onClick={() => setAddOptionOpen((open) => !open)}
-          >
-            + New Option
-          </Button>
-          {designOptions.length > 1 ? (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={renderedDesignOptions.length >= 5}
+                className="gap-1"
+              >
+                + New Option
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-72">
+              <DropdownMenuItem className="items-start py-2" onSelect={() => addDesignOption(false)}>
+                <div>
+                  <p className="font-medium">Create new option</p>
+                  <p className="text-xs text-muted-foreground">
+                    Keep the roofline measurements and start fresh with lights, scope, trees, and bushes.
+                  </p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="items-start py-2" onSelect={() => addDesignOption(true)}>
+                <div>
+                  <p className="font-medium">Copy current option</p>
+                  <p className="text-xs text-muted-foreground">
+                    Duplicate the roofline, selections, trees, bushes, and pricing.
+                  </p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {renderedDesignOptions.length > 1 ? (
             <Button
               type="button"
               size="sm"
@@ -1065,20 +1114,6 @@ export function HolidayLightingQuoter({
           ) : null}
           <span className="text-xs text-muted-foreground">Up to 5 options per estimate</span>
         </div>
-        {addOptionOpen ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted/50 p-3">
-            <span className="text-sm font-medium">Build the new option from:</span>
-            <Button type="button" size="sm" onClick={() => addDesignOption(true)}>
-              Copy current option
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => addDesignOption(false)}>
-              Start blank
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setAddOptionOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
@@ -1255,6 +1290,34 @@ export function HolidayLightingQuoter({
       {step === 3 ? (
         <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">Lighting selections</h3>
+          <div className="space-y-3 rounded-md border border-border p-3">
+            <label className="block text-xs text-muted-foreground">Option title
+              <input
+                type="text"
+                maxLength={80}
+                value={activeDesignOption?.label ?? ""}
+                placeholder="Option title"
+                onChange={(event) => updateActiveDesignOptionLabel(event.target.value)}
+                onBlur={() => void save(undefined, {
+                  quiet: true,
+                  designOptions: currentOptions(),
+                  activeOptionId,
+                })}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+            <label className="block text-xs text-muted-foreground">Customer-facing description / notes
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={selections.notes ?? ""}
+                placeholder="Add details that should appear with this option on the estimate"
+                onChange={(event) => setSelections((current) => ({ ...current, notes: event.target.value }))}
+                onBlur={() => void save(undefined, { quiet: true })}
+                className="mt-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              />
+            </label>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-xs text-muted-foreground">Scope
               <select
@@ -1462,6 +1525,20 @@ export function HolidayLightingQuoter({
           ) : null}
           {pricing && draftPricing ? (
             <section className="space-y-4 rounded-lg border border-border bg-background p-4">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {renderedDesignOptions.map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={option.id === activeOptionId ? "default" : "outline"}
+                    className="shrink-0"
+                    onClick={() => switchDesignOption(option.id)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
               <div>
                 <h3 className="text-sm font-semibold">Prices and discounts</h3>
                 <p className="text-xs text-muted-foreground">Leave a price blank to use the calculated price. Discounts apply to each option separately.</p>

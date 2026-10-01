@@ -12,6 +12,7 @@ import {
   HOLIDAY_LEASE_DETAIL,
   HOLIDAY_PERMANENT_DETAIL,
   HOLIDAY_INCLUDED_LINES,
+  HOLIDAY_PERMANENT_INCLUDED_LINES,
   holidayDetailedBuyLines,
   holidayDetailedLaborOnlyLines,
   holidayOptionSummary,
@@ -64,15 +65,15 @@ export async function createEstimateFromHolidayQuote(params: {
       : selections.pricingMode === "lease" || selections.pricingMode === "labor"
         ? selections.pricingMode
         : "buy" as const;
-    const label = key === "permanent"
+    const defaultLabel = key === "permanent"
       ? "Permanent Lights"
       : key === "labor"
         ? "Labor Only"
         : key === "lease"
           ? "Lease Lights"
           : "Lights + Labor";
+    const label = design.label.trim() || defaultLabel;
     const summary = holidayOptionSummary({
-      billedLengthFt: priced.billedLengthFt,
       placementCount: priced.placementCount,
       styleLabel: style?.kind === "permanent"
         ? style.label
@@ -101,7 +102,9 @@ export async function createEstimateFromHolidayQuote(params: {
       key,
       label,
       tagline,
-      description: `${tagline}\n\n${detailCopy} ${summary}`.trim(),
+      description: [tagline, selections.notes?.trim(), `${detailCopy} ${summary}`]
+        .filter(Boolean)
+        .join("\n\n"),
       detail,
       strandMap: buildHolidayStrandMap({ measurements, selections, catalog, pricedLines: priced.lines, address }),
     };
@@ -239,8 +242,11 @@ export async function createEstimateFromHolidayQuote(params: {
       });
     }
     if (key !== "labor") {
+      const includedLines = key === "permanent"
+        ? HOLIDAY_PERMANENT_INCLUDED_LINES
+        : HOLIDAY_INCLUDED_LINES;
       await prisma.estimateLineItem.createMany({
-        data: HOLIDAY_INCLUDED_LINES.map((line, index) => ({
+        data: includedLines.map((line, index) => ({
           estimateId: estimate.id,
           optionId: option.id,
           name: line.name,
@@ -276,7 +282,7 @@ export async function createEstimateFromHolidayQuote(params: {
           type: adjustment.discountType === "percent" ? DiscountType.PERCENT : DiscountType.FIXED,
           amount: adjustment.discountType === "percent"
             ? adjustment.discountAmount ?? 0
-            : Math.min(detail.subtotal, adjustment.discountAmount ?? 0),
+            : detail.discountTotal,
         },
       });
     }

@@ -1,7 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Hammer,
+  Leaf,
+  Lightbulb,
+  Package,
+  ShieldCheck,
+  TreePine,
+  Warehouse,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
 import { cn } from "@/lib/utils";
@@ -60,6 +74,13 @@ function splitPresentCopy(description: string | null) {
   const detail = text.slice(i + 2).trim();
   if (!tagline || !detail) return { tagline: null as string | null, detail: text };
   return { tagline, detail };
+}
+
+function customerFacingOptionDescription(description: string | null) {
+  if (!description || !/roofline lighting/i.test(description)) return description;
+  return description
+    .replace(/\b\d+(?:\.\d+)?\s*(?:ft|feet|foot)\s+of\s+/gi, "")
+    .replace(/\b\d+(?:\.\d+)?\s*(?:ft|feet|foot)\b/gi, "");
 }
 
 function isHolidayPackageLabel(label: string) {
@@ -129,6 +150,18 @@ function optionDiscounts(optionId: string, discounts: PresentDiscount[]) {
   return discounts.filter((discount) => !discount.optionId || discount.optionId === optionId);
 }
 
+function lineItemIcon(name: string): LucideIcon {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("storage")) return Warehouse;
+  if (normalized.includes("maintenance")) return Wrench;
+  if (normalized.includes("warranty")) return ShieldCheck;
+  if (normalized.includes("tree")) return TreePine;
+  if (normalized.includes("bush")) return Leaf;
+  if (normalized.includes("labor") || normalized.includes("install")) return Hammer;
+  if (normalized.includes("parts") || normalized.includes("materials")) return Package;
+  return Lightbulb;
+}
+
 function discountAmount(subtotal: number, discount: PresentDiscount) {
   if (discount.type.toUpperCase() === "PERCENT") {
     return (subtotal * discount.amount) / 100;
@@ -191,7 +224,7 @@ export function EstimateOptionPresentCards({
   const selectedOption = ranked.find((option) => option.id === selected) ?? ranked[0] ?? null;
   const clampLines = useMemo(() => {
     const lines = ranked.map((option) => {
-      const { tagline, detail } = splitPresentCopy(option.description ?? "");
+      const { tagline, detail } = splitPresentCopy(customerFacingOptionDescription(option.description));
       return approxDescriptionLines(tagline ? tagline : detail);
     });
     if (!lines.length) return 2;
@@ -214,7 +247,7 @@ export function EstimateOptionPresentCards({
   const totals = selectedOption
     ? optionTotals(selectedOption, selectedItems, selectedDiscountRows)
     : null;
-  const selectedDescription = selectedOption?.description?.trim() ?? "";
+  const selectedDescription = customerFacingOptionDescription(selectedOption?.description)?.trim() ?? "";
   const selectedCopy = splitPresentCopy(selectedDescription);
   const showFullDescription = selectedCopy.tagline
     ? Boolean(selectedCopy.detail)
@@ -228,7 +261,7 @@ export function EstimateOptionPresentCards({
     <div className="space-y-4">
       <div
         className={cn(
-          "overflow-x-auto pb-1",
+          "overflow-x-auto px-2 py-4",
           "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         )}
       >
@@ -236,9 +269,10 @@ export function EstimateOptionPresentCards({
           {visible.map((option) => {
             const isSelected = option.id === selected;
             const popular = isMostPopularPresentOption(option);
-            const { tagline, detail } = splitPresentCopy(option.description ?? "");
+            const { tagline, detail } = splitPresentCopy(customerFacingOptionDescription(option.description));
             const cardCopy = tagline ?? detail;
-            const hasMore = Boolean(tagline ? detail : approxDescriptionLines(detail) > clampLines);
+            const cardDescription = tagline ? detail : cardCopy;
+            const hasMore = approxDescriptionLines(cardDescription) > 2;
             return (
               <article
                 key={option.id}
@@ -252,9 +286,9 @@ export function EstimateOptionPresentCards({
                   }
                 }}
                 className={cn(
-                  "relative flex min-w-[240px] max-w-sm flex-1 cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-shadow",
+                  "relative flex min-w-[240px] max-w-sm flex-1 cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-all duration-200",
                   isSelected
-                    ? "border-[#4C9BC8] ring-2 ring-[#4C9BC8]"
+                    ? "border-[#4C9BC8] ring-4 ring-[#4C9BC8]/30 shadow-[0_0_28px_rgba(76,155,200,0.65)]"
                     : popular
                       ? "border-amber-400 hover:border-amber-500"
                       : "border-border hover:border-[#4C9BC8]/50"
@@ -305,20 +339,20 @@ export function EstimateOptionPresentCards({
                   ) : null}
                 </div>
                 <div className="flex flex-1 flex-col px-4 py-3">
-                  {!tagline && cardCopy ? (
+                  {cardDescription ? (
                     <p
                       className="overflow-hidden whitespace-pre-wrap text-sm text-muted-foreground"
                       style={{
                         display: "-webkit-box",
                         WebkitBoxOrient: "vertical",
-                        WebkitLineClamp: clampLines,
+                        WebkitLineClamp: 2,
                       }}
                     >
-                      {cardCopy}
+                      {cardDescription}
                     </p>
-                  ) : !tagline ? (
+                  ) : (
                     <p className="text-sm text-muted-foreground">&nbsp;</p>
-                  ) : null}
+                  )}
                   {hasMore ? (
                     <span className="inline-flex items-center gap-0.5 text-sm font-medium text-[#4C9BC8]">
                       {isSelected ? "Details below" : "More"}
@@ -350,30 +384,44 @@ export function EstimateOptionPresentCards({
           {hideDuplicateLineItems ? null : selectedItems.length ? (
             <ul className="space-y-3">
               {selectedItems.map((item, index) => (
-                <li
-                  key={`${item.name}-${index}`}
-                  className={cn(
-                    "flex justify-between gap-3 text-sm",
-                    item.name === "Customer-supplied materials" &&
-                      "border-t pt-3 text-xs text-muted-foreground"
-                  )}
-                >
-                  <span>
-                    <span className={cn("font-medium", item.name === "Customer-supplied materials" && "font-normal")}>
-                      {item.name === "Customer-supplied materials"
-                        ? "Customer-supplied materials disclaimer"
-                        : item.name}
-                    </span>
-                    {item.description ? (
-                      <span className="mt-0.5 block whitespace-pre-wrap text-muted-foreground">
-                        {item.description}
-                      </span>
-                    ) : null}
-                  </span>
-                  {item.name === "Customer-supplied materials" ? null : (
-                    <span className="shrink-0 font-medium">{formatCurrency(item.total)}</span>
-                  )}
-                </li>
+                (() => {
+                  const Icon = lineItemIcon(item.name);
+                  const isDisclaimer = item.name === "Customer-supplied materials";
+                  const isIncluded = item.unit?.trim().toLowerCase() === "included";
+                  return (
+                    <li
+                      key={`${item.name}-${index}`}
+                      className={cn(
+                        "flex justify-between gap-3",
+                        isDisclaimer && "border-t pt-3 text-muted-foreground"
+                      )}
+                    >
+                      <div className="flex min-w-0 gap-3">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#4C9BC8]/12 text-[#4C9BC8]">
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                        </span>
+                        <span>
+                          <span className={cn("block text-base font-semibold leading-tight", isDisclaimer && "text-sm font-medium")}>
+                            {isDisclaimer ? "Customer-supplied materials disclaimer" : item.name}
+                          </span>
+                          {item.description ? (
+                            <span className="mt-1 block whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                              {item.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                      {isDisclaimer ? null : isIncluded ? (
+                        <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-[#4C9BC8]">
+                          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                          INCLUDED
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-base font-semibold">{formatCurrency(item.total)}</span>
+                      )}
+                    </li>
+                  );
+                })()
               ))}
             </ul>
           ) : (

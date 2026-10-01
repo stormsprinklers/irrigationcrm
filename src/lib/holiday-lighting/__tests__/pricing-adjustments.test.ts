@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import {
   computeHolidayQuotePricing,
   HOLIDAY_LABOR_ONLY_DISCLAIMER,
+  HOLIDAY_INCLUDED_LINES,
+  HOLIDAY_PERMANENT_INCLUDED_LINES,
   holidayBuyBreakdownLines,
   holidayDetailedBuyLines,
   holidayDetailedLaborOnlyLines,
+  holidayOptionSummary,
 } from "../pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
@@ -305,6 +308,7 @@ test("quote design options preserve independent scope and measurements and cap a
       defaultLightStyleKey: index === 3 ? "permanent" : "c9",
       pricingMode: index === 0 ? "labor" : "buy",
       defaultColorPattern: index === 1 ? "Red" : "Warm White",
+      notes: index === 1 ? "Customer-facing option note" : undefined,
     },
   }));
   const parsed = parseHolidaySelections({ designOptions: rawOptions, activeDesignOptionId: "design-2" });
@@ -316,7 +320,44 @@ test("quote design options preserve independent scope and measurements and cap a
   assert.equal(options.length, 5);
   assert.equal(options[0]?.selections.pricingMode, "labor");
   assert.equal(options[1]?.selections.defaultColorPattern, "Red");
+  assert.equal(options[1]?.selections.notes, "Customer-facing option note");
   assert.equal(options[2]?.measurements.placements.length, 1);
   assert.equal(options[3]?.selections.pricingMode, "permanent");
   assert.equal(parsed.activeDesignOptionId, "design-2");
+});
+
+test("customer-facing holiday summaries never expose roofline footage", () => {
+  const summary = holidayOptionSummary({
+    placementCount: 2,
+    styleLabel: "C9 Warm White",
+  });
+  assert.match(summary, /C9 Warm White roofline lighting/);
+  assert.doesNotMatch(summary, /\bft\b|feet|foot/i);
+});
+
+test("permanent-light fixed discounts retain the exact entered amount", () => {
+  const selections = parseHolidaySelections({
+    defaultLightStyleKey: "permanent",
+    pricingMode: "permanent",
+    optionAdjustments: {
+      permanent: { price: 13_175, discountType: "fixed", discountAmount: 1_000 },
+    },
+  });
+  const result = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements,
+    selections,
+    prices,
+  });
+  assert.equal(result.optionDetails.permanent.subtotal, 13_175);
+  assert.equal(result.optionDetails.permanent.discountTotal, 1_000);
+  assert.equal(result.optionDetails.permanent.total, 12_175);
+});
+
+test("included holiday services have customer descriptions and permanent coverage is five years", () => {
+  assert.match(HOLIDAY_INCLUDED_LINES[0].description, /warehouse/i);
+  assert.match(HOLIDAY_INCLUDED_LINES[1].description, /48 hours/i);
+  assert.match(HOLIDAY_INCLUDED_LINES[2].name, /3-year parts and labor/i);
+  assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[2].name, /5-year parts and labor/i);
+  assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[2].description, /no cost/i);
 });
