@@ -1,4 +1,4 @@
-import { Channel, MessageDirection, Prisma, Scope } from "@prisma/client";
+import { Channel, MessageDirection, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isFieldRole } from "@/lib/employees";
 import { listEligibleCustomerIdsForFieldSms, type FieldAccessUser } from "@/lib/field/access";
@@ -15,16 +15,6 @@ const unreadCustomerSmsWhere = {
   readAt: null,
   NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
 } as const;
-
-const openCustomerSmsWhere: Prisma.ConversationWhereInput = {
-  OR: [
-    { smsOpen: true },
-    {
-      smsOpen: null,
-      messages: { some: unreadCustomerSmsWhere },
-    },
-  ],
-};
 
 export async function getInboxBadgeCounts(
   companyId: string,
@@ -45,8 +35,8 @@ export async function getInboxBadgeCounts(
     select: { phone: true },
   })).map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone));
 
-  const [smsCandidates, social, leads, missedLogs, googleReviews] = await Promise.all([
-    prisma.conversation.findMany({
+  const [sms, social, leads, missedLogs, googleReviews] = await Promise.all([
+    prisma.conversation.count({
       where: {
         companyId,
         channel: Channel.SMS,
@@ -56,18 +46,8 @@ export async function getInboxBadgeCounts(
           ...(blockedPhones.length
             ? [{ OR: [{ participantPhone: null }, { participantPhone: { notIn: blockedPhones } }] }]
             : []),
-          openCustomerSmsWhere,
+          { messages: { some: unreadCustomerSmsWhere } },
         ],
-      },
-      select: {
-        messages: {
-          where: {
-            NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-          },
-          orderBy: { sentAt: "desc" },
-          take: 1,
-          select: { direction: true },
-        },
       },
     }),
     field
@@ -100,11 +80,8 @@ export async function getInboxBadgeCounts(
     field ? Promise.resolve(0) : countGbpInboxAttention(companyId),
   ]);
 
-  // Open is the workflow folder; the badge is narrower and only signals a
-  // conversation whose most recent customer SMS still needs a team reply.
-  const sms = smsCandidates.filter(
-    (conversation) => conversation.messages[0]?.direction === MessageDirection.INBOUND
-  ).length;
+  // Unread is a notification state. Open is a separate workflow state that
+  // remains active until a team member replies or explicitly closes the thread.
   const missedCalls = field ? 0 : missedLogs.filter((log) => isMissedInboundLog(log)).length;
   const total = sms + social + leads + missedCalls + googleReviews;
 

@@ -114,13 +114,20 @@ export function SmsThreadList({
           const latest = thread.messages[0];
           const latestNotDelivered =
             latest?.direction === "OUTBOUND" && isSmsNotDelivered(latest.deliveryStatus);
-          const needsResponse = thread.needsResponse === true;
+          const unread = (thread.unreadCount ?? 0) > 0;
 
           return (
             <li key={thread.id}>
               <button
                 type="button"
-                onClick={() => onSelect(thread.id)}
+                onClick={() => {
+                  setThreads((current) =>
+                    current.map((item) =>
+                      item.id === thread.id ? { ...item, unreadCount: 0 } : item
+                    )
+                  );
+                  onSelect(thread.id);
+                }}
                 className={cn(
                   "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
                   selectedId === thread.id && "bg-highlight"
@@ -134,12 +141,12 @@ export function SmsThreadList({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1.5">
-                      {needsResponse ? (
+                      {unread ? (
                         <span
                           className="h-2 w-2 shrink-0 rounded-full bg-primary"
                           role="img"
-                          aria-label="Needs reply"
-                          title="Needs reply"
+                          aria-label="Unread message"
+                          title="Unread message"
                         />
                       ) : null}
                       {thread.customer?.name ? (

@@ -56,7 +56,7 @@ test("discounts cannot reduce an option below zero", () => {
   assert.equal(result.year1Total, 0);
 });
 
-test("buy breakdown treats the Year 2 cost as labor and the remainder as parts", () => {
+test("buy breakdown treats the future-year service amount as labor and the remainder as parts", () => {
   const lines = holidayBuyBreakdownLines({
     year1Subtotal: 1_250,
     year2LaborTotal: 475,
@@ -65,7 +65,7 @@ test("buy breakdown treats the Year 2 cost as labor and the remainder as parts",
     lines.map(({ name, total }) => ({ name, total })),
     [
       { name: "Parts", total: 775 },
-      { name: "Labor (Year 2 cost)", total: 475 },
+      { name: "Labor", total: 475 },
     ]
   );
   assert.equal(lines.reduce((sum, line) => sum + line.total, 0), 1_250);
@@ -94,7 +94,7 @@ test("C9 and C7 default prices are independent of color", () => {
   assert.equal(rows.get(c7.leaseSku)?.defaultUnitPrice, 4.29);
 });
 
-test("detailed buy lines show parts and year-two labor without per-foot pricing", () => {
+test("detailed buy lines explain future-year labor without per-foot pricing", () => {
   const lines = holidayDetailedBuyLines({
     targetSubtotal: 52.4,
     lines: [{
@@ -113,7 +113,8 @@ test("detailed buy lines show parts and year-two labor without per-foot pricing"
     }],
   });
   assert.deepEqual(lines.map((line) => line.total), [22.5, 29.9]);
-  assert.match(lines[1]!.name, /Year 2 cost/);
+  assert.equal(lines[1]!.name, "Roofline — labor");
+  assert.match(lines[1]!.description, /In future years, since you already own the lights/);
   assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
 });
 
@@ -138,7 +139,7 @@ test("branded estimate combines every roofline segment into one parts and labor 
   });
   assert.deepEqual(lines.map(({ name, total }) => ({ name, total })), [
     { name: "Roofline — parts", total: 45 },
-    { name: "Roofline — labor (Year 2 cost)", total: 59.8 },
+    { name: "Roofline — labor", total: 59.8 },
   ]);
   assert.doesNotMatch(JSON.stringify(lines), /Front eave|Garage eave/);
 });

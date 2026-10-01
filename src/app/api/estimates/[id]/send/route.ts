@@ -8,6 +8,7 @@ import {
   type EstimateSendChannel,
 } from "@/lib/notifications/estimate-notify";
 import { onEstimateSent } from "@/lib/notifications/estimate-followup";
+import { recordEstimateSentInSmsThread } from "@/lib/estimates/sms-thread-activity";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
@@ -80,6 +81,21 @@ export async function POST(request: NextRequest, { params }: Params) {
         sentAt: new Date(),
       },
     });
+
+    if (result.smsSent && estimate.customer.phone) {
+      await recordEstimateSentInSmsThread({
+        companyId: user.companyId,
+        customerId: estimate.customerId,
+        customerPhone: estimate.customer.phone,
+        estimateId: estimate.id,
+        estimateNumber: estimate.estimateNumber,
+        senderId: user.id,
+      }).catch((error) => {
+        // The customer notification already sent successfully. Do not report a
+        // false send failure if the staff-only inbox activity cannot be saved.
+        console.error("Could not add estimate activity to SMS thread", error);
+      });
+    }
 
     void onEstimateSent(id, user.companyId).catch((err) =>
       console.error("Estimate follow-up schedule error:", err)

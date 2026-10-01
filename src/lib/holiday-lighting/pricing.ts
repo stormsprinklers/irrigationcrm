@@ -251,8 +251,8 @@ export function holidayBuyBreakdownLines(params: {
       itemType: "PRODUCT" as const,
     },
     {
-      name: "Labor (Year 2 cost)",
-      description: "Installation and take-down labor. This same amount is the Year 2 service cost.",
+      name: "Labor",
+      description: "In future years, since you already own the lights, we would charge only this amount to install, take down, and store the lights for you.",
       total: laborTotal,
       itemType: "SERVICE" as const,
     },
@@ -286,8 +286,8 @@ export function holidayDetailedBuyLines(params: {
       itemType: "PRODUCT",
     });
     result.push({
-      name: "Roofline — labor (Year 2 cost)",
-      description: `Installation and take-down labor. This amount is the Year 2 service cost for the roofline.${lights}`,
+      name: "Roofline — labor",
+      description: `In future years, since you already own the lights, we would charge only this amount to install, take down, and store the lights for you.${lights}`,
       total: money(rooflines.reduce((sum, line) => sum + line.laborTotal, 0)),
       itemType: "SERVICE",
     });
@@ -303,8 +303,8 @@ export function holidayDetailedBuyLines(params: {
       itemType: "PRODUCT",
     });
     result.push({
-      name: `${line.name} — labor (Year 2 cost)`,
-      description: `Installation and take-down labor. This amount is the Year 2 service cost for this item.${lights}`,
+      name: `${line.name} — labor`,
+      description: `In future years, since you already own the lights, we would charge only this amount to install, take down, and store the lights for you.${lights}`,
       total: line.laborTotal,
       itemType: "SERVICE",
     });

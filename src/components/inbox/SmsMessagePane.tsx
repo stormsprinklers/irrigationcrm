@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
-import { Send, AlertCircle, CheckCircle2, Copy } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2, Copy, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,6 +23,7 @@ import {
   isSmsNotDelivered,
 } from "@/lib/inbox/sms-delivery";
 import { resolveSmsSendTarget } from "@/lib/inbox/sms-send-target";
+import { parseEstimateSentActivity } from "@/lib/inbox/internal-activity";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
@@ -475,6 +477,7 @@ export function SmsMessagePane({
             {threadMessages.length > 0 ? (
               <div className="space-y-3">
                 {threadMessages.map((msg) => {
+                  const estimateActivity = parseEstimateSentActivity(msg.deliveryStatus);
                   const attribution =
                     msg.direction === "OUTBOUND"
                       ? msg.campaignName ? `Campaign: ${msg.campaignName}` : msg.sender?.name ?? "Team"
@@ -486,7 +489,24 @@ export function SmsMessagePane({
                         : thread?.title ??
                           (thread?.participantPhone
                             ? formatPhoneDisplay(thread.participantPhone)
-                            : "Team member");
+                          : "Team member");
+
+                  if (estimateActivity) {
+                    return (
+                      <div key={msg.id} className="flex justify-center py-1">
+                        <Link
+                          href={`/estimates/${estimateActivity.estimateId}`}
+                          className="group flex max-w-[92%] items-center gap-2 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          <span className="font-medium text-foreground group-hover:text-primary">
+                            {msg.body}
+                          </span>
+                          <span className="opacity-70">· {formatSmsMessageTime(msg.sentAt)}</span>
+                        </Link>
+                      </div>
+                    );
+                  }
 
                   return (
                   <div

@@ -1056,6 +1056,62 @@ export function HolidayLightingQuoter({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
+        <CustomerSearchPicker
+          compact
+          className="w-full min-w-[180px] sm:w-56"
+          value={customerId}
+          selectedName={customerName}
+          onValueChange={onCustomerPicked}
+          onCustomerSelect={onCustomerSelect}
+          placeholder="Customer…"
+        />
+        {properties.length > 0 ? (
+          <select
+            className="h-9 min-w-[140px] max-w-[220px] flex-1 rounded-md border border-input bg-background px-2 text-sm sm:flex-none"
+            value={propertyId}
+            onChange={(e) => {
+              const next = properties.find((p) => p.id === e.target.value);
+              if (next) applyProperty(next);
+              else {
+                setPropertyId("");
+                void save({ propertyId: null }, { quiet: true });
+              }
+            }}
+            aria-label="Property"
+          >
+            <option value="">Property…</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || p.address || "Property"}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <div className="min-w-[220px] flex-[2]">
+          <AddressAutocompleteInput
+            value={addressQuery}
+            onChange={(value) => {
+              setAddressQuery(value);
+              setAddress(value);
+              setCity("");
+              setState("");
+              setZip("");
+            }}
+            onResolved={applyResolvedAddress}
+            onBlur={() =>
+              void geocode({
+                address: city.trim() || zip.trim() ? address : addressQuery,
+                city,
+                state,
+                zip,
+              })
+            }
+            placeholder="Address, city, state, ZIP…"
+          />
+        </div>
+      </div>
+
       <div className="rounded-lg border border-border bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
           {renderedDesignOptions.map((option) => (
@@ -1113,62 +1169,6 @@ export function HolidayLightingQuoter({
             </Button>
           ) : null}
           <span className="text-xs text-muted-foreground">Up to 5 options per estimate</span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
-        <CustomerSearchPicker
-          compact
-          className="w-full min-w-[180px] sm:w-56"
-          value={customerId}
-          selectedName={customerName}
-          onValueChange={onCustomerPicked}
-          onCustomerSelect={onCustomerSelect}
-          placeholder="Customer…"
-        />
-        {properties.length > 0 ? (
-          <select
-            className="h-9 min-w-[140px] max-w-[220px] flex-1 rounded-md border border-input bg-background px-2 text-sm sm:flex-none"
-            value={propertyId}
-            onChange={(e) => {
-              const next = properties.find((p) => p.id === e.target.value);
-              if (next) applyProperty(next);
-              else {
-                setPropertyId("");
-                void save({ propertyId: null }, { quiet: true });
-              }
-            }}
-            aria-label="Property"
-          >
-            <option value="">Property…</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name || p.address || "Property"}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        <div className="min-w-[220px] flex-[2]">
-          <AddressAutocompleteInput
-            value={addressQuery}
-            onChange={(value) => {
-              setAddressQuery(value);
-              setAddress(value);
-              setCity("");
-              setState("");
-              setZip("");
-            }}
-            onResolved={applyResolvedAddress}
-            onBlur={() =>
-              void geocode({
-                address: city.trim() || zip.trim() ? address : addressQuery,
-                city,
-                state,
-                zip,
-              })
-            }
-            placeholder="Address, city, state, ZIP…"
-          />
         </div>
       </div>
 
@@ -1288,7 +1288,7 @@ export function HolidayLightingQuoter({
       </div>
 
       {step === 3 ? (
-        <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
+        <section className="max-w-2xl space-y-4 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">Lighting selections</h3>
           <div className="space-y-3 rounded-md border border-border p-3">
             <label className="block text-xs text-muted-foreground">Option title
@@ -1454,77 +1454,8 @@ export function HolidayLightingQuoter({
             ))}
             <datalist id="holiday-color-patterns">{HOLIDAY_COLOR_PATTERNS.filter((color) => color !== "Other").map((color) => <option key={color} value={color} />)}</datalist>
           </div>
-          {pricing ? (
-            <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
-              <div>
-                <div className="flex justify-between">
-                  <span>{activePricingLabel}</span>
-                  <span className="font-semibold">{money(pricing.optionDetails[activePricingKey].total)}</span>
-                </div>
-                {activePricingKey === "buy" ? (
-                  <p className="text-xs text-muted-foreground">Future years: {money(pricing.reinstallTotal)}</p>
-                ) : null}
-                {activePricingKey === "labor" ? (
-                  <p className="text-xs text-muted-foreground">Customer-supplied lights and materials</p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {step === 4 && photoApproved && photoUrl ? (
-        <section className="space-y-3 rounded-lg border border-border bg-white p-4">
-          <h3 className="text-sm font-semibold">AI lighting preview</h3>
-          <p className="text-xs text-muted-foreground">
-            Paint where lights should go. We&apos;ll generate a night photo with{" "}
-            {catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey)?.label ??
-              "your lights"}
-            , a little snow, and a wreath on the door.
-          </p>
-          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
-          <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
-            {visualizing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating…
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate night preview
-              </>
-            )}
-          </Button>
-          {previewUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={blobProxyUrl(previewUrl) ?? previewUrl}
-                alt="Lighting preview"
-                className="w-full max-w-xl rounded-md border border-border"
-              />
-              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
-            </>
-          ) : null}
-        </section>
-      ) : null}
-
-      {step === 5 ? (
-        <div className="flex max-w-xl flex-col gap-4">
-          {previewUrl ? (
-            <section className="space-y-2 rounded-lg border border-border bg-white p-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={blobProxyUrl(previewUrl) ?? previewUrl}
-                alt="Lighting preview"
-                className="w-full rounded-md border border-border"
-              />
-              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
-            </section>
-          ) : null}
           {pricing && draftPricing ? (
-            <section className="space-y-4 rounded-lg border border-border bg-background p-4">
+            <div className="space-y-4 border-t border-border pt-4">
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {renderedDesignOptions.map((option) => (
                   <Button
@@ -1585,6 +1516,59 @@ export function HolidayLightingQuoter({
                   className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
               </label> : null}
               <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>Save prices and discounts</Button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {step === 4 && photoApproved && photoUrl ? (
+        <section className="space-y-3 rounded-lg border border-border bg-white p-4">
+          <h3 className="text-sm font-semibold">AI lighting preview</h3>
+          <p className="text-xs text-muted-foreground">
+            Paint where lights should go. We&apos;ll generate a night photo with{" "}
+            {catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey)?.label ??
+              "your lights"}
+            , a little snow, and a wreath on the door.
+          </p>
+          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+          <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
+            {visualizing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating…
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate night preview
+              </>
+            )}
+          </Button>
+          {previewUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={blobProxyUrl(previewUrl) ?? previewUrl}
+                alt="Lighting preview"
+                className="w-full max-w-xl rounded-md border border-border"
+              />
+              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
+      {step === 5 ? (
+        <div className="flex max-w-xl flex-col gap-4">
+          {previewUrl ? (
+            <section className="space-y-2 rounded-lg border border-border bg-white p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={blobProxyUrl(previewUrl) ?? previewUrl}
+                alt="Lighting preview"
+                className="w-full rounded-md border border-border"
+              />
+              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
             </section>
           ) : null}
           <section className="space-y-3 rounded-lg border border-border bg-white p-4">
