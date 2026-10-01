@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Search } from "lucide-react";
+import { AlertCircle, CheckCheck, Search } from "lucide-react";
+import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { cn } from "@/lib/utils";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { formatSmsMessageTime } from "@/lib/inbox/message-time";
@@ -43,6 +46,7 @@ export function SmsThreadList({
   const [threads, setThreads] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [markingAllRead, setMarkingAllRead] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,11 +81,42 @@ export function SmsThreadList({
         ? "No spam messages."
         : "No conversations yet.";
 
+  async function markAllRead() {
+    setMarkingAllRead(true);
+    try {
+      const res = await fetch("/api/inbox/sms/read-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: scope === "customers" ? "external" : "internal" }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        updatedCount?: number;
+      };
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not mark messages as read");
+        return;
+      }
+
+      setThreads((current) => current.map((thread) => ({ ...thread, unreadCount: 0 })));
+      notifyInboxBadgesChanged();
+      toast.success(
+        data.updatedCount
+          ? `${data.updatedCount} ${data.updatedCount === 1 ? "message" : "messages"} marked as read`
+          : "All messages are already read"
+      );
+    } catch {
+      toast.error("Could not mark messages as read");
+    } finally {
+      setMarkingAllRead(false);
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {scope === "customers" && folder !== "spam" ? (
-        <div className="shrink-0 border-b px-3 py-2">
-          <div className="relative">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+        {scope === "customers" && folder !== "spam" ? (
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={search}
@@ -90,8 +125,24 @@ export function SmsThreadList({
               className="h-9 pl-8"
             />
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <div className="min-w-0 flex-1" />
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="shrink-0 px-2 sm:px-3"
+          disabled={markingAllRead}
+          onClick={() => void markAllRead()}
+        >
+          <CheckCheck className="h-4 w-4" aria-hidden />
+          <span className="hidden sm:inline">
+            {markingAllRead ? "Marking read..." : "Mark all read"}
+          </span>
+          <span className="sm:hidden">{markingAllRead ? "Marking..." : "Read all"}</span>
+        </Button>
+      </div>
       <div className="min-h-0 flex-1">
         {loading && !threads.length ? (
           <div className="p-4 text-sm text-muted-foreground">Loading...</div>
