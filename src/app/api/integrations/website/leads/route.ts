@@ -4,6 +4,7 @@ import { authenticateIntegration, isIntegrationContext } from "@/lib/integration
 import { logIntegrationAudit } from "@/lib/integrations/audit";
 import { websiteLeadSchema } from "@/lib/integrations/schemas";
 import { createLeadFromIntegration } from "@/lib/leads/create";
+import { sendMetaCrmLeadEvent } from "@/lib/meta/conversions-api";
 
 export async function POST(request: NextRequest) {
   const auth = await authenticateIntegration(request, IntegrationType.WEBSITE);
@@ -26,6 +27,33 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await createLeadFromIntegration(auth.companyId, parsed.data);
+    let metaConversionSent: boolean | undefined;
+    if (result.created && parsed.data.source === "meta-sprinkler-winterization") {
+      const metaResult = await sendMetaCrmLeadEvent({
+        leadId: result.lead.id,
+        name: result.lead.name,
+        phone: result.lead.phone,
+        email: result.lead.email,
+        city: parsed.data.city,
+        metadata:
+          parsed.data.metadata && typeof parsed.data.metadata === "object"
+            ? parsed.data.metadata
+            : null,
+        eventTime: result.lead.createdAt,
+      });
+      metaConversionSent = metaResult.ok;
+      await logIntegrationAudit({
+        companyId: auth.companyId,
+        integrationType: IntegrationType.WEBSITE,
+        action: "meta.conversions.lead",
+        payload: { leadId: result.lead.id, eventId: parsed.data.metadata?.metaEvent },
+        status: metaResult.ok ? "success" : "error",
+        error: metaResult.ok ? undefined : metaResult.error,
+      });
+      if (!metaResult.ok) {
+        console.error("Meta Conversions API Lead event failed", metaResult.error);
+      }
+    }
     await logIntegrationAudit({
       companyId: auth.companyId,
       integrationType: IntegrationType.WEBSITE,
@@ -37,6 +65,7 @@ export async function POST(request: NextRequest) {
       {
         leadId: result.lead.id,
         created: result.created,
+        ...(metaConversionSent !== undefined ? { metaConversionSent } : {}),
       },
       { status: result.created ? 201 : 200 }
     );
