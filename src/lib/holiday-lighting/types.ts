@@ -82,6 +82,8 @@ export type HolidayQuoteSelections = {
   defaultLightStyleKey: string;
   installKind: HolidayInstallKind;
   billingMode?: HolidayQuoteBillingMode;
+  includeLaborOnlyOption?: boolean;
+  includePermanentOption?: boolean;
   defaultColorPattern?: string;
   notes?: string;
   /** @deprecated Company minimums replace per-quote margin. */
@@ -91,7 +93,7 @@ export type HolidayQuoteSelections = {
   reinstallPrice?: number | null;
 };
 
-export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent";
+export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
 export type HolidayOptionAdjustment = {
   price?: number | null;
   discountLabel?: string;
@@ -219,6 +221,8 @@ export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
   defaultLightStyleKey: "c9",
   installKind: "temporary",
   billingMode: "standard",
+  includeLaborOnlyOption: false,
+  includePermanentOption: false,
   defaultColorPattern: "Warm White",
 };
 
@@ -388,6 +392,8 @@ export function holidaySelectionsFromCatalog(
     defaultLightStyleKey: d.defaultLightStyleKey,
     installKind: d.defaultInstallKind,
     billingMode: "standard",
+    includeLaborOnlyOption: false,
+    includePermanentOption: false,
     defaultColorPattern: "Warm White",
   };
 }
@@ -404,10 +410,15 @@ export function applyHolidayCatalogPolicy(
   return {
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
     installKind: style?.kind === "permanent" ? "permanent" : "temporary",
-    billingMode:
-      style?.kind !== "permanent" && selections.billingMode === "labor_only"
-        ? "labor_only"
-        : "standard",
+    billingMode: "standard",
+    includeLaborOnlyOption:
+      style?.kind !== "permanent"
+        ? Boolean(selections.includeLaborOnlyOption || selections.billingMode === "labor_only")
+        : false,
+    includePermanentOption:
+      style?.kind !== "permanent"
+        ? Boolean(selections.includePermanentOption)
+        : false,
     notes: selections.notes,
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
@@ -458,7 +469,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_HOLIDAY_SELECTIONS };
   const obj = raw as Partial<HolidayQuoteSelections>;
   const adjustments: HolidayQuoteSelections["optionAdjustments"] = {};
-  for (const key of ["buy", "lease", "permanent"] as const) {
+  for (const key of ["buy", "lease", "permanent", "labor"] as const) {
     const item = obj.optionAdjustments?.[key];
     if (!item || typeof item !== "object") continue;
     const rawPrice: unknown = item.price;
@@ -483,6 +494,8 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
       obj.defaultLightStyleKey ?? DEFAULT_HOLIDAY_SELECTIONS.defaultLightStyleKey,
     installKind: parseInstallKind(obj.installKind),
     billingMode: obj.billingMode === "labor_only" ? "labor_only" : "standard",
+    includeLaborOnlyOption: obj.includeLaborOnlyOption === true,
+    includePermanentOption: obj.includePermanentOption === true,
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
     defaultColorPattern:
       typeof obj.defaultColorPattern === "string" && obj.defaultColorPattern.trim()

@@ -8,6 +8,7 @@ import {
   computeHolidayQuotePricing,
   HOLIDAY_LABOR_ONLY_DETAIL,
   HOLIDAY_LABOR_ONLY_DISCLAIMER,
+  HOLIDAY_PERMANENT_DETAIL,
   HOLIDAY_INCLUDED_LINES,
   holidayDetailedBuyLines,
   holidayDetailedLaborOnlyLines,
@@ -103,7 +104,9 @@ export async function createEstimateFromHolidayQuote(params: {
         leaseTotal: priced.leaseTotal,
         permanentTotal: priced.permanentTotal,
         installKind: selections.installKind,
-        billingMode: selections.billingMode ?? "standard",
+        billingMode: "standard",
+        includeLaborOnlyOption: selections.includeLaborOnlyOption === true,
+        includePermanentOption: selections.includePermanentOption === true,
         lightStyleKey: selections.defaultLightStyleKey,
         colorPattern: selections.defaultColorPattern,
         strandMap,
@@ -111,31 +114,63 @@ export async function createEstimateFromHolidayQuote(params: {
     },
   });
 
-  const laborOnly = selections.billingMode === "labor_only" && style?.kind !== "permanent";
   const allPackages = holidayCustomerPackages({
-    year1Total: priced.year1Total,
+    year1Total: priced.optionDetails.buy.total,
     reinstallTotal: priced.reinstallTotal,
     leaseTotal: priced.leaseTotal,
     permanentTotal: priced.permanentTotal,
     summary,
   });
-  const packages = laborOnly
-    ? [{
-        letter: "A" as const,
-        label: "Labor Only",
-        tagline: "Customer-supplied lights",
-        popular: false,
-        description: `Customer-supplied lights\n\n${HOLIDAY_LABOR_ONLY_DETAIL} ${summary}`.trim(),
-        total: priced.year1Total,
-        sortOrder: 0,
-      }]
-    : style?.kind === "permanent"
-      ? allPackages.filter((pack) => pack.letter === "C")
-      : allPackages.filter((pack) => pack.letter !== "C");
+  const packages: Array<{
+    key: "buy" | "lease" | "permanent" | "labor";
+    letter: "A" | "B" | "C" | "D";
+    label: string;
+    tagline: string;
+    popular: boolean;
+    description: string;
+    total: number;
+    sortOrder: number;
+  }> = style?.kind === "permanent"
+    ? allPackages
+        .filter((pack) => pack.letter === "C")
+        .map((pack) => ({ ...pack, key: "permanent" as const }))
+    : [
+        ...allPackages
+          .filter((pack) => pack.letter !== "C")
+          .map((pack) => ({
+            ...pack,
+            label: pack.letter === "A" ? "New Option" : pack.label,
+            key: pack.letter === "A" ? "buy" as const : "lease" as const,
+          })),
+        ...(selections.includeLaborOnlyOption
+          ? [{
+              key: "labor" as const,
+              letter: "C" as const,
+              label: "Labor Only",
+              tagline: "Customer-supplied lights",
+              popular: false,
+              description: `Customer-supplied lights\n\n${HOLIDAY_LABOR_ONLY_DETAIL} ${summary}`.trim(),
+              total: priced.optionDetails.labor.total,
+              sortOrder: 2,
+            }]
+          : []),
+        ...(selections.includePermanentOption
+          ? [{
+              key: "permanent" as const,
+              letter: (selections.includeLaborOnlyOption ? "D" : "C") as "C" | "D",
+              label: "Permanent Lights",
+              tagline: "Fit Your Vibe Year-Round",
+              popular: false,
+              description: `Fit Your Vibe Year-Round\n\n${HOLIDAY_PERMANENT_DETAIL} ${summary}`.trim(),
+              total: priced.optionDetails.permanent.total,
+              sortOrder: selections.includeLaborOnlyOption ? 3 : 2,
+            }]
+          : []),
+      ];
 
   const createdOptions = [];
   for (const pack of packages) {
-    const key = pack.letter === "A" ? "buy" : pack.letter === "B" ? "lease" : "permanent";
+    const key = pack.key;
     const detail = priced.optionDetails[key];
     const adjustment = selections.optionAdjustments?.[key];
     const option = await prisma.estimateOption.create({
@@ -151,8 +186,8 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: quote.previewImageUrl,
       },
     });
-    if (key === "buy") {
-      const breakdown = laborOnly
+    if (key === "buy" || key === "labor") {
+      const breakdown = key === "labor"
         ? holidayDetailedLaborOnlyLines({
             lines: priced.lines,
             targetSubtotal: detail.subtotal,
@@ -189,7 +224,7 @@ export async function createEstimateFromHolidayQuote(params: {
         },
       });
     }
-    if (!laborOnly) {
+    if (key !== "labor") {
       await prisma.estimateLineItem.createMany({
         data: HOLIDAY_INCLUDED_LINES.map((line, index) => ({
           estimateId: estimate.id,
@@ -234,13 +269,13 @@ export async function createEstimateFromHolidayQuote(params: {
     createdOptions.push({ ...pack, id: option.id });
   }
 
-  const selected = laborOnly
-    ? createdOptions[0]
-    : style?.kind === "permanent"
-    ? createdOptions.find((o) => o.letter === "C") ?? createdOptions[0]
-    : createdOptions.find((o) => o.letter === "B") ?? createdOptions[0];
-  const selectedTotal = selected?.total ?? (laborOnly ? priced.year1Total : priced.leaseTotal);
-  const selectedKey = selected?.letter === "A" ? "buy" : selected?.letter === "C" ? "permanent" : "lease";
+  const selected = style?.kind === "permanent"
+    ? createdOptions.find((option) => option.key === "permanent") ?? createdOptions[0]
+    : createdOptions.find((option) => option.key === "buy") ?? createdOptions[0];
+  const selectedTotal = selected?.total ?? (
+    style?.kind === "permanent" ? priced.permanentTotal : priced.optionDetails.buy.total
+  );
+  const selectedKey = selected?.key ?? (style?.kind === "permanent" ? "permanent" : "buy");
   const selectedDetail = priced.optionDetails[selectedKey];
 
   await prisma.estimate.update({
@@ -250,7 +285,10 @@ export async function createEstimateFromHolidayQuote(params: {
       subtotal: selectedDetail.subtotal,
       discountTotal: selectedDetail.discountTotal,
       total: selectedTotal,
-      premiumOptionTotal: laborOnly ? null : priced.permanentTotal,
+      premiumOptionTotal:
+        style?.kind === "permanent" || selections.includePermanentOption
+          ? priced.permanentTotal
+          : null,
     },
   });
 

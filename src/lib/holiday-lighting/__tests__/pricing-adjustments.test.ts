@@ -195,7 +195,7 @@ test("customer-facing breakdown hides internal price and minimum adjustments", (
   assert.doesNotMatch(JSON.stringify(buyLines), /adjustment|minimum/i);
 });
 
-test("labor-only quotes charge installation labor and omit parts", () => {
+test("legacy labor-only quotes become an additional option without replacing the default", () => {
   const selections = parseHolidaySelections({
     defaultLightStyleKey: style.key,
     installKind: "temporary",
@@ -207,14 +207,17 @@ test("labor-only quotes charge installation labor and omit parts", () => {
     selections,
     prices,
   });
-  assert.equal(result.year1Total, 50);
-  assert.equal(result.lines[0]?.partsTotal, 0);
+  assert.equal(selections.billingMode, "labor_only");
+  assert.equal(result.year1Total, 150);
+  assert.equal(result.lines[0]?.partsTotal, 100);
   assert.equal(result.lines[0]?.laborTotal, 50);
-  assert.equal(result.lines[0]?.purchaseTotal, 50);
+  assert.equal(result.lines[0]?.purchaseTotal, 150);
+  assert.equal(result.optionDetails.labor.total, 50);
+  assert.equal(result.optionDetails.buy.total, 150);
 
   const lines = holidayDetailedLaborOnlyLines({
     lines: result.lines,
-    targetSubtotal: result.optionDetails.buy.subtotal,
+    targetSubtotal: result.optionDetails.labor.subtotal,
   });
   assert.deepEqual(lines.map((line) => line.total), [50]);
   assert.match(lines[0]!.name, /labor only/i);
@@ -228,10 +231,55 @@ test("permanent lights cannot retain labor-only mode", () => {
       defaultLightStyleKey: "permanent",
       installKind: "permanent",
       billingMode: "labor_only",
+      includeLaborOnlyOption: true,
+      includePermanentOption: true,
     }),
     DEFAULT_HOLIDAY_CATALOG
   );
   assert.equal(selections.billingMode, "standard");
+  assert.equal(selections.includeLaborOnlyOption, false);
+  assert.equal(selections.includePermanentOption, false);
+});
+
+test("temporary quotes retain optional labor-only and permanent customer options", () => {
+  const selections = applyHolidayCatalogPolicy(
+    parseHolidaySelections({
+      defaultLightStyleKey: style.key,
+      includeLaborOnlyOption: true,
+      includePermanentOption: true,
+      optionAdjustments: {
+        labor: { price: 45, discountLabel: "Returning customer", discountType: "fixed", discountAmount: 5 },
+        buy: { price: 140 },
+        permanent: { price: 250 },
+      },
+    }),
+    DEFAULT_HOLIDAY_CATALOG
+  );
+  const result = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements,
+    selections,
+    prices,
+  });
+  assert.equal(selections.billingMode, "standard");
+  assert.equal(selections.includeLaborOnlyOption, true);
+  assert.equal(selections.includePermanentOption, true);
+  assert.equal(result.optionDetails.labor.total, 40);
+  assert.equal(result.optionDetails.buy.total, 140);
+  assert.equal(result.optionDetails.permanent.total, 250);
+  assert.equal(result.year1Total, 140);
+});
+
+test("legacy labor-only selection migrates to a standard quote with labor-only offered", () => {
+  const selections = applyHolidayCatalogPolicy(
+    parseHolidaySelections({
+      defaultLightStyleKey: style.key,
+      billingMode: "labor_only",
+    }),
+    DEFAULT_HOLIDAY_CATALOG
+  );
+  assert.equal(selections.billingMode, "standard");
+  assert.equal(selections.includeLaborOnlyOption, true);
 });
 
 test("labor-only disclaimer covers third-party materials and replacement visits", () => {

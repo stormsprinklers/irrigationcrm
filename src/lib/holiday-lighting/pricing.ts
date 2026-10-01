@@ -90,7 +90,6 @@ export function computeHolidayQuotePricing(params: {
     catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
     catalog.lightStyles[0];
   const defaults = catalog.quoteDefaults;
-  const laborOnly = selections.billingMode === "labor_only" && style?.kind !== "permanent";
   const billedLengthFt = totalBilledLengthFt(measurements);
 
   const permanentStyle = catalog.lightStyles.find((item) => item.kind === "permanent" || item.key === "permanent");
@@ -113,7 +112,7 @@ export function computeHolidayQuotePricing(params: {
     const partsRate = rate(prices, segmentStyle?.partsSku ?? segmentStyle?.temporaryYear1Sku);
     const laborRate = rate(prices, segmentStyle?.installSku ?? segmentStyle?.temporaryReinstallSku);
     const segmentLeaseRate = rate(prices, segmentStyle?.leaseSku);
-    const partsTotal = laborOnly ? 0 : money(lengthFt * partsRate);
+    const partsTotal = money(lengthFt * partsRate);
     const laborTotal = money(lengthFt * laborRate);
     const leaseTotal = money(lengthFt * segmentLeaseRate);
     roofYear1 += partsTotal + laborTotal;
@@ -144,7 +143,7 @@ export function computeHolidayQuotePricing(params: {
     const item = lookup(prices, catalogItem.partsSku ?? catalogItem.sku);
     const laborItem = lookup(prices, catalogItem.installSku);
     const leaseItem = lookup(prices, catalogItem.leaseSku);
-    const partsAmount = laborOnly ? 0 : item?.unitPrice ?? 0;
+    const partsAmount = item?.unitPrice ?? 0;
     const laborAmount = laborItem?.unitPrice ?? 0;
     const amount = partsAmount + laborAmount;
     const placementStyle = catalog.lightStyles.find((item) => item.key === placement.lightStyleKey);
@@ -178,11 +177,13 @@ export function computeHolidayQuotePricing(params: {
   const year1Min = defaults?.temporaryYear1Minimum ?? 0;
   const permMin = defaults?.permanentYear1Minimum ?? 0;
   const calculatedYear1Total = money(Math.max(year1BeforeMin, year1Min));
+  const calculatedLaborOnlyTotal = money(Math.max(calculatedReinstallTotal, year1Min));
   const calculatedPermanentTotal = money(Math.max(permanentBeforeMin, permMin));
   const optionDetails = {
     buy: optionDetail(calculatedYear1Total, selections, "buy"),
     lease: optionDetail(calculatedLeaseTotal, selections, "lease"),
     permanent: optionDetail(calculatedPermanentTotal, selections, "permanent"),
+    labor: optionDetail(calculatedLaborOnlyTotal, selections, "labor"),
   };
   const year1Total = optionDetails.buy.total;
   const leaseTotal = optionDetails.lease.total;

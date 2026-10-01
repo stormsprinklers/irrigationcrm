@@ -73,7 +73,7 @@ export function EstimatePresentMode({
           const defaultId = defaultPresentOptionId(data.options ?? []);
           setEstimate({
             ...data,
-            selectedOptionId: defaultId ?? data.selectedOptionId ?? null,
+            selectedOptionId: data.selectedOptionId ?? defaultId ?? null,
           });
         }
       })

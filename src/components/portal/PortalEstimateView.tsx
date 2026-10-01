@@ -144,15 +144,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
         const defaultId = defaultPresentOptionId(estData.estimate.options ?? []);
-        const alreadyChosen =
-          estData.estimate.status === "APPROVED" ||
-          estData.estimate.status === "CONVERTED" ||
-          Boolean(estData.estimate.signedAt);
-        setSelectedOptionId(
-          alreadyChosen
-            ? estData.estimate.selectedOptionId ?? defaultId
-            : defaultId
-        );
+        setSelectedOptionId(estData.estimate.selectedOptionId ?? defaultId);
 
         if (estData.estimate?.hasDesign) {
           const designRes = await fetch(`/api/portal/estimates/${token}/design`);

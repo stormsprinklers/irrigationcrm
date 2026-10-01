@@ -63,7 +63,7 @@ function splitPresentCopy(description: string | null) {
 }
 
 function isHolidayPackageLabel(label: string) {
-  return /^(Buy Lights|Lease Lights|Permanent Lights|Labor Only)$/i.test(label.trim());
+  return /^(New Option|Buy Lights|Lease Lights|Permanent Lights|Labor Only)$/i.test(label.trim());
 }
 
 export function isMostPopularPresentOption(option: {
