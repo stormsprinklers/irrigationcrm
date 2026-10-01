@@ -21,6 +21,8 @@ type BlockContactActionProps = {
   inline?: boolean;
   onBlocked?: () => void;
   spam?: boolean;
+  spamSource?: "sms" | "call";
+  callLogId?: string;
 };
 
 export function BlockContactAction({
@@ -31,13 +33,26 @@ export function BlockContactAction({
   inline = false,
   onBlocked,
   spam = false,
+  spamSource = "sms",
+  callLogId,
 }: BlockContactActionProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const blockLabel = spam ? "Block and move to spam" : phone ? "Block number" : "Block contact";
+  const callSpam = spam && spamSource === "call";
+  const blockLabel = callSpam
+    ? "Block number and mark as spam"
+    : spam
+      ? "Block and move to spam"
+      : phone
+        ? "Block number"
+        : "Block contact";
   const confirmDescription = phone
-    ? spam ? "Block this number and move its SMS conversation to Spam?" : "Are you sure you want to block this number?"
+    ? callSpam
+      ? "Block this number and mark this call as spam? Future calls and messages from this number will be blocked."
+      : spam
+        ? "Block this number and move its SMS conversation to Spam?"
+        : "Are you sure you want to block this number?"
     : `Are you sure you want to block ${name ?? "this contact"}?`;
 
   async function handleBlock() {
@@ -51,7 +66,7 @@ export function BlockContactAction({
           phone,
           email,
           reason: "Blocked from inbox",
-          ...(spam ? { spam: true } : {}),
+          ...(spam ? { spam: true, spamSource, callLogId } : {}),
         }),
       });
 
@@ -60,7 +75,15 @@ export function BlockContactAction({
         return;
       }
 
-      toast.success(spam ? "Number blocked and moved to spam" : phone ? "Number blocked" : `${name ?? "Contact"} blocked`);
+      toast.success(
+        callSpam
+          ? "Number blocked and call marked as spam"
+          : spam
+            ? "Number blocked and moved to spam"
+            : phone
+              ? "Number blocked"
+              : `${name ?? "Contact"} blocked`
+      );
       setConfirmOpen(false);
       onBlocked?.();
     } catch {
@@ -99,7 +122,7 @@ export function BlockContactAction({
         open={confirmOpen}
         title={blockLabel}
         description={confirmDescription}
-        confirmLabel={spam ? "Block and move" : "Yes, block"}
+        confirmLabel={callSpam ? "Block and mark spam" : spam ? "Block and move" : "Yes, block"}
         confirmVariant="destructive"
         busy={busy}
         onConfirm={() => void handleBlock()}

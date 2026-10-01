@@ -1,5 +1,6 @@
 import { ReferralSubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ensureLeadHasContact } from "@/lib/leads/queries";
 
 export type ReferralFormInput = {
   referredName: string;
@@ -37,7 +38,7 @@ export async function createReferralSubmission(params: {
   const name = params.input.referredName.trim();
   if (!name) throw new Error("Name is required");
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const lead = await tx.lead.create({
       data: {
         companyId: params.companyId,
@@ -76,6 +77,9 @@ export async function createReferralSubmission(params: {
 
     return { lead, submission, referrerName: member.customer.name };
   });
+
+  await ensureLeadHasContact(params.companyId, result.lead.id);
+  return result;
 }
 
 export async function getPublicReferralFormMeta(params: {

@@ -740,9 +740,12 @@ export function HolidayLightingQuoter({
   const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
   const selectedStyle = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey);
   const permanentSelected = selectedStyle?.kind === "permanent";
+  const laborOnly = !permanentSelected && selections.billingMode === "labor_only";
   const visibleQuoteOptions = permanentSelected
     ? ([ ["permanent", "Permanent Lights"] ] as const)
-    : ([ ["buy", "Buy Lights"], ["lease", "Lease Lights"] ] as const);
+    : laborOnly
+      ? ([ ["buy", "Labor Only"] ] as const)
+      : ([ ["buy", "Buy Lights"], ["lease", "Lease Lights"] ] as const);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -975,7 +978,7 @@ export function HolidayLightingQuoter({
       {step === 3 ? (
         <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">Lighting selections</h3>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-xs text-muted-foreground">Light type
             <select
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1003,6 +1006,27 @@ export function HolidayLightingQuoter({
                 </option>
               ))}
             </select>
+            </label>
+            <label className="text-xs text-muted-foreground">Scope
+              <select
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={selections.billingMode ?? "standard"}
+                disabled={permanentSelected}
+                onChange={(event) => {
+                  const next = applyHolidayCatalogPolicy(
+                    {
+                      ...selections,
+                      billingMode: event.target.value === "labor_only" ? "labor_only" : "standard",
+                    },
+                    catalog
+                  );
+                  setSelections(next);
+                  void save({ selections: next }, { quiet: true });
+                }}
+              >
+                <option value="standard">Lights + labor</option>
+                <option value="labor_only">Labor only</option>
+              </select>
             </label>
             {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" ? (
               <label className="text-xs text-muted-foreground">Color / pattern
@@ -1040,6 +1064,12 @@ export function HolidayLightingQuoter({
                 }}
               />
             </label>
+          ) : null}
+          {laborOnly ? (
+            <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-900">
+              Labor only uses the installation and take-down rates. The customer supplies all
+              lights and materials.
+            </p>
           ) : null}
 
           <div className="space-y-3 border-t border-border pt-4">
@@ -1089,7 +1119,14 @@ export function HolidayLightingQuoter({
           </div>
           {pricing ? (
             <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
-              {!permanentSelected ? <><div>
+              {laborOnly ? <div>
+                <div className="flex justify-between">
+                  <span>Labor Only</span>
+                  <span className="font-semibold">{money(pricing.year1Total)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Customer-supplied lights and materials</p>
+              </div> : null}
+              {!permanentSelected && !laborOnly ? <><div>
                 <div className="flex justify-between">
                   <span>Buy Lights</span>
                   <span className="font-semibold">{money(pricing.year1Total)}</span>
@@ -1204,7 +1241,7 @@ export function HolidayLightingQuoter({
                   {detail.discountTotal > 0 ? <p className="text-xs text-muted-foreground">{money(detail.subtotal)} minus {money(detail.discountTotal)} discount</p> : null}
                 </div>;
               })}
-              {!permanentSelected ? <label className="block text-xs text-muted-foreground">Buy Lights future years ($)
+              {!permanentSelected && !laborOnly ? <label className="block text-xs text-muted-foreground">Buy Lights future years ($)
                 <input type="number" min={0} max={9999999} step="0.01" placeholder={pricing.calculatedReinstallTotal.toFixed(2)}
                   value={selections.reinstallPrice ?? ""}
                   onChange={(event) => setSelections((current) => ({ ...current, reinstallPrice: event.target.value === "" ? null : Number(event.target.value) }))}
@@ -1217,7 +1254,17 @@ export function HolidayLightingQuoter({
             <h3 className="text-sm font-semibold">Quote</h3>
             {pricing ? (
               <div className="space-y-3 text-sm">
-                {!permanentSelected ? <><div>
+                {laborOnly ? <div>
+                  <div className="flex justify-between">
+                    <span>Labor Only</span>
+                    <span className="font-semibold">{money(draftPricing?.buy.total ?? pricing.year1Total)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Installation and take-down labor for customer-supplied lights. Lights, bulbs,
+                    clips, extension cords, and other materials are not included.
+                  </p>
+                </div> : null}
+                {!permanentSelected && !laborOnly ? <><div>
                   <div className="flex justify-between">
                     <span>Buy Lights</span>
                     <span className="font-semibold">{money(draftPricing?.buy.total ?? pricing.year1Total)}</span>
@@ -1259,9 +1306,13 @@ export function HolidayLightingQuoter({
                   {pricing.placementCount
                     ? ` · ${pricing.placementCount} trees/bushes`
                     : ""}
-                  {pricing.year1MinimumApplied ? " · buy first-year minimum applied" : ""}
+                  {pricing.year1MinimumApplied
+                    ? laborOnly
+                      ? " · labor minimum applied"
+                      : " · buy first-year minimum applied"
+                    : ""}
                 </p>
-                {!permanentSelected && pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
+                {!permanentSelected && !laborOnly && pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
                   <p className="text-xs text-amber-800">
                     Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
                     lighting before sending this quote.

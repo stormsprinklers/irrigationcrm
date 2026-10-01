@@ -55,19 +55,10 @@ export async function mergeCustomers(params: {
       }
     }
 
-    const sourceLead = await tx.lead.findFirst({ where: { convertedCustomerId: sourceId } });
-    const targetLead = await tx.lead.findFirst({ where: { convertedCustomerId: targetId } });
-    if (sourceLead && !targetLead) {
-      await tx.lead.update({
-        where: { id: sourceLead.id },
-        data: { convertedCustomerId: targetId },
-      });
-    } else if (sourceLead && targetLead) {
-      await tx.lead.update({
-        where: { id: sourceLead.id },
-        data: { convertedCustomerId: null },
-      });
-    }
+    await tx.lead.updateMany({
+      where: { companyId, convertedCustomerId: sourceId },
+      data: { convertedCustomerId: targetId },
+    });
 
     const moveCustomerId = [
       tx.customerProperty.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } }),

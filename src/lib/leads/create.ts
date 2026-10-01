@@ -16,6 +16,12 @@ import {
 } from "@/lib/leads/pricing-quote-enrichment";
 import type { WebsiteLeadInput } from "@/lib/integrations/schemas";
 import { ensureDefaultNotificationTemplates } from "@/lib/notifications/send";
+import { ensureLeadHasContact } from "@/lib/leads/queries";
+
+async function withAutomaticContact<T extends { id: string }>(companyId: string, lead: T) {
+  await ensureLeadHasContact(companyId, lead.id);
+  return (await prisma.lead.findUnique({ where: { id: lead.id } })) ?? lead;
+}
 
 export async function createLeadFromIntegration(
   companyId: string,
@@ -68,11 +74,11 @@ export async function createLeadFromIntegration(
               metadata: metadata as Prisma.InputJsonValue,
             },
           });
-          return { lead: updated, created: false };
+          return { lead: await withAutomaticContact(companyId, updated), created: false };
         }
       }
     }
-    return { lead: existing, created: false };
+    return { lead: await withAutomaticContact(companyId, existing), created: false };
   }
 
   const company = await prisma.company.findUnique({
@@ -114,7 +120,7 @@ export async function createLeadFromIntegration(
     ...(input.city ? { city: input.city } : {}),
   };
 
-  const lead = await prisma.lead.create({
+  let lead = await prisma.lead.create({
     data: {
       companyId,
       name: input.name,
@@ -130,6 +136,10 @@ export async function createLeadFromIntegration(
       assignedUserId: company?.defaultLeadAssigneeId ?? null,
     },
   });
+
+  // A form submission is immediately available under Contacts while the lead
+  // remains NEW/active until the team advances its sales status.
+  lead = await withAutomaticContact(companyId, lead);
 
   const sessionId =
     typeof metadata.session_id === "string"

@@ -154,6 +154,7 @@ function mapCallLog(
     hasSummary: Boolean(row.aiSummary?.trim()),
     hasVoicemail,
     isAiAgent,
+    isSpam: row.dispositionNote?.trim().toLowerCase() === "spam",
     objectionCategory: row.objectionCategory ?? null,
     objectionReason: row.objectionReason ?? null,
     missedReviewedAt: row.missedReviewedAt?.toISOString() ?? null,

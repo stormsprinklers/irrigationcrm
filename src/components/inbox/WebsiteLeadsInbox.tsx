@@ -172,14 +172,16 @@ function stripRedundantLeadBody(
 function leadMatchesTab(item: WebsiteLeadInboxItem, tab: LeadFilterTab) {
   const status = item.leadStatus;
   if (tab === "spam") return status === "SPAM";
-  if (tab === "contacted") return status === "CONTACTED";
-  // Exclude won/lost (e.g. pricing lead booked online) from active follow-up.
+  if (tab === "contacted") {
+    return status === "CONTACTED" || status === "WON" || status === "LOST";
+  }
+  // Completed leads stay visible under Contacted rather than disappearing.
   return status !== "SPAM" && status !== "CONTACTED" && status !== "WON" && status !== "LOST";
 }
 
 function tabForLeadStatus(status: string | null): LeadFilterTab {
   if (status === "SPAM") return "spam";
-  if (status === "CONTACTED") return "contacted";
+  if (status === "CONTACTED" || status === "WON" || status === "LOST") return "contacted";
   return "to_contact";
 }
 
@@ -209,8 +211,12 @@ export function WebsiteLeadsInbox() {
     let spam = 0;
     for (const item of items) {
       if (item.leadStatus === "SPAM") spam += 1;
-      else if (item.leadStatus === "CONTACTED") contacted += 1;
-      else if (item.leadStatus !== "WON" && item.leadStatus !== "LOST") toContact += 1;
+      else if (
+        item.leadStatus === "CONTACTED" ||
+        item.leadStatus === "WON" ||
+        item.leadStatus === "LOST"
+      ) contacted += 1;
+      else toContact += 1;
     }
     return { toContact, contacted, spam };
   }, [items]);

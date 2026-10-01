@@ -21,11 +21,33 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
     const body = await request.json();
-    const { customerId, phone, email, reason, spam } = body;
+    const { customerId, phone, email, reason, spam, spamSource, callLogId } = body;
 
     if (spam) {
-      if (!phone || typeof phone !== "string") return badRequestResponse("Phone required for SMS spam");
+      if (!phone || typeof phone !== "string") return badRequestResponse("Phone required for spam");
+      if (spamSource !== undefined && spamSource !== "sms" && spamSource !== "call") {
+        return badRequestResponse("Invalid spam source");
+      }
+      if (spamSource === "call" && (!callLogId || typeof callLogId !== "string")) {
+        return badRequestResponse("Call log required for call spam");
+      }
       const normalizedPhone = normalizePhone(phone);
+      const spamReason = spamSource === "call" ? "Call spam" : "SMS spam";
+
+      if (spamSource === "call") {
+        const call = await prisma.callLog.findFirst({
+          where: { id: callLogId, companyId: user.companyId },
+          select: { id: true, direction: true, fromNumber: true, toNumber: true },
+        });
+        if (!call) return badRequestResponse("Call not found");
+        const remoteNumber = normalizePhone(
+          call.direction === "INBOUND" ? call.fromNumber : call.toNumber
+        );
+        if (remoteNumber !== normalizedPhone) {
+          return badRequestResponse("Phone does not match call");
+        }
+      }
+
       const existing = await prisma.blockedContact.findFirst({ where: { companyId: user.companyId, phone: normalizedPhone } });
       const blocked = existing
         ? await prisma.blockedContact.update({
@@ -33,14 +55,14 @@ export async function POST(request: NextRequest) {
             data: {
               blockedBy: user.id,
               blockedAt: new Date(),
-              reason: "SMS spam",
+              reason: spamReason,
             },
           })
         : await blockCustomer({
             companyId: user.companyId,
             blockedBy: user.id,
             phone: normalizedPhone,
-            reason: "SMS spam",
+            reason: spamReason,
           });
 
       await prisma.conversation.updateMany({
@@ -51,6 +73,17 @@ export async function POST(request: NextRequest) {
         },
         data: { smsOpen: false },
       });
+
+      if (spamSource === "call") {
+        await prisma.callLog.update({
+          where: { id: callLogId },
+          data: {
+            disposition: "NON_OPPORTUNITY",
+            dispositionNote: "Spam",
+            missedReviewedAt: new Date(),
+          },
+        });
+      }
       return NextResponse.json(blocked);
     }
 

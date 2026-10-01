@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LeadStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { listLeads, serializeLead } from "@/lib/leads/queries";
+import { ensureLeadHasContact, listLeads, serializeLead } from "@/lib/leads/queries";
 import { leadInclude } from "@/lib/leads/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     if (!body.name) return badRequestResponse("name is required");
 
-    const lead = await prisma.lead.create({
+    const created = await prisma.lead.create({
       data: {
         companyId: user.companyId,
         name: String(body.name),
@@ -40,6 +40,12 @@ export async function POST(request: NextRequest) {
         assignedUserId: body.assignedUserId ?? null,
         notes: body.notes ?? null,
       },
+      include: leadInclude,
+    });
+
+    await ensureLeadHasContact(user.companyId, created.id);
+    const lead = await prisma.lead.findUniqueOrThrow({
+      where: { id: created.id },
       include: leadInclude,
     });
 

@@ -18,6 +18,8 @@ export type CallHistoryListItem = {
   objectionReason: string | null;
   /** True when the AI receptionist handled (or started) this call. */
   isAiAgent: boolean;
+  /** True when a CSR explicitly marked this call and number as spam. */
+  isSpam: boolean;
   /** When set, missed inbound no longer counts toward the CSR Desk badge. */
   missedReviewedAt: string | null;
   customer: { id: string; name: string; phone: string | null } | null;

@@ -99,7 +99,12 @@ function ComposeBar({
           value={body}
           onChange={onBodyChange}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.ctrlKey || event.nativeEvent.isComposing) return;
+            if (
+              event.key !== "Enter" ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.nativeEvent.isComposing
+            ) return;
             event.preventDefault();
             if (!submitDisabled) event.currentTarget.form?.requestSubmit();
           }}
@@ -110,7 +115,12 @@ function ComposeBar({
           value={body}
           onChange={onBodyChange}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.ctrlKey || event.nativeEvent.isComposing) return;
+            if (
+              event.key !== "Enter" ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.nativeEvent.isComposing
+            ) return;
             event.preventDefault();
             if (!submitDisabled) event.currentTarget.form?.requestSubmit();
           }}

@@ -62,7 +62,7 @@ function splitPresentCopy(description: string | null) {
 }
 
 function isHolidayPackageLabel(label: string) {
-  return /^(Buy Lights|Lease Lights|Permanent Lights)$/i.test(label.trim());
+  return /^(Buy Lights|Lease Lights|Permanent Lights|Labor Only)$/i.test(label.trim());
 }
 
 export function isMostPopularPresentOption(option: {
@@ -347,16 +347,29 @@ export function EstimateOptionPresentCards({
           {hideDuplicateLineItems ? null : selectedItems.length ? (
             <ul className="space-y-3">
               {selectedItems.map((item, index) => (
-                <li key={`${item.name}-${index}`} className="flex justify-between gap-3 text-sm">
+                <li
+                  key={`${item.name}-${index}`}
+                  className={cn(
+                    "flex justify-between gap-3 text-sm",
+                    item.name === "Customer-supplied materials" &&
+                      "border-t pt-3 text-xs text-muted-foreground"
+                  )}
+                >
                   <span>
-                    <span className="font-medium">{item.name}</span>
+                    <span className={cn("font-medium", item.name === "Customer-supplied materials" && "font-normal")}>
+                      {item.name === "Customer-supplied materials"
+                        ? "Customer-supplied materials disclaimer"
+                        : item.name}
+                    </span>
                     {item.description ? (
                       <span className="mt-0.5 block whitespace-pre-wrap text-muted-foreground">
                         {item.description}
                       </span>
                     ) : null}
                   </span>
-                  <span className="shrink-0 font-medium">{formatCurrency(item.total)}</span>
+                  {item.name === "Customer-supplied materials" ? null : (
+                    <span className="shrink-0 font-medium">{formatCurrency(item.total)}</span>
+                  )}
                 </li>
               ))}
             </ul>

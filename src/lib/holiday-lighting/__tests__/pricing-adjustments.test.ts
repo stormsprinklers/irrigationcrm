@@ -1,8 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeHolidayQuotePricing, holidayBuyBreakdownLines, holidayDetailedBuyLines } from "../pricing";
+import {
+  computeHolidayQuotePricing,
+  HOLIDAY_LABOR_ONLY_DISCLAIMER,
+  holidayBuyBreakdownLines,
+  holidayDetailedBuyLines,
+  holidayDetailedLaborOnlyLines,
+} from "../pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
+  applyHolidayCatalogPolicy,
   holidayCatalogSkus,
   parseHolidaySelections,
 } from "../types";
@@ -103,4 +110,51 @@ test("detailed buy lines show parts and year-two labor without per-foot pricing"
   assert.deepEqual(lines.map((line) => line.total), [22.5, 29.9]);
   assert.match(lines[1]!.name, /Year 2 cost/);
   assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
+});
+
+test("labor-only quotes charge installation labor and omit parts", () => {
+  const selections = parseHolidaySelections({
+    defaultLightStyleKey: style.key,
+    installKind: "temporary",
+    billingMode: "labor_only",
+  });
+  const result = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements,
+    selections,
+    prices,
+  });
+  assert.equal(result.year1Total, 50);
+  assert.equal(result.lines[0]?.partsTotal, 0);
+  assert.equal(result.lines[0]?.laborTotal, 50);
+  assert.equal(result.lines[0]?.purchaseTotal, 50);
+
+  const lines = holidayDetailedLaborOnlyLines({
+    lines: result.lines,
+    targetSubtotal: result.optionDetails.buy.subtotal,
+  });
+  assert.deepEqual(lines.map((line) => line.total), [50]);
+  assert.match(lines[0]!.name, /labor only/i);
+  assert.match(lines[0]!.description, /customer-supplied/i);
+  assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
+});
+
+test("permanent lights cannot retain labor-only mode", () => {
+  const selections = applyHolidayCatalogPolicy(
+    parseHolidaySelections({
+      defaultLightStyleKey: "permanent",
+      installKind: "permanent",
+      billingMode: "labor_only",
+    }),
+    DEFAULT_HOLIDAY_CATALOG
+  );
+  assert.equal(selections.billingMode, "standard");
+});
+
+test("labor-only disclaimer covers third-party materials and replacement visits", () => {
+  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not liable/i);
+  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /clips/i);
+  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /provided by another company/i);
+  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /visits to replace lights or strands/i);
+  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not included/i);
 });

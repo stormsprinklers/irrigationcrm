@@ -5,6 +5,7 @@ export type HolidaySegmentKind = "roofline" | "peak" | "garland" | "custom";
 export const PEAK_LENGTH_MULTIPLIER = 1.5;
 
 export type HolidayInstallKind = "temporary" | "permanent";
+export type HolidayQuoteBillingMode = "standard" | "labor_only";
 export type HolidayDifficulty = 1 | 2 | 3;
 
 export const HOLIDAY_COLOR_PATTERNS = [
@@ -80,6 +81,7 @@ export type HolidayMeasurementPlacement = {
 export type HolidayQuoteSelections = {
   defaultLightStyleKey: string;
   installKind: HolidayInstallKind;
+  billingMode?: HolidayQuoteBillingMode;
   defaultColorPattern?: string;
   notes?: string;
   /** @deprecated Company minimums replace per-quote margin. */
@@ -215,6 +217,7 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
 export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
   defaultLightStyleKey: "c9",
   installKind: "temporary",
+  billingMode: "standard",
   defaultColorPattern: "Warm White",
 };
 
@@ -383,6 +386,7 @@ export function holidaySelectionsFromCatalog(
   return {
     defaultLightStyleKey: d.defaultLightStyleKey,
     installKind: d.defaultInstallKind,
+    billingMode: "standard",
     defaultColorPattern: "Warm White",
   };
 }
@@ -399,6 +403,10 @@ export function applyHolidayCatalogPolicy(
   return {
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
     installKind: style?.kind === "permanent" ? "permanent" : "temporary",
+    billingMode:
+      style?.kind !== "permanent" && selections.billingMode === "labor_only"
+        ? "labor_only"
+        : "standard",
     notes: selections.notes,
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
@@ -469,6 +477,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     defaultLightStyleKey:
       obj.defaultLightStyleKey ?? DEFAULT_HOLIDAY_SELECTIONS.defaultLightStyleKey,
     installKind: parseInstallKind(obj.installKind),
+    billingMode: obj.billingMode === "labor_only" ? "labor_only" : "standard",
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
     defaultColorPattern:
       typeof obj.defaultColorPattern === "string" && obj.defaultColorPattern.trim()

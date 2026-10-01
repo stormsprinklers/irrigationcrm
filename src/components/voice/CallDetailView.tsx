@@ -10,7 +10,9 @@ import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallRecordingPlayer } from "@/components/voice/CallRecordingPlayer";
 import { CallTranscriptPanel } from "@/components/voice/CallTranscriptPanel";
 import { InboundLineCard } from "@/components/voice/InboundLineCard";
+import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import { PhoneText } from "@/components/ui/PhoneText";
+import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { useVoiceDevice } from "@/contexts/VoiceDeviceProvider";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
@@ -165,6 +167,17 @@ export function CallDetailView({
     }
   }
 
+  function handleMarkedSpam() {
+    const next = {
+      ...detail,
+      isSpam: true,
+      missedReviewedAt: detail.missedReviewedAt ?? new Date().toISOString(),
+    };
+    setDetail(next);
+    onUpdated?.(next);
+    notifyInboxBadgesChanged();
+  }
+
   async function linkToJob() {
     if (!selectedVisitId) {
       toast.error("Select a visit first");
@@ -208,6 +221,9 @@ export function CallDetailView({
                 Voicemail
               </span>
             ) : null}
+            {detail.isSpam ? (
+              <Badge variant="destructive">Spam</Badge>
+            ) : null}
             {callBackNumber ? (
               <Button
                 type="button"
@@ -220,6 +236,18 @@ export function CallDetailView({
               >
                 <Phone className="h-4 w-4" />
               </Button>
+            ) : null}
+            {callBackNumber && !detail.isSpam ? (
+              <BlockContactAction
+                inline
+                customerId={detail.customer?.id}
+                phone={callBackNumber}
+                name={displayName}
+                spam
+                spamSource="call"
+                callLogId={detail.id}
+                onBlocked={handleMarkedSpam}
+              />
             ) : null}
           </div>
           {detail.customer?.id ? (

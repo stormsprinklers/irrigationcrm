@@ -1451,7 +1451,7 @@ model Customer {
   holidayLightingQuotes HolidayLightingQuote[]
   invoices             Invoice[]
   maintenanceEnrollments MaintenancePlanEnrollment[]
-  convertedFromLead      Lead?
+  convertedFromLeads     Lead[]
   callSessions           CallSession[]
   contactListMembers     ContactListMember[]
   campaignRecipients     CampaignRecipient[]
@@ -1600,7 +1600,7 @@ model Lead {
   notes               String?
   externalId          String?
   metadata            Json?
-  convertedCustomerId String?    @unique
+  convertedCustomerId String?
   /// First time marked contacted (manual or via call / SMS / email action). Used for speed-to-lead.
   contactedAt         DateTime?
   attributionChannel  String?
@@ -1626,6 +1626,7 @@ model Lead {
 
   @@unique([companyId, externalId])
   @@index([companyId, status])
+  @@index([convertedCustomerId])
   @@index([assignedUserId])
   @@index([companyId, contactedAt])
   @@index([companyId, attributionChannel])

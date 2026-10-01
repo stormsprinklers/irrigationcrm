@@ -90,6 +90,7 @@ export function computeHolidayQuotePricing(params: {
     catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
     catalog.lightStyles[0];
   const defaults = catalog.quoteDefaults;
+  const laborOnly = selections.billingMode === "labor_only" && style?.kind !== "permanent";
   const billedLengthFt = totalBilledLengthFt(measurements);
 
   const permanentStyle = catalog.lightStyles.find((item) => item.kind === "permanent" || item.key === "permanent");
@@ -112,7 +113,7 @@ export function computeHolidayQuotePricing(params: {
     const partsRate = rate(prices, segmentStyle?.partsSku ?? segmentStyle?.temporaryYear1Sku);
     const laborRate = rate(prices, segmentStyle?.installSku ?? segmentStyle?.temporaryReinstallSku);
     const segmentLeaseRate = rate(prices, segmentStyle?.leaseSku);
-    const partsTotal = money(lengthFt * partsRate);
+    const partsTotal = laborOnly ? 0 : money(lengthFt * partsRate);
     const laborTotal = money(lengthFt * laborRate);
     const leaseTotal = money(lengthFt * segmentLeaseRate);
     roofYear1 += partsTotal + laborTotal;
@@ -143,7 +144,7 @@ export function computeHolidayQuotePricing(params: {
     const item = lookup(prices, catalogItem.partsSku ?? catalogItem.sku);
     const laborItem = lookup(prices, catalogItem.installSku);
     const leaseItem = lookup(prices, catalogItem.leaseSku);
-    const partsAmount = item?.unitPrice ?? 0;
+    const partsAmount = laborOnly ? 0 : item?.unitPrice ?? 0;
     const laborAmount = laborItem?.unitPrice ?? 0;
     const amount = partsAmount + laborAmount;
     const placementStyle = catalog.lightStyles.find((item) => item.key === placement.lightStyleKey);
@@ -298,6 +299,39 @@ export function holidayDetailedBuyLines(params: {
   return result;
 }
 
+export function holidayDetailedLaborOnlyLines(params: {
+  lines: HolidayPricedLine[];
+  targetSubtotal: number;
+}) {
+  const result: Array<{
+    name: string;
+    description: string;
+    total: number;
+    itemType: "SERVICE";
+  }> = params.lines.map((line) => {
+    const subject = line.kind === "roofline" ? `Roofline — ${line.name}` : line.name;
+    const selection = [line.lightStyleLabel, line.colorPattern].filter(Boolean).join(" · ");
+    const lights = selection ? ` Customer-supplied lights: ${selection}.` : "";
+    return {
+      name: `${subject} — labor only`,
+      description: `Installation and take-down labor for customer-supplied lights. Lights and materials are not included.${lights}`,
+      total: line.laborTotal,
+      itemType: "SERVICE" as const,
+    };
+  });
+  const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
+  const adjustment = money(params.targetSubtotal - detailedTotal);
+  if (adjustment !== 0) {
+    result.push({
+      name: "Labor minimum adjustment",
+      description: "Adjustment to the quoted labor-only package price or minimum.",
+      total: adjustment,
+      itemType: "SERVICE",
+    });
+  }
+  return result;
+}
+
 export const HOLIDAY_INCLUDED_LINES = [
   { name: "Storage", description: "Included with this holiday lighting package." },
   { name: "Maintenance", description: "Included bulb and lighting maintenance during the season." },
@@ -312,6 +346,12 @@ export const HOLIDAY_LEASE_DETAIL =
 
 export const HOLIDAY_PERMANENT_DETAIL =
   "Permanent Lights are the most costly up-front, but then you have them year-round: change the color with an app to show support for your favorite team, raise awareness for a cause you care about, and celebrate holidays like Halloween, Thanksgiving, Valentine's Day, and 4th of July with festive lights — not just Christmas.";
+
+export const HOLIDAY_LABOR_ONLY_DETAIL =
+  "Installation and take-down labor for customer-supplied holiday lights. Lights, bulbs, clips, extension cords, and other materials are not included.";
+
+export const HOLIDAY_LABOR_ONLY_DISCLAIMER =
+  "Customer-supplied lights and clips: We are not liable for damage or poor function involving clips, lights, or other materials provided by another company. Visits to replace lights or strands during the season are not included.";
 
 /** @deprecated Use HOLIDAY_LEASE_DETAIL. */
 export const HOLIDAY_LEASE_INCLUDED = HOLIDAY_LEASE_DETAIL;

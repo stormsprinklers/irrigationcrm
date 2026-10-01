@@ -205,6 +205,25 @@ export async function GET(request: NextRequest) {
         ],
       });
     }
+    if (scope === Scope.EXTERNAL && folder === "general" && !search) {
+      and.push({
+        OR: [
+          { smsOpen: false },
+          {
+            smsOpen: null,
+            NOT: {
+              messages: {
+                some: {
+                  direction: MessageDirection.INBOUND,
+                  readAt: null,
+                  NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
     if (search) {
       and.push({
         OR: [

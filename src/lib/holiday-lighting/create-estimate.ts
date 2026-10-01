@@ -6,8 +6,11 @@ import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { loadHolidayPriceLookup } from "./catalog";
 import {
   computeHolidayQuotePricing,
+  HOLIDAY_LABOR_ONLY_DETAIL,
+  HOLIDAY_LABOR_ONLY_DISCLAIMER,
   HOLIDAY_INCLUDED_LINES,
   holidayDetailedBuyLines,
+  holidayDetailedLaborOnlyLines,
   holidayCustomerPackages,
   holidayOptionSummary,
 } from "./pricing";
@@ -100,6 +103,7 @@ export async function createEstimateFromHolidayQuote(params: {
         leaseTotal: priced.leaseTotal,
         permanentTotal: priced.permanentTotal,
         installKind: selections.installKind,
+        billingMode: selections.billingMode ?? "standard",
         lightStyleKey: selections.defaultLightStyleKey,
         colorPattern: selections.defaultColorPattern,
         strandMap,
@@ -107,6 +111,7 @@ export async function createEstimateFromHolidayQuote(params: {
     },
   });
 
+  const laborOnly = selections.billingMode === "labor_only" && style?.kind !== "permanent";
   const allPackages = holidayCustomerPackages({
     year1Total: priced.year1Total,
     reinstallTotal: priced.reinstallTotal,
@@ -114,9 +119,19 @@ export async function createEstimateFromHolidayQuote(params: {
     permanentTotal: priced.permanentTotal,
     summary,
   });
-  const packages = style?.kind === "permanent"
-    ? allPackages.filter((pack) => pack.letter === "C")
-    : allPackages.filter((pack) => pack.letter !== "C");
+  const packages = laborOnly
+    ? [{
+        letter: "A" as const,
+        label: "Labor Only",
+        tagline: "Customer-supplied lights",
+        popular: false,
+        description: `Customer-supplied lights\n\n${HOLIDAY_LABOR_ONLY_DETAIL} ${summary}`.trim(),
+        total: priced.year1Total,
+        sortOrder: 0,
+      }]
+    : style?.kind === "permanent"
+      ? allPackages.filter((pack) => pack.letter === "C")
+      : allPackages.filter((pack) => pack.letter !== "C");
 
   const createdOptions = [];
   for (const pack of packages) {
@@ -137,10 +152,15 @@ export async function createEstimateFromHolidayQuote(params: {
       },
     });
     if (key === "buy") {
-      const breakdown = holidayDetailedBuyLines({
-        lines: priced.lines,
-        targetSubtotal: detail.subtotal,
-      });
+      const breakdown = laborOnly
+        ? holidayDetailedLaborOnlyLines({
+            lines: priced.lines,
+            targetSubtotal: detail.subtotal,
+          })
+        : holidayDetailedBuyLines({
+            lines: priced.lines,
+            targetSubtotal: detail.subtotal,
+          });
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({
           estimateId: estimate.id,
@@ -169,19 +189,35 @@ export async function createEstimateFromHolidayQuote(params: {
         },
       });
     }
-    await prisma.estimateLineItem.createMany({
-      data: HOLIDAY_INCLUDED_LINES.map((line, index) => ({
-        estimateId: estimate.id,
-        optionId: option.id,
-        name: line.name,
-        description: line.description,
-        quantity: 1,
-        unitPrice: 0,
-        unit: "included",
-        total: 0,
-        sortOrder: (key === "buy" ? priced.lines.length * 2 : 1) + index + 1,
-      })),
-    });
+    if (!laborOnly) {
+      await prisma.estimateLineItem.createMany({
+        data: HOLIDAY_INCLUDED_LINES.map((line, index) => ({
+          estimateId: estimate.id,
+          optionId: option.id,
+          name: line.name,
+          description: line.description,
+          quantity: 1,
+          unitPrice: 0,
+          unit: "included",
+          total: 0,
+          sortOrder: (key === "buy" ? priced.lines.length * 2 : 1) + index + 1,
+        })),
+      });
+    } else {
+      await prisma.estimateLineItem.create({
+        data: {
+          estimateId: estimate.id,
+          optionId: option.id,
+          name: "Customer-supplied materials",
+          description: HOLIDAY_LABOR_ONLY_DISCLAIMER,
+          quantity: 1,
+          unitPrice: 0,
+          unit: "included",
+          total: 0,
+          sortOrder: priced.lines.length + 100,
+        },
+      });
+    }
     if (detail.discountTotal > 0 && adjustment) {
       await prisma.discount.create({
         data: {
@@ -198,10 +234,12 @@ export async function createEstimateFromHolidayQuote(params: {
     createdOptions.push({ ...pack, id: option.id });
   }
 
-  const selected = style?.kind === "permanent"
+  const selected = laborOnly
+    ? createdOptions[0]
+    : style?.kind === "permanent"
     ? createdOptions.find((o) => o.letter === "C") ?? createdOptions[0]
     : createdOptions.find((o) => o.letter === "B") ?? createdOptions[0];
-  const selectedTotal = selected?.total ?? priced.leaseTotal;
+  const selectedTotal = selected?.total ?? (laborOnly ? priced.year1Total : priced.leaseTotal);
   const selectedKey = selected?.letter === "A" ? "buy" : selected?.letter === "C" ? "permanent" : "lease";
   const selectedDetail = priced.optionDetails[selectedKey];
 
@@ -212,7 +250,7 @@ export async function createEstimateFromHolidayQuote(params: {
       subtotal: selectedDetail.subtotal,
       discountTotal: selectedDetail.discountTotal,
       total: selectedTotal,
-      premiumOptionTotal: priced.permanentTotal,
+      premiumOptionTotal: laborOnly ? null : priced.permanentTotal,
     },
   });
 

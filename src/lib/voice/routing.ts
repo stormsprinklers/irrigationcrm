@@ -9,6 +9,7 @@ import {
 import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone, phoneLookupVariants } from "@/lib/inbox/phone";
+import { isContactBlocked } from "@/lib/inbox/contacts";
 import { getCompanyByTwilioPhone } from "@/lib/inbox/conversations";
 import { lookupCustomerByPhone } from "@/lib/voice/caller-lookup";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
@@ -246,6 +247,13 @@ export async function buildInboundTwiml(params: TwilioParams) {
   const company = await getCompanyByTwilioPhone(to);
   if (!company) {
     response.say("This number is not configured.");
+    return response.toString();
+  }
+
+  // Phone-level inbox blocks apply across both SMS and voice. Reject the call
+  // before creating a session or ringing employees so known spam stays silent.
+  if (from && (await isContactBlocked(company.id, from, null))) {
+    response.hangup();
     return response.toString();
   }
 

@@ -19,13 +19,15 @@ export async function GET(request: NextRequest) {
     const user = await requireSessionUser();
     const customerId = request.nextUrl.searchParams.get("customerId");
     const phoneParam = request.nextUrl.searchParams.get("phone");
+    const conversationId = request.nextUrl.searchParams.get("conversationId");
 
-    const or: Array<{ customerId: string } | { participantPhone: string }> = [];
+    const or: Array<{ id: string } | { customerId: string } | { participantPhone: string }> = [];
+    if (conversationId) or.push({ id: conversationId });
     if (customerId) or.push({ customerId });
     if (phoneParam) or.push({ participantPhone: normalizePhone(phoneParam) });
 
     if (or.length === 0) {
-      return badRequestResponse("customerId or phone is required");
+      return badRequestResponse("conversationId, customerId, or phone is required");
     }
 
     if (customerId && !(await canAccessFieldCustomerComms(user, customerId))) {
@@ -51,6 +53,10 @@ export async function GET(request: NextRequest) {
         messages: { orderBy: { sentAt: "desc" }, take: 1 },
       },
     });
+
+    if (conversation && !(await canAccessFieldCustomerComms(user, conversation.customerId))) {
+      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+    }
 
     return NextResponse.json({ conversation });
   } catch (error) {

@@ -204,6 +204,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
                         Missed
                       </Badge>
                     ) : null}
+                    {call.isSpam ? (
+                      <Badge variant="destructive" className="text-[10px]">
+                        Spam
+                      </Badge>
+                    ) : null}
                     {call.hasVoicemail ? (
                       <Badge variant="outline" className="text-[10px]">
                         Voicemail
@@ -247,7 +252,26 @@ export function CsrCallHistoryPanel({ className }: Props) {
           <p className="p-4 text-sm text-muted-foreground">Call not found.</p>
         ) : (
           <div className="p-4">
-            <CallDetailView detail={detail} />
+            <CallDetailView
+              detail={detail}
+              onUpdated={(next) => {
+                setDetail(next);
+                setCalls((current) =>
+                  current.map((call) =>
+                    call.id === next.id
+                      ? {
+                          ...call,
+                          hasSummary: next.hasSummary,
+                          objectionCategory: next.objectionCategory,
+                          objectionReason: next.objectionReason,
+                          isSpam: next.isSpam,
+                          missedReviewedAt: next.missedReviewedAt,
+                        }
+                      : call
+                  )
+                );
+              }}
+            />
           </div>
         )}
       </div>

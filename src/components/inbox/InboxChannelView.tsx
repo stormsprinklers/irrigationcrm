@@ -54,11 +54,25 @@ export function InboxChannelView({
   useEffect(() => {
     if (ch !== "sms" || sc !== "customers") return;
     const conversationId = searchParams.get("conversationId");
-    if (conversationId) {
-      setSmsFolder("general");
-      setSelectedId(conversationId);
-      setIsComposing(false);
-    }
+    if (!conversationId) return;
+
+    let cancelled = false;
+    fetch(`/api/inbox/sms/conversations/resolve?conversationId=${encodeURIComponent(conversationId)}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled) return;
+        setSmsFolder(data.conversation?.smsOpen === true ? "open" : "general");
+        setSelectedId(conversationId);
+        setIsComposing(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedId(conversationId);
+        setIsComposing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [ch, sc, searchParams]);
 
   useEffect(() => {
@@ -76,7 +90,7 @@ export function InboxChannelView({
       .then((data) => {
         if (cancelled || userOverrideRef.current) return;
         if (data.conversation?.id) {
-          setSmsFolder("general");
+          setSmsFolder(data.conversation.smsOpen === true ? "open" : "general");
           setSelectedId(data.conversation.id);
           setIsComposing(false);
         } else if (deepLink.phone || deepLink.customerId) {
