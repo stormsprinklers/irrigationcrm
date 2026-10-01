@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
@@ -21,10 +21,13 @@ export async function POST(_request: NextRequest, { params }: Params) {
     assertHolidayLightingEnabled(company ?? {});
 
     const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    const mode = body.mode === "revise" ? "revise" : "new";
     const estimate = await createEstimateFromHolidayQuote({
       companyId: user.companyId,
       quoteId: id,
       userId: user.id,
+      mode,
     });
     return NextResponse.json({ estimate });
   } catch (error) {

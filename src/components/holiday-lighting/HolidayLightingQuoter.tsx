@@ -18,6 +18,7 @@ import {
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
@@ -30,6 +31,7 @@ import {
   HOLIDAY_PREVIEW_DISCLAIMER,
   HOLIDAY_COLOR_PATTERNS,
   applyHolidayCatalogPolicy,
+  holidayDesignOptionsFromQuote,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
@@ -37,6 +39,7 @@ import {
   type HolidayLightingCatalog,
   type HolidayMeasurements,
   type HolidayQuoteSelections,
+  type HolidayQuoteDesignOption,
   type HolidayQuoteOptionKey,
   type HolidayOptionAdjustment,
   type HolidayDifficulty,
@@ -158,6 +161,8 @@ export function HolidayLightingQuoter({
   const [center, setCenter] = useState<HolidayLatLng | null>(null);
   const [measurements, setMeasurements] = useState<HolidayMeasurements>(EMPTY_HOLIDAY_MEASUREMENTS);
   const [selections, setSelections] = useState<HolidayQuoteSelections>(DEFAULT_HOLIDAY_SELECTIONS);
+  const [designOptions, setDesignOptions] = useState<HolidayQuoteDesignOption[]>([]);
+  const [activeOptionId, setActiveOptionId] = useState("option-1");
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -168,6 +173,8 @@ export function HolidayLightingQuoter({
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [addOptionOpen, setAddOptionOpen] = useState(false);
+  const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
@@ -202,12 +209,23 @@ export function HolidayLightingQuoter({
       setCustomerName(q.customer?.name ?? "");
       setPropertyId(q.propertyId ?? "");
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
-      setMeasurements(parseHolidayMeasurements(q.measurements));
       const nextCatalog = (data.catalog as HolidayLightingCatalog | undefined) ?? DEFAULT_HOLIDAY_CATALOG;
       setCatalog(nextCatalog);
-      setSelections(
-        applyHolidayCatalogPolicy(parseHolidaySelections(q.selections), nextCatalog)
+      const parsedMeasurements = parseHolidayMeasurements(q.measurements);
+      const parsedSelections = applyHolidayCatalogPolicy(
+        parseHolidaySelections(q.selections),
+        nextCatalog
       );
+      const nextOptions = holidayDesignOptionsFromQuote({
+        measurements: parsedMeasurements,
+        selections: parsedSelections,
+        catalog: nextCatalog,
+      });
+      const firstOption = nextOptions.find((option) => option.id === parsedSelections.activeDesignOptionId) ?? nextOptions[0]!;
+      setDesignOptions(nextOptions);
+      setActiveOptionId(firstOption.id);
+      setMeasurements(firstOption.measurements);
+      setSelections({ ...firstOption.selections, designOptions: nextOptions, activeDesignOptionId: firstOption.id });
       setPreviewUrl(q.previewImageUrl);
       const loadedPhoto = q.sourcePhotoUrl
         ? blobProxyUrl(q.sourcePhotoUrl) ?? q.sourcePhotoUrl
@@ -233,8 +251,16 @@ export function HolidayLightingQuoter({
         const data = await r.json();
         if (!r.ok) return;
         const nextCatalog = data.catalog as HolidayLightingCatalog;
+        const nextSelections = holidaySelectionsFromCatalog(nextCatalog);
+        const initialOption = holidayDesignOptionsFromQuote({
+          measurements: EMPTY_HOLIDAY_MEASUREMENTS,
+          selections: nextSelections,
+          catalog: nextCatalog,
+        });
         setCatalog(nextCatalog);
-        setSelections(holidaySelectionsFromCatalog(nextCatalog));
+        setSelections({ ...nextSelections, designOptions: initialOption, activeDesignOptionId: initialOption[0]!.id });
+        setDesignOptions(initialOption);
+        setActiveOptionId(initialOption[0]!.id);
       })
       .catch(() => {});
 
@@ -309,7 +335,7 @@ export function HolidayLightingQuoter({
           lat: center?.lat ?? null,
           lng: center?.lng ?? null,
           measurements,
-          selections,
+          selections: selectionsWithCurrentOption(),
         }),
       });
       const data = await res.json();
@@ -327,6 +353,44 @@ export function HolidayLightingQuoter({
     }
   }
 
+  function currentOptions(
+    nextMeasurements = measurements,
+    nextSelections = selections,
+    optionId = activeOptionId,
+    baseOptions = designOptions
+  ): HolidayQuoteDesignOption[] {
+    const base = baseOptions.length
+      ? baseOptions
+      : holidayDesignOptionsFromQuote({ measurements, selections, catalog });
+    return base.map((option) => option.id === optionId
+      ? {
+          ...option,
+          measurements: nextMeasurements,
+          selections: {
+            defaultLightStyleKey: nextSelections.defaultLightStyleKey,
+            installKind: nextSelections.installKind,
+            billingMode: nextSelections.billingMode ?? "standard",
+            pricingMode: nextSelections.pricingMode ?? "buy",
+            defaultColorPattern: nextSelections.defaultColorPattern,
+            notes: nextSelections.notes,
+            optionAdjustments: nextSelections.optionAdjustments,
+            reinstallPrice: nextSelections.reinstallPrice,
+          },
+        }
+      : option);
+  }
+
+  function selectionsWithCurrentOption(
+    nextMeasurements = measurements,
+    nextSelections = selections
+  ): HolidayQuoteSelections {
+    return {
+      ...nextSelections,
+      designOptions: currentOptions(nextMeasurements, nextSelections),
+      activeDesignOptionId: activeOptionId,
+    };
+  }
+
   async function save(
     patch?: Partial<{
       measurements: HolidayMeasurements;
@@ -342,11 +406,25 @@ export function HolidayLightingQuoter({
       sourcePhotoUrl: string | null;
       previewImageUrl: string | null;
     }>,
-    opts?: { quiet?: boolean }
+    opts?: {
+      quiet?: boolean;
+      designOptions?: HolidayQuoteDesignOption[];
+      activeOptionId?: string;
+    }
   ) {
     setSaving(true);
     try {
       const id = await ensureQuote();
+      const nextMeasurements = patch?.measurements ?? measurements;
+      const nextSelections = patch?.selections ?? selections;
+      const nextOptions = currentOptions(
+        nextMeasurements,
+        nextSelections,
+        opts?.activeOptionId ?? activeOptionId,
+        opts?.designOptions ?? designOptions
+      );
+      setDesignOptions(nextOptions);
+      const targetOptionId = opts?.activeOptionId ?? activeOptionId;
       const body = {
         address,
         city,
@@ -355,10 +433,12 @@ export function HolidayLightingQuoter({
         lat: center?.lat ?? null,
         lng: center?.lng ?? null,
         customerId: customerId || null,
-        measurements,
-        selections,
+        measurements: nextMeasurements,
+        selections: { ...nextSelections, designOptions: nextOptions, activeDesignOptionId: targetOptionId },
         ...patch,
       };
+      body.measurements = nextMeasurements;
+      body.selections = { ...nextSelections, designOptions: nextOptions, activeDesignOptionId: targetOptionId };
       const res = await fetch(`/api/holiday-lighting/quotes/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -389,6 +469,87 @@ export function HolidayLightingQuoter({
         [key]: { ...current.optionAdjustments?.[key], ...patch },
       },
     }));
+  }
+
+  function switchDesignOption(optionId: string) {
+    if (optionId === activeOptionId) return;
+    const snapshot = currentOptions();
+    const target = snapshot.find((option) => option.id === optionId);
+    if (!target) return;
+    setDesignOptions(snapshot);
+    setActiveOptionId(target.id);
+    setMeasurements(target.measurements);
+    setSelections({ ...target.selections, designOptions: snapshot, activeDesignOptionId: target.id });
+    setSelectedSegmentId(null);
+    setPricing(null);
+    void save(
+      { measurements: target.measurements, selections: { ...target.selections, designOptions: snapshot, activeDesignOptionId: target.id } },
+      { quiet: true, designOptions: snapshot, activeOptionId: target.id }
+    );
+  }
+
+  function addDesignOption(copyCurrent: boolean) {
+    const snapshot = currentOptions();
+    if (snapshot.length >= 5) {
+      toast.error("Holiday estimates can have up to five options");
+      return;
+    }
+    const number = snapshot.length + 1;
+    const id = crypto.randomUUID();
+    const baseSelections = copyCurrent
+      ? { ...selections, designOptions: undefined }
+      : holidaySelectionsFromCatalog(catalog);
+    const baseMeasurements = copyCurrent
+      ? structuredClone(measurements)
+      : structuredClone(EMPTY_HOLIDAY_MEASUREMENTS);
+    const normalized = applyHolidayCatalogPolicy(baseSelections, catalog);
+    const nextOption: HolidayQuoteDesignOption = {
+      id,
+      label: `Option ${number}`,
+      measurements: baseMeasurements,
+      selections: {
+        defaultLightStyleKey: normalized.defaultLightStyleKey,
+        installKind: normalized.installKind,
+        billingMode: normalized.billingMode ?? "standard",
+        pricingMode: normalized.pricingMode ?? "buy",
+        defaultColorPattern: normalized.defaultColorPattern,
+        notes: normalized.notes,
+        optionAdjustments: normalized.optionAdjustments,
+        reinstallPrice: normalized.reinstallPrice,
+      },
+    };
+    const nextOptions = [...snapshot, nextOption];
+    setAddOptionOpen(false);
+    setDesignOptions(nextOptions);
+    setActiveOptionId(id);
+    setMeasurements(baseMeasurements);
+    setSelections({ ...nextOption.selections, designOptions: nextOptions, activeDesignOptionId: id });
+    setSelectedSegmentId(null);
+    setPricing(null);
+    void save(
+      { measurements: baseMeasurements, selections: { ...nextOption.selections, designOptions: nextOptions, activeDesignOptionId: id } },
+      { quiet: true, designOptions: nextOptions, activeOptionId: id }
+    );
+  }
+
+  function removeActiveDesignOption() {
+    const snapshot = currentOptions();
+    if (snapshot.length <= 1) return;
+    const activeIndex = snapshot.findIndex((option) => option.id === activeOptionId);
+    const remaining = snapshot
+      .filter((option) => option.id !== activeOptionId)
+      .map((option, index) => ({ ...option, label: `Option ${index + 1}` }));
+    const target = remaining[Math.min(Math.max(activeIndex, 0), remaining.length - 1)]!;
+    setDesignOptions(remaining);
+    setActiveOptionId(target.id);
+    setMeasurements(target.measurements);
+    setSelections({ ...target.selections, designOptions: remaining, activeDesignOptionId: target.id });
+    setSelectedSegmentId(null);
+    setPricing(null);
+    void save(
+      { measurements: target.measurements, selections: { ...target.selections, designOptions: remaining, activeDesignOptionId: target.id } },
+      { quiet: true, designOptions: remaining, activeOptionId: target.id }
+    );
   }
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
@@ -727,13 +888,16 @@ export function HolidayLightingQuoter({
     }
   }
 
-  async function createEstimate() {
+  async function createEstimate(mode: "revise" | "new" = "new") {
     setCreating(true);
+    setEstimateChoiceOpen(false);
     try {
       const id = await ensureQuote();
       if (!(await save(undefined, { quiet: true }))) return;
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/create-estimate`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not create estimate");
@@ -742,7 +906,7 @@ export function HolidayLightingQuoter({
         estimateNumber: data.estimate.estimateNumber,
         status: data.estimate.status,
       });
-      toast.success("Estimate created");
+      toast.success(mode === "revise" ? "Estimate revised" : "Estimate created");
       setSendDialogOpen(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create estimate failed");
@@ -752,7 +916,16 @@ export function HolidayLightingQuoter({
   }
 
   async function clearQuoteWork() {
+    const resetSelections = holidaySelectionsFromCatalog(catalog);
+    const resetOptions = holidayDesignOptionsFromQuote({
+      measurements: EMPTY_HOLIDAY_MEASUREMENTS,
+      selections: resetSelections,
+      catalog,
+    });
     setMeasurements(EMPTY_HOLIDAY_MEASUREMENTS);
+    setSelections({ ...resetSelections, designOptions: resetOptions, activeDesignOptionId: resetOptions[0]!.id });
+    setDesignOptions(resetOptions);
+    setActiveOptionId(resetOptions[0]!.id);
     setSelectedSegmentId(null);
     setPhotoUrl(null);
     setPhotoApproved(false);
@@ -763,10 +936,11 @@ export function HolidayLightingQuoter({
     await save(
       {
         measurements: EMPTY_HOLIDAY_MEASUREMENTS,
+        selections: { ...resetSelections, designOptions: resetOptions, activeDesignOptionId: resetOptions[0]!.id },
         sourcePhotoUrl: null,
         previewImageUrl: null,
       },
-      { quiet: true }
+      { quiet: true, designOptions: resetOptions, activeOptionId: resetOptions[0]!.id }
     );
     toast.success("Quote measurements cleared");
   }
@@ -780,18 +954,21 @@ export function HolidayLightingQuoter({
   const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
   const selectedStyle = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey);
   const permanentSelected = selectedStyle?.kind === "permanent";
-  const visibleQuoteOptions: Array<readonly [HolidayQuoteOptionKey, string]> = permanentSelected
-    ? [["permanent", "Permanent Lights"]]
-    : [
-        ["buy", "New Option"],
-        ["lease", "Lease Lights"],
-        ...(selections.includeLaborOnlyOption
-          ? ([["labor", "Labor Only"]] as const)
-          : []),
-        ...(selections.includePermanentOption
-          ? ([["permanent", "Permanent Lights"]] as const)
-          : []),
-      ];
+  const activePricingKey: HolidayQuoteOptionKey = permanentSelected
+    ? "permanent"
+    : selections.pricingMode === "lease" || selections.pricingMode === "labor"
+      ? selections.pricingMode
+      : "buy";
+  const activePricingLabel = activePricingKey === "permanent"
+    ? "Permanent Lights"
+    : activePricingKey === "labor"
+      ? "Labor Only"
+      : activePricingKey === "lease"
+        ? "Lease Lights"
+        : "Lights + Labor";
+  const visibleQuoteOptions: Array<readonly [HolidayQuoteOptionKey, string]> = [
+    [activePricingKey, activePricingLabel],
+  ];
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -848,6 +1025,60 @@ export function HolidayLightingQuoter({
             </Button>
           ) : null}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {(designOptions.length
+            ? currentOptions()
+            : holidayDesignOptionsFromQuote({ measurements, selections, catalog })
+          ).map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              size="sm"
+              variant={option.id === activeOptionId ? "default" : "outline"}
+              onClick={() => switchDesignOption(option.id)}
+            >
+              {option.label}
+            </Button>
+          ))}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={designOptions.length >= 5}
+            onClick={() => setAddOptionOpen((open) => !open)}
+          >
+            + New Option
+          </Button>
+          {designOptions.length > 1 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={removeActiveDesignOption}
+            >
+              Remove current
+            </Button>
+          ) : null}
+          <span className="text-xs text-muted-foreground">Up to 5 options per estimate</span>
+        </div>
+        {addOptionOpen ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted/50 p-3">
+            <span className="text-sm font-medium">Build the new option from:</span>
+            <Button type="button" size="sm" onClick={() => addDesignOption(true)}>
+              Copy current option
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => addDesignOption(false)}>
+              Start blank
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setAddOptionOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
@@ -1025,6 +1256,31 @@ export function HolidayLightingQuoter({
         <section className="max-w-lg space-y-4 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">Lighting selections</h3>
           <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-xs text-muted-foreground">Scope
+              <select
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={permanentSelected ? "buy" : activePricingKey}
+                disabled={permanentSelected}
+                onChange={(event) => {
+                  const pricingMode = event.target.value === "lease"
+                    ? "lease" as const
+                    : event.target.value === "labor"
+                      ? "labor" as const
+                      : "buy" as const;
+                  const next = {
+                    ...selections,
+                    pricingMode,
+                    billingMode: pricingMode === "labor" ? "labor_only" as const : "standard" as const,
+                  };
+                  setSelections(next);
+                  void save({ selections: next }, { quiet: true });
+                }}
+              >
+                <option value="buy">Materials + labor</option>
+                <option value="lease">Lease</option>
+                <option value="labor">Labor only</option>
+              </select>
+            </label>
             <label className="text-xs text-muted-foreground">Light type
             <select
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1042,7 +1298,7 @@ export function HolidayLightingQuoter({
                   })),
                 };
                 setSelections(next);
-                updateMeasurements(nextMeasurements);
+                setMeasurements(pruneStrands(nextMeasurements));
                 void save({ selections: next, measurements: nextMeasurements }, { quiet: true });
               }}
             >
@@ -1063,7 +1319,7 @@ export function HolidayLightingQuoter({
                     const nextSelections = { ...selections, defaultColorPattern: colorPattern };
                     const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
                     setSelections(nextSelections);
-                    updateMeasurements(nextMeasurements);
+                    setMeasurements(pruneStrands(nextMeasurements));
                     void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
                   }}
                 >
@@ -1084,42 +1340,12 @@ export function HolidayLightingQuoter({
                   const nextSelections = { ...selections, defaultColorPattern: colorPattern };
                   const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
                   setSelections(nextSelections);
-                  updateMeasurements(nextMeasurements);
+                  setMeasurements(pruneStrands(nextMeasurements));
                   void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
                 }}
               />
             </label>
           ) : null}
-          {!permanentSelected ? (
-            <div className="space-y-2 rounded-md bg-amber-50 p-3 text-xs text-amber-900">
-              <p className="font-medium">Additional customer options</p>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selections.includeLaborOnlyOption === true}
-                  onChange={(event) => {
-                    const next = { ...selections, includeLaborOnlyOption: event.target.checked };
-                    setSelections(next);
-                    void save({ selections: next }, { quiet: true });
-                  }}
-                />
-                Offer labor only (customer supplies lights and materials)
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selections.includePermanentOption === true}
-                  onChange={(event) => {
-                    const next = { ...selections, includePermanentOption: event.target.checked };
-                    setSelections(next);
-                    void save({ selections: next }, { quiet: true });
-                  }}
-                />
-                Offer permanent lights
-              </label>
-            </div>
-          ) : null}
-
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1167,42 +1393,18 @@ export function HolidayLightingQuoter({
           </div>
           {pricing ? (
             <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
-              {!permanentSelected ? <><div>
-                <div className="flex justify-between">
-                  <span>New Option</span>
-                  <span className="font-semibold">{money(pricing.optionDetails.buy.total)}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Future years: {money(pricing.reinstallTotal)}
-                </p>
-              </div>
               <div>
                 <div className="flex justify-between">
-                  <span>
-                    Lease Lights{" "}
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
-                      Most popular
-                    </span>
-                  </span>
-                  <span className="font-semibold">{money(pricing.leaseTotal)}</span>
+                  <span>{activePricingLabel}</span>
+                  <span className="font-semibold">{money(pricing.optionDetails[activePricingKey].total)}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">No commitments</p>
-              </div></> : null}
-              {!permanentSelected && selections.includeLaborOnlyOption ? <div>
-                <div className="flex justify-between">
-                  <span>Labor Only</span>
-                  <span className="font-semibold">{money(pricing.optionDetails.labor.total)}</span>
-                </div>
-                <p className="text-xs text-muted-foreground">Customer-supplied lights and materials</p>
-              </div> : null}
-              {!permanentSelected && selections.includePermanentOption ? <div className="flex justify-between">
-                <span>Permanent Lights</span>
-                <span className="font-semibold">{money(pricing.optionDetails.permanent.total)}</span>
-              </div> : null}
-              {permanentSelected ? <div className="flex justify-between">
-                <span>Permanent Lights</span>
-                <span className="font-semibold">{money(pricing.permanentTotal)}</span>
-              </div> : null}
+                {activePricingKey === "buy" ? (
+                  <p className="text-xs text-muted-foreground">Future years: {money(pricing.reinstallTotal)}</p>
+                ) : null}
+                {activePricingKey === "labor" ? (
+                  <p className="text-xs text-muted-foreground">Customer-supplied lights and materials</p>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </section>
@@ -1299,7 +1501,7 @@ export function HolidayLightingQuoter({
                   {detail.discountTotal > 0 ? <p className="text-xs text-muted-foreground">{money(detail.subtotal)} minus {money(detail.discountTotal)} discount</p> : null}
                 </div>;
               })}
-              {!permanentSelected ? <label className="block text-xs text-muted-foreground">New Option future years ($)
+              {activePricingKey === "buy" ? <label className="block text-xs text-muted-foreground">Future years ($)
                 <input type="number" min={0} max={9999999} step="0.01" placeholder={pricing.calculatedReinstallTotal.toFixed(2)}
                   value={selections.reinstallPrice ?? ""}
                   onChange={(event) => setSelections((current) => ({ ...current, reinstallPrice: event.target.value === "" ? null : Number(event.target.value) }))}
@@ -1312,72 +1514,38 @@ export function HolidayLightingQuoter({
             <h3 className="text-sm font-semibold">Quote</h3>
             {pricing ? (
               <div className="space-y-3 text-sm">
-                {!permanentSelected ? <><div>
-                  <div className="flex justify-between">
-                    <span>New Option</span>
-                    <span className="font-semibold">{money(draftPricing?.buy.total ?? pricing.optionDetails.buy.total)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    New customer-owned lights and materials, installation, and take-down. Future
-                    years: {money(draftReinstall)}. Front-loads the cost so you own the lights and
-                    pay less later. Includes bulb replacements during the season.
-                  </p>
-                </div>
                 <div>
                   <div className="flex justify-between">
-                    <span>
-                      Lease Lights{" "}
-                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
-                        Most popular
-                      </span>
-                    </span>
-                    <span className="font-semibold">{money(draftPricing?.lease.total ?? pricing.leaseTotal)}</span>
+                    <span>{activePricingLabel}</span>
+                    <span className="font-semibold">{money(draftPricing?.[activePricingKey].total ?? pricing.optionDetails[activePricingKey].total)}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    No commitments. Lower up front, can cost more long-term, and you can change
-                    colors and design each year. Includes installation, take-down, and bulb
-                    replacements during the season.
-                  </p>
-                </div></> : null}
-                {!permanentSelected && selections.includeLaborOnlyOption ? <div>
-                  <div className="flex justify-between">
-                    <span>Labor Only</span>
-                    <span className="font-semibold">{money(draftPricing?.labor.total ?? pricing.optionDetails.labor.total)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
+                  {activePricingKey === "buy" ? <p className="text-xs text-muted-foreground">
+                    New customer-owned lights and materials, installation, and take-down. Future
+                    years: {money(draftReinstall)}. Includes bulb replacements during the season.
+                  </p> : null}
+                  {activePricingKey === "lease" ? <p className="text-xs text-muted-foreground">
+                    No commitments. Includes installation, take-down, and bulb replacements during
+                    the season.
+                  </p> : null}
+                  {activePricingKey === "labor" ? <p className="text-xs text-muted-foreground">
                     Installation and take-down labor for customer-supplied lights. Lights, bulbs,
                     clips, extension cords, and other materials are not included.
-                  </p>
-                </div> : null}
-                {!permanentSelected && selections.includePermanentOption ? <div>
-                  <div className="flex justify-between">
-                    <span>Permanent Lights</span>
-                    <span className="font-semibold">{money(draftPricing?.permanent.total ?? pricing.permanentTotal)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Permanent app-controlled lighting for year-round use.
-                  </p>
-                </div> : null}
-                {permanentSelected ? <div>
-                  <div className="flex justify-between">
-                    <span>Permanent Lights</span>
-                    <span className="font-semibold">{money(draftPricing?.permanent.total ?? pricing.permanentTotal)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
+                  </p> : null}
+                  {activePricingKey === "permanent" ? <p className="text-xs text-muted-foreground">
                     Fit your vibe year-round. Highest up-front cost, then change colors with an
                     app for teams, causes, and holidays — not just Christmas.
-                  </p>
-                </div> : null}
+                  </p> : null}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {Math.round(pricing.billedLengthFt)} ft billed
                   {pricing.placementCount
                     ? ` · ${pricing.placementCount} trees/bushes`
                     : ""}
-                  {pricing.year1MinimumApplied
+                  {(activePricingKey === "buy" || activePricingKey === "labor") && pricing.year1MinimumApplied
                     ? " · new-option first-year minimum applied"
                     : ""}
                 </p>
-                {!permanentSelected && pricing.optionDetails.buy.calculated > 0 && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
+                {activePricingKey === "lease" && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
                   <p className="text-xs text-amber-800">
                     Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
                     lighting before sending this quote.
@@ -1391,7 +1559,7 @@ export function HolidayLightingQuoter({
               type="button"
               className="w-full"
               disabled={creating || !customerId}
-              onClick={() => void createEstimate()}
+              onClick={() => estimate ? setEstimateChoiceOpen(true) : void createEstimate("new")}
             >
               {creating ? (
                 <>
@@ -1434,6 +1602,36 @@ export function HolidayLightingQuoter({
         onConfirm={() => void clearQuoteWork()}
         onCancel={() => setClearConfirmOpen(false)}
       />
+      {estimateChoiceOpen ? (
+        <ModalPortal>
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/50"
+              aria-label="Close estimate choice"
+              disabled={creating}
+              onClick={() => setEstimateChoiceOpen(false)}
+            />
+            <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-white p-5 shadow-lg">
+              <h2 className="text-base font-semibold">Update the branded estimate?</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Revise {estimate?.estimateNumber ?? "the existing estimate"} in place, or create a separate estimate with a new number.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="ghost" disabled={creating} onClick={() => setEstimateChoiceOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="outline" disabled={creating} onClick={() => void createEstimate("new")}>
+                  Create new estimate
+                </Button>
+                <Button type="button" disabled={creating} onClick={() => void createEstimate("revise")}>
+                  Revise existing
+                </Button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      ) : null}
       <EstimateSendDialog
         open={sendDialogOpen}
         estimateId={estimate?.id ?? null}

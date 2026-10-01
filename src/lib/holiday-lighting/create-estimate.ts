@@ -6,19 +6,21 @@ import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { loadHolidayPriceLookup } from "./catalog";
 import {
   computeHolidayQuotePricing,
+  HOLIDAY_BUY_DETAIL,
   HOLIDAY_LABOR_ONLY_DETAIL,
   HOLIDAY_LABOR_ONLY_DISCLAIMER,
+  HOLIDAY_LEASE_DETAIL,
   HOLIDAY_PERMANENT_DETAIL,
   HOLIDAY_INCLUDED_LINES,
   holidayDetailedBuyLines,
   holidayDetailedLaborOnlyLines,
-  holidayCustomerPackages,
   holidayOptionSummary,
 } from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
 import {
   HOLIDAY_PREVIEW_DISCLAIMER,
   applyHolidayCatalogPolicy,
+  holidayDesignOptionsFromQuote,
   parseHolidayCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
@@ -28,6 +30,7 @@ export async function createEstimateFromHolidayQuote(params: {
   companyId: string;
   quoteId: string;
   userId?: string | null;
+  mode?: "revise" | "new";
 }) {
   const quote = await prisma.holidayLightingQuote.findFirst({
     where: { id: params.quoteId, companyId: params.companyId },
@@ -39,150 +42,161 @@ export async function createEstimateFromHolidayQuote(params: {
   if (!company) throw new Error("Company not found");
 
   const catalog = parseHolidayCatalog(company.holidayLightingCatalog);
-  const measurements = parseHolidayMeasurements(quote.measurements);
-  const selections = applyHolidayCatalogPolicy(
-    parseHolidaySelections(quote.selections),
-    catalog
-  );
-  const prices = await loadHolidayPriceLookup(params.companyId);
-  const priced = computeHolidayQuotePricing({
+  const rootMeasurements = parseHolidayMeasurements(quote.measurements);
+  const rootSelections = applyHolidayCatalogPolicy(parseHolidaySelections(quote.selections), catalog);
+  const designs = holidayDesignOptionsFromQuote({
+    measurements: rootMeasurements,
+    selections: rootSelections,
     catalog,
-    measurements,
-    selections,
-    prices,
+  });
+  const prices = await loadHolidayPriceLookup(params.companyId);
+  const address = [quote.address, quote.city, quote.state, quote.zip].filter(Boolean).join(", ");
+  const prepared = designs.map((design, index) => {
+    const selections = applyHolidayCatalogPolicy(design.selections, catalog);
+    const measurements = parseHolidayMeasurements(design.measurements);
+    const priced = computeHolidayQuotePricing({ catalog, measurements, selections, prices });
+    if (priced.billedLengthFt <= 0 && priced.placementCount <= 0) {
+      throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements or trees/bushes`);
+    }
+    const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
+    const key = style?.kind === "permanent"
+      ? "permanent" as const
+      : selections.pricingMode === "lease" || selections.pricingMode === "labor"
+        ? selections.pricingMode
+        : "buy" as const;
+    const label = key === "permanent"
+      ? "Permanent Lights"
+      : key === "labor"
+        ? "Labor Only"
+        : key === "lease"
+          ? "Lease Lights"
+          : "Lights + Labor";
+    const summary = holidayOptionSummary({
+      billedLengthFt: priced.billedLengthFt,
+      placementCount: priced.placementCount,
+      styleLabel: style?.kind === "permanent"
+        ? style.label
+        : `${style?.label ?? "holiday"} ${selections.defaultColorPattern ?? "Warm White"}`,
+    });
+    const detail = priced.optionDetails[key];
+    const tagline = key === "buy"
+      ? `Future Years: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(priced.reinstallTotal)}`
+      : key === "lease"
+        ? "No Commitments!"
+        : key === "labor"
+          ? "Customer-supplied lights"
+          : "Fit Your Vibe Year-Round";
+    const detailCopy = key === "buy"
+      ? HOLIDAY_BUY_DETAIL
+      : key === "lease"
+        ? HOLIDAY_LEASE_DETAIL
+        : key === "labor"
+          ? HOLIDAY_LABOR_ONLY_DETAIL
+          : HOLIDAY_PERMANENT_DETAIL;
+    return {
+      design,
+      selections,
+      measurements,
+      priced,
+      key,
+      label,
+      tagline,
+      description: `${tagline}\n\n${detailCopy} ${summary}`.trim(),
+      detail,
+      strandMap: buildHolidayStrandMap({ measurements, selections, catalog, pricedLines: priced.lines, address }),
+    };
   });
 
-  if (priced.billedLengthFt <= 0 && priced.placementCount <= 0) {
-    throw new Error("Add measurements or trees before creating an estimate");
+  const metadata = {
+    source: "holiday-lighting-quote",
+    quoteId: quote.id,
+    previewImageUrl: quote.previewImageUrl,
+    previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
+    address,
+    strandMap: prepared[0]?.strandMap,
+    options: prepared.map((item, index) => ({
+      id: item.design.id,
+      letter: String.fromCharCode(65 + index),
+      label: item.label,
+      pricingMode: item.key,
+      billedLengthFt: item.priced.billedLengthFt,
+      placementCount: item.priced.placementCount,
+      total: item.detail.total,
+      reinstallTotal: item.priced.reinstallTotal,
+      lightStyleKey: item.selections.defaultLightStyleKey,
+      colorPattern: item.selections.defaultColorPattern,
+      strandMap: item.strandMap,
+    })),
+  };
+  const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
+  const revising = params.mode === "revise" && Boolean(quote.estimateId);
+  const existingEstimate = revising
+    ? await prisma.estimate.findFirst({ where: { id: quote.estimateId!, companyId: params.companyId } })
+    : null;
+  if (revising && !existingEstimate) throw new Error("The existing estimate could not be found");
+  if (
+    existingEstimate &&
+    (existingEstimate.status === EstimateStatus.APPROVED || existingEstimate.status === EstimateStatus.CONVERTED)
+  ) {
+    throw new Error("Approved or converted estimates cannot be revised. Create a new estimate instead.");
   }
 
-  const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
-  const estimateNumber = await allocateEstimateNumber(params.companyId);
-  const address = [quote.address, quote.city, quote.state, quote.zip]
-    .filter(Boolean)
-    .join(", ");
-  const style =
-    catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
-    catalog.lightStyles[0];
-  const summary = holidayOptionSummary({
-    billedLengthFt: priced.billedLengthFt,
-    placementCount: priced.placementCount,
-    styleLabel: style?.kind === "permanent"
-      ? style.label
-      : `${style?.label ?? "holiday"} ${selections.defaultColorPattern ?? "Warm White"}`,
-  });
-  const strandMap = buildHolidayStrandMap({
-    measurements,
-    selections,
-    catalog,
-    pricedLines: priced.lines,
-    address,
-  });
+  const estimate = existingEstimate
+    ? await prisma.estimate.update({
+        where: { id: existingEstimate.id },
+        data: {
+          customerId: quote.customerId,
+          propertyId: quote.propertyId,
+          visitId: quote.visitId,
+          expiresAt,
+          depositRequired: company.estimateDepositRequired,
+          depositType: company.estimateDepositType,
+          depositAmount: company.estimateDepositAmount,
+          depositThreshold: company.estimateDepositThreshold,
+          selectedOptionId: null,
+          designExportMetadata: metadata,
+        },
+      })
+    : await prisma.estimate.create({
+        data: {
+          companyId: params.companyId,
+          customerId: quote.customerId,
+          propertyId: quote.propertyId,
+          visitId: quote.visitId,
+          estimateNumber: await allocateEstimateNumber(params.companyId),
+          status: EstimateStatus.DRAFT,
+          expiresAt,
+          depositRequired: company.estimateDepositRequired,
+          depositType: company.estimateDepositType,
+          depositAmount: company.estimateDepositAmount,
+          depositThreshold: company.estimateDepositThreshold,
+          designExportMetadata: metadata,
+        },
+      });
 
-  const estimate = await prisma.estimate.create({
-    data: {
-      companyId: params.companyId,
-      customerId: quote.customerId,
-      propertyId: quote.propertyId,
-      visitId: quote.visitId,
-      estimateNumber,
-      status: EstimateStatus.DRAFT,
-      expiresAt,
-      depositRequired: company.estimateDepositRequired,
-      depositType: company.estimateDepositType,
-      depositAmount: company.estimateDepositAmount,
-      depositThreshold: company.estimateDepositThreshold,
-      designExportMetadata: {
-        source: "holiday-lighting-quote",
-        quoteId: quote.id,
-        previewImageUrl: quote.previewImageUrl,
-        previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
-        address,
-        billedLengthFt: priced.billedLengthFt,
-        year1Total: priced.year1Total,
-        reinstallTotal: priced.reinstallTotal,
-        leaseTotal: priced.leaseTotal,
-        permanentTotal: priced.permanentTotal,
-        installKind: selections.installKind,
-        billingMode: "standard",
-        includeLaborOnlyOption: selections.includeLaborOnlyOption === true,
-        includePermanentOption: selections.includePermanentOption === true,
-        lightStyleKey: selections.defaultLightStyleKey,
-        colorPattern: selections.defaultColorPattern,
-        strandMap,
-      },
-    },
-  });
-
-  const allPackages = holidayCustomerPackages({
-    year1Total: priced.optionDetails.buy.total,
-    reinstallTotal: priced.reinstallTotal,
-    leaseTotal: priced.leaseTotal,
-    permanentTotal: priced.permanentTotal,
-    summary,
-  });
-  const packages: Array<{
-    key: "buy" | "lease" | "permanent" | "labor";
-    letter: "A" | "B" | "C" | "D";
-    label: string;
-    tagline: string;
-    popular: boolean;
-    description: string;
-    total: number;
-    sortOrder: number;
-  }> = style?.kind === "permanent"
-    ? allPackages
-        .filter((pack) => pack.letter === "C")
-        .map((pack) => ({ ...pack, key: "permanent" as const }))
-    : [
-        ...allPackages
-          .filter((pack) => pack.letter !== "C")
-          .map((pack) => ({
-            ...pack,
-            label: pack.letter === "A" ? "New Option" : pack.label,
-            key: pack.letter === "A" ? "buy" as const : "lease" as const,
-          })),
-        ...(selections.includeLaborOnlyOption
-          ? [{
-              key: "labor" as const,
-              letter: "C" as const,
-              label: "Labor Only",
-              tagline: "Customer-supplied lights",
-              popular: false,
-              description: `Customer-supplied lights\n\n${HOLIDAY_LABOR_ONLY_DETAIL} ${summary}`.trim(),
-              total: priced.optionDetails.labor.total,
-              sortOrder: 2,
-            }]
-          : []),
-        ...(selections.includePermanentOption
-          ? [{
-              key: "permanent" as const,
-              letter: (selections.includeLaborOnlyOption ? "D" : "C") as "C" | "D",
-              label: "Permanent Lights",
-              tagline: "Fit Your Vibe Year-Round",
-              popular: false,
-              description: `Fit Your Vibe Year-Round\n\n${HOLIDAY_PERMANENT_DETAIL} ${summary}`.trim(),
-              total: priced.optionDetails.permanent.total,
-              sortOrder: selections.includeLaborOnlyOption ? 3 : 2,
-            }]
-          : []),
-      ];
+  if (existingEstimate) {
+    await prisma.discount.deleteMany({ where: { estimateId: estimate.id } });
+    await prisma.estimateLineItem.deleteMany({ where: { estimateId: estimate.id } });
+    await prisma.estimateOption.deleteMany({ where: { estimateId: estimate.id } });
+    await prisma.estimateAttachment.deleteMany({
+      where: { estimateId: estimate.id, fileName: "lighting-preview.png" },
+    });
+  }
 
   const createdOptions = [];
-  for (const pack of packages) {
-    const key = pack.key;
-    const detail = priced.optionDetails[key];
+  for (const [index, pack] of prepared.entries()) {
+    const { key, detail, priced, selections } = pack;
     const adjustment = selections.optionAdjustments?.[key];
     const option = await prisma.estimateOption.create({
       data: {
         estimateId: estimate.id,
-        letter: pack.letter,
+        letter: String.fromCharCode(65 + index),
         label: pack.label,
         description: pack.description,
-        sortOrder: pack.sortOrder,
+        sortOrder: index,
         subtotal: detail.subtotal,
         discountTotal: detail.discountTotal,
-        total: pack.total,
+        total: detail.total,
         photoUrl: quote.previewImageUrl,
       },
     });
@@ -269,26 +283,19 @@ export async function createEstimateFromHolidayQuote(params: {
     createdOptions.push({ ...pack, id: option.id });
   }
 
-  const selected = style?.kind === "permanent"
-    ? createdOptions.find((option) => option.key === "permanent") ?? createdOptions[0]
-    : createdOptions.find((option) => option.key === "buy") ?? createdOptions[0];
-  const selectedTotal = selected?.total ?? (
-    style?.kind === "permanent" ? priced.permanentTotal : priced.optionDetails.buy.total
-  );
-  const selectedKey = selected?.key ?? (style?.kind === "permanent" ? "permanent" : "buy");
-  const selectedDetail = priced.optionDetails[selectedKey];
+  const selected = createdOptions[0]!;
+  const permanentTotal = createdOptions
+    .filter((option) => option.key === "permanent")
+    .reduce<number | null>((highest, option) => highest == null ? option.detail.total : Math.max(highest, option.detail.total), null);
 
   await prisma.estimate.update({
     where: { id: estimate.id },
     data: {
-      selectedOptionId: selected?.id ?? createdOptions[0]?.id,
-      subtotal: selectedDetail.subtotal,
-      discountTotal: selectedDetail.discountTotal,
-      total: selectedTotal,
-      premiumOptionTotal:
-        style?.kind === "permanent" || selections.includePermanentOption
-          ? priced.permanentTotal
-          : null,
+      selectedOptionId: selected.id,
+      subtotal: selected.detail.subtotal,
+      discountTotal: selected.detail.discountTotal,
+      total: selected.detail.total,
+      premiumOptionTotal: permanentTotal,
     },
   });
 

@@ -14,6 +14,7 @@ import { createEstimateFromHolidayQuote } from "@/lib/holiday-lighting/create-es
 import { computeHolidayQuotePricing } from "@/lib/holiday-lighting/pricing";
 import {
   applyHolidayCatalogPolicy,
+  holidayDesignOptionsFromQuote,
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "@/lib/holiday-lighting/types";
@@ -50,10 +51,13 @@ export async function GET(_request: NextRequest, { params }: Params) {
       parseHolidaySelections(quote.selections),
       catalog
     );
+    const measurements = parseHolidayMeasurements(quote.measurements);
+    const options = holidayDesignOptionsFromQuote({ measurements, selections, catalog });
+    const active = options.find((option) => option.id === selections.activeDesignOptionId) ?? options[0]!;
     const pricing = computeHolidayQuotePricing({
       catalog,
-      measurements: parseHolidayMeasurements(quote.measurements),
-      selections,
+      measurements: active.measurements,
+      selections: applyHolidayCatalogPolicy(active.selections, catalog),
       prices,
     });
 
@@ -114,13 +118,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     const prices = await loadHolidayPriceLookup(user.companyId);
+    const savedMeasurements = parseHolidayMeasurements(quote.measurements);
+    const savedSelections = applyHolidayCatalogPolicy(parseHolidaySelections(quote.selections), catalog);
+    const options = holidayDesignOptionsFromQuote({
+      measurements: savedMeasurements,
+      selections: savedSelections,
+      catalog,
+    });
+    const active = options.find((option) => option.id === savedSelections.activeDesignOptionId) ?? options[0]!;
     const pricing = computeHolidayQuotePricing({
       catalog,
-      measurements: parseHolidayMeasurements(quote.measurements),
-      selections: applyHolidayCatalogPolicy(
-        parseHolidaySelections(quote.selections),
-        catalog
-      ),
+      measurements: active.measurements,
+      selections: applyHolidayCatalogPolicy(active.selections, catalog),
       prices,
     });
 

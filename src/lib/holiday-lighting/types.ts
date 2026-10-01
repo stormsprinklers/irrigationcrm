@@ -6,6 +6,7 @@ export const PEAK_LENGTH_MULTIPLIER = 1.5;
 
 export type HolidayInstallKind = "temporary" | "permanent";
 export type HolidayQuoteBillingMode = "standard" | "labor_only";
+export type HolidayQuotePricingMode = "buy" | "lease" | "labor" | "permanent";
 export type HolidayDifficulty = 1 | 2 | 3;
 
 export const HOLIDAY_COLOR_PATTERNS = [
@@ -82,6 +83,7 @@ export type HolidayQuoteSelections = {
   defaultLightStyleKey: string;
   installKind: HolidayInstallKind;
   billingMode?: HolidayQuoteBillingMode;
+  pricingMode?: HolidayQuotePricingMode;
   includeLaborOnlyOption?: boolean;
   includePermanentOption?: boolean;
   defaultColorPattern?: string;
@@ -91,6 +93,24 @@ export type HolidayQuoteSelections = {
   includeLease?: boolean;
   optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
   reinstallPrice?: number | null;
+  designOptions?: HolidayQuoteDesignOption[];
+  activeDesignOptionId?: string;
+};
+
+export type HolidayQuoteDesignOption = {
+  id: string;
+  label: string;
+  measurements: HolidayMeasurements;
+  selections: {
+    defaultLightStyleKey: string;
+    installKind: HolidayInstallKind;
+    billingMode: HolidayQuoteBillingMode;
+    pricingMode: HolidayQuotePricingMode;
+    defaultColorPattern?: string;
+    notes?: string;
+    optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
+    reinstallPrice?: number | null;
+  };
 };
 
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
@@ -221,6 +241,7 @@ export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
   defaultLightStyleKey: "c9",
   installKind: "temporary",
   billingMode: "standard",
+  pricingMode: "buy",
   includeLaborOnlyOption: false,
   includePermanentOption: false,
   defaultColorPattern: "Warm White",
@@ -392,6 +413,7 @@ export function holidaySelectionsFromCatalog(
     defaultLightStyleKey: d.defaultLightStyleKey,
     installKind: d.defaultInstallKind,
     billingMode: "standard",
+    pricingMode: "buy",
     includeLaborOnlyOption: false,
     includePermanentOption: false,
     defaultColorPattern: "Warm White",
@@ -411,6 +433,14 @@ export function applyHolidayCatalogPolicy(
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
     installKind: style?.kind === "permanent" ? "permanent" : "temporary",
     billingMode: "standard",
+    pricingMode:
+      style?.kind === "permanent"
+        ? "permanent"
+        : selections.pricingMode === "lease" || selections.pricingMode === "labor"
+          ? selections.pricingMode
+          : selections.billingMode === "labor_only"
+            ? "labor"
+            : "buy",
     includeLaborOnlyOption:
       style?.kind !== "permanent"
         ? Boolean(selections.includeLaborOnlyOption || selections.billingMode === "labor_only")
@@ -423,6 +453,8 @@ export function applyHolidayCatalogPolicy(
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
     reinstallPrice: selections.reinstallPrice,
+    designOptions: selections.designOptions,
+    activeDesignOptionId: selections.activeDesignOptionId,
   };
 }
 
@@ -489,11 +521,47 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
   }
   const rawReinstallPrice: unknown = obj.reinstallPrice;
   const reinstallPrice = rawReinstallPrice == null || rawReinstallPrice === "" ? null : Number(rawReinstallPrice);
+  const designOptions: HolidayQuoteDesignOption[] = Array.isArray(obj.designOptions)
+    ? obj.designOptions.slice(0, 5).flatMap((rawOption, index) => {
+        if (!rawOption || typeof rawOption !== "object") return [];
+        const option = rawOption as Partial<HolidayQuoteDesignOption>;
+        const nested = parseHolidaySelections(
+          option.selections && typeof option.selections === "object"
+            ? { ...option.selections, designOptions: undefined }
+            : {}
+        );
+        return [{
+          id: typeof option.id === "string" && option.id.trim()
+            ? option.id.trim().slice(0, 80)
+            : `option-${index + 1}`,
+          label: typeof option.label === "string" && option.label.trim()
+            ? option.label.trim().slice(0, 80)
+            : `Option ${index + 1}`,
+          measurements: parseHolidayMeasurements(option.measurements),
+          selections: {
+            defaultLightStyleKey: nested.defaultLightStyleKey,
+            installKind: nested.installKind,
+            billingMode: nested.billingMode ?? "standard",
+            pricingMode: nested.pricingMode ?? "buy",
+            defaultColorPattern: nested.defaultColorPattern,
+            notes: nested.notes,
+            optionAdjustments: nested.optionAdjustments,
+            reinstallPrice: nested.reinstallPrice,
+          },
+        }];
+      })
+    : [];
   return {
     defaultLightStyleKey:
       obj.defaultLightStyleKey ?? DEFAULT_HOLIDAY_SELECTIONS.defaultLightStyleKey,
     installKind: parseInstallKind(obj.installKind),
     billingMode: obj.billingMode === "labor_only" ? "labor_only" : "standard",
+    pricingMode:
+      obj.pricingMode === "lease" || obj.pricingMode === "labor" || obj.pricingMode === "permanent"
+        ? obj.pricingMode
+        : obj.billingMode === "labor_only"
+          ? "labor"
+          : "buy",
     includeLaborOnlyOption: obj.includeLaborOnlyOption === true,
     includePermanentOption: obj.includePermanentOption === true,
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
@@ -504,7 +572,57 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     optionAdjustments: adjustments,
     reinstallPrice: reinstallPrice != null && Number.isFinite(reinstallPrice) && reinstallPrice >= 0 && reinstallPrice <= 9_999_999
       ? Math.round(reinstallPrice * 100) / 100 : null,
+    designOptions,
+    activeDesignOptionId:
+      typeof obj.activeDesignOptionId === "string" ? obj.activeDesignOptionId : undefined,
   };
+}
+
+export function holidayDesignOptionsFromQuote(params: {
+  measurements: HolidayMeasurements;
+  selections: HolidayQuoteSelections;
+  catalog: HolidayLightingCatalog;
+}): HolidayQuoteDesignOption[] {
+  const { measurements, selections, catalog } = params;
+  if (selections.designOptions?.length) {
+    return selections.designOptions.slice(0, 5).map((option, index) => {
+      const normalized = applyHolidayCatalogPolicy(
+        { ...option.selections, designOptions: undefined },
+        catalog
+      );
+      return {
+        id: option.id,
+        label: option.label || `Option ${index + 1}`,
+        measurements: parseHolidayMeasurements(option.measurements),
+        selections: {
+          defaultLightStyleKey: normalized.defaultLightStyleKey,
+          installKind: normalized.installKind,
+          billingMode: normalized.billingMode ?? "standard",
+          pricingMode: normalized.pricingMode ?? "buy",
+          defaultColorPattern: normalized.defaultColorPattern,
+          notes: normalized.notes,
+          optionAdjustments: normalized.optionAdjustments,
+          reinstallPrice: normalized.reinstallPrice,
+        },
+      };
+    });
+  }
+  const normalized = applyHolidayCatalogPolicy(selections, catalog);
+  return [{
+    id: "option-1",
+    label: "Option 1",
+    measurements: parseHolidayMeasurements(measurements),
+    selections: {
+      defaultLightStyleKey: normalized.defaultLightStyleKey,
+      installKind: normalized.installKind,
+      billingMode: normalized.billingMode ?? "standard",
+      pricingMode: normalized.pricingMode ?? "buy",
+      defaultColorPattern: normalized.defaultColorPattern,
+      notes: normalized.notes,
+      optionAdjustments: normalized.optionAdjustments,
+      reinstallPrice: normalized.reinstallPrice,
+    },
+  }];
 }
 
 export function findPlacementCatalogItem(

@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_HOLIDAY_CATALOG,
   applyHolidayCatalogPolicy,
+  holidayDesignOptionsFromQuote,
   holidayCatalogSkus,
   parseHolidaySelections,
 } from "../types";
@@ -288,4 +289,34 @@ test("labor-only disclaimer covers third-party materials and replacement visits"
   assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /provided by another company/i);
   assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /visits to replace lights or strands/i);
   assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not included/i);
+});
+
+test("quote design options preserve independent scope and measurements and cap at five", () => {
+  const rawOptions = Array.from({ length: 6 }, (_, index) => ({
+    id: `design-${index + 1}`,
+    label: `Option ${index + 1}`,
+    measurements: {
+      segments: [{ ...measurements.segments[0], id: `roof-${index + 1}`, lengthFt: 10 + index }],
+      placements: index === 2
+        ? [{ id: "tree-1", kind: "tree", size: "medium", label: "Tree 1", latLng: { lat: 0, lng: 0 } }]
+        : [],
+    },
+    selections: {
+      defaultLightStyleKey: index === 3 ? "permanent" : "c9",
+      pricingMode: index === 0 ? "labor" : "buy",
+      defaultColorPattern: index === 1 ? "Red" : "Warm White",
+    },
+  }));
+  const parsed = parseHolidaySelections({ designOptions: rawOptions, activeDesignOptionId: "design-2" });
+  const options = holidayDesignOptionsFromQuote({
+    measurements,
+    selections: parsed,
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+  });
+  assert.equal(options.length, 5);
+  assert.equal(options[0]?.selections.pricingMode, "labor");
+  assert.equal(options[1]?.selections.defaultColorPattern, "Red");
+  assert.equal(options[2]?.measurements.placements.length, 1);
+  assert.equal(options[3]?.selections.pricingMode, "permanent");
+  assert.equal(parsed.activeDesignOptionId, "design-2");
 });
