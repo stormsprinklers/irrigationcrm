@@ -902,7 +902,7 @@ export function HolidayLightingQuoter({
           difficulty: 1,
           label: `${kind === "tree" ? "Tree" : "Bush"} ${count}`,
           latLng: anchor,
-          lightStyleKey: selections.defaultLightStyleKey === "permanent" ? "c9" : selections.defaultLightStyleKey,
+          lightStyleKey: "mini",
           colorPattern: selections.defaultColorPattern ?? "Warm White",
         },
       ],
@@ -1568,17 +1568,19 @@ export function HolidayLightingQuoter({
                 </div>
                 <div className="grid gap-2 sm:grid-cols-4">
                   <label className="text-xs text-muted-foreground">Number of strands
-                    <input type="number" min={1} max={100} step={1} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.strandCount ?? 1} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, strandCount: Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))) } : item) })} />
+                    <input type="number" min={1} max={100} step={1} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.strandCount ?? 1} onChange={(event) => {
+                      if (event.target.value === "") return;
+                      const strandCount = Math.max(1, Math.min(100, Math.round(Number(event.target.value))));
+                      updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, strandCount } : item) });
+                    }} />
                   </label>
                   <label className="text-xs text-muted-foreground">Difficulty
                     <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.difficulty ?? 1} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, difficulty: Number(event.target.value) as HolidayDifficulty } : item) })}>
                       <option value={1}>1 ({catalog.difficultyMultipliers?.[1] ?? 1}×)</option><option value={2}>2 ({catalog.difficultyMultipliers?.[2] ?? 1.25}×)</option><option value={3}>3 ({catalog.difficultyMultipliers?.[3] ?? 1.5}×)</option>
                     </select>
                   </label>
-                  <label className="text-xs text-muted-foreground">Bulb type
-                    <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.lightStyleKey ?? "c9"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, lightStyleKey: event.target.value } : item) })}>
-                      {catalog.lightStyles.filter((item) => item.kind !== "permanent").map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-                    </select>
+                  <label className="text-xs text-muted-foreground">Light type
+                    <span className="mt-1 block rounded-md border border-input bg-muted/30 px-2 py-1.5 text-sm text-foreground">Mini LED lights</span>
                   </label>
                   <label className="text-xs text-muted-foreground">Color / pattern
                     <input className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" list="holiday-color-patterns" value={placement.colorPattern ?? "Warm White"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, colorPattern: event.target.value } : item) })} />
@@ -1673,7 +1675,10 @@ export function HolidayLightingQuoter({
                       max={9999}
                       step="0.01"
                       value={service.quantity}
-                      onChange={(event) => patchCustomService(service.id, { quantity: Number(event.target.value) || 0 })}
+                      onChange={(event) => {
+                        if (event.target.value === "") return;
+                        patchCustomService(service.id, { quantity: Number(event.target.value) });
+                      }}
                       onBlur={() => void save(undefined, { quiet: true })}
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                     />
@@ -1685,7 +1690,10 @@ export function HolidayLightingQuoter({
                       max={9999999}
                       step="0.01"
                       value={service.unitPrice}
-                      onChange={(event) => patchCustomService(service.id, { unitPrice: Number(event.target.value) || 0 })}
+                      onChange={(event) => {
+                        if (event.target.value === "") return;
+                        patchCustomService(service.id, { unitPrice: Number(event.target.value) });
+                      }}
                       onBlur={() => void save(undefined, { quiet: true })}
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                     />
@@ -1740,7 +1748,10 @@ export function HolidayLightingQuoter({
                     <label className="text-xs text-muted-foreground">Amount
                       <input type="number" min={0} max={adjustment?.discountType === "percent" ? 100 : 9999999} step="0.01"
                         value={adjustment?.discountAmount ?? 0}
-                        onChange={(event) => patchOption(key, { discountAmount: Number(event.target.value) || 0 })}
+                        onChange={(event) => {
+                          if (event.target.value === "") return;
+                          patchOption(key, { discountAmount: Number(event.target.value) });
+                        }}
                         className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
                     </label>
                     <label className="text-xs text-muted-foreground">Discount name

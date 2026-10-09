@@ -269,12 +269,13 @@ export default function SettingsVoicePage() {
               max={45}
               className="flex h-10 w-32 rounded-md border border-input bg-background px-3 text-sm"
               value={data.aiReceptionistMaxMinutes}
-              onChange={(e) =>
+              onChange={(e) => {
+                if (e.target.value === "") return;
                 setData({
                   ...data,
-                  aiReceptionistMaxMinutes: Number(e.target.value) || 12,
-                })
-              }
+                  aiReceptionistMaxMinutes: Number(e.target.value),
+                });
+              }}
             />
           </div>
           <div>

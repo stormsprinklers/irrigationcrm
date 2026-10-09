@@ -101,7 +101,6 @@ export function EstimatePostApprovalDialog({
           return;
         }
         body.schedule = {
-          title: "Work from estimate",
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
           division: "SERVICE",

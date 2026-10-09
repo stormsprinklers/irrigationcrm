@@ -537,7 +537,8 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
             : Number((placement as HolidayMeasurementPlacement).difficulty) === 3
               ? 3 as const
               : 1 as const,
-          lightStyleKey: (placement as HolidayMeasurementPlacement).lightStyleKey || "c9",
+          // Trees and bushes always use mini LEDs, regardless of legacy C7/C9 data.
+          lightStyleKey: "mini",
           colorPattern: (placement as HolidayMeasurementPlacement).colorPattern || "Warm White",
         });
         })

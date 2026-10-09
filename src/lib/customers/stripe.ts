@@ -84,6 +84,8 @@ export async function createCardSetupCheckoutSession(params: {
   successUrl?: string;
   cancelUrl?: string;
   enrollmentId?: string | null;
+  estimateId?: string | null;
+  purpose?: "card_on_file" | "estimate_pay_later";
 }) {
   const stripe = getStripeClient();
   const company = await prisma.company.findUnique({
@@ -112,12 +114,16 @@ export async function createCardSetupCheckoutSession(params: {
     metadata: {
       customerId: params.customerId,
       companyId: params.companyId,
-      purpose: "card_on_file",
+      purpose: params.purpose ?? "card_on_file",
       ...(params.enrollmentId ? { enrollmentId: params.enrollmentId } : {}),
+      ...(params.estimateId ? { estimateId: params.estimateId } : {}),
     },
     custom_text: {
       submit: {
-        message: `Save your card with ${company?.name ?? "us"} for maintenance plan billing and faster checkout.`,
+        message:
+          params.purpose === "estimate_pay_later"
+            ? `Save your card securely with ${company?.name ?? "us"}. You will not be charged today.`
+            : `Save your card with ${company?.name ?? "us"} for maintenance plan billing and faster checkout.`,
       },
     },
   });
@@ -135,6 +141,8 @@ export async function requireCardOnFileOrSetupUrl(params: {
   enrollmentId?: string | null;
   successUrl?: string;
   cancelUrl?: string;
+  estimateId?: string | null;
+  purpose?: "card_on_file" | "estimate_pay_later";
 }): Promise<
   | { ok: true; paymentMethodId: string; stripeCustomerId: string }
   | { ok: false; code: "CARD_REQUIRED"; setupUrl: string; error: string }
@@ -188,6 +196,8 @@ export async function requireCardOnFileOrSetupUrl(params: {
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,
     enrollmentId: params.enrollmentId,
+    estimateId: params.estimateId,
+    purpose: params.purpose,
   });
 
   if (!session.url) {

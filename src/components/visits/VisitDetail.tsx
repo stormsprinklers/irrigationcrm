@@ -361,6 +361,8 @@ export function VisitDetail({ visitId }: Props) {
             total={paymentSummary.balanceDue ?? total}
             disabled={paymentSummary.isPaid || total <= 0}
             paid={paymentSummary.isPaid}
+            allowInvoice
+            onInvoiceSent={load}
           />
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>

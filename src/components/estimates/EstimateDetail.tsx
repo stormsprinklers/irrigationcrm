@@ -248,6 +248,7 @@ export function EstimateDetail({ estimateId }: Props) {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
   const [financingSending, setFinancingSending] = useState(false);
+  const [invoiceSending, setInvoiceSending] = useState(false);
   const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
     "choose"
   );
@@ -450,6 +451,38 @@ export function EstimateDetail({ estimateId }: Props) {
       toast.success("Financing options texted to the customer");
     } finally {
       setFinancingSending(false);
+    }
+  }
+
+  async function sendInvoice() {
+    setInvoiceSending(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}/invoice`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (typeof data.payUrl === "string") {
+          await navigator.clipboard.writeText(data.payUrl);
+          toast.message(data.error ?? "Invoice delivery is not configured", {
+            description: "The invoice payment link was copied to your clipboard.",
+          });
+        } else {
+          toast.error(data.error ?? "Invoice could not be sent");
+        }
+        return;
+      }
+      const channel =
+        data.emailSent && data.smsSent
+          ? " by email and SMS"
+          : data.emailSent
+            ? " by email"
+            : data.smsSent
+              ? " by SMS"
+              : "";
+      toast.success(`Invoice sent${channel}`);
+    } catch {
+      toast.error("Invoice could not be sent. Check your connection and try again.");
+    } finally {
+      setInvoiceSending(false);
     }
   }
 
@@ -690,6 +723,21 @@ export function EstimateDetail({ estimateId }: Props) {
                 Schedule Visit
               </Button>
             </>
+          ) : null}
+          {estimate.status === "APPROVED" || estimate.status === "CONVERTED" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void sendInvoice()}
+              disabled={saving || invoiceSending}
+            >
+              {invoiceSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
+              )}
+              Send Invoice
+            </Button>
           ) : null}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>

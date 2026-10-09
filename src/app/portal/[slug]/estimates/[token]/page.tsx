@@ -1,6 +1,17 @@
+import type { Metadata } from "next";
 import { PortalEstimateView } from "@/components/portal/PortalEstimateView";
 import { getCompanyByPortalSlug } from "@/lib/portal/company";
 import { notFound } from "next/navigation";
+
+export const metadata: Metadata = {
+  title: "View My Quote",
+  openGraph: {
+    title: "View My Quote",
+  },
+  twitter: {
+    title: "View My Quote",
+  },
+};
 
 type Props = {
   params: Promise<{ slug: string; token: string }>;

@@ -132,6 +132,8 @@ export function serializePortalEstimate(estimate: {
   depositType?: string | null;
   depositAmount?: { toNumber?: () => number } | number | null;
   depositThreshold?: { toNumber?: () => number } | number | null;
+  depositPaidAt?: Date | null;
+  needsScheduling?: boolean;
   designProjectId?: string | null;
   designExportMetadata?: unknown;
   premiumOptionTotal?: { toNumber?: () => number } | number | null;
@@ -309,6 +311,8 @@ export function serializePortalEstimate(estimate: {
       estimate.depositAmount != null ? toNumber(estimate.depositAmount as never) : null,
     depositThreshold:
       estimate.depositThreshold != null ? toNumber(estimate.depositThreshold as never) : 999,
+    depositPaidAt: estimate.depositPaidAt?.toISOString() ?? null,
+    needsScheduling: estimate.needsScheduling ?? false,
     hasDesign,
     hasHolidayLighting,
     holidayPreviewImageUrl,

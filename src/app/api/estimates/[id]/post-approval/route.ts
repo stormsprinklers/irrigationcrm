@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { toNumber } from "@/lib/visits/totals";
+import { defaultEstimateVisitTitle } from "@/lib/estimates/visit-title";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -70,6 +71,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     let visitId: string;
     let depositDue = 0;
     const depositMeta = computeDeferredVisitDeposit(visitTotal, estimate.company);
+    const defaultVisitTitle = defaultEstimateVisitTitle(estimate.designExportMetadata);
 
     if (timing === "today") {
       const linkedVisitId =
@@ -85,7 +87,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         const created = await createScheduledVisitFromEstimate({
           companyId: user.companyId,
           estimate,
-          title: `Work from estimate — today`,
+          title: defaultVisitTitle,
           startAt: new Date(),
           endAt: addHours(new Date(), 2),
           assignedUserId: user.id,
@@ -113,7 +115,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       const created = await createScheduledVisitFromEstimate({
         companyId: user.companyId,
         estimate,
-        title: String(schedule.title ?? `Work from estimate`),
+        title:
+          typeof schedule.title === "string" && schedule.title.trim()
+            ? schedule.title.trim()
+            : defaultVisitTitle,
         startAt,
         endAt,
         assignedUserId: schedule.assignedUserId ?? user.id,

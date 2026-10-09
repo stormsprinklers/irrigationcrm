@@ -244,7 +244,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           label: `${kind === "bush" ? "Bush" : "Tree"} ${count}`,
           latLng,
           difficulty: 1,
-          lightStyleKey: defaultLightStyleKey === "permanent" ? "c9" : defaultLightStyleKey,
+          lightStyleKey: "mini",
           colorPattern: defaultColorPattern,
         };
         onChange({
@@ -484,7 +484,10 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   step={1}
                   className="h-7 w-20"
                   value={placementStrandCount}
-                  onChange={(event) => setPlacementStrandCount(Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))))}
+                  onChange={(event) => {
+                    if (event.target.value === "") return;
+                    setPlacementStrandCount(Math.max(1, Math.min(100, Math.round(Number(event.target.value)))));
+                  }}
                 />
               </label>
             </div>
@@ -592,7 +595,8 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                           className="h-7 w-20"
                           value={placement.strandCount ?? 1}
                           onChange={(event) => {
-                            const strandCount = Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1)));
+                            if (event.target.value === "") return;
+                            const strandCount = Math.max(1, Math.min(100, Math.round(Number(event.target.value))));
                             onChange({
                               ...measurements,
                               placements: measurements.placements.map((x) =>

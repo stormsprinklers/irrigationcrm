@@ -147,9 +147,10 @@ export default function HolidayLightingCatalogSettingsPage() {
                   step="1"
                   className="mt-1 w-full rounded-md border border-input px-3 py-2 text-sm"
                   value={defaults.temporaryYear1Minimum}
-                  onChange={(e) =>
-                    patchDefaults({ temporaryYear1Minimum: Number(e.target.value) || 0 })
-                  }
+                  onChange={(e) => {
+                    if (e.target.value === "") return;
+                    patchDefaults({ temporaryYear1Minimum: Number(e.target.value) });
+                  }}
                 />
               </label>
               <label className="text-xs text-muted-foreground">
@@ -160,9 +161,10 @@ export default function HolidayLightingCatalogSettingsPage() {
                   step="1"
                   className="mt-1 w-full rounded-md border border-input px-3 py-2 text-sm"
                   value={defaults.permanentYear1Minimum}
-                  onChange={(e) =>
-                    patchDefaults({ permanentYear1Minimum: Number(e.target.value) || 0 })
-                  }
+                  onChange={(e) => {
+                    if (e.target.value === "") return;
+                    patchDefaults({ permanentYear1Minimum: Number(e.target.value) });
+                  }}
                 />
               </label>
             </div>
@@ -180,7 +182,10 @@ export default function HolidayLightingCatalogSettingsPage() {
                       step="0.05"
                       className="mt-1 w-full rounded-md border border-input px-3 py-2 text-sm"
                       value={catalog.difficultyMultipliers?.[difficulty] ?? (difficulty === 2 ? 1.25 : difficulty === 3 ? 1.5 : 1)}
-                      onChange={(event) => patchDifficultyMultiplier(difficulty, Math.max(0.01, Math.min(10, Number(event.target.value) || 1)))}
+                      onChange={(event) => {
+                        if (event.target.value === "") return;
+                        patchDifficultyMultiplier(difficulty, Math.max(0.01, Math.min(10, Number(event.target.value))));
+                      }}
                     />
                   </label>
                 ))}
@@ -218,9 +223,10 @@ export default function HolidayLightingCatalogSettingsPage() {
                           step="0.01"
                           className="w-24 rounded-md border border-input px-2 py-1 text-sm"
                           value={row.unitCost ?? 0}
-                          onChange={(e) =>
-                            patchPrice(row.sku, { unitCost: Number(e.target.value) || 0 })
-                          }
+                          onChange={(e) => {
+                            if (e.target.value === "") return;
+                            patchPrice(row.sku, { unitCost: Number(e.target.value) });
+                          }}
                         />
                       </td>
                       <td className="py-2">
@@ -230,9 +236,10 @@ export default function HolidayLightingCatalogSettingsPage() {
                           step="0.01"
                           className="w-24 rounded-md border border-input px-2 py-1 text-sm"
                           value={row.unitPrice}
-                          onChange={(e) =>
-                            patchPrice(row.sku, { unitPrice: Number(e.target.value) || 0 })
-                          }
+                          onChange={(e) => {
+                            if (e.target.value === "") return;
+                            patchPrice(row.sku, { unitPrice: Number(e.target.value) });
+                          }}
                         />
                       </td>
                     </tr>

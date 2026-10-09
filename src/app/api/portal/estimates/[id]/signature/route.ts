@@ -14,9 +14,8 @@ import {
   handleEstimateApprovedWithoutDeposit,
 } from "@/lib/estimates/booking";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
-import { createEstimateDepositCheckout } from "@/lib/estimates/deposit-checkout";
 import { toNumber } from "@/lib/visits/totals";
-import { resolvePortalSlug, type PortalCompany } from "@/lib/portal/company";
+import type { PortalCompany } from "@/lib/portal/company";
 import { findEstimateByPublicToken } from "@/lib/portal/public-estimate";
 
 type Params = { params: Promise<{ id: string }> };
@@ -156,23 +155,12 @@ export async function POST(request: NextRequest, { params }: Params) {
   }).catch(() => {});
 
   const depositAmount = computeDepositAmount(updated);
-  let depositCheckoutUrl: string | null = null;
-
-  if (depositAmount > 0) {
-    const origin = request.nextUrl.origin;
-    const slug = resolvePortalSlug(company) ?? "portal";
-    const checkout = await createEstimateDepositCheckout({
-      estimateId: updated.id,
-      successUrl: `${origin}/portal/${slug}/estimates/${updated.publicToken}?deposit=success`,
-      cancelUrl: `${origin}/portal/${slug}/estimates/${updated.publicToken}?deposit=cancelled`,
-    });
-    depositCheckoutUrl = checkout.url ?? null;
-  } else {
+  if (depositAmount <= 0) {
     await handleEstimateApprovedWithoutDeposit(updated.id);
   }
 
   return NextResponse.json({
     estimate: serializePortalEstimate(updated),
-    depositCheckoutUrl,
+    depositAmount,
   });
 }

@@ -309,35 +309,40 @@ export function SmsMessagePane({
     }
 
     setSending(true);
-    const res = await fetch("/api/inbox/sms/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: target.to,
-        conversationId: target.conversationId,
-        body,
-        media: attachments,
-        customerId: target.customerId,
-        userId: target.userId,
-        title: target.title,
-        scope: scope === "customers" ? "external" : "internal",
-      }),
-    });
-    setSending(false);
+    try {
+      const res = await fetch("/api/inbox/sms/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: target.to,
+          conversationId: target.conversationId,
+          body,
+          media: attachments,
+          customerId: target.customerId,
+          userId: target.userId,
+          title: target.title,
+          scope: scope === "customers" ? "external" : "internal",
+        }),
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error ?? "Failed to send message");
-      return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(safeSmsRequestError(data.error, "Failed to send message"));
+        return;
+      }
+
+      const data = await res.json();
+      setBody("");
+      setAttachments([]);
+      setRecipient(null);
+      toast.success("Message sent");
+      notifyInboxBadgesChanged();
+      onSent?.(data.conversation.id);
+    } catch {
+      toast.error("The message could not be sent. Check your connection and try again.");
+    } finally {
+      setSending(false);
     }
-
-    const data = await res.json();
-    setBody("");
-    setAttachments([]);
-    setRecipient(null);
-    toast.success("Message sent");
-    notifyInboxBadgesChanged();
-    onSent?.(data.conversation.id);
   }
 
   const displayPhone = thread?.participantPhone
@@ -735,7 +740,7 @@ export function SmsMessagePane({
               );
               const data = await res.json().catch(() => ({}));
               if (!res.ok) {
-                toast.error(typeof data.error === "string" ? data.error : "Resend failed");
+                toast.error(safeSmsRequestError(data.error, "Resend failed"));
                 return;
               }
               toast.success("Message sent again");
@@ -762,6 +767,12 @@ export function SmsMessagePane({
       ) : null}
     </div>
   );
+}
+
+function safeSmsRequestError(value: unknown, fallback: string) {
+  if (typeof value !== "string") return fallback;
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact && compact.length <= 240 ? compact : fallback;
 }
 
 function DeliveryFailureDialog({

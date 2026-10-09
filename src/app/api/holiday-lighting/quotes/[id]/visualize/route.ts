@@ -38,6 +38,9 @@ function imageExtension(type: string) {
 }
 
 function styleRenderingInstruction(styleKey: string, styleLabel: string) {
+  if (styleKey === "mini" || /mini/i.test(styleLabel)) {
+    return "Render mini LED string lights: many small, closely spaced points of light wrapped neatly through the tree or bush. Never use C7 or C9 bulb shapes on trees or bushes.";
+  }
   if (styleKey === "permanent" || /permanent/i.test(styleLabel)) {
     return "Render sleek, low-profile permanent architectural LEDs tucked tightly under the fascia/soffit in a concealed channel. Use small, closely spaced, crisp points of light that trace the architecture cleanly. Do not render removable C7/C9 bulb shapes, visible clips, hanging wire, or bulky sockets.";
   }
@@ -64,7 +67,9 @@ function optionVisualPlan(
   const combinations = new Map<string, { styleKey: string; styleLabel: string; color: string }>();
   for (const item of [...measurements.segments, ...measurements.placements]) {
     const styleKey = item.lightStyleKey ?? selections.defaultLightStyleKey;
-    const styleLabel = catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
+    const styleLabel = styleKey === "mini"
+      ? "Mini LEDs"
+      : catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
     const color = item.colorPattern ?? selections.defaultColorPattern ?? "Warm White";
     combinations.set(`${styleKey}\u0000${color}`, { styleKey, styleLabel, color });
   }
@@ -82,12 +87,14 @@ function optionVisualPlan(
   const layout = [
     ...measurements.segments.map((segment) => {
       const styleKey = segment.lightStyleKey ?? selections.defaultLightStyleKey;
-      const styleLabel = catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
+      const styleLabel = styleKey === "mini"
+        ? "Mini LEDs"
+        : catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
       return `Roofline "${segment.label}": ${styleLabel}, ${segment.colorPattern ?? selections.defaultColorPattern ?? "Warm White"}`;
     }),
     ...measurements.placements.map((placement) => {
       const styleKey = placement.lightStyleKey ?? selections.defaultLightStyleKey;
-      const styleLabel = catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
+      const styleLabel = "Mini LEDs";
       return `${placement.kind === "tree" ? "Tree" : "Bush"} "${placement.label}": ${placement.strandCount ?? 1} strand(s), ${styleLabel}, ${placement.colorPattern ?? selections.defaultColorPattern ?? "Warm White"}`;
     }),
   ].slice(0, 40).map((line) => `- ${line}`).join("\n");

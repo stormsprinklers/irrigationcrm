@@ -183,7 +183,6 @@ export function computeHolidayQuotePricing(params: {
     if (needsLift) liftRentalApplied = true;
     const laborAmount = money(baseLaborAmount + liftAmount);
     const amount = money(partsAmount + laborAmount);
-    const placementStyle = catalog.lightStyles.find((item) => item.key === placement.lightStyleKey);
     const leaseBaseAmount = leaseItem && leaseItem.unitPrice > 0
       ? money(leaseItem.unitPrice * strandCount * difficultyMultiplier)
       : money(partsAmount + baseLaborAmount);
@@ -203,7 +202,7 @@ export function computeHolidayQuotePricing(params: {
       laborTotal: money(laborAmount),
       reinstallTotal: money(laborAmount),
       colorPattern: placement.colorPattern,
-      lightStyleLabel: placementStyle?.label,
+      lightStyleLabel: "Mini LEDs",
       kind: placement.kind,
       priceBookItemId: item?.id ?? null,
     });

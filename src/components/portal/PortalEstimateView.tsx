@@ -40,7 +40,11 @@ type Estimate = {
   expiresAt: string | null;
   signedAt: string | null;
   depositRequired: boolean;
+  depositType: string | null;
+  depositAmount: number | null;
   depositThreshold: number;
+  depositPaidAt?: string | null;
+  needsScheduling?: boolean;
   hasDesign: boolean;
   hasHolidayLighting?: boolean;
   holidayPreviewImageUrl?: string | null;
@@ -128,6 +132,8 @@ export function PortalEstimateView({
   const [drawing, setDrawing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [payLaterLoading, setPayLaterLoading] = useState(false);
+  const [paymentReady, setPaymentReady] = useState(false);
   const [financingSending, setFinancingSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +156,9 @@ export function PortalEstimateView({
         }
         if (cancelled) return;
         setEstimate(estData.estimate);
+        setPaymentReady(
+          Boolean(estData.estimate.needsScheduling || estData.estimate.depositPaidAt)
+        );
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
         setStaffPreview(preview && Boolean(estData.staffPreview));
@@ -179,6 +188,51 @@ export function PortalEstimateView({
       cancelled = true;
     };
   }, [preview, token]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+    const sessionId = params.get("session_id");
+    const deposit = params.get("deposit");
+    if (deposit === "success") {
+      setPaymentReady(true);
+      toast.success("Deposit submitted successfully.");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (deposit === "cancelled") {
+      toast.message("Deposit payment was cancelled. Choose Pay now or Pay later to continue.");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (payment === "card-cancelled") {
+      toast.message("Card setup was cancelled. Choose Pay now or Pay later to continue.");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (payment !== "card-saved" || !sessionId) return;
+
+    setPayLaterLoading(true);
+    fetch(`/api/portal/estimates/${token}/pay-later`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Card setup could not be verified");
+        setEstimate((current) =>
+          current ? { ...current, needsScheduling: true } : current
+        );
+        setPaymentReady(true);
+        toast.success("Card saved. You will not be charged until an invoice is due.");
+        window.history.replaceState({}, "", window.location.pathname);
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Card setup could not be verified");
+      })
+      .finally(() => setPayLaterLoading(false));
+  }, [token]);
 
   const activeOption = useMemo(() => {
     if (!estimate?.options?.length) return null;
@@ -271,9 +325,6 @@ export function PortalEstimateView({
       if (!res.ok) throw new Error(data.error ?? "Failed to sign");
       setEstimate(data.estimate);
       toast.success("Estimate approved");
-      if (data.depositCheckoutUrl) {
-        window.location.href = data.depositCheckoutUrl;
-      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to sign");
     } finally {
@@ -293,6 +344,33 @@ export function PortalEstimateView({
       toast.error(err instanceof Error ? err.message : "Deposit failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function payLater() {
+    if (staffPreview) return;
+    setPayLaterLoading(true);
+    try {
+      const res = await fetch(`/api/portal/estimates/${token}/pay-later`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not start card setup");
+      if (data.setupUrl) {
+        window.location.href = data.setupUrl;
+        return;
+      }
+      setEstimate((current) =>
+        current ? { ...current, needsScheduling: true } : current
+      );
+      setPaymentReady(true);
+      toast.success("Your card is already saved. The office can invoice you later.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start card setup");
+    } finally {
+      setPayLaterLoading(false);
     }
   }
 
@@ -346,7 +424,18 @@ export function PortalEstimateView({
   const canSign = !staffPreview && estimate.status === "SENT";
   const requiresDeposit =
     estimate.depositRequired && displayTotal() > estimate.depositThreshold;
-  const needsDeposit = !staffPreview && estimate.status === "APPROVED" && requiresDeposit;
+  const needsDeposit =
+    !staffPreview &&
+    estimate.status === "APPROVED" &&
+    requiresDeposit &&
+    !estimate.depositPaidAt &&
+    !estimate.needsScheduling &&
+    !paymentReady;
+  const depositDue = requiresDeposit
+    ? estimate.depositType === "FIXED"
+      ? Number(estimate.depositAmount ?? 0)
+      : Math.round(displayTotal() * (Number(estimate.depositAmount ?? 50) / 100) * 100) / 100
+    : 0;
   const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
@@ -536,11 +625,7 @@ export function PortalEstimateView({
                 Clear
               </Button>
               <Button onClick={() => void sign()} disabled={loading}>
-                {loading
-                  ? "Submitting..."
-                  : requiresDeposit
-                    ? "Approve & pay deposit"
-                    : "Approve estimate"}
+                {loading ? "Submitting..." : "Approve estimate"}
               </Button>
             </div>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
@@ -551,9 +636,33 @@ export function PortalEstimateView({
             </p>
           </div>
         ) : needsDeposit ? (
-          <Button onClick={() => void payDeposit()} disabled={loading}>
-            {loading ? "Loading..." : "Pay deposit to book installation"}
-          </Button>
+          <section className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div>
+              <h2 className="font-semibold">Choose when to pay your deposit</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Pay {formatCurrency(depositDue)} now, or securely save a card so the office can
+                invoice you later. Saving a card does not charge it today.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button onClick={() => void payDeposit()} disabled={loading || payLaterLoading}>
+                {loading ? "Loading..." : `Pay ${formatCurrency(depositDue)} now`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void payLater()}
+                disabled={loading || payLaterLoading}
+              >
+                {payLaterLoading ? "Opening secure card form..." : "Pay later — save card"}
+              </Button>
+            </div>
+          </section>
+        ) : estimate.status === "APPROVED" &&
+          (estimate.needsScheduling || paymentReady) &&
+          requiresDeposit ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            Payment arrangements are complete. The office will contact you to schedule the work.
+          </div>
         ) : estimate.signedAt ? (
           <p className="text-sm text-muted-foreground">
             Signed on {format(new Date(estimate.signedAt), "MMM d, yyyy")}

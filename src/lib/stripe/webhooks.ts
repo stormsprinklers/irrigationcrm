@@ -42,6 +42,22 @@ function getPaymentIntentId(session: Stripe.Checkout.Session): string | null {
 }
 
 export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  if (
+    session.mode === "setup" &&
+    session.metadata?.purpose === "estimate_pay_later" &&
+    session.metadata.estimateId
+  ) {
+    await prisma.estimate.updateMany({
+      where: {
+        id: session.metadata.estimateId,
+        ...(session.metadata.companyId ? { companyId: session.metadata.companyId } : {}),
+        ...(session.metadata.customerId ? { customerId: session.metadata.customerId } : {}),
+        status: "APPROVED",
+      },
+      data: { needsScheduling: true },
+    });
+    return;
+  }
   await applyPaidCheckoutSession(session);
 }
 

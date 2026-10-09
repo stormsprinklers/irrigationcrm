@@ -189,12 +189,13 @@ test("legacy tree and bush sizes migrate to strand counts", () => {
   const parsed = parseHolidayMeasurements({
     segments: [],
     placements: [
-      { id: "small", kind: "tree", size: "small", label: "Small", latLng: { lat: 0, lng: 0 } },
-      { id: "medium", kind: "tree", size: "medium", label: "Medium", latLng: { lat: 0, lng: 0 } },
+      { id: "small", kind: "tree", size: "small", label: "Small", latLng: { lat: 0, lng: 0 }, lightStyleKey: "c9" },
+      { id: "medium", kind: "tree", size: "medium", label: "Medium", latLng: { lat: 0, lng: 0 }, lightStyleKey: "c7" },
       { id: "large", kind: "bush", size: "large", label: "Large", latLng: { lat: 0, lng: 0 }, liftRentalNeeded: true },
     ],
   });
   assert.deepEqual(parsed.placements.map((item) => item.strandCount), [1, 2, 3]);
+  assert.deepEqual(parsed.placements.map((item) => item.lightStyleKey), ["mini", "mini", "mini"]);
   assert.equal(parsed.placements[2]?.liftRentalNeeded, false);
 });
 

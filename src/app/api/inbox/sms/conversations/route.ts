@@ -21,6 +21,10 @@ import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
+import {
+  describeSmsSendError,
+  SmsSentButNotRecordedError,
+} from "@/lib/inbox/sms-send-error";
 
 type SendSmsBody = {
   to?: string;
@@ -96,53 +100,75 @@ async function sendSmsMessage(params: {
     statusCallback: params.statusCallback,
   });
 
-  const conversation = await findOrCreateSmsConversation({
-    companyId: params.user.companyId,
-    scope: params.scope,
-    participantPhone: normalizedTo,
-    customerId: resolvedCustomerId,
-    title: recipientTitle,
-  });
+  let conversation: Awaited<ReturnType<typeof findOrCreateSmsConversation>>;
+  let message;
+  try {
+    conversation = await findOrCreateSmsConversation({
+      companyId: params.user.companyId,
+      scope: params.scope,
+      participantPhone: normalizedTo,
+      customerId: resolvedCustomerId,
+      title: recipientTitle,
+    });
 
-  const message = await prisma.message.create({
-    data: {
+    message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: params.user.id,
+        direction: "OUTBOUND",
+        body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
+          (mediaUrls.length ? "[Media message]" : ""),
+        twilioMessageSid: twilioMessage.sid,
+        deliveryStatus: "queued",
+        ...(params.media.length
+          ? {
+              media: {
+                create: params.media.map((item) => ({
+                  blobUrl: item.blobUrl,
+                  fileName: item.fileName,
+                  mimeType: item.mimeType,
+                  sizeBytes: item.sizeBytes,
+                })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        media: true,
+        sender: { select: { id: true, name: true, email: true } },
+      },
+    });
+  } catch (error) {
+    throw new SmsSentButNotRecordedError(twilioMessage.sid, error);
+  }
+
+  const conversationUpdate = await prisma.conversation
+    .update({
+      where: { id: conversation.id },
+      data: {
+        lastMessageAt: new Date(),
+        ...(params.scope === Scope.EXTERNAL
+          ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
+          : {}),
+      },
+    })
+    .catch((error) => {
+      console.error("SMS saved, but conversation state was not updated", {
+        conversationId: conversation.id,
+        providerMessageSid: twilioMessage.sid,
+        error,
+      });
+      return null;
+    });
+  if (conversationUpdate) conversation = conversationUpdate;
+
+  await markInboundConversationRead(params.user.companyId, conversation.id).catch((error) => {
+    console.error("SMS saved, but its conversation could not be marked read", {
       conversationId: conversation.id,
-      senderId: params.user.id,
-      direction: "OUTBOUND",
-      body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
-        (mediaUrls.length ? "[Media message]" : ""),
-      twilioMessageSid: twilioMessage.sid,
-      deliveryStatus: "queued",
-      ...(params.media.length
-        ? {
-            media: {
-              create: params.media.map((item) => ({
-                blobUrl: item.blobUrl,
-                fileName: item.fileName,
-                mimeType: item.mimeType,
-                sizeBytes: item.sizeBytes,
-              })),
-            },
-          }
-        : {}),
-    },
-    include: {
-      media: true,
-      sender: { select: { id: true, name: true, email: true } },
-    },
+      providerMessageSid: twilioMessage.sid,
+      error,
+    });
   });
-
-  await prisma.conversation.update({
-    where: { id: conversation.id },
-    data: {
-      lastMessageAt: new Date(),
-      ...(params.scope === Scope.EXTERNAL
-        ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
-        : {}),
-    },
-  });
-
-  await markInboundConversationRead(params.user.companyId, conversation.id);
 
   return { conversation, message };
 }
@@ -399,12 +425,18 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const commsDisabled = outboundCommsErrorResponse(error);
     if (commsDisabled) return commsDisabled;
-    console.error(error);
-    const message = error instanceof Error ? error.message : "Failed to send SMS";
-    if (message === "Contact is blocked") return forbiddenResponse(message);
-    if (message.includes("required") || message.includes("configured")) {
-      return badRequestResponse(message);
+    if (error instanceof SmsSentButNotRecordedError) {
+      console.error("SMS accepted by Twilio but not saved in Radar", {
+        providerMessageSid: error.providerMessageSid,
+        error: error.originalError,
+      });
+    } else {
+      console.error("SMS send failed", error);
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    const details = describeSmsSendError(error);
+    return NextResponse.json(
+      { error: details.error, code: details.code },
+      { status: details.status }
+    );
   }
 }

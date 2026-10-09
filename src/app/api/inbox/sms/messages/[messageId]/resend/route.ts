@@ -13,6 +13,10 @@ import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard"
 import { prisma } from "@/lib/prisma";
 import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
 import { isBlobStorageUrl } from "@/lib/blob/urls";
+import {
+  describeSmsSendError,
+  SmsSentButNotRecordedError,
+} from "@/lib/inbox/sms-send-error";
 
 type Ctx = { params: Promise<{ messageId: string }> };
 
@@ -101,36 +105,45 @@ export async function POST(_request: NextRequest, context: Ctx) {
     } catch (err) {
       const outbound = outboundCommsErrorResponse(err);
       if (outbound) return outbound;
-      const message = err instanceof Error ? err.message : "Failed to send SMS";
-      return NextResponse.json({ error: message }, { status: 502 });
+      console.error("SMS resend failed", err);
+      const details = describeSmsSendError(err);
+      return NextResponse.json(
+        { error: details.error, code: details.code },
+        { status: details.status }
+      );
     }
 
-    const message = await prisma.message.create({
-      data: {
-        conversationId: original.conversation.id,
-        senderId: user.id,
-        direction: "OUTBOUND",
-        body: original.body,
-        twilioMessageSid: twilioMessage.sid,
-        deliveryStatus: "queued",
-        ...(original.media.length
-          ? {
-              media: {
-                create: original.media.map((item) => ({
-                  blobUrl: item.blobUrl,
-                  fileName: item.fileName,
-                  mimeType: item.mimeType,
-                  sizeBytes: item.sizeBytes,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: {
-        media: true,
-        sender: { select: { id: true, name: true, email: true } },
-      },
-    });
+    let message;
+    try {
+      message = await prisma.message.create({
+        data: {
+          conversationId: original.conversation.id,
+          senderId: user.id,
+          direction: "OUTBOUND",
+          body: original.body,
+          twilioMessageSid: twilioMessage.sid,
+          deliveryStatus: "queued",
+          ...(original.media.length
+            ? {
+                media: {
+                  create: original.media.map((item) => ({
+                    blobUrl: item.blobUrl,
+                    fileName: item.fileName,
+                    mimeType: item.mimeType,
+                    sizeBytes: item.sizeBytes,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: {
+          media: true,
+          sender: { select: { id: true, name: true, email: true } },
+        },
+      });
+    } catch (error) {
+      throw new SmsSentButNotRecordedError(twilioMessage.sid, error);
+    }
 
     await prisma.conversation.update({
       where: { id: original.conversation.id },
@@ -140,6 +153,12 @@ export async function POST(_request: NextRequest, context: Ctx) {
         smsClosedAt: null,
         smsClosedById: null,
       },
+    }).catch((error) => {
+      console.error("Resent SMS saved, but conversation state was not updated", {
+        conversationId: original.conversation.id,
+        providerMessageSid: twilioMessage.sid,
+        error,
+      });
     });
 
     return NextResponse.json({ message, resentFromId: original.id });
@@ -147,6 +166,20 @@ export async function POST(_request: NextRequest, context: Ctx) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return unauthorizedResponse();
     }
-    return forbiddenResponse();
+    const outbound = outboundCommsErrorResponse(err);
+    if (outbound) return outbound;
+    if (err instanceof SmsSentButNotRecordedError) {
+      console.error("Resent SMS accepted by Twilio but not saved in Radar", {
+        providerMessageSid: err.providerMessageSid,
+        error: err.originalError,
+      });
+    } else {
+      console.error("SMS resend could not be recorded", err);
+    }
+    const details = describeSmsSendError(err);
+    return NextResponse.json(
+      { error: details.error, code: details.code },
+      { status: details.status }
+    );
   }
 }

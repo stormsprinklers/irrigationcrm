@@ -189,7 +189,9 @@ export async function findOrCreateSmsConversation(params: {
     const lockKey = `sms:${params.companyId}:${params.scope}:${phoneDigitsKey(normalizedPhone) ?? normalizedPhone}`;
 
     return prisma.$transaction(async (tx) => {
-      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      // Advisory locks return PostgreSQL's `void` type. `$queryRaw` tries to
+      // deserialize that value and fails before the conversation can be saved.
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
       let matches = await findSmsConversationMatches(tx, {
         companyId: params.companyId,
         scope: params.scope,
