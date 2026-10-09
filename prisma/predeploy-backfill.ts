@@ -3,7 +3,7 @@
  * (@default(cuid()) is applied in the client, not in PostgreSQL).
  * Run before `prisma db push` on deploy.
  */
-import { CampaignEnrollmentStatus, PrismaClient } from "@prisma/client";
+import { CampaignEnrollmentStatus, Channel, PrismaClient, Scope } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -184,6 +184,76 @@ async function removeLegacySmsStopBlocks() {
   console.log(`Removed legacy SMS STOP spam blocks (${removed.count} contacts)`);
 }
 
+/** Merge legacy duplicate customer SMS threads by company + last-10 phone digits. */
+async function consolidateDuplicateCustomerSmsThreads() {
+  const conversations = await prisma.conversation.findMany({
+    where: {
+      channel: Channel.SMS,
+      scope: Scope.EXTERNAL,
+      participantPhone: { not: null },
+    },
+    select: {
+      id: true,
+      companyId: true,
+      participantPhone: true,
+      customerId: true,
+      title: true,
+      smsOpen: true,
+      lastMessageAt: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const groups = new Map<string, typeof conversations>();
+  for (const conversation of conversations) {
+    const digits = (conversation.participantPhone ?? "").replace(/\D/g, "").slice(-10);
+    if (digits.length !== 10) continue;
+    const key = `${conversation.companyId}:${digits}`;
+    const group = groups.get(key) ?? [];
+    group.push(conversation);
+    groups.set(key, group);
+  }
+
+  let mergedCount = 0;
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    const canonical = group[0];
+    const duplicates = group.slice(1);
+    const duplicateIds = duplicates.map((row) => row.id);
+    const mostRecent = [...group].sort(
+      (a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime()
+    );
+    const smsOpen = group.some((row) => row.smsOpen === true)
+      ? true
+      : group.every((row) => row.smsOpen === false)
+        ? false
+        : null;
+    const phoneDigits = key.slice(key.lastIndexOf(":") + 1);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.message.updateMany({
+        where: { conversationId: { in: duplicateIds } },
+        data: { conversationId: canonical.id },
+      });
+      await tx.conversation.updateMany({
+        where: { id: canonical.id },
+        data: {
+          participantPhone: `+1${phoneDigits}`,
+          customerId: group.find((row) => row.customerId)?.customerId ?? null,
+          title: mostRecent.find((row) => row.title?.trim())?.title ?? null,
+          smsOpen,
+          lastMessageAt: mostRecent[0].lastMessageAt,
+        },
+      });
+      await tx.conversation.deleteMany({ where: { id: { in: duplicateIds } } });
+    });
+    mergedCount += duplicates.length;
+  }
+
+  console.log(`Merged duplicate customer SMS threads (${mergedCount} removed)`);
+}
+
 async function main() {
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
@@ -194,6 +264,11 @@ async function main() {
   }
   await backfillDoNotServiceOptOuts();
   await removeLegacySmsStopBlocks();
+  try {
+    await consolidateDuplicateCustomerSmsThreads();
+  } catch (err) {
+    console.warn("SMS conversation consolidation skipped:", err);
+  }
   try {
     await backfillCallCustomers();
   } catch (err) {

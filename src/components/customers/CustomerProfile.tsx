@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { ArrowLeft, ChevronDown, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Eye, GitMerge, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -219,7 +219,14 @@ export function CustomerProfile({ customerId }: Props) {
     }>
   >([]);
   const [estimates, setEstimates] = useState<
-    Array<{ id: string; status: string; total: number; createdAt: string }>
+    Array<{
+      id: string;
+      estimateNumber?: string | null;
+      displayNumber?: string | null;
+      status: string;
+      total: number;
+      createdAt: string;
+    }>
   >([]);
   const [invoices, setInvoices] = useState<
     Array<{
@@ -1438,23 +1445,57 @@ export function CustomerProfile({ customerId }: Props) {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Estimate</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {estimates.map((estimate) => (
-                      <TableRow key={estimate.id}>
+                    {estimates.map((estimate) => {
+                      const estimateUrl = `/estimates/${estimate.id}`;
+                      const estimateLabel =
+                        estimate.displayNumber ?? estimate.estimateNumber ?? "Estimate";
+                      return (
+                      <TableRow
+                        key={estimate.id}
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`View ${estimateLabel}`}
+                        className="cursor-pointer"
+                        onClick={() => router.push(estimateUrl)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          router.push(estimateUrl);
+                        }}
+                      >
+                        <TableCell className="font-medium text-primary">
+                          {estimateLabel}
+                        </TableCell>
                         <TableCell>
-                          <Link href={`/estimates/${estimate.id}`} className="text-primary hover:underline">
-                            <Badge variant="outline">{estimate.status}</Badge>
-                          </Link>
+                          <Badge variant="outline">{estimate.status}</Badge>
                         </TableCell>
                         <TableCell>{formatCurrency(estimate.total)}</TableCell>
                         <TableCell>{format(new Date(estimate.createdAt), "MMM d, yyyy")}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              router.push(estimateUrl);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

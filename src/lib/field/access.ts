@@ -1,5 +1,6 @@
-import { VisitStatus } from "@prisma/client";
+import { Channel, Prisma, Scope, VisitStatus } from "@prisma/client";
 import { isFieldRole } from "@/lib/employees";
+import { phoneLookupVariants } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
 export type FieldAccessUser = {
@@ -111,6 +112,8 @@ export async function listEligibleCustomerIdsForFieldSms(
 
 export const FIELD_CUSTOMER_COMMS_FORBIDDEN =
   "You can only view conversations and calls for customers you have visited or are scheduled to visit.";
+export const FIELD_TEAM_SMS_FORBIDDEN =
+  "You can only view team conversations you are involved in.";
 
 export async function canAccessFieldCustomerComms(
   user: FieldAccessUser,
@@ -137,11 +140,49 @@ export async function fieldCustomerCommsWhere(user: FieldAccessUser) {
   return { customerId: { in: ids } };
 }
 
+/**
+ * Office roles share every office-to-technician SMS thread. Field roles only
+ * see threads sent to their phone number or threads in which they have sent a message.
+ */
+export async function fieldTeamSmsWhere(
+  user: FieldAccessUser
+): Promise<Prisma.ConversationWhereInput | null> {
+  if (!isFieldRole(user.role)) return null;
+
+  const employee = await prisma.user.findFirst({
+    where: { id: user.id, companyId: user.companyId },
+    select: { phone: true },
+  });
+  const phoneVariants = employee?.phone ? phoneLookupVariants(employee.phone) : [];
+  const involvedIn: Prisma.ConversationWhereInput[] = [
+    { messages: { some: { senderId: user.id } } },
+  ];
+  if (phoneVariants.length) {
+    involvedIn.push({ participantPhone: { in: phoneVariants } });
+  }
+  return { OR: involvedIn };
+}
+
 export async function canAccessFieldSmsConversation(
   user: FieldAccessUser,
-  conversation: { scope: string; customerId: string | null }
+  conversation: { id: string; scope: string; customerId: string | null }
 ) {
   if (!isFieldRole(user.role)) return true;
-  if (conversation.scope !== "EXTERNAL") return true;
-  return canAccessFieldCustomerComms(user, conversation.customerId);
+  if (conversation.scope === Scope.EXTERNAL) {
+    return canAccessFieldCustomerComms(user, conversation.customerId);
+  }
+  if (conversation.scope !== Scope.INTERNAL) return false;
+
+  const teamWhere = await fieldTeamSmsWhere(user);
+  const match = await prisma.conversation.findFirst({
+    where: {
+      id: conversation.id,
+      companyId: user.companyId,
+      channel: Channel.SMS,
+      scope: Scope.INTERNAL,
+      ...(teamWhere ?? {}),
+    },
+    select: { id: true },
+  });
+  return Boolean(match);
 }

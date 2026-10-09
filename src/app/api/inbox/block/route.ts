@@ -65,15 +65,6 @@ export async function POST(request: NextRequest) {
             reason: spamReason,
           });
 
-      await prisma.conversation.updateMany({
-        where: {
-          companyId: user.companyId,
-          channel: "SMS",
-          participantPhone: normalizedPhone,
-        },
-        data: { smsOpen: false },
-      });
-
       if (spamSource === "call") {
         await prisma.callLog.update({
           where: { id: callLogId },
@@ -132,6 +123,14 @@ export async function DELETE(request: NextRequest) {
           ? prisma.blockedContact.update({ where: { id: entry.id }, data: { phone: null, customerId: null } })
           : prisma.blockedContact.delete({ where: { id: entry.id } })
       ));
+      await prisma.conversation.updateMany({
+        where: {
+          companyId: user.companyId,
+          channel: "SMS",
+          participantPhone: normalizedPhone,
+        },
+        data: { smsOpen: true, smsClosedAt: null, smsClosedById: null },
+      });
       return NextResponse.json({ success: true });
     }
     if (!id) return badRequestResponse("id or phone required");

@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarPlus } from "lucide-react";
+import { CalendarClock, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
+import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import {
   Table,
   TableBody,
@@ -45,6 +48,10 @@ export function UnscheduledVisitsCard() {
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
   const [scheduleDialogId, setScheduleDialogId] = useState<string | null>(null);
   const [assignedUserId, setAssignedUserId] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("11:00");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(async () => {
@@ -75,12 +82,27 @@ export function UnscheduledVisitsCard() {
       return;
     }
 
+    const startAt = new Date(`${scheduleDate}T${startTime}`);
+    const endAt = new Date(`${scheduleDate}T${endTime}`);
+    if (!scheduleDate || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      toast.error("Choose a date and time before scheduling this visit");
+      return;
+    }
+    if (endAt <= startAt) {
+      toast.error("End time must be after start time");
+      return;
+    }
+
     setSchedulingId(planVisitId);
     try {
       const res = await fetch(`/api/maintenance-plans/visits/${planVisitId}/schedule`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignedUserId }),
+        body: JSON.stringify({
+          assignedUserId,
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -98,6 +120,36 @@ export function UnscheduledVisitsCard() {
       setSchedulingId(null);
     }
   }
+
+  function applyScheduleSlot(slot: ScheduleSlotClick) {
+    const nextStart = slot.startAt;
+    const nextEnd = slot.endAt;
+    setScheduleDate(
+      `${nextStart.getFullYear()}-${String(nextStart.getMonth() + 1).padStart(2, "0")}-${String(
+        nextStart.getDate()
+      ).padStart(2, "0")}`
+    );
+    setStartTime(
+      `${String(nextStart.getHours()).padStart(2, "0")}:${String(nextStart.getMinutes()).padStart(
+        2,
+        "0"
+      )}`
+    );
+    setEndTime(
+      `${String(nextEnd.getHours()).padStart(2, "0")}:${String(nextEnd.getMinutes()).padStart(
+        2,
+        "0"
+      )}`
+    );
+    if (slot.assignedUserId && slot.assignedUserId !== "__unassigned__") {
+      setAssignedUserId(slot.assignedUserId);
+    }
+  }
+
+  const selectedPlanVisit = visits.find((visit) => visit.id === scheduleDialogId);
+  const scheduleInitialDate = selectedPlanVisit
+    ? `${selectedPlanVisit.dueYear}-${String(selectedPlanVisit.dueMonth).padStart(2, "0")}-01`
+    : undefined;
 
   return (
     <>
@@ -159,6 +211,9 @@ export function UnscheduledVisitsCard() {
                         onClick={() => {
                           setScheduleDialogId(visit.id);
                           setAssignedUserId("");
+                          setScheduleDate("");
+                          setStartTime("09:00");
+                          setEndTime("11:00");
                         }}
                       >
                         <CalendarPlus className="h-4 w-4" />
@@ -181,15 +236,56 @@ export function UnscheduledVisitsCard() {
             aria-label="Close"
             onClick={() => setScheduleDialogId(null)}
           />
-          <div className="relative z-10 w-full max-w-sm rounded-lg border bg-background p-6 shadow-lg">
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
             <h2 className="text-lg font-semibold">Schedule maintenance visit</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Choose a technician before adding this visit to the schedule.
+              Choose an open time on the schedule, or enter the date and time directly.
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full"
+              onClick={() => setScheduleOpen(true)}
+            >
+              <CalendarClock className="mr-2 h-4 w-4" />
+              View schedule and choose a time
+            </Button>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Date</label>
+                <Input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(event) => setScheduleDate(event.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Start</label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(event) => setStartTime(event.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">End</label>
+                <Input
+                  type="time"
+                  value={endTime}
+                  onChange={(event) => setEndTime(event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <label className="mb-1 mt-4 block text-xs font-medium text-muted-foreground">
+              Technician
+            </label>
             <select
               value={assignedUserId}
               onChange={(e) => setAssignedUserId(e.target.value)}
-              className={`${selectClassName} mt-4`}
+              className={selectClassName}
               required
             >
               <option value="">Assign technician (required)</option>
@@ -214,6 +310,13 @@ export function UnscheduledVisitsCard() {
           </div>
         </div>
       ) : null}
+
+      <SchedulePeekModal
+        open={scheduleOpen}
+        date={scheduleDate || scheduleInitialDate}
+        onClose={() => setScheduleOpen(false)}
+        onSelectSlot={applyScheduleSlot}
+      />
     </>
   );
 }

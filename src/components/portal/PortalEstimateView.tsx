@@ -107,11 +107,20 @@ function techPhotoSrc(photoUrl: string | null | undefined) {
   return absolutePublicBlobUrl(photoUrl) ?? blobProxyUrl(photoUrl) ?? photoUrl;
 }
 
-export function PortalEstimateView({ slug, token }: { slug: string; token: string }) {
+export function PortalEstimateView({
+  slug,
+  token,
+  preview = false,
+}: {
+  slug: string;
+  token: string;
+  preview?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hasInk = useRef(false);
   const [company, setCompany] = useState<CompanyBranding | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
+  const [staffPreview, setStaffPreview] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [designSnapshot, setDesignSnapshot] = useState<Record<string, unknown> | null>(null);
   const [selectedTier, setSelectedTier] = useState<"STANDARD" | "PREMIUM">("STANDARD");
@@ -143,6 +152,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
         setEstimate(estData.estimate);
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
+        setStaffPreview(preview && Boolean(estData.staffPreview));
         const defaultId = defaultPresentOptionId(estData.estimate.options ?? []);
         setSelectedOptionId(estData.estimate.selectedOptionId ?? defaultId);
 
@@ -168,7 +178,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [preview, token]);
 
   const activeOption = useMemo(() => {
     if (!estimate?.options?.length) return null;
@@ -239,6 +249,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   }
 
   async function sign() {
+    if (staffPreview) return;
     const canvas = canvasRef.current;
     if (!canvas || !estimate) return;
     if (!hasInk.current) {
@@ -271,6 +282,7 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   }
 
   async function payDeposit() {
+    if (staffPreview) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/portal/estimates/${token}/deposit`, { method: "POST" });
@@ -285,6 +297,10 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
   }
 
   async function exploreFinancing() {
+    if (staffPreview) {
+      toast.message("Financing actions are disabled in customer preview mode");
+      return;
+    }
     setFinancingSending(true);
     try {
       const res = await fetch(`/api/portal/estimates/${token}/financing`, { method: "POST" });
@@ -327,10 +343,10 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
     );
   }
 
-  const canSign = estimate.status === "SENT";
+  const canSign = !staffPreview && estimate.status === "SENT";
   const requiresDeposit =
     estimate.depositRequired && displayTotal() > estimate.depositThreshold;
-  const needsDeposit = estimate.status === "APPROVED" && requiresDeposit;
+  const needsDeposit = !staffPreview && estimate.status === "APPROVED" && requiresDeposit;
   const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
@@ -344,6 +360,11 @@ export function PortalEstimateView({ slug, token }: { slug: string; token: strin
       guest={!authenticated}
     >
       <div className="space-y-6">
+        {staffPreview ? (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            Customer-facing preview — signing, payments, and customer actions are disabled.
+          </div>
+        ) : null}
         {authenticated ? (
           <Link href={`/portal/${slug}`} className="text-sm text-primary hover:underline">
             ← Back to portal

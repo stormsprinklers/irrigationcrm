@@ -3,6 +3,7 @@ type CustomerFacingLine = {
   total: number;
   quantity: number;
   unitPrice: number;
+  unit?: string | null;
 };
 
 const INTERNAL_ADJUSTMENT_NAMES = new Set([
@@ -18,9 +19,21 @@ export function customerFacingEstimateLines<T extends CustomerFacingLine>(items:
   let adjustment = 0;
   let laborOnlyAdjustment = false;
   const visible: T[] = [];
+  const permanentHolidayOption = items.some(
+    (item) =>
+      item.unit?.trim().toLowerCase() === "included" &&
+      /^5-year parts and labor warranty$/i.test(item.name.trim())
+  );
 
   for (const item of items) {
     const normalizedName = item.name.trim().toLowerCase();
+    if (
+      permanentHolidayOption &&
+      item.unit?.trim().toLowerCase() === "included" &&
+      (normalizedName === "storage" || normalizedName === "maintenance")
+    ) {
+      continue;
+    }
     if (INTERNAL_ADJUSTMENT_NAMES.has(normalizedName)) {
       adjustment += item.total;
       laborOnlyAdjustment ||= normalizedName === "labor minimum adjustment";

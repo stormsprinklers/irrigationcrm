@@ -222,9 +222,11 @@ export async function POST(request: NextRequest) {
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
-        // STOP/START are resolved automatically, so they belong in General and
-        // must not count as conversations awaiting a staff response.
-        smsOpen: blocked || isStop || isStart ? false : true,
+        // Every customer reply reopens the thread. Blocked numbers remain
+        // separated by the Spam filter rather than the Open/General state.
+        ...(scope === Scope.EXTERNAL
+          ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
+          : {}),
         ...(customer && !conversation.customerId ? { customerId: customer.id } : {}),
       },
     });
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest) {
       });
       await prisma.conversation.update({
         where: { id: conversation.id },
-        data: { lastMessageAt: automaticReply.sentAt, smsOpen: false },
+        data: { lastMessageAt: automaticReply.sentAt },
       });
     }
 
@@ -314,15 +316,24 @@ export async function POST(request: NextRequest) {
       }
     })();
 
-    if (!blocked && !isStop && !isStart) notifyInboundSms({
-      companyId: company.id,
-      conversationId: conversation.id,
-      fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
-      preview: storedBody || (mediaItems.length ? "[Media message]" : "New message"),
-      scope: conversation.scope,
-      participantPhone: conversation.participantPhone,
-      fromPhone: normalizedFrom,
-    }).catch((err) => console.error("In-app notification failed for inbound SMS", err));
+    if (!blocked && !isStop && !isStart) {
+      // Keep the serverless invocation alive until browser/iOS push delivery has
+      // been attempted. A detached promise can be terminated as soon as the
+      // Twilio webhook response is returned.
+      after(async () => {
+        await notifyInboundSms({
+          companyId: company.id,
+          conversationId: conversation.id,
+          fromLabel: customer?.name ?? formatPhoneDisplay(normalizedFrom),
+          preview: storedBody || (mediaItems.length ? "[Media message]" : "New message"),
+          scope: conversation.scope,
+          participantPhone: conversation.participantPhone,
+          fromPhone: normalizedFrom,
+        }).catch((err) =>
+          console.error("In-app notification failed for inbound SMS", err)
+        );
+      });
+    }
 
     if (contactInfoDetected) {
       void processInboundMessageContactInfo(message.id).catch((err) =>

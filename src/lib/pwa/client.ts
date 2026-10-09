@@ -35,9 +35,16 @@ export async function registerRadarServiceWorker() {
     return null;
   }
   try {
-    return await navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH, {
+    const registration = await navigator.serviceWorker.register(PWA_SERVICE_WORKER_PATH, {
       scope: "/",
+      // Always revalidate sw.js so installed PWAs receive notification fixes
+      // instead of continuing to run an old cached worker.
+      updateViaCache: "none",
     });
+    void registration.update().catch((error) => {
+      console.warn("Service worker update check failed", error);
+    });
+    return registration;
   } catch (error) {
     console.error("Service worker registration failed", error);
     return null;

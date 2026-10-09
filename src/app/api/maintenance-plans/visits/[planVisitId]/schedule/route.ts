@@ -14,14 +14,6 @@ import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ planVisitId: string }> };
 
-function firstWeekdayOfMonth(year: number, month: number): Date {
-  const date = new Date(year, month - 1, 1, 9, 0, 0, 0);
-  while (date.getDay() === 0 || date.getDay() === 6) {
-    date.setDate(date.getDate() + 1);
-  }
-  return date;
-}
-
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
@@ -63,12 +55,17 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (block) return badRequestResponse(block);
 
     const title = planVisit.visitTemplate?.visitTitle ?? "Maintenance visit";
-    const startAt = body.startAt
-      ? new Date(body.startAt)
-      : firstWeekdayOfMonth(planVisit.dueYear, planVisit.dueMonth);
-    const endAt = body.endAt
-      ? new Date(body.endAt)
-      : new Date(startAt.getTime() + 2 * 60 * 60 * 1000);
+    if (!body.startAt || !body.endAt) {
+      return badRequestResponse("Choose a date and time before scheduling this visit");
+    }
+    const startAt = new Date(body.startAt);
+    const endAt = new Date(body.endAt);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      return badRequestResponse("Enter a valid date and time");
+    }
+    if (endAt <= startAt) {
+      return badRequestResponse("End time must be after start time");
+    }
 
     const assignedUserId = body.assignedUserId as string | undefined;
     const assignmentError = validateScheduledVisitAssignment(VisitStatus.SCHEDULED, assignedUserId);

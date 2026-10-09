@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Copy,
   FileText,
+  Eye,
   Loader2,
   Pencil,
   Plus,
@@ -55,6 +56,7 @@ type EstimateOptionData = {
 type EstimateData = {
   id: string;
   estimateNumber: string | null;
+  portalPath: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;
@@ -627,6 +629,18 @@ export function EstimateDetail({ estimateId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {estimate.portalPath ? (
+            <Button variant="outline" size="sm" asChild>
+              <Link
+                href={`${estimate.portalPath}?preview=1`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Eye className="h-4 w-4" />
+                Preview customer view
+              </Link>
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             size="sm"

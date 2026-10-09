@@ -56,8 +56,14 @@ export async function createEstimateFromHolidayQuote(params: {
     const selections = applyHolidayCatalogPolicy(design.selections, catalog);
     const measurements = parseHolidayMeasurements(design.measurements);
     const priced = computeHolidayQuotePricing({ catalog, measurements, selections, prices });
-    if (priced.billedLengthFt <= 0 && priced.placementCount <= 0) {
-      throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements or trees/bushes`);
+    const customServices = (selections.customServices ?? []).filter(
+      (service) => service.name.trim() || service.unitPrice > 0
+    );
+    if (customServices.some((service) => !service.name.trim())) {
+      throw new Error(`${design.label || `Option ${index + 1}`} has an additional service without a name`);
+    }
+    if (priced.billedLengthFt <= 0 && priced.placementCount <= 0 && customServices.length === 0) {
+      throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements, trees/bushes, or an additional service`);
     }
     const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
     const key = style?.kind === "permanent"
@@ -78,12 +84,24 @@ export async function createEstimateFromHolidayQuote(params: {
       styleLabel: style?.kind === "permanent"
         ? style.label
         : `${style?.label ?? "holiday"} ${selections.defaultColorPattern ?? "Warm White"}`,
+      hasRoofline: priced.billedLengthFt > 0,
+      customServiceCount: customServices.length,
     });
     const detail = priced.optionDetails[key];
+    const leaseContractYears = selections.leaseContractYears ?? 1;
+    const leaseContractDiscountPercent = leaseContractYears === 5
+      ? 20
+      : leaseContractYears === 3
+        ? 10
+        : 0;
     const tagline = key === "buy"
       ? `Future Years: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(priced.reinstallTotal)}`
       : key === "lease"
-        ? "No Commitments!"
+        ? leaseContractYears === 5
+          ? "5-Year Agreement · Save 20% Each Year"
+          : leaseContractYears === 3
+            ? "3-Year Agreement · Save 10% Each Year"
+            : "Single Season · No Commitment"
         : key === "labor"
           ? "Customer-supplied lights"
           : "Fit Your Vibe Year-Round";
@@ -94,6 +112,9 @@ export async function createEstimateFromHolidayQuote(params: {
         : key === "labor"
           ? HOLIDAY_LABOR_ONLY_DETAIL
           : HOLIDAY_PERMANENT_DETAIL;
+    const leaseAgreementCopy = key === "lease" && leaseContractYears > 1
+      ? `This option requires a ${leaseContractYears}-year lease agreement. The ${leaseContractDiscountPercent}% discount applies to the annual lease price in each year of the agreement.`
+      : null;
     return {
       design,
       selections,
@@ -102,18 +123,22 @@ export async function createEstimateFromHolidayQuote(params: {
       key,
       label,
       tagline,
-      description: [tagline, selections.notes?.trim(), `${detailCopy} ${summary}`]
+      description: [tagline, leaseAgreementCopy, selections.notes?.trim(), `${detailCopy} ${summary}`]
         .filter(Boolean)
         .join("\n\n"),
       detail,
+      customServices,
+      leaseContractYears,
+      leaseContractDiscountPercent,
       strandMap: buildHolidayStrandMap({ measurements, selections, catalog, pricedLines: priced.lines, address }),
     };
   });
 
+  const primaryPreviewImageUrl = prepared[0]?.design.previewImageUrl ?? quote.previewImageUrl;
   const metadata = {
     source: "holiday-lighting-quote",
     quoteId: quote.id,
-    previewImageUrl: quote.previewImageUrl,
+    previewImageUrl: primaryPreviewImageUrl,
     previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
     address,
     strandMap: prepared[0]?.strandMap,
@@ -128,6 +153,10 @@ export async function createEstimateFromHolidayQuote(params: {
       reinstallTotal: item.priced.reinstallTotal,
       lightStyleKey: item.selections.defaultLightStyleKey,
       colorPattern: item.selections.defaultColorPattern,
+      previewImageUrl: item.design.previewImageUrl ?? quote.previewImageUrl,
+      leaseContractYears: item.key === "lease" ? item.leaseContractYears : undefined,
+      leaseContractDiscountPercent:
+        item.key === "lease" ? item.leaseContractDiscountPercent : undefined,
       strandMap: item.strandMap,
     })),
   };
@@ -189,6 +218,10 @@ export async function createEstimateFromHolidayQuote(params: {
   const createdOptions = [];
   for (const [index, pack] of prepared.entries()) {
     const { key, detail, priced, selections } = pack;
+    const baseSubtotal = Math.max(
+      0,
+      Math.round((detail.subtotal - priced.customServicesTotal) * 100) / 100
+    );
     const adjustment = selections.optionAdjustments?.[key];
     const option = await prisma.estimateOption.create({
       data: {
@@ -200,18 +233,18 @@ export async function createEstimateFromHolidayQuote(params: {
         subtotal: detail.subtotal,
         discountTotal: detail.discountTotal,
         total: detail.total,
-        photoUrl: quote.previewImageUrl,
+        photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
     if (key === "buy" || key === "labor") {
       const breakdown = key === "labor"
         ? holidayDetailedLaborOnlyLines({
             lines: priced.lines,
-            targetSubtotal: detail.subtotal,
+            targetSubtotal: baseSubtotal,
           })
         : holidayDetailedBuyLines({
             lines: priced.lines,
-            targetSubtotal: detail.subtotal,
+            targetSubtotal: baseSubtotal,
           });
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({
@@ -226,7 +259,7 @@ export async function createEstimateFromHolidayQuote(params: {
           sortOrder: index,
         })),
       });
-    } else {
+    } else if (baseSubtotal > 0 || priced.lines.length > 0) {
       await prisma.estimateLineItem.create({
         data: {
           estimateId: estimate.id,
@@ -234,11 +267,26 @@ export async function createEstimateFromHolidayQuote(params: {
           name: pack.label,
           description: pack.tagline,
           quantity: 1,
-          unitPrice: detail.subtotal,
+          unitPrice: baseSubtotal,
           unit: "each",
-          total: detail.subtotal,
+          total: baseSubtotal,
           sortOrder: 0,
         },
+      });
+    }
+    if (pack.customServices.length) {
+      await prisma.estimateLineItem.createMany({
+        data: pack.customServices.map((service, serviceIndex) => ({
+          estimateId: estimate.id,
+          optionId: option.id,
+          name: service.name.trim(),
+          description: service.description?.trim() || null,
+          quantity: service.quantity,
+          unitPrice: service.unitPrice,
+          unit: "each",
+          total: Math.round(service.quantity * service.unitPrice * 100) / 100,
+          sortOrder: 100 + serviceIndex,
+        })),
       });
     }
     if (key !== "labor") {
@@ -255,7 +303,7 @@ export async function createEstimateFromHolidayQuote(params: {
           unitPrice: 0,
           unit: "included",
           total: 0,
-          sortOrder: (key === "buy" ? priced.lines.length * 2 : 1) + index + 1,
+          sortOrder: 200 + index,
         })),
       });
     } else {
@@ -269,11 +317,26 @@ export async function createEstimateFromHolidayQuote(params: {
           unitPrice: 0,
           unit: "included",
           total: 0,
-          sortOrder: priced.lines.length + 100,
+          sortOrder: 200,
         },
       });
     }
-    if (detail.discountTotal > 0 && adjustment) {
+    if (key === "lease" && pack.leaseContractDiscountPercent > 0) {
+      await prisma.discount.create({
+        data: {
+          estimateId: estimate.id,
+          optionId: option.id,
+          label: `${pack.leaseContractYears}-year lease agreement discount`,
+          type: DiscountType.PERCENT,
+          amount: pack.leaseContractDiscountPercent,
+        },
+      });
+    }
+    const manualDiscountTotal = Math.max(
+      0,
+      Math.round((detail.discountTotal - (detail.contractDiscountTotal ?? 0)) * 100) / 100
+    );
+    if (manualDiscountTotal > 0 && adjustment) {
       await prisma.discount.create({
         data: {
           estimateId: estimate.id,
@@ -282,7 +345,7 @@ export async function createEstimateFromHolidayQuote(params: {
           type: adjustment.discountType === "percent" ? DiscountType.PERCENT : DiscountType.FIXED,
           amount: adjustment.discountType === "percent"
             ? adjustment.discountAmount ?? 0
-            : detail.discountTotal,
+            : manualDiscountTotal,
         },
       });
     }
@@ -305,14 +368,14 @@ export async function createEstimateFromHolidayQuote(params: {
     },
   });
 
-  if (quote.previewImageUrl) {
+  if (primaryPreviewImageUrl) {
     try {
       await prisma.estimateAttachment.create({
         data: {
           estimateId: estimate.id,
           fileName: "lighting-preview.png",
           mimeType: "image/png",
-          blobUrl: quote.previewImageUrl,
+          blobUrl: primaryPreviewImageUrl,
         },
       });
     } catch {
@@ -341,11 +404,12 @@ export async function createEstimateFromHolidayQuote(params: {
 export async function saveHolidayPreviewBlob(params: {
   companyId: string;
   quoteId: string;
+  optionId?: string;
   pngBase64: string;
 }) {
   const buffer = Buffer.from(params.pngBase64, "base64");
   const blob = await uploadPrivateBlob(
-    `company-holiday/${params.companyId}/${params.quoteId}-${Date.now()}-preview.png`,
+    `company-holiday/${params.companyId}/${params.quoteId}-${params.optionId ?? "quote"}-${Date.now()}-preview.png`,
     buffer,
     { contentType: "image/png" }
   );

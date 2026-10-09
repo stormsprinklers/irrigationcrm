@@ -14,9 +14,65 @@ import {
 } from "@/lib/pwa/client";
 
 const DISMISS_INSTALL_KEY = "radar-pwa-install-dismissed";
-const DISMISS_PUSH_KEY = "radar-pwa-push-dismissed";
 
-type PushState = "loading" | "unsupported" | "needs-install" | "prompt" | "subscribed" | "denied";
+type PushState =
+  | "loading"
+  | "unsupported"
+  | "needs-install"
+  | "prompt"
+  | "subscribed"
+  | "denied"
+  | "unconfigured"
+  | "error";
+
+async function loadPushPublicKey(): Promise<string | null> {
+  const response = await fetch("/api/push/vapid-public-key", { cache: "no-store" });
+  const data = (await response.json().catch(() => ({}))) as {
+    configured?: boolean;
+    publicKey?: string | null;
+  };
+  return response.ok && data.configured && data.publicKey ? data.publicKey : null;
+}
+
+function subscriptionUsesKey(subscription: PushSubscription, publicKey: string) {
+  const currentKey = subscription.options.applicationServerKey;
+  if (!currentKey) return true;
+  const current = new Uint8Array(currentKey);
+  const expected = urlBase64ToUint8Array(publicKey);
+  return current.length === expected.length && current.every((value, index) => value === expected[index]);
+}
+
+async function savePushSubscription(subscription: PushSubscription) {
+  const json = subscription.toJSON();
+  const response = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? "Could not save push subscription");
+  }
+}
+
+async function ensurePushSubscription(publicKey: string) {
+  const registration = await registerRadarServiceWorker();
+  if (!registration) throw new Error("Could not register the service worker");
+  await navigator.serviceWorker.ready;
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && !subscriptionUsesKey(subscription, publicKey)) {
+    await subscription.unsubscribe();
+    subscription = null;
+  }
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+  }
+  await savePushSubscription(subscription);
+}
 
 /** Customer-facing / public paths must never show Radar install or push prompts. */
 function isEmployeeAppPath(pathname: string | null): boolean {
@@ -83,26 +139,38 @@ export function PwaProvider() {
     }
 
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const existing = await registration.pushManager.getSubscription();
-      if (existing) {
-        const json = existing.toJSON();
-        await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
-        });
+      const publicKey = await loadPushPublicKey();
+      if (!publicKey) {
+        setPushState("unconfigured");
+        return;
+      }
+      if (Notification.permission === "granted") {
+        await ensurePushSubscription(publicKey);
         setPushState("subscribed");
         return;
       }
       setPushState("prompt");
     } catch {
-      setPushState("unsupported");
+      setPushState("error");
     }
   }, [authenticated, employeeSurface, canUseNotifications, ios, standalone, session?.user?.id]);
 
   useEffect(() => {
     void refreshPushState();
+    const refresh = () => void refreshPushState();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const interval = window.setInterval(refresh, 15 * 60 * 1000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [refreshPushState]);
 
   useEffect(() => {
@@ -110,11 +178,12 @@ export function PwaProvider() {
       setShowPushPrompt(false);
       return;
     }
-    if (localStorage.getItem(DISMISS_PUSH_KEY) === "1") {
-      setShowPushPrompt(false);
-      return;
-    }
-    setShowPushPrompt(pushState === "prompt" || pushState === "needs-install");
+    setShowPushPrompt(
+      pushState === "prompt" ||
+        pushState === "needs-install" ||
+        pushState === "unconfigured" ||
+        pushState === "error"
+    );
   }, [authenticated, employeeSurface, pushState]);
 
   async function enablePush() {
@@ -129,12 +198,9 @@ export function PwaProvider() {
 
     setEnabling(true);
     try {
-      const keyRes = await fetch("/api/push/vapid-public-key");
-      const keyData = (await keyRes.json()) as {
-        configured?: boolean;
-        publicKey?: string | null;
-      };
-      if (!keyData.configured || !keyData.publicKey) {
+      const publicKey = await loadPushPublicKey();
+      if (!publicKey) {
+        setPushState("unconfigured");
         toast.error("Push notifications are not configured on the server yet");
         return;
       }
@@ -146,39 +212,15 @@ export function PwaProvider() {
         return;
       }
 
-      const registration = await registerRadarServiceWorker();
-      if (!registration) {
-        toast.error("Could not register the service worker");
-        return;
-      }
-      await navigator.serviceWorker.ready;
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
-      });
-
-      const json = subscription.toJSON();
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endpoint: json.endpoint,
-          keys: json.keys,
-        }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(data.error ?? "Could not save push subscription");
-        return;
-      }
+      await ensurePushSubscription(publicKey);
 
       setPushState("subscribed");
       setShowPushPrompt(false);
       toast.success("Push notifications enabled");
     } catch (error) {
       console.error(error);
-      toast.error("Could not enable push notifications");
+      setPushState("error");
+      toast.error(error instanceof Error ? error.message : "Could not enable push notifications");
     } finally {
       setEnabling(false);
     }
@@ -228,11 +270,19 @@ export function PwaProvider() {
               <p className="text-xs text-muted-foreground">
                 {pushState === "needs-install"
                   ? "Install Radar to your Home Screen first, then open it from there to turn on alerts."
-                  : "Get SMS, leads, and other alerts even when Radar is in the background."}
+                  : pushState === "unconfigured"
+                    ? "Background notifications need VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY configured on the server."
+                    : pushState === "error"
+                      ? "Radar could not verify this browser's background-notification subscription. Try again."
+                      : "Get SMS, leads, and other alerts even when Radar is in the background or closed."}
               </p>
-              {pushState === "prompt" ? (
+              {pushState === "prompt" || pushState === "error" ? (
                 <Button size="sm" onClick={() => void enablePush()} disabled={enabling}>
-                  {enabling ? "Enabling…" : "Enable notifications"}
+                  {enabling
+                    ? "Enabling…"
+                    : pushState === "error"
+                      ? "Retry notifications"
+                      : "Enable notifications"}
                 </Button>
               ) : null}
             </div>
@@ -241,7 +291,6 @@ export function PwaProvider() {
               className="rounded-md p-1 text-muted-foreground hover:bg-muted"
               aria-label="Dismiss"
               onClick={() => {
-                localStorage.setItem(DISMISS_PUSH_KEY, "1");
                 setShowPushPrompt(false);
               }}
             >

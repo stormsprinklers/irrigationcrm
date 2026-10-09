@@ -7,6 +7,7 @@ export const PEAK_LENGTH_MULTIPLIER = 1.5;
 export type HolidayInstallKind = "temporary" | "permanent";
 export type HolidayQuoteBillingMode = "standard" | "labor_only";
 export type HolidayQuotePricingMode = "buy" | "lease" | "labor" | "permanent";
+export type HolidayLeaseContractYears = 1 | 3 | 5;
 export type HolidayDifficulty = 1 | 2 | 3;
 
 export const HOLIDAY_COLOR_PATTERNS = [
@@ -71,7 +72,10 @@ export type HolidayTreeSize = "small" | "medium" | "large" | "xl";
 export type HolidayMeasurementPlacement = {
   id: string;
   kind: HolidayPlacementKind;
+  /** Legacy display size retained so existing saved quotes continue to load. */
   size: HolidayTreeSize;
+  strandCount?: number;
+  liftRentalNeeded?: boolean;
   label: string;
   latLng: HolidayLatLng;
   difficulty?: HolidayDifficulty;
@@ -93,6 +97,8 @@ export type HolidayQuoteSelections = {
   includeLease?: boolean;
   optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
   reinstallPrice?: number | null;
+  customServices?: HolidayCustomService[];
+  leaseContractYears?: HolidayLeaseContractYears;
   designOptions?: HolidayQuoteDesignOption[];
   activeDesignOptionId?: string;
 };
@@ -100,6 +106,8 @@ export type HolidayQuoteSelections = {
 export type HolidayQuoteDesignOption = {
   id: string;
   label: string;
+  /** Option-specific customer preview. The source property photo remains quote-wide. */
+  previewImageUrl?: string;
   measurements: HolidayMeasurements;
   selections: {
     defaultLightStyleKey: string;
@@ -110,7 +118,17 @@ export type HolidayQuoteDesignOption = {
     notes?: string;
     optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
     reinstallPrice?: number | null;
+    customServices?: HolidayCustomService[];
+    leaseContractYears?: HolidayLeaseContractYears;
   };
+};
+
+export type HolidayCustomService = {
+  id: string;
+  name: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
 };
 
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
@@ -145,6 +163,8 @@ export type HolidayPlacementCatalogItem = {
   installSku?: string;
 };
 
+export type HolidayDifficultyMultipliers = Record<HolidayDifficulty, number>;
+
 export type HolidayQuoteDefaults = {
   defaultLightStyleKey: string;
   defaultInstallKind: HolidayInstallKind;
@@ -159,6 +179,8 @@ export type HolidayLightingCatalog = {
   placements: HolidayPlacementCatalogItem[];
   peakSku?: string;
   peakLeaseSku?: string;
+  liftRentalSku?: string;
+  difficultyMultipliers?: HolidayDifficultyMultipliers;
   quoteDefaults?: HolidayQuoteDefaults;
 };
 
@@ -209,26 +231,23 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       kind: "permanent",
     },
   ],
-  placements: (["tree", "bush"] as const).flatMap((kind) =>
-    (["small", "medium", "large"] as const).flatMap((size) =>
-      ([1, 2, 3] as const).map((difficulty) => {
-        const prefix = kind === "tree" ? "TREE" : "BUSH";
-        const sizeCode = size === "small" ? "S" : size === "medium" ? "M" : "L";
-        const legacyPartsSku = `HL-${prefix}-${sizeCode}`;
-        return {
-          key: `${kind}-${size}-d${difficulty}`,
-          kind,
-          size,
-          difficulty,
-          label: `${kind === "tree" ? "Tree" : "Bush"} wrap — ${size}, difficulty ${difficulty}`,
-          sku: difficulty === 1 ? legacyPartsSku : `${legacyPartsSku}-D${difficulty}-PARTS`,
-          partsSku: difficulty === 1 ? legacyPartsSku : `${legacyPartsSku}-D${difficulty}-PARTS`,
-          installSku: `${legacyPartsSku}-D${difficulty}-LABOR`,
-          leaseSku: `${legacyPartsSku}-D${difficulty}-LEASE`,
-        };
-      })
-    )
-  ),
+  placements: (["tree", "bush"] as const).map((kind) => {
+    const prefix = kind === "tree" ? "TREE" : "BUSH";
+    const legacyPartsSku = `HL-${prefix}-S`;
+    return {
+      key: `${kind}-strand`,
+      kind,
+      size: "small" as const,
+      difficulty: 1 as const,
+      label: `${kind === "tree" ? "Tree" : "Bush"} lighting / strand`,
+      sku: legacyPartsSku,
+      partsSku: legacyPartsSku,
+      installSku: `${legacyPartsSku}-D1-LABOR`,
+      leaseSku: `${legacyPartsSku}-D1-LEASE`,
+    };
+  }),
+  liftRentalSku: "HL-LIFT-RENTAL",
+  difficultyMultipliers: { 1: 1, 2: 1.25, 3: 1.5 },
   quoteDefaults: {
     defaultLightStyleKey: "c9",
     defaultInstallKind: "temporary",
@@ -245,6 +264,7 @@ export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
   includeLaborOnlyOption: false,
   includePermanentOption: false,
   defaultColorPattern: "Warm White",
+  leaseContractYears: 1,
 };
 
 export const EMPTY_HOLIDAY_MEASUREMENTS: HolidayMeasurements = {
@@ -341,13 +361,13 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
           parseLightStyle(style, DEFAULT_HOLIDAY_CATALOG.lightStyles[i] ?? DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!)
         )
       : DEFAULT_HOLIDAY_CATALOG.lightStyles;
-  const hasCurrentPlacements = Array.isArray(obj.placements) && obj.placements.some(
-    (placement) => placement && typeof placement === "object" && typeof (placement as HolidayPlacementCatalogItem).difficulty === "number"
-  );
-  const placements =
-    hasCurrentPlacements
-      ? mergePlacements(obj.placements as HolidayPlacementCatalogItem[])
-      : DEFAULT_HOLIDAY_CATALOG.placements;
+  const placements = migratePlacementCatalog(obj.placements);
+  const rawMultipliers = obj.difficultyMultipliers;
+  const difficultyMultipliers: HolidayDifficultyMultipliers = {
+    1: parseMultiplier(rawMultipliers?.[1], 1),
+    2: parseMultiplier(rawMultipliers?.[2], 1.25),
+    3: parseMultiplier(rawMultipliers?.[3], 1.5),
+  };
   const parsedDefaults = parseQuoteDefaults(obj.quoteDefaults);
   const quoteDefaults = {
     ...parsedDefaults,
@@ -358,19 +378,33 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   return {
     lightStyles: styles,
     placements,
+    liftRentalSku: typeof obj.liftRentalSku === "string" && obj.liftRentalSku.trim()
+      ? obj.liftRentalSku.trim()
+      : DEFAULT_HOLIDAY_CATALOG.liftRentalSku,
+    difficultyMultipliers,
     quoteDefaults,
   };
 }
 
-function mergePlacements(raw: unknown[]): HolidayPlacementCatalogItem[] {
-  const parsed = raw.map((row, i) =>
-    parsePlacement(row, DEFAULT_HOLIDAY_CATALOG.placements[i] ?? DEFAULT_HOLIDAY_CATALOG.placements[0]!)
-  );
-  const byKey = new Map(parsed.map((p) => [p.key, p]));
-  for (const fallback of DEFAULT_HOLIDAY_CATALOG.placements) {
-    if (!byKey.has(fallback.key)) byKey.set(fallback.key, fallback);
-  }
-  return [...byKey.values()];
+function parseMultiplier(raw: unknown, fallback: number) {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 && value <= 10
+    ? Math.round(value * 100) / 100
+    : fallback;
+}
+
+function migratePlacementCatalog(raw: unknown): HolidayPlacementCatalogItem[] {
+  if (!Array.isArray(raw)) return DEFAULT_HOLIDAY_CATALOG.placements;
+  return DEFAULT_HOLIDAY_CATALOG.placements.map((fallback) => {
+    const exact = raw.find((row) => row && typeof row === "object" && (row as HolidayPlacementCatalogItem).key === fallback.key);
+    const legacy = raw.find((row) => {
+      if (!row || typeof row !== "object") return false;
+      const item = row as HolidayPlacementCatalogItem;
+      return item.kind === fallback.kind && item.size === "small" && Number(item.difficulty ?? 1) === 1;
+    }) ?? raw.find((row) => row && typeof row === "object" && (row as HolidayPlacementCatalogItem).kind === fallback.kind);
+    const parsed = parsePlacement(exact ?? legacy, fallback);
+    return { ...parsed, key: fallback.key, kind: fallback.kind, size: "small", difficulty: 1, label: fallback.label };
+  });
 }
 
 export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCatalogSku[] {
@@ -402,6 +436,7 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     add(placement.installSku, `${placement.label} — labor`, "each");
     add(placement.leaseSku, `${placement.label} — lease`, "each");
   }
+  add(catalog.liftRentalSku, "Lift rental (internal; folded into tree price)", "each");
   return rows;
 }
 
@@ -417,6 +452,7 @@ export function holidaySelectionsFromCatalog(
     includeLaborOnlyOption: false,
     includePermanentOption: false,
     defaultColorPattern: "Warm White",
+    leaseContractYears: 1,
   };
 }
 
@@ -453,6 +489,8 @@ export function applyHolidayCatalogPolicy(
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
     reinstallPrice: selections.reinstallPrice,
+    customServices: selections.customServices,
+    leaseContractYears: selections.leaseContractYears ?? 1,
     designOptions: selections.designOptions,
     activeDesignOptionId: selections.activeDesignOptionId,
   };
@@ -481,8 +519,19 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
   return {
     segments,
     placements: Array.isArray(obj.placements)
-      ? obj.placements.map((placement) => ({
-          ...placement,
+      ? obj.placements.map((placement) => {
+          const source = placement as HolidayMeasurementPlacement;
+          const legacyStrands = source.size === "small" ? 1 : source.size === "medium" ? 2 : source.size === "large" ? 3 : 4;
+          const requestedStrands = Number(source.strandCount ?? legacyStrands);
+          return ({
+          ...source,
+          size: source.size === "small" || source.size === "medium" || source.size === "large" || source.size === "xl"
+            ? source.size
+            : "small",
+          strandCount: Number.isFinite(requestedStrands)
+            ? Math.max(1, Math.min(100, Math.round(requestedStrands)))
+            : 1,
+          liftRentalNeeded: source.kind === "tree" && source.liftRentalNeeded === true,
           difficulty: Number((placement as HolidayMeasurementPlacement).difficulty) === 2
             ? 2 as const
             : Number((placement as HolidayMeasurementPlacement).difficulty) === 3
@@ -490,7 +539,8 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
               : 1 as const,
           lightStyleKey: (placement as HolidayMeasurementPlacement).lightStyleKey || "c9",
           colorPattern: (placement as HolidayMeasurementPlacement).colorPattern || "Warm White",
-        }))
+        });
+        })
       : [],
     streetTraces: Array.isArray(obj.streetTraces) ? obj.streetTraces : [],
     strands,
@@ -521,6 +571,38 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
   }
   const rawReinstallPrice: unknown = obj.reinstallPrice;
   const reinstallPrice = rawReinstallPrice == null || rawReinstallPrice === "" ? null : Number(rawReinstallPrice);
+  const customServices: HolidayCustomService[] = Array.isArray(obj.customServices)
+    ? obj.customServices.slice(0, 20).flatMap((rawService, index) => {
+        if (!rawService || typeof rawService !== "object") return [];
+        const service = rawService as Partial<HolidayCustomService>;
+        const quantity = Number(service.quantity);
+        const unitPrice = Number(service.unitPrice);
+        return [{
+          id: typeof service.id === "string" && service.id.trim()
+            ? service.id.trim().slice(0, 80)
+            : `service-${index + 1}`,
+          name: typeof service.name === "string" ? service.name.slice(0, 120) : "",
+          description:
+            typeof service.description === "string"
+              ? service.description.slice(0, 1000)
+              : undefined,
+          quantity:
+            Number.isFinite(quantity) && quantity > 0
+              ? Math.round(Math.min(quantity, 9_999) * 100) / 100
+              : 1,
+          unitPrice:
+            Number.isFinite(unitPrice) && unitPrice >= 0
+              ? Math.round(Math.min(unitPrice, 9_999_999) * 100) / 100
+              : 0,
+        }];
+      })
+    : [];
+  const leaseContractYears: HolidayLeaseContractYears =
+    Number(obj.leaseContractYears) === 3
+      ? 3
+      : Number(obj.leaseContractYears) === 5
+        ? 5
+        : 1;
   const designOptions: HolidayQuoteDesignOption[] = Array.isArray(obj.designOptions)
     ? obj.designOptions.slice(0, 5).flatMap((rawOption, index) => {
         if (!rawOption || typeof rawOption !== "object") return [];
@@ -537,6 +619,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
           label: typeof option.label === "string" && option.label.trim()
             ? option.label.trim().slice(0, 80)
             : `Option ${index + 1}`,
+          previewImageUrl:
+            typeof option.previewImageUrl === "string" && option.previewImageUrl.trim()
+              ? option.previewImageUrl.trim()
+              : undefined,
           measurements: parseHolidayMeasurements(option.measurements),
           selections: {
             defaultLightStyleKey: nested.defaultLightStyleKey,
@@ -547,6 +633,8 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             notes: nested.notes,
             optionAdjustments: nested.optionAdjustments,
             reinstallPrice: nested.reinstallPrice,
+            customServices: nested.customServices,
+            leaseContractYears: nested.leaseContractYears,
           },
         }];
       })
@@ -572,6 +660,8 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     optionAdjustments: adjustments,
     reinstallPrice: reinstallPrice != null && Number.isFinite(reinstallPrice) && reinstallPrice >= 0 && reinstallPrice <= 9_999_999
       ? Math.round(reinstallPrice * 100) / 100 : null,
+    customServices,
+    leaseContractYears,
     designOptions,
     activeDesignOptionId:
       typeof obj.activeDesignOptionId === "string" ? obj.activeDesignOptionId : undefined,
@@ -593,6 +683,7 @@ export function holidayDesignOptionsFromQuote(params: {
       return {
         id: option.id,
         label: option.label || `Option ${index + 1}`,
+        previewImageUrl: option.previewImageUrl,
         measurements: parseHolidayMeasurements(option.measurements),
         selections: {
           defaultLightStyleKey: normalized.defaultLightStyleKey,
@@ -603,6 +694,8 @@ export function holidayDesignOptionsFromQuote(params: {
           notes: normalized.notes,
           optionAdjustments: normalized.optionAdjustments,
           reinstallPrice: normalized.reinstallPrice,
+          customServices: normalized.customServices,
+          leaseContractYears: normalized.leaseContractYears,
         },
       };
     });
@@ -621,19 +714,15 @@ export function holidayDesignOptionsFromQuote(params: {
       notes: normalized.notes,
       optionAdjustments: normalized.optionAdjustments,
       reinstallPrice: normalized.reinstallPrice,
+      customServices: normalized.customServices,
+      leaseContractYears: normalized.leaseContractYears,
     },
   }];
 }
 
 export function findPlacementCatalogItem(
   catalog: HolidayLightingCatalog,
-  placement: Pick<HolidayMeasurementPlacement, "kind" | "size" | "difficulty">
+  placement: Pick<HolidayMeasurementPlacement, "kind">
 ) {
-  const size = placement.size === "xl" ? "large" : placement.size;
-  return (
-    catalog.placements.find((p) => p.kind === placement.kind && p.size === size && (p.difficulty ?? 1) === (placement.difficulty ?? 1)) ??
-    catalog.placements.find((p) => p.kind === placement.kind && p.size === size) ??
-    catalog.placements.find((p) => p.kind === placement.kind) ??
-    null
-  );
+  return catalog.placements.find((p) => p.kind === placement.kind) ?? null;
 }

@@ -857,12 +857,20 @@ async function runTool(
         company.timezone
       );
       const body = `${company.name}: Your appointment "${owned.visit.title}" is confirmed for ${label}. Reply if you need to change it.`;
-      await sendSms({
+      const message = await sendSms({
         companyId: ctx.companyId,
         to,
         body,
         from: company.twilioPhone,
       });
+      const { recordOutboundCustomerSms } = await import("@/lib/inbox/record-outbound-sms");
+      await recordOutboundCustomerSms({
+        companyId: ctx.companyId,
+        customerId: owned.visit.customerId,
+        to,
+        body: message.body || body,
+        twilioMessageSid: message.sid,
+      }).catch((error) => console.error("Could not add AI confirmation SMS to inbox", error));
       return { ok: true, data: { sent: true, to } };
     }
 

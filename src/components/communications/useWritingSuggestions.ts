@@ -6,7 +6,11 @@ export function useWritingSuggestions(text: string, enabled: boolean) {
   const [result, setResult] = useState<{ text: string; issues: WritingIssue[] }>({ text: "", issues: [] });
   const [status, setStatus] = useState("");
   useEffect(() => {
-    if (!enabled || !text.trim()) { setStatus(""); return; }
+    if (!enabled || !text.trim()) {
+      setStatus("");
+      if (!text.trim()) setResult({ text: "", issues: [] });
+      return;
+    }
     if (text.length > 12000) { setStatus("Writing suggestions support drafts up to 12,000 characters."); return; }
     const controller = new AbortController();
     setStatus("Waiting to check English…");
@@ -18,8 +22,14 @@ export function useWritingSuggestions(text: string, enabled: boolean) {
         if (!res.ok) throw new Error(data.error || "Writing suggestions unavailable");
         if (!controller.signal.aborted) { setResult({ text, issues: data.issues }); setStatus(data.issues.length ? `${data.issues.length} writing suggestion${data.issues.length === 1 ? "" : "s"}` : "No English issues found"); }
       } catch (err) { if (!controller.signal.aborted) setStatus(err instanceof Error ? err.message : "Writing suggestions unavailable"); }
-    }, 1800);
+    }, 650);
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [text, enabled]);
-  return { issues: enabled && result.text === text ? result.issues : [], status, dismiss: (issue: WritingIssue) => setResult((prev) => ({ ...prev, issues: prev.issues.filter((i) => i !== issue) })) };
+
+  const canReusePreviousResult = result.text === text || (result.text.length > 0 && text.startsWith(result.text));
+  const visibleIssues = canReusePreviousResult
+    ? result.issues.filter((issue) => text.slice(issue.start, issue.end) === issue.original)
+    : [];
+
+  return { issues: enabled ? visibleIssues : [], status, dismiss: (issue: WritingIssue) => setResult((prev) => ({ ...prev, issues: prev.issues.filter((i) => i !== issue) })) };
 }

@@ -163,7 +163,12 @@ export async function POST(request: NextRequest) {
 
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastMessageAt: new Date() },
+      data: {
+        lastMessageAt: new Date(),
+        smsOpen: true,
+        smsClosedAt: null,
+        smsClosedById: null,
+      },
     });
 
     return NextResponse.json({ conversation, message });

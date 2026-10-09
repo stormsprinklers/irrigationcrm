@@ -1,4 +1,4 @@
-import { Channel, Scope } from "@prisma/client";
+import { Channel, Prisma, Scope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   normalizePhone,
@@ -15,8 +15,7 @@ export async function findSmsConversationByPhone(params: {
 }) {
   const normalized = normalizePhone(params.participantPhone);
   const digits = normalized.replace(/\D/g, "").slice(-10);
-
-  const exact = await prisma.conversation.findFirst({
+  const exact = await prisma.conversation.findMany({
     where: {
       companyId: params.companyId,
       channel: Channel.SMS,
@@ -25,27 +24,105 @@ export async function findSmsConversationByPhone(params: {
     },
     orderBy: { lastMessageAt: "desc" },
   });
-  if (exact) return exact;
+  if (exact.length) return exact[0];
 
-  const candidates = await prisma.conversation.findMany({
+  if (digits.length < 10) return null;
+  const matches = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM "Conversation"
+    WHERE "companyId" = ${params.companyId}
+      AND channel::text = 'SMS'
+      AND scope::text = ${params.scope}
+      AND "participantPhone" IS NOT NULL
+      AND right(regexp_replace("participantPhone", '[^0-9]', '', 'g'), 10) = ${digits}
+    ORDER BY "lastMessageAt" DESC
+  `);
+  if (!matches.length) return null;
+
+  return prisma.conversation.findFirst({
+    where: { id: { in: matches.map((row) => row.id) } },
+    orderBy: { lastMessageAt: "desc" },
+  });
+}
+
+async function findSmsConversationMatches(
+  tx: Prisma.TransactionClient,
+  params: { companyId: string; scope: Scope; participantPhone: string }
+) {
+  const digits = phoneDigitsKey(params.participantPhone);
+  if (digits?.length === 10) {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id
+      FROM "Conversation"
+      WHERE "companyId" = ${params.companyId}
+        AND channel::text = 'SMS'
+        AND scope::text = ${params.scope}
+        AND "participantPhone" IS NOT NULL
+        AND right(regexp_replace("participantPhone", '[^0-9]', '', 'g'), 10) = ${digits}
+    `);
+    if (!rows.length) return [];
+    return tx.conversation.findMany({
+      where: { id: { in: rows.map((row) => row.id) } },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  return tx.conversation.findMany({
     where: {
       companyId: params.companyId,
       channel: Channel.SMS,
       scope: params.scope,
-      participantPhone: { not: null },
+      participantPhone: { in: phoneLookupVariants(params.participantPhone) },
     },
-    orderBy: { lastMessageAt: "desc" },
-    take: 50,
+    orderBy: { createdAt: "asc" },
   });
+}
 
-  return (
-    candidates.find((row) => {
-      if (!row.participantPhone) return false;
-      const rowNormalized = normalizePhone(row.participantPhone);
-      if (rowNormalized === normalized) return true;
-      return digits.length >= 10 && rowNormalized.replace(/\D/g, "").endsWith(digits);
-    }) ?? null
+async function mergeSmsConversationMatches(
+  tx: Prisma.TransactionClient,
+  matches: Awaited<ReturnType<typeof findSmsConversationMatches>>,
+  params: {
+    normalizedPhone: string;
+    customerId?: string | null;
+    title?: string;
+  }
+) {
+  const canonical = matches[0];
+  if (!canonical) return null;
+  const duplicates = matches.slice(1);
+  const mostRecent = [...matches].sort(
+    (a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime()
   );
+  const openState = matches.some((row) => row.smsOpen === true)
+    ? true
+    : matches.every((row) => row.smsOpen === false)
+      ? false
+      : null;
+  const closed = mostRecent.find((row) => row.smsClosedAt);
+
+  if (duplicates.length) {
+    const duplicateIds = duplicates.map((row) => row.id);
+    await tx.message.updateMany({
+      where: { conversationId: { in: duplicateIds } },
+      data: { conversationId: canonical.id },
+    });
+    await tx.conversation.deleteMany({ where: { id: { in: duplicateIds } } });
+  }
+
+  return tx.conversation.update({
+    where: { id: canonical.id },
+    data: {
+      participantPhone: params.normalizedPhone,
+      customerId:
+        params.customerId ?? matches.find((row) => row.customerId)?.customerId ?? null,
+      title:
+        params.title?.trim() || mostRecent.find((row) => row.title?.trim())?.title || null,
+      lastMessageAt: mostRecent[0]?.lastMessageAt ?? canonical.lastMessageAt,
+      smsOpen: openState,
+      smsClosedAt: openState === false ? closed?.smsClosedAt ?? null : null,
+      smsClosedById: openState === false ? closed?.smsClosedById ?? null : null,
+    },
+  });
 }
 
 /** Prefer an existing thread so replies land in the same inbox tab as outbound. */
@@ -100,55 +177,46 @@ export async function findOrCreateSmsConversation(params: {
     ? normalizePhone(params.participantPhone)
     : undefined;
 
-  if (params.scope === Scope.EXTERNAL && normalizedPhone) {
-    const existing = await findSmsConversationByPhone({
-      companyId: params.companyId,
-      scope: Scope.EXTERNAL,
-      participantPhone: normalizedPhone,
-    });
-    if (existing) {
-      const nextCustomerId = await nextCustomerIdForSmsPhone({
+  if (normalizedPhone) {
+    const nextCustomerId =
+      params.scope === Scope.EXTERNAL
+        ? await nextCustomerIdForSmsPhone({
+            companyId: params.companyId,
+            participantPhone: normalizedPhone,
+            currentCustomerId: params.customerId,
+          })
+        : params.customerId ?? null;
+    const lockKey = `sms:${params.companyId}:${params.scope}:${phoneDigitsKey(normalizedPhone) ?? normalizedPhone}`;
+
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+      let matches = await findSmsConversationMatches(tx, {
         companyId: params.companyId,
+        scope: params.scope,
         participantPhone: normalizedPhone,
-        currentCustomerId: existing.customerId,
       });
-      const needsUpdate =
-        existing.participantPhone !== normalizedPhone ||
-        nextCustomerId !== (existing.customerId ?? null);
-      if (needsUpdate) {
-        return prisma.conversation.update({
-          where: { id: existing.id },
+      if (!matches.length) {
+        const created = await tx.conversation.create({
           data: {
+            companyId: params.companyId,
+            channel: Channel.SMS,
+            scope: params.scope,
             participantPhone: normalizedPhone,
             customerId: nextCustomerId,
+            title: params.title,
+            ...(params.scope === Scope.EXTERNAL ? { smsOpen: true } : {}),
           },
         });
+        matches = [created];
       }
-      return existing;
-    }
-  }
-
-  if (params.scope === Scope.INTERNAL && normalizedPhone) {
-    const existing = await findSmsConversationByPhone({
-      companyId: params.companyId,
-      scope: Scope.INTERNAL,
-      participantPhone: normalizedPhone,
+      const merged = await mergeSmsConversationMatches(tx, matches, {
+        normalizedPhone,
+        customerId: nextCustomerId,
+        title: params.title,
+      });
+      if (!merged) throw new Error("Failed to create SMS conversation");
+      return merged;
     });
-    if (existing) {
-      const needsUpdate =
-        existing.participantPhone !== normalizedPhone ||
-        (params.title && !existing.title);
-      if (needsUpdate) {
-        return prisma.conversation.update({
-          where: { id: existing.id },
-          data: {
-            participantPhone: normalizedPhone,
-            ...(params.title && !existing.title ? { title: params.title } : {}),
-          },
-        });
-      }
-      return existing;
-    }
   }
 
   if (params.scope === Scope.INTERNAL && params.title && !params.participantPhone) {
@@ -174,6 +242,7 @@ export async function findOrCreateSmsConversation(params: {
       participantPhone: normalizedPhone ?? params.participantPhone,
       customerId: params.customerId,
       title: params.title,
+      ...(params.scope === Scope.EXTERNAL ? { smsOpen: true } : {}),
     },
   });
 }

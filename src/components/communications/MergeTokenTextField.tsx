@@ -84,7 +84,9 @@ export const MergeTokenTextField = forwardRef<HTMLTextAreaElement | HTMLInputEle
     }
     const writingProps = {
       lang: "en-US",
-      spellCheck: !proofreading,
+      // Keep the browser's immediate spelling check active while the richer
+      // server-side checker catches grammar and contextual mistakes.
+      spellCheck: true,
       onFocus: (event: React.FocusEvent<HTMLTextAreaElement | HTMLInputElement>) => { setWritingActive(true); onFocus?.(event as never); },
       onCompositionStart: (event: React.CompositionEvent<HTMLTextAreaElement | HTMLInputElement>) => { setComposing(true); onCompositionStart?.(event as never); },
       onCompositionEnd: (event: React.CompositionEvent<HTMLTextAreaElement | HTMLInputElement>) => { setComposing(false); onCompositionEnd?.(event as never); },

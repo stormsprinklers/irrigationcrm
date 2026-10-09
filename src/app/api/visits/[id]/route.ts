@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
-import { forbiddenForFieldRole, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  badRequestResponse,
+  forbiddenForFieldRole,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { assertVisitCanComplete } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 import { isFieldRole } from "@/lib/employees";
@@ -84,6 +90,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
+    if (Number.isNaN(nextStart.getTime()) || Number.isNaN(nextEnd.getTime())) {
+      return badRequestResponse("Enter a valid start and end time");
+    }
+    if (nextEnd <= nextStart) {
+      return badRequestResponse("End time must be after start time");
+    }
     const assignmentChanged = body.assignedUserIds !== undefined || body.assignedUserId !== undefined;
     const nextAssignedUserIds = normalizeVisitAssigneeIds(
       body.assignedUserIds,
@@ -214,9 +226,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       customerId: existing.customerId,
     });
 
-    const startChanged =
-      body.startAt !== undefined &&
-      new Date(body.startAt).getTime() !== existing.startAt.getTime();
+    const timeChanged =
+      (body.startAt !== undefined && nextStart.getTime() !== existing.startAt.getTime()) ||
+      (body.endAt !== undefined && nextEnd.getTime() !== existing.endAt.getTime());
     const cancelled =
       body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
     const becameCompleted =
@@ -237,7 +249,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           companyId: user.companyId,
           isInitialSchedule: true,
         }).catch(() => {});
-      } else if (startChanged) {
+      } else if (timeChanged) {
         void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
       }
     }

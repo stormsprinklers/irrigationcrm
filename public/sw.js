@@ -44,6 +44,59 @@ self.addEventListener("push", (event) => {
   );
 });
 
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+}
+
+async function saveSubscription(subscription) {
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+
+  const response = await fetch("/api/push/subscribe", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+  });
+  if (!response.ok) throw new Error(`Subscription refresh failed (${response.status})`);
+}
+
+// Push services can rotate or expire a subscription while Radar is closed.
+// Renew it in the worker and update the server record without requiring the
+// employee to reinstall the PWA or toggle notifications manually.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        let subscription = event.newSubscription ?? null;
+        if (!subscription) {
+          let applicationServerKey = event.oldSubscription?.options?.applicationServerKey;
+          if (!applicationServerKey) {
+            const keyResponse = await fetch("/api/push/vapid-public-key", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            if (!keyResponse.ok) return;
+            const keyData = await keyResponse.json();
+            if (!keyData.configured || !keyData.publicKey) return;
+            applicationServerKey = urlBase64ToUint8Array(keyData.publicKey);
+          }
+          subscription = await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
+          });
+        }
+        await saveSubscription(subscription);
+      } catch (error) {
+        console.error("Push subscription renewal failed", error);
+      }
+    })()
+  );
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const href =

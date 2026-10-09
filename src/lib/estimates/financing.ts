@@ -1,4 +1,5 @@
 import { sendSms } from "@/lib/inbox/twilio";
+import { recordOutboundCustomerSms } from "@/lib/inbox/record-outbound-sms";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
 
@@ -29,7 +30,7 @@ export async function sendEstimateFinancingSms(params: {
   const estimate = await prisma.estimate.findFirst({
     where: { id: params.estimateId, companyId: params.companyId },
     include: {
-      customer: { select: { phone: true } },
+      customer: { select: { id: true, phone: true } },
       company: { select: { name: true, estimateFinancingUrl: true, twilioPhone: true } },
     },
   });
@@ -61,13 +62,21 @@ export async function sendEstimateFinancingSms(params: {
   }
 
   try {
-    await sendSms({
+    const body = financingSmsBody(estimate.company.name, financingUrl);
+    const message = await sendSms({
       companyId: params.companyId,
       from: estimate.company.twilioPhone,
       to: phone,
-      body: financingSmsBody(estimate.company.name, financingUrl),
+      body,
       statusCallback: twilioSmsStatusCallbackUrl(),
     });
+    await recordOutboundCustomerSms({
+      companyId: params.companyId,
+      customerId: estimate.customer.id,
+      to: phone,
+      body: message.body || body,
+      twilioMessageSid: message.sid,
+    }).catch((error) => console.error("Could not add financing SMS to inbox", error));
   } catch (err) {
     console.error("[financing-sms]", err);
     return {

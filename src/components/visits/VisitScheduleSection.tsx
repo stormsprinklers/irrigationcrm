@@ -52,14 +52,6 @@ function toTimeInput(iso: string) {
   return `${hours}:${minutes}`;
 }
 
-function formatTimeLabel(value: string) {
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "Choose time";
-  const d = new Date();
-  d.setHours(hours, minutes, 0, 0);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 function TechnicianAvatar({ employee }: { employee: EmployeeOption }) {
   return (
     <Avatar className="h-8 w-8 shrink-0">
@@ -223,43 +215,36 @@ export function VisitScheduleSection({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Date</label>
-            <button
-              type="button"
-              className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
-              onClick={() => setScheduleOpen(true)}
-            >
-              {date
-                ? new Date(`${date}T12:00`).toLocaleDateString(undefined, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-                : "Choose date"}
-            </button>
+            <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Start</label>
-              <button
-                type="button"
-                className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
-                onClick={() => setScheduleOpen(true)}
-              >
-                {formatTimeLabel(startTime)}
-              </button>
+              <Input
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">End</label>
-              <button
-                type="button"
-                className="flex h-9 w-full items-center rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-sm hover:bg-muted/40"
-                onClick={() => setScheduleOpen(true)}
-              >
-                {formatTimeLabel(endTime)}
-              </button>
+              <Input
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
             </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => setScheduleOpen(true)}
+          >
+            <CalendarClock className="mr-1.5 h-4 w-4" />
+            View schedule and choose a time
+          </Button>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               Assigned technicians
@@ -278,8 +263,8 @@ export function VisitScheduleSection({
           </Button>
           {status === "UNSCHEDULED" ? (
             <p className="text-xs text-muted-foreground">
-              This visit is not on the board yet. Click the date or time to check the full
-              schedule, then save.
+              This visit is not on the board yet. Enter a date and time directly or choose an
+              opening from the full schedule, then save.
             </p>
           ) : null}
           <SchedulePeekModal

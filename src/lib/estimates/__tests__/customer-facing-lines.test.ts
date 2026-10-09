@@ -14,3 +14,23 @@ test("legacy labor minimum adjustment is hidden and folded into roofline labor",
     { name: "Tree — labor only", quantity: 1, unitPrice: 50, total: 50 },
   ]);
 });
+
+test("permanent holiday-lighting options omit legacy storage and maintenance rows", () => {
+  const lines = customerFacingEstimateLines([
+    { name: "Permanent Lights", total: 5000, quantity: 1, unitPrice: 5000, unit: "each" },
+    { name: "Storage", total: 0, quantity: 1, unitPrice: 0, unit: "included" },
+    { name: "Maintenance", total: 0, quantity: 1, unitPrice: 0, unit: "included" },
+    {
+      name: "5-year parts and labor warranty",
+      total: 0,
+      quantity: 1,
+      unitPrice: 0,
+      unit: "included",
+    },
+  ]);
+
+  assert.deepEqual(
+    lines.map((line) => line.name),
+    ["Permanent Lights", "5-year parts and labor warranty"]
+  );
+});

@@ -133,7 +133,13 @@ export async function createInboxEntriesFromWebsiteLead(
 
     await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastMessageAt: new Date(), title: input.name },
+      data: {
+        lastMessageAt: new Date(),
+        title: input.name,
+        smsOpen: true,
+        smsClosedAt: null,
+        smsClosedById: null,
+      },
     });
     await notifyWebsiteFormInbox({
       companyId,

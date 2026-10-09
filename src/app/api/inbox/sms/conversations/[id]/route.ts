@@ -16,6 +16,9 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await requireSessionUser();
+    if (!["ADMIN", "MANAGER", "CSR"].includes(user.role)) {
+      return forbiddenResponse("Only office staff can close or reopen SMS conversations");
+    }
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     if (typeof body.open !== "boolean") {
@@ -52,8 +55,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const updated = await prisma.conversation.update({
       where: { id: conversation.id },
-      data: { smsOpen: body.open },
-      select: { id: true, smsOpen: true },
+      data: body.open
+        ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
+        : { smsOpen: false, smsClosedAt: new Date(), smsClosedById: user.id },
+      select: {
+        id: true,
+        smsOpen: true,
+        smsClosedAt: true,
+        smsClosedBy: { select: { id: true, name: true } },
+      },
     });
     return NextResponse.json({ conversation: updated });
   } catch (error) {

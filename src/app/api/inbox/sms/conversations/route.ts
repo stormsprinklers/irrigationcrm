@@ -134,7 +134,12 @@ async function sendSmsMessage(params: {
 
   await prisma.conversation.update({
     where: { id: conversation.id },
-    data: { lastMessageAt: new Date() },
+    data: {
+      lastMessageAt: new Date(),
+      ...(params.scope === Scope.EXTERNAL
+        ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
+        : {}),
+    },
   });
 
   await markInboundConversationRead(params.user.companyId, conversation.id);
@@ -161,9 +166,11 @@ export async function GET(request: NextRequest) {
           .map((entry) => entry.phone).filter((phone): phone is string => Boolean(phone))
       : [];
 
-    const { fieldCustomerCommsWhere } = await import("@/lib/field/access");
+    const { fieldCustomerCommsWhere, fieldTeamSmsWhere } = await import("@/lib/field/access");
     const fieldCommsWhere =
       scope === Scope.EXTERNAL ? await fieldCustomerCommsWhere(user) : null;
+    const fieldTeamWhere =
+      scope === Scope.INTERNAL ? await fieldTeamSmsWhere(user) : null;
     if (fieldCommsWhere && fieldCommsWhere.customerId.in.length === 0) {
       return NextResponse.json([]);
     }
@@ -192,37 +199,12 @@ export async function GET(request: NextRequest) {
       and.push({
         OR: [
           { smsOpen: true },
-          {
-            smsOpen: null,
-            messages: {
-              some: {
-                direction: MessageDirection.INBOUND,
-                readAt: null,
-                NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-              },
-            },
-          },
+          { smsOpen: null },
         ],
       });
     }
     if (scope === Scope.EXTERNAL && folder === "general" && !search) {
-      and.push({
-        OR: [
-          { smsOpen: false },
-          {
-            smsOpen: null,
-            NOT: {
-              messages: {
-                some: {
-                  direction: MessageDirection.INBOUND,
-                  readAt: null,
-                  NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-                },
-              },
-            },
-          },
-        ],
-      });
+      and.push({ smsOpen: false });
     }
     if (search) {
       and.push({
@@ -256,6 +238,7 @@ export async function GET(request: NextRequest) {
           ? { participantPhone: { in: blockedPhones } }
           : {}),
         ...(fieldCommsWhere ?? {}),
+        ...(fieldTeamWhere ?? {}),
         ...(and.length ? { AND: and } : {}),
       },
       include: {
@@ -341,7 +324,7 @@ export async function POST(request: NextRequest) {
     } = body;
     let { to, customerId } = body;
 
-    const scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
+    let scope = scopeParam === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
     const statusCallback = twilioSmsStatusCallbackUrl(request.nextUrl.origin);
 
     if (requestedConversationId) {
@@ -354,6 +337,7 @@ export async function POST(request: NextRequest) {
         select: {
           participantPhone: true,
           customerId: true,
+          scope: true,
         },
       });
       if (!existing) {
@@ -365,6 +349,22 @@ export async function POST(request: NextRequest) {
       // An open thread is the source of truth — ignore leftover compose `to` / customerId.
       to = existing.participantPhone;
       customerId = existing.customerId ?? undefined;
+      scope = existing.scope;
+
+      if (scope === Scope.INTERNAL) {
+        const { canAccessFieldSmsConversation, FIELD_TEAM_SMS_FORBIDDEN } = await import(
+          "@/lib/field/access"
+        );
+        if (
+          !(await canAccessFieldSmsConversation(user, {
+            id: requestedConversationId,
+            scope,
+            customerId: existing.customerId,
+          }))
+        ) {
+          return forbiddenResponse(FIELD_TEAM_SMS_FORBIDDEN);
+        }
+      }
     }
 
     if (!to) return badRequestResponse("Recipient phone required");

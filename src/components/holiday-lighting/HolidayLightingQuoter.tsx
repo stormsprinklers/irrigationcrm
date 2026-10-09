@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, ChevronDown, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -48,8 +48,9 @@ import {
   type HolidayQuoteDesignOption,
   type HolidayQuoteOptionKey,
   type HolidayOptionAdjustment,
+  type HolidayCustomService,
+  type HolidayLeaseContractYears,
   type HolidayDifficulty,
-  type HolidayTreeSize,
 } from "@/lib/holiday-lighting/types";
 import { getBrowserMapsApiKey } from "@/lib/holiday-lighting/load-maps";
 import { cn } from "@/lib/utils";
@@ -129,6 +130,18 @@ function displayAddressQuery(
   return "";
 }
 
+function optionVisualFingerprint(
+  measurements: HolidayMeasurements,
+  selections: Pick<HolidayQuoteSelections, "defaultLightStyleKey" | "defaultColorPattern" | "installKind">
+) {
+  return JSON.stringify({
+    measurements,
+    defaultLightStyleKey: selections.defaultLightStyleKey,
+    defaultColorPattern: selections.defaultColorPattern,
+    installKind: selections.installKind,
+  });
+}
+
 export function HolidayLightingQuoter({
   quoteId: initialId,
   initialCustomerId,
@@ -146,6 +159,7 @@ export function HolidayLightingQuoter({
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [visualizing, setVisualizing] = useState(false);
+  const [visualizingProgress, setVisualizingProgress] = useState("");
   const [capturing, setCapturing] = useState(false);
 
   const [address, setAddress] = useState(initialAddress ?? "");
@@ -171,7 +185,6 @@ export function HolidayLightingQuoter({
   const [activeOptionId, setActiveOptionId] = useState("option-1");
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoApproved, setPhotoApproved] = useState(false);
   const [estimate, setEstimate] = useState<QuoteRecord["estimate"]>(null);
@@ -186,6 +199,7 @@ export function HolidayLightingQuoter({
   const fileRef = useRef<HTMLInputElement>(null);
   const quoteIdRef = useRef(initialId ?? "");
   const quoteCreationRef = useRef<Promise<string> | null>(null);
+  const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const quoteRouteReplacedRef = useRef(Boolean(initialId));
   const lastGeocodedKey = useRef("");
   const geocodeSeq = useRef(0);
@@ -227,11 +241,16 @@ export function HolidayLightingQuoter({
         catalog: nextCatalog,
       });
       const firstOption = nextOptions.find((option) => option.id === parsedSelections.activeDesignOptionId) ?? nextOptions[0]!;
-      setDesignOptions(nextOptions);
+      const hydratedOptions = nextOptions.map((option) =>
+        option.id === firstOption.id && !option.previewImageUrl && q.previewImageUrl
+          ? { ...option, previewImageUrl: q.previewImageUrl }
+          : option
+      );
+      const hydratedFirstOption = hydratedOptions.find((option) => option.id === firstOption.id)!;
+      setDesignOptions(hydratedOptions);
       setActiveOptionId(firstOption.id);
-      setMeasurements(firstOption.measurements);
-      setSelections({ ...firstOption.selections, designOptions: nextOptions, activeDesignOptionId: firstOption.id });
-      setPreviewUrl(q.previewImageUrl);
+      setMeasurements(hydratedFirstOption.measurements);
+      setSelections({ ...hydratedFirstOption.selections, designOptions: hydratedOptions, activeDesignOptionId: firstOption.id });
       const loadedPhoto = q.sourcePhotoUrl
         ? blobProxyUrl(q.sourcePhotoUrl) ?? q.sourcePhotoUrl
         : null;
@@ -368,9 +387,13 @@ export function HolidayLightingQuoter({
       ? baseOptions
       : holidayDesignOptionsFromQuote({ measurements, selections, catalog });
     return base.map((option) => option.id === optionId
-      ? {
+      ? (() => {
+          const visualChanged = optionVisualFingerprint(option.measurements, option.selections)
+            !== optionVisualFingerprint(nextMeasurements, nextSelections);
+          return {
           ...option,
-          measurements: nextMeasurements,
+          previewImageUrl: visualChanged ? undefined : option.previewImageUrl,
+          measurements: structuredClone(nextMeasurements),
           selections: {
             defaultLightStyleKey: nextSelections.defaultLightStyleKey,
             installKind: nextSelections.installKind,
@@ -380,8 +403,11 @@ export function HolidayLightingQuoter({
             notes: nextSelections.notes,
             optionAdjustments: nextSelections.optionAdjustments,
             reinstallPrice: nextSelections.reinstallPrice,
+            customServices: nextSelections.customServices,
+            leaseContractYears: nextSelections.leaseContractYears,
           },
-        }
+        };
+        })()
       : option);
   }
 
@@ -417,6 +443,7 @@ export function HolidayLightingQuoter({
       activeOptionId?: string;
     }
   ) {
+    const run = async () => {
     setSaving(true);
     try {
       const id = await ensureQuote();
@@ -464,6 +491,10 @@ export function HolidayLightingQuoter({
     } finally {
       setSaving(false);
     }
+    };
+    const queued = saveQueueRef.current.then(run, run);
+    saveQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued;
   }
 
   function patchOption(key: HolidayQuoteOptionKey, patch: Partial<HolidayOptionAdjustment>) {
@@ -523,6 +554,7 @@ export function HolidayLightingQuoter({
     const nextOption: HolidayQuoteDesignOption = {
       id,
       label: `Option ${number}`,
+      previewImageUrl: undefined,
       measurements: baseMeasurements,
       selections: {
         defaultLightStyleKey: normalized.defaultLightStyleKey,
@@ -533,6 +565,8 @@ export function HolidayLightingQuoter({
         notes: normalized.notes,
         optionAdjustments: normalized.optionAdjustments,
         reinstallPrice: normalized.reinstallPrice,
+        customServices: normalized.customServices,
+        leaseContractYears: normalized.leaseContractYears,
       },
     };
     const nextOptions = [...snapshot, nextOption];
@@ -578,8 +612,13 @@ export function HolidayLightingQuoter({
 
   function updateMeasurements(next: HolidayMeasurements, quiet = true) {
     const refreshed = pruneStrands(next);
+    const nextOptions = currentOptions(refreshed);
     setMeasurements(refreshed);
-    void save({ measurements: refreshed }, { quiet });
+    setDesignOptions(nextOptions);
+    void save(
+      { measurements: refreshed },
+      { quiet, designOptions: nextOptions, activeOptionId }
+    );
   }
 
   async function geocode(fields?: {
@@ -760,6 +799,9 @@ export function HolidayLightingQuoter({
   }, [address, city, state, zip, addressLine]);
 
   async function onPhotoSelected(file: File) {
+    const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
+    setDesignOptions(optionsWithoutPreviews);
+    setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
     setPhotoUrl(URL.createObjectURL(file));
     setPhotoApproved(false);
   }
@@ -794,6 +836,9 @@ export function HolidayLightingQuoter({
         throw new Error("No Street View image for this view — try a different angle or upload a photo.");
       }
       setPhotoUrl(URL.createObjectURL(blob));
+      const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
+      setDesignOptions(optionsWithoutPreviews);
+      setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
       setPhotoApproved(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not capture Street View");
@@ -851,7 +896,9 @@ export function HolidayLightingQuoter({
         {
           id: crypto.randomUUID(),
           kind,
-          size: "medium",
+          size: "small",
+          strandCount: 1,
+          liftRentalNeeded: false,
           difficulty: 1,
           label: `${kind === "tree" ? "Tree" : "Bush"} ${count}`,
           latLng: anchor,
@@ -862,6 +909,40 @@ export function HolidayLightingQuoter({
     });
   }
 
+  function updateCustomServices(nextServices: HolidayCustomService[], persist = false) {
+    const nextSelections = { ...selections, customServices: nextServices };
+    setSelections(nextSelections);
+    if (persist) void save({ selections: nextSelections }, { quiet: true });
+  }
+
+  function addCustomService() {
+    updateCustomServices([
+      ...(selections.customServices ?? []),
+      {
+        id: crypto.randomUUID(),
+        name: "",
+        description: "",
+        quantity: 1,
+        unitPrice: 0,
+      },
+    ], true);
+  }
+
+  function patchCustomService(id: string, patch: Partial<HolidayCustomService>) {
+    updateCustomServices(
+      (selections.customServices ?? []).map((service) =>
+        service.id === id ? { ...service, ...patch } : service
+      )
+    );
+  }
+
+  function removeCustomService(id: string) {
+    updateCustomServices(
+      (selections.customServices ?? []).filter((service) => service.id !== id),
+      true
+    );
+  }
+
   async function runVisualize() {
     if (!paintRef.current?.hasPaint()) {
       toast.error("Paint the areas where lights should go");
@@ -870,45 +951,55 @@ export function HolidayLightingQuoter({
     setVisualizing(true);
     try {
       const id = await ensureQuote();
+      const optionsToRender = currentOptions();
+      if (!(await save(undefined, { quiet: true, designOptions: optionsToRender }))) return;
       const exported = await paintRef.current.exportForApi();
       if (!exported) throw new Error("Could not export paint mask");
       const uploadBytes = exported.cleanBlob.size + exported.markedBlob.size;
       if (uploadBytes > 4 * 1024 * 1024) {
         throw new Error("This photo is too large to process. Try a smaller photo.");
       }
-      const form = new FormData();
-      form.set("clean", exported.cleanBlob, "property.jpg");
-      form.set("marked", exported.markedBlob, "property-marked.jpg");
-      form.set("lightStyle", selections.defaultLightStyleKey);
-      form.set("colorPattern", selections.defaultColorPattern ?? "Warm White");
-      const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
-        method: "POST",
-        body: form,
-      });
-      const responseText = await res.text();
-      let data: { error?: string; previewImageUrl?: string } = {};
-      if (responseText.trim()) {
-        try {
-          data = JSON.parse(responseText) as typeof data;
-        } catch {
-          if (!res.ok) {
-            throw new Error(
-              res.status === 413 || /request ent/i.test(responseText)
-                ? "The preview image was too large to upload. Try again with a smaller photo."
-                : responseText.slice(0, 180)
-            );
+      let generatedOptions = optionsToRender;
+      for (const [index, option] of optionsToRender.entries()) {
+        setVisualizingProgress(`Generating ${option.label} (${index + 1} of ${optionsToRender.length})…`);
+        const form = new FormData();
+        form.set("clean", exported.cleanBlob, "property.jpg");
+        form.set("marked", exported.markedBlob, "property-marked.jpg");
+        form.set("optionId", option.id);
+        const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
+          method: "POST",
+          body: form,
+        });
+        const responseText = await res.text();
+        let data: { error?: string; optionId?: string; previewImageUrl?: string } = {};
+        if (responseText.trim()) {
+          try {
+            data = JSON.parse(responseText) as typeof data;
+          } catch {
+            if (!res.ok) {
+              throw new Error(
+                res.status === 413 || /request ent/i.test(responseText)
+                  ? "The preview image was too large to upload. Try again with a smaller photo."
+                  : responseText.slice(0, 180)
+              );
+            }
+            throw new Error("The preview service returned an invalid response. Please try again.");
           }
-          throw new Error("The preview service returned an invalid response. Please try again.");
         }
+        if (!res.ok) throw new Error(data.error ?? `Preview failed for ${option.label}`);
+        if (!data.previewImageUrl) throw new Error(`${option.label} completed without an image URL`);
+        generatedOptions = generatedOptions.map((item) => item.id === option.id
+          ? { ...item, previewImageUrl: data.previewImageUrl }
+          : item);
+        setDesignOptions(generatedOptions);
+        setSelections((current) => ({ ...current, designOptions: generatedOptions }));
       }
-      if (!res.ok) throw new Error(data.error ?? "Preview failed");
-      if (!data.previewImageUrl) throw new Error("Preview completed without an image URL");
-      setPreviewUrl(data.previewImageUrl);
-      toast.success("Lighting preview ready");
+      toast.success(optionsToRender.length === 1 ? "Lighting preview ready" : `${optionsToRender.length} option previews ready`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Preview failed");
     } finally {
       setVisualizing(false);
+      setVisualizingProgress("");
     }
   }
 
@@ -953,7 +1044,6 @@ export function HolidayLightingQuoter({
     setSelectedSegmentId(null);
     setPhotoUrl(null);
     setPhotoApproved(false);
-    setPreviewUrl(null);
     setPricing(null);
     setStep(1);
     setClearConfirmOpen(false);
@@ -969,11 +1059,26 @@ export function HolidayLightingQuoter({
     toast.success("Quote measurements cleared");
   }
 
+  const draftCustomServicesTotal = Math.round(
+    (selections.customServices ?? []).reduce(
+      (sum, service) => sum + service.quantity * service.unitPrice,
+      0
+    ) * 100
+  ) / 100;
+  const draftCalculated = (key: HolidayQuoteOptionKey) => pricing
+    ? pricing.optionDetails[key].calculated - pricing.customServicesTotal + draftCustomServicesTotal
+    : 0;
   const draftPricing = pricing ? {
-    buy: optionDetail(pricing.optionDetails.buy.calculated, selections, "buy"),
-    lease: optionDetail(pricing.optionDetails.lease.calculated, selections, "lease"),
-    permanent: optionDetail(pricing.optionDetails.permanent.calculated, selections, "permanent"),
-    labor: optionDetail(pricing.optionDetails.labor.calculated, selections, "labor"),
+    buy: optionDetail(draftCalculated("buy"), selections, "buy", draftCustomServicesTotal),
+    lease: optionDetail(
+      draftCalculated("lease"),
+      selections,
+      "lease",
+      draftCustomServicesTotal,
+      selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0
+    ),
+    permanent: optionDetail(draftCalculated("permanent"), selections, "permanent", draftCustomServicesTotal),
+    labor: optionDetail(draftCalculated("labor"), selections, "labor", draftCustomServicesTotal),
   } : null;
   const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
   const selectedStyle = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey);
@@ -1114,15 +1219,17 @@ export function HolidayLightingQuoter({
 
       <div className="rounded-lg border border-border bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {renderedDesignOptions.map((option) => (
+            {renderedDesignOptions.map((option) => (
             <Button
               key={option.id}
               type="button"
               size="sm"
               variant={option.id === activeOptionId ? "default" : "outline"}
+              disabled={visualizing}
               onClick={() => switchDesignOption(option.id)}
             >
               {option.label}
+              {option.previewImageUrl ? <span className="ml-1 text-[10px] opacity-75">Preview ready</span> : null}
             </Button>
           ))}
           <DropdownMenu modal={false}>
@@ -1131,7 +1238,7 @@ export function HolidayLightingQuoter({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={renderedDesignOptions.length >= 5}
+                disabled={visualizing || renderedDesignOptions.length >= 5}
                 className="gap-1"
               >
                 + New Option
@@ -1163,6 +1270,7 @@ export function HolidayLightingQuoter({
               size="sm"
               variant="ghost"
               className="text-destructive hover:text-destructive"
+              disabled={visualizing}
               onClick={removeActiveDesignOption}
             >
               Remove current
@@ -1170,6 +1278,9 @@ export function HolidayLightingQuoter({
           ) : null}
           <span className="text-xs text-muted-foreground">Up to 5 options per estimate</span>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Each option keeps its own roofline strands, tree and bush strand counts, colors, scope, and pricing. Switch options before editing to change only that option.
+        </p>
       </div>
 
       {step === 1 ? (
@@ -1183,7 +1294,7 @@ export function HolidayLightingQuoter({
         {step === 2 ? (
           <p className="text-sm text-muted-foreground">
             Draw linear rooflines on satellite. Mark any line that includes a peak to bill it at
-            1.5×. Click trees and bushes and set small, medium, or large.
+            1.5×. Click trees and bushes and enter the strand count for the currently selected option.
           </p>
         ) : null}
         {step === 4 ? (
@@ -1391,6 +1502,31 @@ export function HolidayLightingQuoter({
               </label>
             ) : null}
           </div>
+          {activePricingKey === "lease" ? (
+            <div className="rounded-md border border-border bg-muted/20 p-3">
+              <label className="block text-xs text-muted-foreground">Lease commitment
+                <select
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selections.leaseContractYears ?? 1}
+                  onChange={(event) => {
+                    const leaseContractYears = Number(event.target.value) as HolidayLeaseContractYears;
+                    const next = { ...selections, leaseContractYears };
+                    setSelections(next);
+                    void save({ selections: next }, { quiet: true });
+                  }}
+                >
+                  <option value={1}>Single season — no commitment</option>
+                  <option value={3}>3-year agreement — save 10% each year</option>
+                  <option value={5}>5-year agreement — save 20% each year</option>
+                </select>
+              </label>
+              {(selections.leaseContractYears ?? 1) > 1 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This discount applies to the annual lease price for every year of the agreement.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" &&
           (!HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) || selections.defaultColorPattern === "Other") ? (
             <label className="block text-xs text-muted-foreground">Custom color / pattern
@@ -1413,7 +1549,7 @@ export function HolidayLightingQuoter({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-semibold">Trees and bushes</h4>
-                <p className="text-xs text-muted-foreground">Difficulty is internal and is not shown to the customer.</p>
+                <p className="text-xs text-muted-foreground">Strand count, difficulty, and lift rental are internal and are folded into the customer price.</p>
               </div>
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => addPlacement("tree")}>Add tree</Button>
@@ -1431,14 +1567,12 @@ export function HolidayLightingQuoter({
                   <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={() => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.filter((item) => item.id !== placement.id) })}>Remove</Button>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-4">
-                  <label className="text-xs text-muted-foreground">Size
-                    <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.size} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, size: event.target.value as HolidayTreeSize } : item) })}>
-                      <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
-                    </select>
+                  <label className="text-xs text-muted-foreground">Number of strands
+                    <input type="number" min={1} max={100} step={1} className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.strandCount ?? 1} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, strandCount: Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))) } : item) })} />
                   </label>
                   <label className="text-xs text-muted-foreground">Difficulty
                     <select className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" value={placement.difficulty ?? 1} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, difficulty: Number(event.target.value) as HolidayDifficulty } : item) })}>
-                      <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option>
+                      <option value={1}>1 ({catalog.difficultyMultipliers?.[1] ?? 1}×)</option><option value={2}>2 ({catalog.difficultyMultipliers?.[2] ?? 1.25}×)</option><option value={3}>3 ({catalog.difficultyMultipliers?.[3] ?? 1.5}×)</option>
                     </select>
                   </label>
                   <label className="text-xs text-muted-foreground">Bulb type
@@ -1450,9 +1584,119 @@ export function HolidayLightingQuoter({
                     <input className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" list="holiday-color-patterns" value={placement.colorPattern ?? "Warm White"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, colorPattern: event.target.value } : item) })} />
                   </label>
                 </div>
+                {placement.kind === "tree" ? (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={placement.liftRentalNeeded === true}
+                      onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, liftRentalNeeded: event.target.checked } : item) })}
+                    />
+                    Lift rental needed (charged once per quote, even when multiple trees use it)
+                  </label>
+                ) : null}
               </div>
             ))}
             <datalist id="holiday-color-patterns">{HOLIDAY_COLOR_PATTERNS.filter((color) => color !== "Other").map((color) => <option key={color} value={color} />)}</datalist>
+            {pricing?.lines.some((line) => line.kind === "tree" || line.kind === "bush") ? (
+              <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
+                <p className="text-xs font-semibold">Internal tree and bush pricing</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">These details are not shown on the customer estimate.</p>
+                <div className="mt-2 space-y-2">
+                  {pricing.lines.filter((line) => line.kind === "tree" || line.kind === "bush").map((line) => (
+                    <div key={line.key} className="flex items-start justify-between gap-3 text-xs">
+                      <div><span className="font-medium text-foreground">{line.name}</span><p className="text-muted-foreground">{line.staffDetail}</p></div>
+                      <span className="shrink-0 font-medium">{money(activePricingKey === "lease" ? line.leaseTotal : activePricingKey === "labor" ? line.reinstallTotal : line.purchaseTotal)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-semibold">Additional services</h4>
+                <p className="text-xs text-muted-foreground">Add customer-facing work that is not in the price book.</p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={(selections.customServices?.length ?? 0) >= 20}
+                onClick={addCustomService}
+              >
+                <Plus className="h-4 w-4" />
+                Add service
+              </Button>
+            </div>
+            {(selections.customServices ?? []).map((service) => (
+              <div key={service.id} className="space-y-3 rounded-md border border-border p-3">
+                <div className="flex items-start gap-2">
+                  <label className="min-w-0 flex-1 text-xs text-muted-foreground">Service name
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={service.name}
+                      placeholder="e.g. Wreath installation"
+                      onChange={(event) => patchCustomService(service.id, { name: event.target.value })}
+                      onBlur={() => void save(undefined, { quiet: true })}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="mt-5 shrink-0 text-destructive"
+                    aria-label="Remove service"
+                    onClick={() => removeCustomService(service.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <label className="block text-xs text-muted-foreground">Description
+                  <textarea
+                    rows={2}
+                    maxLength={1000}
+                    value={service.description ?? ""}
+                    placeholder="Describe what is included"
+                    onChange={(event) => patchCustomService(service.id, { description: event.target.value })}
+                    onBlur={() => void save(undefined, { quiet: true })}
+                    className="mt-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="text-xs text-muted-foreground">Quantity
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={9999}
+                      step="0.01"
+                      value={service.quantity}
+                      onChange={(event) => patchCustomService(service.id, { quantity: Number(event.target.value) || 0 })}
+                      onBlur={() => void save(undefined, { quiet: true })}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                    />
+                  </label>
+                  <label className="text-xs text-muted-foreground">Unit price ($)
+                    <input
+                      type="number"
+                      min={0}
+                      max={9999999}
+                      step="0.01"
+                      value={service.unitPrice}
+                      onChange={(event) => patchCustomService(service.id, { unitPrice: Number(event.target.value) || 0 })}
+                      onBlur={() => void save(undefined, { quiet: true })}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                    />
+                  </label>
+                  <div className="rounded-md bg-muted/50 px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Line total</p>
+                    <p className="mt-1 text-sm font-semibold">{money(service.quantity * service.unitPrice)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
           {pricing && draftPricing ? (
             <div className="space-y-4 border-t border-border pt-4">
@@ -1525,49 +1769,44 @@ export function HolidayLightingQuoter({
         <section className="space-y-3 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">AI lighting preview</h3>
           <p className="text-xs text-muted-foreground">
-            Paint where lights should go. We&apos;ll generate a night photo with{" "}
-            {catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey)?.label ??
-              "your lights"}
-            , a little snow, and a wreath on the door.
+            Paint where lights should go once. We&apos;ll generate a distinct night preview for every option using that option&apos;s bulb type, colors, and pattern. Permanent lights are rendered as sleek, low-profile architectural LEDs.
           </p>
           <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
           <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
             {visualizing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Generating…
+                {visualizingProgress || "Generating…"}
               </>
             ) : (
               <>
                 <Sparkles className="mr-2 h-4 w-4" />
-                Generate night preview
+                Generate previews for {renderedDesignOptions.length === 1 ? "this option" : `all ${renderedDesignOptions.length} options`}
               </>
             )}
           </Button>
-          {previewUrl ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={blobProxyUrl(previewUrl) ?? previewUrl}
-                alt="Lighting preview"
-                className="w-full max-w-xl rounded-md border border-border"
-              />
-              <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
-            </>
+          {renderedDesignOptions.some((option) => option.previewImageUrl) ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {renderedDesignOptions.filter((option) => option.previewImageUrl).map((option) => (
+                <div key={option.id} className={cn("rounded-md border p-2", option.id === activeOptionId ? "border-primary ring-2 ring-primary/20" : "border-border")}>
+                  <p className="mb-2 text-xs font-semibold">{option.label}</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={blobProxyUrl(option.previewImageUrl!) ?? option.previewImageUrl!} alt={`${option.label} lighting preview`} className="w-full rounded border border-border" />
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground md:col-span-2">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
+            </div>
           ) : null}
         </section>
       ) : null}
 
       {step === 5 ? (
         <div className="flex max-w-xl flex-col gap-4">
-          {previewUrl ? (
+          {activeDesignOption?.previewImageUrl ? (
             <section className="space-y-2 rounded-lg border border-border bg-white p-4">
+              <p className="text-xs font-semibold">{activeDesignOption?.label} preview</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={blobProxyUrl(previewUrl) ?? previewUrl}
-                alt="Lighting preview"
-                className="w-full rounded-md border border-border"
-              />
+              <img src={blobProxyUrl(activeDesignOption.previewImageUrl) ?? activeDesignOption.previewImageUrl} alt={`${activeDesignOption.label} preview`} className="w-full rounded-md border border-border" />
               <p className="text-xs text-muted-foreground">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
             </section>
           ) : null}

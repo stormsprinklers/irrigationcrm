@@ -61,7 +61,7 @@ export function InboxChannelView({
       .then((response) => response.json())
       .then((data) => {
         if (cancelled) return;
-        setSmsFolder(data.conversation?.smsOpen === true ? "open" : "general");
+        setSmsFolder(data.conversation?.smsOpen === false ? "general" : "open");
         setSelectedId(conversationId);
         setIsComposing(false);
       })
@@ -90,7 +90,7 @@ export function InboxChannelView({
       .then((data) => {
         if (cancelled || userOverrideRef.current) return;
         if (data.conversation?.id) {
-          setSmsFolder(data.conversation.smsOpen === true ? "open" : "general");
+          setSmsFolder(data.conversation.smsOpen === false ? "general" : "open");
           setSelectedId(data.conversation.id);
           setIsComposing(false);
         } else if (deepLink.phone || deepLink.customerId) {
@@ -125,7 +125,7 @@ export function InboxChannelView({
         composing={isComposing && !selectedId}
         onCompose={() => {
           userOverrideRef.current = true;
-          setSmsFolder("general");
+          setSmsFolder("open");
           setSelectedId(null);
           setIsComposing(true);
           clearInboxDeepLink();
@@ -181,7 +181,7 @@ export function InboxChannelView({
                 clearInboxDeepLink();
               }}
               onRestoredFromSpam={() => {
-                setSmsFolder("general");
+                setSmsFolder("open");
                 setRefreshKey((key) => key + 1);
                 clearInboxDeepLink();
               }}
@@ -192,8 +192,13 @@ export function InboxChannelView({
                   setIsComposing(false);
                 }
               }}
+              onConversationReopened={() => {
+                setSmsFolder("open");
+                setRefreshKey((key) => key + 1);
+              }}
               onSent={(id) => {
                 userOverrideRef.current = true;
+                if (teamScope === "customers") setSmsFolder("open");
                 setSelectedId(id);
                 setIsComposing(false);
                 setRefreshKey((k) => k + 1);

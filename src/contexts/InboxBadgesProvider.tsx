@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -17,6 +18,7 @@ import {
   type InboxBadgeCounts,
   type InboxBadgeResponse,
 } from "@/lib/inbox/badge-types";
+import { useNotificationSound } from "@/hooks/useNotificationSound";
 
 const EMPTY: InboxBadgeCounts = {
   sms: 0,
@@ -58,6 +60,8 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
   const [counts, setCounts] = useState<InboxBadgeCounts>(EMPTY);
   const [companies, setCompanies] = useState<CompanyInboxBadgeCounts[]>([]);
   const [timeOffPending, setTimeOffPending] = useState(0);
+  const previousSmsCountRef = useRef<number | null>(null);
+  const playNotificationSound = useNotificationSound();
   const canReviewTimeOff = TIME_OFF_REVIEW_ROLES.has(session?.user?.role ?? "");
 
   const refresh = useCallback(async () => {
@@ -66,14 +70,22 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
       const inboxRes = await fetch("/api/inbox/badges", { cache: "no-store" });
       if (inboxRes.ok) {
         const data = (await inboxRes.json()) as InboxBadgeResponse;
-        setCounts({
+        const nextCounts = {
           sms: Number(data.sms) || 0,
           social: Number(data.social) || 0,
           leads: Number(data.leads) || 0,
           missedCalls: Number(data.missedCalls) || 0,
           googleReviews: Number(data.googleReviews) || 0,
           total: Number(data.total) || 0,
-        });
+        };
+        if (
+          previousSmsCountRef.current !== null &&
+          nextCounts.sms > previousSmsCountRef.current
+        ) {
+          void playNotificationSound();
+        }
+        previousSmsCountRef.current = nextCounts.sms;
+        setCounts(nextCounts);
         setCompanies(
           Array.isArray(data.companies)
             ? data.companies.map((company) => ({
@@ -114,12 +126,16 @@ export function InboxBadgesProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore poll errors */
     }
-  }, [status, canReviewTimeOff]);
+  }, [status, canReviewTimeOff, playNotificationSound]);
+
+  useEffect(() => {
+    previousSmsCountRef.current = null;
+  }, [session?.user?.id]);
 
   useEffect(() => {
     void refresh();
     const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
+      void refresh();
     }, 5_000);
     const onChanged = () => void refresh();
     const onVisibilityChange = () => {

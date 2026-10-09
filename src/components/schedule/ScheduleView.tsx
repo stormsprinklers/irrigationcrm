@@ -298,6 +298,44 @@ export function ScheduleView({
     else setWeekStart((d) => addWeeks(d, 1));
   }
 
+  async function updateJobTime(jobId: string, startAt: Date, endAt: Date) {
+    const previousJob = jobs.find((job) => job.id === jobId);
+    if (!previousJob) return;
+
+    setJobs((current) =>
+      current.map((job) =>
+        job.id === jobId
+          ? { ...job, startAt: startAt.toISOString(), endAt: endAt.toISOString() }
+          : job
+      )
+    );
+
+    try {
+      const response = await fetch(`/api/schedule/jobs/${jobId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setJobs((current) =>
+          current.map((job) => (job.id === jobId ? previousJob : job))
+        );
+        toast.error(data.error ?? "Failed to update the arrival window");
+        return;
+      }
+      setJobs((current) => current.map((job) => (job.id === jobId ? data : job)));
+      if (data.warning) toast.warning(data.warning);
+      toast.success("Arrival window updated");
+    } catch {
+      setJobs((current) => current.map((job) => (job.id === jobId ? previousJob : job)));
+      toast.error("Failed to update the arrival window");
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <ScheduleToolbar
@@ -426,6 +464,11 @@ export function ScheduleView({
               }
               setQuickAddSlot(slot);
             }}
+            onJobTimeChange={
+              !fieldRole && !onSelectSlot
+                ? (jobId, startAt, endAt) => void updateJobTime(jobId, startAt, endAt)
+                : undefined
+            }
           />
         )}
       </div>

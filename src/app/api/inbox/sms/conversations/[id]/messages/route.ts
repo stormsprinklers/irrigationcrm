@@ -8,6 +8,7 @@ import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import {
   canAccessFieldSmsConversation,
   FIELD_CUSTOMER_COMMS_FORBIDDEN,
+  FIELD_TEAM_SMS_FORBIDDEN,
 } from "@/lib/field/access";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -18,8 +19,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
 
     let conversation = await prisma.conversation.findFirst({
-      where: { id, companyId: user.companyId },
+      where: { id, companyId: user.companyId, channel: "SMS" },
       include: {
+        smsClosedBy: { select: { id: true, name: true } },
         customer: {
           select: {
             id: true,
@@ -55,6 +57,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           where: { id: conversation.id },
           data: { customerId: nextId },
           include: {
+            smsClosedBy: { select: { id: true, name: true } },
             customer: {
               select: {
                 id: true,
@@ -70,7 +73,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     }
 
     if (!(await canAccessFieldSmsConversation(user, conversation))) {
-      return forbiddenResponse(FIELD_CUSTOMER_COMMS_FORBIDDEN);
+      return forbiddenResponse(
+        conversation.scope === "INTERNAL"
+          ? FIELD_TEAM_SMS_FORBIDDEN
+          : FIELD_CUSTOMER_COMMS_FORBIDDEN
+      );
     }
 
     if (
@@ -83,15 +90,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
           id,
           companyId: user.companyId,
           smsOpen: null,
-          messages: {
-            some: {
-              direction: "INBOUND",
-              readAt: null,
-              NOT: { body: { startsWith: WEBSITE_FORM_SMS_BODY_STARTS_WITH } },
-            },
-          },
         },
-        data: { smsOpen: true },
+        data: { smsOpen: true, smsClosedAt: null, smsClosedById: null },
       });
       if (promoted.count) conversation = { ...conversation, smsOpen: true };
     }

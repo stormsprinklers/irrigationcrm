@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
-import { Send, AlertCircle, CheckCircle2, Copy, FileText } from "lucide-react";
+import { Send, AlertCircle, CheckCircle2, Copy, FileText, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -47,6 +47,8 @@ type Message = {
 type Conversation = {
   id: string;
   smsOpen?: boolean | null;
+  smsClosedAt?: string | null;
+  smsClosedBy?: { id: string; name: string } | null;
   lastMessageAt: string;
   participantPhone?: string | null;
   title?: string | null;
@@ -82,6 +84,30 @@ function ComposeBar({
 }) {
   const submitDisabled = sending || !canSend || (!body.trim() && !attachments.length);
 
+  function handleComposerKeyDown(
+    event: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>
+  ) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+
+    if ((event.shiftKey || event.ctrlKey) && multiline) {
+      event.preventDefault();
+      const field = event.currentTarget;
+      const selectionStart = field.selectionStart ?? body.length;
+      const selectionEnd = field.selectionEnd ?? selectionStart;
+      const nextBody = `${body.slice(0, selectionStart)}\n${body.slice(selectionEnd)}`;
+      onBodyChange(nextBody);
+      requestAnimationFrame(() => {
+        field.focus();
+        field.setSelectionRange(selectionStart + 1, selectionStart + 1);
+      });
+      return;
+    }
+
+    if (event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    if (!submitDisabled) event.currentTarget.form?.requestSubmit();
+  }
+
   return (
     <form
       onSubmit={onSubmit}
@@ -100,32 +126,14 @@ function ComposeBar({
           placeholder={placeholder}
           value={body}
           onChange={onBodyChange}
-          onKeyDown={(event) => {
-            if (
-              event.key !== "Enter" ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.nativeEvent.isComposing
-            ) return;
-            event.preventDefault();
-            if (!submitDisabled) event.currentTarget.form?.requestSubmit();
-          }}
+          onKeyDown={handleComposerKeyDown}
         />
       ) : (
         <MergeTokenTextField multiline={false}
           placeholder={placeholder}
           value={body}
           onChange={onBodyChange}
-          onKeyDown={(event) => {
-            if (
-              event.key !== "Enter" ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.nativeEvent.isComposing
-            ) return;
-            event.preventDefault();
-            if (!submitDisabled) event.currentTarget.form?.requestSubmit();
-          }}
+          onKeyDown={handleComposerKeyDown}
           className="min-h-[44px] w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       )}
@@ -148,6 +156,7 @@ export function SmsMessagePane({
   onMovedToSpam,
   onRestoredFromSpam,
   onConversationClosed,
+  onConversationReopened,
 }: {
   conversationId: string | null;
   scope: CustomerTeamScope;
@@ -159,6 +168,7 @@ export function SmsMessagePane({
   onMovedToSpam?: () => void;
   onRestoredFromSpam?: () => void;
   onConversationClosed?: () => void;
+  onConversationReopened?: () => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -172,16 +182,20 @@ export function SmsMessagePane({
   const [restoring, setRestoring] = useState(false);
   const [closingConversation, setClosingConversation] = useState(false);
   const badgesNotifiedFor = useRef<string | null>(null);
+  const smsOpenRef = useRef<boolean | null | undefined>(undefined);
+  const onConversationReopenedRef = useRef(onConversationReopened);
   const messageScrollRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
 
   const isCompose = !conversationId;
+  onConversationReopenedRef.current = onConversationReopened;
 
   useEffect(() => {
     setBody("");
     setAttachments([]);
     setContactInfoMessageId(null);
     setDeliveryDetailMsg(null);
+    smsOpenRef.current = undefined;
   }, [conversationId]);
 
   useEffect(() => {
@@ -216,6 +230,9 @@ export function SmsMessagePane({
       if (cancelled || !res.ok) return;
       const data = await res.json();
       if (cancelled) return;
+      const reopenedWhileViewing =
+        smsOpenRef.current === false && data.conversation?.smsOpen !== false;
+      smsOpenRef.current = data.conversation?.smsOpen;
       setConversation(data.conversation);
       setMessages(
         data.messages.map((msg: Message & { contactInfoAppliedAt?: string | Date | null }) => ({
@@ -229,6 +246,7 @@ export function SmsMessagePane({
         badgesNotifiedFor.current = conversationId;
         notifyInboxBadgesChanged();
       }
+      if (reopenedWhileViewing) onConversationReopenedRef.current?.();
     }
     load();
     const interval = setInterval(load, 5000);
@@ -362,13 +380,46 @@ export function SmsMessagePane({
         return;
       }
       setConversation((current) =>
-        current?.id === conversationId ? { ...current, smsOpen: false } : current
+        current?.id === conversationId
+          ? { ...current, ...data.conversation }
+          : current
       );
+      smsOpenRef.current = false;
       notifyInboxBadgesChanged();
       toast.success("Conversation closed");
       onConversationClosed?.();
     } catch {
       toast.error("Could not close this conversation");
+    } finally {
+      setClosingConversation(false);
+    }
+  }
+
+  async function reopenConversation() {
+    if (!conversationId || !thread) return;
+    setClosingConversation(true);
+    try {
+      const res = await fetch(`/api/inbox/sms/conversations/${conversationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ open: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not reopen this conversation");
+        return;
+      }
+      setConversation((current) =>
+        current?.id === conversationId
+          ? { ...current, ...data.conversation }
+          : current
+      );
+      smsOpenRef.current = true;
+      notifyInboxBadgesChanged();
+      toast.success("Conversation reopened");
+      onConversationReopened?.();
+    } catch {
+      toast.error("Could not reopen this conversation");
     } finally {
       setClosingConversation(false);
     }
@@ -464,6 +515,27 @@ export function SmsMessagePane({
           )}
         </div>
       </div>
+
+      {scope === "customers" && !spam && thread?.smsOpen === false ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+          <span>
+            {thread.smsClosedBy?.name && thread.smsClosedAt
+              ? `Closed by ${thread.smsClosedBy.name} on ${new Date(thread.smsClosedAt).toLocaleString()}`
+              : "This conversation is closed."}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={closingConversation}
+            onClick={() => void reopenConversation()}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {closingConversation ? "Reopening…" : "Reopen"}
+          </Button>
+        </div>
+      ) : null}
 
       {isCompose && (
         <div className="shrink-0 border-b border-border px-4 py-3">

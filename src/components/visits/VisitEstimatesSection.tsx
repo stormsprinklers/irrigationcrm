@@ -28,7 +28,7 @@ export function VisitEstimatesSection({ visitId, estimates }: Props) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-base">Estimates</CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/customers/estimates?visitId=${visitId}`}>
+          <Link href={`/estimates/new?visitId=${visitId}`}>
             <FilePlus2 className="h-4 w-4" />
             New estimate
           </Link>

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   type HolidayLightingCatalog,
+  type HolidayDifficulty,
   type HolidayPriceBookRow,
   type HolidayQuoteDefaults,
 } from "@/lib/holiday-lighting/types";
@@ -49,6 +50,18 @@ export default function HolidayLightingCatalogSettingsPage() {
 
   function patchPrice(sku: string, patch: Partial<HolidayPriceBookRow>) {
     setPrices((prev) => prev.map((row) => (row.sku === sku ? { ...row, ...patch } : row)));
+  }
+
+  function patchDifficultyMultiplier(difficulty: HolidayDifficulty, value: number) {
+    setCatalog({
+      ...catalog,
+      difficultyMultipliers: {
+        1: catalog.difficultyMultipliers?.[1] ?? 1,
+        2: catalog.difficultyMultipliers?.[2] ?? 1.25,
+        3: catalog.difficultyMultipliers?.[3] ?? 1.5,
+        [difficulty]: value,
+      },
+    });
   }
 
   async function save() {
@@ -98,7 +111,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
         title="Holiday lighting"
-        subtitle="Edit roofline parts, installation, lease, permanent, and tree/bush pricing. Trees and bushes have separate size and difficulty SKUs."
+        subtitle="Edit roofline, per-strand tree and bush, lift rental, lease, and permanent-light pricing."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -153,12 +166,32 @@ export default function HolidayLightingCatalogSettingsPage() {
                 />
               </label>
             </div>
+            <div className="mt-4 border-t border-border pt-4">
+              <h4 className="text-xs font-semibold">Tree and bush difficulty multipliers</h4>
+              <p className="mt-1 text-xs text-muted-foreground">Applied to the per-strand parts and labor price. These details remain internal.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                {([1, 2, 3] as const).map((difficulty) => (
+                  <label key={difficulty} className="text-xs text-muted-foreground">
+                    Difficulty {difficulty} multiplier
+                    <input
+                      type="number"
+                      min={0.01}
+                      max={10}
+                      step="0.05"
+                      className="mt-1 w-full rounded-md border border-input px-3 py-2 text-sm"
+                      value={catalog.difficultyMultipliers?.[difficulty] ?? (difficulty === 2 ? 1.25 : difficulty === 3 ? 1.5 : 1)}
+                      onChange={(event) => patchDifficultyMultiplier(difficulty, Math.max(0.01, Math.min(10, Number(event.target.value) || 1)))}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Price book SKUs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Customer-facing price is what quotes use. Internal cost is for your books only.
+              Tree and bush entries are priced per strand. Lift rental is charged once and folded into tree pricing so customers never see it separately. Internal cost is for your books only.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">

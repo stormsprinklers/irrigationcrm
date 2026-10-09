@@ -765,7 +765,9 @@ export function WebsiteLeadsInbox() {
                 size="sm"
                 variant="outline"
                 onClick={() =>
-                  void markContactedThenNavigate(buildInboxCustomerUrl("voice", linkParams!))
+                  void markContactedThenNavigate(
+                    buildInboxCustomerUrl("voice", { ...linkParams!, autoCall: true })
+                  )
                 }
               >
                 <Phone className="mr-1.5 h-3.5 w-3.5" />

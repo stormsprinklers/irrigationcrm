@@ -8,15 +8,13 @@ import { holidayStrandColorAt } from "@/lib/holiday-lighting/strand-map";
 import {
   pruneStrands,
   strandOfSegment,
-  treeShrubRadiusMeters,
-  treeShrubSizeLabel,
+  treeShrubRadiusMetersForStrands,
 } from "@/lib/holiday-lighting/strands";
 import type {
   HolidayLatLng,
   HolidayMeasurementPlacement,
   HolidayMeasurementSegment,
   HolidayMeasurements,
-  HolidayTreeSize,
 } from "@/lib/holiday-lighting/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,8 +51,6 @@ export type HolidayMapPanelHandle = {
 };
 
 type DrawMode = "select" | "roofline" | "treeShrub";
-
-const TREE_SIZES: HolidayTreeSize[] = ["small", "medium", "large"];
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -96,7 +92,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mode, setMode] = useState<DrawMode>("roofline");
-    const [treeSize, setTreeSize] = useState<HolidayTreeSize>("medium");
+    const [placementStrandCount, setPlacementStrandCount] = useState(1);
     const [placementKind, setPlacementKind] = useState<"tree" | "bush">("tree");
     const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
       selectedSegmentId ?? null
@@ -104,8 +100,8 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [activePlacementId, setActivePlacementId] = useState<string | null>(null);
     const modeRef = useRef(mode);
     modeRef.current = mode;
-    const treeSizeRef = useRef(treeSize);
-    treeSizeRef.current = treeSize;
+    const placementStrandCountRef = useRef(placementStrandCount);
+    placementStrandCountRef.current = placementStrandCount;
     const placementKindRef = useRef(placementKind);
     placementKindRef.current = placementKind;
     const measurementsRef = useRef(measurements);
@@ -235,14 +231,16 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       if (currentMode === "select") return;
 
       if (currentMode === "treeShrub") {
-        const size = treeSizeRef.current;
+        const strandCount = placementStrandCountRef.current;
         const kind = placementKindRef.current;
         const count =
           measurementsRef.current.placements.filter((p) => p.kind === kind).length + 1;
         const placement: HolidayMeasurementPlacement = {
           id: newId(),
           kind,
-          size,
+          size: "small",
+          strandCount,
+          liftRentalNeeded: false,
           label: `${kind === "bush" ? "Bush" : "Tree"} ${count}`,
           latLng,
           difficulty: 1,
@@ -361,7 +359,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
         const active = placement.id === activePlacementId;
         const circle = new g.maps.Circle({
           center: placement.latLng,
-          radius: treeShrubRadiusMeters(placement.size),
+          radius: treeShrubRadiusMetersForStrands(placement.strandCount ?? 1),
           map,
           fillColor: active ? "#2F6B4F" : "#3D8B6E",
           fillOpacity: active ? 0.45 : 0.28,
@@ -477,19 +475,18 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   {kind}
                 </Button>
               ))}
-              <span className="ml-2 text-xs text-muted-foreground">Size:</span>
-              {TREE_SIZES.map((size) => (
-                <Button
-                  key={size}
-                  type="button"
-                  size="sm"
-                  variant={treeSize === size ? "default" : "outline"}
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setTreeSize(size)}
-                >
-                  {treeShrubSizeLabel(size)}
-                </Button>
-              ))}
+              <label className="ml-2 flex items-center gap-1 text-xs text-muted-foreground">
+                Strands:
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="h-7 w-20"
+                  value={placementStrandCount}
+                  onChange={(event) => setPlacementStrandCount(Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1))))}
+                />
+              </label>
             </div>
           ) : null}
           {hasAny ? (
@@ -585,25 +582,26 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   return (
                     <>
                       <span className="text-sm font-medium">{placement.label}</span>
-                      {TREE_SIZES.map((size) => (
-                        <Button
-                          key={size}
-                          type="button"
-                          size="sm"
-                          variant={placement.size === size ? "default" : "outline"}
-                          className="h-7 px-2 text-xs"
-                          onClick={() => {
+                      <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                        Strands
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          step={1}
+                          className="h-7 w-20"
+                          value={placement.strandCount ?? 1}
+                          onChange={(event) => {
+                            const strandCount = Math.max(1, Math.min(100, Math.round(Number(event.target.value) || 1)));
                             onChange({
                               ...measurements,
                               placements: measurements.placements.map((x) =>
-                                x.id === placement.id ? { ...x, size } : x
+                                x.id === placement.id ? { ...x, strandCount } : x
                               ),
                             });
                           }}
-                        >
-                          {treeShrubSizeLabel(size)}
-                        </Button>
-                      ))}
+                        />
+                      </label>
                       <Button
                         type="button"
                         size="sm"

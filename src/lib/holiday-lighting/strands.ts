@@ -3,7 +3,6 @@ import type {
   HolidayMeasurementSegment,
   HolidayMeasurements,
   HolidayStrand,
-  HolidayTreeSize,
 } from "@/lib/holiday-lighting/types";
 
 function newId() {
@@ -12,35 +11,10 @@ function newId() {
     : `strand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Visual circle radius (meters) for Tree/Shrub placement by size. */
-export function treeShrubRadiusMeters(size: HolidayTreeSize): number {
-  switch (size) {
-    case "small":
-      return 1.8; // ~6 ft
-    case "medium":
-      return 3.0; // ~10 ft
-    case "large":
-      return 4.3; // ~14 ft
-    case "xl":
-      return 5.5; // ~18 ft
-    default:
-      return 3.0;
-  }
-}
-
-export function treeShrubSizeLabel(size: HolidayTreeSize): string {
-  switch (size) {
-    case "small":
-      return "Small";
-    case "medium":
-      return "Medium";
-    case "large":
-      return "Large";
-    case "xl":
-      return "Extra large";
-    default:
-      return size;
-  }
+/** Visual map marker radius; pricing is based on strands, not this footprint. */
+export function treeShrubRadiusMetersForStrands(strandCount: number): number {
+  const count = Math.max(1, Math.min(100, Math.round(Number(strandCount) || 1)));
+  return Math.min(6, 1.4 + Math.sqrt(count) * 0.9);
 }
 
 export function strandOfSegment(

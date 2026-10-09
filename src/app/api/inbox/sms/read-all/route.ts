@@ -5,7 +5,7 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { fieldCustomerCommsWhere } from "@/lib/field/access";
+import { fieldCustomerCommsWhere, fieldTeamSmsWhere } from "@/lib/field/access";
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import { prisma } from "@/lib/prisma";
 
@@ -24,11 +24,14 @@ export async function POST(request: NextRequest) {
     const scope = body.scope === "internal" ? Scope.INTERNAL : Scope.EXTERNAL;
     const fieldCommsWhere =
       scope === Scope.EXTERNAL ? await fieldCustomerCommsWhere(user) : null;
+    const fieldTeamWhere =
+      scope === Scope.INTERNAL ? await fieldTeamSmsWhere(user) : null;
     const conversationWhere: Prisma.ConversationWhereInput = {
       companyId: user.companyId,
       channel: Channel.SMS,
       scope,
       ...(fieldCommsWhere ?? {}),
+      ...(fieldTeamWhere ?? {}),
     };
 
     const result = await prisma.message.updateMany({

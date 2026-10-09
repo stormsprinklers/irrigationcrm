@@ -1,6 +1,7 @@
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail, resolveFromAddress, type EmailBranding } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
+import { recordOutboundCustomerSms } from "@/lib/inbox/record-outbound-sms";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 
 function formatCurrency(value: number) {
@@ -70,12 +71,18 @@ export async function notifyInvoicePayment(params: InvoiceNotifyParams) {
 
   if (params.customerPhone && params.twilioPhone && process.env.TWILIO_ACCOUNT_SID) {
     try {
-      await sendSms({
+      const message = await sendSms({
         companyId: params.companyId,
         from: params.twilioPhone,
         to: params.customerPhone,
         body: smsBody,
       });
+      await recordOutboundCustomerSms({
+        companyId: params.companyId,
+        to: params.customerPhone,
+        body: message.body || smsBody,
+        twilioMessageSid: message.sid,
+      }).catch((error) => console.error("Could not add invoice SMS to inbox", error));
       smsSent = true;
     } catch {
       // best-effort
@@ -135,12 +142,19 @@ export async function notifyInvoiceReceipt(params: InvoiceReceiptParams) {
 
   if (params.customerPhone && params.twilioPhone && process.env.TWILIO_ACCOUNT_SID) {
     try {
-      await sendSms({
+      const receiptBody = `Payment received for invoice ${params.invoiceNumber}: ${amountFormatted}. View receipt: ${payUrl}`;
+      const message = await sendSms({
         companyId: params.companyId,
         from: params.twilioPhone,
         to: params.customerPhone,
-        body: `Payment received for invoice ${params.invoiceNumber}: ${amountFormatted}. View receipt: ${payUrl}`,
+        body: receiptBody,
       });
+      await recordOutboundCustomerSms({
+        companyId: params.companyId,
+        to: params.customerPhone,
+        body: message.body || receiptBody,
+        twilioMessageSid: message.sid,
+      }).catch((error) => console.error("Could not add receipt SMS to inbox", error));
       smsSent = true;
     } catch {
       // best-effort

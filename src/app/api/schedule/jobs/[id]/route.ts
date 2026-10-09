@@ -41,6 +41,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const nextStart = body.startAt !== undefined ? new Date(body.startAt) : existing.startAt;
     const nextEnd = body.endAt !== undefined ? new Date(body.endAt) : existing.endAt;
+    if (Number.isNaN(nextStart.getTime()) || Number.isNaN(nextEnd.getTime())) {
+      return badRequestResponse("Enter a valid start and end time");
+    }
+    if (nextEnd <= nextStart) {
+      return badRequestResponse("End time must be after start time");
+    }
     const assignmentChanged = body.assignedUserIds !== undefined || body.assignedUserId !== undefined;
     const nextAssignedUserIds = normalizeVisitAssigneeIds(
       body.assignedUserIds,
@@ -119,15 +125,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     await clearNeedsSchedulingForVisit(id);
 
-    const startChanged =
-      body.startAt !== undefined &&
-      new Date(body.startAt).getTime() !== existing.startAt.getTime();
+    const timeChanged =
+      (body.startAt !== undefined && nextStart.getTime() !== existing.startAt.getTime()) ||
+      (body.endAt !== undefined && nextEnd.getTime() !== existing.endAt.getTime());
     const cancelled =
       body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED;
 
     if (cancelled && existing.customerId) {
       void onVisitCancelled(id, user.companyId).catch(() => {});
-    } else if (startChanged && existing.customerId && visit.status !== VisitStatus.CANCELLED) {
+    } else if (timeChanged && existing.customerId && visit.status !== VisitStatus.CANCELLED) {
       void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
     }
 

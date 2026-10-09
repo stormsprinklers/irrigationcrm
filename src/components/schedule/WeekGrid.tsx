@@ -124,6 +124,7 @@ function JobBlock({
   colorBy,
   columnWidth,
   startHour,
+  onTimeChange,
 }: {
   job: ScheduleJobDTO;
   lane: number;
@@ -131,9 +132,20 @@ function JobBlock({
   colorBy: ColorByMode;
   columnWidth: number;
   startHour: number;
+  onTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
 }) {
-  const start = new Date(job.startAt);
-  const end = new Date(job.endAt);
+  const [resizeDraft, setResizeDraft] = useState<{ startAt: Date; endAt: Date } | null>(null);
+  const resizeDraftRef = useRef<{ startAt: Date; endAt: Date } | null>(null);
+  const resizeState = useRef<{
+    edge: "start" | "end";
+    pointerId: number;
+    initialY: number;
+    startAt: Date;
+    endAt: Date;
+  } | null>(null);
+  const resizedRef = useRef(false);
+  const start = resizeDraft?.startAt ?? new Date(job.startAt);
+  const end = resizeDraft?.endAt ?? new Date(job.endAt);
   const startFraction = start.getHours() + start.getMinutes() / 60;
   const endFraction = end.getHours() + end.getMinutes() / 60;
   const top = (startFraction - startHour) * HOUR_HEIGHT;
@@ -142,9 +154,81 @@ function JobBlock({
   const laneWidth = Math.max(28, Math.floor((columnWidth - 8) / laneCount) - 2);
   const left = 4 + lane * (laneWidth + 2);
 
+  function beginResize(edge: "start" | "end", event: React.PointerEvent<HTMLSpanElement>) {
+    if (!onTimeChange) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const startAt = new Date(job.startAt);
+    const endAt = new Date(job.endAt);
+    resizeState.current = {
+      edge,
+      pointerId: event.pointerId,
+      initialY: event.clientY,
+      startAt,
+      endAt,
+    };
+    resizedRef.current = false;
+    resizeDraftRef.current = { startAt, endAt };
+    setResizeDraft({ startAt, endAt });
+  }
+
+  function updateResize(event: React.PointerEvent<HTMLSpanElement>) {
+    const state = resizeState.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rawMinutes = ((event.clientY - state.initialY) / HOUR_HEIGHT) * 60;
+    const snappedMinutes = Math.round(rawMinutes / 15) * 15;
+    const minimumDurationMs = 30 * 60 * 1000;
+    const gridStart = new Date(state.startAt);
+    gridStart.setHours(SCHEDULE_START_HOUR, 0, 0, 0);
+    const gridEnd = new Date(state.startAt);
+    gridEnd.setHours(SCHEDULE_END_HOUR + 1, 0, 0, 0);
+    const nextStart = new Date(state.startAt);
+    const nextEnd = new Date(state.endAt);
+    if (state.edge === "start") {
+      nextStart.setMinutes(nextStart.getMinutes() + snappedMinutes);
+      if (nextStart < gridStart) nextStart.setTime(gridStart.getTime());
+      if (nextStart.getTime() > nextEnd.getTime() - minimumDurationMs) {
+        nextStart.setTime(nextEnd.getTime() - minimumDurationMs);
+      }
+    } else {
+      nextEnd.setMinutes(nextEnd.getMinutes() + snappedMinutes);
+      if (nextEnd > gridEnd) nextEnd.setTime(gridEnd.getTime());
+      if (nextEnd.getTime() < nextStart.getTime() + minimumDurationMs) {
+        nextEnd.setTime(nextStart.getTime() + minimumDurationMs);
+      }
+    }
+    resizedRef.current =
+      nextStart.getTime() !== state.startAt.getTime() || nextEnd.getTime() !== state.endAt.getTime();
+    resizeDraftRef.current = { startAt: nextStart, endAt: nextEnd };
+    setResizeDraft({ startAt: nextStart, endAt: nextEnd });
+  }
+
+  function finishResize(event: React.PointerEvent<HTMLSpanElement>) {
+    const state = resizeState.current;
+    if (!state || state.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const finalDraft = resizeDraftRef.current;
+    resizeState.current = null;
+    resizeDraftRef.current = null;
+    setResizeDraft(null);
+    if (resizedRef.current && finalDraft) {
+      onTimeChange?.(job.id, finalDraft.startAt, finalDraft.endAt);
+    }
+    window.setTimeout(() => {
+      resizedRef.current = false;
+    }, 0);
+  }
+
   return (
     <Link
       href={`/visits/${job.id}`}
+      onClick={(event) => {
+        if (resizedRef.current || resizeState.current) event.preventDefault();
+      }}
       className="absolute z-10 block overflow-hidden rounded border shadow-sm transition-shadow hover:z-20 hover:shadow-md"
       style={{
         top: top + 1,
@@ -156,6 +240,30 @@ function JobBlock({
       }}
       title={`${job.title} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`}
     >
+      {onTimeChange ? (
+        <>
+          <span
+            role="separator"
+            aria-label={`Adjust start time for ${job.title}`}
+            title="Drag to adjust start time"
+            className="absolute inset-x-0 top-0 z-20 h-2 cursor-ns-resize touch-none bg-transparent hover:bg-black/10"
+            onPointerDown={(event) => beginResize("start", event)}
+            onPointerMove={updateResize}
+            onPointerUp={finishResize}
+            onPointerCancel={finishResize}
+          />
+          <span
+            role="separator"
+            aria-label={`Adjust end time for ${job.title}`}
+            title="Drag to adjust end time"
+            className="absolute inset-x-0 bottom-0 z-20 h-2 cursor-ns-resize touch-none bg-transparent hover:bg-black/10"
+            onPointerDown={(event) => beginResize("end", event)}
+            onPointerMove={updateResize}
+            onPointerUp={finishResize}
+            onPointerCancel={finishResize}
+          />
+        </>
+      ) : null}
       <div className="flex h-full flex-col p-1 text-[9px]">
         <div className="flex items-center gap-0.5">
           <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
@@ -201,6 +309,7 @@ type TimeGridProps = {
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   arrivalWindowHours?: number;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
+  onJobTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
 };
 
 function firstName(name: string) {
@@ -390,6 +499,7 @@ function TimeGrid({
   workSchedules,
   arrivalWindowHours = DEFAULT_ARRIVAL_WINDOW_HOURS,
   onSlotClick,
+  onJobTimeChange,
 }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [weekDayWidth, setWeekDayWidth] = useState(DAY_MIN_WIDTH);
@@ -722,6 +832,7 @@ function TimeGrid({
                               colorBy={colorBy}
                               columnWidth={techColWidth}
                               startHour={startHour}
+                              onTimeChange={onJobTimeChange}
                             />
                           ))}
                         </div>
@@ -773,6 +884,7 @@ function TimeGrid({
                       colorBy={colorBy}
                       columnWidth={dayWidth}
                       startHour={startHour}
+                      onTimeChange={onJobTimeChange}
                     />
                   ))}
                 </div>
@@ -925,6 +1037,7 @@ type Props = {
   arrivalWindowHours?: number;
   onDayClick?: (day: Date) => void;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
+  onJobTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
 };
 
 export function WeekGrid({
@@ -942,6 +1055,7 @@ export function WeekGrid({
   arrivalWindowHours,
   onDayClick,
   onSlotClick,
+  onJobTimeChange,
 }: Props) {
   if (viewMode === "month" && monthStart) {
     return <MonthScheduleGrid jobs={jobs} monthStart={monthStart} onDayClick={onDayClick} />;
@@ -961,6 +1075,7 @@ export function WeekGrid({
       workSchedules={workSchedules}
       arrivalWindowHours={arrivalWindowHours}
       onSlotClick={onSlotClick}
+      onJobTimeChange={onJobTimeChange}
     />
   );
 }

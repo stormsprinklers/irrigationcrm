@@ -134,7 +134,12 @@ export async function POST(_request: NextRequest, context: Ctx) {
 
     await prisma.conversation.update({
       where: { id: original.conversation.id },
-      data: { lastMessageAt: new Date() },
+      data: {
+        lastMessageAt: new Date(),
+        smsOpen: true,
+        smsClosedAt: null,
+        smsClosedById: null,
+      },
     });
 
     return NextResponse.json({ message, resentFromId: original.id });

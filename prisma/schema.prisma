@@ -995,6 +995,7 @@ model User {
   company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   callLogs           CallLog[]
   sentMessages       Message[]
+  closedSmsConversations Conversation[] @relation("SmsConversationClosedBy")
   emailMessages      EmailMessage[]
   blockedContacts    BlockedContact[]     @relation("BlockedByUser")
   groupMemberships   InternalGroupMember[]
@@ -2537,11 +2538,14 @@ model Conversation {
   title            String?
   /// Explicit CSR workflow state for external SMS. Null preserves legacy conversations until opened or closed.
   smsOpen          Boolean?
+  smsClosedAt      DateTime?
+  smsClosedById    String?
   lastMessageAt    DateTime @default(now())
   createdAt        DateTime @default(now())
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  smsClosedBy User?   @relation("SmsConversationClosedBy", fields: [smsClosedById], references: [id], onDelete: SetNull)
   messages Message[]
 
   @@index([companyId, channel, scope, lastMessageAt])

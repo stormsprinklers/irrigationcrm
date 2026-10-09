@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Calendar, Phone, User, UserPlus } from "lucide-react";
@@ -55,15 +55,32 @@ type CustomerDetail = {
   }>;
 };
 
+type PendingOutboundCall = {
+  phone: string;
+  customerId: string | null;
+  name: string | null;
+  autoCall: boolean;
+};
+
 export function CsrDeskPanel({
   onVisitBooked,
 }: {
   onVisitBooked?: (visitId: string) => void;
 }) {
   const router = useRouter();
-  const { ready, activeCall, disconnect, transfer, toggleHold, notifyVisitBooked } = useVoiceDevice();
+  const {
+    ready,
+    activeCall,
+    connect,
+    disconnect,
+    transfer,
+    toggleHold,
+    notifyVisitBooked,
+  } = useVoiceDevice();
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
+  const [pendingOutboundCall, setPendingOutboundCall] = useState<PendingOutboundCall | null>(null);
+  const autoCallAttemptedRef = useRef(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [needsScheduling, setNeedsScheduling] = useState<
@@ -78,6 +95,39 @@ export function CsrDeskPanel({
 
   const callerPhone = activeCall?.remoteNumber ?? activeCall?.callerInfo?.phone;
   const knownCustomerId = activeCall?.callerInfo?.customerId ?? customer?.id;
+
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const phone = search.get("phone")?.trim() ?? "";
+    if (!phone) return;
+
+    setPendingOutboundCall({
+      phone,
+      customerId: search.get("customerId"),
+      name: search.get("name"),
+      autoCall: search.get("autoCall") === "1",
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pendingOutboundCall?.autoCall || !ready || autoCallAttemptedRef.current) return;
+
+    autoCallAttemptedRef.current = true;
+    // Remove the trigger before dialing so a refresh or back navigation cannot place a second call.
+    window.history.replaceState(window.history.state, "", "/inbox/voice/desk");
+
+    if (activeCall) {
+      toast.error("Finish your current call before calling this lead");
+      return;
+    }
+
+    void connect(
+      pendingOutboundCall.phone,
+      pendingOutboundCall.customerId ?? undefined
+    )
+      .then(() => toast.success(`Calling ${pendingOutboundCall.name ?? formatPhoneDisplay(pendingOutboundCall.phone)}…`))
+      .catch(() => toast.error("Failed to place call"));
+  }, [activeCall, connect, pendingOutboundCall, ready]);
 
   useEffect(() => {
     fetch("/api/estimates/needs-scheduling")
@@ -385,7 +435,12 @@ export function CsrDeskPanel({
         <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
           <Phone className="h-4 w-4" /> Outbound dialer
         </h3>
-        <VoiceDialer compact />
+        <VoiceDialer
+          compact
+          initialPhone={pendingOutboundCall?.phone}
+          initialCustomerId={pendingOutboundCall?.customerId}
+          initialName={pendingOutboundCall?.name}
+        />
       </section>
 
       <section className="rounded-lg border border-border bg-white p-3">

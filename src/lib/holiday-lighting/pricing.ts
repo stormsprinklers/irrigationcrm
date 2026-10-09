@@ -43,21 +43,48 @@ export type HolidayPricingResult = {
   purchaseSubtotal: number;
   leaseSubtotal: number;
   marginPct: number;
-  optionDetails: Record<HolidayQuoteOptionKey, { calculated: number; subtotal: number; discountTotal: number; total: number }>;
+  optionDetails: Record<HolidayQuoteOptionKey, {
+    calculated: number;
+    subtotal: number;
+    discountTotal: number;
+    total: number;
+    contractDiscountTotal?: number;
+  }>;
   calculatedReinstallTotal: number;
+  customServicesTotal: number;
 };
 
 function money(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-export function optionDetail(calculated: number, selections: HolidayQuoteSelections, key: HolidayQuoteOptionKey) {
+export function optionDetail(
+  calculated: number,
+  selections: HolidayQuoteSelections,
+  key: HolidayQuoteOptionKey,
+  minimumSubtotal = 0,
+  automaticDiscountPercent = 0
+) {
   const adjustment = selections.optionAdjustments?.[key];
-  const subtotal = adjustment?.price == null || !Number.isFinite(adjustment.price)
+  const requestedSubtotal = adjustment?.price == null || !Number.isFinite(adjustment.price)
     ? calculated : money(Math.max(0, Math.min(9_999_999, adjustment.price)));
+  const subtotal = money(Math.max(minimumSubtotal, requestedSubtotal));
+  const contractDiscountTotal = money(
+    subtotal * Math.max(0, Math.min(100, automaticDiscountPercent)) / 100
+  );
   const requested = Math.max(0, Math.min(adjustment?.discountType === "percent" ? 100 : 9_999_999, adjustment?.discountAmount ?? 0));
-  const discountTotal = money(Math.min(subtotal, adjustment?.discountType === "percent" ? subtotal * requested / 100 : requested));
-  return { calculated, subtotal, discountTotal, total: money(subtotal - discountTotal) };
+  const manualDiscountTotal = money(Math.min(
+    subtotal - contractDiscountTotal,
+    adjustment?.discountType === "percent" ? subtotal * requested / 100 : requested
+  ));
+  const discountTotal = money(contractDiscountTotal + manualDiscountTotal);
+  return {
+    calculated,
+    subtotal,
+    discountTotal,
+    total: money(subtotal - discountTotal),
+    ...(contractDiscountTotal > 0 ? { contractDiscountTotal } : {}),
+  };
 }
 
 function lookup(prices: PriceLookup, sku: string | undefined) {
@@ -102,6 +129,7 @@ export function computeHolidayQuotePricing(params: {
   let placementsReinstall = 0;
   let placementsLease = 0;
   let placementsPermanent = 0;
+  let liftRentalApplied = false;
   const lines: HolidayPricedLine[] = [];
 
   for (const segment of measurements.segments) {
@@ -143,21 +171,32 @@ export function computeHolidayQuotePricing(params: {
     const item = lookup(prices, catalogItem.partsSku ?? catalogItem.sku);
     const laborItem = lookup(prices, catalogItem.installSku);
     const leaseItem = lookup(prices, catalogItem.leaseSku);
-    const partsAmount = item?.unitPrice ?? 0;
-    const laborAmount = laborItem?.unitPrice ?? 0;
-    const amount = partsAmount + laborAmount;
+    const strandCount = Math.max(1, Math.min(100, Math.round(Number(placement.strandCount) || 1)));
+    const difficulty = placement.difficulty ?? 1;
+    const difficultyMultiplier = catalog.difficultyMultipliers?.[difficulty]
+      ?? (difficulty === 2 ? 1.25 : difficulty === 3 ? 1.5 : 1);
+    const partsAmount = money((item?.unitPrice ?? 0) * strandCount * difficultyMultiplier);
+    const baseLaborAmount = money((laborItem?.unitPrice ?? 0) * strandCount * difficultyMultiplier);
+    const needsLift = placement.kind === "tree" && placement.liftRentalNeeded === true;
+    const applyLiftHere = needsLift && !liftRentalApplied;
+    const liftAmount = applyLiftHere ? rate(prices, catalog.liftRentalSku) : 0;
+    if (needsLift) liftRentalApplied = true;
+    const laborAmount = money(baseLaborAmount + liftAmount);
+    const amount = money(partsAmount + laborAmount);
     const placementStyle = catalog.lightStyles.find((item) => item.key === placement.lightStyleKey);
-    const leaseAmount =
-      leaseItem && leaseItem.unitPrice > 0 ? leaseItem.unitPrice : amount;
+    const leaseBaseAmount = leaseItem && leaseItem.unitPrice > 0
+      ? money(leaseItem.unitPrice * strandCount * difficultyMultiplier)
+      : money(partsAmount + baseLaborAmount);
+    const leaseAmount = money(leaseBaseAmount + liftAmount);
     placementsYear1 += amount;
     placementsReinstall += laborAmount;
     placementsLease += leaseAmount;
     placementsPermanent += amount;
     lines.push({
       key: placement.id,
-      name: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.size} — ${placement.label}`,
+      name: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.label}`,
       description: placement.label,
-      staffDetail: `Difficulty ${placement.difficulty ?? 1} · each @ $${amount.toFixed(2)}`,
+      staffDetail: `${strandCount} strand${strandCount === 1 ? "" : "s"} · Difficulty ${difficulty} (${difficultyMultiplier}×)${applyLiftHere ? ` · Lift rental $${liftAmount.toFixed(2)} (charged once)` : needsLift ? " · Lift rental included on another tree" : ""}`,
       purchaseTotal: money(amount),
       leaseTotal: money(leaseAmount),
       partsTotal: money(partsAmount),
@@ -174,16 +213,28 @@ export function computeHolidayQuotePricing(params: {
   const calculatedReinstallTotal = money(roofReinstall + placementsReinstall);
   const calculatedLeaseTotal = money(roofLease + placementsLease);
   const permanentBeforeMin = money(billedLengthFt * permanentRate + placementsPermanent);
+  const customServicesTotal = money(
+    (selections.customServices ?? []).reduce(
+      (sum, service) => sum + service.quantity * service.unitPrice,
+      0
+    )
+  );
   const year1Min = defaults?.temporaryYear1Minimum ?? 0;
   const permMin = defaults?.permanentYear1Minimum ?? 0;
-  const calculatedYear1Total = money(Math.max(year1BeforeMin, year1Min));
-  const calculatedLaborOnlyTotal = money(Math.max(calculatedReinstallTotal, year1Min));
-  const calculatedPermanentTotal = money(Math.max(permanentBeforeMin, permMin));
+  const calculatedYear1Total = money(Math.max(year1BeforeMin, year1Min) + customServicesTotal);
+  const calculatedLaborOnlyTotal = money(Math.max(calculatedReinstallTotal, year1Min) + customServicesTotal);
+  const calculatedPermanentTotal = money(Math.max(permanentBeforeMin, permMin) + customServicesTotal);
   const optionDetails = {
-    buy: optionDetail(calculatedYear1Total, selections, "buy"),
-    lease: optionDetail(calculatedLeaseTotal, selections, "lease"),
-    permanent: optionDetail(calculatedPermanentTotal, selections, "permanent"),
-    labor: optionDetail(calculatedLaborOnlyTotal, selections, "labor"),
+    buy: optionDetail(calculatedYear1Total, selections, "buy", customServicesTotal),
+    lease: optionDetail(
+      money(calculatedLeaseTotal + customServicesTotal),
+      selections,
+      "lease",
+      customServicesTotal,
+      selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0
+    ),
+    permanent: optionDetail(calculatedPermanentTotal, selections, "permanent", customServicesTotal),
+    labor: optionDetail(calculatedLaborOnlyTotal, selections, "labor", customServicesTotal),
   };
   const year1Total = optionDetails.buy.total;
   const leaseTotal = optionDetails.lease.total;
@@ -198,14 +249,15 @@ export function computeHolidayQuotePricing(params: {
     reinstallTotal,
     leaseTotal,
     permanentTotal,
-    year1MinimumApplied: calculatedYear1Total > year1BeforeMin,
-    permanentMinimumApplied: calculatedPermanentTotal > permanentBeforeMin,
+    year1MinimumApplied: year1Min > year1BeforeMin,
+    permanentMinimumApplied: permMin > permanentBeforeMin,
     purchaseTotal: year1Total,
-    purchaseSubtotal: year1BeforeMin,
+    purchaseSubtotal: money(year1BeforeMin + customServicesTotal),
     leaseSubtotal: leaseTotal,
     marginPct: 0,
     optionDetails,
     calculatedReinstallTotal,
+    customServicesTotal,
   };
 }
 
@@ -224,13 +276,18 @@ export function applyMarginToLines(
 export function holidayOptionSummary(params: {
   placementCount: number;
   styleLabel: string;
+  hasRoofline?: boolean;
+  customServiceCount?: number;
 }) {
-  const roofline = `${params.styleLabel} roofline lighting`;
+  const roofline = params.hasRoofline === false ? "" : `${params.styleLabel} roofline lighting`;
   const plants =
     params.placementCount > 0
-      ? ` plus ${params.placementCount} tree${params.placementCount === 1 ? "" : "s"}/bush${params.placementCount === 1 ? "" : "es"}`
+      ? `${roofline ? " plus " : ""}${params.placementCount} tree${params.placementCount === 1 ? "" : "s"}/bush${params.placementCount === 1 ? "" : "es"}`
       : "";
-  return `${roofline}${plants}.`;
+  const services = (params.customServiceCount ?? 0) > 0
+    ? `${roofline || plants ? " plus " : ""}${params.customServiceCount} additional service${params.customServiceCount === 1 ? "" : "s"}`
+    : "";
+  return `${roofline}${plants}${services}.`;
 }
 
 function formatHolidayMoney(n: number) {
@@ -387,8 +444,6 @@ export const HOLIDAY_INCLUDED_LINES = [
 ] as const;
 
 export const HOLIDAY_PERMANENT_INCLUDED_LINES = [
-  HOLIDAY_INCLUDED_LINES[0],
-  HOLIDAY_INCLUDED_LINES[1],
   {
     name: "5-year parts and labor warranty",
     description: "If anything goes wrong during the five-year warranty period, we will make it right at no cost to you.",

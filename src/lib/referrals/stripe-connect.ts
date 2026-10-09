@@ -271,7 +271,7 @@ async function notifyReferrerReward(submissionId: string) {
   const submission = await prisma.referralSubmission.findUnique({
     where: { id: submissionId },
     include: {
-      referrerCustomer: { select: { phone: true, name: true } },
+      referrerCustomer: { select: { id: true, phone: true, name: true } },
       company: { select: { id: true, twilioPhone: true } },
       reward: { select: { amountCents: true } },
     },
@@ -287,14 +287,23 @@ async function notifyReferrerReward(submissionId: string) {
   }).format(submission.reward.amountCents / 100);
 
   const { sendSms } = await import("@/lib/inbox/twilio");
+  const { recordOutboundCustomerSms } = await import("@/lib/inbox/record-outbound-sms");
   const { OutboundCommsDisabledError } = await import("@/lib/communications/outbound-guard");
   try {
-    await sendSms({
+    const body = `Thanks for referring ${submission.referredName}! Your ${amount} referral reward is on the way.`;
+    const message = await sendSms({
       companyId: submission.company.id,
       from: submission.company.twilioPhone,
       to: submission.referrerCustomer.phone,
-      body: `Thanks for referring ${submission.referredName}! Your ${amount} referral reward is on the way.`,
+      body,
     });
+    await recordOutboundCustomerSms({
+      companyId: submission.company.id,
+      customerId: submission.referrerCustomer.id,
+      to: submission.referrerCustomer.phone,
+      body: message.body || body,
+      twilioMessageSid: message.sid,
+    }).catch((error) => console.error("Could not add referral SMS to inbox", error));
   } catch (error) {
     if (error instanceof OutboundCommsDisabledError) return;
     throw error;

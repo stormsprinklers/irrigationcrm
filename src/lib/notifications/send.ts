@@ -2,6 +2,7 @@ import { Channel } from "@prisma/client";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
+import { recordOutboundCustomerSms } from "@/lib/inbox/record-outbound-sms";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { prisma } from "@/lib/prisma";
@@ -354,7 +355,7 @@ export async function sendOperationalNotification(params: {
       if (options.smsBackupOnly && !emailAttempted && params.recipient.email) continue;
 
       try {
-        await sendSms({
+        const twilioMessage = await sendSms({
           companyId: params.companyId,
           from: company.twilioPhone,
           to,
@@ -363,6 +364,13 @@ export async function sendOperationalNotification(params: {
             params.event === "VISIT_EN_ROUTE" && technicianPhotoUrl ? [technicianPhotoUrl] : undefined,
           statusCallback: twilioSmsStatusCallbackUrl(),
         });
+        await recordOutboundCustomerSms({
+          companyId: params.companyId,
+          customerId: params.recipient.customerId,
+          to,
+          body: twilioMessage.body || fullText,
+          twilioMessageSid: twilioMessage.sid,
+        }).catch((error) => console.error("Failed to record notification SMS in thread", error));
         await prisma.notificationDelivery.update({
           where: { id: delivery.id },
           data: { smsSent: true },
@@ -405,7 +413,7 @@ export async function sendOperationalNotification(params: {
       const to = params.recipient.phone;
       if (!to || !company.twilioPhone) continue;
       try {
-        await sendSms({
+        const twilioMessage = await sendSms({
           companyId: params.companyId,
           from: company.twilioPhone,
           to,
@@ -413,6 +421,13 @@ export async function sendOperationalNotification(params: {
           mediaUrl: params.event === "VISIT_EN_ROUTE" && technicianPhotoUrl ? [technicianPhotoUrl] : undefined,
           statusCallback: twilioSmsStatusCallbackUrl(),
         });
+        await recordOutboundCustomerSms({
+          companyId: params.companyId,
+          customerId: params.recipient.customerId,
+          to,
+          body: twilioMessage.body || body,
+          twilioMessageSid: twilioMessage.sid,
+        }).catch((error) => console.error("Failed to record backup SMS in thread", error));
         await prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { smsSent: true } });
         result.smsSent = true;
         break;

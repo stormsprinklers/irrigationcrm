@@ -4,6 +4,7 @@ import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorized
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { sendSms } from "@/lib/inbox/twilio";
+import { recordOutboundCustomerSms } from "@/lib/inbox/record-outbound-sms";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import {
@@ -85,12 +86,21 @@ export async function POST(request: NextRequest, { params }: Params) {
           { status: 503 }
         );
       }
-      await sendSms({
+      const body = `${companyName}: Please use this secure link to save your card on file: ${session.url}`;
+      const message = await sendSms({
         companyId: user.companyId,
         from,
         to: customer.phone!,
-        body: `${companyName}: Please use this secure link to save your card on file: ${session.url}`,
+        body,
       });
+      await recordOutboundCustomerSms({
+        companyId: user.companyId,
+        customerId: customer.id,
+        senderId: user.id,
+        to: customer.phone!,
+        body: message.body || body,
+        twilioMessageSid: message.sid,
+      }).catch((error) => console.error("Could not add card-link SMS to inbox", error));
       return NextResponse.json({ ok: true, url: session.url, textedTo: customer.phone, channel });
     }
 
