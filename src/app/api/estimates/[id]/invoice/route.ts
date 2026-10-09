@@ -6,12 +6,16 @@ import { syncEstimateInvoice } from "@/lib/invoices/sync-estimate-invoice";
 
 type Params = { params: Promise<{ id: string }> };
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     if (!canAccessInvoices(user.role)) return forbiddenResponse();
 
     const { id } = await params;
+    const body = (await request.json().catch(() => ({}))) as { channel?: unknown };
+    if (body.channel !== "EMAIL" && body.channel !== "SMS") {
+      return NextResponse.json({ error: "Choose email or SMS to send the invoice." }, { status: 400 });
+    }
     const synced = await syncEstimateInvoice({
       companyId: user.companyId,
       estimateId: id,
@@ -24,6 +28,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       invoiceId: synced.invoice.id,
       companyId: user.companyId,
       kind: "send",
+      channel: body.channel,
     });
     if ("error" in delivered && !delivered.invoice) {
       return NextResponse.json(

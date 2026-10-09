@@ -19,6 +19,9 @@ export async function notifyInvoiceViaTemplates(params: {
   /** Customer-facing pay URL. Always a short CRM /pay/{token} link. */
   payUrlOverride?: string | null;
   amountOverride?: number | null;
+  /** A staff-selected delivery channel. This sends even when its automation
+   * rule is disabled, while still using the company's branded template. */
+  channel?: "EMAIL" | "SMS";
 }) {
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.invoiceId, companyId: params.companyId },
@@ -153,6 +156,9 @@ export async function notifyInvoiceViaTemplates(params: {
       textAppend: receiptExtras.text || undefined,
       emailAttachments,
       smsBackupOnly: params.smsBackupOnly,
+      emailOnly: params.channel === "EMAIL",
+      smsOnly: params.channel === "SMS",
+      explicitChannelSend: Boolean(params.channel),
     },
   });
 }

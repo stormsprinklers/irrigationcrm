@@ -9,10 +9,13 @@ import {
   ArrowLeft,
   Banknote,
   CheckCircle2,
+  ChevronDown,
   Copy,
   FileText,
   Eye,
   Loader2,
+  Mail,
+  MessageSquare,
   Pencil,
   Plus,
   Presentation,
@@ -33,6 +36,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { blobProxyUrl } from "@/lib/blob/urls";
@@ -454,10 +463,14 @@ export function EstimateDetail({ estimateId }: Props) {
     }
   }
 
-  async function sendInvoice() {
+  async function sendInvoice(channel: "EMAIL" | "SMS") {
     setInvoiceSending(true);
     try {
-      const res = await fetch(`/api/estimates/${estimateId}/invoice`, { method: "POST" });
+      const res = await fetch(`/api/estimates/${estimateId}/invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (typeof data.payUrl === "string") {
@@ -470,7 +483,7 @@ export function EstimateDetail({ estimateId }: Props) {
         }
         return;
       }
-      const channel =
+      const sentBy =
         data.emailSent && data.smsSent
           ? " by email and SMS"
           : data.emailSent
@@ -478,7 +491,7 @@ export function EstimateDetail({ estimateId }: Props) {
             : data.smsSent
               ? " by SMS"
               : "";
-      toast.success(`Invoice sent${channel}`);
+      toast.success(`Invoice sent${sentBy}`);
     } catch {
       toast.error("Invoice could not be sent. Check your connection and try again.");
     } finally {
@@ -725,19 +738,37 @@ export function EstimateDetail({ estimateId }: Props) {
             </>
           ) : null}
           {estimate.status === "APPROVED" || estimate.status === "CONVERTED" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void sendInvoice()}
-              disabled={saving || invoiceSending}
-            >
-              {invoiceSending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileText className="h-4 w-4" />
-              )}
-              Send Invoice
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={saving || invoiceSending}>
+                  {invoiceSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  Send Invoice
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!estimate.customer.email}
+                  onSelect={() => void sendInvoice("EMAIL")}
+                >
+                  <Mail />
+                  Send via email
+                  {!estimate.customer.email ? " (no email)" : ""}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!estimate.customer.phone}
+                  onSelect={() => void sendInvoice("SMS")}
+                >
+                  <MessageSquare />
+                  Send via SMS
+                  {!estimate.customer.phone ? " (no phone)" : ""}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>

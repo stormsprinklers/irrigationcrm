@@ -959,9 +959,10 @@ export function HolidayLightingQuoter({
       if (uploadBytes > 4 * 1024 * 1024) {
         throw new Error("This photo is too large to process. Try a smaller photo.");
       }
-      let generatedOptions = optionsToRender;
-      for (const [index, option] of optionsToRender.entries()) {
-        setVisualizingProgress(`Generating ${option.label} (${index + 1} of ${optionsToRender.length})…`);
+      let completedCount = 0;
+      setVisualizingProgress(`Generating ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}…`);
+
+      const generateOption = async (option: HolidayQuoteDesignOption) => {
         const form = new FormData();
         form.set("clean", exported.cleanBlob, "property.jpg");
         form.set("marked", exported.markedBlob, "property-marked.jpg");
@@ -988,13 +989,65 @@ export function HolidayLightingQuoter({
         }
         if (!res.ok) throw new Error(data.error ?? `Preview failed for ${option.label}`);
         if (!data.previewImageUrl) throw new Error(`${option.label} completed without an image URL`);
-        generatedOptions = generatedOptions.map((item) => item.id === option.id
+        // Show each completed image immediately instead of leaving the preview
+        // area looking stalled while the other concurrent requests finish.
+        setDesignOptions((current) => current.map((item) => item.id === option.id
           ? { ...item, previewImageUrl: data.previewImageUrl }
-          : item);
+          : item));
+        setSelections((current) => ({
+          ...current,
+          designOptions: current.designOptions?.map((item) => item.id === option.id
+            ? { ...item, previewImageUrl: data.previewImageUrl }
+            : item),
+        }));
+        return { optionId: option.id, previewImageUrl: data.previewImageUrl };
+      };
+
+      const results: Array<PromiseSettledResult<{ optionId: string; previewImageUrl: string }>> = [];
+      // Up to three image edits run at once. Quotes may contain as many as five
+      // options, so remaining options run in the next batch.
+      for (let start = 0; start < optionsToRender.length; start += 3) {
+        const batch = optionsToRender.slice(start, start + 3);
+        const batchResults = await Promise.allSettled(batch.map(async (option) => {
+          try {
+            return await generateOption(option);
+          } finally {
+            completedCount += 1;
+            setVisualizingProgress(
+              `Generated ${completedCount} of ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}…`
+            );
+          }
+        }));
+        results.push(...batchResults);
+      }
+
+      const successful = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      const failed = results.flatMap((result) => result.status === "rejected"
+        ? [result.reason instanceof Error ? result.reason.message : "Preview generation failed"]
+        : []);
+      const previewByOptionId = new Map(successful.map((result) => [result.optionId, result.previewImageUrl]));
+      const generatedOptions = optionsToRender.map((option) => {
+        const previewImageUrl = previewByOptionId.get(option.id);
+        return previewImageUrl ? { ...option, previewImageUrl } : option;
+      });
+
+      if (successful.length) {
         setDesignOptions(generatedOptions);
         setSelections((current) => ({ ...current, designOptions: generatedOptions }));
+        const activePreview = generatedOptions.find((option) => option.id === activeOptionId)?.previewImageUrl ?? null;
+        const saved = await save(
+          activePreview ? { previewImageUrl: activePreview } : undefined,
+          { quiet: true, designOptions: generatedOptions }
+        );
+        if (!saved) throw new Error("The previews were generated but could not be saved. Please try again.");
       }
-      toast.success(optionsToRender.length === 1 ? "Lighting preview ready" : `${optionsToRender.length} option previews ready`);
+
+      if (!successful.length) throw new Error(failed[0] ?? "No previews could be generated");
+      if (failed.length) {
+        toast.warning(`${successful.length} preview${successful.length === 1 ? "" : "s"} generated; ${failed.length} failed. ${failed[0]}`);
+      } else {
+        toast.success(successful.length === 1 ? "Lighting preview ready" : `${successful.length} option previews ready`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Preview failed");
     } finally {

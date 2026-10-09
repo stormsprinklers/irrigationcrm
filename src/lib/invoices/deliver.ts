@@ -8,6 +8,7 @@ export async function deliverInvoice(params: {
   invoiceId: string;
   companyId: string;
   kind: "send" | "remind";
+  channel?: "EMAIL" | "SMS";
 }) {
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.invoiceId, companyId: params.companyId },
@@ -24,16 +25,27 @@ export async function deliverInvoice(params: {
 
   const payUrl = getInvoicePayUrl(invoice.publicToken, invoice.company);
 
+  if (params.channel === "EMAIL" && !invoice.customer?.email?.trim()) {
+    return { error: "This customer does not have an email address.", status: 400 as const, payUrl };
+  }
+  if (params.channel === "SMS" && !invoice.customer?.phone?.trim()) {
+    return { error: "This customer does not have a phone number.", status: 400 as const, payUrl };
+  }
+
   const { emailSent, smsSent } = await notifyInvoiceViaTemplates({
     invoiceId: params.invoiceId,
     companyId: params.companyId,
     event: params.kind === "remind" ? "INVOICE_REMINDER" : "INVOICE_SENT",
     payUrlOverride: payUrl,
+    channel: params.channel,
   });
 
   if (!emailSent && !smsSent) {
+    const selectedChannel = params.channel === "EMAIL" ? "email" : params.channel === "SMS" ? "SMS" : null;
     return {
-      error: "No email or SMS channel configured. Copy the pay link to send manually.",
+      error: selectedChannel
+        ? `The invoice could not be sent by ${selectedChannel}. Check the ${selectedChannel} configuration and try again.`
+        : "No email or SMS channel configured. Copy the pay link to send manually.",
       status: 503 as const,
       payUrl,
     };
