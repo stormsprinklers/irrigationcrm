@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -19,6 +21,8 @@ type Issue = {
 };
 
 export default function TechAssistantIssuesPage() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const router = useRouter();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [name, setName] = useState("");
@@ -94,7 +98,7 @@ export default function TechAssistantIssuesPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Technician Assistant"]}
         title="Technician Assistant"
-        subtitle="Issues Storm AI matches by title and description, then walks technicians through one diagnostic at a time. Use the Parts Info tab for the parts library."
+        subtitle={`Issues ${aiName} matches by title and description, then walks technicians through one diagnostic at a time. Use the Parts Info tab for the parts library.`}
       />
 
       <div className="mb-6 flex gap-2">

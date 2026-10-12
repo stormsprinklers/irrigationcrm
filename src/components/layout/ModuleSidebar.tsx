@@ -1,4 +1,5 @@
 "use client";
+import { CompanyAIText } from "./CompanyAIText";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -58,7 +59,7 @@ function NavLink({
       {active ? (
         <span className="absolute bottom-1 left-0 top-1 w-1 rounded-r bg-primary" />
       ) : null}
-      <span>{item.label}</span>
+      <span><CompanyAIText text={item.label} /></span>
       <span className="flex items-center gap-1.5">
         {companyBadgeCounts ? (
           <CompanyInboxCountOrbs companies={companyBadgeCounts} />
@@ -124,7 +125,7 @@ function ExpandableNavItem({
         {groupActive ? (
           <span className="absolute bottom-1 left-0 top-1 w-1 rounded-r bg-primary" />
         ) : null}
-        <span>{item.label}</span>
+        <span><CompanyAIText text={item.label} /></span>
         <ChevronDown
           className={cn("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-180")}
         />
@@ -176,7 +177,7 @@ export function ModuleSidebar({
       )}
     >
       <div className="flex items-center justify-between border-b border-border px-4 py-4">
-        <h2 className="font-display text-lg font-bold text-foreground">{title}</h2>
+        <h2 className="font-display text-lg font-bold text-foreground"><CompanyAIText text={title} /></h2>
         {onClose ? (
           <button
             type="button"
@@ -198,7 +199,7 @@ export function ModuleSidebar({
           <div key={section.title ?? sectionIndex} className="mb-2">
             {section.title && !hasExpandable ? (
               <p className="px-4 py-2 text-[11px] font-semibold tracking-wide text-muted-foreground">
-                {section.title}
+                <CompanyAIText text={section.title} />
               </p>
             ) : null}
             <ul>

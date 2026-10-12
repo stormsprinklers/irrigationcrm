@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
@@ -57,6 +59,8 @@ function policiesToCsv(rows: Policy[]) {
 }
 
 export default function StormAiPoliciesPage() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Policy | null>(null);
@@ -254,7 +258,7 @@ export default function StormAiPoliciesPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Company policies"]}
         title="Company policies"
-        subtitle="Tell Storm AI how this company handles safety, property protection, technical standards, customer authorization, pricing/payments, and employee operations. Storm AI checks these before it answers."
+        subtitle={`Tell ${aiName} how this company handles safety, property protection, technical standards, customer authorization, pricing/payments, and employee operations. ${aiName} checks these before it answers.`}
         actions={
           <Button
             type="button"
@@ -415,7 +419,7 @@ export default function StormAiPoliciesPage() {
                   className="mt-1 min-h-[220px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={draft.description}
                   onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                  placeholder="Describe exactly how the company wants this handled. Storm AI will follow this wording."
+                  placeholder={`Describe exactly how the company wants this handled. ${aiName} will follow this wording.`}
                 />
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -424,7 +428,7 @@ export default function StormAiPoliciesPage() {
                     checked={draft.active}
                     onCheckedChange={(active) => setDraft({ ...draft, active })}
                   />
-                  <span className="text-sm">Active — Storm AI can use this policy</span>
+                  <span className="text-sm">Active — {aiName} can use this policy</span>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => void remove(draft.id)}>
@@ -438,7 +442,7 @@ export default function StormAiPoliciesPage() {
             </section>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Add a policy to teach Storm AI how this company does things.
+              Add a policy to teach {aiName} how this company does things.
             </p>
           )}
         </div>

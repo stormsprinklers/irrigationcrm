@@ -31,7 +31,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 import { requestCurrentPosition } from "@/lib/maps/geolocation";
-import { useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
+import { useMaintenancePlansFeatures, useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
 
 type VisitDetailData = {
@@ -167,6 +167,7 @@ export function VisitDetail({ visitId }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
+  const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const canDelete = !isFieldRole(session?.user?.role ?? "");
   const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
   const showProfit = canViewProfitMargins(session?.user?.role ?? "");
@@ -201,6 +202,22 @@ export function VisitDetail({ visitId }: Props) {
       .catch(() => toast.error("Failed to load visit"))
       .finally(() => setLoading(false));
   }, [load]);
+
+  useEffect(() => {
+    if (visit?.status !== "EN_ROUTE") return;
+    const departed = [...timeEvents].reverse().find(event => event.type === "EN_ROUTE");
+    if (!departed) return;
+    const refresh = async () => {
+      const [visitRes, timeRes] = await Promise.all([fetch(`/api/visits/${visitId}`), fetch(`/api/visits/${visitId}/time`)]);
+      if (visitRes.ok) setVisit(await visitRes.json());
+      if (timeRes.ok) setTimeEvents(await timeRes.json());
+    };
+    const remaining = Math.max(0, new Date(departed.occurredAt).getTime() + 7200000 - Date.now());
+    const timeout = window.setTimeout(() => void refresh().catch(() => {}), remaining + 100);
+    const onFocus = () => { if (Date.now() >= new Date(departed.occurredAt).getTime() + 7200000) void refresh().catch(() => {}); };
+    window.addEventListener("focus", onFocus);
+    return () => {window.clearTimeout(timeout); window.removeEventListener("focus", onFocus);};
+  }, [visit?.status, timeEvents, visitId]);
 
   useEffect(() => {
     if (paymentStatus !== "success" || !sessionId) return;
@@ -532,13 +549,14 @@ export function VisitDetail({ visitId }: Props) {
               </label>
             </div>
           ) : null}
-          <VisitMaintenancePlanSection
+          {maintenanceEnabled ? <VisitMaintenancePlanSection
             visitId={visit.id}
             customerId={visit.customer?.id ?? null}
             propertyId={visit.property?.id ?? null}
             onUpdated={load}
           />
-          <VisitEstimatesSection visitId={visit.id} estimates={visit.estimates} />
+          : null}
+          <VisitEstimatesSection visitId={visit.id} estimates={visit.estimates} customerId={visit.customer?.id} propertyId={visit.property?.id} />
         </div>
       </div>
 

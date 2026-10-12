@@ -48,7 +48,7 @@ type FilterOptions = {
     color?: string | null;
     photoUrl?: string | null;
     role?: string;
-    division?: "SERVICE" | "INSTALL" | null;
+    division?: "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS" | null;
   }[];
   crews: {
     id: string;
@@ -58,7 +58,7 @@ type FilterOptions = {
     avatarName?: string | null;
     avatarColor?: string | null;
     foremanUserId?: string | null;
-    division?: "SERVICE" | "INSTALL" | null;
+    division?: "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS" | null;
     members?: { userId?: string; user: { id: string } }[];
   }[];
   openTimeSlots?: {

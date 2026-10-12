@@ -81,11 +81,11 @@ function isEmployeeAppPath(pathname: string | null): boolean {
   return !publicPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
 }
 
-export function PwaProvider() {
+export function PwaProvider({ nativeShell = false }: { nativeShell?: boolean }) {
   const pathname = usePathname();
   const { status, data: session } = useSession();
   const authenticated = status === "authenticated";
-  const employeeSurface = isEmployeeAppPath(pathname);
+  const employeeSurface = !nativeShell && isEmployeeAppPath(pathname);
   const [standalone, setStandalone] = useState(false);
   const [ios, setIos] = useState(false);
   const [showInstall, setShowInstall] = useState(false);

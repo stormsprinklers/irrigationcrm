@@ -37,7 +37,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
+      select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
     });
     assertHolidayLightingEnabled(company ?? {});
 
@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { holidayLightingFeaturesEnabled: true },
+      select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },
     });
     assertHolidayLightingEnabled(company ?? {});
 
@@ -148,7 +148,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { holidayLightingFeaturesEnabled: true },
+      select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },
     });
     assertHolidayLightingEnabled(company ?? {});
 

@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -9,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 
 export default function StormAiGeneralPage() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const [showFab, setShowFab] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,7 +21,7 @@ export default function StormAiGeneralPage() {
     fetch("/api/settings/company")
       .then((r) => r.json())
       .then((data) => setShowFab(data.showStormAiFab !== false))
-      .catch(() => toast.error("Could not load Storm AI settings"))
+      .catch(() => toast.error(`Could not load ${aiName} settings`))
       .finally(() => setLoading(false));
   }, []);
 
@@ -42,13 +46,13 @@ export default function StormAiGeneralPage() {
     <ContentArea className="max-w-2xl">
       <PageHeader
         breadcrumb={["Settings", "Storm AI"]}
-        title="Storm AI"
+        title={`${aiName}`}
         subtitle="Assistant visibility, company policies, and technician diagnostic workflows"
       />
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="text-lg font-semibold">General</h3>
         <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Open Storm AI from the sparkles icon in the top-right of the CRM (
+          Open {aiName} from the sparkles icon in the top-right of the CRM (
           <Link href="/storm-ai" className="text-primary underline underline-offset-2">
             /storm-ai
           </Link>
@@ -56,9 +60,9 @@ export default function StormAiGeneralPage() {
         </p>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">Enable Storm AI</p>
+            <p className="text-sm font-medium">Enable {aiName}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              When off, the Storm AI page shows as disabled for this company. On by default.
+              When off, the {aiName} page shows as disabled for this company. On by default.
             </p>
           </div>
           <Switch checked={showFab} onCheckedChange={setShowFab} disabled={loading} />
@@ -75,7 +79,7 @@ export default function StormAiGeneralPage() {
         >
           <h3 className="text-lg font-semibold">Company policies</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Add, edit, or remove the written rules Storm AI must follow for safety, property
+            Add, edit, or remove the written rules {aiName} must follow for safety, property
             protection, technical standards, customer authorization, pricing, and operations.
           </p>
         </Link>
@@ -85,7 +89,7 @@ export default function StormAiGeneralPage() {
         >
           <h3 className="text-lg font-semibold">Technician assistant</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Diagnostic workflows and the parts library Storm AI uses in the field.
+            Diagnostic workflows and the parts library {aiName} uses in the field.
           </p>
         </Link>
       </section>

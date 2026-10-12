@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
   const company = await prisma.company.findUnique({
     where: { id: auth.companyId },
-    select: { irrigationFeaturesEnabled: true },
+    select: { name: true, holidayLightingFeaturesEnabled: true, irrigationFeaturesEnabled: true },
   });
   if (!irrigationFeaturesEnabled(company)) {
     return NextResponse.json({ error: "Winterization tools are not enabled" }, { status: 403 });

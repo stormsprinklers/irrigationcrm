@@ -1,3 +1,4 @@
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
@@ -20,7 +21,7 @@ function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
     serviceAreaIds: searchParams.getAll("serviceAreaIds").filter(Boolean),
     userIds: searchParams.getAll("userIds").filter(Boolean),
     crewIds: searchParams.getAll("crewIds").filter(Boolean),
-    divisions: searchParams.getAll("divisions").filter(Boolean) as ("INSTALL" | "SERVICE")[],
+    divisions: searchParams.getAll("divisions").filter(Boolean) as ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[],
   };
 }
 
@@ -83,6 +84,12 @@ export async function POST(request: NextRequest) {
       callSessionId,
     } = body;
 
+    const company = await prisma.company.findUnique({where: {id: user.companyId}});
+    const holiday = isHolidayLightingCompany(company);
+    const effectiveDivision = division || (holiday ? Division.HOLIDAY_LIGHTS : Division.SERVICE);
+    if (!Object.values(Division).includes(effectiveDivision)) return badRequestResponse("Invalid job type");
+    const defaultTitles = ["New visit", "Service visit", "Service call", "Service appointment", ""];
+    const effectiveTitle = holiday && defaultTitles.includes(String(title ?? "").trim()) ? "Holiday lighting appointment" : title;
     const requestedAssigneeIds = normalizeVisitAssigneeIds(
       assignedUserIds,
       assignedUserId
@@ -104,7 +111,7 @@ export async function POST(request: NextRequest) {
       if (fieldDenied) return fieldDenied;
     }
 
-    if (!title || !startAt || !endAt || !division) {
+    if (!effectiveTitle || !startAt || !endAt || !effectiveDivision) {
       return badRequestResponse("title, startAt, endAt, and division are required");
     }
 
@@ -169,10 +176,10 @@ export async function POST(request: NextRequest) {
     const visit = await prisma.visit.create({
       data: {
         companyId: user.companyId,
-        title: String(title),
+        title: String(effectiveTitle),
         startAt: new Date(startAt),
         endAt: new Date(endAt),
-        division: division as Division,
+        division: effectiveDivision as Division,
         serviceAreaId: resolvedServiceAreaId,
         assignedUserId: effectiveAssignee ?? null,
         additionalAssignees: effectiveAssigneeIds.length > 1

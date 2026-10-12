@@ -1,3 +1,5 @@
+import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { addDays } from "date-fns";
 import { DepositType, Division, EstimateStatus, VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -97,15 +99,17 @@ export async function createInstallVisitFromEstimate(estimateId: string) {
   const startAt = addDays(new Date(), 7);
   const endAt = addDays(startAt, durationDays);
 
+  const approvedOption = estimate.selectedOptionId ? await prisma.estimateOption.findFirst({where: {id: estimate.selectedOptionId, estimateId: estimate.id}, select: {letter: true}}) : null;
+  const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: estimate.companyId}})) || (estimate.designExportMetadata as {source?: string} | null)?.source === "holiday-lighting-quote";
   const visit = await prisma.visit.create({
     data: {
       companyId: estimate.companyId,
       customerId: estimate.customerId,
       propertyId: estimate.propertyId,
-      title: `Install — ${estimate.customer.name}`,
+      title: holiday ? "Holiday lighting appointment" : `Install — ${estimate.customer.name}`,
       startAt,
       endAt,
-      division: Division.INSTALL,
+      division: holiday ? Division.HOLIDAY_LIGHTS : Division.INSTALL,
       serviceAreaId: serviceArea.id,
       status: VisitStatus.UNSCHEDULED,
       address: estimate.property?.address ?? estimate.customer.address ?? null,
@@ -114,7 +118,7 @@ export async function createInstallVisitFromEstimate(estimateId: string) {
       zip: estimate.property?.zip ?? estimate.customer.zip ?? null,
       designProjectId: estimate.designProjectId,
       designVersionId: estimate.designVersionId,
-      designExportMetadata: estimate.designExportMetadata ?? undefined,
+      designExportMetadata: holidayVisitPlan(estimate.designExportMetadata, approvedOption?.letter) ?? estimate.designExportMetadata ?? undefined,
       installDurationDays: durationDays,
       estimateId: estimate.id,
       lineItems: {

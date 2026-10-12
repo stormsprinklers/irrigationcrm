@@ -1,4 +1,5 @@
 "use client";
+import { companyAIName } from "@/lib/company/industry";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -247,7 +248,7 @@ export function TopNav() {
           <Button variant="ghost" size="icon" asChild>
             <Link
               href="/storm-ai"
-              aria-label="Storm AI"
+              aria-label={companyAIName(brand.companyName)}
               aria-current={pathname === "/storm-ai" || pathname.startsWith("/storm-ai/") ? "page" : undefined}
               className={cn(
                 pathname === "/storm-ai" || pathname.startsWith("/storm-ai/")

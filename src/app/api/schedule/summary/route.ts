@@ -8,7 +8,7 @@ function parseFilters(searchParams: URLSearchParams): ScheduleFilters {
     serviceAreaIds: searchParams.getAll("serviceAreaIds").filter(Boolean),
     userIds: searchParams.getAll("userIds").filter(Boolean),
     crewIds: searchParams.getAll("crewIds").filter(Boolean),
-    divisions: searchParams.getAll("divisions").filter(Boolean) as ("INSTALL" | "SERVICE")[],
+    divisions: searchParams.getAll("divisions").filter(Boolean) as ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[],
   };
 }
 

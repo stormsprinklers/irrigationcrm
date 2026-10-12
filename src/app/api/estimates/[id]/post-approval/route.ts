@@ -1,3 +1,5 @@
+import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { addHours } from "date-fns";
@@ -164,6 +166,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
+    const holidayPlan = holidayVisitPlan(estimate.designExportMetadata, estimate.options.find(option => option.id === optionId)?.letter);
+    if (holidayPlan) await prisma.visit.update({where: {id: visitId, companyId: user.companyId}, data: {designExportMetadata: holidayPlan, division: "HOLIDAY_LIGHTS"}});
     await prisma.estimate.update({
       where: { id: estimate.id },
       data: {
@@ -191,6 +195,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 async function createScheduledVisitFromEstimate(params: {
   companyId: string;
   estimate: {
+    id: string;
     customerId: string;
     propertyId: string | null;
     customer: {
@@ -241,15 +246,18 @@ async function createScheduledVisitFromEstimate(params: {
   );
   if (assignmentError) return { error: assignmentError };
 
+  const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: params.companyId}}));
+  const plan = await prisma.estimate.findFirst({where: {id: params.estimate.id, companyId: params.companyId}, select: {designExportMetadata: true}});
   const visit = await prisma.visit.create({
     data: {
       companyId: params.companyId,
       customerId: params.estimate.customerId,
       propertyId: params.estimate.propertyId,
-      title: params.title,
+      title: holiday && ["Service appointment", "Install", "Service visit"].includes(params.title) ? "Holiday lighting appointment" : params.title,
       startAt: params.startAt,
       endAt: params.endAt,
-      division: params.division,
+      division: holiday ? Division.HOLIDAY_LIGHTS : params.division,
+      designExportMetadata: plan?.designExportMetadata ?? undefined,
       serviceAreaId,
       assignedUserId: params.assignedUserId,
       crewId: params.crewId ?? null,

@@ -25,7 +25,7 @@ export function formatChecklistRules(template: {
     parts.push("All visits");
   } else if (template.divisions.length) {
     parts.push(
-      template.divisions.map((d) => (d === "INSTALL" ? "Install" : "Service")).join(", ")
+      template.divisions.map((d) => (d === "HOLIDAY_LIGHTS" ? "Holiday Lights" : d === "INSTALL" ? "Install" : "Service")).join(", ")
     );
   }
   if (template.priceBookItems?.length) {

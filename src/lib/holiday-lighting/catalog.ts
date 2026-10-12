@@ -1,3 +1,5 @@
+import { holidayLightingFeaturesEnabled } from "@/lib/company/features";
+import type { CompanyIndustry } from "@/lib/company/industry";
 import { prisma } from "@/lib/prisma";
 import type { PriceLookup } from "./pricing";
 import {
@@ -32,10 +34,8 @@ export async function loadHolidayPriceLookup(companyId: string): Promise<PriceLo
   return map;
 }
 
-export function assertHolidayLightingEnabled(company: {
-  holidayLightingFeaturesEnabled?: boolean | null;
-}) {
-  if (company.holidayLightingFeaturesEnabled !== true) {
+export function assertHolidayLightingEnabled(company: CompanyIndustry) {
+  if (!holidayLightingFeaturesEnabled(company)) {
     const err = new Error("Holiday lighting tools are disabled for this company");
     (err as Error & { status: number }).status = 403;
     throw err;

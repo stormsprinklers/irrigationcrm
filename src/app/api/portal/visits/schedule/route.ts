@@ -1,3 +1,4 @@
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -69,7 +70,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const visitTitle = title?.trim() || "Service appointment";
+  const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: ctx.companyId}}));
+  const visitTitle = holiday && (!title?.trim() || title.trim() === "Service appointment") ? "Holiday lighting appointment" : title?.trim() || "Service appointment";
   const visit = await prisma.visit.create({
     data: {
       companyId: ctx.companyId,
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest) {
       title: visitTitle,
       startAt: slotStart,
       endAt: slotEnd,
-      division: Division.SERVICE,
+      division: holiday ? Division.HOLIDAY_LIGHTS : Division.SERVICE,
       serviceAreaId: serviceArea.id,
       status: VisitStatus.SCHEDULED,
       address: property.address,

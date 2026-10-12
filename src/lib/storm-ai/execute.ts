@@ -266,7 +266,7 @@ export async function runStormAiTool(
         }
 
         const filters = requestedTech
-          ? { serviceAreaIds: [], userIds: [requestedTech], crewIds: [], divisions: [] as ("INSTALL" | "SERVICE")[] }
+          ? { serviceAreaIds: [], userIds: [requestedTech], crewIds: [], divisions: [] as ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[] }
           : undefined;
         const visits = await listVisits(user.companyId, start, end, filters);
         return ok({ visits: visits.slice(0, 80) });

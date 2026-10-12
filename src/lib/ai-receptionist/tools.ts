@@ -1,3 +1,4 @@
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { addMinutes } from "date-fns";
 import { Division, ReceptionistCallStatus, VisitStatus } from "@prisma/client";
 import { z } from "zod";
@@ -143,7 +144,7 @@ export const toolArgSchemas: Record<ReceptionistToolName, z.ZodTypeAny> = {
     propertyId: z.string().optional(),
     title: z.string().min(3).max(160),
     issue: z.string().optional(),
-    division: z.enum(["SERVICE", "INSTALL"]).optional(),
+    division: z.enum(["SERVICE", "INSTALL", "HOLIDAY_LIGHTS"]).optional(),
     zip: zipSchema.optional(),
     detailsConfirmed: z.boolean().refine((v) => v === true, {
       message: "detailsConfirmed must be true",
@@ -667,6 +668,7 @@ async function runTool(
       }
 
       const call = await getCall(ctx);
+      const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: ctx.companyId}}));
       const visit = await prisma.$transaction(async (tx) => {
         await tx.appointmentHold.delete({ where: { id: hold.id } });
         return tx.visit.create({
@@ -674,10 +676,10 @@ async function runTool(
             companyId: ctx.companyId,
             customerId,
             propertyId: property?.id,
-            title: String(args.title),
+            title: holiday && (!args.title || ["Service appointment", "Service visit", "Service call"].includes(String(args.title))) ? "Holiday lighting appointment" : String(args.title),
             startAt: hold.startAt,
             endAt: hold.endAt,
-            division: (args.division as Division) ?? Division.SERVICE,
+            division: (args.division as Division) ?? (holiday ? Division.HOLIDAY_LIGHTS : Division.SERVICE),
             status: VisitStatus.SCHEDULED,
             serviceAreaId: serviceArea.id,
             address: property?.address ?? undefined,

@@ -1,3 +1,5 @@
+import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
+import { expireEnRouteVisits } from "./en-route-timeout";
 import { Division, Prisma, VisitStatus } from "@prisma/client";
 import { formatVisitEtaPayload } from "@/lib/maps/eta";
 import { prisma } from "@/lib/prisma";
@@ -186,6 +188,7 @@ export async function listVisitsForCompany(
   companyId: string,
   filters?: VisitListFilters
 ) {
+  await expireEnRouteVisits(companyId);
   const where: Prisma.VisitWhereInput = { companyId };
 
   if (filters?.status) {
@@ -221,6 +224,7 @@ export async function listVisits(
   end: Date,
   filters?: ScheduleFilters
 ) {
+  await expireEnRouteVisits(companyId);
   const visits = await prisma.visit.findMany({
     where: buildVisitWhere(companyId, start, end, filters),
     include: visitInclude,
@@ -355,6 +359,7 @@ export async function getScheduleFilters(
 }
 
 export async function getVisitForCompany(companyId: string, visitId: string) {
+  await expireEnRouteVisits(companyId, visitId);
   return prisma.visit.findFirst({
     where: { id: visitId, companyId },
     include: visitDetailInclude,
@@ -409,6 +414,7 @@ export async function serializeVisitDetail(
 
   return {
     ...visit,
+    designExportMetadata: holidayVisitPlan(visit.designExportMetadata, (visit.designExportMetadata as {approvedOptionLetter?: string} | null)?.approvedOptionLetter) ?? visit.designExportMetadata,
     property,
     assignedUsers,
     estimates: visit.estimates.map(serializeVisitEstimateSummary),

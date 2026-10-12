@@ -30,7 +30,7 @@ export type EmployeeRecord = {
   title: string | null;
   websiteTeamSlug: string | null;
   status: "ACTIVE" | "ARCHIVED";
-  division: "INSTALL" | "SERVICE" | null;
+  division: "INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS" | null;
   color: string | null;
   photoUrl: string | null;
   address: string | null;
@@ -70,7 +70,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
     role: "CSR" as (typeof ROLES)[number],
     title: "",
     websiteTeamSlug: "",
-    division: "" as "" | "INSTALL" | "SERVICE",
+    division: "" as "" | "INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS",
     color: "#2563EB",
     photoUrl: "",
     address: "",
@@ -596,10 +596,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           <select
             className="mt-1 w-full rounded-md border border-border px-3 py-2 text-sm"
             value={form.division}
-            onChange={(e) => setForm((p) => ({ ...p, division: e.target.value as "" | "INSTALL" | "SERVICE" }))}
+            onChange={(e) => setForm((p) => ({ ...p, division: e.target.value as "" | "INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS" }))}
           >
             <option value="">None</option>
             <option value="INSTALL">Install</option>
+            <option value="HOLIDAY_LIGHTS">Holiday Lights</option>
             <option value="SERVICE">Service</option>
           </select>
         </div>

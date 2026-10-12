@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -238,6 +240,8 @@ async function fileToCompressedDataUrl(file: File): Promise<PendingImage | null>
 }
 
 export function StormAiChat() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [enabled, setEnabled] = useState(true);
@@ -710,11 +714,11 @@ export function StormAiChat() {
     return (
       <ContentArea>
         <PageHeader
-          title="Storm AI"
+          title={aiName}
           subtitle="Assistant for CRM lookups, parts ID, and field diagnostics"
         />
         <p className="text-sm text-muted-foreground">
-          Storm AI is turned off for this company. Enable it under Settings → Storm AI.
+          {aiName} is turned off for this company. Enable it under Settings → {aiName}.
         </p>
       </ContentArea>
     );
@@ -732,7 +736,7 @@ export function StormAiChat() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Sparkles className="h-4 w-4" />
               </span>
-              Storm AI
+              {aiName}
             </span>
           }
           subtitle="Ask about customers, attach a part photo, or use mic / video for live help"
@@ -960,7 +964,7 @@ export function StormAiChat() {
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Ask Storm AI… or use mic / video"
+              placeholder={`Ask ${aiName}… or use mic / video`}
               disabled={sending}
               className="flex-1"
             />

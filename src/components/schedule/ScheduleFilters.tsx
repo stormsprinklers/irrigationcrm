@@ -108,14 +108,14 @@ export function ScheduleFiltersPanel({ open, onClose, filters, options, onChange
         <div>
           <p className="mb-2 font-medium">Division</p>
           <div className="flex gap-2">
-            {(["INSTALL", "SERVICE"] as const).map((division) => (
+            {(["INSTALL", "SERVICE", "HOLIDAY_LIGHTS"] as const).map((division) => (
               <button
                 key={division}
                 type="button"
                 onClick={() =>
                   onChange({
                     ...filters,
-                    divisions: toggleItem(filters.divisions, division) as ("INSTALL" | "SERVICE")[],
+                    divisions: toggleItem(filters.divisions, division) as ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[],
                   })
                 }
                 className={`rounded-full border px-3 py-1 text-xs ${
@@ -124,7 +124,7 @@ export function ScheduleFiltersPanel({ open, onClose, filters, options, onChange
                     : "border-border"
                 }`}
               >
-                {division === "INSTALL" ? "Install" : "Service"}
+                {division === "HOLIDAY_LIGHTS" ? "Holiday Lights" : division === "INSTALL" ? "Install" : "Service"}
               </button>
             ))}
           </div>

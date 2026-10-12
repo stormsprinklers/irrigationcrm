@@ -84,18 +84,18 @@ function computeEnRouteSeconds(events: TimeEvent[], status: string, now: Date) {
   for (const event of events) {
     const at = new Date(event.occurredAt);
     if (at <= enRouteAt) continue;
-    if (event.type === "START" || event.type === "RESUME" || event.type === "FINISH") {
+    if (event.type === "START" || event.type === "RESUME" || event.type === "PAUSE" || event.type === "FINISH") {
       endedAt = at;
       break;
     }
   }
 
   if (status === "EN_ROUTE" && !endedAt) {
-    return Math.floor((now.getTime() - enRouteAt.getTime()) / 1000);
+    return Math.max(0, Math.min(7200, Math.floor((now.getTime() - enRouteAt.getTime()) / 1000)));
   }
 
   if (endedAt) {
-    return Math.floor((endedAt.getTime() - enRouteAt.getTime()) / 1000);
+    return Math.max(0, Math.min(7200, Math.floor((endedAt.getTime() - enRouteAt.getTime()) / 1000)));
   }
 
   return 0;

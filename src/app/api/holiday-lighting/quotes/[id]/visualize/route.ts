@@ -140,7 +140,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
+      select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
     });
     assertHolidayLightingEnabled(company ?? {});
 

@@ -59,7 +59,7 @@ export type TechColumn = {
   role?: string;
   /** User whose work schedule drives Open Time Slots (foreman for crews). */
   scheduleUserId?: string | null;
-  division?: "SERVICE" | "INSTALL" | null;
+  division?: "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS" | null;
 };
 
 export type ScheduleViewMode = "week" | "day" | "month";

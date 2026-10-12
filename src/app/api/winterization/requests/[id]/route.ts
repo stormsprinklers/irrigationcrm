@@ -21,7 +21,7 @@ export async function PATCH(
     const user = await requireSessionUser();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { irrigationFeaturesEnabled: true },
+      select: { name: true, holidayLightingFeaturesEnabled: true, irrigationFeaturesEnabled: true },
     });
     if (!irrigationFeaturesEnabled(company) || !canViewWinterizationNav(user.role)) {
       return NextResponse.json({ error: "Winterization tools are off" }, { status: 403 });

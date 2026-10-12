@@ -1,4 +1,5 @@
 "use client";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2, Copy, Check } from "lucide-react";
@@ -87,6 +88,8 @@ function BrandColorField({
 }
 
 export function CompanySettingsInner() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const { refresh: refreshBrand } = useCompanyBrand();
   const [tab, setTab] = useState<(typeof profileTabs)[number]>("Profile");
   const [company, setCompany] = useState<CompanySettingsDTO | null>(null);
@@ -421,7 +424,7 @@ export function CompanySettingsInner() {
           <section className="rounded-lg border border-border bg-white p-6">
             <h3 className="mb-1 text-lg font-semibold">Monthly revenue target</h3>
             <p className="mb-4 text-sm text-muted-foreground">
-              Used by Storm AI and reporting when staff ask about being on track for the month.
+              Used by {aiName} and reporting when staff ask about being on track for the month.
             </p>
             <div>
               <label className="text-sm text-muted-foreground">Amount (USD)</label>

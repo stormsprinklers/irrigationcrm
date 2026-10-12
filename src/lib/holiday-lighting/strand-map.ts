@@ -35,6 +35,7 @@ export type HolidayStrandMapFeature = {
   lengthFtWithMargin: number;
   lightStyleKey: string;
   lightStyleLabel: string;
+  bulbColors?: string;
   purchaseTotal: number;
   leaseTotal: number;
   kind: "strand" | "segment" | "placement";
@@ -131,6 +132,7 @@ export function buildHolidayStrandMap(params: {
       lengthFtWithMargin: lengthWithMargin(lengthFt, marginPct),
       lightStyleKey: styleKey,
       lightStyleLabel: styleLabel(catalog, styleKey),
+      bulbColors: members.map(m => m.colorPattern || selections.defaultColorPattern || "Warm White").filter((v, i, all) => all.indexOf(v) === i).join(", "),
       purchaseTotal: totals.purchaseTotal,
       leaseTotal: totals.leaseTotal,
       kind: "strand",
@@ -153,6 +155,7 @@ export function buildHolidayStrandMap(params: {
       lengthFtWithMargin: lengthWithMargin(lengthFt, marginPct),
       lightStyleKey: styleKey,
       lightStyleLabel: styleLabel(catalog, styleKey),
+      bulbColors: segment.colorPattern || selections.defaultColorPattern || "Warm White",
       purchaseTotal: totals.purchaseTotal,
       leaseTotal: totals.leaseTotal,
       kind: "segment",
@@ -174,6 +177,7 @@ export function buildHolidayStrandMap(params: {
       lightStyleLabel: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap · Mini LEDs${placement.colorPattern ? ` · ${placement.colorPattern}` : ""}`,
       purchaseTotal: totals.purchaseTotal,
       leaseTotal: totals.leaseTotal,
+      bulbColors: placement.colorPattern || selections.defaultColorPattern || "Warm White",
       kind: "placement",
       placement: { latLng: placement.latLng, radiusMeters },
     });

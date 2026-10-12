@@ -16,7 +16,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
   // Keep native Twilio calling in charge while using field web tools.
   if (mobile && session?.user) {
     return <VoiceDeviceProvider enabled={false}><InboxBadgesProvider><CompanyBrandProvider><TooltipProvider delayDuration={200}>
-      <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
+      <div data-native-shell="true" className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
         <OutboundCommsBanner />
         <main className="relative min-h-0 flex-1 overflow-auto">{children}</main>
       </div>

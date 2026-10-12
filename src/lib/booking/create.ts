@@ -1,3 +1,4 @@
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { Division, VisitStatus } from "@prisma/client";
 import { getAvailableSlots, BOOKING_SLOT_MINUTES, clampOnlineBookingSlotMinutes } from "@/lib/booking/availability";
 import {
@@ -269,7 +270,8 @@ export async function createOnlineBooking(companyId: string, input: OnlineBookin
     propertyId = property.id;
   }
 
-  const visitTitle = virtual ? "Virtual consultation" : "Service appointment";
+  const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: companyId}}));
+  const visitTitle = holiday ? "Holiday lighting appointment" : virtual ? "Virtual consultation" : "Service appointment";
   const assignee = assignedUserId
     ? staff.find((person) => person.id === assignedUserId) ??
       (await prisma.user.findUnique({
@@ -286,7 +288,7 @@ export async function createOnlineBooking(companyId: string, input: OnlineBookin
       title: visitTitle,
       startAt: slotStart,
       endAt: slotEnd,
-      division: Division.SERVICE,
+      division: holiday ? Division.HOLIDAY_LIGHTS : Division.SERVICE,
       serviceAreaId: serviceArea?.id ?? null,
       assignedUserId,
       status: VisitStatus.SCHEDULED,

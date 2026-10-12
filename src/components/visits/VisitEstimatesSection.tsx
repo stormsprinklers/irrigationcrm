@@ -1,3 +1,6 @@
+"use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import Link from "next/link";
 import { FilePlus2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +17,8 @@ type Estimate = {
 type Props = {
   visitId: string;
   estimates: Estimate[];
+  customerId?: string;
+  propertyId?: string;
 };
 
 function formatCurrency(value: string | number) {
@@ -22,13 +27,15 @@ function formatCurrency(value: string | number) {
   );
 }
 
-export function VisitEstimatesSection({ visitId, estimates }: Props) {
+export function VisitEstimatesSection({ visitId, estimates, customerId, propertyId }: Props) {
+  const { brand } = useCompanyBrand();
+  const href = isHolidayLightingCompany(brand) ? `/holiday-lighting/quote/new?${new URLSearchParams({visitId, ...(customerId ? {customerId} : {}), ...(propertyId ? {propertyId} : {})})}` : `/estimates/new?visitId=${visitId}`;
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-base">Estimates</CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/estimates/new?visitId=${visitId}`}>
+          <Link href={href}>
             <FilePlus2 className="h-4 w-4" />
             New estimate
           </Link>

@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, Link2, Loader2, Plus, Trash2, Upload } from "lucide-react";
@@ -37,6 +39,8 @@ type Part = {
 };
 
 export default function TechAssistPartsPage() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const [sections, setSections] = useState<Section[]>([]);
   const [parts, setParts] = useState<Part[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
@@ -355,7 +359,7 @@ export default function TechAssistPartsPage() {
       <PageHeader
         breadcrumb={["Settings", "Storm AI", "Technician Assistant", "Parts Info"]}
         title="Parts Info"
-        subtitle="Sections of parts with visual and technical descriptions, photos, and manuals for Storm AI to look up in the field"
+        subtitle={`Sections of parts with visual and technical descriptions, photos, and manuals for ${aiName} to look up in the field`}
       />
 
       <div className="grid gap-4 lg:grid-cols-[220px_220px_1fr]">

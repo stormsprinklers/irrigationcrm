@@ -34,7 +34,7 @@ export type ChecklistTemplateInput = {
   description?: string | null;
   active?: boolean;
   applyToAllJobs?: boolean;
-  divisions?: ("INSTALL" | "SERVICE")[];
+  divisions?: ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[];
   excludeCallbacks?: boolean;
   requiredForCompletion?: boolean;
   sortOrder?: number;

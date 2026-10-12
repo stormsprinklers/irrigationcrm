@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import type { Metadata, Viewport } from "next";
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
@@ -73,7 +74,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -81,7 +82,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers nativeShell={(await cookies()).get("crm-mobile-shell")?.value === "1"}>{children}</Providers>
       </body>
     </html>
   );

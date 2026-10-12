@@ -1,3 +1,4 @@
+import { expireEnRouteVisits } from "@/lib/visits/en-route-timeout";
 import { NextResponse } from "next/server";
 import { VisitStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
@@ -14,6 +15,7 @@ const ACTIVE_STATUSES: VisitStatus[] = [
 export async function GET(request: Request) {
   try {
     const user = await requireSessionUser(request);
+    await expireEnRouteVisits(user.companyId);
     const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
     const visit = await prisma.visit.findFirst({
       where: {

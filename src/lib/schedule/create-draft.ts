@@ -58,7 +58,7 @@ export async function createDraftVisit(fields?: {
       title: fields?.title?.trim() || "New visit",
       startAt: startAt.toISOString(),
       endAt: endAt.toISOString(),
-      division: "SERVICE",
+      division: undefined,
       status: "UNSCHEDULED",
       customerId: fields?.customerId || undefined,
       callSessionId: fields?.callSessionId || undefined,

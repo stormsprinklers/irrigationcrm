@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/google-reviews",
       "schedule": "0 22,23 * * *"
+    },
+    {
+      "path": "/api/cron/visits/en-route-timeout",
+      "schedule": "* * * * *"
     }
   ]
 }

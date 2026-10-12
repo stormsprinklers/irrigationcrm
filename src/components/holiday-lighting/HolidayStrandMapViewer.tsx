@@ -24,7 +24,7 @@ function featureSubtitle(feature: HolidayStrandMapFeature, mode: Mode, priceFiel
     if (feature.kind === "placement") {
       return `${feature.lightStyleLabel} · ${price}`;
     }
-    return `${feature.lengthFtWithMargin.toFixed(1)} ft (incl. margin) · ${price}`;
+    return `${feature.lightStyleLabel} · Bulb colors: ${feature.bulbColors ?? "Not specified"} · ${feature.lengthFtWithMargin.toFixed(1)} ft (incl. margin) · ${price}`;
   }
   return feature.lightStyleLabel;
 }

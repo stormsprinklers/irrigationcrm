@@ -13,6 +13,7 @@ type SwitchableAccount = {
   role: string;
   companyId: string;
   companyName: string;
+  companyLogoUrl: string | null;
   source: "same-email" | "linked";
 };
 
@@ -35,7 +36,7 @@ async function listSwitchableAccounts(
       name: true,
       email: true,
       role: true,
-      company: { select: { id: true, name: true } },
+      company: { select: { id: true, name: true, brandLogoUrl: true, emailLogoUrl: true } },
     },
   });
 
@@ -47,6 +48,7 @@ async function listSwitchableAccounts(
       role: u.role,
       companyId: u.company.id,
       companyName: u.company.name,
+      companyLogoUrl: u.company.brandLogoUrl || u.company.emailLogoUrl,
       source: "same-email",
     });
   }
@@ -61,7 +63,7 @@ async function listSwitchableAccounts(
           email: true,
           role: true,
           status: true,
-          company: { select: { id: true, name: true } },
+          company: { select: { id: true, name: true, brandLogoUrl: true, emailLogoUrl: true } },
         },
       },
     },
@@ -78,6 +80,7 @@ async function listSwitchableAccounts(
       role: l.linkedUser.role,
       companyId: l.linkedUser.company.id,
       companyName: l.linkedUser.company.name,
+      companyLogoUrl: l.linkedUser.company.brandLogoUrl || l.linkedUser.company.emailLogoUrl,
       source: "linked",
     });
   }
@@ -98,7 +101,7 @@ export async function GET() {
         email: true,
         role: true,
         photoUrl: true,
-        company: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true, brandLogoUrl: true, emailLogoUrl: true } },
       },
     });
     if (!current) return unauthorizedResponse();
@@ -118,6 +121,7 @@ export async function GET() {
         photoUrl: current.photoUrl,
         companyId: current.company.id,
         companyName: current.company.name,
+        companyLogoUrl: current.company.brandLogoUrl || current.company.emailLogoUrl,
         source: "same-email" as const,
       },
       switchable,

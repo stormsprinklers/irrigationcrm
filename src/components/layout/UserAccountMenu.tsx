@@ -30,6 +30,7 @@ type AccountOption = {
   role: string;
   companyId: string;
   companyName: string;
+  companyLogoUrl?: string | null;
   photoUrl?: string | null;
   source: "same-email" | "linked";
 };
@@ -151,7 +152,7 @@ export function UserAccountMenu() {
             Switch accounts
           </DropdownMenuLabel>
           <DropdownMenuItem disabled className="opacity-100">
-            <Check className="mr-2 h-4 w-4 shrink-0" />
+            <Avatar className="mr-2 h-8 w-8"><AvatarImage src={blobProxyUrl(current?.companyLogoUrl) ?? undefined} /><AvatarFallback>{getInitials(companyName)}</AvatarFallback></Avatar><Check className="mr-2 h-4 w-4 shrink-0" />
             <div className="min-w-0">
               <div className="truncate font-medium">{companyName}</div>
               <div className="truncate text-xs text-muted-foreground">Current</div>
@@ -163,7 +164,7 @@ export function UserAccountMenu() {
               onClick={() => void switchTo(acct.userId)}
               disabled={switching}
             >
-              <Building2 className="mr-2 h-4 w-4 shrink-0 opacity-60" />
+              <Avatar className="mr-2 h-8 w-8"><AvatarImage src={blobProxyUrl(acct.companyLogoUrl) ?? undefined} /><AvatarFallback>{getInitials(acct.companyName)}</AvatarFallback></Avatar>
               <div className="min-w-0">
                 <div className="truncate font-medium">{acct.companyName}</div>
                 <div className="truncate text-xs text-muted-foreground">{acct.email}</div>

@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -25,6 +27,8 @@ type Props = {
 };
 
 export function CreateCustomerVisitModal({ open, onClose, customer, properties }: Props) {
+  const { brand } = useCompanyBrand();
+  const holiday = isHolidayLightingCompany(brand);
   const router = useRouter();
   const defaults = defaultVisitTimes();
   const [saving, setSaving] = useState(false);
@@ -35,7 +39,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
   const primaryProperty = properties.find((p) => p.isPrimary) ?? properties[0];
   const [form, setForm] = useState({
     title: "",
-    division: "SERVICE" as "SERVICE" | "INSTALL",
+    division: "SERVICE" as "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS",
     date: defaults.date,
     startTime: defaults.startTime,
     endTime: defaults.endTime,
@@ -45,6 +49,10 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
     zip: primaryProperty?.zip ?? customer.zip ?? "",
     isCallback: false,
   });
+
+  useEffect(() => {
+    if (open && holiday) setForm(f => ({...f, title: f.title || "Holiday lighting appointment", division: "HOLIDAY_LIGHTS"}));
+  }, [open, holiday]);
 
   useEffect(() => {
     if (!open) return;
@@ -174,11 +182,12 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
           />
           <select
             value={form.division}
-            onChange={(e) => setForm({ ...form, division: e.target.value as "SERVICE" | "INSTALL" })}
+            onChange={(e) => setForm({ ...form, division: e.target.value as "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS" })}
             className={selectClassName}
           >
             <option value="SERVICE">Service</option>
             <option value="INSTALL">Install</option>
+            <option value="HOLIDAY_LIGHTS">Holiday Lights</option>
           </select>
           <Input
             type="date"

@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -36,6 +38,8 @@ function serializeIssueState(input: {
 }
 
 export default function TechAssistIssueEditorPage() {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const params = useParams<{ issueId: string }>();
   const router = useRouter();
   const issueId = params.issueId;
@@ -186,7 +190,7 @@ export default function TechAssistIssueEditorPage() {
           className="h-8 min-w-[12rem] max-w-md flex-[1.4] text-sm"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description — when Storm AI should pick this…"
+          placeholder={`Description — when ${aiName} should pick this…`}
           aria-label="Issue description"
         />
         <label className="flex shrink-0 items-center gap-2 text-sm">

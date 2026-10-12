@@ -6,7 +6,7 @@ export default function StormAiPage() {
     <Suspense
       fallback={
         <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-          Loading Storm AI…
+          Loading assistant…
         </div>
       }
     >

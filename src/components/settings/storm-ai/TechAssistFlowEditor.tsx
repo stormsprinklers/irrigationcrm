@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 
 import {
   useCallback,
@@ -1438,6 +1440,8 @@ export function TechAssistFlowEditor({
   historyRef,
   onHistoryStateChange,
 }: Props) {
+  const { brand } = useCompanyBrand();
+  const aiName = companyAIName(brand.companyName);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [zoom, setZoom] = useState(1);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
@@ -1991,7 +1995,7 @@ export function TechAssistFlowEditor({
               <div className="w-full max-w-sm rounded-lg border border-border bg-background/90 p-4 text-center shadow-sm">
                 <p className="text-sm font-semibold">Issue start</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Storm AI begins at the first diagnostic below.
+                  {aiName} begins at the first diagnostic below.
                 </p>
                 {nodes.length > 1 ? (
                   <label className="mt-3 block text-left text-xs">

@@ -23,7 +23,7 @@ type FormState = {
   description: string;
   active: boolean;
   applyToAllJobs: boolean;
-  divisions: ("INSTALL" | "SERVICE")[];
+  divisions: ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[];
   excludeCallbacks: boolean;
   requiredForCompletion: boolean;
   customerVisible: boolean;
@@ -295,7 +295,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
           </label>
           {!form.applyToAllJobs && (
             <div className="flex flex-wrap gap-4">
-              {(["INSTALL", "SERVICE"] as const).map((division) => (
+              {(["INSTALL", "SERVICE", "HOLIDAY_LIGHTS"] as const).map((division) => (
                 <label key={division} className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -309,7 +309,7 @@ export function ChecklistTemplateEditor({ templateId }: Props) {
                       }))
                     }
                   />
-                  {division === "INSTALL" ? "Install" : "Service"}
+                  {division === "HOLIDAY_LIGHTS" ? "Holiday Lights" : division === "INSTALL" ? "Install" : "Service"}
                 </label>
               ))}
             </div>

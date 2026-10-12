@@ -29,7 +29,7 @@ export function assertMaintenancePlansEnabled(company: {
 export async function requireCompanyMaintenancePlans(companyId: string) {
   const company = await prisma.company.findUnique({
     where: { id: companyId },
-    select: { maintenancePlansFeaturesEnabled: true },
+    select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true, maintenancePlansFeaturesEnabled: true },
   });
   assertMaintenancePlansEnabled(company ?? {});
 }

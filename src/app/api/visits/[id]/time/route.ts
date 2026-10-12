@@ -1,3 +1,4 @@
+import { expireEnRouteVisits } from "@/lib/visits/en-route-timeout";
 import { NextRequest, NextResponse } from "next/server";
 import { TimeEventType, VisitStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
+    await expireEnRouteVisits(user.companyId, id);
     const visit = await prisma.visit.findFirst({
       where: { id, companyId: user.companyId },
       include: {
@@ -232,6 +234,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
+    await expireEnRouteVisits(user.companyId, id);
     const events = await prisma.visitTimeEvent.findMany({
       where: { visit: { id, companyId: user.companyId } },
       orderBy: { occurredAt: "asc" },

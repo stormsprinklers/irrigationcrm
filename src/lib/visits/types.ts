@@ -4,7 +4,7 @@ export type ScheduleFilters = {
   serviceAreaIds: string[];
   userIds: string[];
   crewIds: string[];
-  divisions: ("INSTALL" | "SERVICE")[];
+  divisions: ("INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS")[];
 };
 
 export const DEFAULT_SCHEDULE_FILTERS: ScheduleFilters = {
@@ -19,7 +19,7 @@ export type VisitDTO = {
   title: string;
   startAt: string;
   endAt: string;
-  division: "INSTALL" | "SERVICE";
+  division: "INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS";
   status: string;
   tags: string[];
   isCallback?: boolean;

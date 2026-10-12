@@ -1,3 +1,4 @@
+import { expireEnRouteVisits } from "./en-route-timeout";
 import { randomBytes } from "crypto";
 import { VisitStatus } from "@prisma/client";
 import {
@@ -93,6 +94,7 @@ export async function recordLiveLocationPing(params: {
   heading?: number | null;
   speedMps?: number | null;
 }) {
+  await expireEnRouteVisits(params.companyId, params.visitId);
   const visit = await prisma.visit.findFirst({
     where: { id: params.visitId, companyId: params.companyId },
     include: {
@@ -111,6 +113,7 @@ export async function recordLiveLocationPing(params: {
   }
 
   const now = new Date();
+  if (visit.liveTrackExpiresAt && visit.liveTrackExpiresAt <= now) return {ok: false as const, error: "Live tracking expired", status: 409};
   if (
     visit.liveLocationAt &&
     now.getTime() - visit.liveLocationAt.getTime() < MIN_PING_INTERVAL_MS
@@ -161,9 +164,13 @@ export async function recordLiveLocationPing(params: {
     }
   }
 
-  const updated = await prisma.visit.update({
-    where: { id: visit.id },
+  const accepted = await prisma.visit.updateMany({
+    where: { id: visit.id, status: VisitStatus.EN_ROUTE, liveTrackingActive: true, liveTrackExpiresAt: {gt: new Date()} },
     data: update,
+  });
+  if (!accepted.count) return {ok: false as const, error: "Live tracking expired", status: 409};
+  const updated = await prisma.visit.findUniqueOrThrow({
+    where: {id: visit.id},
     select: {
       liveLocationAt: true,
       enRouteEtaSeconds: true,

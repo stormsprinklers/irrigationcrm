@@ -1,3 +1,5 @@
+import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       );
       if (assignmentError) return badRequestResponse(assignmentError);
 
+      const holiday = isHolidayLightingCompany(await prisma.company.findUnique({where: {id: user.companyId}}));
       const visit = await prisma.visit.create({
         data: {
           companyId: user.companyId,
@@ -86,7 +89,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           title: String(schedule.title),
           startAt: new Date(schedule.startAt),
           endAt: new Date(schedule.endAt),
-          division: schedule.division as Division,
+          division: holiday ? "HOLIDAY_LIGHTS" : schedule.division as Division,
+          designExportMetadata: estimate.designExportMetadata ?? undefined,
           serviceAreaId,
           assignedUserId: schedule.assignedUserId ?? null,
           crewId: schedule.crewId ?? null,
@@ -129,6 +133,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       });
     }
 
+    const holidayPlan = holidayVisitPlan(estimate.designExportMetadata, estimate.options.find(option => option.id === optionId)?.letter);
+    if (holidayPlan) await prisma.visit.update({where: {id: visitId, companyId: user.companyId}, data: {designExportMetadata: holidayPlan, division: "HOLIDAY_LIGHTS"}});
     await prisma.estimate.update({
       where: { id: estimate.id },
       data: {

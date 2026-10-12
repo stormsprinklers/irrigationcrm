@@ -32,7 +32,7 @@ const MAX_TOOL_ROUNDS = 8;
 const MAX_IMAGE_HISTORY_TURNS = 2;
 const MAX_OPENAI_RETRIES = 3;
 const TURN_FAILURE_WARNING =
-  "Storm AI couldn’t finish that reply. Try sending your message again.";
+  "The assistant couldn’t finish that reply. Try sending your message again.";
 
 type ContentPart =
   | { type: "text"; text: string }
@@ -147,7 +147,7 @@ export async function runStormAiTurn(opts: {
       error: "OPENAI_API_KEY is not configured",
     });
     return {
-      warning: "Storm AI is not configured (missing OPENAI_API_KEY).",
+      warning: "The assistant is not configured (missing OPENAI_API_KEY).",
       messages: await listMessages(conversation.id),
       debugLog: [
         {
@@ -462,7 +462,7 @@ export async function runStormAiTurn(opts: {
 
     return { messages: await listMessages(conversation.id), debugLog };
   } catch (err) {
-    const error = err instanceof Error ? err.message : "Storm AI failed";
+    const error = err instanceof Error ? err.message : "Assistant failed";
     debugLog.push({ level: "error", message: `Text turn failed: ${error.slice(0, 240)}` });
     await writeAudit({
       user: opts.user,

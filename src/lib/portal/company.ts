@@ -30,6 +30,7 @@ export const portalCompanySelect = {
   portalShowReferrals: true,
   portalRachioAllowRun: true,
   irrigationFeaturesEnabled: true,
+  holidayLightingFeaturesEnabled: true,
   maintenancePlansFeaturesEnabled: true,
   estimateWarrantyText: true,
   estimateFinancingUrl: true,
@@ -67,6 +68,7 @@ export type PortalCompany = {
   portalShowReferrals: boolean;
   portalRachioAllowRun: boolean;
   irrigationFeaturesEnabled: boolean;
+  holidayLightingFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
   estimateWarrantyText: string | null;
   estimateFinancingUrl: string | null;

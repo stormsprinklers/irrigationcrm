@@ -1,3 +1,6 @@
+"use client";
+import { useCompanyBrand } from "./CompanyBrandProvider";
+import { companyAIName } from "@/lib/company/industry";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +23,8 @@ export function PageHeader({
   actions,
   className,
 }: PageHeaderProps) {
+  const { brand } = useCompanyBrand();
+  const branded = (value: string) => value.replace(/Storm AI/g, companyAIName(brand.companyName));
   const crumbs = breadcrumb?.length ? resolveBreadcrumbs(breadcrumb) : [];
 
   return (
@@ -30,7 +35,7 @@ export function PageHeader({
             {crumbs.map((crumb, index) => {
               const isLast = index === crumbs.length - 1;
               return (
-                <li key={`${crumb.label}-${index}`} className="flex items-center gap-1">
+                <li key={`${branded(crumb.label)}-${index}`} className="flex items-center gap-1">
                   {index > 0 ? <span aria-hidden="true">&gt;</span> : null}
                   {crumb.href ? (
                     <Link
@@ -40,10 +45,10 @@ export function PageHeader({
                         isLast && "text-foreground/80"
                       )}
                     >
-                      {crumb.label}
+                      {branded(crumb.label)}
                     </Link>
                   ) : (
-                    <span className={cn(isLast && "text-foreground/80")}>{crumb.label}</span>
+                    <span className={cn(isLast && "text-foreground/80")}>{branded(crumb.label)}</span>
                   )}
                 </li>
               );
@@ -54,10 +59,10 @@ export function PageHeader({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-xl font-bold tracking-tight text-storm-navy sm:text-2xl">
-            {title}
+            {typeof title === "string" ? branded(title) : title}
           </h1>
           {subtitle ? (
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{branded(subtitle)}</p>
           ) : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

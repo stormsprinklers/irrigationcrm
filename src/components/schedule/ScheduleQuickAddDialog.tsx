@@ -1,4 +1,6 @@
 "use client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { isHolidayLightingCompany } from "@/lib/company/industry";
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
@@ -34,6 +36,8 @@ export function ScheduleQuickAddDialog({
   onClose,
   onCreated,
 }: Props) {
+  const { brand } = useCompanyBrand();
+  const holiday = isHolidayLightingCompany(brand);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState("Service visit");
   const [customerId, setCustomerId] = useState("");
@@ -42,16 +46,16 @@ export function ScheduleQuickAddDialog({
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [crewId, setCrewId] = useState<string | null>(null);
   const [crewName, setCrewName] = useState<string | null>(null);
-  const [division, setDivision] = useState<"SERVICE" | "INSTALL">("SERVICE");
+  const [division, setDivision] = useState<"SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS">("SERVICE");
 
   useEffect(() => {
     if (!open) return;
 
-    setTitle("Service visit");
+    setTitle(holiday ? "Holiday lighting appointment" : "Service visit");
     setCustomerId("");
     setCustomerName("");
     setSelectedCustomer(null);
-    setDivision("SERVICE");
+    setDivision(holiday ? "HOLIDAY_LIGHTS" : "SERVICE");
     setCrewId(slot?.crewId ?? null);
     setCrewName(slot?.crewName ?? null);
 
@@ -59,7 +63,7 @@ export function ScheduleQuickAddDialog({
       slot?.assignedUserId && slot.assignedUserId !== "__unassigned__" ? slot.assignedUserId : "";
     const preassignedEmployee = employees.find((employee) => employee.id === preassignedId);
     setAssignedUserIds(preassignedEmployee ? [preassignedEmployee.id] : []);
-  }, [open, slot, employees]);
+  }, [open, slot, employees, holiday]);
 
   if (!open || !slot) return null;
 
@@ -212,10 +216,11 @@ export function ScheduleQuickAddDialog({
               <select
                 className={`${selectClassName} mt-1`}
                 value={division}
-                onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL")}
+                onChange={(e) => setDivision(e.target.value as "SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS")}
               >
                 <option value="SERVICE">Service</option>
                 <option value="INSTALL">Install</option>
+                <option value="HOLIDAY_LIGHTS">Holiday Lights</option>
               </select>
             </div>
           </div>

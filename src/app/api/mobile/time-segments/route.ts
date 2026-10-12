@@ -1,3 +1,4 @@
+import { expireEnRouteVisits } from "@/lib/visits/en-route-timeout";
 import { NextRequest, NextResponse } from "next/server";
 import { TechTimeCategory, TechTimeCorrectionStatus, TechTimeSegmentSource } from "@prisma/client";
 import {
@@ -20,6 +21,7 @@ import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser(request);
+    await expireEnRouteVisits(user.companyId);
     const { searchParams } = request.nextUrl;
     const openOnly = searchParams.get("open") === "1";
     const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit") ?? 50)));
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser(request);
+    await expireEnRouteVisits(user.companyId);
     const body = await request.json();
     const action = String(body.action ?? "start");
     const deviceId = body.deviceId ? String(body.deviceId) : null;
@@ -143,6 +146,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await requireSessionUser(request);
+    await expireEnRouteVisits(user.companyId);
     if (isFieldRole(user.role)) {
       return forbiddenResponse("Only managers can review time corrections");
     }

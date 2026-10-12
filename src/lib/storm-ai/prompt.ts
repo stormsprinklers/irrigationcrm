@@ -1,3 +1,5 @@
+import { prisma } from "@/lib/prisma";
+import { companyAIName } from "@/lib/company/industry";
 import type { SessionUser } from "@/lib/api-auth";
 import { formatCompanyPoliciesForPrompt } from "./policies";
 import { stormAiCapabilityLines } from "./permissions";
@@ -22,7 +24,9 @@ export async function buildStormAiSystemPrompt(opts: {
 
   const policyBlock = await formatCompanyPoliciesForPrompt(opts.user.companyId);
 
-  return `You are Storm AI, the internal assistant for Storm Sprinklers staff using this CRM.
+  const company = await prisma.company.findUnique({where: {id: opts.user.companyId}, select: {name: true}});
+  const companyName = company?.name || "Company";
+  return `You are ${companyAIName(companyName)}, the internal assistant for ${companyName} staff using this CRM.
 The CRM is the source of truth. Never invent metrics, revenue, names, dates, or IDs.
 If a tool returns ok:false, say you could not retrieve that information. Map codes:
 - NOT_FOUND: ask which of similar search results they meant

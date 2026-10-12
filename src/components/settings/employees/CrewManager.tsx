@@ -11,7 +11,7 @@ type Crew = {
   id: string;
   name: string;
   color: string;
-  division: "INSTALL" | "SERVICE" | null;
+  division: "INSTALL" | "SERVICE" | "HOLIDAY_LIGHTS" | null;
   foremanUserId?: string | null;
   members: { user: { id: string; name: string } }[];
   _count?: { visits: number };

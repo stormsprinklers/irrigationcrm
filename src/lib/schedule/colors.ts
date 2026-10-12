@@ -3,6 +3,7 @@ import type { ColorByMode, ScheduleJobDTO } from "@/lib/visits/types";
 const DIVISION_COLORS: Record<string, string> = {
   INSTALL: "#059669",
   SERVICE: "#2563EB",
+  HOLIDAY_LIGHTS: "#b45309",
 };
 
 export function getJobColor(job: ScheduleJobDTO, colorBy: ColorByMode): string {

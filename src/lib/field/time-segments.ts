@@ -1,3 +1,4 @@
+import { expireEnRouteVisits } from "@/lib/visits/en-route-timeout";
 import {
   TechTimeCategory,
   TechTimeSegmentSource,
@@ -36,6 +37,7 @@ export function serializeTimeSegment(
 }
 
 export async function getOpenTimeSegment(companyId: string, userId: string) {
+  await expireEnRouteVisits(companyId);
   return prisma.techTimeSegment.findFirst({
     where: { companyId, userId, endedAt: null },
     orderBy: { startedAt: "desc" },
