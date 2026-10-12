@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
-import { computeDepositAmount } from "@/lib/estimates/booking";
+import { computeApprovalPaymentAmount, computeDepositAmount } from "@/lib/estimates/booking";
 import { toNumber } from "@/lib/visits/totals";
 
 export async function createEstimateDepositCheckout(params: {
@@ -14,14 +14,20 @@ export async function createEstimateDepositCheckout(params: {
   });
   if (!estimate) throw new Error("Estimate not found");
 
+  if (!estimate.signedAt || (estimate.status !== "SENT" && estimate.status !== "APPROVED")) {
+    throw new Error("Sign the estimate before submitting payment");
+  }
+
   const depositAmount = computeDepositAmount(estimate);
-  if (depositAmount <= 0) throw new Error("No deposit required");
+  const paymentAmount = computeApprovalPaymentAmount(estimate);
+  if (paymentAmount <= 0) throw new Error("This estimate does not have a balance to pay");
+  const isDeposit = depositAmount > 0;
 
   const prefix = estimate.company.invoicePrefix ?? "INV";
-  const invoiceNumber = `${prefix}-DEP-${estimate.id.slice(-6).toUpperCase()}`;
+  const invoiceNumber = `${prefix}-${isDeposit ? "DEP" : "PAY"}-${estimate.id.slice(-6).toUpperCase()}`;
 
   const existing = await prisma.invoice.findFirst({
-    where: { estimateId: estimate.id, companyId: estimate.companyId },
+    where: { estimateId: estimate.id, companyId: estimate.companyId, invoiceNumber },
     orderBy: { createdAt: "desc" },
   });
 
@@ -34,17 +40,17 @@ export async function createEstimateDepositCheckout(params: {
         estimateId: estimate.id,
         invoiceNumber,
         status: "SENT",
-        subtotal: depositAmount,
-        total: depositAmount,
+        subtotal: paymentAmount,
+        total: paymentAmount,
         sentAt: new Date(),
         lineItems: {
           create: [
             {
-              name: "Installation deposit",
-              description: "Deposit",
+              name: isDeposit ? "Installation deposit" : "Estimate payment",
+              description: isDeposit ? "Deposit" : "Payment for approved estimate",
               quantity: 1,
-              unitPrice: depositAmount,
-              total: depositAmount,
+              unitPrice: paymentAmount,
+              total: paymentAmount,
             },
           ],
         },
@@ -60,7 +66,7 @@ export async function createEstimateDepositCheckout(params: {
       visitId: invoice.visitId,
     },
     customerEmail: estimate.customer.email,
-    productName: `Deposit — ${estimate.customer.name}`,
+    productName: `${isDeposit ? "Deposit" : "Estimate payment"} — ${estimate.customer.name}`,
     amount: balance,
     successUrl: params.successUrl,
     cancelUrl: params.cancelUrl,

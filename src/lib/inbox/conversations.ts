@@ -7,6 +7,7 @@ import {
   phonesMatch,
 } from "@/lib/inbox/phone";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { mergedSmsOpenState } from "@/lib/inbox/sms-inbox-state";
 
 export async function findSmsConversationByPhone(params: {
   companyId: string;
@@ -93,11 +94,7 @@ async function mergeSmsConversationMatches(
   const mostRecent = [...matches].sort(
     (a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime()
   );
-  const openState = matches.some((row) => row.smsOpen === true)
-    ? true
-    : matches.every((row) => row.smsOpen === false)
-      ? false
-      : null;
+  const openState = mergedSmsOpenState(matches);
   const closed = mostRecent.find((row) => row.smsClosedAt);
 
   if (duplicates.length) {

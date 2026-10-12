@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DepositType } from "@prisma/client";
-import { computeDepositAmount } from "../booking";
+import { computeApprovalPaymentAmount, computeDepositAmount } from "../booking";
 
 test("estimate deposits are only due above the configured threshold", () => {
   const policy = {
@@ -38,5 +38,41 @@ test("disabled estimate deposit policy does not collect a deposit", () => {
       depositThreshold: 999,
     }),
     0
+  );
+});
+
+test("pay now collects the configured deposit when one is due", () => {
+  assert.equal(
+    computeApprovalPaymentAmount({
+      total: 2000,
+      depositRequired: true,
+      depositType: DepositType.PERCENT,
+      depositAmount: 50,
+      depositThreshold: 999,
+    }),
+    1000
+  );
+});
+
+test("pay now collects the full estimate when no deposit applies", () => {
+  assert.equal(
+    computeApprovalPaymentAmount({
+      total: 750,
+      depositRequired: true,
+      depositType: DepositType.PERCENT,
+      depositAmount: 50,
+      depositThreshold: 999,
+    }),
+    750
+  );
+  assert.equal(
+    computeApprovalPaymentAmount({
+      total: 2400,
+      depositRequired: false,
+      depositType: DepositType.PERCENT,
+      depositAmount: 50,
+      depositThreshold: 999,
+    }),
+    2400
   );
 });

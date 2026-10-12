@@ -651,7 +651,11 @@ export function EstimateDetail({ estimateId }: Props) {
             <h1 className="text-2xl font-semibold tracking-tight">
               {activeOption?.displayNumber ?? estimate.estimateNumber ?? "Estimate"}
             </h1>
-            <Badge variant="outline">{estimate.status}</Badge>
+            <Badge variant="outline">
+              {estimate.status === "SENT" && estimate.signedAt
+                ? "AWAITING PAYMENT / CARD"
+                : estimate.status}
+            </Badge>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <CustomerNameWithBadge
@@ -797,7 +801,9 @@ export function EstimateDetail({ estimateId }: Props) {
 
       {estimate.status === "SENT" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Waiting for customer approval — this page updates automatically when they sign.
+          {estimate.signedAt
+            ? `Customer signed ${format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")} — waiting for payment or a saved card before approval.`
+            : "Waiting for customer approval — this page updates automatically when they sign."}
         </div>
       ) : null}
 

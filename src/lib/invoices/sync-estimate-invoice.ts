@@ -11,6 +11,10 @@ const OPEN_INVOICE_STATUSES = [
   InvoiceStatus.PARTIAL,
 ] as const;
 
+function isApprovalPaymentInvoice(invoiceNumber: string) {
+  return invoiceNumber.includes("-DEP-") || invoiceNumber.includes("-PAY-");
+}
+
 export async function syncEstimateInvoice(params: {
   companyId: string;
   estimateId: string;
@@ -62,14 +66,14 @@ export async function syncEstimateInvoice(params: {
     OPEN_INVOICE_STATUSES.includes(invoice.status as (typeof OPEN_INVOICE_STATUSES)[number])
   );
   const normalInvoice = openInvoices.find(
-    (invoice) => !invoice.invoiceNumber.includes("-DEP-")
+    (invoice) => !isApprovalPaymentInvoice(invoice.invoiceNumber)
   );
-  const unpaidDepositInvoice = openInvoices.find(
+  const unpaidApprovalInvoice = openInvoices.find(
     (invoice) =>
-      invoice.invoiceNumber.includes("-DEP-") &&
+      isApprovalPaymentInvoice(invoice.invoiceNumber) &&
       invoice.payments.every((payment) => payment.refundedAt || toNumber(payment.amount) <= 0)
   );
-  const existing = normalInvoice ?? unpaidDepositInvoice ?? null;
+  const existing = normalInvoice ?? unpaidApprovalInvoice ?? null;
   const priorPaid = estimate.invoices.reduce((sum, invoice) => {
     if (invoice.id === existing?.id) return sum;
     return (
@@ -95,7 +99,7 @@ export async function syncEstimateInvoice(params: {
     return { ok: false as const, error: "This estimate is already paid", status: 400 };
   }
   const invoiceNumber =
-    existing && !existing.invoiceNumber.includes("-DEP-")
+    existing && !isApprovalPaymentInvoice(existing.invoiceNumber)
       ? existing.invoiceNumber
       : await nextInvoiceNumber(params.companyId);
   const lineItems = [

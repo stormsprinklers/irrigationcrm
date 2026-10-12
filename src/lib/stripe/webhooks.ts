@@ -47,15 +47,20 @@ export async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Se
     session.metadata?.purpose === "estimate_pay_later" &&
     session.metadata.estimateId
   ) {
-    await prisma.estimate.updateMany({
+    const estimate = await prisma.estimate.findFirst({
       where: {
         id: session.metadata.estimateId,
         ...(session.metadata.companyId ? { companyId: session.metadata.companyId } : {}),
         ...(session.metadata.customerId ? { customerId: session.metadata.customerId } : {}),
-        status: "APPROVED",
+        signedAt: { not: null },
+        status: { in: ["SENT", "APPROVED"] },
       },
-      data: { needsScheduling: true },
+      select: { id: true },
     });
+    if (estimate) {
+      const { finalizeEstimateApprovalWithCard } = await import("@/lib/estimates/booking");
+      await finalizeEstimateApprovalWithCard(estimate.id);
+    }
     return;
   }
   await applyPaidCheckoutSession(session);

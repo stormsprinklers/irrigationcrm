@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { EstimateStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import {
@@ -9,10 +8,7 @@ import {
 } from "@/lib/portal/auth";
 import { portalFeatureEnabled } from "@/lib/portal/permissions";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
-import {
-  computeDepositAmount,
-  handleEstimateApprovedWithoutDeposit,
-} from "@/lib/estimates/booking";
+import { computeApprovalPaymentAmount, computeDepositAmount } from "@/lib/estimates/booking";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { toNumber } from "@/lib/visits/totals";
 import type { PortalCompany } from "@/lib/portal/company";
@@ -42,6 +38,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         customerId: ctx.customerId,
         OR: [{ id }, { publicToken: id }],
         status: { in: ["SENT"] },
+        signedAt: null,
       },
       include: { lineItems: { orderBy: { sortOrder: "asc" } } },
     });
@@ -55,7 +52,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   } else {
     const estimate = await findEstimateByPublicToken(id);
-    if (estimate?.status === "SENT") {
+    if (estimate?.status === "SENT" && !estimate.signedAt) {
       estimateId = estimate.id;
       companyId = estimate.companyId;
       customerId = estimate.customerId;
@@ -111,8 +108,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     data: {
       signatureBlobUrl: blob.url,
       signedAt: new Date(),
-      status: EstimateStatus.APPROVED,
-      approvedAt: new Date(),
+      // Acceptance is recorded now, but the estimate remains SENT until Stripe
+      // confirms either a payment or a saved card.
+      approvedAt: null,
       selectedQuoteTier,
       ...(selectedOptionId ? { selectedOptionId } : {}),
       total,
@@ -147,20 +145,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   void onEstimateClosed(estimateId).catch(() => {});
 
-  const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
-  void onReferralEstimateApproved({
-    companyId,
-    estimateId,
-    customerId,
-  }).catch(() => {});
-
   const depositAmount = computeDepositAmount(updated);
-  if (depositAmount <= 0) {
-    await handleEstimateApprovedWithoutDeposit(updated.id);
-  }
+  const paymentAmount = computeApprovalPaymentAmount(updated);
 
   return NextResponse.json({
     estimate: serializePortalEstimate(updated),
     depositAmount,
+    paymentAmount,
   });
 }

@@ -25,6 +25,10 @@ import {
   describeSmsSendError,
   SmsSentButNotRecordedError,
 } from "@/lib/inbox/sms-send-error";
+import {
+  archiveInactiveSmsConversations,
+  smsOpenActivityCutoff,
+} from "@/lib/inbox/sms-inbox-state";
 
 type SendSmsBody = {
   to?: string;
@@ -111,56 +115,50 @@ async function sendSmsMessage(params: {
       title: recipientTitle,
     });
 
-    message = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: params.user.id,
-        direction: "OUTBOUND",
-        body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
-          (mediaUrls.length ? "[Media message]" : ""),
-        twilioMessageSid: twilioMessage.sid,
-        deliveryStatus: "queued",
-        ...(params.media.length
-          ? {
-              media: {
-                create: params.media.map((item) => ({
-                  blobUrl: item.blobUrl,
-                  fileName: item.fileName,
-                  mimeType: item.mimeType,
-                  sizeBytes: item.sizeBytes,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: {
-        media: true,
-        sender: { select: { id: true, name: true, email: true } },
-      },
+    const saved = await prisma.$transaction(async (tx) => {
+      const savedMessage = await tx.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: params.user.id,
+          direction: "OUTBOUND",
+          body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
+            (mediaUrls.length ? "[Media message]" : ""),
+          twilioMessageSid: twilioMessage.sid,
+          deliveryStatus: "queued",
+          ...(params.media.length
+            ? {
+                media: {
+                  create: params.media.map((item) => ({
+                    blobUrl: item.blobUrl,
+                    fileName: item.fileName,
+                    mimeType: item.mimeType,
+                    sizeBytes: item.sizeBytes,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: {
+          media: true,
+          sender: { select: { id: true, name: true, email: true } },
+        },
+      });
+      const updatedConversation = await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          lastMessageAt: savedMessage.sentAt,
+          ...(params.scope === Scope.EXTERNAL
+            ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
+            : {}),
+        },
+      });
+      return { message: savedMessage, conversation: updatedConversation };
     });
+    message = saved.message;
+    conversation = saved.conversation;
   } catch (error) {
     throw new SmsSentButNotRecordedError(twilioMessage.sid, error);
   }
-
-  const conversationUpdate = await prisma.conversation
-    .update({
-      where: { id: conversation.id },
-      data: {
-        lastMessageAt: new Date(),
-        ...(params.scope === Scope.EXTERNAL
-          ? { smsOpen: true, smsClosedAt: null, smsClosedById: null }
-          : {}),
-      },
-    })
-    .catch((error) => {
-      console.error("SMS saved, but conversation state was not updated", {
-        conversationId: conversation.id,
-        providerMessageSid: twilioMessage.sid,
-        error,
-      });
-      return null;
-    });
-  if (conversationUpdate) conversation = conversationUpdate;
 
   await markInboundConversationRead(params.user.companyId, conversation.id).catch((error) => {
     console.error("SMS saved, but its conversation could not be marked read", {
@@ -186,6 +184,10 @@ export async function GET(request: NextRequest) {
           ? "open"
           : "general";
     const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
+    const openActivityCutoff = smsOpenActivityCutoff();
+    if (scope === Scope.EXTERNAL) {
+      await archiveInactiveSmsConversations(user.companyId);
+    }
     const searchPhoneDigits = phoneDigitsKey(search);
     const blockedPhones = scope === Scope.EXTERNAL
       ? (await prisma.blockedContact.findMany({ where: { companyId: user.companyId, phone: { not: null } }, select: { phone: true } }))
@@ -223,14 +225,19 @@ export async function GET(request: NextRequest) {
     // customer can be found even when their workflow folder differs from the active tab.
     if (scope === Scope.EXTERNAL && folder === "open" && !search) {
       and.push({
-        OR: [
-          { smsOpen: true },
-          { smsOpen: null },
+        AND: [
+          { lastMessageAt: { gt: openActivityCutoff } },
+          { OR: [{ smsOpen: true }, { smsOpen: null }] },
         ],
       });
     }
     if (scope === Scope.EXTERNAL && folder === "general" && !search) {
-      and.push({ smsOpen: false });
+      and.push({
+        OR: [
+          { smsOpen: false },
+          { lastMessageAt: { lte: openActivityCutoff } },
+        ],
+      });
     }
     if (search) {
       and.push({

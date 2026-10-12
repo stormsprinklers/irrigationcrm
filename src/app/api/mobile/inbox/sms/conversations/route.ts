@@ -132,46 +132,48 @@ export async function POST(request: NextRequest) {
       customerId: resolvedCustomerId,
     });
 
-    const message = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: user.id,
-        direction: "OUTBOUND",
-        body:
-          prefixOutboundSmsWithCompanyName(company?.name ?? "", messageBody.trim()) ||
-          (mediaUrls.length ? "[Media message]" : ""),
-        twilioMessageSid: twilioMessage.sid,
-        deliveryStatus: "queued",
-        ...(media.length
-          ? {
-              media: {
-                create: media.map((item) => ({
-                  blobUrl: item.blobUrl,
-                  fileName: item.fileName,
-                  mimeType: item.mimeType,
-                  sizeBytes: item.sizeBytes,
-                })),
-              },
-            }
-          : {}),
-      },
-      include: {
-        media: true,
-        sender: { select: { id: true, name: true, email: true } },
-      },
+    const saved = await prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: user.id,
+          direction: "OUTBOUND",
+          body:
+            prefixOutboundSmsWithCompanyName(company?.name ?? "", messageBody.trim()) ||
+            (mediaUrls.length ? "[Media message]" : ""),
+          twilioMessageSid: twilioMessage.sid,
+          deliveryStatus: "queued",
+          ...(media.length
+            ? {
+                media: {
+                  create: media.map((item) => ({
+                    blobUrl: item.blobUrl,
+                    fileName: item.fileName,
+                    mimeType: item.mimeType,
+                    sizeBytes: item.sizeBytes,
+                  })),
+                },
+              }
+            : {}),
+        },
+        include: {
+          media: true,
+          sender: { select: { id: true, name: true, email: true } },
+        },
+      });
+      const updatedConversation = await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          lastMessageAt: message.sentAt,
+          smsOpen: true,
+          smsClosedAt: null,
+          smsClosedById: null,
+        },
+      });
+      return { conversation: updatedConversation, message };
     });
 
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        lastMessageAt: new Date(),
-        smsOpen: true,
-        smsClosedAt: null,
-        smsClosedById: null,
-      },
-    });
-
-    return NextResponse.json({ conversation, message });
+    return NextResponse.json(saved);
   } catch (error) {
     const commsDisabled = outboundCommsErrorResponse(error);
     if (commsDisabled) return commsDisabled;

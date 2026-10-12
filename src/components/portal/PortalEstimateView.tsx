@@ -155,9 +155,13 @@ export function PortalEstimateView({
           return;
         }
         if (cancelled) return;
-        setEstimate(estData.estimate);
-        setPaymentReady(
-          Boolean(estData.estimate.needsScheduling || estData.estimate.depositPaidAt)
+        setEstimate((current) =>
+          current?.status === "APPROVED" && estData.estimate.status === "SENT"
+            ? current
+            : estData.estimate
+        );
+        setPaymentReady((current) =>
+          current || Boolean(estData.estimate.needsScheduling || estData.estimate.depositPaidAt)
         );
         setCompany(estData.company ?? null);
         setAuthenticated(Boolean(estData.authenticated));
@@ -195,13 +199,41 @@ export function PortalEstimateView({
     const sessionId = params.get("session_id");
     const deposit = params.get("deposit");
     if (deposit === "success") {
-      setPaymentReady(true);
-      toast.success("Deposit submitted successfully.");
-      window.history.replaceState({}, "", window.location.pathname);
+      if (!sessionId) {
+        toast.message("Your payment is still being confirmed. Refresh in a moment.");
+        return;
+      }
+      setLoading(true);
+      fetch(`/api/portal/estimates/${token}/deposit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ready) {
+            throw new Error(data.error ?? "Payment could not be verified");
+          }
+          setEstimate((current) => current
+            ? {
+                ...current,
+                status: "APPROVED",
+                needsScheduling: Boolean(data.needsScheduling),
+                depositPaidAt: data.depositPaidAt ?? current.depositPaidAt,
+              }
+            : current);
+          setPaymentReady(true);
+          toast.success("Payment submitted. Your estimate is approved.");
+          window.history.replaceState({}, "", window.location.pathname);
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Payment could not be verified");
+        })
+        .finally(() => setLoading(false));
       return;
     }
     if (deposit === "cancelled") {
-      toast.message("Deposit payment was cancelled. Choose Pay now or Pay later to continue.");
+      toast.message("Payment was cancelled. Choose Pay now or Pay later to continue.");
       window.history.replaceState({}, "", window.location.pathname);
       return;
     }
@@ -222,7 +254,7 @@ export function PortalEstimateView({
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error ?? "Card setup could not be verified");
         setEstimate((current) =>
-          current ? { ...current, needsScheduling: true } : current
+          current ? { ...current, status: "APPROVED", needsScheduling: true } : current
         );
         setPaymentReady(true);
         toast.success("Card saved. You will not be charged until an invoice is due.");
@@ -324,7 +356,7 @@ export function PortalEstimateView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to sign");
       setEstimate(data.estimate);
-      toast.success("Estimate approved");
+      toast.success("Signature saved. Choose how you would like to handle payment.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to sign");
     } finally {
@@ -363,7 +395,7 @@ export function PortalEstimateView({
         return;
       }
       setEstimate((current) =>
-        current ? { ...current, needsScheduling: true } : current
+        current ? { ...current, status: "APPROVED", needsScheduling: true } : current
       );
       setPaymentReady(true);
       toast.success("Your card is already saved. The office can invoice you later.");
@@ -421,13 +453,13 @@ export function PortalEstimateView({
     );
   }
 
-  const canSign = !staffPreview && estimate.status === "SENT";
+  const canSign = !staffPreview && estimate.status === "SENT" && !estimate.signedAt;
   const requiresDeposit =
     estimate.depositRequired && displayTotal() > estimate.depositThreshold;
-  const needsDeposit =
+  const needsPaymentChoice =
     !staffPreview &&
-    estimate.status === "APPROVED" &&
-    requiresDeposit &&
+    Boolean(estimate.signedAt) &&
+    (estimate.status === "SENT" || estimate.status === "APPROVED") &&
     !estimate.depositPaidAt &&
     !estimate.needsScheduling &&
     !paymentReady;
@@ -436,6 +468,7 @@ export function PortalEstimateView({
       ? Number(estimate.depositAmount ?? 0)
       : Math.round(displayTotal() * (Number(estimate.depositAmount ?? 50) / 100) * 100) / 100
     : 0;
+  const paymentDue = depositDue > 0 ? depositDue : displayTotal();
   const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
@@ -462,7 +495,11 @@ export function PortalEstimateView({
 
         <div>
           <h1 className="text-2xl font-semibold">Proposal from {company.name}</h1>
-          <p className="text-sm text-muted-foreground capitalize">{estimate.status.toLowerCase()}</p>
+          <p className="text-sm text-muted-foreground capitalize">
+            {estimate.status === "SENT" && estimate.signedAt
+              ? "Pending payment arrangement"
+              : estimate.status.toLowerCase()}
+          </p>
           {estimate.expiresAt ? (
             <p className="text-sm">Expires {format(new Date(estimate.expiresAt), "MMM d, yyyy")}</p>
           ) : null}
@@ -625,7 +662,7 @@ export function PortalEstimateView({
                 Clear
               </Button>
               <Button onClick={() => void sign()} disabled={loading}>
-                {loading ? "Submitting..." : "Approve estimate"}
+                {loading ? "Submitting..." : "Sign and continue"}
               </Button>
             </div>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
@@ -635,19 +672,22 @@ export function PortalEstimateView({
               the scope of work being approved.
             </p>
           </div>
-        ) : needsDeposit ? (
+        ) : needsPaymentChoice ? (
           <section className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
             <div>
-              <h2 className="font-semibold">Choose when to pay your deposit</h2>
+              <h2 className="font-semibold">Complete your approval</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Pay {formatCurrency(depositDue)} now, or securely save a card so the office can
-                invoice you later. Saving a card does not charge it today.
+                {depositDue > 0 ? "Pay the required deposit" : "Pay the estimate"} now, or
+                securely save a card so the office can invoice you later. Saving a card does not
+                charge it today. Your estimate is not approved until you complete one of these options.
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <Button onClick={() => void payDeposit()} disabled={loading || payLaterLoading}>
-                {loading ? "Loading..." : `Pay ${formatCurrency(depositDue)} now`}
-              </Button>
+              {paymentDue > 0 ? (
+                <Button onClick={() => void payDeposit()} disabled={loading || payLaterLoading}>
+                  {loading ? "Loading..." : `Pay ${formatCurrency(paymentDue)} now`}
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 onClick={() => void payLater()}
@@ -659,7 +699,7 @@ export function PortalEstimateView({
           </section>
         ) : estimate.status === "APPROVED" &&
           (estimate.needsScheduling || paymentReady) &&
-          requiresDeposit ? (
+          Boolean(estimate.signedAt) ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             Payment arrangements are complete. The office will contact you to schedule the work.
           </div>

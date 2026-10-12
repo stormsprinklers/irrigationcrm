@@ -23,32 +23,44 @@ export async function recordOutboundCustomerSms(params: {
   });
 
   try {
-    const message = await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: params.senderId ?? null,
-        direction: MessageDirection.OUTBOUND,
-        body: params.body,
-        twilioMessageSid: params.twilioMessageSid,
-        deliveryStatus: "queued",
-      },
+    const saved = await prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          conversationId: conversation.id,
+          senderId: params.senderId ?? null,
+          direction: MessageDirection.OUTBOUND,
+          body: params.body,
+          twilioMessageSid: params.twilioMessageSid,
+          deliveryStatus: "queued",
+        },
+      });
+      const updatedConversation = await tx.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          lastMessageAt: message.sentAt,
+          smsOpen: true,
+          smsClosedAt: null,
+          smsClosedById: null,
+        },
+      });
+      return { conversation: updatedConversation, message };
     });
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        lastMessageAt: message.sentAt,
-        smsOpen: true,
-        smsClosedAt: null,
-        smsClosedById: null,
-      },
-    });
-    return { conversation, message };
+    return saved;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const message = await prisma.message.findUnique({
         where: { twilioMessageSid: params.twilioMessageSid },
       });
-      return { conversation, message };
+      const updatedConversation = await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: {
+          ...(message ? { lastMessageAt: message.sentAt } : {}),
+          smsOpen: true,
+          smsClosedAt: null,
+          smsClosedById: null,
+        },
+      });
+      return { conversation: updatedConversation, message };
     }
     throw error;
   }

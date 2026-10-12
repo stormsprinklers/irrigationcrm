@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { computeDepositAmount } from "@/lib/estimates/booking";
+import { finalizeEstimateApprovalWithCard } from "@/lib/estimates/booking";
 import {
   getCustomerDefaultCardId,
   requireCardOnFileOrSetupUrl,
@@ -12,7 +12,7 @@ import { getStripeClient } from "@/lib/stripe/client";
 
 type Params = { params: Promise<{ id: string }> };
 
-async function resolveApprovedEstimate(id: string) {
+async function resolveSignedEstimate(id: string) {
   const ctx = await requirePortalCustomer();
   if (ctx) {
     return prisma.estimate.findFirst({
@@ -20,20 +20,23 @@ async function resolveApprovedEstimate(id: string) {
         companyId: ctx.companyId,
         customerId: ctx.customerId,
         OR: [{ id }, { publicToken: id }],
-        status: "APPROVED",
+        signedAt: { not: null },
+        status: { in: ["SENT", "APPROVED"] },
       },
       include: { company: true },
     });
   }
 
   const estimate = await findEstimateByPublicToken(id);
-  return estimate?.status === "APPROVED" ? estimate : null;
+  return estimate?.signedAt && (estimate.status === "SENT" || estimate.status === "APPROVED")
+    ? estimate
+    : null;
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
-    const estimate = await resolveApprovedEstimate(id);
+    const estimate = await resolveSignedEstimate(id);
     if (!estimate) return portalNotFoundResponse();
 
     const body = (await request.json().catch(() => ({}))) as { sessionId?: string };
@@ -53,15 +56,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       if (!valid) {
         return NextResponse.json({ error: "Card setup could not be verified" }, { status: 400 });
       }
-      await prisma.estimate.update({
-        where: { id: estimate.id },
-        data: { needsScheduling: true },
-      });
-      return NextResponse.json({ ready: true, cardOnFile: true });
-    }
-
-    if (computeDepositAmount(estimate) <= 0) {
-      return NextResponse.json({ error: "No payment arrangement is required" }, { status: 400 });
+      const approved = await finalizeEstimateApprovalWithCard(estimate.id);
+      if (!approved) {
+        return NextResponse.json({ error: "Estimate approval could not be completed" }, { status: 409 });
+      }
+      return NextResponse.json({ ready: true, cardOnFile: true, status: approved.status });
     }
 
     const existingCard = await getCustomerDefaultCardId({
@@ -69,11 +68,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       companyId: estimate.companyId,
     });
     if (existingCard) {
-      await prisma.estimate.update({
-        where: { id: estimate.id },
-        data: { needsScheduling: true },
-      });
-      return NextResponse.json({ ready: true, cardOnFile: true });
+      const approved = await finalizeEstimateApprovalWithCard(estimate.id);
+      if (!approved) {
+        return NextResponse.json({ error: "Estimate approval could not be completed" }, { status: 409 });
+      }
+      return NextResponse.json({ ready: true, cardOnFile: true, status: approved.status });
     }
 
     const slug = resolvePortalSlug(estimate.company) ?? "portal";
@@ -89,11 +88,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
 
     if (setup.ok) {
-      await prisma.estimate.update({
-        where: { id: estimate.id },
-        data: { needsScheduling: true },
-      });
-      return NextResponse.json({ ready: true, cardOnFile: true });
+      const approved = await finalizeEstimateApprovalWithCard(estimate.id);
+      if (!approved) {
+        return NextResponse.json({ error: "Estimate approval could not be completed" }, { status: 409 });
+      }
+      return NextResponse.json({ ready: true, cardOnFile: true, status: approved.status });
     }
     if (!setup.setupUrl) {
       return NextResponse.json({ error: "Card setup is unavailable" }, { status: 503 });

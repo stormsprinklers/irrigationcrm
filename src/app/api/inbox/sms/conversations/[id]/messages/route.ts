@@ -5,6 +5,7 @@ import { nextCustomerIdForSmsPhone } from "@/lib/inbox/conversations";
 import { phonesMatch } from "@/lib/inbox/phone";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
+import { hasRecentSmsActivity } from "@/lib/inbox/sms-inbox-state";
 import {
   canAccessFieldSmsConversation,
   FIELD_CUSTOMER_COMMS_FORBIDDEN,
@@ -83,7 +84,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (
       conversation.channel === "SMS" &&
       conversation.scope === "EXTERNAL" &&
-      conversation.smsOpen === null
+      conversation.smsOpen === null &&
+      hasRecentSmsActivity(conversation.lastMessageAt)
     ) {
       const promoted = await prisma.conversation.updateMany({
         where: {
