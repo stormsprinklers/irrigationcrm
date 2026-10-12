@@ -1,3 +1,4 @@
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    if (!canManagePriceBook(user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

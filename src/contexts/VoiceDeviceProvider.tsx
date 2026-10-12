@@ -211,7 +211,7 @@ async function patchPresence(status: "AVAILABLE" | "ON_CALL" | "OFFLINE" | "AWAY
   }
 }
 
-export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
+export function VoiceDeviceProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const { data: session, status: sessionStatus } = useSession();
   const deviceRef = useRef<Device | null>(null);
   const extraDevicesRef = useRef<Device[]>([]);
@@ -468,7 +468,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (sessionStatus !== "authenticated" || !session?.user?.id) {
+    if (!enabled || sessionStatus !== "authenticated" || !session?.user?.id) {
       setReady(false);
       return;
     }
@@ -699,7 +699,7 @@ export function VoiceDeviceProvider({ children }: { children: ReactNode }) {
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionStatus, session?.user?.id, fetchVoiceTokenPayload, refreshDeviceToken, recoverVoiceTransport]);
+  }, [enabled, sessionStatus, session?.user?.id, fetchVoiceTokenPayload, refreshDeviceToken, recoverVoiceTransport]);
 
   const connect = useCallback(
     async (to: string, customerId?: string) => {

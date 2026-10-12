@@ -5,5 +5,5 @@ export function canViewPriceBook(_role: UserRole | string | null | undefined) {
 }
 
 export function canManagePriceBook(role: UserRole | string | null | undefined) {
-  return role === "ADMIN" || role === "MANAGER";
+  return role === "ADMIN";
 }

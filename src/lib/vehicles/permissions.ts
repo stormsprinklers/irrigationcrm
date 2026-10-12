@@ -4,6 +4,9 @@ const VIEW_ROLES: UserRole[] = [
   UserRole.ADMIN,
   UserRole.MANAGER,
   UserRole.SALES,
+  UserRole.CSR,
+  UserRole.TECH,
+  UserRole.INSTALLER,
 ];
 
 const MANAGE_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.MANAGER];

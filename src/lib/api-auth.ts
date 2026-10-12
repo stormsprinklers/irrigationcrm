@@ -30,7 +30,7 @@ async function getBearerFromHeaders(): Promise<string | null> {
   }
 }
 
-async function userFromBearerToken(token: string): Promise<SessionUser | null> {
+export async function userFromBearerToken(token: string): Promise<SessionUser | null> {
   const claims = await verifyMobileAccessToken(token);
   if (!claims) return null;
 

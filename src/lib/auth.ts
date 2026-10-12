@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { AuthMfaPurpose } from "@prisma/client";
 import { getAuthSecret } from "@/lib/auth-secret";
+import { prisma } from "@/lib/prisma";
 import {
   findActiveStaffByEmail,
   findActiveStaffById,
@@ -35,6 +36,7 @@ declare module "@auth/core/jwt" {
     companyId: string;
     role: string;
     trueRole?: string;
+    mobileWebExpiresAt?: number;
   }
 }
 
@@ -107,6 +109,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
+      // Native web screens get a short-lived session. Recheck the real account
+      // on every use, and do not allow session.update to change its identity/role.
+      if (token.mobileWebExpiresAt !== undefined) {
+        if (token.mobileWebExpiresAt <= Math.floor(Date.now() / 1000)) return null;
+        const account = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { status: true, companyId: true, role: true },
+        });
+        if (!account || account.status !== "ACTIVE" ||
+            account.companyId !== token.companyId || account.role !== token.role) return null;
+        return token;
+      }
       if (user) {
         token.id = user.id!;
         token.companyId = user.companyId;

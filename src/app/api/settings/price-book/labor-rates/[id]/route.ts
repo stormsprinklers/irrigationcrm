@@ -1,3 +1,4 @@
+import { canManagePriceBook } from "@/lib/price-book/permissions";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { recalculateCalculatedServicesUsingLaborRate } from "@/lib/price-book/pricing";
@@ -9,7 +10,7 @@ export async function PATCH(
 ) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    if (!canManagePriceBook(user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -48,7 +49,7 @@ export async function DELETE(
 ) {
   try {
     const user = await requireSessionUser();
-    if (user.role !== "ADMIN" && user.role !== "MANAGER") {
+    if (!canManagePriceBook(user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
