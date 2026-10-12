@@ -1,3 +1,4 @@
+import { absolutePublicBlobUrl } from "@/lib/blob/urls";
 import { NextRequest, NextResponse } from "next/server";
 import { EmployeeStatus } from "@prisma/client";
 import {
@@ -48,7 +49,7 @@ async function listSwitchableAccounts(
       role: u.role,
       companyId: u.company.id,
       companyName: u.company.name,
-      companyLogoUrl: u.company.brandLogoUrl || u.company.emailLogoUrl,
+      companyLogoUrl: absolutePublicBlobUrl(u.company.brandLogoUrl || u.company.emailLogoUrl) ?? null,
       source: "same-email",
     });
   }
@@ -80,7 +81,7 @@ async function listSwitchableAccounts(
       role: l.linkedUser.role,
       companyId: l.linkedUser.company.id,
       companyName: l.linkedUser.company.name,
-      companyLogoUrl: l.linkedUser.company.brandLogoUrl || l.linkedUser.company.emailLogoUrl,
+      companyLogoUrl: absolutePublicBlobUrl(l.linkedUser.company.brandLogoUrl || l.linkedUser.company.emailLogoUrl) ?? null,
       source: "linked",
     });
   }
@@ -121,7 +122,7 @@ export async function GET() {
         photoUrl: current.photoUrl,
         companyId: current.company.id,
         companyName: current.company.name,
-        companyLogoUrl: current.company.brandLogoUrl || current.company.emailLogoUrl,
+        companyLogoUrl: absolutePublicBlobUrl(current.company.brandLogoUrl || current.company.emailLogoUrl) ?? null,
         source: "same-email" as const,
       },
       switchable,
