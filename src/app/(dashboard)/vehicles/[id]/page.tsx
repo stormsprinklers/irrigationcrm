@@ -10,6 +10,7 @@ import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmployeeSearchPicker } from "@/components/schedule/EmployeeSearchPicker";
 import { Button } from "@/components/ui/button";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { isOilOverdue, oilStatusLabel } from "@/lib/vehicles/oil";
@@ -115,6 +116,9 @@ function AttachmentPreview({
   mimeType: string;
   className?: string;
 }) {
+  const [imageOpen, setImageOpen] = useState(false);
+  const closeImage = useCallback(() => setImageOpen(false), []);
+
   if (!url) {
     return (
       <div
@@ -135,14 +139,20 @@ function AttachmentPreview({
 
   if (isImage) {
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className={cn("relative block bg-muted", className)}
-      >
-        <Image src={url} alt={fileName} fill className="object-contain" unoptimized />
-      </a>
+      <>
+        <button
+          type="button"
+          className={cn(
+            "relative block cursor-zoom-in bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            className
+          )}
+          aria-label={`Preview ${fileName}`}
+          onClick={() => setImageOpen(true)}
+        >
+          <Image src={url} alt={fileName} fill className="object-contain" unoptimized />
+        </button>
+        <ImageLightbox src={imageOpen ? url : null} alt={fileName} onClose={closeImage} />
+      </>
     );
   }
 

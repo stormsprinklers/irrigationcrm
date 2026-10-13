@@ -68,11 +68,9 @@ export async function GET() {
       prisma.user.findMany({
         where: {
           companyId: user.companyId,
-          status: "ACTIVE",
-          OR: [
-            { role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES } },
-            { crewsAsForeman: { some: { companyId: user.companyId, division: "INSTALL" } } },
-          ],
+          systemKind: null,
+          appleDemoAccount: false,
+          role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES },
         },
         select: { id: true, name: true, status: true },
         orderBy: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],

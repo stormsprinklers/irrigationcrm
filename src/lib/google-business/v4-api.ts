@@ -111,6 +111,58 @@ export async function listGbpReviews(
   return fetchGbpReviewsPage(accessToken, accountId, locationId, pageToken);
 }
 
+export type GbpReviewsFullListResponse = GbpReviewsListResponse & {
+  /** False only when the safety page limit was reached before Google's final page. */
+  complete: boolean;
+};
+
+/**
+ * Load the complete review list used by the inbox. The old inbox fetched only
+ * Google's first 50 rows, while its badge counted every stored actionable row.
+ */
+export async function listAllGbpReviews(
+  companyId: string,
+  accountId: string,
+  locationId: string,
+  options: { maxPages?: number } = {}
+): Promise<GbpReviewsFullListResponse> {
+  const maxPages = Math.max(1, options.maxPages ?? 40);
+  const accessToken = await getCompanyAccessToken(companyId);
+  const reviews: GbpReviewDto[] = [];
+  let pageToken: string | undefined;
+  let nextPageToken: string | null = null;
+  let averageRating: number | null = null;
+  let totalReviewCount: number | null = null;
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    const page = await fetchGbpReviewsPage(accessToken, accountId, locationId, pageToken);
+    reviews.push(...page.reviews);
+    if (pageIndex === 0) {
+      averageRating = page.averageRating;
+      totalReviewCount = page.totalReviewCount;
+    }
+    nextPageToken = page.nextPageToken;
+    if (!nextPageToken) {
+      return {
+        reviews,
+        averageRating,
+        totalReviewCount,
+        nextPageToken: null,
+        complete: true,
+      };
+    }
+    pageToken = nextPageToken;
+  }
+
+  return {
+    reviews,
+    averageRating,
+    totalReviewCount,
+    nextPageToken,
+    complete: false,
+  };
+}
+
 const REVIEW_SUMMARY_MAX_PAGES = 40;
 
 function starLevelFromRating(rating: GbpReviewDto["starRating"]) {

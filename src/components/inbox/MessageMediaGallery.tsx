@@ -1,6 +1,8 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { Download, FileText } from "lucide-react";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
   isImageMimeType,
@@ -26,49 +28,62 @@ export function MessageMediaGallery({
   media: MessageMediaItem[];
   className?: string;
 }) {
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
+
   if (!media.length) return null;
 
   return (
-    <div className={cn("mt-2 space-y-2", className)}>
-      {media.map((item) => {
-        const src = mediaSrc(item.blobUrl);
-        if (isImageMimeType(item.mimeType)) {
-          return (
-            <a key={item.id} href={src} target="_blank" rel="noopener noreferrer">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+    <>
+      <div className={cn("mt-2 space-y-2", className)}>
+        {media.map((item) => {
+          const src = mediaSrc(item.blobUrl);
+          if (isImageMimeType(item.mimeType)) {
+            const alt = item.fileName ?? "Image attachment";
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="block max-w-full cursor-zoom-in rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Preview ${alt}`}
+                onClick={() => setPreview({ src, alt })}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt={alt}
+                  className="max-h-48 max-w-full rounded-lg object-cover"
+                />
+              </button>
+            );
+          }
+          if (isVideoMimeType(item.mimeType)) {
+            return (
+              <video
+                key={item.id}
                 src={src}
-                alt={item.fileName ?? "Image attachment"}
-                className="max-h-48 max-w-full rounded-lg object-cover"
+                className="max-h-48 max-w-full rounded-lg"
+                controls
+                preload="metadata"
               />
+            );
+          }
+          return (
+            <a
+              key={item.id}
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-xs underline"
+            >
+              <FileText className="h-4 w-4" />
+              {item.fileName ?? "Download attachment"}
+              <Download className="h-3 w-3" />
             </a>
           );
-        }
-        if (isVideoMimeType(item.mimeType)) {
-          return (
-            <video
-              key={item.id}
-              src={src}
-              controls
-              className="max-h-48 max-w-full rounded-lg"
-              preload="metadata"
-            />
-          );
-        }
-        return (
-          <a
-            key={item.id}
-            href={src}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-xs underline"
-          >
-            <FileText className="h-4 w-4" />
-            {item.fileName ?? "Download attachment"}
-            <Download className="h-3 w-3" />
-          </a>
-        );
-      })}
-    </div>
+        })}
+      </div>
+      <ImageLightbox src={preview?.src ?? null} alt={preview?.alt} onClose={closePreview} />
+    </>
   );
 }

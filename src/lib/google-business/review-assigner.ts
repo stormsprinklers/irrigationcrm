@@ -8,7 +8,7 @@ import {
   REVIEW_MANUAL_ASSIGNMENT_ROLES,
   tokenizeName,
 } from "@/lib/google-business/review-aliases";
-import { listGbpReviews } from "@/lib/google-business/v4-api";
+import { listAllGbpReviews } from "@/lib/google-business/v4-api";
 import { prisma } from "@/lib/prisma";
 
 const REVIEW_FETCH_MAX_PAGES = 8;
@@ -214,6 +214,39 @@ export async function upsertGbpReviews(companyId: string, reviews: GbpReviewDto[
   }
 }
 
+/**
+ * Clear locally cached inbox work when a complete Google sync proves that a
+ * review no longer belongs to the connected location. Existing assignments
+ * remain intact for historical reporting.
+ */
+export async function reconcileMissingGbpReviews(
+  companyId: string,
+  remoteReviewIds: string[],
+  complete: boolean
+) {
+  if (!complete) return { repliesClosed: 0, assignmentsClosed: 0 };
+
+  const missingWhere = remoteReviewIds.length
+    ? { reviewId: { notIn: [...new Set(remoteReviewIds)] } }
+    : {};
+  const [replies, assignments] = await prisma.$transaction([
+    prisma.gbpReview.updateMany({
+      where: { companyId, ...missingWhere, hasReply: false },
+      data: { hasReply: true },
+    }),
+    prisma.gbpReview.updateMany({
+      where: {
+        companyId,
+        ...missingWhere,
+        status: GbpReviewAssignStatus.NEEDS_REVIEW,
+      },
+      data: { status: GbpReviewAssignStatus.UNKNOWN },
+    }),
+  ]);
+
+  return { repliesClosed: replies.count, assignmentsClosed: assignments.count };
+}
+
 export async function assignPendingGbpReviews(companyId: string) {
   await ensureCompanyReviewAliases(companyId);
 
@@ -280,25 +313,22 @@ export async function syncAndAssignGbpReviews(companyId: string, options?: { max
     return { upserted: 0 };
   }
 
-  const reviews: GbpReviewDto[] = [];
-  let pageToken: string | undefined;
-  const maxPages = options?.maxPages ?? REVIEW_FETCH_MAX_PAGES;
-  for (let page = 0; page < maxPages; page += 1) {
-    const data = await listGbpReviews(
-      companyId,
-      company.googleBusinessAccountId,
-      company.googleBusinessLocationId,
-      pageToken
-    );
-    reviews.push(...data.reviews);
-    if (!data.nextPageToken) break;
-    pageToken = data.nextPageToken;
-  }
+  const data = await listAllGbpReviews(
+    companyId,
+    company.googleBusinessAccountId,
+    company.googleBusinessLocationId,
+    { maxPages: options?.maxPages ?? REVIEW_FETCH_MAX_PAGES }
+  );
 
-  await upsertGbpReviews(companyId, reviews);
+  await upsertGbpReviews(companyId, data.reviews);
+  await reconcileMissingGbpReviews(
+    companyId,
+    data.reviews.map((review) => review.reviewId),
+    data.complete
+  );
   await assignPendingGbpReviews(companyId);
   const expiredUnassigned = await markExpiredUnassignedGbpReviews(companyId);
-  return { upserted: reviews.length, expiredUnassigned };
+  return { upserted: data.reviews.length, expiredUnassigned };
 }
 
 export async function manuallyAssignGbpReview(
@@ -327,11 +357,9 @@ export async function manuallyAssignGbpReview(
     where: {
       companyId,
       id: { in: userIds },
-      status: "ACTIVE",
-      OR: [
-        { role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES } },
-        { crewsAsForeman: { some: { companyId, division: "INSTALL" } } },
-      ],
+      systemKind: null,
+      appleDemoAccount: false,
+      role: { in: REVIEW_MANUAL_ASSIGNMENT_ROLES },
     },
     select: { id: true },
   });

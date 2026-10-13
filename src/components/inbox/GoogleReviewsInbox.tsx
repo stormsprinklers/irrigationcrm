@@ -1,11 +1,15 @@
 "use client";
 
 import { format } from "date-fns";
+import { useSession } from "next-auth/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
+import {
+  notifyInboxBadgesChanged,
+  useInboxBadges,
+} from "@/contexts/InboxBadgesProvider";
 import type { GbpReviewDto } from "@/lib/google-business/engagement-types";
 import { GBP_STAR_LABELS } from "@/lib/google-business/engagement-types";
 import { cn } from "@/lib/utils";
@@ -56,6 +60,8 @@ type InboxReviewCard = {
 };
 
 export function GoogleReviewsInbox() {
+  const { data: session, update: updateSession } = useSession();
+  const inboxBadges = useInboxBadges();
   const [googleReviews, setGoogleReviews] = useState<GbpReviewDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -66,9 +72,21 @@ export function GoogleReviewsInbox() {
     Record<string, Array<{ userId: string; name: string; share: number }>>
   >({});
   const [technicians, setTechnicians] = useState<ReviewTechnician[]>([]);
+  const [switchingCompanyId, setSwitchingCompanyId] = useState<string | null>(null);
+
+  const otherCompaniesWithReviews = useMemo(
+    () =>
+      (inboxBadges?.companies ?? []).filter(
+        (company) =>
+          company.companyId !== session?.user?.companyId && company.counts.googleReviews > 0
+      ),
+    [inboxBadges?.companies, session?.user?.companyId]
+  );
 
   const loadAssignments = useCallback(async () => {
-    const res = await fetch("/api/marketing/google-business/reviews/assignments");
+    const res = await fetch("/api/marketing/google-business/reviews/assignments", {
+      cache: "no-store",
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? "Failed to load review assignments");
     setNeedsReview(data.needsReview ?? []);
@@ -79,7 +97,7 @@ export function GoogleReviewsInbox() {
   const loadReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/marketing/google-business/reviews");
+      const res = await fetch("/api/marketing/google-business/reviews", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load reviews");
       const list = (data.reviews ?? []) as GbpReviewDto[];
@@ -106,6 +124,36 @@ export function GoogleReviewsInbox() {
   useEffect(() => {
     void loadReviews();
   }, [loadReviews]);
+
+  async function switchToCompanyReviews(company: (typeof otherCompaniesWithReviews)[number]) {
+    if (switchingCompanyId) return;
+    setSwitchingCompanyId(company.companyId);
+    try {
+      const res = await fetch("/api/account/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: company.switchUserId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.session) {
+        throw new Error(data.error ?? `Could not open ${company.companyName}`);
+      }
+      await updateSession({
+        user: {
+          id: data.session.id,
+          email: data.session.email,
+          name: data.session.name,
+          companyId: data.session.companyId,
+          role: data.session.role,
+          trueRole: null,
+        },
+      });
+      window.location.reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to switch companies");
+      setSwitchingCompanyId(null);
+    }
+  }
 
   const cards = useMemo(() => {
     const needsByGoogleId = new Map(needsReview.map((row) => [row.reviewId, row]));
@@ -215,6 +263,35 @@ export function GoogleReviewsInbox() {
           Reply to new Google reviews and assign technician credit when needed — in one list.
         </p>
       </div>
+
+      {otherCompaniesWithReviews.length > 0 ? (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+          <p className="font-medium">Reviews also need attention in another company</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {otherCompaniesWithReviews.map((company) => (
+              <Button
+                key={company.companyId}
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={Boolean(switchingCompanyId)}
+                onClick={() => void switchToCompanyReviews(company)}
+              >
+                {switchingCompanyId === company.companyId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: company.brandPrimary }}
+                    aria-hidden
+                  />
+                )}
+                Open {company.companyName} ({company.counts.googleReviews})
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

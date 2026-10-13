@@ -1,11 +1,12 @@
 "use client";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Archive, Download, Mail, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { BlockContactAction } from "@/components/inbox/BlockContactAction";
 import {
   EmailRecipientPicker,
@@ -41,6 +42,9 @@ type EmailDetail = {
 };
 
 function EmailAttachmentList({ attachments }: { attachments: EmailAttachment[] }) {
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
+
   if (!attachments.length) return null;
 
   return (
@@ -52,7 +56,12 @@ function EmailAttachmentList({ attachments }: { attachments: EmailAttachment[] }
           return (
             <li key={file.id}>
               {isImageMimeType(file.mimeType) ? (
-                <a href={href} target="_blank" rel="noopener noreferrer" className="block max-w-sm">
+                <button
+                  type="button"
+                  className="block max-w-sm cursor-zoom-in rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={`Preview ${file.fileName}`}
+                  onClick={() => setPreview({ src: href, alt: file.fileName })}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={href}
@@ -60,7 +69,7 @@ function EmailAttachmentList({ attachments }: { attachments: EmailAttachment[] }
                     className="max-h-48 rounded-md border border-border object-cover"
                   />
                   <span className="mt-1 block text-xs text-muted-foreground">{file.fileName}</span>
-                </a>
+                </button>
               ) : (
                 <a
                   href={href}
@@ -76,6 +85,7 @@ function EmailAttachmentList({ attachments }: { attachments: EmailAttachment[] }
           );
         })}
       </ul>
+      <ImageLightbox src={preview?.src ?? null} alt={preview?.alt} onClose={closePreview} />
     </div>
   );
 }

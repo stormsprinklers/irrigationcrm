@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { blobProxyUrl } from "@/lib/blob/urls";
 
 type Note = {
@@ -54,7 +55,9 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
   const [editNoteBody, setEditNoteBody] = useState("");
   const [noteActionId, setNoteActionId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
 
   const load = useCallback(async () => {
     const [notesRes, attachmentsRes] = await Promise.all([
@@ -316,12 +319,11 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
                       key={attachment.id}
                       className="overflow-hidden rounded-md border bg-muted/20"
                     >
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block"
-                        title="Open full size"
+                      <button
+                        type="button"
+                        className="block w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Preview ${attachment.fileName}`}
+                        onClick={() => setPreview({ src: url, alt: attachment.fileName })}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -329,7 +331,7 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
                           alt={attachment.fileName}
                           className="max-h-56 w-full object-contain bg-muted/30"
                         />
-                      </a>
+                      </button>
                       <div className="flex items-start justify-between gap-2 border-t bg-background p-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{attachment.fileName}</p>
@@ -380,6 +382,7 @@ export function CustomerNotesAttachmentsTab({ customerId }: Props) {
           )}
         </CardContent>
       </Card>
+      <ImageLightbox src={preview?.src ?? null} alt={preview?.alt} onClose={closePreview} />
     </div>
   );
 }
