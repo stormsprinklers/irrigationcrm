@@ -103,7 +103,30 @@ export type HolidayQuoteSelections = {
   activeDesignOptionId?: string;
 };
 
+export type HolidayPhotoStroke = {
+  id: string;
+  points: Array<{ x: number; y: number }>;
+  color: string;
+  width: number;
+};
+
+export function parseHolidayPhotoMarkup(raw: unknown): HolidayPhotoStroke[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 150).flatMap((stroke) => {
+    if (!stroke || typeof stroke !== "object") return [];
+    const points = Array.isArray(stroke.points) ? stroke.points.slice(0, 1500).filter(
+      (point: { x?: unknown; y?: unknown }) => typeof point?.x === "number" && Number.isFinite(point.x)
+        && point.x >= 0 && point.x <= 1 && typeof point.y === "number" && Number.isFinite(point.y) && point.y >= 0 && point.y <= 1
+    ) : [];
+    if (!points.length) return [];
+    return [{ id: typeof stroke.id === "string" ? stroke.id.slice(0, 80) : crypto.randomUUID(), points,
+      color: typeof stroke.color === "string" && /^#[0-9a-f]{6}$/i.test(stroke.color) ? stroke.color : "#ffb020",
+      width: typeof stroke.width === "number" && Number.isFinite(stroke.width) ? Math.min(0.08, Math.max(0.003, stroke.width)) : 0.012 }];
+  });
+}
+
 export type HolidayQuoteDesignOption = {
+  photoMarkup?: HolidayPhotoStroke[];
   id: string;
   label: string;
   /** Option-specific customer preview. The source property photo remains quote-wide. */
@@ -624,6 +647,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             typeof option.previewImageUrl === "string" && option.previewImageUrl.trim()
               ? option.previewImageUrl.trim()
               : undefined,
+          photoMarkup: parseHolidayPhotoMarkup(option.photoMarkup),
           measurements: parseHolidayMeasurements(option.measurements),
           selections: {
             defaultLightStyleKey: nested.defaultLightStyleKey,
@@ -685,6 +709,7 @@ export function holidayDesignOptionsFromQuote(params: {
         id: option.id,
         label: option.label || `Option ${index + 1}`,
         previewImageUrl: option.previewImageUrl,
+        photoMarkup: parseHolidayPhotoMarkup(option.photoMarkup),
         measurements: parseHolidayMeasurements(option.measurements),
         selections: {
           defaultLightStyleKey: normalized.defaultLightStyleKey,

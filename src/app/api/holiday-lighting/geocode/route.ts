@@ -12,7 +12,7 @@ import { prisma } from "@/lib/prisma";
 /** Geocode an address for the holiday lighting quoter. */
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },

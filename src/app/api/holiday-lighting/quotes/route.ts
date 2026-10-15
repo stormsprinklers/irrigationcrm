@@ -18,7 +18,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },

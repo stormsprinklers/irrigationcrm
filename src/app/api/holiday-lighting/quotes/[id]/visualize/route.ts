@@ -16,6 +16,7 @@ import {
   type HolidayLightingCatalog,
   type HolidayQuoteDesignOption,
 } from "@/lib/holiday-lighting/types";
+import { persistNativeHolidayPreview, HolidayPreviewConflict } from "@/lib/holiday-lighting/native-preview";
 import { requireOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
 
@@ -137,7 +138,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: Params) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
@@ -234,6 +235,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       optionId: option.id,
       pngBase64: b64,
     });
+
+    // Native clients persist the returned option preview here, atomically. A long
+    // generation must not replace a design/photo changed on another device.
+    if (form.get("persistOptionPreview") === "true") {
+      await persistNativeHolidayPreview({ companyId: user.companyId, quoteId, sourcePhotoUrl: quote.sourcePhotoUrl, option, catalog, previewImageUrl });
+      return NextResponse.json({ optionId: option.id, previewImageUrl });
+    }
 
     const isActiveOption = option.id === rootSelections.activeDesignOptionId;
     // Do not update selections here. Several option previews are intentionally

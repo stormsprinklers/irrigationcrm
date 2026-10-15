@@ -12,9 +12,9 @@ import {
 import { parseHolidayCatalog } from "@/lib/holiday-lighting/types";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { holidayLightingFeaturesEnabled: true, holidayLightingCatalog: true },
@@ -37,7 +37,7 @@ export async function GET() {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     if (user.role !== "ADMIN" && user.role !== "MANAGER") {
       return forbiddenResponse();
     }

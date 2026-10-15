@@ -13,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: Params) {
   try {
-    const user = await requireSessionUser();
+    const user = await requireSessionUser(request);
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: { name: true, irrigationFeaturesEnabled: true, holidayLightingFeaturesEnabled: true },
