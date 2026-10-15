@@ -92,6 +92,7 @@ export type HolidayQuoteSelections = {
   includePermanentOption?: boolean;
   defaultColorPattern?: string;
   notes?: string;
+  completedSteps?: string[];
   /** @deprecated Company minimums replace per-quote margin. */
   marginPct?: number;
   includeLease?: boolean;
@@ -139,6 +140,7 @@ export type HolidayQuoteDesignOption = {
     pricingMode: HolidayQuotePricingMode;
     defaultColorPattern?: string;
     notes?: string;
+    completedSteps?: string[];
     optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
     reinstallPrice?: number | null;
     customServices?: HolidayCustomService[];
@@ -157,6 +159,8 @@ export type HolidayCustomService = {
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
 export type HolidayOptionAdjustment = {
   price?: number | null;
+  partsPrice?: number | null;
+  laborPrice?: number | null;
   discountLabel?: string;
   discountType?: "fixed" | "percent";
   discountAmount?: number;
@@ -509,6 +513,7 @@ export function applyHolidayCatalogPolicy(
         ? Boolean(selections.includePermanentOption)
         : false,
     notes: selections.notes,
+    completedSteps: selections.completedSteps,
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
     optionAdjustments: selections.optionAdjustments,
     reinstallPrice: selections.reinstallPrice,
@@ -582,6 +587,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     const price = rawPrice == null || rawPrice === "" ? null : Number(rawPrice);
     const discountAmount = Number(item.discountAmount ?? 0);
     adjustments[key] = {
+      ...Object.fromEntries((["partsPrice", "laborPrice"] as const).map((field) => {
+        const value = item[field];
+        return [field, typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 9_999_999 ? Math.round(value * 100) / 100 : null];
+      })),
       price: price != null && Number.isFinite(price) && price >= 0 && price <= 9_999_999 ? Math.round(price * 100) / 100 : null,
       discountLabel:
         typeof item.discountLabel === "string" && item.discountLabel.trim()
@@ -656,6 +665,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             pricingMode: nested.pricingMode ?? "buy",
             defaultColorPattern: nested.defaultColorPattern,
             notes: nested.notes,
+            completedSteps: nested.completedSteps,
             optionAdjustments: nested.optionAdjustments,
             reinstallPrice: nested.reinstallPrice,
             customServices: nested.customServices,
@@ -678,6 +688,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     includeLaborOnlyOption: obj.includeLaborOnlyOption === true,
     includePermanentOption: obj.includePermanentOption === true,
     notes: typeof obj.notes === "string" ? obj.notes : undefined,
+    completedSteps: Array.isArray(obj.completedSteps) ? [...new Set(obj.completedSteps.filter((step): step is string => typeof step === "string" && ["property", "options", "design", "photo", "price", "notes"].includes(step)))] : [],
     defaultColorPattern:
       typeof obj.defaultColorPattern === "string" && obj.defaultColorPattern.trim()
         ? obj.defaultColorPattern.trim()
@@ -718,6 +729,7 @@ export function holidayDesignOptionsFromQuote(params: {
           pricingMode: normalized.pricingMode ?? "buy",
           defaultColorPattern: normalized.defaultColorPattern,
           notes: normalized.notes,
+          completedSteps: normalized.completedSteps,
           optionAdjustments: normalized.optionAdjustments,
           reinstallPrice: normalized.reinstallPrice,
           customServices: normalized.customServices,
@@ -738,6 +750,7 @@ export function holidayDesignOptionsFromQuote(params: {
       pricingMode: normalized.pricingMode ?? "buy",
       defaultColorPattern: normalized.defaultColorPattern,
       notes: normalized.notes,
+      completedSteps: normalized.completedSteps,
       optionAdjustments: normalized.optionAdjustments,
       reinstallPrice: normalized.reinstallPrice,
       customServices: normalized.customServices,

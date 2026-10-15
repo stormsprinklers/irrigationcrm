@@ -13,8 +13,6 @@ import {
   HOLIDAY_PERMANENT_DETAIL,
   HOLIDAY_INCLUDED_LINES,
   HOLIDAY_PERMANENT_INCLUDED_LINES,
-  holidayDetailedBuyLines,
-  holidayDetailedLaborOnlyLines,
   holidayOptionSummary,
 } from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
@@ -236,16 +234,8 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
-    if (key === "buy" || key === "labor") {
-      const breakdown = key === "labor"
-        ? holidayDetailedLaborOnlyLines({
-            lines: priced.lines,
-            targetSubtotal: baseSubtotal,
-          })
-        : holidayDetailedBuyLines({
-            lines: priced.lines,
-            targetSubtotal: baseSubtotal,
-          });
+    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null) {
+      const breakdown = detail.displayLines;
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({
           estimateId: estimate.id,

@@ -44,6 +44,9 @@ export type HolidayPricingResult = {
   leaseSubtotal: number;
   marginPct: number;
   optionDetails: Record<HolidayQuoteOptionKey, {
+    displayLines: HolidayDisplayLine[];
+    partsPrice: number;
+    laborPrice: number;
     calculated: number;
     subtotal: number;
     discountTotal: number;
@@ -235,9 +238,32 @@ export function computeHolidayQuotePricing(params: {
     permanent: optionDetail(calculatedPermanentTotal, selections, "permanent", customServicesTotal),
     labor: optionDetail(calculatedLaborOnlyTotal, selections, "labor", customServicesTotal),
   };
-  const year1Total = optionDetails.buy.total;
-  const leaseTotal = optionDetails.lease.total;
-  const permanentTotal = optionDetails.permanent.total;
+  const rawLabor = money(lines.reduce((sum, line) => sum + line.laborTotal, 0));
+  const componentDetails = Object.fromEntries(
+    (["buy", "lease", "permanent", "labor"] as const).map((key) => {
+      const original = optionDetails[key];
+      const base = Math.max(0, original.subtotal - customServicesTotal);
+      const laborBase = key === "labor" ? base : Math.min(base, rawLabor);
+      const partsBase = key === "labor" ? 0 : money(base - laborBase);
+      const adjustment = selections.optionAdjustments?.[key];
+      const partsPrice = key === "labor" ? 0 : adjustment?.partsPrice ?? partsBase;
+      const laborPrice = adjustment?.laborPrice ?? laborBase;
+      const hasComponents = adjustment?.partsPrice != null || adjustment?.laborPrice != null;
+      const detail = hasComponents ? optionDetail(
+        money(partsPrice + laborPrice + customServicesTotal),
+        { ...selections, optionAdjustments: { ...selections.optionAdjustments, [key]: { ...adjustment, price: null } } },
+        key, customServicesTotal,
+        key === "lease" ? selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0 : 0
+      ) : original;
+      return [key, { ...detail, partsPrice, laborPrice, displayLines: holidayOptionLines({
+        lines, key, targetSubtotal: money(detail.subtotal - customServicesTotal),
+        ...(hasComponents ? { partsPrice, laborPrice } : {}),
+      }) }];
+    })
+  ) as HolidayPricingResult["optionDetails"];
+  const year1Total = componentDetails.buy.total;
+  const leaseTotal = componentDetails.lease.total;
+  const permanentTotal = componentDetails.permanent.total;
   const reinstallTotal = selections.reinstallPrice == null ? calculatedReinstallTotal : money(selections.reinstallPrice);
 
   return {
@@ -254,7 +280,7 @@ export function computeHolidayQuotePricing(params: {
     purchaseSubtotal: money(year1BeforeMin + customServicesTotal),
     leaseSubtotal: leaseTotal,
     marginPct: 0,
-    optionDetails,
+    optionDetails: componentDetails,
     calculatedReinstallTotal,
     customServicesTotal,
   };
@@ -512,4 +538,35 @@ export function holidayCustomerPackages(params: {
       sortOrder: 2,
     },
   ];
+}
+
+export type HolidayDisplayLine = { name: string; description: string; total: number; itemType: "PRODUCT" | "SERVICE" };
+
+/** Shared native preview and estimate breakdown, including explicit zero-dollar overrides. */
+export function holidayOptionLines(params: {
+  lines: HolidayPricedLine[]; key: HolidayQuoteOptionKey; targetSubtotal: number;
+  partsPrice?: number; laborPrice?: number;
+}): HolidayDisplayLine[] {
+  const result: HolidayDisplayLine[] = params.key === "labor"
+    ? holidayDetailedLaborOnlyLines(params)
+    : params.key === "buy" ? holidayDetailedBuyLines(params)
+    : [{ name: "Holiday lighting", description: "Holiday lighting installation", total: params.targetSubtotal, itemType: "SERVICE" }];
+  if (params.partsPrice == null && params.laborPrice == null) return result;
+  if (params.key === "lease" || params.key === "permanent") result.length = 0;
+  for (const type of ["PRODUCT", "SERVICE"] as const) {
+    const target = type === "PRODUCT" ? params.partsPrice ?? 0 : params.laborPrice ?? 0;
+    const rows = result.filter((line) => line.itemType === type);
+    if (!rows.length && target > 0) {
+      result.push({ name: type === "PRODUCT" ? "Parts" : "Labor", description: "Holiday lighting", total: target, itemType: type });
+      continue;
+    }
+    const total = rows.reduce((sum, line) => sum + Math.max(0, line.total), 0);
+    let allocated = 0;
+    rows.forEach((line, index) => {
+      line.total = index === rows.length - 1 ? money(target - allocated)
+        : Math.floor(Math.round(target * 100) * (total > 0 ? Math.max(0, line.total) / total : 1 / rows.length)) / 100;
+      allocated = money(allocated + line.total);
+    });
+  }
+  return result;
 }

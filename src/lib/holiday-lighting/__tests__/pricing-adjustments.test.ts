@@ -20,6 +20,8 @@ import {
   parseHolidaySelections,
 } from "../types";
 
+function onlyTotals({ partsPrice, laborPrice, displayLines, ...totals }: ReturnType<typeof computeHolidayQuotePricing>["optionDetails"]["buy"]) { return totals; }
+
 const style = DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!;
 const prices = new Map([
   [style.temporaryYear1Sku, { id: "buy", name: "Buy", unitPrice: 10, unitCost: null }],
@@ -44,8 +46,8 @@ test("quote-specific prices and discounts survive parsing and affect each option
     },
   });
   const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.deepEqual(result.optionDetails.buy, { calculated: 150, subtotal: 120, discountTotal: 30, total: 90 });
-  assert.deepEqual(result.optionDetails.lease, { calculated: 80, subtotal: 80, discountTotal: 20, total: 60 });
+  assert.deepEqual(onlyTotals(result.optionDetails.buy), { calculated: 150, subtotal: 120, discountTotal: 30, total: 90 });
+  assert.deepEqual(onlyTotals(result.optionDetails.lease), { calculated: 80, subtotal: 80, discountTotal: 20, total: 60 });
   assert.equal(selections.optionAdjustments?.lease?.discountLabel, "Early booking");
   assert.equal(result.permanentTotal, 180);
   assert.equal(result.reinstallTotal, 45);
@@ -111,7 +113,7 @@ test("lease agreements apply 10% for three years and 20% for five years", () => 
     selections: parseHolidaySelections({ leaseContractYears: 3 }),
     prices,
   });
-  assert.deepEqual(threeYear.optionDetails.lease, {
+  assert.deepEqual(onlyTotals(threeYear.optionDetails.lease), {
     calculated: 80,
     subtotal: 80,
     discountTotal: 8,
@@ -509,4 +511,37 @@ test("included holiday services have customer descriptions and permanent options
     HOLIDAY_PERMANENT_INCLUDED_LINES.map((line) => line.name).join(" "),
     /storage|maintenance/i
   );
+});
+
+test("native parts and labor overrides persist and agree with generated line items", () => {
+  const selections = parseHolidaySelections({
+    defaultLightStyleKey: style.key, installKind: "temporary",
+    completedSteps: ["design", "price", "design", "invalid"],
+    customServices: [{ id: "extra", name: "Wreath", quantity: 2, unitPrice: 15 }],
+    optionAdjustments: { buy: { partsPrice: 75.25, laborPrice: 42.5, price: 999, discountType: "fixed", discountAmount: 10 } },
+    designOptions: [{ id: "a", label: "A", measurements, selections: { completedSteps: ["notes"], optionAdjustments: { buy: { partsPrice: 75.25, laborPrice: 42.5 } } } }],
+  });
+  assert.deepEqual(selections.completedSteps, ["design", "price"]);
+  assert.deepEqual(holidayDesignOptionsFromQuote({ measurements, selections, catalog: DEFAULT_HOLIDAY_CATALOG })[0]?.selections.completedSteps, ["notes"]);
+  assert.equal(selections.designOptions?.[0]?.selections.optionAdjustments?.buy?.partsPrice, 75.25);
+  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
+  const detail = result.optionDetails.buy;
+  assert.equal(detail.subtotal, 147.75);
+  assert.equal(detail.total, 137.75);
+  assert.equal(detail.displayLines.filter((line) => line.itemType === "PRODUCT").reduce((sum, line) => sum + line.total, 0), 75.25);
+  assert.equal(detail.displayLines.filter((line) => line.itemType === "SERVICE").reduce((sum, line) => sum + line.total, 0), 42.5);
+  assert.equal(detail.displayLines.reduce((sum, line) => sum + line.total, 0) + result.customServicesTotal, detail.subtotal);
+});
+
+test("zero component prices and lease discounts are honored without changing other options", () => {
+  const selections = parseHolidaySelections({ defaultLightStyleKey: style.key, leaseContractYears: 3,
+    optionAdjustments: { buy: { partsPrice: 0, laborPrice: 0 }, lease: { partsPrice: 100, laborPrice: 50 }, labor: { partsPrice: 900, laborPrice: 25 } } });
+  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
+  assert.equal(result.optionDetails.buy.total, 0);
+  assert.equal(result.optionDetails.buy.displayLines.reduce((sum, line) => sum + line.total, 0), 0);
+  assert.equal(result.optionDetails.lease.subtotal, 150);
+  assert.equal(result.optionDetails.lease.total, 135);
+  assert.equal(result.optionDetails.labor.total, 25);
+  assert.equal(result.optionDetails.labor.partsPrice, 0);
+  assert.equal(result.optionDetails.labor.displayLines.reduce((sum, line) => sum + line.total, 0), 25);
 });

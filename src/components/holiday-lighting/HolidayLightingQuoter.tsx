@@ -401,6 +401,7 @@ export function HolidayLightingQuoter({
             pricingMode: nextSelections.pricingMode ?? "buy",
             defaultColorPattern: nextSelections.defaultColorPattern,
             notes: nextSelections.notes,
+            completedSteps: nextSelections.completedSteps,
             optionAdjustments: nextSelections.optionAdjustments,
             reinstallPrice: nextSelections.reinstallPrice,
             customServices: nextSelections.customServices,
@@ -502,7 +503,7 @@ export function HolidayLightingQuoter({
       ...current,
       optionAdjustments: {
         ...current.optionAdjustments,
-        [key]: { ...current.optionAdjustments?.[key], ...patch },
+        [key]: { ...current.optionAdjustments?.[key], ...("price" in patch ? { partsPrice: null, laborPrice: null } : {}), ...patch },
       },
     }));
   }
@@ -563,6 +564,7 @@ export function HolidayLightingQuoter({
         pricingMode: normalized.pricingMode ?? "buy",
         defaultColorPattern: normalized.defaultColorPattern,
         notes: normalized.notes,
+        completedSteps: normalized.completedSteps,
         optionAdjustments: normalized.optionAdjustments,
         reinstallPrice: normalized.reinstallPrice,
         customServices: normalized.customServices,
