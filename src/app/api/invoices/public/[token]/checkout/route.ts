@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
 import { toNumber } from "@/lib/visits/totals";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
+import { activePublicCapability } from "@/lib/security/public-capability";
 
 type Params = { params: Promise<{ token: string }> };
 
@@ -24,8 +25,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "STRIPE_SECRET_KEY is not configured" }, { status: 503 });
   }
 
-  const invoice = await prisma.invoice.findUnique({
-    where: { publicToken: token },
+  const invoice = await prisma.invoice.findFirst({
+    where: activePublicCapability(token),
     include: {
       customer: true,
       visit: { select: { title: true } },

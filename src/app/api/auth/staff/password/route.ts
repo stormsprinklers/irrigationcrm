@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestPasswordReset, resetStaffPassword } from "@/lib/staff-auth";
 import { sanitizeAuthReturnTo } from "@/lib/staff-auth/return-to";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,6 +10,8 @@ export async function POST(request: NextRequest) {
     if (!email.trim()) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
     }
+    const limited = await enforceAuthRateLimit(request, "password-reset-request", email);
+    if (limited) return limited;
     const returnTo = sanitizeAuthReturnTo(
       body.returnTo != null ? String(body.returnTo) : null,
       [request.nextUrl.origin]
@@ -38,6 +41,8 @@ export async function PUT(request: NextRequest) {
         { status: 400 },
       );
     }
+    const limited = await enforceAuthRateLimit(request, "password-reset-complete", token);
+    if (limited) return limited;
     const result = await resetStaffPassword(token, password);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });

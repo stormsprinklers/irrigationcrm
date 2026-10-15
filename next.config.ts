@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
+import { buildSecurityHeaders } from "./src/lib/security/headers";
 
 const nextConfig: NextConfig = {
+  // Lets CI and local verification place generated output outside synced folders.
+  distDir: process.env.NEXT_DIST_DIR?.trim() || ".next",
   async redirects() {
     return [
       { source: "/campaigns", destination: "/marketing/campaigns", permanent: true },
@@ -10,6 +13,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        source: "/(.*)",
+        headers: buildSecurityHeaders(process.env.NODE_ENV === "production"),
+      },
       {
         source: "/sw.js",
         headers: [
@@ -30,7 +37,8 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Permissions-Policy",
-            value: "geolocation=(self), notifications=(self)",
+            value:
+              "geolocation=(self), notifications=(self), camera=(self), microphone=(self), payment=(self), usb=(), serial=()",
           },
         ],
       },

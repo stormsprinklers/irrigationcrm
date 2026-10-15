@@ -3,15 +3,13 @@ import { notifyAllCompaniesOfNewGbpReviews } from "@/lib/google-business/review-
 import { syncAndAssignGbpReviews } from "@/lib/google-business/review-assigner";
 import { isGbpReviewPullHour } from "@/lib/google-business/review-pull-window";
 import { prisma } from "@/lib/prisma";
+import { authorizeCronRequest } from "@/lib/security/trusted-request";
 
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = authorizeCronRequest(request);
+  if (denied) return denied;
 
   // Vercel cron is UTC; fire at 22:00 and 23:00 UTC and only pull at 4pm Mountain.
   if (!isGbpReviewPullHour()) {

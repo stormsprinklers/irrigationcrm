@@ -17,6 +17,7 @@ import {
   pickEstimateOption,
 } from "@/lib/housecall-pro/utils";
 import { prisma } from "@/lib/prisma";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchResult> {
   const debugEnabled = Boolean(ctx.options.debugMode);
@@ -156,7 +157,9 @@ export async function importEstimatesBatch(ctx: ImportContext): Promise<BatchRes
           fields: debugFields,
         });
       } else {
-        const estimate = await prisma.estimate.create({ data: estimateData });
+        const estimate = await prisma.estimate.create({
+          data: { ...estimateData, ...createPublicCapability() },
+        });
         estimateId = estimate.id;
         await upsertMapping({
           companyId: ctx.companyId,

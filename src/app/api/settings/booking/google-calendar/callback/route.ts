@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${redirectBase}?error=missing_oauth_params`);
     }
 
-    const companyId = verifyOAuthState(state);
+    const companyId = await verifyOAuthState(state, "google-calendar");
     if (!companyId) {
       return NextResponse.redirect(`${redirectBase}?error=invalid_oauth_state`);
     }

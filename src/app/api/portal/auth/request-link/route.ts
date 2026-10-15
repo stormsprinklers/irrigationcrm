@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCompanyByPortalSlug } from "@/lib/portal/company";
 import { findCustomersByEmail, requestPortalLoginLink } from "@/lib/portal/login";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -13,6 +14,13 @@ export async function POST(request: NextRequest) {
   if (!slug || !email) {
     return NextResponse.json({ error: "slug and email are required" }, { status: 400 });
   }
+
+  const limited = await enforceAuthRateLimit(
+    request,
+    "portal-login-link",
+    `${slug}:${email}`
+  );
+  if (limited) return limited;
 
   const company = await getCompanyByPortalSlug(slug);
   if (!company) {

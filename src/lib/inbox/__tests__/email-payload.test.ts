@@ -86,9 +86,10 @@ test("signed email webhook verifies raw payload and rejects tampering", () => {
     const timestamp = "1726500000";
     const payload = Buffer.from('[{"event":"open"}]\r\n');
     const signature = sign("sha256", Buffer.concat([Buffer.from(timestamp), payload]), privateKey).toString("base64");
-    assert.equal(validateEmailWebhook(payload, signature, timestamp), true);
-    assert.equal(validateEmailWebhook(Buffer.from('[{"event":"click"}]\r\n'), signature, timestamp), false);
-    assert.equal(validateEmailWebhook(payload, "bad", timestamp), false);
+    assert.equal(validateEmailWebhook(payload, signature, timestamp, 1726500000), true);
+    assert.equal(validateEmailWebhook(Buffer.from('[{"event":"click"}]\r\n'), signature, timestamp, 1726500000), false);
+    assert.equal(validateEmailWebhook(payload, "bad", timestamp, 1726500000), false);
+    assert.equal(validateEmailWebhook(payload, signature, timestamp, 1726500301), false);
   } finally {
     if (prior === undefined) delete process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY;
     else process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY = prior;

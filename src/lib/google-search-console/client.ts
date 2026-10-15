@@ -22,6 +22,7 @@ import type {
 import { SEARCH_CONSOLE_SCOPE } from "@/lib/google-search-console/types";
 import { prisma } from "@/lib/prisma";
 import { fetchSitemapPages } from "@/lib/marketing/sitemap-pages";
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
 import { accessibleSites } from "./site-selection";
 export { pickDefaultSite } from "./site-selection";
 
@@ -46,7 +47,7 @@ export function isSearchConsoleConfigured() {
   return isGeneralGoogleOAuthConfigured();
 }
 
-export function buildSearchConsoleAuthUrl(companyId: string, redirectUri: string) {
+export async function buildSearchConsoleAuthUrl(companyId: string, redirectUri: string) {
   const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleSearchConsoleApiError("Google OAuth is not configured", 503);
 
@@ -57,7 +58,7 @@ export function buildSearchConsoleAuthUrl(companyId: string, redirectUri: string
     scope: SEARCH_CONSOLE_SCOPE,
     access_type: "offline",
     prompt: "consent select_account",
-    state: createOAuthState(companyId),
+    state: await createOAuthState(companyId, "search-console"),
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -369,7 +370,7 @@ async function getLiveIndexability(pageUrl: string): Promise<LiveIndexability> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LIVE_PAGE_TIMEOUT_MS);
   try {
-    const response = await fetch(pageUrl, {
+    const response = await safeOutboundFetch(pageUrl, {
       redirect: "follow",
       cache: "no-store",
       signal: controller.signal,
@@ -377,7 +378,7 @@ async function getLiveIndexability(pageUrl: string): Promise<LiveIndexability> {
         Accept: "text/html,application/xhtml+xml",
         "User-Agent": "StormCRM-Indexability-Check/1.0",
       },
-    });
+    }, { allowedHosts: [new URL(pageUrl).hostname] });
     if (!response.ok) return "unavailable";
     const contentType = response.headers.get("content-type") ?? "";
     if (!/text\/html|application\/xhtml\+xml/i.test(contentType)) return "unavailable";

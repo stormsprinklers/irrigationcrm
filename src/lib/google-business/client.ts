@@ -49,7 +49,7 @@ export function isGoogleBusinessConfigured() {
   return isGoogleBusinessOAuthConfigured();
 }
 
-export function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: string) {
+export async function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: string) {
   const { clientId } = getGoogleOAuthConfig();
   if (!clientId) throw new GoogleBusinessApiError("Google OAuth is not configured", 503);
 
@@ -60,7 +60,7 @@ export function buildGoogleBusinessAuthUrl(companyId: string, redirectUri: strin
     scope: GOOGLE_BUSINESS_SCOPE,
     access_type: "offline",
     prompt: "consent",
-    state: createOAuthState(companyId),
+    state: await createOAuthState(companyId, "google-business"),
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

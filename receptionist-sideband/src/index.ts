@@ -21,6 +21,11 @@ const CRM_BASE_URL = (process.env.CRM_BASE_URL || "").replace(/\/$/, "");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const REALTIME_MODEL =
   process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
+const MAX_CONNECTIONS = Number(process.env.SIDEBAND_MAX_CONNECTIONS || 100);
+const MAX_CONNECTIONS_PER_IP = Number(process.env.SIDEBAND_MAX_CONNECTIONS_PER_IP || 10);
+const START_MESSAGE_TIMEOUT_MS = 5_000;
+const MAX_MESSAGES_PER_MINUTE = 1_200;
+const connectionsByIp = new Map<string, number>();
 
 type SessionBootstrap = {
   receptionistCallId: string;
@@ -282,10 +287,10 @@ class CallBridge {
     const type = String(event.type || "");
 
     if (type === "error") {
-      const err = event.error as { code?: string } | undefined;
+      const err = event.error as { code?: string; type?: string } | undefined;
       if (err?.code === "response_cancel_not_active") return;
       this.fatalOpenAi = true;
-      log("OpenAI error event", JSON.stringify(event).slice(0, 800));
+      log("OpenAI error event", { code: err?.code ?? "unknown", type: err?.type ?? "unknown" });
       return;
     }
 
@@ -494,24 +499,71 @@ const server = http.createServer((_req, res) => {
   res.end(JSON.stringify({ ok: true, service: "receptionist-sideband" }));
 });
 
-const wss = new WebSocketServer({ server, path: "/twilio/media" });
+const wss = new WebSocketServer({
+  server,
+  path: "/twilio/media",
+  maxPayload: 64 * 1024,
+  perMessageDeflate: false,
+});
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, request) => {
+  const remoteIp = request.socket.remoteAddress || "unknown";
+  const existingForIp = connectionsByIp.get(remoteIp) ?? 0;
+  if (wss.clients.size > MAX_CONNECTIONS || existingForIp >= MAX_CONNECTIONS_PER_IP) {
+    log("Connection limit reached", { remoteIp });
+    ws.close(1013, "Try again later");
+    return;
+  }
+  connectionsByIp.set(remoteIp, existingForIp + 1);
+
   log("Twilio stream connected");
   const bridge = new CallBridge(ws);
+  let started = false;
+  let messagesInWindow = 0;
+  let windowStartedAt = Date.now();
+  let invalidMessages = 0;
+  const startTimer = setTimeout(() => {
+    if (!started) ws.close(1008, "Missing authenticated start message");
+  }, START_MESSAGE_TIMEOUT_MS);
+
   ws.on("message", (data) => {
+    const now = Date.now();
+    if (now - windowStartedAt >= 60_000) {
+      windowStartedAt = now;
+      messagesInWindow = 0;
+    }
+    messagesInWindow += 1;
+    if (messagesInWindow > MAX_MESSAGES_PER_MINUTE) {
+      ws.close(1008, "Message rate exceeded");
+      return;
+    }
     try {
       const msg = JSON.parse(data.toString()) as Record<string, unknown>;
+      if (msg.event === "start") {
+        started = true;
+        clearTimeout(startTimer);
+      }
       void bridge.startFromTwilioMessage(msg);
     } catch (err) {
-      log("Bad Twilio message", err);
+      invalidMessages += 1;
+      log("Bad Twilio message", { invalidMessages });
+      if (invalidMessages >= 3) ws.close(1008, "Invalid messages");
     }
   });
-  ws.on("close", () => log("Twilio stream closed"));
+  ws.on("close", () => {
+    clearTimeout(startTimer);
+    const remaining = Math.max(0, (connectionsByIp.get(remoteIp) ?? 1) - 1);
+    if (remaining) connectionsByIp.set(remoteIp, remaining);
+    else connectionsByIp.delete(remoteIp);
+    log("Twilio stream closed");
+  });
 });
 
 server.listen(PORT, () => {
   log(`Receptionist sideband listening on :${PORT} (WSS path /twilio/media)`);
   if (!CRM_BASE_URL) log("WARNING: CRM_BASE_URL unset");
+  if (process.env.NODE_ENV === "production" && CRM_BASE_URL && !CRM_BASE_URL.startsWith("https://")) {
+    log("WARNING: CRM_BASE_URL must use HTTPS in production");
+  }
   if (!OPENAI_API_KEY) log("WARNING: OPENAI_API_KEY unset");
 });

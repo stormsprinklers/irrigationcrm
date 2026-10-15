@@ -139,14 +139,7 @@ export function GoogleReviewsInbox() {
         throw new Error(data.error ?? `Could not open ${company.companyName}`);
       }
       await updateSession({
-        user: {
-          id: data.session.id,
-          email: data.session.email,
-          name: data.session.name,
-          companyId: data.session.companyId,
-          role: data.session.role,
-          trueRole: null,
-        },
+        securityAction: { type: "switch-account", targetUserId: data.session.id },
       });
       window.location.reload();
     } catch (error) {

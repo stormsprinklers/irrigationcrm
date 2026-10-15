@@ -41,10 +41,13 @@ export async function POST(request: NextRequest) {
     params[key] = String(value);
   });
 
-  if (
-    process.env.TWILIO_AUTH_TOKEN &&
-    !isValidTwilioWebhookRequest(request, params)
-  ) {
+  if (!process.env.TWILIO_AUTH_TOKEN) {
+    return NextResponse.json(
+      { error: "Twilio webhook authentication is not configured" },
+      { status: 503 }
+    );
+  }
+  if (!isValidTwilioWebhookRequest(request, params)) {
     console.error("Twilio SMS inbound signature validation failed", {
       urls: getTwilioWebhookUrlCandidates(request),
     });

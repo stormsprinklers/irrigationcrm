@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(result.stream, {
       headers: {
         "Content-Type": contentTypeForPathname(pathname, result.blob.contentType),
+        "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
         "Cache-Control": "public, max-age=86400",
         "X-Content-Type-Options": "nosniff",
       },

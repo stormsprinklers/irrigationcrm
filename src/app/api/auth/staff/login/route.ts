@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthMfaPurpose } from "@prisma/client";
 import { beginStaffPasswordLogin } from "@/lib/staff-auth";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
+import { writeSecurityAuditEvent } from "@/lib/security/audit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,13 +22,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
     }
 
+    const limited = await enforceAuthRateLimit(
+      request,
+      "password-login",
+      `${email}:${companyId ?? "any"}`
+    );
+    if (limited) return limited;
+
     const result = await beginStaffPasswordLogin(email, password, purpose, companyId);
     if (!result.ok) {
+      await writeSecurityAuditEvent({
+        event: "AUTH_PASSWORD_LOGIN",
+        outcome: "FAILURE",
+        request,
+        companyId,
+        subject: email,
+        audience: purpose,
+        metadata: { reason: result.code },
+      });
       const status = result.code === "INVALID" ? 401 : 400;
       return NextResponse.json({ error: result.error, code: result.code }, { status });
     }
 
     if ("needsCompanyChoice" in result) {
+      await writeSecurityAuditEvent({
+        event: "AUTH_PASSWORD_LOGIN",
+        outcome: "CHALLENGE",
+        request,
+        subject: email,
+        audience: purpose,
+        metadata: { next: "company-choice" },
+      });
       return NextResponse.json({
         needsCompanyChoice: true,
         companies: result.companies,
@@ -34,6 +60,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (result.mfaRequired) {
+      await writeSecurityAuditEvent({
+        event: "AUTH_PASSWORD_LOGIN",
+        outcome: "CHALLENGE",
+        request,
+        companyId,
+        subject: email,
+        audience: purpose,
+        metadata: { next: "mfa" },
+      });
       return NextResponse.json({
         mfaRequired: true,
         challengeId: result.challengeId,
@@ -44,6 +79,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    await writeSecurityAuditEvent({
+      event: "AUTH_PASSWORD_LOGIN",
+      outcome: "SUCCESS",
+      request,
+      companyId: result.user.companyId,
+      actorId: result.user.id,
+      subject: email,
+      audience: purpose,
+    });
     return NextResponse.json({
       mfaRequired: false,
       appleDemo: true,

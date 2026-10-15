@@ -1,5 +1,6 @@
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { safeFileName } from "@/lib/inbox/attachments";
+import { readResponseBufferLimited, safeOutboundFetch } from "@/lib/security/outbound-fetch";
 
 export async function downloadTwilioMedia(params: {
   mediaUrl: string;
@@ -15,15 +16,15 @@ export async function downloadTwilioMedia(params: {
   }
 
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-  const res = await fetch(params.mediaUrl, {
+  const res = await safeOutboundFetch(params.mediaUrl, {
     headers: { Authorization: `Basic ${auth}` },
-  });
+  }, { allowedHosts: ["api.twilio.com"] });
 
   if (!res.ok) {
     throw new Error(`Failed to download Twilio media (${res.status})`);
   }
 
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const buffer = await readResponseBufferLimited(res, 5 * 1024 * 1024);
   const ext = params.mimeType.split("/")[1]?.split(";")[0] ?? "bin";
   const fileName = `media-${params.index}.${ext}`;
 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/twilio/phone-release-token";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
 import { attachNumberToA2pMessagingService, listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
+import { isValidPhoneAssignee } from "@/lib/voice/phone-assignment";
 import { prisma } from "@/lib/prisma";
 
 async function operatedCompanyIdsFor(user: {
@@ -146,6 +147,15 @@ export async function PATCH(
     }
 
     const companyId = existing.companyId;
+    if (
+      assignedUserId &&
+      !(await isValidPhoneAssignee(companyId, String(assignedUserId)))
+    ) {
+      return NextResponse.json(
+        { error: "Assigned employee must be an active employee of this company" },
+        { status: 400 }
+      );
+    }
     const onlyAssignmentChange =
       (changingCompany || changingCampaign || locking || unlocking) &&
       e164 === undefined &&

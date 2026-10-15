@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { getAuthSecret } from "@/lib/auth-secret";
+import { enforceBrowserMutationOrigin } from "@/lib/security/csrf";
 
 const publicPaths = [
   "/",
@@ -56,6 +57,9 @@ function withNoIndex(response: NextResponse) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const csrfDenied = enforceBrowserMutationOrigin(request);
+  if (csrfDenied) return withNoIndex(csrfDenied);
 
   // Google Search / OAuth HTML file verification (served from /public)
   if (/^\/google[a-z0-9]+\.html$/i.test(pathname)) {

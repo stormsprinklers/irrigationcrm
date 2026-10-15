@@ -5,7 +5,7 @@ import { handlePortingWebhookPayload } from "@/lib/twilio/port-in-service";
 
 function isValidJsonTwilioWebhook(request: NextRequest, rawBody: string) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken) return true;
+  if (!authToken) return false;
 
   const signature = request.headers.get("x-twilio-signature") ?? "";
   return getTwilioWebhookUrlCandidates(request).some((url) => {
@@ -21,7 +21,13 @@ function isValidJsonTwilioWebhook(request: NextRequest, rawBody: string) {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text();
 
-  if (process.env.TWILIO_AUTH_TOKEN && !isValidJsonTwilioWebhook(request, rawBody)) {
+  if (!process.env.TWILIO_AUTH_TOKEN) {
+    return NextResponse.json(
+      { error: "Twilio webhook authentication is not configured" },
+      { status: 503 }
+    );
+  }
+  if (!isValidJsonTwilioWebhook(request, rawBody)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 

@@ -4,6 +4,7 @@ import { isBillingPeriodLate } from "@/lib/maintenance-plans/late-payment";
 import { prisma } from "@/lib/prisma";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 import { toNumber } from "@/lib/visits/totals";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 function invoiceStillCollectible(status: string | null | undefined) {
   return Boolean(status && status !== InvoiceStatus.VOID && status !== InvoiceStatus.REFUNDED);
@@ -48,6 +49,7 @@ export async function ensureLatePlanBillingInvoices(companyId: string, customerI
     const invoiceNumber = await nextInvoiceNumber(companyId);
     const invoice = await prisma.invoice.create({
       data: {
+        ...createPublicCapability(),
         companyId,
         customerId: period.enrollment.customerId,
         invoiceNumber,

@@ -1,6 +1,9 @@
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
 import { twilioRecordingMediaUrl } from "@/lib/voice/recording";
+import { readResponseBufferLimited, safeOutboundFetch } from "@/lib/security/outbound-fetch";
+
+const MAX_RECORDING_BYTES = 25 * 1024 * 1024;
 
 /**
  * Download a Twilio call recording and transcribe it with OpenAI Whisper.
@@ -19,17 +22,21 @@ export async function downloadTwilioRecordingAudio(recordingUrl: string): Promis
 
   const mediaUrl = twilioRecordingMediaUrl(recordingUrl);
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-  const res = await fetch(mediaUrl, {
+  const res = await safeOutboundFetch(mediaUrl, {
     headers: { Authorization: `Basic ${auth}` },
-  });
+  }, { allowedHosts: ["api.twilio.com"] });
   if (!res.ok) {
     throw new Error(`Failed to download Twilio recording (${res.status})`);
   }
 
   const contentType = res.headers.get("content-type") ?? "audio/mpeg";
   const ext = contentType.includes("wav") ? "wav" : "mp3";
+  const buffer = await readResponseBufferLimited(res, MAX_RECORDING_BYTES);
   return {
-    bytes: await res.arrayBuffer(),
+    bytes: buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength
+    ) as ArrayBuffer,
     contentType,
     fileName: `recording.${ext}`,
   };

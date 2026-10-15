@@ -1,7 +1,10 @@
 import twilio from "twilio";
 import type { NextRequest } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
-import { assertOutboundCommsEnabled } from "@/lib/communications/outbound-guard";
+import {
+  assertEnvironmentRecipientAllowed,
+  assertOutboundCommsEnabled,
+} from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
 import { prefixOutboundSmsWithCompanyName } from "@/lib/inbox/sms-company-prefix";
 import { getSharedMessagingServiceSid, ensureCompanyFromNumberOnA2p } from "@/lib/twilio/a2p";
@@ -50,7 +53,7 @@ export function isValidTwilioWebhookRequest(
 ) {
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  if (!authToken) return true;
+  if (!authToken) return false;
 
   return getTwilioWebhookUrlCandidates(request).some((url) =>
     twilio.validateRequest(authToken, signature, url, params)
@@ -128,6 +131,7 @@ export async function sendSms(params: {
   /** Skip the outbound-comms freeze (admin diagnostics only). */
   bypassCommsFreeze?: boolean;
 }) {
+  assertEnvironmentRecipientAllowed("sms", params.to);
   if (!params.bypassCommsFreeze) {
     await assertOutboundCommsEnabled(params.companyId, "sms");
   }
@@ -170,6 +174,7 @@ export async function initiateOutboundCall(params: {
   /** Skip the outbound-comms freeze (admin diagnostics only). */
   bypassCommsFreeze?: boolean;
 }) {
+  assertEnvironmentRecipientAllowed("call", params.to);
   if (!params.bypassCommsFreeze) {
     await assertOutboundCommsEnabled(params.companyId, "call");
   }

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const redirectUri = `${appUrl}/api/marketing/google-business/callback`;
-    const url = buildGoogleBusinessAuthUrl(user.companyId, redirectUri);
+    const url = await buildGoogleBusinessAuthUrl(user.companyId, redirectUri);
 
     return NextResponse.redirect(url);
   } catch {

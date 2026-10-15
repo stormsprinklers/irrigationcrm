@@ -2,6 +2,7 @@ import type { User } from "@prisma/client";
 import { EmployeeStatus, Prisma, UserRole } from "@prisma/client";
 import { fetchBlobBytes } from "@/lib/blob/download";
 import { prisma } from "@/lib/prisma";
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
 
 const LMS_BASE = process.env.LMS_INTEGRATION_URL?.replace(/\/$/, "") ?? "";
 const LMS_KEY = process.env.LMS_INTEGRATION_KEY ?? "";
@@ -93,11 +94,12 @@ export async function pushEmployeeToLms(employee: SyncEmployee): Promise<LmsSync
   };
 
   try {
-    const res = await fetch(`${LMS_BASE}/api/integrations/crm/users`, {
+    const allowedHosts = [new URL(LMS_BASE).hostname];
+    const res = await safeOutboundFetch(`${LMS_BASE}/api/integrations/crm/users`, {
       method: "POST",
       headers: lmsHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
-    });
+    }, { allowedHosts });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -204,10 +206,10 @@ export async function fetchLmsTrainingSummary(crmUserId: string) {
   const url = `${LMS_BASE}/api/integrations/crm/users/${encodeURIComponent(lmsId)}/progress`;
 
   try {
-    const res = await fetch(url, {
+    const res = await safeOutboundFetch(url, {
       headers: lmsHeaders(),
       next: { revalidate: 60 },
-    });
+    }, { allowedHosts: [new URL(LMS_BASE).hostname] });
     if (!res.ok) {
       return { error: "Failed to load training data" };
     }

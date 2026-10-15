@@ -3,6 +3,7 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getTwilioClient } from "@/lib/inbox/twilio";
 import { prisma } from "@/lib/prisma";
 import { twilioRecordingMediaUrl } from "@/lib/voice/recording";
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
 
 export async function GET(
   _request: Request,
@@ -37,9 +38,9 @@ export async function GET(
 
     const mediaUrl = twilioRecordingMediaUrl(call.recordingUrl);
     const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-    const upstream = await fetch(mediaUrl, {
+    const upstream = await safeOutboundFetch(mediaUrl, {
       headers: { Authorization: `Basic ${auth}` },
-    });
+    }, { allowedHosts: ["api.twilio.com"], maxRedirects: 1 });
 
     if (!upstream.ok) {
       // Fallback: resolve via Twilio SDK when stored URL is stale.

@@ -6,6 +6,7 @@ import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
 import { fetchTwilioNumberCapabilitiesBySid } from "@/lib/twilio/numbers";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
 import { listUserOperatedCompanyIds } from "@/lib/twilio/a2p";
+import { isValidPhoneAssignee } from "@/lib/voice/phone-assignment";
 import { prisma } from "@/lib/prisma";
 
 const numberInclude = {
@@ -104,6 +105,16 @@ export async function POST(request: NextRequest) {
 
     const wantPrimary =
       Boolean(isPrimary) || numberType === "PRIMARY" || numberType === PhoneNumberType.PRIMARY;
+
+    if (
+      assignedUserId &&
+      !(await isValidPhoneAssignee(user.companyId, String(assignedUserId)))
+    ) {
+      return NextResponse.json(
+        { error: "Assigned employee must be an active employee of this company" },
+        { status: 400 }
+      );
+    }
 
     const number = await prisma.phoneNumber.create({
       data: {

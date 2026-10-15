@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { portalCompanySelect, type PortalCompany } from "./company";
 import { portalFeatureEnabled } from "./permissions";
+import { activePublicCapability } from "@/lib/security/public-capability";
 
 const estimateLineItemsInclude = {
   lineItems: {
@@ -27,7 +28,7 @@ const estimateLineItemsInclude = {
 export async function findEstimateByPublicToken(token: string) {
   const estimate = await prisma.estimate.findFirst({
     where: {
-      publicToken: token,
+      ...activePublicCapability(token),
       status: { not: "DRAFT" },
       company: { portalEnabled: true },
     },

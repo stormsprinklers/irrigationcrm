@@ -7,6 +7,7 @@ import { buildNotificationContext } from "./context";
 import { buildPaidReceiptExtras } from "./receipt-extras";
 import { sendOperationalNotification } from "./send";
 import type { NotificationEvent } from "./templates";
+import { ensureInvoicePublicToken } from "@/lib/security/public-capability";
 
 export async function notifyInvoiceViaTemplates(params: {
   invoiceId: string;
@@ -39,6 +40,8 @@ export async function notifyInvoiceViaTemplates(params: {
   });
   if (!invoice?.customer) return { emailSent: false, smsSent: false, skipped: ["no customer"] };
 
+  const publicToken = await ensureInvoicePublicToken(invoice);
+
   const paid = invoice.payments.reduce((sum, payment) => {
     if (payment.refundedAt) return sum;
     return sum + toNumber(payment.amount);
@@ -52,7 +55,7 @@ export async function notifyInvoiceViaTemplates(params: {
         ? toNumber(invoice.total)
         : balanceDue;
 
-  const payUrl = params.payUrlOverride?.trim() || getInvoicePayUrl(invoice.publicToken, invoice.company);
+  const payUrl = params.payUrlOverride?.trim() || getInvoicePayUrl(publicToken, invoice.company);
 
   let customerWorkSummary: string | null = null;
   if (params.event === "INVOICE_PAID_RECEIPT" && invoice.visit?.workSummary?.trim()) {
@@ -74,7 +77,7 @@ export async function notifyInvoiceViaTemplates(params: {
     invoice: {
       invoiceNumber: invoice.invoiceNumber,
       amount,
-      publicToken: invoice.publicToken,
+      publicToken,
     },
     visit: invoice.visit
       ? {
@@ -101,7 +104,7 @@ export async function notifyInvoiceViaTemplates(params: {
       ? buildPaidReceiptExtras({
           workSummary: customerWorkSummary,
           reviewUrl: invoice.company.googleReviewUrl?.trim() || null,
-          invoicePublicToken: invoice.publicToken,
+          invoicePublicToken: publicToken,
           publicBaseUrl: invoice.company.customerBaseUrl,
           media: (invoice.visit?.attachments ?? []).map((item) => ({
             id: item.id,

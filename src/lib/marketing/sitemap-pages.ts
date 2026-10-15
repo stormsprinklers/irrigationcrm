@@ -1,3 +1,5 @@
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
+
 const DEFAULT_MAX_URLS = 400;
 const FETCH_TIMEOUT_MS = 12_000;
 
@@ -30,18 +32,18 @@ function isSitemapIndex(xml: string): boolean {
   return /<sitemapindex[\s>]/i.test(xml);
 }
 
-async function fetchXml(url: string): Promise<string | null> {
+async function fetchXml(url: string, allowedHost: string): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await safeOutboundFetch(url, {
       signal: controller.signal,
       headers: {
         Accept: "application/xml,text/xml,*/*",
         "User-Agent": "StormCRM-SEO-Bot/1.0",
       },
       cache: "no-store",
-    });
+    }, { allowedHosts: [allowedHost] });
     if (!res.ok) return null;
     const text = await res.text();
     return text.trim() || null;
@@ -63,6 +65,12 @@ export async function fetchSitemapPages(params: {
 }): Promise<SitemapPagesSnapshot | null> {
   const base = params.websiteUrl ? normalizeWebsiteBase(params.websiteUrl) : "";
   if (!base) return null;
+  let allowedHost: string;
+  try {
+    allowedHost = new URL(base).hostname;
+  } catch {
+    return null;
+  }
 
   const candidates = [
     ...(params.sitemapPaths ?? []).map((path) => path.trim()).filter(Boolean),
@@ -85,7 +93,7 @@ export async function fetchSitemapPages(params: {
   async function collectFromSitemap(sitemapUrl: string, depth: number): Promise<void> {
     if (collected.size >= maxUrls || depth > 3) return;
 
-    const xml = await fetchXml(sitemapUrl);
+    const xml = await fetchXml(sitemapUrl, allowedHost);
     if (!xml) return;
 
     if (!sourceUrl) sourceUrl = sitemapUrl;

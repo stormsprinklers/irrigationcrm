@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
 
 export type WebsiteCareerJob = {
   slug: string;
@@ -24,12 +25,13 @@ export async function fetchWebsiteCareerJobs(companyId: string): Promise<Website
   });
   const base = resolveWebsiteBaseUrl(company?.websiteBaseUrl);
   try {
-    const res = await fetch(`${base}/api/careers/jobs`, {
+    const allowedHosts = [new URL(base).hostname];
+    const res = await safeOutboundFetch(`${base}/api/careers/jobs`, {
       method: "GET",
       headers: { Accept: "application/json" },
       next: { revalidate: 0 },
       cache: "no-store",
-    });
+    }, { allowedHosts });
     if (!res.ok) {
       console.error("fetchWebsiteCareerJobs failed:", res.status);
       return [];
@@ -78,14 +80,15 @@ export async function fetchWebsiteCareerApplications(
   }
 
   try {
-    const res = await fetch(`${base}/api/careers/applications`, {
+    const allowedHosts = [new URL(base).hostname];
+    const res = await safeOutboundFetch(`${base}/api/careers/applications`, {
       method: "GET",
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${key}`,
       },
       cache: "no-store",
-    });
+    }, { allowedHosts });
     if (!res.ok) {
       console.error("fetchWebsiteCareerApplications failed:", res.status, await res.text().catch(() => ""));
       return [];

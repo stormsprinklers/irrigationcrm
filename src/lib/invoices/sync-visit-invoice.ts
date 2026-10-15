@@ -3,6 +3,7 @@ import { getInvoiceForCompany } from "@/lib/invoices/queries";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export type SyncVisitInvoiceResult =
   | {
@@ -63,6 +64,7 @@ export async function syncVisitInvoice(params: {
   if (!invoice) {
     const created = await prisma.invoice.create({
       data: {
+        ...createPublicCapability(),
         companyId: params.companyId,
         customerId: visit.customerId,
         visitId: visit.id,

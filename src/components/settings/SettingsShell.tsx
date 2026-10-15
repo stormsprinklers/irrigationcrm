@@ -18,7 +18,7 @@ import {
   filterSettingsNavForUser,
   isSettingsPathHidden,
 } from "@/lib/settings/access";
-import { isFieldRole } from "@/lib/employees";
+import { isFieldRole, isMarketerRole } from "@/lib/employees";
 import { settingsRootSections } from "@/lib/settings/nav";
 import { cn } from "@/lib/utils";
 
@@ -89,7 +89,9 @@ export function SettingsShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) return;
     if (isSettingsPathHidden(pathname, user)) {
-      router.replace(isFieldRole(user.role ?? "") ? "/home" : "/settings");
+      router.replace(
+        isFieldRole(user.role ?? "") || isMarketerRole(user.role) ? "/home" : "/settings"
+      );
     }
   }, [pathname, router, user]);
 

@@ -5,6 +5,7 @@ import { blobPathnameFromUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 export const SMS_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
 export const EMAIL_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const EMAIL_ATTACHMENT_MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+export const EMAIL_ATTACHMENT_MAX_COUNT = 10;
 export const SMS_MEDIA_MAX_COUNT = 10;
 
 export const SMS_ALLOWED_MIME_TYPES = [
@@ -46,6 +47,46 @@ export function isAllowedSmsMimeType(mimeType: string) {
 
 export function isAllowedEmailMimeType(mimeType: string) {
   return (EMAIL_ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType);
+}
+
+function startsWith(bytes: Uint8Array, expected: number[]) {
+  return expected.every((value, index) => bytes[index] === value);
+}
+
+/** Verify common attachment formats from bytes instead of trusting client MIME metadata. */
+export async function hasExpectedFileSignature(file: File): Promise<boolean> {
+  const bytes = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+  const mime = file.type.toLowerCase();
+
+  if (mime === "image/jpeg") return startsWith(bytes, [0xff, 0xd8, 0xff]);
+  if (mime === "image/png") return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (mime === "image/gif") {
+    const header = new TextDecoder().decode(bytes.slice(0, 6));
+    return header === "GIF87a" || header === "GIF89a";
+  }
+  if (mime === "image/webp") {
+    return new TextDecoder().decode(bytes.slice(0, 4)) === "RIFF" &&
+      new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
+  }
+  if (mime === "application/pdf") {
+    return new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";
+  }
+  if (mime === "video/mp4" || mime === "video/quicktime" || mime === "video/3gpp") {
+    return new TextDecoder().decode(bytes.slice(4, 8)) === "ftyp";
+  }
+  if (mime === "video/mpeg") {
+    return startsWith(bytes, [0x00, 0x00, 0x01, 0xba]) || startsWith(bytes, [0x00, 0x00, 0x01, 0xb3]);
+  }
+  if (mime === "application/msword" || mime === "application/vnd.ms-excel") {
+    return startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+  }
+  if (mime.includes("openxmlformats-officedocument")) {
+    return startsWith(bytes, [0x50, 0x4b, 0x03, 0x04]);
+  }
+  if (mime === "text/plain" || mime === "text/csv") {
+    return !bytes.includes(0);
+  }
+  return false;
 }
 
 export function isImageMimeType(mimeType: string) {

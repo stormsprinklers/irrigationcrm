@@ -4,7 +4,17 @@ import { prisma } from "@/lib/prisma";
 import { isContactBlocked } from "@/lib/inbox/contacts";
 import { notifyInboundEmail } from "@/lib/notifications/in-app";
 import { uploadPrivateBlob, assertBlobConfigured } from "@/lib/blob/storage";
-import { safeFileName } from "@/lib/inbox/attachments";
+import {
+  EMAIL_ATTACHMENT_MAX_BYTES,
+  EMAIL_ATTACHMENT_MAX_COUNT,
+  EMAIL_ATTACHMENT_MAX_TOTAL_BYTES,
+  hasExpectedFileSignature,
+  isAllowedEmailMimeType,
+  safeFileName,
+} from "@/lib/inbox/attachments";
+import { verifySharedSecret } from "@/lib/security/trusted-request";
+
+const MAX_INBOUND_EMAIL_BYTES = 30 * 1024 * 1024;
 
 async function saveInboundAttachments(
   companyId: string,
@@ -27,15 +37,32 @@ async function saveInboundAttachments(
     return;
   }
 
-  for (const [fieldName, meta] of Object.entries(attachmentInfo)) {
+  const entries = Object.entries(attachmentInfo);
+  if (entries.length > EMAIL_ATTACHMENT_MAX_COUNT) {
+    throw new Error("Too many inbound email attachments");
+  }
+  let totalBytes = 0;
+
+  for (const [fieldName, meta] of entries) {
     const file = formData.get(fieldName);
     if (!file || !(file instanceof File) || file.size <= 0) continue;
+
+    const mimeType = String(meta.type ?? file.type).toLowerCase();
+    totalBytes += file.size;
+    if (
+      file.size > EMAIL_ATTACHMENT_MAX_BYTES ||
+      totalBytes > EMAIL_ATTACHMENT_MAX_TOTAL_BYTES ||
+      !isAllowedEmailMimeType(mimeType) ||
+      !(await hasExpectedFileSignature(new File([file], file.name, { type: mimeType })))
+    ) {
+      throw new Error("Inbound email attachment rejected by security policy");
+    }
 
     const safeName = safeFileName(meta.filename ?? file.name);
     const blob = await uploadPrivateBlob(
       `inbox/${companyId}/email/inbound/${emailMessageId}/${Date.now()}-${safeName}`,
       file,
-      { contentType: meta.type ?? file.type }
+      { contentType: mimeType }
     );
 
     await prisma.emailAttachment.create({
@@ -43,7 +70,7 @@ async function saveInboundAttachments(
         emailMessageId,
         blobUrl: blob.url,
         fileName: meta.filename ?? file.name,
-        mimeType: meta.type ?? file.type,
+        mimeType,
         sizeBytes: file.size,
       },
     });
@@ -51,6 +78,23 @@ async function saveInboundAttachments(
 }
 
 export async function POST(request: NextRequest) {
+  const configuredInboundToken = process.env.TWILIO_EMAIL_INBOUND_VERIFY_TOKEN?.trim();
+  if (!configuredInboundToken) {
+    return NextResponse.json(
+      { error: "Inbound email authentication is not configured" },
+      { status: 503 }
+    );
+  }
+  const inboundToken = request.nextUrl.searchParams.get("token") ?? "";
+  if (!verifySharedSecret(inboundToken, configuredInboundToken)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (declaredLength > MAX_INBOUND_EMAIL_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
   const contentType = request.headers.get("content-type") ?? "";
 
   let from = "";
@@ -69,14 +113,6 @@ export async function POST(request: NextRequest) {
     html = String(formData.get("html") ?? "");
   } else {
     return NextResponse.json({ ok: true });
-  }
-
-  const inboundToken = request.nextUrl.searchParams.get("token");
-  if (
-    process.env.TWILIO_EMAIL_INBOUND_VERIFY_TOKEN &&
-    inboundToken !== process.env.TWILIO_EMAIL_INBOUND_VERIFY_TOKEN
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const toAddress = to.match(/[\w.+-]+@[\w.-]+\.\w+/)?.[0] ?? to;

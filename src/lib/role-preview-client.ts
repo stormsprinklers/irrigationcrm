@@ -36,9 +36,9 @@ export async function applyRolePreview(
   }
 
   await update({
-    user: {
-      role: session.role,
-      trueRole: session.trueRole,
+    securityAction: {
+      type: "role-preview",
+      role: session.trueRole ? session.role : null,
     },
   });
 

@@ -3,6 +3,7 @@ import { AuthMfaPurpose } from "@prisma/client";
 import { badRequestResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { parseMfaChannel, startStaffMfaChallenge } from "@/lib/staff-auth";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
 
 /** Resend MFA code for an in-progress mobile login challenge. */
 export async function POST(request: NextRequest) {
@@ -12,6 +13,9 @@ export async function POST(request: NextRequest) {
     if (!challengeId) {
       return badRequestResponse("challengeId is required");
     }
+
+    const limited = await enforceAuthRateLimit(request, "mfa-resend", challengeId);
+    if (limited) return limited;
 
     const existing = await prisma.authMfaChallenge.findUnique({
       where: { id: challengeId },

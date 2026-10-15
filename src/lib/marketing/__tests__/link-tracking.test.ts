@@ -8,6 +8,8 @@ import {
   rewriteTrackedUrlsInText,
   safeTrackedDestination,
   shouldSkipTrackedUrl,
+  trackedClickUrl,
+  verifyMarketingTrackingToken,
 } from "../link-tracking";
 import { buildMarketingEmailPayload } from "../outbound-email";
 
@@ -17,7 +19,7 @@ test("rewriteTrackedLinks wraps http hrefs and skips unsubscribe", () => {
     '<p><a href="https://crm.example.com/api/marketing/unsubscribe?token=abc">Unsub</a></p>',
   ].join("");
   const out = rewriteTrackedLinks(html, "rec_1");
-  assert.match(out, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out, /\/api\/marketing\/track\/click\?t=v1\./);
   assert.match(out, /u=https%3A%2F%2Fstormsprinklers.com%2Fwinter/);
   assert.match(out, /href="https:\/\/crm.example.com\/api\/marketing\/unsubscribe\?token=abc"/);
 });
@@ -31,7 +33,7 @@ test("rewriteTrackedUrlsInText wraps http URLs and leaves unsubscribe alone", ()
   const text =
     "Book here https://stormsprinklers.com/book.\nUnsubscribe from marketing emails: https://crm.example.com/api/marketing/unsubscribe?token=abc";
   const out = rewriteTrackedUrlsInText(text, "rec_1");
-  assert.match(out, /\/api\/marketing\/track\/click\?r=rec_1/);
+  assert.match(out, /\/api\/marketing\/track\/click\?t=v1\./);
   assert.match(out, /u=https%3A%2F%2Fstormsprinklers.com%2Fbook/);
   assert.match(out, /unsubscribe\?token=abc/);
   assert.ok(shouldSkipTrackedUrl("https://x/api/marketing/unsubscribe?token=1"));
@@ -71,6 +73,17 @@ test("htmlToPlainText keeps hyperlink text and URL", () => {
 
 test("appendOpenTrackingPixel inserts a 1x1 image once", () => {
   const html = appendOpenTrackingPixel("<p>Hi</p>", "rec_1");
-  assert.match(html, /\/api\/marketing\/track\/open\?r=rec_1/);
+  assert.match(html, /\/api\/marketing\/track\/open\?t=v1\./);
   assert.equal(appendOpenTrackingPixel(html, "rec_1"), html);
+});
+
+test("click tracking tokens bind recipient, purpose, destination, and expiry", () => {
+  const destination = "https://example.com/book?a=1";
+  const tracked = new URL(trackedClickUrl("rec_1", destination));
+  const token = tracked.searchParams.get("t") ?? "";
+  const normalized = tracked.searchParams.get("u") ?? "";
+  assert.equal(verifyMarketingTrackingToken(token, "click", normalized), "rec_1");
+  assert.equal(verifyMarketingTrackingToken(token, "open"), null);
+  assert.equal(verifyMarketingTrackingToken(token, "click", "https://evil.example"), null);
+  assert.equal(verifyMarketingTrackingToken(`${token}x`, "click", normalized), null);
 });

@@ -3,6 +3,8 @@ import { AuthMfaPurpose } from "@prisma/client";
 import { badRequestResponse } from "@/lib/api-auth";
 import { authenticateMobileUser, issueMobileSession } from "@/lib/mobile-auth/session";
 import { startStaffMfaChallenge } from "@/lib/staff-auth";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
+import { writeSecurityAuditEvent } from "@/lib/security/audit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,9 +18,24 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("email and password are required");
     }
 
+    const limited = await enforceAuthRateLimit(
+      request,
+      "password-login",
+      `${email}:${companyId ?? "any"}`
+    );
+    if (limited) return limited;
+
     const result = await authenticateMobileUser(email, password, companyId);
     if ("error" in result) {
       if ("needsCompanyChoice" in result && result.needsCompanyChoice) {
+        await writeSecurityAuditEvent({
+          event: "AUTH_PASSWORD_LOGIN",
+          outcome: "CHALLENGE",
+          request,
+          subject: email,
+          audience: "mobile",
+          metadata: { next: "company-choice" },
+        });
         return NextResponse.json({
           needsCompanyChoice: true,
           companies: result.companies,
@@ -29,6 +46,15 @@ export async function POST(request: NextRequest) {
         message.includes("technicians and admins") || message.includes("Storm CRM staff")
           ? 403
           : 401;
+      await writeSecurityAuditEvent({
+        event: "AUTH_PASSWORD_LOGIN",
+        outcome: status === 403 ? "DENIED" : "FAILURE",
+        request,
+        companyId,
+        subject: email,
+        audience: "mobile",
+        metadata: { status },
+      });
       return NextResponse.json({ error: message }, { status });
     }
 
@@ -39,6 +65,16 @@ export async function POST(request: NextRequest) {
         companyId: result.user.companyId,
         role: result.user.role,
         deviceName,
+      });
+      await writeSecurityAuditEvent({
+        event: "AUTH_PASSWORD_LOGIN",
+        outcome: "SUCCESS",
+        request,
+        companyId: result.user.companyId,
+        actorId: result.user.id,
+        subject: email,
+        audience: "mobile",
+        metadata: { appleDemo: true },
       });
       return NextResponse.json({
         mfaRequired: false,
@@ -58,6 +94,17 @@ export async function POST(request: NextRequest) {
     if (!mfa.ok) {
       return NextResponse.json({ error: mfa.error, code: mfa.code }, { status: 400 });
     }
+
+    await writeSecurityAuditEvent({
+      event: "AUTH_PASSWORD_LOGIN",
+      outcome: "CHALLENGE",
+      request,
+      companyId: result.user.companyId,
+      actorId: result.user.id,
+      subject: email,
+      audience: "mobile",
+      metadata: { next: "mfa" },
+    });
 
     return NextResponse.json({
       mfaRequired: true,

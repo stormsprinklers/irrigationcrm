@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export type OutboundChannel = "sms" | "email" | "call";
+export type OutboundEnvironmentMode = "normal" | "allowlist" | "disabled";
 
 export const DEFAULT_OUTBOUND_FREEZE_REASON =
   "Outbound communications are temporarily paused by an administrator.";
@@ -36,6 +37,55 @@ export class OutboundCommsDisabledError extends Error {
     this.reason = reason;
     this.disabledAt = disabledAt;
   }
+}
+
+function environmentMode(): OutboundEnvironmentMode {
+  const value = process.env.OUTBOUND_COMMS_MODE?.trim().toLowerCase();
+  if (value === "disabled" || value === "allowlist") return value;
+  return "normal";
+}
+
+function configuredAllowlist(channel: OutboundChannel): string[] {
+  const raw =
+    channel === "email"
+      ? process.env.OUTBOUND_EMAIL_ALLOWLIST
+      : process.env.OUTBOUND_PHONE_ALLOWLIST;
+  return (raw ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function normalizeRecipient(channel: OutboundChannel, recipient: string) {
+  if (channel === "email") return recipient.trim().toLowerCase();
+  const digits = recipient.replace(/\D/g, "");
+  return digits.length === 10 ? `1${digits}` : digits;
+}
+
+export function isEnvironmentRecipientAllowed(
+  channel: OutboundChannel,
+  recipient: string
+): boolean {
+  const mode = environmentMode();
+  if (mode === "normal") return true;
+  if (mode === "disabled") return false;
+  const normalized = normalizeRecipient(channel, recipient);
+  return configuredAllowlist(channel).some(
+    (allowed) => normalizeRecipient(channel, allowed) === normalized
+  );
+}
+
+/**
+ * Environment-wide safety gate. Unlike the per-company freeze, diagnostic and
+ * MFA sends cannot bypass this control, making it suitable for staging tests.
+ */
+export function assertEnvironmentRecipientAllowed(
+  channel: OutboundChannel,
+  recipients: string | string[]
+) {
+  const values = Array.isArray(recipients) ? recipients : [recipients];
+  if (values.every((recipient) => isEnvironmentRecipientAllowed(channel, recipient))) return;
+  throw new Error(`${CHANNEL_NOUN[channel]} blocked by the environment outbound safety policy.`);
 }
 
 export function buildOutboundDisabledMessage(

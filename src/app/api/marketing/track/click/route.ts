@@ -1,18 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { trackCampaignEngagement } from "@/lib/marketing/engagement";
-import { safeTrackedDestination } from "@/lib/marketing/link-tracking";
+import {
+  safeTrackedDestination,
+  verifyMarketingTrackingToken,
+} from "@/lib/marketing/link-tracking";
 
 export async function GET(request: NextRequest) {
-  const recipientId = request.nextUrl.searchParams.get("r");
+  const token = request.nextUrl.searchParams.get("t");
   const encodedUrl = request.nextUrl.searchParams.get("u");
 
-  if (!recipientId || !encodedUrl) {
+  if (!token || !encodedUrl) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   const targetUrl = safeTrackedDestination(encodedUrl);
   if (!targetUrl) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  const recipientId = verifyMarketingTrackingToken(token, "click", targetUrl);
+  if (!recipientId) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

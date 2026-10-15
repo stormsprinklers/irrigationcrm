@@ -8,6 +8,7 @@ import { computeEstimateExpiry } from "@/lib/estimates/queries";
 import { onEstimateSent } from "@/lib/notifications/estimate-followup";
 import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
 import { prisma } from "@/lib/prisma";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export async function POST(request: NextRequest) {
   const auth = await authenticateIntegration(request, IntegrationType.DESIGN);
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
 
     const estimate = await prisma.estimate.create({
       data: {
+        ...createPublicCapability(),
         companyId: auth.companyId,
         customerId: input.customerId,
         propertyId: input.propertyId ?? null,

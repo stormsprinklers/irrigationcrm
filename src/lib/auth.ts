@@ -9,6 +9,8 @@ import {
   verifyStaffMfaChallenge,
   verifyStaffPassword,
 } from "@/lib/staff-auth";
+import { parseAuthSessionAction } from "@/lib/auth-session-action";
+import { writeSecurityAuditEvent } from "@/lib/security/audit";
 
 declare module "next-auth" {
   interface Session {
@@ -37,10 +39,12 @@ declare module "@auth/core/jwt" {
     role: string;
     trueRole?: string;
     mobileWebExpiresAt?: number;
+    authVersion?: number;
   }
 }
 
 const authSecret = getAuthSecret();
+const AUTH_VERSION = 2;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -125,30 +129,114 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.companyId = user.companyId;
         token.role = user.role;
+        token.authVersion = AUTH_VERSION;
         delete token.trueRole;
         if (user.email) token.email = user.email;
         if (user.name) token.name = user.name;
       }
-      if (trigger === "update" && session?.user) {
-        const next = session.user as {
-          id?: string;
-          companyId?: string;
-          role?: string;
-          email?: string;
-          name?: string;
-          trueRole?: string | null;
-        };
-        const switchingUser = Boolean(next.id && next.id !== token.id);
-        if (next.id) token.id = next.id;
-        if (next.companyId) token.companyId = next.companyId;
-        if (next.role) token.role = next.role;
-        if (next.email) token.email = next.email;
-        if (next.name) token.name = next.name;
-        if (switchingUser) {
+      // Invalidate JWTs created before server-authorized session transitions were
+      // introduced. This intentionally signs existing staff out once on rollout.
+      if (!user && token.authVersion !== AUTH_VERSION) return null;
+
+      if (trigger === "update") {
+        const requested = parseAuthSessionAction(
+          (session as { securityAction?: unknown } | undefined)?.securityAction
+        );
+
+        const current = await prisma.user.findFirst({
+          where: {
+            id: token.id,
+            companyId: token.companyId,
+            status: "ACTIVE",
+            systemKind: null,
+          },
+          select: { id: true, email: true, name: true, companyId: true, role: true },
+        });
+        if (!current) return null;
+
+        if (requested?.type === "switch-account") {
+          const target = await prisma.user.findFirst({
+            where: {
+              id: requested.targetUserId,
+              status: "ACTIVE",
+              systemKind: null,
+            },
+            select: { id: true, email: true, name: true, companyId: true, role: true },
+          });
+          if (target && target.id !== current.id) {
+            const sameEmail = target.email.toLowerCase() === current.email.toLowerCase();
+            const link = sameEmail
+              ? true
+              : Boolean(
+                  await prisma.userAccountLink.findFirst({
+                    where: {
+                      OR: [
+                        { userId: current.id, linkedUserId: target.id },
+                        { userId: target.id, linkedUserId: current.id },
+                      ],
+                    },
+                    select: { id: true },
+                  })
+                );
+            if (sameEmail || link) {
+              await writeSecurityAuditEvent({
+                event: "SESSION_ACCOUNT_SWITCH",
+                outcome: "SUCCESS",
+                companyId: current.companyId,
+                actorId: current.id,
+                resourceType: "User",
+                resourceId: target.id,
+                metadata: { targetCompanyId: target.companyId },
+              });
+              token.id = target.id;
+              token.companyId = target.companyId;
+              token.role = target.role;
+              token.email = target.email;
+              token.name = target.name;
+              delete token.trueRole;
+              return token;
+            }
+          }
+          await writeSecurityAuditEvent({
+            event: "SESSION_ACCOUNT_SWITCH",
+            outcome: "DENIED",
+            companyId: current.companyId,
+            actorId: current.id,
+            resourceType: "User",
+            resourceId: requested.targetUserId,
+          });
+        }
+
+        if (requested?.type === "role-preview" && current.role === "ADMIN") {
+          await writeSecurityAuditEvent({
+            event: "SESSION_ROLE_PREVIEW",
+            outcome: "SUCCESS",
+            companyId: current.companyId,
+            actorId: current.id,
+            resourceType: "Role",
+            resourceId: requested.role ?? "ADMIN",
+          });
+          if (requested.role) {
+            token.role = requested.role;
+            token.trueRole = "ADMIN";
+          } else {
+            token.role = "ADMIN";
+            delete token.trueRole;
+          }
+          token.email = current.email;
+          token.name = current.name;
+          return token;
+        }
+
+        // Ordinary session refreshes can update presentation fields only from
+        // the database. Preserve a valid admin preview but never trust client claims.
+        const previewing = token.trueRole === "ADMIN" && current.role === "ADMIN";
+        token.email = current.email;
+        token.name = current.name;
+        token.companyId = current.companyId;
+        if (!previewing) {
+          token.role = current.role;
           delete token.trueRole;
-        } else if ("trueRole" in next) {
-          if (next.trueRole) token.trueRole = next.trueRole;
-          else delete token.trueRole;
         }
       }
       return token;

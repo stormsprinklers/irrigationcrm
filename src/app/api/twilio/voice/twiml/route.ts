@@ -12,7 +12,13 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const url = request.url;
 
-  if (process.env.TWILIO_AUTH_TOKEN && !validateTwilioSignature(signature, url, params)) {
+  if (!process.env.TWILIO_AUTH_TOKEN) {
+    return NextResponse.json(
+      { error: "Twilio webhook authentication is not configured" },
+      { status: 503 }
+    );
+  }
+  if (!validateTwilioSignature(signature, url, params)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 

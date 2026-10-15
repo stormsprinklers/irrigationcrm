@@ -1,5 +1,6 @@
 import { InvoiceStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { activePublicCapability } from "@/lib/security/public-capability";
 import { toNumber } from "@/lib/visits/totals";
 import { ensureLatePlanBillingInvoices } from "@/lib/maintenance-plans/late-invoices";
 import type { InvoiceDTO, PublicInvoiceDTO } from "./types";
@@ -194,8 +195,8 @@ export async function getInvoiceForCompany(companyId: string, invoiceId: string)
 }
 
 export async function getPublicInvoiceByToken(token: string) {
-  const invoice = await prisma.invoice.findUnique({
-    where: { publicToken: token },
+  const invoice = await prisma.invoice.findFirst({
+    where: activePublicCapability(token),
     include: { ...invoiceInclude, company: { select: { name: true } } },
   });
   return invoice ? serializePublicInvoice(invoice) : null;

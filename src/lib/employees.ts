@@ -7,6 +7,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   TECH: "Technician",
   INSTALLER: "Installer",
   SALES: "Sales",
+  MARKETER: "Marketer",
   SOCIAL_MEDIA_MANAGER: "Social Media Manager",
 };
 
@@ -17,8 +18,13 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   TECH: "Service technician — view assigned service visits and team inbox",
   INSTALLER: "Install crew member — view assigned install visits and team inbox",
   SALES: "Manage leads, estimates, and customer sales pipeline",
+  MARKETER: "View marketing performance and all reports, including calls, leads, LTV, and estimates",
   SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
 };
+
+export function isMarketerRole(role: string | null | undefined) {
+  return role === "MARKETER";
+}
 
 /** Field roles with limited office/admin access (service techs and installers). */
 export function isFieldRole(role: string) {
@@ -81,7 +87,7 @@ export function canManageServiceAreas(role: string) {
 }
 
 export function redactEmployeeForRole<T extends object>(employee: T, role: string): T {
-  if (role !== "CSR") return employee;
+  if (role !== "CSR" && role !== "MARKETER") return employee;
   return {
     ...employee,
     payType: null,

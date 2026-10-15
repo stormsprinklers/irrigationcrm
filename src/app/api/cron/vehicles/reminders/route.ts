@@ -4,13 +4,11 @@ import { notifyStaffInApp } from "@/lib/notifications/in-app";
 import { isOilDueSoon } from "@/lib/vehicles/oil";
 import { vehicleDisplayName } from "@/lib/vehicles/types";
 import { prisma } from "@/lib/prisma";
+import { authorizeCronRequest } from "@/lib/security/trusted-request";
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = authorizeCronRequest(request);
+  if (denied) return denied;
 
   const now = new Date();
   const vehicles = await prisma.vehicle.findMany({

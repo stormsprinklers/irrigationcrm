@@ -1,5 +1,6 @@
 import type { IntegrationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { safeOutboundFetch } from "@/lib/security/outbound-fetch";
 
 export type IntegrationStatusState =
   | "connected"
@@ -112,20 +113,22 @@ async function testLmsOutboundConnection(): Promise<Pick<IntegrationStatus, "sta
     // Prefer dedicated health route; fall back to legacy progress probe for older LMS deploys.
     // Use x-integration-key (not Authorization Bearer) so Auth.js does not treat the key as a JWT.
     const headers = { "x-integration-key": key };
-    let res = await fetch(`${base}/api/integrations/crm/health`, {
+    const allowedHosts = [new URL(base).hostname];
+    let res = await safeOutboundFetch(`${base}/api/integrations/crm/health`, {
       headers,
       signal: AbortSignal.timeout(10_000),
       cache: "no-store",
-    });
+    }, { allowedHosts });
 
     if (res.status === 404) {
-      res = await fetch(
+      res = await safeOutboundFetch(
         `${base}/api/integrations/crm/users/__connection_test__/progress`,
         {
           headers,
           signal: AbortSignal.timeout(10_000),
           cache: "no-store",
-        }
+        },
+        { allowedHosts }
       );
       if (res.status === 404) {
         return {

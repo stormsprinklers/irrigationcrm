@@ -43,7 +43,7 @@ export function hasGoogleAdsDeveloperToken() {
   return Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim());
 }
 
-export function buildGoogleAdsAuthUrl(companyId: string, redirectUri: string) {
+export async function buildGoogleAdsAuthUrl(companyId: string, redirectUri: string) {
   const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleAdsApiError("Google OAuth is not configured", 503);
 
@@ -54,7 +54,7 @@ export function buildGoogleAdsAuthUrl(companyId: string, redirectUri: string) {
     scope: GOOGLE_ADS_SCOPE,
     access_type: "offline",
     prompt: "consent",
-    state: createOAuthState(companyId),
+    state: await createOAuthState(companyId, "google-ads"),
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

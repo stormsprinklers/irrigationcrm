@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { trackCampaignEngagement } from "@/lib/marketing/engagement";
+import { verifyMarketingTrackingToken } from "@/lib/marketing/link-tracking";
 
 /** 1×1 transparent GIF */
 const PIXEL = Buffer.from(
@@ -8,7 +9,10 @@ const PIXEL = Buffer.from(
 );
 
 export async function GET(request: NextRequest) {
-  const recipientId = request.nextUrl.searchParams.get("r");
+  const token = request.nextUrl.searchParams.get("t");
+  const recipientId = token
+    ? verifyMarketingTrackingToken(token, "open")
+    : null;
   if (recipientId) {
     try {
       await trackCampaignEngagement({ recipientId, kind: "opened" });

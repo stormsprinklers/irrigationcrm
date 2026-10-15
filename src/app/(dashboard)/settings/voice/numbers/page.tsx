@@ -618,6 +618,12 @@ export default function VoiceNumbersPage() {
       toast.success("Assignment unlocked");
     } else if (patch.messagingServiceSid) {
       toast.success("Campaign updated");
+    } else if (patch.assignedUserId !== undefined) {
+      toast.success(
+        patch.assignedUserId
+          ? "Calls will ring this employee on every signed-in device"
+          : "Calls will use the company call flow"
+      );
     } else if (patch.companyId && patch.companyId !== sessionCompanyId) {
       toast.success("Moved to the other company — switch accounts to manage it there");
     } else if (patch.companyId) {
@@ -1169,23 +1175,24 @@ export default function VoiceNumbersPage() {
                 />
               </div>
             ) : null}
-            {numberType === "AGENT_DIRECT" ? (
-              <div className="space-y-1 sm:col-span-2">
-                <label className="text-sm font-medium">Assign to employee</label>
+            <div className="space-y-1 sm:col-span-2">
+                <label className="text-sm font-medium">Rings to</label>
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={assignedUserId}
                 onChange={(e) => setAssignedUserId(e.target.value)}
               >
-                <option value="">Select employee</option>
+                <option value="">Company call flow</option>
                 {employees.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.name}
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">
+                An employee assignment rings every browser and app where that person is signed in.
+              </p>
               </div>
-            ) : null}
             <div className="space-y-1 sm:col-span-2">
               <label className="text-sm font-medium">Title (optional)</label>
               <Input
@@ -1346,7 +1353,7 @@ export default function VoiceNumbersPage() {
                     </TableHead>
                     <TableHead className="w-[88px]">Lock</TableHead>
                     <TableHead className="min-w-[150px]">Call flow</TableHead>
-                    <TableHead className="min-w-[140px]">Source / agent</TableHead>
+                    <TableHead className="min-w-[190px]">Rings to / source</TableHead>
                     <TableHead>Linked</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -1541,10 +1548,39 @@ export default function VoiceNumbersPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {n.numberType === "AGENT_DIRECT" || n.assignedUser
-                          ? (n.assignedUser?.name ?? "—")
-                          : n.trackingSource || "—"}
+                      <TableCell>
+                        {onCurrentCompany ? (
+                          <div className="space-y-1">
+                            <select
+                              aria-label={`Route ${formatPhoneDisplay(n.e164)} calls to`}
+                              className="h-9 w-full min-w-[180px] rounded-md border border-input bg-background px-2 text-sm"
+                              value={n.assignedUserId ?? ""}
+                              onChange={(e) =>
+                                void updateNumber(n.id, {
+                                  assignedUserId: e.target.value || null,
+                                })
+                              }
+                            >
+                              <option value="">Company call flow</option>
+                              {employees.map((employee) => (
+                                <option key={employee.id} value={employee.id}>
+                                  {employee.name}
+                                </option>
+                              ))}
+                            </select>
+                            {n.trackingSource ? (
+                              <p className="text-xs text-muted-foreground">
+                                Source: {n.trackingSource}
+                              </p>
+                            ) : n.assignedUser ? (
+                              <p className="text-xs text-muted-foreground">All signed-in devices</p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {n.assignedUser?.name ?? "Company call flow"}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {n.twilioSid ? "Twilio" : "Manual"}
@@ -1656,23 +1692,24 @@ export default function VoiceNumbersPage() {
                     />
                   </div>
                 ) : null}
-                {numberType === "AGENT_DIRECT" ? (
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="text-sm font-medium">Assign to employee</label>
+                    <label className="text-sm font-medium">Rings to</label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                       value={assignedUserId}
                       onChange={(e) => setAssignedUserId(e.target.value)}
                     >
-                      <option value="">Select employee</option>
+                      <option value="">Company call flow</option>
                       {employees.map((e) => (
                         <option key={e.id} value={e.id}>
                           {e.name}
                         </option>
                       ))}
                     </select>
+                    <p className="text-xs text-muted-foreground">
+                      An employee assignment rings every browser and app where that person is signed in.
+                    </p>
                   </div>
-                ) : null}
               </div>
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox

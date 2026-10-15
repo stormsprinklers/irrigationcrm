@@ -4,6 +4,7 @@ import { getInvoiceForCompany } from "@/lib/invoices/queries";
 import { prisma } from "@/lib/prisma";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 const OPEN_INVOICE_STATUSES = [
   InvoiceStatus.DRAFT,
@@ -145,6 +146,7 @@ export async function syncEstimateInvoice(params: {
         })
       : await tx.invoice.create({
           data: {
+            ...createPublicCapability(),
             companyId: estimate.companyId,
             customerId: estimate.customerId,
             estimateId: estimate.id,

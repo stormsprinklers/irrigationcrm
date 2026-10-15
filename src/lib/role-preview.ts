@@ -1,7 +1,7 @@
 import { ROLE_LABELS } from "@/lib/employees";
 
 /** Roles an admin can preview for training / permission testing. */
-export const ROLE_PREVIEW_OPTIONS = ["MANAGER", "CSR", "TECH"] as const;
+export const ROLE_PREVIEW_OPTIONS = ["MANAGER", "CSR", "TECH", "MARKETER"] as const;
 
 export type RolePreviewOption = (typeof ROLE_PREVIEW_OPTIONS)[number];
 

@@ -32,8 +32,23 @@ export async function authenticateIntegration(
     return NextResponse.json({ error: "Integration key type mismatch" }, { status: 403 });
   }
 
-  if (!checkIntegrationRateLimit(credential.id)) {
-    return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+  try {
+    const rateLimit = await checkIntegrationRateLimit(credential.id);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+      );
+    }
+  } catch (error) {
+    console.error("[security] integration rate-limit storage unavailable", {
+      credentialId: credential.id,
+      error,
+    });
+    return NextResponse.json(
+      { error: "Integration protection is temporarily unavailable" },
+      { status: 503 }
+    );
   }
 
   await prisma.integrationCredential

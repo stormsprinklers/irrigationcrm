@@ -81,6 +81,98 @@ async function ensureVehicleNotesColumn() {
   }
 }
 
+async function ensureSecurityRateLimitTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "SecurityRateLimitBucket" (
+      "key" TEXT PRIMARY KEY,
+      "count" INTEGER NOT NULL DEFAULT 0,
+      "windowStartedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "blockedUntil" TIMESTAMP(3),
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "SecurityRateLimitBucket_updatedAt_idx"
+    ON "SecurityRateLimitBucket"("updatedAt")
+  `);
+}
+
+async function ensureSecurityHardeningTables() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "OAuthStateNonce" (
+      "id" TEXT PRIMARY KEY,
+      "nonceHash" TEXT NOT NULL UNIQUE,
+      "companyId" TEXT NOT NULL,
+      "provider" TEXT NOT NULL,
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "consumedAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "OAuthStateNonce_companyId_provider_idx" ON "OAuthStateNonce"("companyId", "provider")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "OAuthStateNonce_expiresAt_idx" ON "OAuthStateNonce"("expiresAt")`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "WebhookEventReceipt" (
+      "key" TEXT PRIMARY KEY,
+      "provider" TEXT NOT NULL,
+      "eventId" TEXT NOT NULL,
+      "status" TEXT NOT NULL,
+      "attempts" INTEGER NOT NULL DEFAULT 1,
+      "leaseUntil" TIMESTAMP(3),
+      "processedAt" TIMESTAMP(3),
+      "lastError" TEXT,
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WebhookEventReceipt_provider_eventId_idx" ON "WebhookEventReceipt"("provider", "eventId")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "WebhookEventReceipt_expiresAt_idx" ON "WebhookEventReceipt"("expiresAt")`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "SecurityAuditEvent" (
+      "id" TEXT PRIMARY KEY,
+      "companyId" TEXT,
+      "actorId" TEXT,
+      "event" TEXT NOT NULL,
+      "outcome" TEXT NOT NULL,
+      "audience" TEXT,
+      "subjectHash" TEXT,
+      "ipHash" TEXT,
+      "resourceType" TEXT,
+      "resourceId" TEXT,
+      "metadata" JSONB,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SecurityAuditEvent_companyId_createdAt_idx" ON "SecurityAuditEvent"("companyId", "createdAt")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SecurityAuditEvent_event_createdAt_idx" ON "SecurityAuditEvent"("event", "createdAt")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SecurityAuditEvent_subjectHash_createdAt_idx" ON "SecurityAuditEvent"("subjectHash", "createdAt")`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SecurityAuditEvent_createdAt_idx" ON "SecurityAuditEvent"("createdAt")`);
+}
+
+async function ensureExpiringPublicLinks(table: "Estimate" | "Invoice") {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "publicTokenExpiresAt" TIMESTAMP(3)`
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "${table}" SET "publicTokenExpiresAt" = CURRENT_TIMESTAMP + INTERVAL '180 days' WHERE "publicTokenExpiresAt" IS NULL`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "${table}" ALTER COLUMN "publicTokenExpiresAt" SET DEFAULT (CURRENT_TIMESTAMP + INTERVAL '180 days')`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "${table}" ALTER COLUMN "publicTokenExpiresAt" SET NOT NULL`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "publicTokenRevokedAt" TIMESTAMP(3)`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "publicTokenVersion" INTEGER NOT NULL DEFAULT 1`
+  );
+}
+
 /**
  * Introduce the estimate deposit threshold and move companies that still use
  * the legacy untouched deposit defaults to the new 50%-over-$999 policy.
@@ -255,8 +347,12 @@ async function consolidateDuplicateCustomerSmsThreads() {
 }
 
 async function main() {
+  await ensureSecurityRateLimitTable();
+  await ensureSecurityHardeningTables();
   await backfillPublicToken("Estimate");
   await backfillPublicToken("Invoice");
+  await ensureExpiringPublicLinks("Estimate");
+  await ensureExpiringPublicLinks("Invoice");
   try {
     await restoreMarketingOptOutDefaults();
   } catch (err) {

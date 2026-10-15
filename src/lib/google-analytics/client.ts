@@ -39,7 +39,7 @@ export function isGoogleAnalyticsConfigured() {
   return isGeneralGoogleOAuthConfigured();
 }
 
-export function buildGoogleAnalyticsAuthUrl(companyId: string, redirectUri: string) {
+export async function buildGoogleAnalyticsAuthUrl(companyId: string, redirectUri: string) {
   const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleAnalyticsApiError("Google OAuth is not configured", 503);
 
@@ -50,7 +50,7 @@ export function buildGoogleAnalyticsAuthUrl(companyId: string, redirectUri: stri
     scope: GOOGLE_ANALYTICS_SCOPE,
     access_type: "offline",
     prompt: "consent",
-    state: createOAuthState(companyId),
+    state: await createOAuthState(companyId, "google-analytics"),
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

@@ -125,6 +125,39 @@ async function dialAvailableAgents(
   }
 }
 
+/**
+ * Direct lines deliberately do not depend on presence. Twilio fans one Client
+ * identity out to every currently registered browser and mobile device, so a
+ * person's assigned number follows them everywhere they are signed in.
+ */
+export function dialAssignedUser(
+  response: InstanceType<typeof twilio.twiml.VoiceResponse>,
+  company: {
+    id: string;
+    name: string;
+    recordCalls: boolean;
+    brandPrimaryColor?: string | null;
+    brandSecondaryColor?: string | null;
+    brandPalette?: unknown;
+  },
+  userId: string,
+  from: string
+) {
+  const dial = response.dial(
+    inboundDialAttributes(company, {
+      timeout: 30,
+      action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${company.id}`,
+      method: "POST",
+      callerId: from,
+    })
+  );
+  dialVoiceClient(
+    dial,
+    voiceClientIdentity(company.id, userId),
+    voiceClientBrandFromCompany(company)
+  );
+}
+
 function isWithinBusinessHours(
   businessHours: unknown,
   timezone?: string | null
@@ -156,6 +189,7 @@ async function createInboundSession(params: {
   to: string;
   customerId?: string;
   phoneNumberId?: string;
+  assignedUserId?: string;
 }) {
   return prisma.callSession.upsert({
     where: { callSid: params.callSid },
@@ -168,9 +202,12 @@ async function createInboundSession(params: {
       toNumber: params.to,
       customerId: params.customerId,
       phoneNumberId: params.phoneNumberId,
+      assignedUserId: params.assignedUserId,
     },
     update: {
       status: CallSessionStatus.RINGING,
+      phoneNumberId: params.phoneNumberId,
+      assignedUserId: params.assignedUserId ?? null,
     },
   });
 }
@@ -262,19 +299,33 @@ export async function buildInboundTwiml(params: TwilioParams) {
 
   // Match PhoneNumber with the same format variants as company lookup so a
   // slight E.164 mismatch does not drop the assigned call flow.
-  let phoneRecord = await prisma.phoneNumber.findFirst({
+  const phoneRecord = await prisma.phoneNumber.findFirst({
     where: {
       companyId: company.id,
       OR: toVariants.map((e164) => ({ e164 })),
     },
     include: {
       callFlow: { include: { nodes: { orderBy: { sortOrder: "asc" } } } },
+      assignedUser: {
+        select: { id: true, companyId: true, status: true, systemKind: true },
+      },
     },
   });
 
+  const assignedUser =
+    phoneRecord?.assignedUser &&
+    phoneRecord.assignedUser.companyId === company.id &&
+    phoneRecord.assignedUser.status === "ACTIVE" &&
+    phoneRecord.assignedUser.systemKind === null
+      ? phoneRecord.assignedUser
+      : null;
+
+  let callFlow = phoneRecord?.callFlow ?? null;
+
   // If the dialed number has no flow, fall back to another company number that does
   // (common when company.twilioPhone is set but PhoneNumber.callFlowId was never assigned).
-  if (!phoneRecord?.callFlow) {
+  // A valid individual assignment always wins over the company fallback flow.
+  if (!assignedUser && !callFlow) {
     const withFlow = await prisma.phoneNumber.findFirst({
       where: { companyId: company.id, callFlowId: { not: null } },
       include: {
@@ -288,7 +339,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
         fallbackNumberId: withFlow.id,
         flowId: withFlow.callFlow.id,
       });
-      phoneRecord = withFlow;
+      callFlow = withFlow.callFlow;
     }
   }
 
@@ -301,12 +352,13 @@ export async function buildInboundTwiml(params: TwilioParams) {
       to,
       customerId: customer?.id,
       phoneNumberId: phoneRecord?.id,
+      assignedUserId: assignedUser?.id,
     });
     callSessionId = session.id;
   }
 
   const baseCtx = (): FlowContext => ({
-    flowId: phoneRecord?.callFlow?.id ?? "",
+    flowId: callFlow?.id ?? "",
     companyId: company.id,
     from,
     to,
@@ -317,7 +369,17 @@ export async function buildInboundTwiml(params: TwilioParams) {
     clientBrand: voiceClientBrandFromCompany(company),
   });
 
-  const callFlow = phoneRecord?.callFlow;
+  if (assignedUser) {
+    console.info("[voice/inbound] routing assigned number", {
+      callSid,
+      companyId: company.id,
+      phoneNumberId: phoneRecord?.id ?? null,
+      assignedUserId: assignedUser.id,
+    });
+    dialAssignedUser(response, company, assignedUser.id, from);
+    return response.toString();
+  }
+
   const withinHours = isWithinBusinessHours(company.businessHours, company.timezone);
 
   if (!withinHours && callFlow) {

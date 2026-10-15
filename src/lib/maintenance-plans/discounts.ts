@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recordInvoicePayment } from "@/lib/invoices/record-payment";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export { computeCancellationFee } from "@/lib/maintenance-plans/billing";
 
@@ -88,6 +89,7 @@ export async function recordMaintenanceInvoicePayment(params: {
 
   const invoice = await prisma.invoice.create({
     data: {
+      ...createPublicCapability(),
       companyId: params.companyId,
       customerId: params.customerId,
       invoiceNumber,

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const redirectUri = `${appUrl}/api/marketing/google-ads/callback`;
-    const url = buildGoogleAdsAuthUrl(user.companyId, redirectUri);
+    const url = await buildGoogleAdsAuthUrl(user.companyId, redirectUri);
 
     return NextResponse.redirect(url);
   } catch {

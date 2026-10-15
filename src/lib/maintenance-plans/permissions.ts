@@ -5,7 +5,8 @@ export function canViewMaintenancePlans(role: UserRole) {
     role === "CSR" ||
     role === "MANAGER" ||
     role === "ADMIN" ||
-    role === "SALES"
+    role === "SALES" ||
+    role === "MARKETER"
   );
 }
 

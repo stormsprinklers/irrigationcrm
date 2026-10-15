@@ -6,6 +6,8 @@ import {
   startStaffMfaChallenge,
   verifyStaffMfaChallenge,
 } from "@/lib/staff-auth";
+import { enforceAuthRateLimit } from "@/lib/security/rate-limit";
+import { writeSecurityAuditEvent } from "@/lib/security/audit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,10 +29,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const limited = await enforceAuthRateLimit(request, "mfa-verify", challengeId);
+    if (limited) return limited;
+
     const result = await verifyStaffMfaChallenge(challengeId, code, purpose);
     if (!result.ok) {
+      await writeSecurityAuditEvent({
+        event: "AUTH_MFA_VERIFY",
+        outcome: "FAILURE",
+        request,
+        subject: challengeId,
+        audience: purpose,
+      });
       return NextResponse.json({ error: result.error }, { status: 401 });
     }
+
+    await writeSecurityAuditEvent({
+      event: "AUTH_MFA_VERIFY",
+      outcome: "SUCCESS",
+      request,
+      companyId: result.user.companyId,
+      actorId: result.user.id,
+      subject: challengeId,
+      audience: purpose,
+    });
 
     if (purpose === AuthMfaPurpose.LMS_LOGIN) {
       const ticket = await issueLmsAuthTicket(result.user);
@@ -76,6 +98,9 @@ export async function PUT(request: NextRequest) {
         : purposeRaw === "LMS_LOGIN"
           ? AuthMfaPurpose.LMS_LOGIN
           : AuthMfaPurpose.LOGIN;
+
+    const limited = await enforceAuthRateLimit(request, "mfa-resend", challengeId);
+    if (limited) return limited;
 
     const { prisma } = await import("@/lib/prisma");
     const existing = await prisma.authMfaChallenge.findUnique({

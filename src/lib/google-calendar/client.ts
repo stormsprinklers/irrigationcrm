@@ -42,7 +42,7 @@ export async function getGoogleCalendarConnectionStatus(companyId: string) {
   };
 }
 
-export function buildGoogleCalendarAuthUrl(companyId: string, redirectUri: string) {
+export async function buildGoogleCalendarAuthUrl(companyId: string, redirectUri: string) {
   const { clientId } = getGeneralGoogleOAuthConfig();
   if (!clientId) throw new GoogleCalendarApiError("Google OAuth is not configured", 503);
 
@@ -53,7 +53,7 @@ export function buildGoogleCalendarAuthUrl(companyId: string, redirectUri: strin
     scope: GOOGLE_CALENDAR_SCOPE,
     access_type: "offline",
     prompt: "consent",
-    state: createOAuthState(companyId),
+    state: await createOAuthState(companyId, "google-calendar"),
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;

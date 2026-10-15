@@ -7,6 +7,7 @@ import { computeEstimateExpiry, getEstimateForCompany, listEstimates } from "@/l
 import { getTemplateLineItemsForEstimate } from "@/lib/price-book/extras";
 import { computeLineItemTotal, computeTotals } from "@/lib/visits/totals";
 import { prisma } from "@/lib/prisma";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     const estimate = await prisma.estimate.create({
       data: {
+        ...createPublicCapability(),
         companyId: user.companyId,
         customerId: body.customerId,
         propertyId: body.propertyId ?? null,

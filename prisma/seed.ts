@@ -10,6 +10,7 @@ import {
   PayPeriodType,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 
 const prisma = new PrismaClient();
 
@@ -59,8 +60,16 @@ function visitTime(weekStart: Date, dayOffset: number, hour: number, minute = 0)
 }
 
 async function main() {
-  const passwordHash = await bcrypt.hash("password123", 10);
-  const devAdminPasswordHash = await bcrypt.hash("Test123", 10);
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    throw new Error(
+      "Refusing to seed a production environment. Set ALLOW_PRODUCTION_SEED=true only for an explicitly approved synthetic environment."
+    );
+  }
+
+  const seedPassword =
+    process.env.DEV_SEED_PASSWORD?.trim() || randomBytes(18).toString("base64url");
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
+  const devAdminPasswordHash = passwordHash;
 
   const company = await prisma.company.upsert({
     where: { id: "seed-company" },
@@ -903,7 +912,7 @@ async function main() {
     });
   }
 
-  console.log("Seed complete. Dev login: admin@stormsprinklers.com / Test123");
+  console.log(`Seed complete. Dev login: admin@stormsprinklers.com / ${seedPassword}`);
   const { ensureDefaultNotificationTemplates } = await import(
     "../src/lib/notifications/send"
   );
@@ -1151,7 +1160,7 @@ async function main() {
     });
     console.log("");
     console.log("Chestnut & Cheer company seeded.");
-    console.log("C&C CRM login: admin@utah.christmas / Test123");
+    console.log(`C&C CRM login: admin@utah.christmas / ${seedPassword}`);
     console.log("Public booking: C&C website /book (or CRM /book/chestnut-cheer)");
     console.log("Set on christmas-lights-website .env.local:");
     console.log(`  CRM_INTEGRATION_URL=<your-crm-origin>/api/integrations`);
@@ -1159,7 +1168,7 @@ async function main() {
     console.log("(This key is shown once — create a new key in Settings → Integrations if lost.)");
   } else {
     console.log("Chestnut & Cheer company already has a website integration key.");
-    console.log("C&C CRM login: admin@utah.christmas / Test123");
+    console.log(`C&C CRM login: admin@utah.christmas / ${seedPassword}`);
     console.log("Public booking: C&C website /book (or CRM /book/chestnut-cheer)");
   }
 }

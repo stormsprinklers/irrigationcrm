@@ -4,14 +4,11 @@ import {
   processFlowEnrollments,
 } from "@/lib/marketing/flow-engine";
 import { processDripSends, processPendingBlastSends } from "@/lib/marketing/send";
+import { authorizeCronRequest } from "@/lib/security/trusted-request";
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = authorizeCronRequest(request);
+  if (denied) return denied;
 
   try {
     // This already deployed route is called every minute. Keep the expensive

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const redirectUri = `${appUrl}/api/settings/booking/google-calendar/callback`;
-    const url = buildGoogleCalendarAuthUrl(user.companyId, redirectUri);
+    const url = await buildGoogleCalendarAuthUrl(user.companyId, redirectUri);
 
     return NextResponse.redirect(url);
   } catch {

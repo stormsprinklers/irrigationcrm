@@ -14,6 +14,7 @@ enum UserRole {
   TECH
   INSTALLER
   SALES
+  MARKETER
   SOCIAL_MEDIA_MANAGER
 }
 
@@ -1393,6 +1394,70 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// Shared fixed-window rate-limit state for authentication and other abuse-sensitive flows.
+/// Keys are one-way hashes; raw email addresses, IP addresses, and tokens are never stored.
+model SecurityRateLimitBucket {
+  key             String   @id
+  count           Int      @default(0)
+  windowStartedAt DateTime @default(now())
+  blockedUntil    DateTime?
+  updatedAt       DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model OAuthStateNonce {
+  id         String    @id @default(cuid())
+  nonceHash  String    @unique
+  companyId  String
+  provider   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([companyId, provider])
+  @@index([expiresAt])
+}
+
+model WebhookEventReceipt {
+  key         String    @id
+  provider    String
+  eventId     String
+  status      String
+  attempts    Int       @default(1)
+  leaseUntil  DateTime?
+  processedAt DateTime?
+  lastError   String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([provider, eventId])
+  @@index([expiresAt])
+}
+
+/// Security-relevant events that may not have an authenticated staff actor.
+/// Identifiers used for correlation are one-way hashes, never raw credentials.
+model SecurityAuditEvent {
+  id           String   @id @default(cuid())
+  companyId    String?
+  actorId      String?
+  event        String
+  outcome      String
+  audience     String?
+  subjectHash  String?
+  ipHash       String?
+  resourceType String?
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([event, createdAt])
+  @@index([subjectHash, createdAt])
+  @@index([createdAt])
 }
 
 model Customer {
@@ -3247,6 +3312,9 @@ model Estimate {
   /// Human-readable base number, e.g. EST-1012. Options append A/B/C when multiple exist.
   estimateNumber  String?
   publicToken     String         @unique @default(cuid())
+  publicTokenExpiresAt DateTime  @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '180 days')"))
+  publicTokenRevokedAt DateTime?
+  publicTokenVersion   Int       @default(1)
   status          EstimateStatus @default(DRAFT)
   expiresAt       DateTime?
   depositRequired  Boolean        @default(true)
@@ -3428,6 +3496,9 @@ model Invoice {
   total                   Decimal       @default(0) @db.Decimal(10, 2)
   paidAt                  DateTime?
   publicToken             String        @unique @default(cuid())
+  publicTokenExpiresAt    DateTime      @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '180 days')"))
+  publicTokenRevokedAt    DateTime?
+  publicTokenVersion      Int           @default(1)
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
   sentAt                  DateTime?

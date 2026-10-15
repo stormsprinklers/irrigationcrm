@@ -3,6 +3,7 @@ import { get } from "@vercel/blob";
 import { blobPathnameFromUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 import { getBlobToken } from "@/lib/blob/storage";
 import { prisma } from "@/lib/prisma";
+import { activePublicCapability } from "@/lib/security/public-capability";
 
 type Params = { params: Promise<{ token: string; attachmentId: string }> };
 
@@ -11,7 +12,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const { token, attachmentId } = await params;
     const invoice = await prisma.invoice.findFirst({
-      where: { publicToken: token },
+      where: activePublicCapability(token),
       select: { visitId: true, companyId: true },
     });
     if (!invoice?.visitId) {

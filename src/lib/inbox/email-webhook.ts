@@ -1,9 +1,18 @@
 import { createPublicKey, verify } from "node:crypto";
 
 /** Verify Twilio Email's signed event webhook against its raw request bytes. */
-export function validateEmailWebhook(payload: Buffer, signature: string, timestamp: string): boolean {
+export function validateEmailWebhook(
+  payload: Buffer,
+  signature: string,
+  timestamp: string,
+  nowSeconds = Math.floor(Date.now() / 1000)
+): boolean {
   const encodedKey = process.env.TWILIO_EMAIL_WEBHOOK_PUBLIC_KEY?.trim();
   if (!encodedKey || !signature || !/^\d+$/.test(timestamp)) return false;
+  const signedAt = Number(timestamp);
+  if (!Number.isSafeInteger(signedAt) || signedAt > nowSeconds + 60 || nowSeconds - signedAt > 5 * 60) {
+    return false;
+  }
   try {
     const key = createPublicKey({ key: Buffer.from(encodedKey, "base64"), format: "der", type: "spki" });
     return verify(

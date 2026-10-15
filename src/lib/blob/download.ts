@@ -1,6 +1,9 @@
 import { get } from "@vercel/blob";
 import { getBlobToken } from "@/lib/blob/storage";
 import { blobPathnameFromUrl, isBlobStorageUrl } from "@/lib/blob/urls";
+import { readResponseBufferLimited, safeOutboundFetch } from "@/lib/security/outbound-fetch";
+
+const MAX_EXTERNAL_BLOB_BYTES = 15 * 1024 * 1024;
 
 export async function fetchBlobBytes(blobUrl: string): Promise<{ buffer: Buffer; mimeType: string }> {
   if (isBlobStorageUrl(blobUrl)) {
@@ -22,9 +25,9 @@ export async function fetchBlobBytes(blobUrl: string): Promise<{ buffer: Buffer;
     };
   }
 
-  const res = await fetch(blobUrl);
+  const res = await safeOutboundFetch(blobUrl);
   if (!res.ok) throw new Error("Failed to read attachment");
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const buffer = await readResponseBufferLimited(res, MAX_EXTERNAL_BLOB_BYTES);
   return {
     buffer,
     mimeType: res.headers.get("content-type") || "application/octet-stream",

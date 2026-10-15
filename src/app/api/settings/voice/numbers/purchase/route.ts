@@ -3,6 +3,7 @@ import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { purchaseNumber } from "@/lib/twilio/numbers";
 import { setExclusivePrimaryNumber } from "@/lib/twilio/primary-number";
 import { syncCompanyTwilioPhone } from "@/lib/voice/company-phone";
+import { isValidPhoneAssignee } from "@/lib/voice/phone-assignment";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,15 @@ export async function POST(request: NextRequest) {
     }
 
     const wantPrimary = Boolean(body.isPrimary) || body.numberType === "PRIMARY";
+    if (
+      body.assignedUserId &&
+      !(await isValidPhoneAssignee(user.companyId, String(body.assignedUserId)))
+    ) {
+      return NextResponse.json(
+        { error: "Assigned employee must be an active employee of this company" },
+        { status: 400 }
+      );
+    }
 
     const number = await purchaseNumber(user.companyId, String(body.e164), {
       friendlyName: body.friendlyName,

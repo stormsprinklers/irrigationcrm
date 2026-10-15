@@ -6,6 +6,10 @@ import {
   MAX_429_RETRIES,
 } from "@/lib/housecall-pro/constants";
 import type { HcpRecord, PaginatedFetchResult } from "@/lib/housecall-pro/types";
+import { readResponseBufferLimited, safeOutboundFetch } from "@/lib/security/outbound-fetch";
+
+const HCP_MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+const HCP_HOST = new URL(HCP_BASE_URL).hostname;
 
 export function getHousecallProApiKey() {
   return process.env.HOUSECALL_PRO_API_KEY ?? "";
@@ -93,7 +97,7 @@ export class HousecallProClient {
 
     for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
       await this.throttle(throttleMs);
-      const response = await fetch(url, {
+      const response = await safeOutboundFetch(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -101,7 +105,7 @@ export class HousecallProClient {
         },
         cache: "no-store",
         redirect: "error",
-      });
+      }, { allowedHosts: [HCP_HOST] });
 
       if (response.status === 429) {
         const retryAfter = Number(response.headers.get("retry-after") ?? 0);
@@ -140,7 +144,7 @@ export class HousecallProClient {
         if (cursorUrl.origin !== HCP_BASE_URL) {
           throw new Error("Invalid Housecall Pro pagination URL");
         }
-        const response = await fetch(options.cursor, {
+        const response = await safeOutboundFetch(options.cursor, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
@@ -148,7 +152,7 @@ export class HousecallProClient {
           },
           cache: "no-store",
           redirect: "error",
-        });
+        }, { allowedHosts: [HCP_HOST] });
         if (!response.ok) {
           throw new Error(`HCP pagination failed: ${response.status}`);
         }
@@ -214,7 +218,7 @@ export class HousecallProClient {
     await this.throttle(DEFAULT_THROTTLE_MS);
 
     const attempt = async (headers?: HeadersInit) => {
-      return fetch(url, {
+      return safeOutboundFetch(url, {
         method: "GET",
         headers,
         cache: "no-store",
@@ -222,18 +226,22 @@ export class HousecallProClient {
     };
 
     let response = await attempt();
-    if (!response.ok) {
+    const originalHost = new URL(url).hostname.toLowerCase();
+    if (!response.ok && originalHost === HCP_HOST) {
       response = await attempt({ Authorization: `Bearer ${this.apiKey}` });
     }
-    if (!response.ok) {
+    if (!response.ok && originalHost === HCP_HOST) {
       response = await attempt({ Authorization: `Token ${this.apiKey}` });
     }
     if (!response.ok) {
       throw new Error(`HCP download failed: ${response.status}`);
     }
-    const buffer = await response.arrayBuffer();
+    const buffer = await readResponseBufferLimited(response, HCP_MAX_DOWNLOAD_BYTES);
     return {
-      buffer,
+      buffer: buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength
+      ) as ArrayBuffer,
       contentType: response.headers.get("content-type") ?? "application/octet-stream",
     };
   }

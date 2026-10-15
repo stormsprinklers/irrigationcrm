@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/visits/en-route-timeout",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/security-maintenance",
+      "schedule": "17 9 * * *"
     }
   ]
 }

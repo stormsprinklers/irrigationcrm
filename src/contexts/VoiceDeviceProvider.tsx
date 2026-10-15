@@ -24,6 +24,10 @@ import {
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { InboundLineInfo } from "@/components/voice/InboundLineCard";
 import type { CallerInfo } from "@/lib/voice/caller-info";
+import {
+  isTransientVoiceTransportError,
+  isVoiceTokenError,
+} from "@/lib/voice/device-errors";
 
 export type { CallerInfo };
 
@@ -96,6 +100,7 @@ type VoiceContextValue = {
 };
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
+const VOICE_CONNECTION_TOAST_ID = "voice-connection-error";
 
 function inviteStillRinging(call: Call) {
   const status = call.status();
@@ -556,6 +561,7 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
           device.on("registered", () => {
             setReady(true);
             setError(null);
+            toast.dismiss(VOICE_CONNECTION_TOAST_ID);
             void patchPresence("AVAILABLE");
             void ensureNotificationPermission();
           });
@@ -574,21 +580,35 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
 
           device.on("error", (err) => {
             const message = err.message ?? "Voice device error";
-            const code = typeof err.code === "number" ? err.code : undefined;
-            const isTokenError =
-              /access.?token/i.test(message) ||
-              code === 20101 ||
-              code === 20104 ||
-              code === 31204 ||
-              code === 31205;
-            const isTransportError =
-              code === 31009 ||
-              /no transport available/i.test(message) ||
-              /transport error/i.test(message);
+            const errorInfo = {
+              code: typeof err.code === "number" ? err.code : undefined,
+              message,
+            };
+            const isTokenError = isVoiceTokenError(errorInfo);
+            const isTransportError = isTransientVoiceTransportError(errorInfo);
 
             if (isTokenError || isTransportError) {
+              if (isTransportError) setReady(false);
               void recoverVoiceTransport({ silent: true }).then((ok) => {
-                if (!ok && !cancelled) setError(message);
+                if (cancelled) return;
+                if (ok) {
+                  setError(null);
+                  toast.dismiss(VOICE_CONNECTION_TOAST_ID);
+                  return;
+                }
+
+                const friendlyMessage =
+                  typeof navigator !== "undefined" && !navigator.onLine
+                    ? "Phone connection paused while this device is offline."
+                    : "Phone connection was interrupted. Radar is trying to reconnect.";
+                setError(friendlyMessage);
+                if (document.visibilityState === "visible") {
+                  // A stable id prevents a burst of SDK errors from stacking toasts.
+                  toast.error(friendlyMessage, {
+                    id: VOICE_CONNECTION_TOAST_ID,
+                    duration: 8000,
+                  });
+                }
               });
               return;
             }

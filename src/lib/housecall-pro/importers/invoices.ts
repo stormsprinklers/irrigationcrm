@@ -17,6 +17,7 @@ import {
   mapInvoiceStatus,
 } from "@/lib/housecall-pro/utils";
 import { prisma } from "@/lib/prisma";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 function paymentMethodFromHcp(value: unknown): PaymentMethod {
   const text = String(value ?? "").toLowerCase();
@@ -187,7 +188,7 @@ async function importSingleInvoice(
       invoiceNumber = `${invoiceNumber}-${id.slice(0, 6)}`;
     }
     const invoice = await prisma.invoice.create({
-      data: { ...invoiceData, invoiceNumber },
+      data: { ...invoiceData, ...createPublicCapability(), invoiceNumber },
     });
     invoiceId = invoice.id;
     await upsertMapping({

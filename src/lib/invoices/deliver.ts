@@ -3,6 +3,7 @@ import { getInvoiceForCompany } from "@/lib/invoices/queries";
 import { getInvoicePayUrl } from "@/lib/invoices/pay-url";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
+import { ensureInvoicePublicToken } from "@/lib/security/public-capability";
 
 export async function deliverInvoice(params: {
   invoiceId: string;
@@ -23,7 +24,8 @@ export async function deliverInvoice(params: {
   const balanceDue = Math.max(0, toNumber(invoice.total) - paid);
   if (balanceDue <= 0) return { error: "Invoice has no balance due", status: 400 as const };
 
-  const payUrl = getInvoicePayUrl(invoice.publicToken, invoice.company);
+  const publicToken = await ensureInvoicePublicToken(invoice);
+  const payUrl = getInvoicePayUrl(publicToken, invoice.company);
 
   if (params.channel === "EMAIL" && !invoice.customer?.email?.trim()) {
     return { error: "This customer does not have an email address.", status: 400 as const, payUrl };

@@ -1,4 +1,9 @@
 import { put } from "@vercel/blob";
+import {
+  assertMalwareFree,
+  malwareScanMode,
+  UploadSecurityError,
+} from "@/lib/security/malware-scan";
 
 type UploadBody = Blob | File | Buffer | ArrayBuffer | ReadableStream | string;
 
@@ -25,6 +30,31 @@ export async function uploadPrivateBlob(
   options: UploadOptions = {}
 ) {
   assertBlobConfigured();
+
+  if (malwareScanMode() === "required") {
+    if (body instanceof ReadableStream) {
+      throw new UploadSecurityError("Streaming uploads require pre-storage malware scanning", 503);
+    }
+    const scanFile =
+      body instanceof File
+        ? body
+        : body instanceof Blob
+          ? new File([body], pathname.split("/").pop() ?? "upload", {
+              type: options.contentType ?? body.type,
+            })
+          : new File(
+              [
+                typeof body === "string"
+                  ? body
+                  : body instanceof ArrayBuffer
+                    ? new Uint8Array(body)
+                    : new Uint8Array(body),
+              ],
+              pathname.split("/").pop() ?? "upload",
+              { type: options.contentType ?? "application/octet-stream" }
+            );
+    await assertMalwareFree(scanFile);
+  }
 
   return put(pathname, body, {
     access: "private",

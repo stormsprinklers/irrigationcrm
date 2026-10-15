@@ -1,3 +1,5 @@
+import { assertEnvironmentRecipientAllowed } from "@/lib/communications/outbound-guard";
+
 const TWILIO_EMAIL_API = "https://comms.twilio.com/v1/Emails";
 
 export type SendEmailResult = {
@@ -226,6 +228,7 @@ export async function sendEmail(params: {
     content: string;
   }>;
 }): Promise<SendEmailResult> {
+  assertEnvironmentRecipientAllowed("email", params.to);
   if (!isEmailConfigured()) {
     throw new Error(getTwilioEmailAuthStatus().issues[0] ?? "Twilio email not configured");
   }

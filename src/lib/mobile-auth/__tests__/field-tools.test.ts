@@ -69,7 +69,10 @@ test("web handoff preserves the selected company and role in an expiring encrypt
     assert.equal(claims?.role, "TECH");
     assert.equal(claims?.trueRole, undefined);
     assert.equal(payload.expiresIn, MOBILE_WEB_SESSION_SECONDS);
-    assert.equal(claims?.exp, claims?.mobileWebExpiresAt);
+    assert.ok(
+      Math.abs(Number(claims?.exp) - Number(claims?.mobileWebExpiresAt)) <= 1,
+      "Auth.js and application expiry timestamps should describe the same second"
+    );
     await assert.rejects(decode({ token: payload.sessionToken, secret: "wrong-secret", salt: payload.cookieName }));
   }
 });

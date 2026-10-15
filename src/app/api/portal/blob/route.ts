@@ -77,10 +77,23 @@ export async function GET(request: NextRequest) {
 
   return new NextResponse(result.stream, {
     headers: {
-      "Content-Type": result.blob.contentType ?? mimeType,
-      "Content-Disposition": `inline; filename="${fileName.replace(/"/g, "")}"`,
+      "Content-Type": safeAttachmentContentType(result.blob.contentType ?? mimeType),
+      "Content-Disposition": `${safeAttachmentDisposition(mimeType)}; filename="${fileName.replace(/"/g, "")}"`,
+      "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+function safeAttachmentContentType(mimeType: string) {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.startsWith("image/") && normalized !== "image/svg+xml") return normalized;
+  if (normalized === "application/pdf" || normalized === "text/plain") return normalized;
+  return "application/octet-stream";
+}
+
+function safeAttachmentDisposition(mimeType: string) {
+  const normalized = mimeType.toLowerCase();
+  return normalized.startsWith("image/") && normalized !== "image/svg+xml" ? "inline" : "attachment";
 }

@@ -1,5 +1,5 @@
 import type { NavItem, NavSection } from "@/config/navigation";
-import { isFieldRole } from "@/lib/employees";
+import { isFieldRole, isMarketerRole } from "@/lib/employees";
 import { canUseRolePreview, type RolePreviewUser } from "@/lib/role-preview";
 import { canViewVehicles } from "@/lib/vehicles/permissions";
 
@@ -15,7 +15,7 @@ export function isLimitedOfficeRole(role: string | null | undefined) {
 }
 
 export function canViewSettingsNav(role: string | null | undefined) {
-  return Boolean(role) && !isFieldRole(role ?? "");
+  return Boolean(role) && !isFieldRole(role ?? "") && !isMarketerRole(role);
 }
 
 export function canViewWinterizationNav(role: string | null | undefined) {
@@ -67,6 +67,8 @@ export function settingsPathAccess(
   if (startsWithPath(path, "/settings/role-preview")) {
     return canUseRolePreview(user) ? "write" : "hidden";
   }
+
+  if (isMarketerRole(user.role)) return "hidden";
 
   if (!isCsrRole(user.role) && !isFieldRole(user.role)) return "write";
 

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
 import { computeApprovalPaymentAmount, computeDepositAmount } from "@/lib/estimates/booking";
 import { toNumber } from "@/lib/visits/totals";
+import { createPublicCapability } from "@/lib/security/public-capability";
 
 export async function createEstimateDepositCheckout(params: {
   estimateId: string;
@@ -35,6 +36,7 @@ export async function createEstimateDepositCheckout(params: {
     existing ??
     (await prisma.invoice.create({
       data: {
+        ...createPublicCapability(),
         companyId: estimate.companyId,
         customerId: estimate.customerId,
         estimateId: estimate.id,

@@ -8,13 +8,11 @@ import { processEstimateFollowUpJob } from "@/lib/notifications/estimate-followu
 import { notifyVisitEvent } from "@/lib/notifications/visit-events";
 import { holdUntilCompletedDelay } from "@/lib/notifications/jobs";
 import type { NotificationEvent } from "@/lib/notifications/templates";
+import { authorizeCronRequest } from "@/lib/security/trusted-request";
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = authorizeCronRequest(request);
+  if (denied) return denied;
 
   const now = new Date();
   const expiredImportantUpdates = await prisma.importantUpdate.deleteMany({

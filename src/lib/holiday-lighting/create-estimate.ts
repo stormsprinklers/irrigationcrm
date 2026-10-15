@@ -3,6 +3,7 @@ import { allocateEstimateNumber } from "@/lib/estimates/numbering";
 import { computeEstimateExpiry } from "@/lib/estimates/queries";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
+import { createPublicCapability } from "@/lib/security/public-capability";
 import { loadHolidayPriceLookup } from "./catalog";
 import {
   computeHolidayQuotePricing,
@@ -189,6 +190,7 @@ export async function createEstimateFromHolidayQuote(params: {
       })
     : await prisma.estimate.create({
         data: {
+          ...createPublicCapability(),
           companyId: params.companyId,
           customerId: quote.customerId,
           propertyId: quote.propertyId,

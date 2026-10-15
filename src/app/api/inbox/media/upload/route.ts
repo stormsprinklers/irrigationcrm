@@ -7,6 +7,7 @@ import {
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import {
   EMAIL_ALLOWED_MIME_TYPES,
+  EMAIL_ATTACHMENT_MAX_COUNT,
   EMAIL_ATTACHMENT_MAX_BYTES,
   SMS_ALLOWED_MIME_TYPES,
   SMS_MEDIA_MAX_BYTES,
@@ -14,8 +15,10 @@ import {
   isAllowedEmailMimeType,
   isAllowedSmsMimeType,
   safeFileName,
+  hasExpectedFileSignature,
 } from "@/lib/inbox/attachments";
 import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
+import { UploadSecurityError } from "@/lib/security/malware-scan";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,6 +43,9 @@ export async function POST(request: NextRequest) {
       if (file.size > SMS_MEDIA_MAX_BYTES) {
         return badRequestResponse("MMS files must be under 5MB");
       }
+      if (!(await hasExpectedFileSignature(file))) {
+        return badRequestResponse("File contents do not match the declared media type");
+      }
 
       const safeName = safeFileName(file.name);
       const pathname = `inbox/${user.companyId}/sms/outbound/${Date.now()}-${safeName}`;
@@ -60,6 +66,9 @@ export async function POST(request: NextRequest) {
     if (file.size > EMAIL_ATTACHMENT_MAX_BYTES) {
       return badRequestResponse("Email attachments must be under 10MB");
     }
+    if (!(await hasExpectedFileSignature(file))) {
+      return badRequestResponse("File contents do not match the declared attachment type");
+    }
 
     const safeName = safeFileName(file.name);
     const blob = await uploadPrivateBlob(
@@ -78,6 +87,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
     }
+    if (error instanceof UploadSecurityError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Inbox media upload failed", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
@@ -92,6 +104,7 @@ export async function GET() {
     },
     email: {
       maxBytes: EMAIL_ATTACHMENT_MAX_BYTES,
+      maxCount: EMAIL_ATTACHMENT_MAX_COUNT,
       allowedMimeTypes: EMAIL_ALLOWED_MIME_TYPES,
     },
   });

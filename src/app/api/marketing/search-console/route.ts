@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin;
     const redirectUri = `${appUrl}/api/marketing/search-console/callback`;
-    const url = buildSearchConsoleAuthUrl(user.companyId, redirectUri);
+    const url = await buildSearchConsoleAuthUrl(user.companyId, redirectUri);
 
     return NextResponse.redirect(url);
   } catch {

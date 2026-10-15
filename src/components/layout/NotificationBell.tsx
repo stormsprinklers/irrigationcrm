@@ -217,14 +217,7 @@ export function NotificationBell() {
           const data = await res.json().catch(() => ({}));
           if (res.ok && data.session) {
             await update({
-              user: {
-                id: data.session.id,
-                email: data.session.email,
-                name: data.session.name,
-                companyId: data.session.companyId,
-                role: data.session.role,
-                trueRole: null,
-              },
+              securityAction: { type: "switch-account", targetUserId: data.session.id },
             });
           }
           window.location.href = item.href;

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { expireEnRouteVisits } from "@/lib/visits/en-route-timeout";
+import { authorizeCronRequest } from "@/lib/security/trusted-request";
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({error: "Unauthorized"}, {status: 401});
+  const denied = authorizeCronRequest(request);
+  if (denied) return denied;
   return NextResponse.json({expired: await expireEnRouteVisits()});
 }

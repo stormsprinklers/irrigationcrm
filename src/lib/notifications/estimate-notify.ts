@@ -3,6 +3,7 @@ import { toNumber } from "@/lib/visits/totals";
 import { customerEstimateUrl } from "@/lib/company/customer-url";
 import { buildEstimateOptionPdfs, pdfEmailAttachment } from "@/lib/pdf/customer-documents";
 import { buildNotificationContext } from "./context";
+import { ensureEstimatePublicToken } from "@/lib/security/public-capability";
 import {
   ensureDefaultNotificationTemplates,
   sendOperationalNotification,
@@ -34,9 +35,10 @@ export async function notifyEstimateViaTemplates(
     return { emailSent: false, smsSent: false, skipped: ["no customer"], deliveryIds: [] };
   }
 
+  const publicToken = await ensureEstimatePublicToken(estimate);
   const estimateUrl = customerEstimateUrl(
     estimate.company,
-    estimate.publicToken,
+    publicToken,
     estimate.id
   );
 
@@ -54,7 +56,7 @@ export async function notifyEstimateViaTemplates(
         }
       : undefined,
     property: estimate.property ?? estimate.customer.properties[0] ?? undefined,
-    estimate: { publicToken: estimate.publicToken },
+    estimate: { publicToken },
     estimateUrl,
   });
 
@@ -105,12 +107,17 @@ export async function getEstimateCustomerPortalPath(
   const estimate = await prisma.estimate.findFirst({
     where: { id: estimateId, companyId },
     select: {
+      id: true,
       publicToken: true,
+      publicTokenExpiresAt: true,
+      publicTokenRevokedAt: true,
+      publicTokenVersion: true,
       company: { select: { portalSlug: true, bookingSlug: true, customerBaseUrl: true } },
     },
   });
   if (!estimate) return null;
+  const publicToken = await ensureEstimatePublicToken(estimate);
   const slug = estimate.company.portalSlug ?? estimate.company.bookingSlug;
   if (!slug) return null;
-  return customerEstimateUrl(estimate.company, estimate.publicToken);
+  return customerEstimateUrl(estimate.company, publicToken);
 }
