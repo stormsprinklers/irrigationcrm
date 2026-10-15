@@ -70,6 +70,7 @@ export function serializeEstimate(
     signatureBlobUrl: estimate.signatureBlobUrl,
     signedAt: estimate.signedAt?.toISOString() ?? null,
     approvedAt: estimate.approvedAt?.toISOString() ?? null,
+    employeeApproval: estimate.signedAt ? null : ((estimate.designExportMetadata as { employeeApproval?: EstimateDTO["employeeApproval"] } | null)?.employeeApproval ?? null),
     sentAt:
       estimate.sentAt?.toISOString() ??
       (estimate.status === EstimateStatus.SENT ? estimate.updatedAt.toISOString() : null),

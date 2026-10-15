@@ -11,8 +11,7 @@ import {
   HOLIDAY_LABOR_ONLY_DISCLAIMER,
   HOLIDAY_LEASE_DETAIL,
   HOLIDAY_PERMANENT_DETAIL,
-  HOLIDAY_INCLUDED_LINES,
-  HOLIDAY_PERMANENT_INCLUDED_LINES,
+  holidayIncludedLines,
   holidayOptionSummary,
 } from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
@@ -60,9 +59,10 @@ export async function createEstimateFromHolidayQuote(params: {
     if (customServices.some((service) => !service.name.trim())) {
       throw new Error(`${design.label || `Option ${index + 1}`} has an additional service without a name`);
     }
-    if (priced.billedLengthFt <= 0 && priced.placementCount <= 0 && customServices.length === 0) {
+    if (priced.billedLengthFt <= 0 && priced.placementCount <= 0 && customServices.length === 0 && !Object.values(selections.optionAdjustments ?? {}).some((adjustment) => adjustment?.lineItems?.some((line) => line.kind !== "included"))) {
       throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements, trees/bushes, or an additional service`);
     }
+    if (Object.values(selections.optionAdjustments ?? {}).some((adjustment) => adjustment?.lineItems?.some((line) => !line.name.trim()))) throw new Error(`${design.label} has a line item without a title`);
     const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
     const key = style?.kind === "permanent"
       ? "permanent" as const
@@ -234,7 +234,7 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
-    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null) {
+    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null || adjustment?.lineItems != null) {
       const breakdown = detail.displayLines;
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({
@@ -242,8 +242,8 @@ export async function createEstimateFromHolidayQuote(params: {
           optionId: option.id,
           name: line.name,
           description: line.description,
-          quantity: 1,
-          unitPrice: line.total,
+          quantity: line.quantity ?? 1,
+          unitPrice: line.unitPrice ?? line.total,
           unit: "each",
           total: line.total,
           sortOrder: index,
@@ -279,10 +279,8 @@ export async function createEstimateFromHolidayQuote(params: {
         })),
       });
     }
-    if (key !== "labor") {
-      const includedLines = key === "permanent"
-        ? HOLIDAY_PERMANENT_INCLUDED_LINES
-        : HOLIDAY_INCLUDED_LINES;
+    if (adjustment?.lineItems == null) {
+      const includedLines = holidayIncludedLines(key);
       await prisma.estimateLineItem.createMany({
         data: includedLines.map((line, index) => ({
           estimateId: estimate.id,

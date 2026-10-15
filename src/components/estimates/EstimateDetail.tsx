@@ -63,6 +63,7 @@ type EstimateOptionData = {
 };
 
 type EstimateData = {
+  employeeApproval?: { employeeId: string; employeeName: string; approvedAt: string } | null;
   id: string;
   estimateNumber: string | null;
   portalPath: string | null;
@@ -793,7 +794,7 @@ export function EstimateDetail({ estimateId }: Props) {
             <p className="text-sm text-emerald-800/80">
               {estimate.signedAt
                 ? `Customer signed ${format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")}`
-                : "Customer signature on file"}
+                : estimate.employeeApproval ? `Approved by employee ${estimate.employeeApproval.employeeName} without signature` : "Estimate approved"}
             </p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import http2 from "http2";
 import { importPKCS8, SignJWT } from "jose";
+import { normalizeApnsSigningKey } from "./signing-key";
 
 type ApnsAlert = {
   title: string;
@@ -45,7 +46,7 @@ async function getApnsAuthToken() {
 
   const keyId = process.env.APNS_KEY_ID!;
   const teamId = process.env.APNS_TEAM_ID!;
-  const privateKeyPem = process.env.APNS_PRIVATE_KEY!.replace(/\\n/g, "\n");
+  const privateKeyPem = normalizeApnsSigningKey(process.env.APNS_PRIVATE_KEY!);
   const privateKey = await importPKCS8(privateKeyPem, "ES256");
 
   const token = await new SignJWT({})

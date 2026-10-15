@@ -45,6 +45,7 @@ export type HolidayPricingResult = {
   marginPct: number;
   optionDetails: Record<HolidayQuoteOptionKey, {
     displayLines: HolidayDisplayLine[];
+    includedLines: HolidayDisplayLine[];
     partsPrice: number;
     laborPrice: number;
     calculated: number;
@@ -255,7 +256,19 @@ export function computeHolidayQuotePricing(params: {
         key, customServicesTotal,
         key === "lease" ? selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0 : 0
       ) : original;
-      return [key, { ...detail, partsPrice, laborPrice, displayLines: holidayOptionLines({
+      if (adjustment?.lineItems != null) {
+        const manual = adjustment.lineItems;
+        const lineSubtotal = money(manual.reduce((sum, line) => sum + (line.kind === "included" ? 0 : line.quantity * line.unitPrice), 0));
+        const manualDetail = optionDetail(money(lineSubtotal + customServicesTotal),
+          { ...selections, optionAdjustments: { ...selections.optionAdjustments, [key]: { ...adjustment, price: null } } },
+          key, customServicesTotal, key === "lease" ? selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0 : 0);
+        return [key, { ...manualDetail, includedLines: [],
+          partsPrice: money(manual.filter((line) => line.kind === "parts").reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)),
+          laborPrice: money(manual.filter((line) => line.kind === "labor").reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)),
+          displayLines: manual.map((line) => ({ ...line, total: line.kind === "included" ? 0 : money(line.quantity * line.unitPrice), itemType: line.kind === "parts" ? "PRODUCT" as const : "SERVICE" as const })),
+        }];
+      }
+      return [key, { ...detail, partsPrice, laborPrice, includedLines: holidayIncludedLines(key).map((line) => ({ ...line, total: 0, itemType: "SERVICE" as const })), displayLines: holidayOptionLines({
         lines, key, targetSubtotal: money(detail.subtotal - customServicesTotal),
         ...(hasComponents ? { partsPrice, laborPrice } : {}),
       }) }];
@@ -264,7 +277,8 @@ export function computeHolidayQuotePricing(params: {
   const year1Total = componentDetails.buy.total;
   const leaseTotal = componentDetails.lease.total;
   const permanentTotal = componentDetails.permanent.total;
-  const reinstallTotal = selections.reinstallPrice == null ? calculatedReinstallTotal : money(selections.reinstallPrice);
+  const manualBuy = selections.optionAdjustments?.buy?.lineItems;
+  const reinstallTotal = manualBuy != null ? componentDetails.buy.laborPrice : selections.reinstallPrice == null ? calculatedReinstallTotal : money(selections.reinstallPrice);
 
   return {
     lines,
@@ -454,6 +468,7 @@ export function holidayDetailedLaborOnlyLines(params: {
 }
 
 export const HOLIDAY_INCLUDED_LINES = [
+  { name: "Takedown", description: "Seasonal light removal is included." },
   {
     name: "Storage",
     description: "We keep your lights in our warehouse in their own labeled bin so they never get lost, and so we can streamline your lighting installation next year.",
@@ -540,7 +555,7 @@ export function holidayCustomerPackages(params: {
   ];
 }
 
-export type HolidayDisplayLine = { name: string; description: string; total: number; itemType: "PRODUCT" | "SERVICE" };
+export type HolidayDisplayLine = { id?: string; quantity?: number; unitPrice?: number; kind?: "parts" | "labor" | "service" | "included"; name: string; description: string; total: number; itemType: "PRODUCT" | "SERVICE" };
 
 /** Shared native preview and estimate breakdown, including explicit zero-dollar overrides. */
 export function holidayOptionLines(params: {
@@ -569,4 +584,9 @@ export function holidayOptionLines(params: {
     });
   }
   return result;
+}
+
+export function holidayIncludedLines(key: HolidayQuoteOptionKey) {
+  return key === "permanent" ? HOLIDAY_PERMANENT_INCLUDED_LINES
+    : key === "labor" ? HOLIDAY_INCLUDED_LINES.filter((line) => line.name === "Takedown") : HOLIDAY_INCLUDED_LINES;
 }

@@ -20,7 +20,7 @@ import {
   parseHolidaySelections,
 } from "../types";
 
-function onlyTotals({ partsPrice, laborPrice, displayLines, ...totals }: ReturnType<typeof computeHolidayQuotePricing>["optionDetails"]["buy"]) { return totals; }
+function onlyTotals({ partsPrice, laborPrice, displayLines, includedLines, ...totals }: ReturnType<typeof computeHolidayQuotePricing>["optionDetails"]["buy"]) { return totals; }
 
 const style = DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!;
 const prices = new Map([
@@ -501,9 +501,9 @@ test("permanent-light fixed discounts retain the exact entered amount", () => {
 });
 
 test("included holiday services have customer descriptions and permanent options include only their warranty", () => {
-  assert.match(HOLIDAY_INCLUDED_LINES[0].description, /warehouse/i);
-  assert.match(HOLIDAY_INCLUDED_LINES[1].description, /48 hours/i);
-  assert.match(HOLIDAY_INCLUDED_LINES[2].name, /3-year parts and labor/i);
+  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Storage")!.description, /warehouse/i);
+  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Maintenance")!.description, /48 hours/i);
+  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name.startsWith("3-year"))!.name, /3-year parts and labor/i);
   assert.equal(HOLIDAY_PERMANENT_INCLUDED_LINES.length, 1);
   assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].name, /5-year parts and labor/i);
   assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].description, /no cost/i);
@@ -544,4 +544,23 @@ test("zero component prices and lease discounts are honored without changing oth
   assert.equal(result.optionDetails.labor.total, 25);
   assert.equal(result.optionDetails.labor.partsPrice, 0);
   assert.equal(result.optionDetails.labor.displayLines.reduce((sum, line) => sum + line.total, 0), 25);
+});
+
+test("editable holiday line items preserve titles, descriptions, quantities and included takedown", () => {
+  const selections = parseHolidaySelections({ defaultLightStyleKey: style.key, optionAdjustments: { buy: { lineItems: [
+    { id: "parts", name: "Front roof lights", description: "Red and green C9", quantity: 2, unitPrice: 75.5, kind: "parts" },
+    { id: "labor", name: "Installation", description: "Use existing clips", quantity: 3, unitPrice: 20, kind: "labor" },
+    { id: "down", name: "Takedown", description: "Included in January", quantity: 1, unitPrice: 99, kind: "included" },
+  ] } } });
+  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
+  assert.equal(result.optionDetails.buy.subtotal, 211);
+  assert.equal(result.optionDetails.buy.partsPrice, 151);
+  assert.equal(result.optionDetails.buy.laborPrice, 60);
+  assert.equal(result.reinstallTotal, 60);
+  assert.equal(result.optionDetails.buy.displayLines[0]?.name, "Front roof lights");
+  assert.equal(result.optionDetails.buy.displayLines[0]?.description, "Red and green C9");
+  assert.equal(result.optionDetails.buy.displayLines[0]?.quantity, 2);
+  assert.equal(result.optionDetails.buy.displayLines[0]?.unitPrice, 75.5);
+  assert.equal(result.optionDetails.buy.displayLines[2]?.total, 0);
+  assert.equal(result.optionDetails.buy.displayLines.reduce((sum, line) => sum + line.total, 0), 211);
 });

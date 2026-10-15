@@ -61,7 +61,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       prices,
     });
 
-    return NextResponse.json({ quote, catalog, pricing });
+    return NextResponse.json({ quote, catalog, pricing, optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])) });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);
@@ -149,7 +149,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       prices,
     });
 
-    return NextResponse.json({ quote, pricing });
+    return NextResponse.json({ quote, pricing, optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])) });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);

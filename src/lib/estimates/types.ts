@@ -29,6 +29,7 @@ export type EstimateDTO = {
   signatureBlobUrl: string | null;
   signedAt: string | null;
   approvedAt: string | null;
+  employeeApproval?: { employeeId: string; employeeName: string; approvedAt: string } | null;
   sentAt: string | null;
   selectedOptionId: string | null;
   subtotal: number;

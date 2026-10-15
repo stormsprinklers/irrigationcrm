@@ -157,7 +157,13 @@ export type HolidayCustomService = {
 };
 
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
+export type HolidayQuoteLineItem = {
+  id: string; name: string; description: string; quantity: number; unitPrice: number;
+  kind: "parts" | "labor" | "service" | "included";
+};
+
 export type HolidayOptionAdjustment = {
+  lineItems?: HolidayQuoteLineItem[];
   price?: number | null;
   partsPrice?: number | null;
   laborPrice?: number | null;
@@ -587,6 +593,13 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     const price = rawPrice == null || rawPrice === "" ? null : Number(rawPrice);
     const discountAmount = Number(item.discountAmount ?? 0);
     adjustments[key] = {
+      ...(Array.isArray(item.lineItems) ? { lineItems: item.lineItems.slice(0, 100).flatMap((line, index) => {
+        if (!line || typeof line !== "object") return [];
+        const quantity = Number(line.quantity), price = Number(line.unitPrice);
+        if (!Number.isFinite(quantity) || quantity < 0 || quantity > 10000 || !Number.isFinite(price) || price < 0 || price > 9_999_999) return [];
+        const kind = ["parts", "labor", "service", "included"].includes(line.kind) ? line.kind : "service" as const;
+        return [{ id: typeof line.id === "string" ? line.id.slice(0, 80) : `line-${index}`, name: String(line.name ?? "").trim().slice(0, 200), description: String(line.description ?? "").slice(0, 4000), quantity, unitPrice: kind === "included" ? 0 : Math.round(price * 100) / 100, kind }];
+      }) } : {}),
       ...Object.fromEntries((["partsPrice", "laborPrice"] as const).map((field) => {
         const value = item[field];
         return [field, typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 9_999_999 ? Math.round(value * 100) / 100 : null];

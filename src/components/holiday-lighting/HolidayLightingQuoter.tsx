@@ -503,7 +503,7 @@ export function HolidayLightingQuoter({
       ...current,
       optionAdjustments: {
         ...current.optionAdjustments,
-        [key]: { ...current.optionAdjustments?.[key], ...("price" in patch ? { partsPrice: null, laborPrice: null } : {}), ...patch },
+        [key]: { ...current.optionAdjustments?.[key], ...("price" in patch ? { partsPrice: null, laborPrice: null, lineItems: undefined } : {}), ...patch },
       },
     }));
   }
