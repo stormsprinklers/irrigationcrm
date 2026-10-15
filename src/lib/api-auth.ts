@@ -59,6 +59,12 @@ export async function userFromBearerToken(token: string): Promise<SessionUser | 
 }
 
 export async function getSessionUser(request?: Request): Promise<SessionUser | null> {
+  // Native requests may carry cookies left by an embedded CRM tool. The explicit
+  // bearer identity must win, including when expired (so iOS can refresh it).
+  const bearer = request
+    ? bearerFromAuthHeader(request.headers.get("authorization"))
+    : await getBearerFromHeaders();
+  if (bearer) return userFromBearerToken(bearer);
   const session = await auth();
   if (session?.user?.id && session.user.companyId) {
     return {
@@ -69,15 +75,6 @@ export async function getSessionUser(request?: Request): Promise<SessionUser | n
       role: session.user.role,
       ...(session.user.trueRole ? { trueRole: session.user.trueRole } : {}),
     };
-  }
-
-  let bearer = request ? bearerFromAuthHeader(request.headers.get("authorization")) : null;
-  if (!bearer) {
-    bearer = await getBearerFromHeaders();
-  }
-
-  if (bearer) {
-    return userFromBearerToken(bearer);
   }
 
   return null;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSessionUser } from "@/lib/api-auth";
+import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
 import { getTwilioVoiceToken } from "@/lib/inbox/twilio";
 import { voiceClientIdentity } from "@/lib/voice/identity";
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate token";
+    if (message === "Unauthorized") return unauthorizedResponse();
     const missingCredentials =
       message.includes("not configured") || message.includes("credentials");
     return NextResponse.json(

@@ -66,7 +66,12 @@ export async function sendApnsNotification(
     return { ok: false, reason: "APNs not configured" };
   }
 
-  const jwt = await getApnsAuthToken();
+  let jwt: string;
+  try {
+    jwt = await getApnsAuthToken();
+  } catch {
+    return { ok: false, reason: "APNs signing key could not be loaded" };
+  }
   const body = JSON.stringify({
     aps: {
       alert: {
@@ -87,6 +92,10 @@ export async function sendApnsNotification(
 
   return new Promise((resolve) => {
     const client = http2.connect(`https://${apnsHost()}`);
+    client.setTimeout(10_000, () => {
+      client.destroy();
+      resolve({ ok: false, reason: "APNs connection timed out" });
+    });
     client.on("error", (error) => {
       client.close();
       resolve({ ok: false, reason: error.message });
