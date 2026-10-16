@@ -1,7 +1,8 @@
 /**
  * Backfills columns that Prisma cannot add as NOT NULL on non-empty tables
  * (@default(cuid()) is applied in the client, not in PostgreSQL).
- * Run before `prisma db push` on deploy.
+ * Apply reviewed, additive compatibility changes before the application build.
+ * Production deploys must not run `prisma db push` or accept destructive drift.
  */
 import { CampaignEnrollmentStatus, Channel, PrismaClient, Scope } from "@prisma/client";
 
@@ -95,6 +96,10 @@ async function ensureSecurityRateLimitTable() {
     CREATE INDEX IF NOT EXISTS "SecurityRateLimitBucket_updatedAt_idx"
     ON "SecurityRateLimitBucket"("updatedAt")
   `);
+}
+
+async function ensureMarketerRole() {
+  await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'MARKETER'`);
 }
 
 async function ensureSecurityHardeningTables() {
@@ -347,6 +352,7 @@ async function consolidateDuplicateCustomerSmsThreads() {
 }
 
 async function main() {
+  await ensureMarketerRole();
   await ensureSecurityRateLimitTable();
   await ensureSecurityHardeningTables();
   await backfillPublicToken("Estimate");

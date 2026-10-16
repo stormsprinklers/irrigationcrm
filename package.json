@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "tsx scripts/validate-security-config.ts && tsx prisma/predeploy-backfill.ts && prisma db push && next build",
+    "vercel-build": "tsx scripts/validate-security-config.ts && tsx prisma/predeploy-backfill.ts && next build",
     "start": "next start",
     "lint": "eslint src scripts prisma --ext .ts,.tsx,.mts,.cts",
     "typecheck": "tsc --noEmit",

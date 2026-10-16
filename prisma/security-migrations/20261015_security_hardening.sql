@@ -1,6 +1,17 @@
 -- Idempotent security hardening rollout for existing PostgreSQL deployments.
 -- This file is intentionally additive and contains no destructive DDL.
 
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'MARKETER';
+
+CREATE TABLE IF NOT EXISTS "SecurityRateLimitBucket" (
+  "key" TEXT PRIMARY KEY,
+  "count" INTEGER NOT NULL DEFAULT 0,
+  "windowStartedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "blockedUntil" TIMESTAMP(3),
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS "SecurityRateLimitBucket_updatedAt_idx" ON "SecurityRateLimitBucket"("updatedAt");
+
 CREATE TABLE IF NOT EXISTS "OAuthStateNonce" (
   "id" TEXT PRIMARY KEY,
   "nonceHash" TEXT NOT NULL UNIQUE,
