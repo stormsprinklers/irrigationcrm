@@ -1,6 +1,7 @@
 import type {
   EstablishmentStage,
   GrassSeason,
+  PropertyLocationContext,
   PropertyScheduleSettings,
   ZoneRuntimeInput,
 } from "./types";
@@ -34,6 +35,8 @@ type PropertyRecord = {
   droughtRestrictionsActive?: boolean | null;
   cycleSoakEnabled?: boolean | null;
   etoOverrideInches?: number | null;
+  address?: string | null;
+  city?: string | null;
 };
 
 export function zoneInputFromMapZone(
@@ -67,5 +70,14 @@ export function propertySettingsFromRecord(
     droughtRestrictionsActive: property.droughtRestrictionsActive ?? true,
     cycleSoakEnabled: property.cycleSoakEnabled ?? false,
     etoOverrideInches: property.etoOverrideInches ?? null,
+  };
+}
+
+export function propertyLocationFromRecord(
+  property: Pick<PropertyRecord, "address" | "city">
+): PropertyLocationContext {
+  return {
+    address: property.address ?? null,
+    city: property.city ?? null,
   };
 }

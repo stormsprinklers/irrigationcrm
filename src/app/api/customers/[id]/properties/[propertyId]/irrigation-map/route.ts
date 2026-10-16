@@ -6,6 +6,7 @@ import {
   calculateZoneRuntime,
   defaultWeatherFallback,
   fetchWeeklyWeather,
+  propertyLocationFromRecord,
   propertySettingsFromRecord,
   zoneInputFromMapZone,
 } from "@/lib/irrigation/runtime-engine";
@@ -77,6 +78,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
 
       const settings = propertySettingsFromRecord(fullProperty ?? {});
+      const location = propertyLocationFromRecord(fullProperty ?? {});
       const zoneInputs = mapZones.map((z) => zoneInputFromMapZone(z));
       const weatherInput = {
         weeklyEToInches: settings.etoOverrideInches ?? weather.weeklyEToInches,
@@ -89,6 +91,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         settings,
         zones: zoneInputs,
         weather: weatherInput,
+        location,
       });
 
       for (const [index, zone] of mapZones.entries()) {
