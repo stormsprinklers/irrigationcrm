@@ -81,7 +81,9 @@ export function buildMarketingEmailPayload(params: {
     : body;
   const withUnsubscribe = appendPlainUnsubscribeText(withSignature, params.unsubscribeUrl);
   const track = params.trackEngagement !== false;
-  const text = track ? rewriteTrackedUrlsInText(withUnsubscribe, params.recipientId) : withUnsubscribe;
+  const text = track
+    ? rewriteTrackedUrlsInText(withUnsubscribe, params.recipientId, params.publicBaseUrl)
+    : withUnsubscribe;
   if (!hasRichFormatting(params.bodyHtml)) {
     const linkedBody = withSignature.split(/(https?:\/\/[^\s<>"']+)/gi).map((part, index) => {
       if (index % 2 === 0) return escapeHtml(part);
@@ -96,7 +98,13 @@ export function buildMarketingEmailPayload(params: {
     ).replace(/<a\s/gi, "<a clicktracking=off ");
     return {
       text,
-      html: track ? appendOpenTrackingPixel(rewriteTrackedLinks(html, params.recipientId), params.recipientId) : html,
+      html: track
+        ? appendOpenTrackingPixel(
+            rewriteTrackedLinks(html, params.recipientId, params.publicBaseUrl),
+            params.recipientId,
+            params.publicBaseUrl
+          )
+        : html,
       unbranded: true,
       omitHtml: false,
     };
@@ -116,7 +124,13 @@ export function buildMarketingEmailPayload(params: {
   ).replace(/<a\s/gi, "<a clicktracking=off ");
   return {
     text,
-    html: track ? appendOpenTrackingPixel(rewriteTrackedLinks(html, params.recipientId), params.recipientId) : html,
+    html: track
+      ? appendOpenTrackingPixel(
+          rewriteTrackedLinks(html, params.recipientId, params.publicBaseUrl),
+          params.recipientId,
+          params.publicBaseUrl
+        )
+      : html,
     unbranded: true,
     omitHtml: false,
   };

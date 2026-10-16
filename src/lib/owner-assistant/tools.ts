@@ -2,9 +2,11 @@ import { Division, VisitStatus } from "@prisma/client";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { prisma } from "@/lib/prisma";
+import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { runStormAiTool } from "@/lib/storm-ai/execute";
 import { resolveOwnerCompanyUser, listOwnerAssistantCompanies } from "./access";
 import { hashOwnerAssistantToolArgs } from "./auth";
+import { matchOwnerAssistantEmployee } from "./employee-resolution";
 import { OWNER_ASSISTANT_TOOL_NAMES, type OwnerAssistantToolName } from "./types";
 
 type Context = { configId: string; ownerUserId: string; sessionId?: string | null };
@@ -18,6 +20,18 @@ function invalid(error: string, code = "INVALID"): Result {
 
 function text(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function textList(value: unknown, maxItems = 20, maxLength = 160): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().slice(0, maxLength))
+        .filter(Boolean)
+    ),
+  ].slice(0, maxItems);
 }
 
 async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<string, unknown>): Promise<Result> {
@@ -36,6 +50,31 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
   if (!companyId) return invalid("companyId is required");
   const companyUser = await resolveOwnerCompanyUser(ctx.ownerUserId, companyId);
   if (!companyUser) return invalid("That company is not available to this assistant", "FORBIDDEN");
+
+  if (tool === "list_employees") {
+    const query = text(args.query, 160);
+    const employees = await prisma.user.findMany({
+      where: {
+        companyId,
+        status: "ACTIVE",
+        systemKind: null,
+        ...(query
+          ? {
+              OR: [
+                { name: { contains: query, mode: "insensitive" } },
+                { firstName: { contains: query, mode: "insensitive" } },
+                { lastName: { contains: query, mode: "insensitive" } },
+                { email: { contains: query, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
+      take: 100,
+      select: { id: true, name: true, email: true, role: true, division: true },
+    });
+    return { ok: true, data: { employees } };
+  }
 
   if (!MUTATING.has(tool)) {
     const { companyId: _companyId, ...toolArgs } = args;
@@ -107,11 +146,45 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
     ? await prisma.customerProperty.findFirst({ where: { id: propertyId, customerId, companyId } })
     : await prisma.customerProperty.findFirst({ where: { customerId, companyId }, orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }] });
   if (propertyId && !property) return invalid("Property not found", "NOT_FOUND");
-  const assignedUserId = text(args.assignedUserId, 128) || null;
-  if (assignedUserId) {
-    const assignee = await prisma.user.findFirst({ where: { id: assignedUserId, companyId, status: "ACTIVE" }, select: { id: true } });
-    if (!assignee) return invalid("Assigned employee not found", "NOT_FOUND");
+  const requestedIds = textList(args.assignedUserIds, 20, 128);
+  const legacyAssignedUserId = text(args.assignedUserId, 128);
+  if (legacyAssignedUserId) requestedIds.push(legacyAssignedUserId);
+  const requestedNames = textList(args.assignedEmployeeNames);
+  let assignedUsers: Array<{ id: string; name: string; email: string }> = [];
+  if (requestedIds.length || requestedNames.length) {
+    const activeEmployees = await prisma.user.findMany({
+      where: { companyId, status: "ACTIVE", systemKind: null },
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
+    });
+    const byId = new Map(activeEmployees.map((employee) => [employee.id, employee]));
+    const resolved: Array<{ id: string; name: string; email: string }> = [];
+    for (const id of requestedIds) {
+      const employee = byId.get(id);
+      if (!employee) return invalid("One of the assigned employees is not active in this company", "NOT_FOUND");
+      resolved.push(employee);
+    }
+    for (const requestedName of requestedNames) {
+      const match = matchOwnerAssistantEmployee(activeEmployees, requestedName);
+      if (!match.ok && match.reason === "NOT_FOUND") {
+        return invalid(`No active employee named "${requestedName}" was found. Use list_employees to check the spelling.`, "NOT_FOUND");
+      }
+      if (!match.ok) {
+        return invalid(`More than one active employee matches "${requestedName}". Use list_employees and select the matching email.`, "AMBIGUOUS");
+      }
+      resolved.push(match.employee);
+    }
+    assignedUsers = [...new Map(resolved.map((employee) => [employee.id, employee])).values()];
+    if (assignedUsers.length > 20) return invalid("A visit can have up to 20 assigned employees");
+    const availability = await Promise.all(
+      assignedUsers.map((employee) =>
+        validateAssignmentUpdate(companyId, employee.id, startAt, endAt)
+      )
+    );
+    const unavailable = availability.find((result) => result.error)?.error;
+    if (unavailable) return invalid(unavailable, "UNAVAILABLE");
   }
+  const assignedUserId = assignedUsers[0]?.id ?? null;
   const divisionRaw = text(args.division, 40) || Division.SERVICE;
   if (!Object.values(Division).includes(divisionRaw as Division)) return invalid("Invalid division");
   const visit = await prisma.visit.create({
@@ -124,6 +197,10 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
       endAt,
       division: divisionRaw as Division,
       assignedUserId,
+      additionalAssignees:
+        assignedUsers.length > 1
+          ? { create: assignedUsers.slice(1).map((employee) => ({ userId: employee.id })) }
+          : undefined,
       createdByUserId: companyUser.id,
       status: VisitStatus.SCHEDULED,
       address: property?.address,
@@ -132,14 +209,38 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
       zip: property?.zip,
       tags: ["owner-assistant"],
     },
-    select: { id: true, title: true, startAt: true, endAt: true },
+    select: {
+      id: true,
+      title: true,
+      startAt: true,
+      endAt: true,
+      assignedUser: { select: { id: true, name: true, email: true } },
+      additionalAssignees: {
+        select: { user: { select: { id: true, name: true, email: true } } },
+      },
+    },
   });
   const notes = text(args.notes, 4000);
   if (notes) await prisma.visitNote.create({ data: { visitId: visit.id, authorId: companyUser.id, body: notes } });
   await onVisitTimeChanged({ visitId: visit.id, companyId, isInitialSchedule: true }).catch((error) => {
     console.error("[owner-assistant] visit notification failed", visit.id, error);
   });
-  return { ok: true, data: { visit: { ...visit, startAt: visit.startAt.toISOString(), endAt: visit.endAt.toISOString() }, customerNotificationAutomationMayRun: true } };
+  const { assignedUser, additionalAssignees, ...visitFields } = visit;
+  return {
+    ok: true,
+    data: {
+      visit: {
+        ...visitFields,
+        startAt: visit.startAt.toISOString(),
+        endAt: visit.endAt.toISOString(),
+        assignedEmployees: [
+          ...(assignedUser ? [assignedUser] : []),
+          ...additionalAssignees.map((assignment) => assignment.user),
+        ],
+      },
+      customerNotificationAutomationMayRun: true,
+    },
+  };
 }
 
 export async function executeOwnerAssistantTool(ctx: Context, rawTool: string, rawArgs: unknown): Promise<Result> {

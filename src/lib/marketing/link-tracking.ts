@@ -61,8 +61,8 @@ export function verifyMarketingTrackingToken(
   }
 }
 
-function trackingBaseUrl() {
-  return getAppBaseUrl().replace(/\/$/, "");
+function trackingBaseUrl(publicBaseUrl?: string | null) {
+  return (publicBaseUrl?.trim() || getAppBaseUrl()).replace(/\/$/, "");
 }
 
 export function shouldSkipTrackedUrl(url: string) {
@@ -85,43 +85,55 @@ export function safeTrackedDestination(value: string): string | null {
   }
 }
 
-export function trackedClickUrl(recipientId: string, url: string) {
+export function trackedClickUrl(recipientId: string, url: string, publicBaseUrl?: string | null) {
   const destination = safeTrackedDestination(url);
   if (!destination) return url;
   const token = createMarketingTrackingToken(recipientId, "click", destination);
-  return `${trackingBaseUrl()}/api/marketing/track/click?t=${encodeURIComponent(token)}&u=${encodeURIComponent(destination)}`;
+  return `${trackingBaseUrl(publicBaseUrl)}/api/marketing/track/click?t=${encodeURIComponent(token)}&u=${encodeURIComponent(destination)}`;
 }
 
-export function trackedOpenUrl(recipientId: string) {
+export function trackedOpenUrl(recipientId: string, publicBaseUrl?: string | null) {
   const token = createMarketingTrackingToken(recipientId, "open");
-  return `${trackingBaseUrl()}/api/marketing/track/open?t=${encodeURIComponent(token)}`;
+  return `${trackingBaseUrl(publicBaseUrl)}/api/marketing/track/open?t=${encodeURIComponent(token)}`;
 }
 
-export function appendOpenTrackingPixel(html: string, recipientId: string) {
-  const src = trackedOpenUrl(recipientId);
+export function appendOpenTrackingPixel(
+  html: string,
+  recipientId: string,
+  publicBaseUrl?: string | null
+) {
+  const src = trackedOpenUrl(recipientId, publicBaseUrl);
   if (!html || html.includes("/api/marketing/track/open")) return html;
   return `${html}<img src="${src}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;outline:0" />`;
 }
 
-export function rewriteTrackedLinks(html: string, recipientId: string) {
+export function rewriteTrackedLinks(
+  html: string,
+  recipientId: string,
+  publicBaseUrl?: string | null
+) {
   if (!html) return html;
   return html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*)>/gi,
     (match, before, url, after) => {
       const destination = url.replace(/&amp;/gi, "&");
       if (shouldSkipTrackedUrl(destination) || !safeTrackedDestination(destination)) return match;
-      return `<a ${before}href="${trackedClickUrl(recipientId, destination)}"${after}>`;
+      return `<a ${before}href="${trackedClickUrl(recipientId, destination, publicBaseUrl)}"${after}>`;
     }
   );
 }
 
 /** Wrap http(s) URLs in plain text so click tracking works without HTML. */
-export function rewriteTrackedUrlsInText(text: string, recipientId: string) {
+export function rewriteTrackedUrlsInText(
+  text: string,
+  recipientId: string,
+  publicBaseUrl?: string | null
+) {
   if (!text) return text;
   return text.replace(/https?:\/\/[^\s<>"']+/gi, (raw) => {
     const trailing = raw.match(/[).,;:!?]+$/)?.[0] ?? "";
     const url = trailing ? raw.slice(0, -trailing.length) : raw;
     if (!url || shouldSkipTrackedUrl(url) || !safeTrackedDestination(url)) return raw;
-    return `${trackedClickUrl(recipientId, url)}${trailing}`;
+    return `${trackedClickUrl(recipientId, url, publicBaseUrl)}${trailing}`;
   });
 }

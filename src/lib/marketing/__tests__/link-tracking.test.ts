@@ -54,6 +54,20 @@ test("buildMarketingEmailPayload tracks campaign links and opens", () => {
   assert.doesNotMatch(out.text, /track\/open/);
 });
 
+test("buildMarketingEmailPayload uses the company's public domain for tracking", () => {
+  const out = buildMarketingEmailPayload({
+    bodyHtml: '<p><a href="https://stormsprinklers.com/book">Book</a></p>',
+    bodyText: "Book https://stormsprinklers.com/book",
+    unsubscribeUrl: "https://portal.stormsprinklers.com/api/marketing/unsubscribe?token=t",
+    recipientId: "rec_company",
+    publicBaseUrl: "https://portal.stormsprinklers.com",
+  });
+  assert.match(out.html, /https:\/\/portal\.stormsprinklers\.com\/api\/marketing\/track\/click/);
+  assert.match(out.html, /https:\/\/portal\.stormsprinklers\.com\/api\/marketing\/track\/open/);
+  assert.match(out.text, /https:\/\/portal\.stormsprinklers\.com\/api\/marketing\/track\/click/);
+  assert.doesNotMatch(out.html, /crm\.stormsprinklers\.com/);
+});
+
 test("tracked redirects accept only absolute web URLs", () => {
   assert.equal(safeTrackedDestination("javascript:alert(1)"), null);
   assert.equal(safeTrackedDestination("//evil.example"), null);

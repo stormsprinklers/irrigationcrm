@@ -7,6 +7,7 @@ import { buildOwnerAssistantPrompt } from "./prompt";
 import { executeOwnerAssistantTool } from "./tools";
 import { OWNER_ASSISTANT_TOOLS } from "./types";
 import { isOwnerAssistantAvailable } from "./availability";
+import { ownerAssistantSmsText } from "./sms-format";
 
 type Config = NonNullable<Awaited<ReturnType<typeof prisma.ownerAssistantConfig.findUnique>>> & {
   owner: { id: string; name: string; email: string; companyId: string };
@@ -60,7 +61,7 @@ export async function handleOwnerAssistantSms(config: Config, input: { body: str
     if (!message) throw new Error("Owner assistant returned an empty response");
     messages.push({ role: "assistant", content: message.content ?? null, tool_calls: message.tool_calls });
     if (!message.tool_calls?.length) {
-      reply = (message.content || reply).trim().slice(0, 1500);
+      reply = ownerAssistantSmsText(message.content || reply);
       break;
     }
     for (const call of message.tool_calls) {
