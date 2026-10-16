@@ -1,3 +1,4 @@
+import { iosVoicePushCredentialSid } from "@/lib/voice/push-credential";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
       platformParam === "ios" || platformParam === "android" ? platformParam : "web";
     const pushCredentialSid =
       platform === "ios"
-        ? process.env.TWILIO_PUSH_CREDENTIAL_SID?.trim()
+        ? iosVoicePushCredentialSid()
         : platform === "android"
           ? process.env.TWILIO_ANDROID_PUSH_CREDENTIAL_SID?.trim()
           : undefined;

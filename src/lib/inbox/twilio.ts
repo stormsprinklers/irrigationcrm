@@ -1,3 +1,4 @@
+import { iosVoicePushCredentialSid } from "@/lib/voice/push-credential";
 import twilio from "twilio";
 import type { NextRequest } from "next/server";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -106,7 +107,7 @@ export function getTwilioVoiceToken(
     options.platform === "android"
       ? process.env.TWILIO_ANDROID_PUSH_CREDENTIAL_SID?.trim()
       : options.platform === "ios"
-        ? process.env.TWILIO_PUSH_CREDENTIAL_SID?.trim()
+        ? iosVoicePushCredentialSid()
         : undefined;
 
   token.addGrant(
