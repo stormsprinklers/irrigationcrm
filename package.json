@@ -67,7 +67,7 @@
     "@types/react-dom": "^19.1.6",
     "@types/web-push": "^3.6.4",
     "eslint": "^9.29.0",
-    "eslint-config-next": "^15.3.4",
+    "eslint-config-next": "^16.4.0",
     "patch-package": "^8.0.1",
     "tailwindcss": "^4.1.11",
     "tsx": "^4.22.4",
