@@ -31,6 +31,9 @@ export function HolidayLightingPlanSection({
       : null;
 
   const showMap = mode === "installer";
+  const totalFeet = strandMap?.features.reduce((total, feature) => total + feature.lengthFtWithMargin, 0) ?? 0;
+  const bulbTypes = [...new Set(strandMap?.features.map(feature => feature.lightStyleLabel) ?? [])];
+  const notes = typeof designExportMetadata?.notes === "string" ? designExportMetadata.notes.trim() : "";
   if (!previewUrl && !(showMap && strandMap)) return null;
 
   return (
@@ -46,6 +49,13 @@ export function HolidayLightingPlanSection({
           </p>
         ) : null}
       </div>
+      {showMap && strandMap ? (
+        <div className="space-y-2 text-sm">
+          <p><strong>Total length including margin:</strong> {totalFeet.toFixed(1)} ft</p>
+          <p><strong>Bulb types:</strong> {bulbTypes.join(", ") || "Not specified"}</p>
+          <p className="whitespace-pre-wrap"><strong>Notes:</strong> {notes || "No quote notes"}</p>
+        </div>
+      ) : null}
       {previewUrl ? (
         <div className="space-y-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -66,3 +66,13 @@ test("visit plan uses approved option B and preserves it across later reads", ()
   assert.equal(plan.previewImageUrl, "https://example.com/b.jpg");
   assert.equal(holidayVisitPlan({source: "irrigation-design"}), null);
 });
+
+test("visit plan keeps only the approved option's material notes", () => {
+  const raw = {source: "holiday-lighting-quote", notes: "Option A notes", options: [
+    {letter: "A", notes: "Option A notes"},
+    {letter: "B", notes: "C9 warm white; purchase extra clips"},
+    {letter: "C", notes: ""},
+  ]};
+  assert.equal(holidayVisitPlan(raw, "B")!.notes, "C9 warm white; purchase extra clips");
+  assert.equal(holidayVisitPlan(raw, "C")!.notes, "");
+});

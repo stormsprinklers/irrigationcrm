@@ -9,6 +9,7 @@ export function holidayVisitPlan(raw: Prisma.JsonValue | null, letter?: string |
   const map = chosen?.strandMap ?? raw.strandMap;
   return {
     ...raw as Prisma.InputJsonObject,
+    ...(typeof chosen?.notes === "string" ? { notes: chosen.notes } : {}),
     ...(chosen?.previewImageUrl ? {previewImageUrl: chosen.previewImageUrl} : {}),
     ...(map && typeof map === "object" && !Array.isArray(map) ? {strandMap: {
       ...map as Prisma.InputJsonObject,

@@ -140,6 +140,7 @@ export async function createEstimateFromHolidayQuote(params: {
     previewImageUrl: primaryPreviewImageUrl,
     previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
     address,
+    notes: prepared[0]?.selections.notes?.trim() ?? "",
     strandMap: prepared[0]?.strandMap,
     options: prepared.map((item, index) => ({
       id: item.design.id,
@@ -150,6 +151,7 @@ export async function createEstimateFromHolidayQuote(params: {
       placementCount: item.priced.placementCount,
       total: item.detail.total,
       reinstallTotal: item.priced.reinstallTotal,
+      notes: item.selections.notes?.trim() ?? "",
       lightStyleKey: item.selections.defaultLightStyleKey,
       colorPattern: item.selections.defaultColorPattern,
       previewImageUrl: item.design.previewImageUrl ?? quote.previewImageUrl,
