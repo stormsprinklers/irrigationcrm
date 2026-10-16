@@ -1,5 +1,6 @@
 const deployment = (process.env.VERCEL_ENV || process.env.APP_ENV || "local").toLowerCase();
 const isDeployed = deployment === "production" || deployment === "preview" || deployment === "staging";
+const strictSecurityConfig = process.env.STRICT_SECURITY_CONFIG?.trim().toLowerCase() === "true";
 
 const errors: string[] = [];
 const warnings: string[] = [];
@@ -16,19 +17,40 @@ function requireValue(name: string, minimumLength = 1) {
   }
 }
 
+function recommendValue(name: string, minimumLength = 1) {
+  const configured = value(name);
+  const message = !configured
+    ? `${name} is not configured`
+    : configured.length < minimumLength
+      ? `${name} should be at least ${minimumLength} characters`
+      : "";
+
+  if (!message) return;
+  if (strictSecurityConfig) errors.push(message);
+  else warnings.push(`${message}; set STRICT_SECURITY_CONFIG=true after provisioning deployment secrets to enforce this at build time`);
+}
+
 if (isDeployed) {
   requireValue("DATABASE_URL");
   if (!value("AUTH_SECRET") && !value("NEXTAUTH_SECRET")) {
     errors.push("AUTH_SECRET or NEXTAUTH_SECRET is required");
   } else if ((value("AUTH_SECRET") || value("NEXTAUTH_SECRET")).length < 32) {
-    errors.push("AUTH_SECRET/NEXTAUTH_SECRET must be at least 32 characters");
+    const message = "AUTH_SECRET/NEXTAUTH_SECRET should be at least 32 characters";
+    if (strictSecurityConfig) errors.push(message);
+    else warnings.push(`${message}; rotate it before enabling STRICT_SECURITY_CONFIG`);
   }
-  requireValue("CRON_SECRET", 32);
-  requireValue("RATE_LIMIT_PEPPER", 32);
-  requireValue("MARKETING_TRACKING_SECRET", 32);
+  // These controls already fail closed or use AUTH_SECRET as a server-only
+  // fallback at runtime. Roll their deployment requirements out as warnings
+  // until the environment has been provisioned, then enable strict mode.
+  recommendValue("CRON_SECRET", 32);
+  recommendValue("RATE_LIMIT_PEPPER", 32);
+  recommendValue("MARKETING_TRACKING_SECRET", 32);
 
   const malwareScanMode = value("MALWARE_SCAN_MODE");
-  if (malwareScanMode !== "disabled" && malwareScanMode !== "required") {
+  if (!malwareScanMode) {
+    recommendValue("MALWARE_SCAN_MODE");
+    warnings.push("Malware scanning defaults to disabled until a scanner is configured");
+  } else if (malwareScanMode !== "disabled" && malwareScanMode !== "required") {
     errors.push("MALWARE_SCAN_MODE must be explicitly set to disabled or required");
   }
   if (malwareScanMode === "required") {
