@@ -32,7 +32,7 @@ jobs:
         run: npm sbom --sbom-format cyclonedx > sbom.cdx.json
       - name: Capture dependency license metadata
         run: npm query .prod --json > dependency-license-inventory.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: security-supply-chain-evidence
           path: |
