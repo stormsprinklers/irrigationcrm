@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   const identity = voiceClientIdentity(companyId, userId);
   const brand = await loadVoiceClientBrand(companyId);
   const dial = response.dial();
-  dialVoiceClient(dial, identity, brand);
+  await dialVoiceClient(dial, identity, brand);
 
   return new NextResponse(response.toString(), { headers: { "Content-Type": "text/xml" } });
 }

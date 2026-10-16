@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   if (presence.length) {
     const brand = voiceClientBrandFromCompany(company);
     for (const row of presence) {
-      dialVoiceClient(dial, voiceClientIdentity(company.id, row.userId), brand);
+      await dialVoiceClient(dial, voiceClientIdentity(company.id, row.userId), brand);
     }
   } else {
     response.say("No agents are available right now. Please leave a message after the tone.");

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
 import { getTwilioVoiceToken } from "@/lib/inbox/twilio";
-import { voiceClientIdentity } from "@/lib/voice/identity";
+import { mobileVoiceClientIdentity, voiceClientIdentity } from "@/lib/voice/identity";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
       token: primary.token,
       identity: primary.identity,
       identities,
+      ...(platform === "ios" ? {
+        incomingToken: getTwilioVoiceToken(mobileVoiceClientIdentity(user.companyId, user.id), { platform }),
+      } : {}),
       ...(platform === "ios"
         ? { pushCredentialConfigured: Boolean(pushCredentialSid) }
         : {}),

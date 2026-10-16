@@ -1,3 +1,5 @@
+import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
+import { mobileVoiceClientIdentity, parseVoiceClientIdentity } from "./identity";
 import twilio from "twilio";
 import { mixWithWhite, resolveBrandPalette } from "@/lib/brand-palette";
 import { prisma } from "@/lib/prisma";
@@ -50,11 +52,31 @@ export function voiceClientBrandFromCompany(company: {
 }
 
 /** Dial a Twilio Client identity and stamp the called company's brand onto the invite. */
-export function dialVoiceClient(dial: Dial, identity: string, brand: VoiceClientBrand) {
-  const client = dial.client({}, identity);
-  client.parameter({ name: "companyId", value: brand.companyId });
-  client.parameter({ name: "companyName", value: brand.companyName });
-  client.parameter({ name: "brandPrimary", value: brand.brandPrimary });
-  client.parameter({ name: "brandSoft", value: brand.brandSoft });
-  return client;
+export async function dialVoiceClient(dial: Dial, identity: string, brand: VoiceClientBrand) {
+  const identities = [identity];
+  const parsed = parseVoiceClientIdentity(identity);
+  if (parsed) {
+    const user = await prisma.user.findFirst({
+      where: { id: parsed.userId, companyId: parsed.companyId, status: "ACTIVE", systemKind: null },
+      select: { id: true, email: true, companyId: true },
+    });
+    if (user) {
+      const accounts = await listOperatedVoiceAccounts({ userId: user.id, email: user.email, companyId: user.companyId });
+      identities.push(...accounts.map(account => mobileVoiceClientIdentity(account.companyId, account.userId)));
+    }
+  }
+  return appendVoiceClients(dial, identities, brand);
+}
+
+export function appendVoiceClients(dial: Dial, identities: string[], brand: VoiceClientBrand) {
+  let firstClient;
+  for (const target of [...new Set(identities)]) {
+    const client = dial.client({}, target);
+    firstClient ??= client;
+    client.parameter({ name: "companyId", value: brand.companyId });
+    client.parameter({ name: "companyName", value: brand.companyName });
+    client.parameter({ name: "brandPrimary", value: brand.brandPrimary });
+    client.parameter({ name: "brandSoft", value: brand.brandSoft });
+  }
+  return firstClient!;
 }

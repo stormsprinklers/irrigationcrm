@@ -16,3 +16,8 @@ export function parseVoiceClientIdentity(identity: string) {
 export function appBaseUrl() {
   return getAppBaseUrl();
 }
+
+/** Mobile bindings are distinct from browser bindings; routing resolves linked accounts. */
+export function mobileVoiceClientIdentity(companyId: string, userId: string) {
+  return `ios_${voiceClientIdentity(companyId, userId)}`;
+}

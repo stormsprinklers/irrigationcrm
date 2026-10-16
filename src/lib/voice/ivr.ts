@@ -160,7 +160,7 @@ async function dialAgentGroup(
   if (strategy === RingStrategy.ROUND_ROBIN) {
     const identity = await getNextRoundRobinAgent(companyId, groupId);
     if (identity) {
-      dialVoiceClient(dial, identity, brand);
+      await dialVoiceClient(dial, identity, brand);
       return;
     }
   }
@@ -173,7 +173,7 @@ async function dialAgentGroup(
     for (const member of group?.members ?? []) {
       const presence = await prisma.agentPresence.findUnique({ where: { userId: member.userId } });
       if (presence?.status === AgentPresenceStatus.AVAILABLE) {
-        dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
+        await dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
         return;
       }
     }
@@ -192,7 +192,7 @@ async function dialAgentGroup(
   });
 
   for (const identity of filtered.length ? filtered : identities) {
-    dialVoiceClient(dial, identity, brand);
+    await dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -346,7 +346,7 @@ export async function renderIvrNode(
         if (identities.length) {
           const brand = await brandOf(ctx);
           for (const identity of identities) {
-            dialVoiceClient(dial, identity, brand);
+            await dialVoiceClient(dial, identity, brand);
           }
         } else {
           response.say("No agents are available. Please try again later.");
@@ -389,7 +389,7 @@ export async function renderIvrNode(
 
       // Rings every endpoint registered under this identity: the web softphone
       // and the user's iOS app (via VoIP push, even when the app is closed).
-      dialVoiceClient(dial, voiceClientIdentity(ctx.companyId, targetUser.id), await brandOf(ctx));
+      await dialVoiceClient(dial, voiceClientIdentity(ctx.companyId, targetUser.id), await brandOf(ctx));
       break;
     }
 

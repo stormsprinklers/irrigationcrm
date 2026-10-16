@@ -121,7 +121,7 @@ async function dialAvailableAgents(
     })
   );
   for (const identity of identities) {
-    dialVoiceClient(dial, identity, brand);
+    await dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -130,7 +130,7 @@ async function dialAvailableAgents(
  * identity out to every currently registered browser and mobile device, so a
  * person's assigned number follows them everywhere they are signed in.
  */
-export function dialAssignedUser(
+export async function dialAssignedUser(
   response: InstanceType<typeof twilio.twiml.VoiceResponse>,
   company: {
     id: string;
@@ -151,7 +151,7 @@ export function dialAssignedUser(
       callerId: from,
     })
   );
-  dialVoiceClient(
+  await dialVoiceClient(
     dial,
     voiceClientIdentity(company.id, userId),
     voiceClientBrandFromCompany(company)
@@ -238,7 +238,7 @@ async function dialAgentGroup(
   if (strategy === RingStrategy.ROUND_ROBIN) {
     const identity = await getNextRoundRobinAgent(companyId, groupId);
     if (identity) {
-      dialVoiceClient(dial, identity, brand);
+      await dialVoiceClient(dial, identity, brand);
       return;
     }
   }
@@ -251,7 +251,7 @@ async function dialAgentGroup(
     for (const member of group?.members ?? []) {
       const presence = await prisma.agentPresence.findUnique({ where: { userId: member.userId } });
       if (presence?.status === AgentPresenceStatus.AVAILABLE) {
-        dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
+        await dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
         return;
       }
     }
@@ -270,7 +270,7 @@ async function dialAgentGroup(
   });
 
   for (const identity of filtered.length ? filtered : identities) {
-    dialVoiceClient(dial, identity, brand);
+    await dialVoiceClient(dial, identity, brand);
   }
 }
 
@@ -376,7 +376,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
       phoneNumberId: phoneRecord?.id ?? null,
       assignedUserId: assignedUser.id,
     });
-    dialAssignedUser(response, company, assignedUser.id, from);
+    await dialAssignedUser(response, company, assignedUser.id, from);
     return response.toString();
   }
 
