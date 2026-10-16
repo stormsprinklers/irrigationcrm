@@ -574,7 +574,6 @@ export default function VoiceNumbersPage() {
   }
 
   const sessionCompanyId = session?.user?.companyId ?? "";
-  const showCompanyColumn = companies.length > 1;
   const sortedNumbers = numbers;
 
   async function updateNumber(
@@ -618,14 +617,14 @@ export default function VoiceNumbersPage() {
       toast.success("Assignment unlocked");
     } else if (patch.messagingServiceSid) {
       toast.success("Campaign updated");
+    } else if (patch.companyId && patch.companyId !== sessionCompanyId) {
+      toast.success("Moved to the other company — switch accounts to manage it there");
     } else if (patch.assignedUserId !== undefined) {
       toast.success(
         patch.assignedUserId
           ? "Calls will ring this employee on every signed-in device"
           : "Calls will use the company call flow"
       );
-    } else if (patch.companyId && patch.companyId !== sessionCompanyId) {
-      toast.success("Moved to the other company — switch accounts to manage it there");
     } else if (patch.companyId) {
       toast.success("Company updated");
     }
@@ -1242,14 +1241,16 @@ export default function VoiceNumbersPage() {
             <div>
               <h3 className="font-semibold">Your numbers</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Edit title, company, type, and call flow inline. Texts to any of these numbers land in
+                Edit title, assignment, type, and call flow inline. Use Companies / Individuals to
+                route calls through a company call flow or directly to a person on every device where
+                they are signed in. Texts to any of these numbers land in
                 this company&apos;s SMS inbox so nothing is missed; replies always send from Primary.
                 Primary is also the default outbound caller ID. “SMS capable” only means Twilio
                 supports SMS on the line — US texts also need the number on that company’s A2P
                 campaign (Campaign column). Assign the campaign, then lock company and campaign so
                 they cannot be changed without 2FA.
-                {showCompanyColumn
-                  ? " Use the Company column to move a number to another business you operate; it will leave this list and appear under that company."
+                {companies.length > 1
+                  ? " Choosing another company moves the number to that business; it will leave this list and appear under that company."
                   : ""}
               </p>
             </div>
@@ -1337,9 +1338,7 @@ export default function VoiceNumbersPage() {
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="min-w-[140px]">Phone number</TableHead>
-                    {showCompanyColumn ? (
-                      <TableHead className="min-w-[160px]">Company</TableHead>
-                    ) : null}
+                    <TableHead className="min-w-[210px]">Companies / Individuals</TableHead>
                     <TableHead className="min-w-[160px]">Title</TableHead>
                     <TableHead className="min-w-[140px]">Type</TableHead>
                     <TableHead title="Twilio SMS capability — not the same as A2P campaign approval.">
@@ -1353,7 +1352,6 @@ export default function VoiceNumbersPage() {
                     </TableHead>
                     <TableHead className="w-[88px]">Lock</TableHead>
                     <TableHead className="min-w-[150px]">Call flow</TableHead>
-                    <TableHead className="min-w-[190px]">Rings to / source</TableHead>
                     <TableHead>Linked</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -1375,49 +1373,109 @@ export default function VoiceNumbersPage() {
                           </Badge>
                         ) : null}
                       </TableCell>
-                      {showCompanyColumn ? (
-                        <TableCell>
-            <select
-                            className="h-9 w-full min-w-[150px] rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                            value={n.companyId}
-                            disabled={!canManageA2p || assignmentDisabled}
-                            onChange={(e) => {
-                              const next = e.target.value;
-                              if (next === n.companyId) return;
-                              const company = companies.find((c) => c.id === next);
-                              void updateNumber(n.id, {
-                                companyId: next,
-                                ...(company?.a2pMessagingServiceSid
-                                  ? { messagingServiceSid: company.a2pMessagingServiceSid }
-                                  : {}),
-                              });
-                            }}
-                          >
-                            {companies.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                </option>
-              ))}
-            </select>
-                        </TableCell>
-                      ) : null}
                       <TableCell>
-                        <Input
-                          placeholder="e.g. PPC Repair"
-                          className="h-9"
-                          defaultValue={n.friendlyName ?? ""}
-                          key={`${n.id}-${n.friendlyName ?? ""}`}
-                          onBlur={(e) => {
-                            const next = e.target.value.trim() || null;
-                            if (next === (n.friendlyName ?? null) || (!next && !n.friendlyName)) {
-                              return;
-                            }
-                            void updateNumber(n.id, { friendlyName: next });
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          }}
-                        />
+                        {onCurrentCompany ? (
+                          <div className="space-y-1">
+                            <select
+                              aria-label={`Assign ${formatPhoneDisplay(n.e164)} to a company or individual`}
+                              className="h-9 w-full min-w-[200px] rounded-md border border-input bg-background px-2 text-sm"
+                              value={
+                                n.assignedUserId
+                                  ? `user:${n.assignedUserId}`
+                                  : `company:${n.companyId}`
+                              }
+                              onChange={(e) => {
+                                const [kind, id] = e.target.value.split(":", 2);
+                                if (!id) return;
+
+                                if (kind === "user") {
+                                  if (id === n.assignedUserId) return;
+                                  void updateNumber(n.id, { assignedUserId: id });
+                                  return;
+                                }
+
+                                if (kind !== "company") return;
+                                if (id === n.companyId) {
+                                  if (n.assignedUserId) {
+                                    void updateNumber(n.id, { assignedUserId: null });
+                                  }
+                                  return;
+                                }
+
+                                const company = companies.find((c) => c.id === id);
+                                void updateNumber(n.id, {
+                                  companyId: id,
+                                  assignedUserId: null,
+                                  ...(company?.a2pMessagingServiceSid
+                                    ? { messagingServiceSid: company.a2pMessagingServiceSid }
+                                    : {}),
+                                });
+                              }}
+                            >
+                              <optgroup label="Companies">
+                                {companies.map((company) => (
+                                  <option
+                                    key={company.id}
+                                    value={`company:${company.id}`}
+                                    disabled={
+                                      company.id !== n.companyId &&
+                                      (!canManageA2p || assignmentDisabled)
+                                    }
+                                  >
+                                    {company.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Individuals">
+                                {n.assignedUser &&
+                                !employees.some((employee) => employee.id === n.assignedUserId) ? (
+                                  <option value={`user:${n.assignedUser.id}`}>
+                                    {n.assignedUser.name}
+                                  </option>
+                                ) : null}
+                                {employees.map((employee) => (
+                                  <option key={employee.id} value={`user:${employee.id}`}>
+                                    {employee.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                              {n.assignedUserId
+                                ? "Rings on all signed-in devices"
+                                : "Uses company call flow"}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {n.assignedUser?.name ?? n.company?.name ?? "Company call flow"}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Input
+                            placeholder="e.g. PPC Repair"
+                            className="h-9"
+                            defaultValue={n.friendlyName ?? ""}
+                            key={`${n.id}-${n.friendlyName ?? ""}`}
+                            onBlur={(e) => {
+                              const next = e.target.value.trim() || null;
+                              if (next === (n.friendlyName ?? null) || (!next && !n.friendlyName)) {
+                                return;
+                              }
+                              void updateNumber(n.id, { friendlyName: next });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            }}
+                          />
+                          {n.trackingSource ? (
+                            <p className="text-xs text-muted-foreground">
+                              Source: {n.trackingSource}
+                            </p>
+                          ) : null}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <select
@@ -1548,40 +1606,6 @@ export default function VoiceNumbersPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {onCurrentCompany ? (
-                          <div className="space-y-1">
-                            <select
-                              aria-label={`Route ${formatPhoneDisplay(n.e164)} calls to`}
-                              className="h-9 w-full min-w-[180px] rounded-md border border-input bg-background px-2 text-sm"
-                              value={n.assignedUserId ?? ""}
-                              onChange={(e) =>
-                                void updateNumber(n.id, {
-                                  assignedUserId: e.target.value || null,
-                                })
-                              }
-                            >
-                              <option value="">Company call flow</option>
-                              {employees.map((employee) => (
-                                <option key={employee.id} value={employee.id}>
-                                  {employee.name}
-                                </option>
-                              ))}
-                            </select>
-                            {n.trackingSource ? (
-                              <p className="text-xs text-muted-foreground">
-                                Source: {n.trackingSource}
-                              </p>
-                            ) : n.assignedUser ? (
-                              <p className="text-xs text-muted-foreground">All signed-in devices</p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            {n.assignedUser?.name ?? "Company call flow"}
-                          </span>
-                        )}
-                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {n.twilioSid ? "Twilio" : "Manual"}
                       </TableCell>
@@ -1609,7 +1633,7 @@ export default function VoiceNumbersPage() {
                   {!sortedNumbers.length ? (
                     <TableRow className="hover:bg-transparent">
                       <TableCell
-                        colSpan={showCompanyColumn ? 11 : 10}
+                        colSpan={10}
                         className="py-8 text-center text-muted-foreground"
                       >
                         No phone numbers yet. Add one below or buy from Twilio.
