@@ -27,7 +27,10 @@ jobs:
       - run: npm test
       - run: npm run security:config
       - run: npm run security:routes -- --check
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Audit production dependencies against reviewed baseline
+        run: |
+          npm audit --omit=dev --json > npm-audit.json || true
+          npx tsx scripts/check-npm-audit-baseline.ts npm-audit.json
       - name: Generate CycloneDX SBOM
         run: npm sbom --sbom-format cyclonedx > sbom.cdx.json
       - name: Capture dependency license metadata
@@ -38,6 +41,7 @@ jobs:
           path: |
             sbom.cdx.json
             dependency-license-inventory.json
+            npm-audit.json
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
