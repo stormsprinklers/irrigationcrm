@@ -21,6 +21,8 @@ const CRM_BASE_URL = (process.env.CRM_BASE_URL || "").replace(/\/$/, "");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const REALTIME_MODEL =
   process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
+const SIDEBAND_MODE = process.env.SIDEBAND_MODE === "owner-assistant" ? "owner-assistant" : "receptionist";
+const API_PREFIX = SIDEBAND_MODE === "owner-assistant" ? "/api/ai/owner-assistant" : "/api/ai/receptionist";
 const MAX_CONNECTIONS = Number(process.env.SIDEBAND_MAX_CONNECTIONS || 100);
 const MAX_CONNECTIONS_PER_IP = Number(process.env.SIDEBAND_MAX_CONNECTIONS_PER_IP || 10);
 const START_MESSAGE_TIMEOUT_MS = 5_000;
@@ -28,7 +30,8 @@ const MAX_MESSAGES_PER_MINUTE = 1_200;
 const connectionsByIp = new Map<string, number>();
 
 type SessionBootstrap = {
-  receptionistCallId: string;
+  receptionistCallId?: string;
+  sessionId?: string;
   voice: string;
   maxCallMinutes: number;
   instructions: string;
@@ -56,7 +59,7 @@ function clampMaxMinutes(raw: unknown) {
 
 async function bootstrapSession(token: string): Promise<SessionBootstrap> {
   if (!CRM_BASE_URL) throw new Error("CRM_BASE_URL is required");
-  const res = await fetch(`${CRM_BASE_URL}/api/ai/receptionist/session`, {
+  const res = await fetch(`${CRM_BASE_URL}${API_PREFIX}/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
@@ -71,7 +74,7 @@ async function callTool(
   tool: string,
   args: unknown
 ): Promise<unknown> {
-  const res = await fetch(`${CRM_BASE_URL}/api/ai/receptionist/tools`, {
+  const res = await fetch(`${CRM_BASE_URL}${API_PREFIX}/tools`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -83,7 +86,7 @@ async function callTool(
 }
 
 async function appendTranscript(bearer: string, text: string) {
-  await fetch(`${CRM_BASE_URL}/api/ai/receptionist/transcript`, {
+  await fetch(`${CRM_BASE_URL}${API_PREFIX}/transcript`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -128,10 +131,10 @@ class CallBridge {
         const ms = maxMinutes * 60 * 1000;
         log("Max call timer armed", { maxMinutes, ms });
         this.maxTimer = setTimeout(() => void this.softTimeout(), ms);
-        log("Session active", this.session.receptionistCallId);
+        log("Session active", this.session.sessionId || this.session.receptionistCallId);
       } catch (err) {
         log("Bootstrap failed", err);
-        await this.failToVoicemail();
+        await this.failSafely();
       }
       return;
     }
@@ -223,8 +226,8 @@ class CallBridge {
     this.openai.on("close", (code, reason) => {
       log("OpenAI socket closed", code, reason?.toString?.() || reason);
       if (!this.closed && !this.leavingForHandoff) {
-        log("OpenAI closed; falling back to voicemail", { fatal: this.fatalOpenAi });
-        void this.failToVoicemail();
+        log("OpenAI closed; ending safely", { fatal: this.fatalOpenAi });
+        void this.failSafely();
       }
     });
   }
@@ -352,7 +355,7 @@ class CallBridge {
     ) {
       const transcript = String(event.transcript || "");
       if (transcript && this.session) {
-        await appendTranscript(this.session.toolBearer, `\nReceptionist: ${transcript}`);
+        await appendTranscript(this.session.toolBearer, `\n${SIDEBAND_MODE === "owner-assistant" ? "Assistant" : "Receptionist"}: ${transcript}`);
       }
       return;
     }
@@ -435,24 +438,32 @@ class CallBridge {
   private async softTimeout() {
     if (this.closed || !this.session) return;
     log("Soft timeout — max call duration reached");
+    if (SIDEBAND_MODE === "owner-assistant") {
+      this.shutdown("COMPLETED");
+      return;
+    }
     try {
       const result = (await callTool(this.session.toolBearer, "transfer_to_human", {
         reason: "max_duration",
       })) as { ok?: boolean };
-      if (!result?.ok) await this.failToVoicemail();
+      if (!result?.ok) await this.failSafely();
       else {
         this.leavingForHandoff = true;
         setTimeout(() => this.shutdown("TRANSFERRED"), 750);
       }
     } catch {
-      await this.failToVoicemail();
+      await this.failSafely();
     }
   }
 
-  private async failToVoicemail() {
+  private async failSafely() {
     if (this.leavingForHandoff) return;
     if (!this.session) {
       this.twilioWs.close();
+      return;
+    }
+    if (SIDEBAND_MODE === "owner-assistant") {
+      this.shutdown("FAILED");
       return;
     }
     try {
@@ -472,7 +483,7 @@ class CallBridge {
     if (this.maxTimer) clearTimeout(this.maxTimer);
     if (this.speakEndTimer) clearTimeout(this.speakEndTimer);
     if (this.session) {
-      void fetch(`${CRM_BASE_URL}/api/ai/receptionist/transcript`, {
+      void fetch(`${CRM_BASE_URL}${API_PREFIX}/transcript`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -496,7 +507,7 @@ class CallBridge {
 
 const server = http.createServer((_req, res) => {
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: true, service: "receptionist-sideband" }));
+  res.end(JSON.stringify({ ok: true, service: `${SIDEBAND_MODE}-sideband` }));
 });
 
 const wss = new WebSocketServer({
@@ -560,7 +571,7 @@ wss.on("connection", (ws, request) => {
 });
 
 server.listen(PORT, () => {
-  log(`Receptionist sideband listening on :${PORT} (WSS path /twilio/media)`);
+  log(`${SIDEBAND_MODE} sideband listening on :${PORT} (WSS path /twilio/media)`);
   if (!CRM_BASE_URL) log("WARNING: CRM_BASE_URL unset");
   if (process.env.NODE_ENV === "production" && CRM_BASE_URL && !CRM_BASE_URL.startsWith("https://")) {
     log("WARNING: CRM_BASE_URL must use HTTPS in production");

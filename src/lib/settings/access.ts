@@ -68,6 +68,10 @@ export function settingsPathAccess(
     return canUseRolePreview(user) ? "write" : "hidden";
   }
 
+  if (startsWithPath(path, "/settings/voice/owner-assistant")) {
+    return user.role === "ADMIN" ? "write" : "hidden";
+  }
+
   if (isMarketerRole(user.role)) return "hidden";
 
   if (!isCsrRole(user.role) && !isFieldRole(user.role)) return "write";

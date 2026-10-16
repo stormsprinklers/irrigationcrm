@@ -1,0 +1,39 @@
+export const OWNER_ASSISTANT_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"] as const;
+export type OwnerAssistantVoice = (typeof OWNER_ASSISTANT_VOICES)[number];
+
+export const OWNER_ASSISTANT_TOOL_NAMES = [
+  "list_companies",
+  "search_customers",
+  "get_customer",
+  "get_customer_history",
+  "get_schedule",
+  "get_availability",
+  "get_business_performance",
+  "get_marketing_metrics",
+  "analyze_inbound_calls",
+  "create_customer",
+  "create_visit",
+  "add_customer_note",
+] as const;
+export type OwnerAssistantToolName = (typeof OWNER_ASSISTANT_TOOL_NAMES)[number];
+
+const company = { companyId: { type: "string", description: "Company id from list_companies" } };
+export const OWNER_ASSISTANT_TOOLS = [
+  { name: "list_companies", description: "List the companies this owner is allowed to access.", properties: {}, required: [] },
+  { name: "search_customers", description: "Search customers in one company.", properties: { ...company, query: { type: "string" }, city: { type: "string" }, zip: { type: "string" } }, required: ["companyId"] },
+  { name: "get_customer", description: "Get a customer profile.", properties: { ...company, customerId: { type: "string" } }, required: ["companyId", "customerId"] },
+  { name: "get_customer_history", description: "Get customer visit, estimate, and invoice history.", properties: { ...company, customerId: { type: "string" } }, required: ["companyId", "customerId"] },
+  { name: "get_schedule", description: "Get scheduled visits.", properties: { ...company, start: { type: "string" }, end: { type: "string" }, technicianId: { type: "string" } }, required: ["companyId"] },
+  { name: "get_availability", description: "Get open scheduling slots.", properties: { ...company, technicianId: { type: "string" }, days: { type: "number" } }, required: ["companyId"] },
+  { name: "get_business_performance", description: "Get business KPI and schedule insights without changing data.", properties: { ...company, range: { type: "object", additionalProperties: true } }, required: ["companyId"] },
+  { name: "get_marketing_metrics", description: "Get marketing performance insights without changing data.", properties: { ...company, channel: { type: "string" }, range: { type: "object", additionalProperties: true } }, required: ["companyId"] },
+  { name: "analyze_inbound_calls", description: "Analyze inbound call and booking performance.", properties: { ...company, employeeName: { type: "string" }, leadSource: { type: "string" }, range: { type: "object", additionalProperties: true } }, required: ["companyId"] },
+  { name: "create_customer", description: "Create a customer only after the owner explicitly confirms the details.", properties: { ...company, confirmed: { type: "boolean" }, name: { type: "string" }, phone: { type: "string" }, email: { type: "string" }, address: { type: "string" }, city: { type: "string" }, state: { type: "string" }, zip: { type: "string" }, leadSource: { type: "string" } }, required: ["companyId", "confirmed", "name"] },
+  { name: "create_visit", description: "Create a visit only after the owner explicitly confirms company, customer, time, and title. Existing CRM notification automations may notify the customer.", properties: { ...company, confirmed: { type: "boolean" }, customerId: { type: "string" }, propertyId: { type: "string" }, title: { type: "string" }, startAt: { type: "string" }, endAt: { type: "string" }, division: { type: "string", enum: ["SERVICE", "INSTALL", "HOLIDAY_LIGHTS"] }, assignedUserId: { type: "string" }, notes: { type: "string" } }, required: ["companyId", "confirmed", "customerId", "title", "startAt", "endAt"] },
+  { name: "add_customer_note", description: "Add an internal customer note only after explicit owner confirmation.", properties: { ...company, confirmed: { type: "boolean" }, customerId: { type: "string" }, body: { type: "string" } }, required: ["companyId", "confirmed", "customerId", "body"] },
+].map((tool) => ({
+  type: "function" as const,
+  name: tool.name,
+  description: tool.description,
+  parameters: { type: "object", additionalProperties: false, properties: tool.properties, required: tool.required },
+}));

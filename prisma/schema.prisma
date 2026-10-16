@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -798,6 +797,9 @@ model Company {
   receptionistCalls      ReceptionistCall[]
   appointmentHolds       AppointmentHold[]
   receptionistToolInvocations ReceptionistToolInvocation[]
+  ownerAssistantConfigs OwnerAssistantConfig[] @relation("OwnerAssistantHomeCompany")
+  ownerAssistantSessions OwnerAssistantSession[]
+  ownerAssistantToolInvocations OwnerAssistantToolInvocation[]
   laborRates             LaborRate[]
   materialMarkupTiers    MaterialMarkupTier[]
   timeClockEntries       TimeClockEntry[]
@@ -1033,6 +1035,7 @@ model User {
   twilioPortInRequests   TwilioPortInRequest[] @relation("PortInCreatedBy")
   handledCallLogs        CallLog[]            @relation("HandledCallLogs")
   answeredCallConversions CallConversion[]    @relation("AnsweredCallConversions")
+  ownerAssistantConfig OwnerAssistantConfig? @relation("OwnerAssistantOwner")
   callParticipants         CallParticipant[]
   workScheduleDays       EmployeeWorkSchedule[]
   timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
@@ -1303,6 +1306,7 @@ enum AuthMfaPurpose {
   EXPENSE_CARD_ADMIN
   PHONE_NUMBER_RELEASE
   PHONE_ASSIGNMENT_UNLOCK
+  OWNER_ASSISTANT_SETTINGS
   ACCOUNT_PASSWORD
 }
 
@@ -2003,6 +2007,7 @@ model PhoneNumber {
   callLogs     CallLog[]
   callConversions CallConversion[]
   portInRequests TwilioPortInRequest[]
+  ownerAssistantConfig OwnerAssistantConfig?
 
   @@unique([companyId, e164])
   @@index([companyId])
@@ -2566,6 +2571,97 @@ model ReceptionistToolInvocation {
 
   @@unique([companyId, idempotencyKey])
   @@index([receptionistCallId, createdAt])
+  @@index([companyId, tool])
+}
+
+
+/// Private voice/SMS assistant owned by one administrator and available across
+/// that administrator's linked company accounts.
+model OwnerAssistantConfig {
+  id                   String   @id @default(cuid())
+  ownerUserId          String   @unique
+  homeCompanyId        String
+  phoneNumberId        String?  @unique
+  enabled              Boolean  @default(false)
+  name                 String   @default("Owner Assistant")
+  authorizedPhoneE164  String?
+  pinHash              String?
+  voice                String   @default("alloy")
+  availabilityJson     Json     @default("{\"mode\":\"ALWAYS\"}")
+  maxCallMinutes       Int      @default(15)
+  allOperatedCompanies Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  owner           User                           @relation("OwnerAssistantOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  homeCompany     Company                        @relation("OwnerAssistantHomeCompany", fields: [homeCompanyId], references: [id], onDelete: Cascade)
+  phoneNumber     PhoneNumber?                   @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  sessions        OwnerAssistantSession[]
+  messages        OwnerAssistantMessage[]
+  toolInvocations OwnerAssistantToolInvocation[]
+
+  @@index([homeCompanyId])
+  @@index([authorizedPhoneE164])
+}
+
+model OwnerAssistantSession {
+  id                String    @id @default(cuid())
+  configId          String
+  companyId         String
+  providerSid       String    @unique
+  channel           String
+  status            String    @default("CONNECTING")
+  fromE164          String
+  toE164            String
+  pinVerifiedAt     DateTime?
+  failedPinAttempts Int       @default(0)
+  activeCompanyId   String?
+  transcript        String    @default("") @db.Text
+  startedAt         DateTime  @default(now())
+  endedAt           DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  config          OwnerAssistantConfig           @relation(fields: [configId], references: [id], onDelete: Cascade)
+  company         Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  toolInvocations OwnerAssistantToolInvocation[]
+
+  @@index([configId, createdAt])
+  @@index([companyId, status])
+}
+
+model OwnerAssistantMessage {
+  id          String   @id @default(cuid())
+  configId    String
+  providerSid String?  @unique
+  role        String
+  channel     String
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+
+  config OwnerAssistantConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([configId, createdAt])
+}
+
+model OwnerAssistantToolInvocation {
+  id           String   @id @default(cuid())
+  configId     String
+  sessionId    String?
+  companyId    String?
+  tool         String
+  argsHash     String
+  resultCode   String
+  latencyMs    Int      @default(0)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  config  OwnerAssistantConfig   @relation(fields: [configId], references: [id], onDelete: Cascade)
+  session OwnerAssistantSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  company Company?               @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([configId, createdAt])
+  @@index([sessionId, createdAt])
   @@index([companyId, tool])
 }
 

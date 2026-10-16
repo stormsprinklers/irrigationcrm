@@ -1,6 +1,6 @@
-# AI Receptionist sideband
+# AI voice sideband
 
-Always-on WebSocket bridge between Twilio Media Streams and OpenAI Realtime.
+Always-on WebSocket bridge between Twilio Media Streams and OpenAI Realtime. The same code can run as either the customer receptionist or the private owner assistant, but they should be separate Railway services.
 
 ## Run locally
 
@@ -19,6 +19,8 @@ ngrok http 8090
 ```
 
 Set CRM env `SIDEBAND_PUBLIC_WSS_URL=wss://YOUR_HOST/twilio/media`.
+
+For the private owner assistant service, set Railway `SIDEBAND_MODE=owner-assistant` and set Vercel `OWNER_ASSISTANT_PUBLIC_WSS_URL=wss://YOUR_OWNER_ASSISTANT_HOST/twilio/media`. Do not set `SIDEBAND_MODE=owner-assistant` on the receptionist service.
 
 ## Production
 

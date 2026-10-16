@@ -8,7 +8,9 @@ export async function parseTwilioWebhook(request: NextRequest) {
     params[key] = String(value);
   });
 
-  if (process.env.TWILIO_AUTH_TOKEN && !isValidTwilioWebhookRequest(request, params)) {
+  // Trusted telephony callbacks must fail closed. An unset secret is not an
+  // authentication bypass; deployment validation also flags this condition.
+  if (!process.env.TWILIO_AUTH_TOKEN || !isValidTwilioWebhookRequest(request, params)) {
     return null;
   }
 

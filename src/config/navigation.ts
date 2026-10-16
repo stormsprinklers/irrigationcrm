@@ -177,6 +177,7 @@ export const voiceSettingsSidebar: NavSection[] = [
     items: [
       { label: "Overview", href: "/settings/voice" },
       { label: "Phone numbers", href: "/settings/voice/numbers" },
+      { label: "Owner assistant", href: "/settings/voice/owner-assistant" },
       { label: "Call flows", href: "/settings/voice/flows" },
       { label: "Audio clips", href: "/settings/voice/clips" },
       { label: "Agent groups", href: "/settings/voice/groups" },
@@ -194,6 +195,7 @@ export const communicationsSettingsSidebar: NavSection[] = [
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice overview", href: "/settings/voice", exact: true },
       { label: "Phone numbers", href: "/settings/voice/numbers" },
+      { label: "Owner assistant", href: "/settings/voice/owner-assistant" },
       { label: "Call flows", href: "/settings/voice/flows" },
       { label: "Audio clips", href: "/settings/voice/clips" },
       { label: "Agent groups", href: "/settings/voice/groups" },

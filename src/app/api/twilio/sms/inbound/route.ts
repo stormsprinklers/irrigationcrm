@@ -31,6 +31,8 @@ import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
 import { notifyInboundSms } from "@/lib/notifications/in-app";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { findOwnerAssistantByNumber } from "@/lib/owner-assistant/twilio";
+import { handleOwnerAssistantSms } from "@/lib/owner-assistant/sms";
 
 export const maxDuration = 60;
 
@@ -63,6 +65,17 @@ export async function POST(request: NextRequest) {
   if (!from || !to) return NextResponse.json({ ok: true });
 
   try {
+    // Private owner-assistant traffic never enters the shared company inbox.
+    // The handler loads its reply recipient from protected configuration and
+    // silently ignores every sender except the single authorized owner number.
+    const ownerAssistant = await findOwnerAssistantByNumber(to);
+    if (ownerAssistant) {
+      if (ownerAssistant.enabled) {
+        await handleOwnerAssistantSms(ownerAssistant, { body, messageSid, from });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     // Any company line (Primary, tracking, agent) → that company's shared SMS inbox.
     const inboundLine = await resolveInboundSmsLine(to);
     if (!inboundLine) {

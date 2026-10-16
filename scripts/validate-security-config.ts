@@ -86,6 +86,16 @@ if (isDeployed) {
   if (value("SIDEBAND_PUBLIC_WSS_URL") && !value("AI_RECEPTIONIST_SECRET")) {
     warnings.push("AI_RECEPTIONIST_SECRET is unset; the sideband will share the general auth secret");
   }
+  if (value("OWNER_ASSISTANT_PUBLIC_WSS_URL")) {
+    recommendValue("OWNER_ASSISTANT_SECRET", 32);
+    try {
+      if (new URL(value("OWNER_ASSISTANT_PUBLIC_WSS_URL")).protocol !== "wss:") {
+        stagedError("OWNER_ASSISTANT_PUBLIC_WSS_URL must use WSS");
+      }
+    } catch {
+      stagedError("OWNER_ASSISTANT_PUBLIC_WSS_URL must be a valid WSS URL");
+    }
+  }
   if (value("LMS_INTEGRATION_URL")) {
     try {
       if (new URL(value("LMS_INTEGRATION_URL")).protocol !== "https:") {
