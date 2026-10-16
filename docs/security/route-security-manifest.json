@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-16T00:15:26.715Z",
-  "digest": "b9497e28225477b44c394262f3a15318057ab75574b5ed873132be4f70580971",
-  "totalRoutes": 554,
-  "highPriorityRoutes": 126,
+  "generatedAt": "2026-10-16T22:06:19.989Z",
+  "digest": "1bb52755b13a03d49fc8285e54efca590983fd525d53456e243bbd9e2a6845bb",
+  "totalRoutes": 565,
+  "highPriorityRoutes": 131,
   "middlewareOnlyRoutes": 0,
-  "mutatingRoutes": 406,
+  "mutatingRoutes": 414,
   "rows": [
     {
       "route": "/api/account/companies/find",
@@ -70,6 +70,45 @@
       "auditEvidence": "none-detected",
       "reviewPriority": "standard",
       "source": "src/app/api/account/switch/route.ts"
+    },
+    {
+      "route": "/api/ai/owner-assistant/session",
+      "methods": "POST",
+      "audience": "ai-sideband",
+      "authentication": "signed-owner-assistant-token",
+      "roles": "not-explicit",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "high",
+      "source": "src/app/api/ai/owner-assistant/session/route.ts"
+    },
+    {
+      "route": "/api/ai/owner-assistant/tools",
+      "methods": "POST",
+      "audience": "ai-sideband",
+      "authentication": "signed-owner-assistant-token",
+      "roles": "not-explicit",
+      "tenantEvidence": "not-local",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "high",
+      "source": "src/app/api/ai/owner-assistant/tools/route.ts"
+    },
+    {
+      "route": "/api/ai/owner-assistant/transcript",
+      "methods": "POST",
+      "audience": "ai-sideband",
+      "authentication": "signed-owner-assistant-token",
+      "roles": "not-explicit",
+      "tenantEvidence": "not-local",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "high",
+      "source": "src/app/api/ai/owner-assistant/transcript/route.ts"
     },
     {
       "route": "/api/ai/receptionist/session",
@@ -4700,6 +4739,32 @@
       "source": "src/app/api/service-areas/resolve/route.ts"
     },
     {
+      "route": "/api/settings/agents/owner-assistant/activity",
+      "methods": "GET",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "no",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/agents/owner-assistant/activity/route.ts"
+    },
+    {
+      "route": "/api/settings/agents/receptionist/activity",
+      "methods": "GET",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN|MANAGER",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "no",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/agents/receptionist/activity/route.ts"
+    },
+    {
       "route": "/api/settings/booking/google-calendar/callback",
       "methods": "GET",
       "audience": "oauth-provider",
@@ -5335,6 +5400,58 @@
       "auditEvidence": "none-detected",
       "reviewPriority": "standard",
       "source": "src/app/api/settings/notifications/test/route.ts"
+    },
+    {
+      "route": "/api/settings/owner-assistant/mfa",
+      "methods": "POST",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/owner-assistant/mfa/route.ts"
+    },
+    {
+      "route": "/api/settings/owner-assistant/number/purchase",
+      "methods": "POST",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/owner-assistant/number/purchase/route.ts"
+    },
+    {
+      "route": "/api/settings/owner-assistant/number/search",
+      "methods": "GET",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "no",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/owner-assistant/number/search/route.ts"
+    },
+    {
+      "route": "/api/settings/owner-assistant",
+      "methods": "GET|PATCH",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "ADMIN",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/settings/owner-assistant/route.ts"
     },
     {
       "route": "/api/settings/parts-suppliers/:id",
@@ -6245,6 +6362,32 @@
       "auditEvidence": "none-detected",
       "reviewPriority": "high",
       "source": "src/app/api/twilio/mms/media/route.ts"
+    },
+    {
+      "route": "/api/twilio/owner-assistant/voice/status",
+      "methods": "POST",
+      "audience": "provider",
+      "authentication": "twilio-signature",
+      "roles": "not-explicit",
+      "tenantEvidence": "not-local",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "high",
+      "source": "src/app/api/twilio/owner-assistant/voice/status/route.ts"
+    },
+    {
+      "route": "/api/twilio/owner-assistant/voice/verify",
+      "methods": "POST",
+      "audience": "provider",
+      "authentication": "twilio-signature",
+      "roles": "not-explicit",
+      "tenantEvidence": "not-local",
+      "rateLimit": "present",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "high",
+      "source": "src/app/api/twilio/owner-assistant/voice/verify/route.ts"
     },
     {
       "route": "/api/twilio/porting",

@@ -8,6 +8,7 @@ import { resolveOwnerCompanyUser, listOwnerAssistantCompanies } from "./access";
 import { hashOwnerAssistantToolArgs } from "./auth";
 import { matchOwnerAssistantEmployee } from "./employee-resolution";
 import { OWNER_ASSISTANT_TOOL_NAMES, type OwnerAssistantToolName } from "./types";
+import { validateOwnerAssistantVisitTime } from "./visit-time";
 
 type Context = { configId: string; ownerUserId: string; sessionId?: string | null };
 type Result = { ok: boolean; data?: unknown; error?: string; code?: string };
@@ -133,12 +134,10 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
 
   const customerId = text(args.customerId, 128);
   const title = text(args.title, 200);
-  const startAt = new Date(String(args.startAt ?? ""));
-  const endAt = new Date(String(args.endAt ?? ""));
-  if (!customerId || !title || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
-    return invalid("Valid customer, title, startAt, and endAt are required");
-  }
-  if (endAt.getTime() - startAt.getTime() > 24 * 60 * 60 * 1000) return invalid("A visit cannot exceed 24 hours");
+  if (!customerId || !title) return invalid("Valid customer and title are required");
+  const visitTime = validateOwnerAssistantVisitTime(args.startAt, args.endAt);
+  if (!visitTime.ok) return invalid(visitTime.error, visitTime.code);
+  const { startAt, endAt } = visitTime;
   const customer = await prisma.customer.findFirst({ where: { id: customerId, companyId }, select: { id: true } });
   if (!customer) return invalid("Customer not found", "NOT_FOUND");
   const propertyId = text(args.propertyId, 128) || null;

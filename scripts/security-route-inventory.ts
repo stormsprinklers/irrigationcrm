@@ -65,6 +65,9 @@ function classify(route: string, source: string): Pick<RouteRow, "audience" | "a
   if (route.startsWith("/api/ai/receptionist/")) {
     return { audience: "ai-sideband", authentication: "signed-ai-token", reviewPriority: "high" };
   }
+  if (route.startsWith("/api/ai/owner-assistant/")) {
+    return { audience: "ai-sideband", authentication: "signed-owner-assistant-token", reviewPriority: "high" };
+  }
   if (route.startsWith("/api/mobile/auth/")) {
     return { audience: "mobile-anonymous", authentication: "credential-or-refresh-flow", reviewPriority: "high" };
   }
@@ -119,6 +122,7 @@ function rolesFor(source: string) {
   const known = ["ADMIN", "MANAGER", "CSR", "TECH", "INSTALLER", "SALES", "SOCIAL_MEDIA_MANAGER"];
   const found = known.filter((role) => new RegExp(`[\"']${role}[\"']`).test(source));
   if (found.length) return found.join("|");
+  if (/requireRealAdmin/.test(source)) return "ADMIN";
   if (/forbiddenForFieldRole|canManage|requireAdmin|trueRoleOf/.test(source)) return "permission-helper";
   return "not-explicit";
 }

@@ -23,12 +23,17 @@ export async function listOwnerAssistantCompanies(owner: {
   });
   const users = await prisma.user.findMany({
     where: { id: { in: operated.map((account) => account.userId) }, status: "ACTIVE", role: "ADMIN" },
-    select: { id: true, companyId: true },
+    select: { id: true, companyId: true, company: { select: { timezone: true } } },
   });
-  const allowedUsers = new Map(users.map((user) => [user.companyId, user.id]));
+  const allowedUsers = new Map(
+    users.map((user) => [
+      user.companyId,
+      { userId: user.id, timezone: user.company.timezone || "America/Denver" },
+    ])
+  );
   return operated
     .filter((account) => allowedUsers.has(account.companyId))
-    .map((account) => ({ ...account, userId: allowedUsers.get(account.companyId)! }));
+    .map((account) => ({ ...account, ...allowedUsers.get(account.companyId)! }));
 }
 
 export async function resolveOwnerCompanyUser(ownerUserId: string, companyId: string) {
