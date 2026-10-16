@@ -27,6 +27,8 @@ const SETTINGS_KEYWORDS: Record<string, string> = {
   "/settings/storm-ai/policies": "company policies ai instructions rules answers knowledge",
   "/settings/storm-ai/technician-assistant": "technician assistant troubleshooting field tech ai issues",
   "/settings/storm-ai/technician-assistant/parts": "parts info materials technician assistant",
+  "/settings/agents": "agents ai receptionist voice automation activity logs calls",
+  "/settings/agents/owner-assistant": "owner assistant private phone text voice activity logs",
   "/settings/employees": "employees users team staff technicians csr manager admin invite permissions",
   "/settings/employees/schedules": "work hours schedule shifts employee availability start end time",
   "/settings/field-devices": "field devices mobile pwa phones tablets technician access",

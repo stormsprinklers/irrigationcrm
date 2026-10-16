@@ -149,6 +149,15 @@ export const stormAiSettingsSidebar: NavSection[] = [
   },
 ];
 
+export const agentsSettingsSidebar: NavSection[] = [
+  {
+    items: [
+      { label: "AI receptionist", href: "/settings/agents", exact: true },
+      { label: "Owner assistant", href: "/settings/agents/owner-assistant" },
+    ],
+  },
+];
+
 export const companySettingsSidebar: NavSection[] = [
   {
     items: [
@@ -177,7 +186,6 @@ export const voiceSettingsSidebar: NavSection[] = [
     items: [
       { label: "Overview", href: "/settings/voice" },
       { label: "Phone numbers", href: "/settings/voice/numbers" },
-      { label: "Owner assistant", href: "/settings/voice/owner-assistant" },
       { label: "Call flows", href: "/settings/voice/flows" },
       { label: "Audio clips", href: "/settings/voice/clips" },
       { label: "Agent groups", href: "/settings/voice/groups" },
@@ -195,7 +203,6 @@ export const communicationsSettingsSidebar: NavSection[] = [
       { label: "Inbox", href: "/settings/inbox" },
       { label: "Voice overview", href: "/settings/voice", exact: true },
       { label: "Phone numbers", href: "/settings/voice/numbers" },
-      { label: "Owner assistant", href: "/settings/voice/owner-assistant" },
       { label: "Call flows", href: "/settings/voice/flows" },
       { label: "Audio clips", href: "/settings/voice/clips" },
       { label: "Agent groups", href: "/settings/voice/groups" },
@@ -273,6 +280,12 @@ export const settingsSidebar: NavSection[] = [
         href: "/settings/storm-ai",
         activePrefixes: ["/settings/storm-ai"],
         children: stormAiSettingsSidebar[0]!.items,
+      },
+      {
+        label: "Agents",
+        href: "/settings/agents",
+        activePrefixes: ["/settings/agents"],
+        children: agentsSettingsSidebar[0]!.items,
       },
       {
         label: "Team",

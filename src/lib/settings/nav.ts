@@ -1,5 +1,6 @@
 import type { NavSection } from "@/config/navigation";
 import {
+  agentsSettingsSidebar,
   communicationsSettingsSidebar,
   companySettingsSidebar,
   customerSettingsSidebar,
@@ -35,6 +36,11 @@ const SETTINGS_SECTIONS: Array<{
     title: "Storm AI",
     match: (pathname) => pathname.startsWith("/settings/storm-ai"),
     sections: stormAiSettingsSidebar,
+  },
+  {
+    title: "Agents",
+    match: (pathname) => pathname.startsWith("/settings/agents"),
+    sections: agentsSettingsSidebar,
   },
   {
     title: "Team",

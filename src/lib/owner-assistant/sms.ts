@@ -23,7 +23,7 @@ export async function handleOwnerAssistantSms(config: Config, input: { body: str
   if (!body) return { handled: true, replied: false };
 
   if (!isOwnerAssistantAvailable(config.availabilityJson)) {
-    await sendSms({ companyId: config.homeCompanyId, from: config.phoneNumber.e164, to: config.authorizedPhoneE164!, body: `${config.name} is outside its configured availability window.` });
+    await sendSms({ companyId: config.homeCompanyId, from: config.phoneNumber.e164, to: config.authorizedPhoneE164!, body: `${config.name} is outside its configured availability window.`, skipCompanyPrefix: true });
     return { handled: true, replied: true };
   }
 
@@ -72,6 +72,6 @@ export async function handleOwnerAssistantSms(config: Config, input: { body: str
   }
   await prisma.ownerAssistantMessage.create({ data: { configId: config.id, role: "assistant", channel: "SMS", content: reply } });
   // Crucial invariant: the recipient is loaded from the protected config, never from model/tool input.
-  await sendSms({ companyId: config.homeCompanyId, from: config.phoneNumber.e164, to: config.authorizedPhoneE164!, body: `${config.name}: ${reply}` });
+  await sendSms({ companyId: config.homeCompanyId, from: config.phoneNumber.e164, to: config.authorizedPhoneE164!, body: `${config.name}: ${reply}`, skipCompanyPrefix: true });
   return { handled: true, replied: true };
 }

@@ -18,14 +18,7 @@ type VoiceOverview = {
   skipIvrForKnownCustomers: boolean;
   queueWaitClipId: string | null;
   holdMusicClipId: string | null;
-  aiReceptionistEnabled: boolean;
-  aiReceptionistMaxMinutes: number;
-  aiReceptionistSmsConfirm: boolean;
-  aiReceptionistTone: string;
-  aiReceptionistPolicies: string;
-  aiReceptionistKnowledge: string;
   twilioConfigured: boolean;
-  sidebandConfigured: boolean;
   clips: VoiceClip[];
   counts: { numbers: number; flows: number; groups: number };
   webhooks: Record<string, string>;
@@ -45,13 +38,6 @@ export default function SettingsVoicePage() {
           skipIvrForKnownCustomers: payload.skipIvrForKnownCustomers !== false,
           queueWaitClipId: payload.queueWaitClipId ?? null,
           holdMusicClipId: payload.holdMusicClipId ?? null,
-          aiReceptionistEnabled: Boolean(payload.aiReceptionistEnabled),
-          aiReceptionistMaxMinutes: payload.aiReceptionistMaxMinutes ?? 12,
-          aiReceptionistSmsConfirm: payload.aiReceptionistSmsConfirm !== false,
-          aiReceptionistTone: payload.aiReceptionistTone ?? "",
-          aiReceptionistPolicies: payload.aiReceptionistPolicies ?? "",
-          aiReceptionistKnowledge: payload.aiReceptionistKnowledge ?? "",
-          sidebandConfigured: Boolean(payload.sidebandConfigured),
           clips: Array.isArray(payload.clips) ? payload.clips : [],
         })
       )
@@ -68,12 +54,6 @@ export default function SettingsVoicePage() {
         recordCalls: data.recordCalls,
         transcribeCalls: data.transcribeCalls,
         skipIvrForKnownCustomers: data.skipIvrForKnownCustomers,
-        aiReceptionistEnabled: data.aiReceptionistEnabled,
-        aiReceptionistMaxMinutes: data.aiReceptionistMaxMinutes,
-        aiReceptionistSmsConfirm: data.aiReceptionistSmsConfirm,
-        aiReceptionistTone: data.aiReceptionistTone,
-        aiReceptionistPolicies: data.aiReceptionistPolicies,
-        aiReceptionistKnowledge: data.aiReceptionistKnowledge,
       }),
     });
     setSaving(false);
@@ -85,9 +65,6 @@ export default function SettingsVoicePage() {
     setData({
       ...data,
       ...updated,
-      aiReceptionistTone: updated.aiReceptionistTone ?? "",
-      aiReceptionistPolicies: updated.aiReceptionistPolicies ?? "",
-      aiReceptionistKnowledge: updated.aiReceptionistKnowledge ?? "",
     });
     toast.success("Voice settings saved");
   }
@@ -234,80 +211,6 @@ export default function SettingsVoicePage() {
         </div>
         <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
           {saving ? "Saving..." : "Save"}
-        </Button>
-      </section>
-
-      <section className="mb-6 rounded-lg border border-border bg-white p-6">
-        <h3 className="mb-2 text-lg font-semibold">AI receptionist</h3>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Enables the AI receptionist step in call flows. Requires a sideband worker (
-          <code className="text-xs">SIDEBAND_PUBLIC_WSS_URL</code>) and{" "}
-          <code className="text-xs">OPENAI_API_KEY</code> /{" "}
-          <code className="text-xs">AI_RECEPTIONIST_SECRET</code>. Sideband:{" "}
-          {data.sidebandConfigured ? "URL configured" : "not configured"}.
-        </p>
-        <div className="space-y-3">
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={data.aiReceptionistEnabled}
-              onCheckedChange={(c) => setData({ ...data, aiReceptionistEnabled: Boolean(c) })}
-            />
-            Enable AI receptionist
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={data.aiReceptionistSmsConfirm}
-              onCheckedChange={(c) => setData({ ...data, aiReceptionistSmsConfirm: Boolean(c) })}
-            />
-            Send SMS appointment confirmations
-          </label>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Default max call minutes</label>
-            <input
-              type="number"
-              min={5}
-              max={45}
-              className="flex h-10 w-32 rounded-md border border-input bg-background px-3 text-sm"
-              value={data.aiReceptionistMaxMinutes}
-              onChange={(e) => {
-                if (e.target.value === "") return;
-                setData({
-                  ...data,
-                  aiReceptionistMaxMinutes: Number(e.target.value),
-                });
-              }}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Tone / speaking style</label>
-            <textarea
-              className="min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="e.g. Friendly and concise. Avoid slang. Say Storm Sprinklers clearly."
-              value={data.aiReceptionistTone}
-              onChange={(e) => setData({ ...data, aiReceptionistTone: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Company policies</label>
-            <textarea
-              className="min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="e.g. No quotes over the phone. Emergency shutoffs transfer immediately. Same-day only if a tech is free."
-              value={data.aiReceptionistPolicies}
-              onChange={(e) => setData({ ...data, aiReceptionistPolicies: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium">Knowledge base</label>
-            <textarea
-              className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Service area notes, winterization season, warranty basics, office hours, common FAQs…"
-              value={data.aiReceptionistKnowledge}
-              onChange={(e) => setData({ ...data, aiReceptionistKnowledge: e.target.value })}
-            />
-          </div>
-        </div>
-        <Button className="mt-4" size="sm" onClick={saveFlags} disabled={saving}>
-          {saving ? "Saving..." : "Save AI settings"}
         </Button>
       </section>
 

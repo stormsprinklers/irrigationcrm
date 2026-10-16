@@ -32,7 +32,10 @@ import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-proce
 import { notifyInboundSms } from "@/lib/notifications/in-app";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { findOwnerAssistantByNumber } from "@/lib/owner-assistant/twilio";
-import { handleOwnerAssistantSms } from "@/lib/owner-assistant/sms";
+import {
+  handleOwnerAssistantSms,
+  isAuthorizedOwnerAssistantRecipient,
+} from "@/lib/owner-assistant/sms";
 
 export const maxDuration = 60;
 
@@ -70,8 +73,34 @@ export async function POST(request: NextRequest) {
     // silently ignores every sender except the single authorized owner number.
     const ownerAssistant = await findOwnerAssistantByNumber(to);
     if (ownerAssistant) {
-      if (ownerAssistant.enabled) {
+      const authorized = isAuthorizedOwnerAssistantRecipient(ownerAssistant, from);
+      if (!authorized) return NextResponse.json({ ok: true });
+      if (!ownerAssistant.enabled) {
+        await prisma.ownerAssistantMessage.create({
+          data: {
+            configId: ownerAssistant.id,
+            providerSid: messageSid || null,
+            role: "system",
+            channel: "SMS",
+            content: "Inbound SMS ignored because the owner assistant was disabled.",
+          },
+        }).catch(() => undefined);
+        return twilioSmsReply(`${ownerAssistant.name} is currently disabled.`);
+      }
+      try {
         await handleOwnerAssistantSms(ownerAssistant, { body, messageSid, from });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Owner assistant SMS failed";
+        console.error("Owner assistant SMS failed", error);
+        await prisma.ownerAssistantMessage.create({
+          data: {
+            configId: ownerAssistant.id,
+            role: "system",
+            channel: "SMS",
+            content: message.slice(0, 1000),
+          },
+        }).catch(() => undefined);
+        return twilioSmsReply(`${ownerAssistant.name} could not respond. Check its activity log in CRM settings.`);
       }
       return NextResponse.json({ ok: true });
     }

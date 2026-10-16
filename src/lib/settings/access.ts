@@ -68,8 +68,15 @@ export function settingsPathAccess(
     return canUseRolePreview(user) ? "write" : "hidden";
   }
 
-  if (startsWithPath(path, "/settings/voice/owner-assistant")) {
+  if (
+    startsWithPath(path, "/settings/voice/owner-assistant") ||
+    startsWithPath(path, "/settings/agents/owner-assistant")
+  ) {
     return user.role === "ADMIN" ? "write" : "hidden";
+  }
+
+  if (startsWithPath(path, "/settings/agents")) {
+    return user.role === "ADMIN" || user.role === "MANAGER" ? "write" : "hidden";
   }
 
   if (isMarketerRole(user.role)) return "hidden";

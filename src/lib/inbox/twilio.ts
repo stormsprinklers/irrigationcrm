@@ -131,16 +131,22 @@ export async function sendSms(params: {
   mediaUrl?: string[];
   /** Skip the outbound-comms freeze (admin diagnostics only). */
   bypassCommsFreeze?: boolean;
+  /** Reserved for private system flows whose own identity prefix is intentional. */
+  skipCompanyPrefix?: boolean;
 }) {
   assertEnvironmentRecipientAllowed("sms", params.to);
   if (!params.bypassCommsFreeze) {
     await assertOutboundCommsEnabled(params.companyId, "sms");
   }
-  const company = await prisma.company.findUnique({
-    where: { id: params.companyId },
-    select: { name: true },
-  });
-  const body = prefixOutboundSmsWithCompanyName(company?.name ?? "", params.body);
+  const company = params.skipCompanyPrefix
+    ? null
+    : await prisma.company.findUnique({
+        where: { id: params.companyId },
+        select: { name: true },
+      });
+  const body = params.skipCompanyPrefix
+    ? params.body
+    : prefixOutboundSmsWithCompanyName(company?.name ?? "", params.body);
   const client = getTwilioClient();
   const messagingServiceSid = await getSharedMessagingServiceSid();
   // Prefer Messaging Service when configured (US A2P / 10DLC). Keep From so the
