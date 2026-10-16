@@ -1,6 +1,11 @@
 import { CallObjectionCategory } from "@prisma/client";
 import { getOpenAIApiKey } from "@/lib/openai/client";
 import { prisma } from "@/lib/prisma";
+import {
+  buildCallSummaryUserMessage,
+  isLikelyOutboundVoicemailTranscript,
+  type CallSummaryContext,
+} from "@/lib/voice/call-summary-context";
 
 /** Skip OpenAI summarization below this length to save tokens on short/failed connects. */
 export const MIN_TRANSCRIPT_WORDS_FOR_SUMMARY = 30;
@@ -23,6 +28,11 @@ export type CallSummaryResult = {
 
 const SUMMARY_SYSTEM_PROMPT = `You summarize phone calls for Storm Sprinklers, an irrigation / sprinkler field-service company.
 
+The user message includes trusted call metadata. Always use its direction and named roles instead of guessing speaker identity from the transcript.
+- INBOUND means the customer called the company.
+- OUTBOUND means a company employee called the customer.
+- On an outbound call, a carrier greeting followed by one person's message means the employee reached customer voicemail and left the message. The greeting is automated; the employee is not a customer seeking service.
+
 Return ONLY valid JSON with this shape:
 {
   "booked": boolean,
@@ -41,6 +51,7 @@ Rules for "summary":
 - If reschedule/cancellation, say so and why.
 - If a complaint, say what it was about.
 - If they did NOT book: the paragraph MUST include (1) why you think they did not book, treating soft objections the same as hard objections, and (2) where value was not built that could have been (e.g. CSR quoted a trip/service fee without explaining what the visit includes, did not offer a window that fits, did not ask about the problem, did not create urgency).
+- The missed-value rule applies only when a customer actually participated in a sales/service conversation. For a one-sided outbound voicemail, simply state that the employee left a voicemail, summarize the purpose and requested follow-up, set booked to false, use objectionCategory "other", and set objectionReason to null.
 - Soft objections count. Examples that are ALL objections (usually price/fee): "okay, I'm going to call other companies", "I'll discuss with my spouse", "I can't believe you charge $40 just to give me a quote", "it costs money just to get a quote?", "that is way more than another company quoted me".
 - Do not invent details that are not in the transcript. If the transcript is sparse, say what little can be gathered.
 
@@ -118,7 +129,8 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
 }
 
 export async function generateCallSummaryFromTranscript(
-  transcript: string
+  transcript: string,
+  context: CallSummaryContext = { direction: "INBOUND" }
 ): Promise<CallSummaryResult> {
   const apiKey = getOpenAIApiKey();
   if (!apiKey) {
@@ -146,7 +158,7 @@ export async function generateCallSummaryFromTranscript(
         { role: "system", content: SUMMARY_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Summarize this call transcript as JSON:\n\n${trimmed.slice(0, 12000)}`,
+          content: buildCallSummaryUserMessage(trimmed, context),
         },
       ],
       max_tokens: 500,
@@ -168,15 +180,18 @@ export async function generateCallSummaryFromTranscript(
     throw new Error("OpenAI returned an empty summary");
   }
 
-  const booked = Boolean(parsed.booked);
+  const outboundVoicemail = isLikelyOutboundVoicemailTranscript(trimmed, context.direction);
+  const booked = outboundVoicemail ? false : Boolean(parsed.booked);
   const summary =
     typeof parsed.summary === "string" ? parsed.summary.trim() : "";
   if (!summary) {
     throw new Error("OpenAI returned an empty summary");
   }
 
-  const objectionCategory = parseObjectionCategory(parsed.objectionCategory, booked);
-  const objectionReason = booked
+  const objectionCategory = outboundVoicemail
+    ? CallObjectionCategory.OTHER
+    : parseObjectionCategory(parsed.objectionCategory, booked);
+  const objectionReason = booked || outboundVoicemail
     ? null
     : typeof parsed.objectionReason === "string" && parsed.objectionReason.trim()
       ? parsed.objectionReason.trim()
@@ -198,7 +213,17 @@ export async function summarizeCallLog(
 }> {
   const call = await prisma.callLog.findUnique({
     where: { id: callLogId },
-    select: { id: true, transcript: true, aiSummary: true, objectionCategory: true, objectionReason: true },
+    select: {
+      id: true,
+      direction: true,
+      transcript: true,
+      aiSummary: true,
+      objectionCategory: true,
+      objectionReason: true,
+      user: { select: { name: true } },
+      handledBy: { select: { name: true } },
+      customer: { select: { name: true } },
+    },
   });
 
   if (!call) return { ok: false, skipped: "Call not found" };
@@ -218,7 +243,11 @@ export async function summarizeCallLog(
     };
   }
 
-  const result = await generateCallSummaryFromTranscript(call.transcript);
+  const result = await generateCallSummaryFromTranscript(call.transcript, {
+    direction: call.direction,
+    employeeName: call.handledBy?.name ?? call.user?.name ?? null,
+    customerName: call.customer?.name ?? null,
+  });
   await prisma.callLog.update({
     where: { id: call.id },
     data: {

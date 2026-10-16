@@ -18,6 +18,10 @@ import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CallHistoryDetail } from "@/lib/voice/call-history";
 import { CALL_OBJECTION_LABELS } from "@/lib/voice/summarize-call";
 import {
+  callSummaryForDisplay,
+  isLikelyOutboundVoicemailTranscript,
+} from "@/lib/voice/call-summary-context";
+import {
   formatCallDateTime,
   formatCallDuration,
   remotePartyLabel,
@@ -79,6 +83,18 @@ export function CallDetailView({
     }
     return [];
   }, [detail.participants, detail.employee]);
+
+  const outboundVoicemail = isLikelyOutboundVoicemailTranscript(
+    detail.transcript ?? "",
+    detail.direction
+  );
+  const displayedSummary = callSummaryForDisplay({
+    transcript: detail.transcript,
+    direction: detail.direction,
+    aiSummary: detail.aiSummary,
+    employeeName: detail.employee?.name,
+    customerName: detail.customer?.name,
+  });
 
   useEffect(() => {
     if (!detail.customer?.id) {
@@ -340,17 +356,22 @@ export function CallDetailView({
             </Button>
           ) : null}
         </div>
-        {detail.aiSummary?.trim() ? (
+        {displayedSummary ? (
           <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
-            {detail.objectionCategory && detail.objectionCategory !== "NA" ? (
+            {outboundVoicemail ? <Badge variant="outline">Outbound voicemail</Badge> : null}
+            {detail.direction === "INBOUND" &&
+            detail.objectionCategory &&
+            detail.objectionCategory !== "NA" ? (
               <Badge variant="secondary">
                 {CALL_OBJECTION_LABELS[
                   detail.objectionCategory as keyof typeof CALL_OBJECTION_LABELS
                 ] ?? detail.objectionCategory}
               </Badge>
             ) : null}
-            <p className="text-sm leading-relaxed text-foreground">{detail.aiSummary}</p>
-            {detail.objectionReason && detail.objectionCategory !== "NA" ? (
+            <p className="text-sm leading-relaxed text-foreground">{displayedSummary}</p>
+            {detail.direction === "INBOUND" &&
+            detail.objectionReason &&
+            detail.objectionCategory !== "NA" ? (
               <p className="text-sm text-muted-foreground">
                 <span className="font-medium text-foreground">Objection: </span>
                 {detail.objectionReason}

@@ -26,6 +26,7 @@ import {
   loadVoiceClientBrand,
   type VoiceClientBrand,
 } from "./client-dial";
+import { resolveClockedInDialGroup } from "./clocked-in-group-routing";
 
 export type IvrNodeConfig = {
   prompt?: string;
@@ -33,6 +34,8 @@ export type IvrNodeConfig = {
   promptClipId?: string;
   forwardTo?: string;
   groupId?: string;
+  /** DIAL_GROUP: use this group when nobody in groupId has an open time-clock entry. */
+  clockedInFallbackGroupId?: string;
   /** Ring a specific user's apps (web softphone + iOS app via VoIP push). */
   userId?: string;
   /** Ring timeout in seconds before falling through (DIAL_GROUP / DIAL_USER). */
@@ -150,19 +153,14 @@ async function brandOf(ctx: FlowContext): Promise<VoiceClientBrand> {
   return ctx.clientBrand ?? loadVoiceClientBrand(ctx.companyId);
 }
 
-async function dialAgentGroup(
-  dial: ReturnType<twilio.twiml.VoiceResponse["dial"]>,
+async function getAgentGroupIdentities(
   companyId: string,
   groupId: string,
-  strategy: RingStrategy,
-  brand: VoiceClientBrand
-) {
+  strategy: RingStrategy
+): Promise<string[]> {
   if (strategy === RingStrategy.ROUND_ROBIN) {
     const identity = await getNextRoundRobinAgent(companyId, groupId);
-    if (identity) {
-      await dialVoiceClient(dial, identity, brand);
-      return;
-    }
+    return identity ? [identity] : [];
   }
 
   if (strategy === RingStrategy.SEQUENTIAL) {
@@ -173,11 +171,10 @@ async function dialAgentGroup(
     for (const member of group?.members ?? []) {
       const presence = await prisma.agentPresence.findUnique({ where: { userId: member.userId } });
       if (presence?.status === AgentPresenceStatus.AVAILABLE) {
-        await dialVoiceClient(dial, voiceClientIdentity(companyId, member.userId), brand);
-        return;
+        return [voiceClientIdentity(companyId, member.userId)];
       }
     }
-    return;
+    return [];
   }
 
   const identities = await getAvailableAgentIdentities(companyId);
@@ -191,9 +188,7 @@ async function dialAgentGroup(
     return memberIds.has(userId);
   });
 
-  for (const identity of filtered.length ? filtered : identities) {
-    await dialVoiceClient(dial, identity, brand);
-  }
+  return filtered;
 }
 
 function inboundDialAttributes(
@@ -310,11 +305,7 @@ export async function renderIvrNode(
       break;
 
     case CallFlowNodeType.DIAL_GROUP: {
-      const group = config.groupId
-        ? await prisma.agentGroup.findFirst({
-            where: { id: config.groupId, companyId: ctx.companyId },
-          })
-        : await prisma.agentGroup.findFirst({ where: { companyId: ctx.companyId } });
+      const group = await resolveClockedInDialGroup(ctx.companyId, config);
 
       if (
         await shouldQueueBecauseAgentsBusy(ctx.companyId, {
@@ -330,27 +321,30 @@ export async function renderIvrNode(
         break;
       }
 
+      const identities = group
+        ? await getAgentGroupIdentities(ctx.companyId, group.id, group.ringStrategy)
+        : await getAvailableAgentIdentities(ctx.companyId);
+      if (!identities.length) {
+        response.say(
+          group
+            ? "No one in that team is available right now."
+            : "No agents are available. Please try again later."
+        );
+        break;
+      }
+
       const dial = response.dial(
         inboundDialAttributes(ctx.recordCalls, {
-          timeout: group?.ringTimeoutSec ?? 30,
+          timeout: config.timeoutSec ?? group?.ringTimeoutSec ?? 30,
           action: `${appBaseUrl()}/api/twilio/voice/dial-complete?companyId=${ctx.companyId}`,
           method: "POST",
           callerId: ctx.from,
         })
       );
 
-      if (group) {
-        await dialAgentGroup(dial, ctx.companyId, group.id, group.ringStrategy, await brandOf(ctx));
-      } else {
-        const identities = await getAvailableAgentIdentities(ctx.companyId);
-        if (identities.length) {
-          const brand = await brandOf(ctx);
-          for (const identity of identities) {
-            await dialVoiceClient(dial, identity, brand);
-          }
-        } else {
-          response.say("No agents are available. Please try again later.");
-        }
+      const brand = await brandOf(ctx);
+      for (const identity of identities) {
+        await dialVoiceClient(dial, identity, brand);
       }
       break;
     }

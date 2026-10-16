@@ -244,6 +244,10 @@ function stepSummary(
     }
     case "DIAL_GROUP": {
       const g = ctx.groups.find((x) => x.id === config.groupId);
+      const fallback = ctx.groups.find((x) => x.id === config.clockedInFallbackGroupId);
+      if (fallback) {
+        return `${g?.name ?? "Default team"} when clocked in · otherwise ${fallback.name}`;
+      }
       return g ? g.name : "Default team";
     }
     case "FORWARD":
@@ -1308,12 +1312,24 @@ function RingStepEditor({
           <select
             className={cn(selectClass, "mb-2")}
             value={String(config.groupId ?? "")}
-            onChange={(e) =>
+            onChange={(e) => {
+              const nextGroupId = e.target.value;
+              const fallbackGroupId = String(config.clockedInFallbackGroupId ?? "");
               onNodeChange({
                 type: "DIAL_GROUP",
-                config: withBranch({ groupId: e.target.value, timeoutSec: Number(config.timeoutSec ?? 30) }, branch),
-              })
-            }
+                config: withBranch(
+                  {
+                    ...config,
+                    groupId: nextGroupId,
+                    timeoutSec: Number(config.timeoutSec ?? 30),
+                    ...(!nextGroupId || fallbackGroupId === nextGroupId
+                      ? { clockedInFallbackGroupId: "" }
+                      : {}),
+                  },
+                  branch
+                ),
+              });
+            }}
           >
             <option value="">Default team</option>
             {groups.map((g) => (
@@ -1370,6 +1386,70 @@ function RingStepEditor({
           Add a second person to ring as a team. Rings web softphone and iOS app.
         </p>
       </div>
+
+      {node.type === "DIAL_GROUP" ? (
+        <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+          <label className="flex items-start gap-2 text-sm font-medium">
+            <Checkbox
+              checked={Boolean(config.clockedInFallbackGroupId)}
+              disabled={
+                !config.groupId || groups.filter((group) => group.id !== config.groupId).length === 0
+              }
+              onCheckedChange={(checked) => {
+                const fallback = groups.find((group) => group.id !== config.groupId)?.id ?? "";
+                onNodeChange({
+                  type: "DIAL_GROUP",
+                  config: withBranch(
+                    {
+                      ...config,
+                      clockedInFallbackGroupId: checked ? fallback : "",
+                    },
+                    branch
+                  ),
+                });
+              }}
+            />
+            <span>Use a fallback team when nobody in this team is clocked in</span>
+          </label>
+          {!config.groupId ? (
+            <p className="text-xs text-muted-foreground">
+              Select a specific team above before enabling clock-in routing.
+            </p>
+          ) : null}
+          {config.clockedInFallbackGroupId ? (
+            <div>
+              <label className="mb-1 block text-sm font-medium">
+                Ring this team when nobody is clocked in
+              </label>
+              <select
+                className={selectClass}
+                value={String(config.clockedInFallbackGroupId)}
+                onChange={(e) =>
+                  onNodeChange({
+                    type: "DIAL_GROUP",
+                    config: withBranch(
+                      { ...config, clockedInFallbackGroupId: e.target.value },
+                      branch
+                    ),
+                  })
+                }
+              >
+                {groups
+                  .filter((group) => group.id !== config.groupId)
+                  .map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                An open time-clock entry for any member sends the call to the primary team;
+                otherwise this fallback team rings.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {showUpgrade && pendingUserIds.length >= 2 ? (
         <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
