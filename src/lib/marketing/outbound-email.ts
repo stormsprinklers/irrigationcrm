@@ -1,26 +1,19 @@
 import { applyCompanyEmailSignatureText, type CompanySignatureFields } from "@/lib/inbox/company-email-signature";
-import { appendOpenTrackingPixel, htmlToPlainText, rewriteTrackedLinks, rewriteTrackedUrlsInText } from "@/lib/marketing/link-tracking";
+import {
+  DEFAULT_CAMPAIGN_GREETING,
+  campaignPlainBodyText,
+  ensureCampaignGreeting,
+} from "@/lib/marketing/email-draft";
+import { appendOpenTrackingPixel, rewriteTrackedLinks, rewriteTrackedUrlsInText } from "@/lib/marketing/link-tracking";
 import { escapeEmailHtml, sanitizeEmailHref } from "@/lib/marketing/email-href";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { appendPlainUnsubscribeFooter, appendPlainUnsubscribeText } from "@/lib/marketing/unsubscribe";
 
-export const DEFAULT_CAMPAIGN_GREETING = "Hey {customer_first_name},";
-
-export function campaignPlainBodyText(
-  bodyHtml: string | null | undefined,
-  bodyText: string | null | undefined
-): string {
-  const text = String(bodyText ?? "");
-  if (text) return text;
-  return htmlToPlainText(bodyHtml ?? "").trim();
-}
-
-export function ensureCampaignGreeting(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return `${DEFAULT_CAMPAIGN_GREETING}\n\n`;
-  if (/^(hey|hi|hello)\b/i.test(trimmed)) return trimmed;
-  return `${DEFAULT_CAMPAIGN_GREETING}\n\n${trimmed}`;
-}
+export {
+  DEFAULT_CAMPAIGN_GREETING,
+  campaignPlainBodyText,
+  ensureCampaignGreeting,
+} from "@/lib/marketing/email-draft";
 
 export function signatureFieldsFromCompany(company: {
   name: string;

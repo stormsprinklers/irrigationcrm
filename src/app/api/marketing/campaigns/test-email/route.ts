@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
-import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { htmlToPlainText } from "@/lib/marketing/email-draft";
 import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
 import { renderMarketingMergeFields } from "@/lib/marketing/render-merge";
 import { resolveMarketingEmailFrom, resolveMarketingSenderName } from "@/lib/marketing/sender";

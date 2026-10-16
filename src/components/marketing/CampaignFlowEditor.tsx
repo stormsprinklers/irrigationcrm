@@ -60,7 +60,7 @@ import {
   parseCampaignInstant,
 } from "@/lib/marketing/campaign-time";
 import { addTagSummary, parseAddTagConfig } from "@/lib/marketing/add-tag";
-import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { htmlToPlainText } from "@/lib/marketing/email-draft";
 import { isHtmlEmailBody } from "@/lib/marketing/email-templates";
 import { campaignFlowChannels } from "@/lib/marketing/flow-channels";
 

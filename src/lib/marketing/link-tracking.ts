@@ -125,24 +125,3 @@ export function rewriteTrackedUrlsInText(text: string, recipientId: string) {
     return `${trackedClickUrl(recipientId, url)}${trailing}`;
   });
 }
-
-export function htmlToPlainText(html: string) {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, inner) => {
-      const text = String(inner)
-        .replace(/<[^>]+>/g, "")
-        .replace(/&nbsp;/g, " ")
-        .trim();
-      if (!text || text === href) return String(href);
-      return `${text} (${href})`;
-    })
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}

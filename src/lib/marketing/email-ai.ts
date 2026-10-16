@@ -1,6 +1,6 @@
 import { stormBrand } from "@/lib/branding";
 import { requireOpenAIApiKey } from "@/lib/openai/client";
-import { htmlToPlainText } from "@/lib/marketing/link-tracking";
+import { htmlToPlainText } from "@/lib/marketing/email-draft";
 import {
   renderEmailTemplateSkeleton,
   type EmailTemplateId,

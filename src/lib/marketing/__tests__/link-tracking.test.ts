@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { getAppBaseUrl } from "@/lib/app-url";
 import {
   appendOpenTrackingPixel,
-  htmlToPlainText,
   rewriteTrackedLinks,
   rewriteTrackedUrlsInText,
   safeTrackedDestination,
@@ -11,6 +10,7 @@ import {
   trackedClickUrl,
   verifyMarketingTrackingToken,
 } from "../link-tracking";
+import { htmlToPlainText } from "../email-draft";
 import { buildMarketingEmailPayload } from "../outbound-email";
 
 test("rewriteTrackedLinks wraps http hrefs and skips unsubscribe", () => {

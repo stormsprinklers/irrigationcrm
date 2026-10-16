@@ -12,12 +12,12 @@ import { MergeTokenTextField } from "@/components/communications/MergeTokenTextF
 import { PlainEmailEditor, type PlainEmailEditorHandle } from "@/components/marketing/PlainEmailEditor";
 import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
 import { buildCompanySignatureText } from "@/lib/inbox/company-email-signature";
-import { htmlToPlainText } from "@/lib/marketing/link-tracking";
 import {
   DEFAULT_CAMPAIGN_GREETING,
   campaignPlainBodyText,
+  htmlToPlainText,
   signatureFieldsFromCompany,
-} from "@/lib/marketing/outbound-email";
+} from "@/lib/marketing/email-draft";
 import { textToPlainEmailHtml } from "@/lib/marketing/email-templates";
 import { cn } from "@/lib/utils";
 
