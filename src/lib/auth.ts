@@ -150,7 +150,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             status: "ACTIVE",
             systemKind: null,
           },
-          select: { id: true, email: true, name: true, companyId: true, role: true },
+          select: { id: true, email: true, name: true, companyId: true, role: true, appleDemoAccount: true },
         });
         if (!current) return null;
 
@@ -161,9 +161,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               status: "ACTIVE",
               systemKind: null,
             },
-            select: { id: true, email: true, name: true, companyId: true, role: true },
+            select: { id: true, email: true, name: true, companyId: true, role: true, appleDemoAccount: true },
           });
-          if (target && target.id !== current.id) {
+          if (target && !current.appleDemoAccount && !target.appleDemoAccount && target.id !== current.id) {
             const sameEmail = target.email.toLowerCase() === current.email.toLowerCase();
             const link = sameEmail
               ? true

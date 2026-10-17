@@ -23,6 +23,8 @@ async function listSwitchableAccounts(
   email: string,
   companyId: string
 ): Promise<SwitchableAccount[]> {
+  const current = await prisma.user.findUnique({ where: { id: userId }, select: { appleDemoAccount: true } });
+  if (!current || current.appleDemoAccount) return [];
   const byId = new Map<string, SwitchableAccount>();
 
   const sameEmail = await prisma.user.findMany({
@@ -30,6 +32,7 @@ async function listSwitchableAccounts(
       email: email.toLowerCase(),
       status: EmployeeStatus.ACTIVE,
       systemKind: null,
+      appleDemoAccount: false,
       NOT: { id: userId },
     },
     select: {
@@ -64,6 +67,7 @@ async function listSwitchableAccounts(
           email: true,
           role: true,
           status: true,
+          appleDemoAccount: true,
           company: { select: { id: true, name: true, brandLogoUrl: true, emailLogoUrl: true } },
         },
       },
@@ -71,7 +75,7 @@ async function listSwitchableAccounts(
   });
 
   for (const l of links) {
-    if (l.linkedUser.status !== EmployeeStatus.ACTIVE) continue;
+    if (l.linkedUser.status !== EmployeeStatus.ACTIVE || l.linkedUser.appleDemoAccount) continue;
     if (l.linkedUser.company.id === companyId) continue;
     if (byId.has(l.linkedUser.id)) continue;
     byId.set(l.linkedUser.id, {
@@ -139,6 +143,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser();
 
+    const actor = await prisma.user.findUnique({ where: { id: user.id }, select: { appleDemoAccount: true } });
+    if (!actor || actor.appleDemoAccount) return NextResponse.json({ error: "Review accounts cannot link companies" }, { status: 403 });
     const body = await request.json();
     const linkedUserId = String(body.linkedUserId ?? "");
     if (!linkedUserId || linkedUserId === user.id) {
@@ -147,11 +153,12 @@ export async function POST(request: NextRequest) {
 
     const target = await prisma.user.findFirst({
       where: { id: linkedUserId, status: EmployeeStatus.ACTIVE },
-      select: { id: true, companyId: true },
+      select: { id: true, companyId: true, appleDemoAccount: true },
     });
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    if (target.appleDemoAccount) return NextResponse.json({ error: "Review accounts cannot link companies" }, { status: 403 });
     if (target.companyId === user.companyId) {
       return NextResponse.json(
         { error: "Linked account must be on a different company" },

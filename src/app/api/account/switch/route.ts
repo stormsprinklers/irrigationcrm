@@ -21,12 +21,13 @@ export async function POST(request: NextRequest) {
 
     const current = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { id: true, email: true },
+      select: { id: true, email: true, appleDemoAccount: true },
     });
     if (!current) return unauthorizedResponse();
+    if (current.appleDemoAccount) return NextResponse.json({ error: "Review accounts cannot switch companies" }, { status: 403 });
 
     const target = await prisma.user.findFirst({
-      where: { id: targetUserId, status: EmployeeStatus.ACTIVE, systemKind: null },
+      where: { id: targetUserId, status: EmployeeStatus.ACTIVE, systemKind: null, appleDemoAccount: false },
       select: {
         id: true,
         email: true,
