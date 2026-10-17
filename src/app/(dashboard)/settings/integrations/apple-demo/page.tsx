@@ -89,7 +89,7 @@ export default function AppleDemoIntegrationsPage() {
       <PageHeader
         breadcrumb={["Settings", "Integrations", "Apple demo"]}
         title="Apple demo account"
-        subtitle="Create a technician login for App Store review — no phone number or 2FA required. Disable anytime after review."
+        subtitle="Create an isolated review company with sample data and a technician login. Disable anytime after review."
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link href="/settings/integrations">Back to integrations</Link>
@@ -101,9 +101,9 @@ export default function AppleDemoIntegrationsPage() {
         <section className="rounded-lg border border-border bg-white p-6 space-y-3">
           <h2 className="text-base font-semibold">How it works</h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>Creates a TECH (technician) employee with the same field permissions as a normal tech.</li>
+            <li>Creates a separate demo company and TECH account with synthetic customers, a visit and sample prices. No access to your company data.</li>
             <li>Signs into Radar (iOS) and the CRM web app with email + password only — MFA is skipped.</li>
-            <li>No phone number is required on the account.</li>
+            <li>No company account links, customer contact destinations or payment integrations are copied.</li>
             <li>Use <strong>Disable</strong> after App Review to archive the account without deleting it.</li>
           </ul>
         </section>
