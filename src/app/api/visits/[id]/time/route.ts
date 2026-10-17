@@ -180,7 +180,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (visitUpdate.status === VisitStatus.COMPLETED) {
       await completeMaintenancePlanVisit(id);
-      void onVisitCompleted(id, user.companyId).catch((err) =>
+      if (body.notifyCustomer !== false) void onVisitCompleted(id, user.companyId).catch((err) =>
         console.error("Visit completed notification error:", err)
       );
     }

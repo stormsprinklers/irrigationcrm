@@ -1,3 +1,4 @@
+import { composeEstimateMessage } from "./composed-message";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 import { customerEstimateUrl } from "@/lib/company/customer-url";
@@ -15,7 +16,8 @@ export type EstimateSendChannel = "email" | "sms";
 export async function notifyEstimateViaTemplates(
   estimateId: string,
   companyId: string,
-  channel?: EstimateSendChannel
+  channel?: EstimateSendChannel,
+  compose?: { message: string; subject?: string }
 ): Promise<SendResult> {
   // Older companies may predate the estimate-sent rules. Explicit sends should
   // always have a branded channel template available.
@@ -89,6 +91,10 @@ export async function notifyEstimateViaTemplates(
       }).format(toNumber(estimate.total)),
     },
     options: {
+      ...(compose ? {
+        customMessage: composeEstimateMessage(compose.message, estimateUrl),
+        customSubject: compose.subject,
+      } : {}),
       estimateId: estimate.id,
       linkPlaceholders: { estimate: estimateUrl },
       emailAttachments,

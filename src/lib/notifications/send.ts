@@ -1,3 +1,4 @@
+import { escapeMessageHtml } from "./composed-message";
 import { Channel } from "@prisma/client";
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
@@ -38,6 +39,8 @@ export type SendResult = {
 };
 
 export type SendOptions = {
+  customMessage?: string;
+  customSubject?: string;
   visitId?: string;
   invoiceId?: string;
   estimateId?: string;
@@ -274,7 +277,7 @@ export async function sendOperationalNotification(params: {
       getCustomerBaseUrl(company)
     );
 
-    let body = renderTemplate(rule.template.body, renderContext);
+    let body = options.customMessage ?? renderTemplate(rule.template.body, renderContext);
     body = injectTrackedUrlsInText(body, urlMap);
     const fullText = options.textAppend
       ? `${body}\n\n${injectTrackedUrlsInText(options.textAppend, urlMap)}`
@@ -296,12 +299,12 @@ export async function sendOperationalNotification(params: {
       emailAttempted = true;
       try {
         const subject = renderTemplate(
-          rule.template.subject ?? `${company.name} notification`,
+          options.customSubject ?? rule.template.subject ?? `${company.name} notification`,
           renderContext
         );
         let html = body
           .split("\n")
-          .map((line) => `<p>${line}</p>`)
+          .map((line) => `<p>${options.customMessage !== undefined ? escapeMessageHtml(line) : line}</p>`)
           .join("");
         if (options.htmlAppend) {
           html += injectTrackedUrlsInText(options.htmlAppend, urlMap);

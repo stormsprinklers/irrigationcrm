@@ -1,3 +1,5 @@
+import { notifyEstimateViaTemplates } from "@/lib/notifications/estimate-notify";
+import { onEstimateSent } from "@/lib/notifications/estimate-followup";
 import { NextResponse } from "next/server";
 import {
   clampToAutomatedSendWindow,
@@ -41,7 +43,7 @@ export async function GET(request: Request) {
   for (const job of jobs) {
     try {
       const tz = await timezoneFor(job.companyId);
-      if (!isWithinAutomatedSendWindow(now, tz)) {
+      if (!job.event.startsWith("ESTIMATE_SCHEDULED_SEND:") && !isWithinAutomatedSendWindow(now, tz)) {
         await prisma.notificationJob.update({
           where: { id: job.id },
           data: { runAt: clampToAutomatedSendWindow(now, tz) },
@@ -50,7 +52,20 @@ export async function GET(request: Request) {
         continue;
       }
 
-      if (job.estimateId && job.event === "ESTIMATE_FOLLOW_UP") {
+      if (job.estimateId && job.event.startsWith("ESTIMATE_SCHEDULED_SEND:")) {
+        const payload = JSON.parse(job.event.slice("ESTIMATE_SCHEDULED_SEND:".length)) as {channel:"sms"|"email";message:string;subject?:string};
+        const claim = await prisma.notificationJob.updateMany({where:{id:job.id,processedAt:null},data:{processedAt:new Date()}});
+        if (!claim.count) continue;
+        try {
+          const result = await notifyEstimateViaTemplates(job.estimateId,job.companyId,payload.channel,payload);
+          if (!result.emailSent && !result.smsSent) throw new Error("Scheduled estimate delivery failed");
+        } catch (error) {
+          await prisma.notificationJob.update({where:{id:job.id},data:{processedAt:null,runAt:new Date(Date.now()+5*60*1000)}});
+          throw error;
+        }
+        await prisma.estimate.updateMany({where:{id:job.estimateId,companyId:job.companyId,status:{in:["DRAFT","SENT"]}},data:{status:"SENT",sentAt:new Date()}});
+        await onEstimateSent(job.estimateId,job.companyId);
+      } else if (job.estimateId && job.event === "ESTIMATE_FOLLOW_UP") {
         await processEstimateFollowUpJob({
           jobId: job.id,
           estimateId: job.estimateId,

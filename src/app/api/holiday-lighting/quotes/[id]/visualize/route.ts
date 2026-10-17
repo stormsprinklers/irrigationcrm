@@ -118,16 +118,16 @@ Instructions — holiday lights:
 ${visualPlan}
 - Where more than one specification is listed, keep their bulb scale, construction, brightness, and colors visually distinct rather than blending them into one generic light style.
 - Add professional LED holiday lights strictly inside the brush-marked regions from IMAGE 2.
-- Do NOT invent extra holiday lighting anywhere that is not marked.
+- Do NOT invent extra holiday lighting anywhere that is not marked. Unpainted trees, bushes, windows and roof edges must remain unlit even if they appear in the option layout. The painted guide and transparent edit mask take precedence over the textual layout.
 - Replace the brushstroke paint with realistic installed lights (evenly spaced, neatly clipped, soft evening glow).
 
 Instructions — atmosphere:
-- Night / dusk scene with a little fresh snow on the roof, lawn, and shrubs.
-- Add a tasteful holiday wreath on the front door if a door is visible.
+- Preserve the source exposure and surroundings outside the edit mask.
+- Do not add wreaths, snow, decorations, or lights outside painted areas.
 - Keep ordinary porch, garage, and interior window lights on so the home feels lived-in.
 
 Instructions — image quality:
-- Beautify IMAGE 1 into a clean professional real-estate night photograph.
+- Render separate physically plausible bulbs, with visible dark gaps and subtle halos. Never render continuous glowing lines, neon tubes, light ribbons, or paint strokes.
 - Preserve the real house, viewpoint, and proportions.
 - Do not add people, extra cars, text, logos, or watermarks.
 
@@ -189,6 +189,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!option) return badRequestResponse("This quote does not have an option to preview");
 
     const outbound = new FormData();
+    const editMask = form.get("editMask");
+    if (editMask instanceof File) {
+      if (editMask.type !== "image/png" || editMask.size > MAX_FILE_BYTES || clean.size + marked.size + editMask.size > MAX_REQUEST_IMAGE_BYTES) return badRequestResponse("Invalid lighting edit mask");
+      outbound.append("mask", new Blob([await editMask.arrayBuffer()], {type: "image/png"}), "lighting-mask.png");
+    }
     outbound.append("model", "gpt-image-1");
     outbound.append("prompt", lightingPrompt(option, catalog));
     outbound.append("size", "1024x1024");
