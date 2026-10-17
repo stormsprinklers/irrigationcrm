@@ -70,5 +70,28 @@ export function hashOwnerAssistantToolArgs(args: unknown) {
 }
 
 export function getOwnerAssistantWssUrl() {
-  return process.env.OWNER_ASSISTANT_PUBLIC_WSS_URL?.trim() || "";
+  return normalizeOwnerAssistantWssUrl(
+    process.env.OWNER_ASSISTANT_PUBLIC_WSS_URL?.trim() || ""
+  );
+}
+
+export function normalizeOwnerAssistantWssUrl(rawValue: string) {
+  let value = rawValue.trim();
+  if (!value) return "";
+
+  // Recover the common copy/paste form "wss://https://host".
+  value = value.replace(/^wss:\/\/(https:\/\/)/i, "$1");
+  if (/^https:\/\//i.test(value)) value = value.replace(/^https:/i, "wss:");
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) value = `wss://${value}`;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "";
+  }
+  if (url.protocol !== "wss:" || !url.hostname || url.username || url.password) return "";
+  if (!url.pathname || url.pathname === "/") url.pathname = "/twilio/media";
+  url.hash = "";
+  return url.toString();
 }

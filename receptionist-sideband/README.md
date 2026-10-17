@@ -22,6 +22,8 @@ Set CRM env `SIDEBAND_PUBLIC_WSS_URL=wss://YOUR_HOST/twilio/media`.
 
 For the private owner assistant service, set Railway `SIDEBAND_MODE=owner-assistant` and set Vercel `OWNER_ASSISTANT_PUBLIC_WSS_URL=wss://YOUR_OWNER_ASSISTANT_HOST/twilio/media`. Do not set `SIDEBAND_MODE=owner-assistant` on the receptionist service.
 
+The owner-assistant service defaults to port `8080`; the receptionist service defaults to `8090`. Railway's public domain target port must match the service port (or set `PORT` explicitly).
+
 ## Production
 
 Deploy this package on Fly.io / Railway / Render with a public HTTPS/WSS hostname. Do not run it on Vercel serverless.

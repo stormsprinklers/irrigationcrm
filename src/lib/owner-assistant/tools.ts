@@ -1,10 +1,12 @@
 import { Division, VisitStatus } from "@prisma/client";
+import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 import { normalizePhone } from "@/lib/inbox/contacts";
-import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
+import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { prisma } from "@/lib/prisma";
 import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
 import { runStormAiTool } from "@/lib/storm-ai/execute";
 import { resolveOwnerCompanyUser, listOwnerAssistantCompanies } from "./access";
+import { formatOwnerAssistantAppointment } from "./appointment-label";
 import { hashOwnerAssistantToolArgs } from "./auth";
 import { matchOwnerAssistantEmployee } from "./employee-resolution";
 import { OWNER_ASSISTANT_TOOL_NAMES, type OwnerAssistantToolName } from "./types";
@@ -13,7 +15,13 @@ import { validateOwnerAssistantVisitTime } from "./visit-time";
 type Context = { configId: string; ownerUserId: string; sessionId?: string | null };
 type Result = { ok: boolean; data?: unknown; error?: string; code?: string };
 
-const MUTATING = new Set<OwnerAssistantToolName>(["create_customer", "create_visit", "add_customer_note"]);
+const MUTATING = new Set<OwnerAssistantToolName>([
+  "create_customer",
+  "create_visit",
+  "reschedule_visit",
+  "cancel_visit",
+  "add_customer_note",
+]);
 
 function invalid(error: string, code = "INVALID"): Result {
   return { ok: false, error, code };
@@ -52,6 +60,27 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
   const companyUser = await resolveOwnerCompanyUser(ctx.ownerUserId, companyId);
   if (!companyUser) return invalid("That company is not available to this assistant", "FORBIDDEN");
 
+  if (tool === "resolve_visit_time") {
+    const visitTime = validateOwnerAssistantVisitTime(args.startAt, args.endAt);
+    if (!visitTime.ok) return invalid(visitTime.error, visitTime.code);
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { timezone: true },
+    });
+    return {
+      ok: true,
+      data: {
+        startAt: visitTime.startAt.toISOString(),
+        endAt: visitTime.endAt.toISOString(),
+        ...formatOwnerAssistantAppointment(
+          visitTime.startAt,
+          visitTime.endAt,
+          company?.timezone
+        ),
+      },
+    };
+  }
+
   if (tool === "list_employees") {
     const query = text(args.query, 160);
     const employees = await prisma.user.findMany({
@@ -79,13 +108,42 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
 
   if (!MUTATING.has(tool)) {
     const { companyId: _companyId, ...toolArgs } = args;
-    return runStormAiTool({
+    const result = await runStormAiTool({
       id: companyUser.id,
       companyId,
       email: companyUser.email,
       name: companyUser.name,
       role: "ADMIN",
     }, tool, toolArgs);
+    if (tool !== "get_schedule" || !result.ok) return result;
+
+    const data = result.data && typeof result.data === "object"
+      ? result.data as { visits?: unknown[] }
+      : {};
+    if (!Array.isArray(data.visits)) return result;
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { timezone: true },
+    });
+    return {
+      ok: true,
+      data: {
+        ...data,
+        visits: data.visits.map((rawVisit) => {
+          if (!rawVisit || typeof rawVisit !== "object") return rawVisit;
+          const visit = rawVisit as Record<string, unknown>;
+          const startAt = typeof visit.startAt === "string" ? new Date(visit.startAt) : null;
+          const endAt = typeof visit.endAt === "string" ? new Date(visit.endAt) : null;
+          if (!startAt || !endAt || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+            return visit;
+          }
+          return {
+            ...visit,
+            ...formatOwnerAssistantAppointment(startAt, endAt, company?.timezone),
+          };
+        }),
+      },
+    };
   }
 
   if (args.confirmed !== true) return invalid("Explicit owner confirmation is required", "NOT_CONFIRMED");
@@ -130,6 +188,176 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
       select: { id: true, createdAt: true },
     });
     return { ok: true, data: { note } };
+  }
+
+  if (tool === "reschedule_visit" || tool === "cancel_visit") {
+    const visitId = text(args.visitId, 128);
+    if (!visitId) return invalid("visitId is required");
+    const existing = await prisma.visit.findFirst({
+      where: { id: visitId, companyId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        startAt: true,
+        endAt: true,
+        customerId: true,
+        propertyId: true,
+        assignedUserId: true,
+        customer: { select: { id: true, name: true } },
+        additionalAssignees: { select: { userId: true } },
+      },
+    });
+    if (!existing) return invalid("Visit not found", "NOT_FOUND");
+    if (existing.status !== VisitStatus.SCHEDULED) {
+      return invalid(
+        existing.status === VisitStatus.CANCELLED
+          ? "That visit is already cancelled"
+          : `Only scheduled visits can be ${tool === "cancel_visit" ? "cancelled" : "rescheduled"}; this visit is ${existing.status.toLowerCase()}`,
+        existing.status === VisitStatus.CANCELLED ? "ALREADY_CANCELLED" : "INVALID_STATUS"
+      );
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { timezone: true },
+    });
+    const existingLabel = formatOwnerAssistantAppointment(
+      existing.startAt,
+      existing.endAt,
+      company?.timezone
+    );
+
+    if (tool === "cancel_visit") {
+      const updated = await prisma.visit.updateMany({
+        where: { id: visitId, companyId, status: VisitStatus.SCHEDULED },
+        data: { status: VisitStatus.CANCELLED },
+      });
+      if (updated.count !== 1) {
+        return invalid("The visit changed before it could be cancelled. Check the schedule and try again.", "CONFLICT");
+      }
+      const reason = text(args.reason, 1000);
+      if (reason) {
+        await prisma.visitNote.create({
+          data: {
+            visitId,
+            authorId: companyUser.id,
+            body: `Cancellation reason: ${reason}`,
+          },
+        }).catch((error) => {
+          console.error("[owner-assistant] cancellation note failed", visitId, error);
+        });
+      }
+      await writeStaffAuditLog({
+        companyId,
+        actorId: companyUser.id,
+        entityType: "Visit",
+        entityId: visitId,
+        action: "cancel",
+        before: { status: existing.status },
+        after: { status: VisitStatus.CANCELLED, reason: reason || null },
+        customerId: existing.customerId,
+        propertyId: existing.propertyId,
+        visitId,
+      });
+      await onVisitCancelled(visitId, companyId).catch((error) => {
+        console.error("[owner-assistant] cancellation notification failed", visitId, error);
+      });
+      return {
+        ok: true,
+        data: {
+          visit: {
+            id: existing.id,
+            title: existing.title,
+            customer: existing.customer,
+            startAt: existing.startAt.toISOString(),
+            endAt: existing.endAt.toISOString(),
+            ...existingLabel,
+            status: VisitStatus.CANCELLED,
+          },
+          customerNotificationAutomationMayRun: true,
+        },
+      };
+    }
+
+    const visitTime = validateOwnerAssistantVisitTime(args.startAt, args.endAt);
+    if (!visitTime.ok) return invalid(visitTime.error, visitTime.code);
+    const { startAt, endAt } = visitTime;
+    if (
+      startAt.getTime() === existing.startAt.getTime() &&
+      endAt.getTime() === existing.endAt.getTime()
+    ) {
+      return invalid("The visit is already scheduled for that time", "NO_CHANGE");
+    }
+    const assignedUserIds = [
+      ...(existing.assignedUserId ? [existing.assignedUserId] : []),
+      ...existing.additionalAssignees.map((assignment) => assignment.userId),
+    ];
+    const availability = await Promise.all(
+      assignedUserIds.map((employeeId) =>
+        validateAssignmentUpdate(companyId, employeeId, startAt, endAt, visitId)
+      )
+    );
+    const unavailable = availability.find((result) => result.error)?.error;
+    if (unavailable) return invalid(unavailable, "UNAVAILABLE");
+    const updated = await prisma.visit.updateMany({
+      where: { id: visitId, companyId, status: VisitStatus.SCHEDULED },
+      data: { startAt, endAt },
+    });
+    if (updated.count !== 1) {
+      return invalid("The visit changed before it could be rescheduled. Check the schedule and try again.", "CONFLICT");
+    }
+    const visit = await prisma.visit.findFirst({
+      where: { id: visitId, companyId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        startAt: true,
+        endAt: true,
+        customer: { select: { id: true, name: true } },
+        assignedUser: { select: { id: true, name: true, email: true } },
+        additionalAssignees: {
+          select: { user: { select: { id: true, name: true, email: true } } },
+        },
+      },
+    });
+    if (!visit) return invalid("The rescheduled visit could not be reloaded", "FAILED");
+    await writeStaffAuditLog({
+      companyId,
+      actorId: companyUser.id,
+      entityType: "Visit",
+      entityId: visitId,
+      action: "reschedule",
+      before: {
+        startAt: existing.startAt.toISOString(),
+        endAt: existing.endAt.toISOString(),
+      },
+      after: { startAt: visit.startAt.toISOString(), endAt: visit.endAt.toISOString() },
+      customerId: existing.customerId,
+      propertyId: existing.propertyId,
+      visitId,
+    });
+    await onVisitTimeChanged({ visitId, companyId }).catch((error) => {
+      console.error("[owner-assistant] reschedule notification failed", visitId, error);
+    });
+    const { assignedUser, additionalAssignees, ...visitFields } = visit;
+    return {
+      ok: true,
+      data: {
+        visit: {
+          ...visitFields,
+          startAt: visit.startAt.toISOString(),
+          endAt: visit.endAt.toISOString(),
+          ...formatOwnerAssistantAppointment(visit.startAt, visit.endAt, company?.timezone),
+          assignedEmployees: [
+            ...(assignedUser ? [assignedUser] : []),
+            ...additionalAssignees.map((assignment) => assignment.user),
+          ],
+        },
+        customerNotificationAutomationMayRun: true,
+      },
+    };
   }
 
   const customerId = text(args.customerId, 128);
@@ -224,6 +452,10 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
   await onVisitTimeChanged({ visitId: visit.id, companyId, isInitialSchedule: true }).catch((error) => {
     console.error("[owner-assistant] visit notification failed", visit.id, error);
   });
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { timezone: true },
+  });
   const { assignedUser, additionalAssignees, ...visitFields } = visit;
   return {
     ok: true,
@@ -232,6 +464,7 @@ async function execute(ctx: Context, tool: OwnerAssistantToolName, args: Record<
         ...visitFields,
         startAt: visit.startAt.toISOString(),
         endAt: visit.endAt.toISOString(),
+        ...formatOwnerAssistantAppointment(visit.startAt, visit.endAt, company?.timezone),
         assignedEmployees: [
           ...(assignedUser ? [assignedUser] : []),
           ...additionalAssignees.map((assignment) => assignment.user),

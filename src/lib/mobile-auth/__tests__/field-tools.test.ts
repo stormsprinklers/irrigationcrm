@@ -27,7 +27,12 @@ test("company switching accepts linked accounts and rejects unavailable or custo
   const lookup = stub(t, prisma.user, "findFirst", async () => target);
   const link = stub(t, prisma.userAccountLink, "findFirst", async () => ({ id: "link" }));
   assert.equal((await resolveMobileCompanyAccount("a", "b"))?.id, "b");
-  assert.deepEqual(lookup.mock.calls[0].arguments[0].where, { id: "b", status: "ACTIVE", systemKind: null });
+  assert.deepEqual(lookup.mock.calls[0].arguments[0].where, {
+    id: "b",
+    status: "ACTIVE",
+    systemKind: null,
+    appleDemoAccount: false,
+  });
   assert.deepEqual(link.mock.calls[0].arguments[0].where.OR, [
     { userId: "a", linkedUserId: "b" }, { userId: "b", linkedUserId: "a" },
   ]);

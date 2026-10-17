@@ -26,8 +26,8 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_REQUEST_IMAGE_BYTES = 4 * 1024 * 1024;
 const OPENAI_IMAGE_TIMEOUT_MS = 240_000;
-
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -55,8 +55,16 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const form = await request.formData();
     const clean = form.get("clean") ?? form.get("image");
-    if (!(clean instanceof File)) return badRequestResponse("Choose a house photo before generating a preview");
-    if (clean.size > MAX_FILE_BYTES) return badRequestResponse("The property photo must be under 4MB");
+    const marked = form.get("marked") ?? form.get("overlay");
+    if (!(clean instanceof File) || !(marked instanceof File)) {
+      return badRequestResponse("Both a clean property image and a brush-marked image are required");
+    }
+    if (clean.size > MAX_FILE_BYTES || marked.size > MAX_FILE_BYTES) {
+      return badRequestResponse("Image files must be under 4MB each");
+    }
+    if (clean.size + marked.size > MAX_REQUEST_IMAGE_BYTES) {
+      return badRequestResponse("Combined preview images must be under 4MB");
+    }
 
     const catalog = parseHolidayCatalog(company?.holidayLightingCatalog);
     const rootMeasurements = parseHolidayMeasurements(quote.measurements);
@@ -74,6 +82,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const propertyPhoto = await sharp(Buffer.from(await clean.arrayBuffer()), {limitInputPixels:20_000_000})
       .rotate().resize({width:1536,height:1536,fit:"inside",withoutEnlargement:true}).toColourspace("srgb").jpeg({quality:92}).toBuffer();
+    const markedPhoto = await sharp(Buffer.from(await marked.arrayBuffer()), {limitInputPixels:20_000_000})
+      .rotate().resize({width:1536,height:1536,fit:"inside",withoutEnlargement:true}).toColourspace("srgb").jpeg({quality:92}).toBuffer();
     const dimensions = await sharp(propertyPhoto).metadata();
     const outbound = new FormData();
     outbound.append("model", "gpt-image-1.5");
@@ -83,6 +93,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     outbound.append("quality", "high");
     outbound.append("output_format", "png");
     outbound.append("image[]", new Blob([new Uint8Array(propertyPhoto)], {type:"image/jpeg"}), "property.jpg");
+    outbound.append("image[]", new Blob([new Uint8Array(markedPhoto)], {type:"image/jpeg"}), "property-marked.jpg");
 
     const res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
@@ -145,6 +156,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
     if (error instanceof Error && error.message === "Unauthorized") {
       return unauthorizedResponse();
+    }
+    if (error instanceof HolidayPreviewConflict) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
       return NextResponse.json(

@@ -1,4 +1,4 @@
-import { applyHolidayCatalogPolicy, parseHolidayMeasurements, type HolidayQuoteDesignOption, type HolidayLightingCatalog } from "./types";
+import { applyHolidayCatalogPolicy, type HolidayQuoteDesignOption, type HolidayLightingCatalog } from "./types";
 
 function styleRenderingInstruction(styleKey: string, styleLabel: string) {
   if (styleKey === "mini" || /mini/i.test(styleLabel)) {
@@ -26,54 +26,19 @@ function optionVisualPlan(
   catalog: HolidayLightingCatalog
 ) {
   const selections = applyHolidayCatalogPolicy(option.selections, catalog);
-  const measurements = parseHolidayMeasurements(option.measurements);
-  const combinations = new Map<string, { styleKey: string; styleLabel: string; color: string }>();
-  for (const item of [...measurements.segments, ...measurements.placements]) {
-    const styleKey = item.lightStyleKey ?? selections.defaultLightStyleKey;
-    const styleLabel = styleKey === "mini"
-      ? "Mini LEDs"
-      : catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
-    const color = item.colorPattern ?? selections.defaultColorPattern ?? "Warm White";
-    combinations.set(`${styleKey}\u0000${color}`, { styleKey, styleLabel, color });
-  }
-  if (!combinations.size) {
-    const styleKey = selections.defaultLightStyleKey;
-    combinations.set(styleKey, {
-      styleKey,
-      styleLabel: catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey,
-      color: selections.defaultColorPattern ?? "Warm White",
-    });
-  }
-  const appearanceRules = [...combinations.values()].map((item, index) =>
-    `${index + 1}. ${item.styleLabel}, ${item.color}: ${styleRenderingInstruction(item.styleKey, item.styleLabel)} ${colorRenderingInstruction(item.color)}`
-  ).join("\n");
-  const layout = [
-    ...measurements.segments.map((segment) => {
-      const styleKey = segment.lightStyleKey ?? selections.defaultLightStyleKey;
-      const styleLabel = styleKey === "mini"
-        ? "Mini LEDs"
-        : catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
-      return `Roofline "${segment.label}": ${styleLabel}, ${segment.colorPattern ?? selections.defaultColorPattern ?? "Warm White"}`;
-    }),
-    ...measurements.placements.map((placement) => {
-      const styleKey = placement.lightStyleKey ?? selections.defaultLightStyleKey;
-      const styleLabel = "Mini LEDs";
-      return `${placement.kind === "tree" ? "Tree" : "Bush"} "${placement.label}": ${placement.strandCount ?? 1} strand(s), ${styleLabel}, ${placement.colorPattern ?? selections.defaultColorPattern ?? "Warm White"}`;
-    }),
-  ].slice(0, 40).map((line) => `- ${line}`).join("\n");
-  return `LIGHT APPEARANCE RULES:\n${appearanceRules}\n\nOPTION LAYOUT:\n${layout || "- Use the selected specification on the visible front roofline."}`;
+  const styleKey = selections.defaultLightStyleKey;
+  const styleLabel = catalog.lightStyles.find((style) => style.key === styleKey)?.label ?? styleKey;
+  const color = selections.defaultColorPattern ?? "Warm White";
+  return `LIGHT APPEARANCE RULES:\n${styleLabel}, ${color}: ${styleRenderingInstruction(styleKey, styleLabel)} ${colorRenderingInstruction(color)}\n\nPLACEMENT RULE:\nApply this specification to every painted line in IMAGE 2. The painted lines alone control placement; do not use quote measurements to add or move lights.`;
 }
 
 export function lightingPrompt(option: HolidayQuoteDesignOption, catalog: HolidayLightingCatalog) {
-  return `Create a photorealistic holiday lighting preview using the supplied clean photograph of this exact house.
-Preserve the actual architecture, roof edges, windows, landscaping, driveway, viewpoint and proportions. You may naturally relight the full scene to blue-hour dusk so the installed lights are visible.
-Use the option specifications below as defaults. The employee's preview instructions take priority for colors and which areas receive lights. Interpret named architectural areas from the photograph and align lights to the real roof edges and features; use measurements as context for scope, not pixel coordinates.
+  return `You are given two images of the same residential property. IMAGE 1 is the clean property photograph. IMAGE 2 is the same photograph with employee-painted guide lines. Preserve the actual architecture, roof edges, windows, landscaping, driveway, viewpoint and proportions.
+
+The painted guide lines in IMAGE 2 are the only places that should receive holiday lighting. Do not infer placement from measurements, labels, or unmarked architectural features. Replace the paint with realistic installed lights and remove every trace of the painted guide from the finished image.
 
 ${optionVisualPlan(option, catalog)}
 
-EMPLOYEE PREVIEW INSTRUCTIONS:
-${option.previewPrompt?.trim() || "Light the visible front roofline using the selected bulb type and color. Leave trees, bushes, windows and other areas unlit unless included in the option layout."}
-
 Render individual realistic LED bulbs, small sockets, subtle clips and fine dark wire, with dark gaps between bulbs and restrained natural glow. Avoid continuous glowing ribbons, painted lines, neon tubes, oversaturated halos and illustration effects. Keep C7, C9, mini and permanent architectural lights visually appropriate to their actual construction and scale.
-Do not add lights to unrelated trees or other unrequested areas. Do not add people, cars, snow, wreaths, text, logos or watermarks. Return one complete AI-generated photograph of the finished installation.`;
+Relight the scene to attractive blue-hour dusk, add a little fresh snow and a tasteful front-door wreath where appropriate, and keep ordinary porch, garage and interior window lights on. Do not add people, extra cars, text, logos or watermarks. Return one complete photorealistic image of the finished installation.`;
 }

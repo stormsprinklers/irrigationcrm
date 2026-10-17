@@ -42,6 +42,7 @@ type Activity = {
     startedAt: string;
     endedAt: string | null;
     failedPinAttempts: number;
+    transcript: string;
   }>;
   messages: Array<{
     id: string;
@@ -121,7 +122,7 @@ export default function OwnerAssistantSettingsPage() {
       id: `session-${session.id}`,
       at: session.startedAt,
       title: `${titleCase(session.channel)} session`,
-      detail: `${formatPhoneDisplay(session.fromE164)} → ${formatPhoneDisplay(session.toE164)}${session.failedPinAttempts ? ` · ${session.failedPinAttempts} failed PIN attempt${session.failedPinAttempts === 1 ? "" : "s"}` : ""}`,
+      detail: `${formatPhoneDisplay(session.fromE164)} → ${formatPhoneDisplay(session.toE164)}${session.failedPinAttempts ? ` · ${session.failedPinAttempts} failed PIN attempt${session.failedPinAttempts === 1 ? "" : "s"}` : ""}${session.transcript.trim() ? `\n${session.transcript.trim()}` : ""}`,
       status: titleCase(session.status),
       failed: session.status === "FAILED" || session.status === "PIN_FAILED",
     })),

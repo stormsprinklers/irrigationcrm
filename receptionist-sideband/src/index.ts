@@ -16,12 +16,13 @@ import http from "http";
 import { randomUUID } from "crypto";
 import { WebSocketServer, WebSocket } from "ws";
 
-const PORT = Number(process.env.PORT || process.env.SIDEBAND_PORT || 8090);
+const SIDEBAND_MODE = process.env.SIDEBAND_MODE === "owner-assistant" ? "owner-assistant" : "receptionist";
+const DEFAULT_PORT = SIDEBAND_MODE === "owner-assistant" ? 8080 : 8090;
+const PORT = Number(process.env.PORT || process.env.SIDEBAND_PORT || DEFAULT_PORT);
 const CRM_BASE_URL = (process.env.CRM_BASE_URL || "").replace(/\/$/, "");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const REALTIME_MODEL =
   process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
-const SIDEBAND_MODE = process.env.SIDEBAND_MODE === "owner-assistant" ? "owner-assistant" : "receptionist";
 const API_PREFIX = SIDEBAND_MODE === "owner-assistant" ? "/api/ai/owner-assistant" : "/api/ai/receptionist";
 const MAX_CONNECTIONS = Number(process.env.SIDEBAND_MAX_CONNECTIONS || 100);
 const MAX_CONNECTIONS_PER_IP = Number(process.env.SIDEBAND_MAX_CONNECTIONS_PER_IP || 10);
@@ -222,6 +223,7 @@ class CallBridge {
     this.openai.on("error", (err) => {
       log("OpenAI socket error", err);
       this.fatalOpenAi = true;
+      void this.failSafely();
     });
     this.openai.on("close", (code, reason) => {
       log("OpenAI socket closed", code, reason?.toString?.() || reason);
@@ -294,6 +296,7 @@ class CallBridge {
       if (err?.code === "response_cancel_not_active") return;
       this.fatalOpenAi = true;
       log("OpenAI error event", { code: err?.code ?? "unknown", type: err?.type ?? "unknown" });
+      void this.failSafely();
       return;
     }
 
@@ -506,8 +509,18 @@ class CallBridge {
 }
 
 const server = http.createServer((_req, res) => {
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: true, service: `${SIDEBAND_MODE}-sideband` }));
+  const issues = [
+    ...(!CRM_BASE_URL ? ["CRM_BASE_URL is unset"] : []),
+    ...(!OPENAI_API_KEY ? ["OPENAI_API_KEY is unset"] : []),
+  ];
+  res.writeHead(issues.length ? 503 : 200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({
+    ok: issues.length === 0,
+    service: `${SIDEBAND_MODE}-sideband`,
+    mode: SIDEBAND_MODE,
+    port: PORT,
+    issues,
+  }));
 });
 
 const wss = new WebSocketServer({
