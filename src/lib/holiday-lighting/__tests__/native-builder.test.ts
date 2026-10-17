@@ -5,7 +5,8 @@ import { prisma } from "../../prisma";
 import { signMobileAccessToken } from "../../mobile-auth/tokens";
 import { DEFAULT_HOLIDAY_CATALOG, holidayDesignOptionsFromQuote, parseHolidayMeasurements, parseHolidaySelections, parseHolidayPhotoMarkup } from "../types";
 import { persistNativeHolidayPreview, HolidayPreviewConflict } from "../native-preview";
-import { POST as erasePreview } from "../../../app/api/holiday-lighting/quotes/[id]/preview-edit/route";
+import sharp from "sharp";
+import { POST as visualize } from "../../../app/api/holiday-lighting/quotes/[id]/visualize/route";
 import { PATCH } from "../../../app/api/holiday-lighting/quotes/[id]/route";
 import { GET as photo, POST as uploadPhoto } from "../../../app/api/holiday-lighting/quotes/[id]/photo/route";
 
@@ -117,25 +118,41 @@ test("payload encoded by the Swift models keeps CRM prices, options, peaks and c
   assert.equal(selections.activeDesignOptionId, options[1].id);
 });
 
-test("layered preview URLs stay in option JSON, and stale eraser saves are rejected", async t => {
+test("preview instructions survive parsing and protect against stale generation", async t => {
   const quote = fixture();
+  quote.selections.designOptions![1].previewPrompt = "Red and green on porch only; no tree lights.";
   stub(t, prisma.holidayLightingQuote, "findFirst", async () => quote);
   const update = stub(t, prisma.holidayLightingQuote, "update", async () => quote);
-  const option = holidayDesignOptionsFromQuote({measurements: parseHolidayMeasurements(quote.measurements),selections:quote.selections,catalog:DEFAULT_HOLIDAY_CATALOG})[1];
-  await persistNativeHolidayPreview({companyId:user.companyId,quoteId:quote.id,sourcePhotoUrl:"source",option,catalog:DEFAULT_HOLIDAY_CATALOG,previewImageUrl:"new-b",previewBackgroundUrl:"house-b",previewLightsUrl:"lights-b",expectedPreviewUrl:"old-b"});
-  const data = update.mock.calls[0].arguments[0].data;
-  assert.deepEqual(Object.keys(data).sort(),["previewImageUrl","selections"]);
-  const parsed = holidayDesignOptionsFromQuote({measurements:parseHolidayMeasurements(quote.measurements),selections:parseHolidaySelections(data.selections),catalog:DEFAULT_HOLIDAY_CATALOG});
-  assert.equal(parsed[1].previewBackgroundUrl,"house-b");
-  assert.equal(parsed[1].previewLightsUrl,"lights-b");
-  await assert.rejects(persistNativeHolidayPreview({companyId:user.companyId,quoteId:quote.id,sourcePhotoUrl:"source",option,catalog:DEFAULT_HOLIDAY_CATALOG,previewImageUrl:"erased",expectedPreviewUrl:"obsolete"}),HolidayPreviewConflict);
-  assert.equal(update.mock.callCount(),1);
+  const options = holidayDesignOptionsFromQuote({measurements:parseHolidayMeasurements(quote.measurements),selections:parseHolidaySelections(quote.selections),catalog:DEFAULT_HOLIDAY_CATALOG});
+  assert.equal(options[1].previewPrompt,"Red and green on porch only; no tree lights.");
+  const original = structuredClone(options[1]);
+  quote.selections.designOptions![1].previewPrompt = "Warm white on roofline instead.";
+  await assert.rejects(persistNativeHolidayPreview({companyId:user.companyId,quoteId:quote.id,sourcePhotoUrl:"source",option:original,catalog:DEFAULT_HOLIDAY_CATALOG,previewImageUrl:"stale"}),HolidayPreviewConflict);
+  assert.equal(update.mock.callCount(),0);
 });
 
-test("preview erasing rejects anonymous and cross-company access",async t=>{
-  assert.equal((await erasePreview(new NextRequest("https://crm.example.com/api/holiday-lighting/quotes/q/preview-edit",{method:"POST",headers:{authorization:"Bearer invalid"}}),{params:Promise.resolve({id:"q"})})).status,401);
+test("photo-only generation sends exactly one clean image and no mask to the AI",async t=>{
   auth(t);
-  const lookup = stub(t,prisma.holidayLightingQuote,"findFirst",async()=>null);
-  assert.equal((await erasePreview(await request("/api/holiday-lighting/quotes/foreign/preview-edit","POST"),{params:Promise.resolve({id:"foreign"})})).status,404);
-  assert.deepEqual(lookup.mock.calls[0].arguments[0].where,{id:"foreign",companyId:"company-a"});
+  const quote = fixture();
+  quote.selections.designOptions![1].previewPrompt = "Warm white on the front roofline, no trees.";
+  stub(t,prisma.holidayLightingQuote,"findFirst",async()=>quote);
+  const key = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-only-key";
+  t.after(()=>{if(key === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY=key;});
+  let sent: FormData | undefined;
+  t.mock.method(globalThis,"fetch",async (_url: unknown,init?: RequestInit)=>{
+    sent = init?.body as FormData;
+    return Response.json({error:{message:"test image service stop"}},{status:422});
+  });
+  const jpg = await sharp({create:{width:20,height:12,channels:3,background:"white"}}).jpeg().toBuffer();
+  const form = new FormData();
+  form.set("clean",new Blob([new Uint8Array(jpg)],{type:"image/jpeg"}),"house.jpg");
+  form.set("optionId","b");
+  const token = await signMobileAccessToken({sub:user.id,companyId:user.companyId,role:user.role});
+  const response = await visualize(new NextRequest("https://crm.example.com/api/holiday-lighting/quotes/quote/visualize",{method:"POST",headers:{authorization:`Bearer ${token}`},body:form}),{params:Promise.resolve({id:"quote"})});
+  assert.equal(response.status,422);
+  assert.equal(sent?.getAll("image[]").length,1);
+  assert.equal(sent?.has("mask"),false);
+  assert.equal(sent?.has("marked"),false);
+  assert.ok(String(sent?.get("prompt")).includes("Warm white on the front roofline, no trees."));
 });

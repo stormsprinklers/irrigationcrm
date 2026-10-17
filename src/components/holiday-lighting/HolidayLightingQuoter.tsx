@@ -11,10 +11,6 @@ import {
   HolidayMapPanel,
   type HolidayMapPanelHandle,
 } from "@/components/holiday-lighting/HolidayMapPanel";
-import {
-  PaintCanvas,
-  type PaintCanvasHandle,
-} from "@/components/holiday-lighting/PaintCanvas";
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -194,7 +190,6 @@ export function HolidayLightingQuoter({
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
 
-  const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const quoteIdRef = useRef(initialId ?? "");
@@ -801,7 +796,7 @@ export function HolidayLightingQuoter({
   }, [address, city, state, zip, addressLine]);
 
   async function onPhotoSelected(file: File) {
-    const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined, previewBackgroundUrl: undefined, previewLightsUrl: undefined }));
+    const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
     setDesignOptions(optionsWithoutPreviews);
     setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
     setPhotoUrl(URL.createObjectURL(file));
@@ -838,7 +833,7 @@ export function HolidayLightingQuoter({
         throw new Error("No Street View image for this view — try a different angle or upload a photo.");
       }
       setPhotoUrl(URL.createObjectURL(blob));
-      const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined, previewBackgroundUrl: undefined, previewLightsUrl: undefined }));
+      const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
       setDesignOptions(optionsWithoutPreviews);
       setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
       setPhotoApproved(false);
@@ -946,35 +941,29 @@ export function HolidayLightingQuoter({
   }
 
   async function runVisualize() {
-    if (!paintRef.current?.hasPaint()) {
-      toast.error("Paint the areas where lights should go");
-      return;
-    }
+    if (!photoUrl) { toast.error("Choose a house photo first"); return; }
     setVisualizing(true);
     try {
       const id = await ensureQuote();
       const optionsToRender = currentOptions();
       if (!(await save(undefined, { quiet: true, designOptions: optionsToRender }))) return;
-      const exported = await paintRef.current.exportForApi();
-      if (!exported) throw new Error("Could not export paint mask");
-      const uploadBytes = exported.cleanBlob.size + exported.markedBlob.size;
-      if (uploadBytes > 4 * 1024 * 1024) {
-        throw new Error("This photo is too large to process. Try a smaller photo.");
-      }
+      const photoResponse = await fetch(photoUrl);
+      if (!photoResponse.ok) throw new Error("Could not load the property photo");
+      const cleanBlob = await photoResponse.blob();
+      if (cleanBlob.size > 4 * 1024 * 1024) throw new Error("This photo is too large to process. Try a smaller photo.");
       let completedCount = 0;
       setVisualizingProgress(`Generating ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}…`);
 
       const generateOption = async (option: HolidayQuoteDesignOption) => {
         const form = new FormData();
-        form.set("clean", exported.cleanBlob, "property.jpg");
-        form.set("marked", exported.markedBlob, "property-marked.jpg");
+        form.set("clean", cleanBlob, "property.jpg");
         form.set("optionId", option.id);
         const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
           method: "POST",
           body: form,
         });
         const responseText = await res.text();
-        let data: { error?: string; optionId?: string; previewImageUrl?: string; previewBackgroundUrl?: string; previewLightsUrl?: string } = {};
+        let data: { error?: string; optionId?: string; previewImageUrl?: string } = {};
         if (responseText.trim()) {
           try {
             data = JSON.parse(responseText) as typeof data;
@@ -994,18 +983,18 @@ export function HolidayLightingQuoter({
         // Show each completed image immediately instead of leaving the preview
         // area looking stalled while the other concurrent requests finish.
         setDesignOptions((current) => current.map((item) => item.id === option.id
-          ? { ...item, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl }
+          ? { ...item, previewImageUrl: data.previewImageUrl }
           : item));
         setSelections((current) => ({
           ...current,
           designOptions: current.designOptions?.map((item) => item.id === option.id
-            ? { ...item, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl }
+            ? { ...item, previewImageUrl: data.previewImageUrl }
             : item),
         }));
-        return { optionId: option.id, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl };
+        return { optionId: option.id, previewImageUrl: data.previewImageUrl };
       };
 
-      const results: Array<PromiseSettledResult<{ optionId: string; previewImageUrl: string; previewBackgroundUrl?: string; previewLightsUrl?: string }>> = [];
+      const results: Array<PromiseSettledResult<{ optionId: string; previewImageUrl: string }>> = [];
       // Up to three image edits run at once. Quotes may contain as many as five
       // options, so remaining options run in the next batch.
       for (let start = 0; start < optionsToRender.length; start += 3) {
@@ -1030,7 +1019,7 @@ export function HolidayLightingQuoter({
       const previewByOptionId = new Map(successful.map((result) => [result.optionId, result]));
       const generatedOptions = optionsToRender.map((option) => {
         const preview = previewByOptionId.get(option.id);
-        return preview ? { ...option, previewImageUrl: preview.previewImageUrl, previewBackgroundUrl: preview.previewBackgroundUrl, previewLightsUrl: preview.previewLightsUrl } : option;
+        return preview ? { ...option, previewImageUrl: preview.previewImageUrl } : option;
       });
 
       if (successful.length) {
@@ -1834,10 +1823,14 @@ export function HolidayLightingQuoter({
       {step === 4 && photoApproved && photoUrl ? (
         <section className="space-y-3 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">AI lighting preview</h3>
-          <p className="text-xs text-muted-foreground">
-            Paint where lights should go once. We&apos;ll generate a distinct night preview for every option using that option&apos;s bulb type, colors, and pattern. Permanent lights are rendered as sleek, low-profile architectural LEDs.
-          </p>
-          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={photoUrl} alt="Property photo" className="w-full rounded border border-border" />
+          <label className="block text-sm font-medium" htmlFor="preview-instructions">Preview instructions</label>
+          <textarea id="preview-instructions" rows={4} maxLength={4000} disabled={visualizing}
+            value={activeDesignOption?.previewPrompt ?? ""}
+            placeholder="Warm white C9 lights along the front roofline. Red and green around the porch. Leave trees unlit."
+            onChange={event => setDesignOptions(currentOptions().map(option => option.id === activeOptionId ? {...option,previewPrompt:event.target.value} : option))}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
           <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
             {visualizing ? (
               <>

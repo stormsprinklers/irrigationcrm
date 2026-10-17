@@ -132,8 +132,7 @@ export type HolidayQuoteDesignOption = {
   label: string;
   /** Option-specific customer preview. The source property photo remains quote-wide. */
   previewImageUrl?: string;
-  previewBackgroundUrl?: string;
-  previewLightsUrl?: string;
+  previewPrompt?: string;
   measurements: HolidayMeasurements;
   selections: {
     defaultLightStyleKey: string;
@@ -671,8 +670,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             typeof option.previewImageUrl === "string" && option.previewImageUrl.trim()
               ? option.previewImageUrl.trim()
               : undefined,
-          previewBackgroundUrl: typeof option.previewBackgroundUrl === "string" ? option.previewBackgroundUrl : undefined,
-          previewLightsUrl: typeof option.previewLightsUrl === "string" ? option.previewLightsUrl : undefined,
+          previewPrompt: typeof option.previewPrompt === "string" ? option.previewPrompt.slice(0, 4000) : undefined,
           photoMarkup: parseHolidayPhotoMarkup(option.photoMarkup),
           measurements: parseHolidayMeasurements(option.measurements),
           selections: {
@@ -737,8 +735,7 @@ export function holidayDesignOptionsFromQuote(params: {
         id: option.id,
         label: option.label || `Option ${index + 1}`,
         previewImageUrl: option.previewImageUrl,
-        previewBackgroundUrl: option.previewBackgroundUrl,
-        previewLightsUrl: option.previewLightsUrl,
+        previewPrompt: option.previewPrompt,
         photoMarkup: parseHolidayPhotoMarkup(option.photoMarkup),
         measurements: parseHolidayMeasurements(option.measurements),
         selections: {
