@@ -5,6 +5,7 @@ import { prisma } from "../../prisma";
 import { signMobileAccessToken } from "../../mobile-auth/tokens";
 import { DEFAULT_HOLIDAY_CATALOG, holidayDesignOptionsFromQuote, parseHolidayMeasurements, parseHolidaySelections, parseHolidayPhotoMarkup } from "../types";
 import { persistNativeHolidayPreview, HolidayPreviewConflict } from "../native-preview";
+import { POST as erasePreview } from "../../../app/api/holiday-lighting/quotes/[id]/preview-edit/route";
 import { PATCH } from "../../../app/api/holiday-lighting/quotes/[id]/route";
 import { GET as photo, POST as uploadPhoto } from "../../../app/api/holiday-lighting/quotes/[id]/photo/route";
 
@@ -114,4 +115,27 @@ test("payload encoded by the Swift models keeps CRM prices, options, peaks and c
   assert.equal(options[1].measurements.segments[0].colorPattern, "Warm White");
   assert.equal(options[1].photoMarkup?.[0].points[0].x, 0.25);
   assert.equal(selections.activeDesignOptionId, options[1].id);
+});
+
+test("layered preview URLs stay in option JSON, and stale eraser saves are rejected", async t => {
+  const quote = fixture();
+  stub(t, prisma.holidayLightingQuote, "findFirst", async () => quote);
+  const update = stub(t, prisma.holidayLightingQuote, "update", async () => quote);
+  const option = holidayDesignOptionsFromQuote({measurements: parseHolidayMeasurements(quote.measurements),selections:quote.selections,catalog:DEFAULT_HOLIDAY_CATALOG})[1];
+  await persistNativeHolidayPreview({companyId:user.companyId,quoteId:quote.id,sourcePhotoUrl:"source",option,catalog:DEFAULT_HOLIDAY_CATALOG,previewImageUrl:"new-b",previewBackgroundUrl:"house-b",previewLightsUrl:"lights-b",expectedPreviewUrl:"old-b"});
+  const data = update.mock.calls[0].arguments[0].data;
+  assert.deepEqual(Object.keys(data).sort(),["previewImageUrl","selections"]);
+  const parsed = holidayDesignOptionsFromQuote({measurements:parseHolidayMeasurements(quote.measurements),selections:parseHolidaySelections(data.selections),catalog:DEFAULT_HOLIDAY_CATALOG});
+  assert.equal(parsed[1].previewBackgroundUrl,"house-b");
+  assert.equal(parsed[1].previewLightsUrl,"lights-b");
+  await assert.rejects(persistNativeHolidayPreview({companyId:user.companyId,quoteId:quote.id,sourcePhotoUrl:"source",option,catalog:DEFAULT_HOLIDAY_CATALOG,previewImageUrl:"erased",expectedPreviewUrl:"obsolete"}),HolidayPreviewConflict);
+  assert.equal(update.mock.callCount(),1);
+});
+
+test("preview erasing rejects anonymous and cross-company access",async t=>{
+  assert.equal((await erasePreview(new NextRequest("https://crm.example.com/api/holiday-lighting/quotes/q/preview-edit",{method:"POST",headers:{authorization:"Bearer invalid"}}),{params:Promise.resolve({id:"q"})})).status,401);
+  auth(t);
+  const lookup = stub(t,prisma.holidayLightingQuote,"findFirst",async()=>null);
+  assert.equal((await erasePreview(await request("/api/holiday-lighting/quotes/foreign/preview-edit","POST"),{params:Promise.resolve({id:"foreign"})})).status,404);
+  assert.deepEqual(lookup.mock.calls[0].arguments[0].where,{id:"foreign",companyId:"company-a"});
 });

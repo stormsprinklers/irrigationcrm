@@ -122,7 +122,7 @@ export async function createEstimateFromHolidayQuote(params: {
       key,
       label,
       tagline,
-      description: [tagline, leaseAgreementCopy, selections.notes?.trim(), `${detailCopy} ${summary}`]
+      description: [tagline, leaseAgreementCopy, `${detailCopy} ${summary}`]
         .filter(Boolean)
         .join("\n\n"),
       detail,
@@ -231,6 +231,7 @@ export async function createEstimateFromHolidayQuote(params: {
         letter: String.fromCharCode(65 + index),
         label: pack.label,
         description: pack.description,
+        internalNotes: pack.selections.notes?.trim() || null,
         sortOrder: index,
         subtotal: detail.subtotal,
         discountTotal: detail.discountTotal,

@@ -49,6 +49,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-easy-crop": "^6.0.2",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.5",
     "stripe": "^22.2.1",
     "tailwind-merge": "^3.3.1",

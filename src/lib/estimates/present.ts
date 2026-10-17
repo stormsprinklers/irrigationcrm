@@ -78,12 +78,11 @@ async function generatePresentationCopy(params: {
   label: string;
   items: string[];
   uniqueItems: string[];
-  technicianNotes: string | null;
   assets: MediaPick[];
   takenTitles: string[];
 }): Promise<{ title: string; description: string; assetId: string | null }> {
-  const haystack = `${params.label} ${params.technicianNotes ?? ""} ${params.items.join(" ")}`;
-  const uniqueHaystack = `${params.technicianNotes ?? ""} ${params.uniqueItems.join(" ")}`;
+  const haystack = `${params.label} ${params.items.join(" ")}`;
+  const uniqueHaystack = `${params.uniqueItems.join(" ")}`;
   const fallbackAsset = pickAssetFallback(params.assets, haystack, uniqueHaystack);
   const fallbackTitle = fallbackOptionTitle(params.label, params.uniqueItems, params.items);
   const apiKey = getOpenAIApiKey();
@@ -120,10 +119,9 @@ async function generatePresentationCopy(params: {
           role: "user",
           content: JSON.stringify({
             instruction:
-              "Write a professional customer-facing option title (2-6 words, Title Case) and 2-3 short paragraphs (about 40-90 words total) describing this estimate option for a homeowner. The title should sound like a named service package, not a draft label. Do not use Option A/B/C, prices, EST numbers, or slang. Make the title distinct from titlesAlreadyUsed. Prefer distinctiveLineItems and technicianNotes for what makes this option different. Plain language in the description. technicianNotes are staff context — use them as the primary guide for tone, scope, title, and which photo to pick, but never copy them verbatim; rewrite in homeowner-friendly language. Pick exactly one photo id from mediaCatalog. Strongly prefer a photo that matches distinctiveLineItems (work unique to this option vs the other options). If none of those fit, match technicianNotes, then the overall line items. If the catalog is empty or nothing fits, use null. Never invent an id.",
+              "Write a professional customer-facing option title (2-6 words, Title Case) and 2-3 short paragraphs (about 40-90 words total) describing this estimate option for a homeowner. The title should sound like a named service package, not a draft label. Do not use Option A/B/C, prices, EST numbers, or slang. Make the title distinct from titlesAlreadyUsed. Use distinctiveLineItems for what makes this option different. Plain language in the description. Pick exactly one photo id from mediaCatalog. Strongly prefer a photo that matches distinctiveLineItems (work unique to this option vs the other options). If none of those fit, match the overall line items. If the catalog is empty or nothing fits, use null. Never invent an id.",
             optionName: params.label,
             titlesAlreadyUsed: params.takenTitles,
-            technicianNotes: params.technicianNotes,
             lineItems: params.items,
             distinctiveLineItems: params.uniqueItems,
             mediaCatalog: catalog,
@@ -274,7 +272,7 @@ export async function prepareEstimatePresentation(params: {
     const available = assets.filter(
       (asset) => !usedAssetIds.has(asset.id) && !usedBlobUrls.has(asset.blobUrl)
     );
-    const uniqueHaystack = `${option.internalNotes?.trim() ?? ""} ${uniqueItems.join(" ")}`;
+    const uniqueHaystack = `${uniqueItems.join(" ")}`;
     const uniqueCatalogAsset =
       uniquePhotoUrl
         ? available.find((row) => row.blobUrl === uniquePhotoUrl) ?? null
@@ -303,7 +301,6 @@ export async function prepareEstimatePresentation(params: {
             label: option.label,
             items,
             uniqueItems,
-            technicianNotes: option.internalNotes?.trim() || null,
             assets: available,
             takenTitles: [...usedTitles],
           })

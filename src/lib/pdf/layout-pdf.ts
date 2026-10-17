@@ -19,6 +19,7 @@ function ascii(text: string) {
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/\u2013|\u2014/g, "-")
     .replace(/\u00A0/g, " ")
+    .replace(/[\u00B7\u2022]/g, ",")
     .replace(/[^\x20-\x7E\n]/g, "?");
 }
 
@@ -67,10 +68,10 @@ function rgb(hex: string | null | undefined) {
   };
 }
 
-type PageContent = { ops: string[]; images: JpegImage[] };
+type PageContent = { ops: string[]; images: JpegImage[]; links: Array<{url: string; y: number; width: number}> };
 
 export class SimplePdf {
-  private pages: PageContent[] = [{ ops: [], images: [] }];
+  private pages: PageContent[] = [{ ops: [], images: [], links: [] }];
   private y = PAGE_H - MARGIN;
   private readonly color: { r: number; g: number; b: number };
 
@@ -83,7 +84,7 @@ export class SimplePdf {
   }
 
   private newPage() {
-    this.pages.push({ ops: [], images: [] });
+    this.pages.push({ ops: [], images: [], links: [] });
     this.y = PAGE_H - MARGIN;
   }
 
@@ -177,11 +178,19 @@ export class SimplePdf {
     this.y -= 16;
   }
 
-  addJpeg(bytes: Buffer, caption?: string) {
+  addLink(label: string, url: string | null | undefined) {
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    this.ensure(16);
+    const y = this.y - 12;
+    this.addMuted(label);
+    this.page().links.push({url, y, width: Math.min(PAGE_W - MARGIN * 2, label.length * 5)});
+  }
+
+  addJpeg(bytes: Buffer, caption?: string, bounds?: {width: number; height: number}) {
     const dim = jpegDimensions(bytes);
     if (!dim) return false;
-    const maxW = PAGE_W - MARGIN * 2;
-    const scale = Math.min(1, maxW / dim.width, 220 / dim.height);
+    const maxW = bounds?.width ?? PAGE_W - MARGIN * 2;
+    const scale = Math.min(1, maxW / dim.width, (bounds?.height ?? 220) / dim.height);
     const w = dim.width * scale;
     const h = dim.height * scale;
     this.ensure(h + 18);
@@ -239,9 +248,12 @@ export class SimplePdf {
         `<< /Font << /F1 ${fontId} 0 R >>` +
         (localNames.length ? ` /XObject << ${localNames.join(" ")} >>` : "") +
         ` >>`;
+      const annotations = page.links.map(link => pushText(
+        `<< /Type /Annot /Subtype /Link /Rect [${MARGIN} ${link.y} ${MARGIN + link.width} ${link.y + 13}] /Border [0 0 0] /A << /S /URI /URI (${pdfEscape(link.url)}) >> >>`
+      ));
       const pageBody =
         `<< /Type /Page /Parent __PAGES__ 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] ` +
-        `/Contents ${contentsId} 0 R /Resources ${resources} >>`;
+        `/Contents ${contentsId} 0 R /Resources ${resources}${annotations.length ? ` /Annots [${annotations.map(id => `${id} 0 R`).join(" ")}]` : ""} >>`;
       const pageId = objs.length + 1;
       pageBodies.push({ id: pageId, body: pageBody });
       pushText(pageBody);
@@ -293,5 +305,5 @@ export function formatCompanyAddress(company: {
   const line1 = company.address?.trim() ?? "";
   const line2 = [company.city, company.state].filter(Boolean).join(", ");
   const cityStateZip = [line2, company.zip].filter(Boolean).join(" ");
-  return [line1, cityStateZip].filter(Boolean).join(" · ");
+  return [line1, cityStateZip].filter(Boolean).join(", ");
 }

@@ -79,6 +79,8 @@ type Estimate = {
 type CompanyBranding = {
   name: string;
   emailLogoUrl: string | null;
+  phone?: string | null;
+  supportEmail?: string | null;
   estimateWarrantyText?: string | null;
   financingUrl?: string | null;
   termsOfServiceUrl?: string | null;
@@ -495,6 +497,14 @@ export function PortalEstimateView({
 
         <div>
           <h1 className="text-2xl font-semibold">Proposal from {company.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            {company.supportEmail ? <a className="text-primary hover:underline" href={`mailto:${company.supportEmail}`}>Email {company.supportEmail}</a> : null}
+            {company.phone ? <>
+              <a className="text-primary hover:underline" href={`sms:${company.phone.replace(/[^+\d]/g, "")}`}>Text</a>
+              <a className="text-primary hover:underline" href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}>Call {company.phone}</a>
+            </> : null}
+            {company.termsOfServiceUrl ? <LegalDocLink href={company.termsOfServiceUrl}>Terms and conditions</LegalDocLink> : null}
+          </div>
           <p className="text-sm text-muted-foreground capitalize">
             {estimate.status === "SENT" && estimate.signedAt
               ? "Pending payment arrangement"
@@ -520,7 +530,7 @@ export function PortalEstimateView({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={
-                blobProxyUrl(estimate.holidayPreviewImageUrl) ??
+                absolutePublicBlobUrl(estimate.holidayPreviewImageUrl) ??
                 estimate.holidayPreviewImageUrl
               }
               alt="Lighting preview"

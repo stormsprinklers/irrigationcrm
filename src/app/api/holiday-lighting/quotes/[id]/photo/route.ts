@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (version && new Date(version).getTime() !== quote.updatedAt.getTime()) return NextResponse.json({ error: "This quote changed in the CRM. Reload before replacing its photo." }, { status: 409 });
     const blob = await uploadPrivateBlob(`estimates/${user.companyId}/holiday-quotes/${quote.id}/source-${crypto.randomUUID()}`, file, { contentType: file.type });
     const selections = parseHolidaySelections(quote.selections);
-    selections.designOptions = selections.designOptions?.map(option => ({ ...option, previewImageUrl: undefined, photoMarkup: [] }));
+    selections.designOptions = selections.designOptions?.map(option => ({ ...option, previewImageUrl: undefined, previewBackgroundUrl: undefined, previewLightsUrl: undefined, photoMarkup: [] }));
     const updated = await prisma.holidayLightingQuote.update({ where: { id: quote.id, companyId: user.companyId, updatedAt: quote.updatedAt }, data: { sourcePhotoUrl: blob.url, previewImageUrl: null, selections }, include: { customer: { select: { id: true, name: true } }, estimate: { select: { id: true, estimateNumber: true, status: true } } } });
     return NextResponse.json({ quote: updated });
   } catch (error) { return failure(error); }

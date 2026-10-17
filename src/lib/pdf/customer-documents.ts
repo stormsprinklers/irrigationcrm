@@ -1,8 +1,9 @@
+import { pdfLogoJpeg } from "./logo";
 import { fetchBlobBytes } from "@/lib/blob/download";
 import { prisma } from "@/lib/prisma";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
 import { toNumber } from "@/lib/visits/totals";
-import { jpegDimensions, SimplePdf, formatCompanyAddress, money } from "@/lib/pdf/layout-pdf";
+import { SimplePdf, formatCompanyAddress, money } from "@/lib/pdf/layout-pdf";
 
 type CompanyBrand = {
   name: string;
@@ -20,16 +21,14 @@ type CompanyBrand = {
   invoiceTerms?: string | null;
   estimateWarrantyText?: string | null;
   googleReviewUrl?: string | null;
+  termsOfServiceUrl?: string | null;
 };
 
 async function logoJpeg(url: string | null | undefined) {
   if (!url) return null;
   try {
-    const { buffer, mimeType } = await fetchBlobBytes(url);
-    if (!mimeType.includes("jpeg") && !mimeType.includes("jpg") && !jpegDimensions(buffer)) {
-      return null;
-    }
-    return jpegDimensions(buffer) ? buffer : null;
+    const { buffer } = await fetchBlobBytes(url);
+    return await pdfLogoJpeg(buffer);
   } catch {
     return null;
   }
@@ -106,17 +105,16 @@ async function loadEstimateForPdf(estimateId: string, companyId: string) {
     ...estimate,
     company: { estimateWarrantyText: estimate.company.estimateWarrantyText },
   });
-  return { estimate, view };
+  return { estimate, view, logo: await logoJpeg(estimate.company.emailLogoUrl) };
 }
 
-async function renderEstimatePdf(
+export async function renderEstimatePdf(
   built: NonNullable<Awaited<ReturnType<typeof loadEstimateForPdf>>>,
   optionId: string | null
 ): Promise<Buffer | null> {
-  const { estimate, view } = built;
+  const { estimate, view, logo } = built;
   const pdf = new SimplePdf(estimate.company.brandPrimaryColor);
-  const logo = await logoJpeg(estimate.company.emailLogoUrl);
-  if (logo) pdf.addJpeg(logo);
+  if (logo) pdf.addJpeg(logo, undefined, {width: 160, height: 64});
 
   addCompanyHeader(pdf, estimate.company, "Proposal");
   pdf.addHeading(`Proposal from ${estimate.company.name}`);
@@ -207,6 +205,8 @@ async function renderEstimatePdf(
     );
   }
 
+  pdf.addLink("Terms and conditions", estimate.company.termsOfServiceUrl);
+
   return pdf.toBuffer();
 }
 
@@ -234,7 +234,7 @@ export async function buildReceiptPdf(params: {
 
   const pdf = new SimplePdf(invoice.company.brandPrimaryColor);
   const logo = await logoJpeg(invoice.company.emailLogoUrl);
-  if (logo) pdf.addJpeg(logo);
+  if (logo) pdf.addJpeg(logo, undefined, {width: 160, height: 64});
 
   addCompanyHeader(pdf, invoice.company, "Payment receipt");
   pdf.addHeading("Payment receipt");

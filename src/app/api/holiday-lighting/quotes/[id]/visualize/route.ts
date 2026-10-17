@@ -1,3 +1,4 @@
+import { preparePreviewLayers, separatePreviewLights } from "@/lib/holiday-lighting/preview-layers";
 import { NextRequest, NextResponse } from "next/server";
 import {
   badRequestResponse,
@@ -28,18 +29,6 @@ export const maxDuration = 300;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_REQUEST_IMAGE_BYTES = 4 * 1024 * 1024;
 const OPENAI_IMAGE_TIMEOUT_MS = 240_000;
-
-function supportedImageType(file: File) {
-  return file.type === "image/jpeg" || file.type === "image/webp" || file.type === "image/png"
-    ? file.type
-    : "image/png";
-}
-
-function imageExtension(type: string) {
-  if (type === "image/jpeg") return "jpg";
-  if (type === "image/webp") return "webp";
-  return "png";
-}
 
 function styleRenderingInstruction(styleKey: string, styleLabel: string) {
   if (styleKey === "mini" || /mini/i.test(styleLabel)) {
@@ -107,19 +96,15 @@ function optionVisualPlan(
 
 function lightingPrompt(option: HolidayQuoteDesignOption, catalog: HolidayLightingCatalog) {
   const visualPlan = optionVisualPlan(option, catalog);
-  return `You are given TWO images of the same residential property:
-
-IMAGE 1 — PROPERTY (clean): a photo of the house (uploaded or Google Street View). Use this as the geometric base — same architecture, camera angle, windows, driveway, landscaping, and layout.
-
-IMAGE 2 — MARKED: the same photo with the user’s brushstroke highlights. Those painted strokes are the ONLY places that should receive holiday lighting.
+  return `You are given ONE unpainted photograph of the residential property and a separate transparent edit mask. The transparent mask regions are the ONLY locations allowed to receive holiday lights. The mask specifies placement, not the shape, thickness, color, or appearance of the lights. There is no colored reference paint to reproduce.
 
 Instructions — holiday lights:
 - Create a distinct preview for the estimate option named "${option.label}" using this exact lighting specification:
 ${visualPlan}
 - Where more than one specification is listed, keep their bulb scale, construction, brightness, and colors visually distinct rather than blending them into one generic light style.
-- Add professional LED holiday lights strictly inside the brush-marked regions from IMAGE 2.
-- Do NOT invent extra holiday lighting anywhere that is not marked. Unpainted trees, bushes, windows and roof edges must remain unlit even if they appear in the option layout. The painted guide and transparent edit mask take precedence over the textual layout.
-- Replace the brushstroke paint with realistic installed lights (evenly spaced, neatly clipped, soft evening glow).
+- Add professional LED holiday lights strictly inside the transparent mask regions.
+- Do NOT invent extra holiday lighting anywhere that is not marked. Unpainted trees, bushes, windows and roof edges must remain unlit even if they appear in the option layout. The transparent edit mask takes precedence over the textual layout.
+- Install discrete three-dimensional bulbs with small sockets, fine dark wiring and clips. For C9, space individual bulbs roughly 12 inches apart along the roof edge. For mini LEDs, use smaller pinpoints on fine wire. The mask is a broad placement boundary, not a luminous strip to fill.
 
 Instructions — atmosphere:
 - Preserve the source exposure and surroundings outside the edit mask.
@@ -131,7 +116,7 @@ Instructions — image quality:
 - Preserve the real house, viewpoint, and proportions.
 - Do not add people, extra cars, text, logos, or watermarks.
 
-Output one photorealistic dusk/night preview of this exact property.`;
+Keep the input house exposure and ambient lighting unchanged. Output a photorealistic installed-light preview, not a drawing or illustration.`;
 }
 
 type Params = { params: Promise<{ id: string }> };
@@ -188,29 +173,17 @@ export async function POST(request: NextRequest, { params }: Params) {
       ?? options[0];
     if (!option) return badRequestResponse("This quote does not have an option to preview");
 
-    const outbound = new FormData();
     const editMask = form.get("editMask");
-    if (editMask instanceof File) {
-      if (editMask.type !== "image/png" || editMask.size > MAX_FILE_BYTES || clean.size + marked.size + editMask.size > MAX_REQUEST_IMAGE_BYTES) return badRequestResponse("Invalid lighting edit mask");
-      outbound.append("mask", new Blob([await editMask.arrayBuffer()], {type: "image/png"}), "lighting-mask.png");
-    }
-    outbound.append("model", "gpt-image-1");
+    if (editMask instanceof File && (editMask.type !== "image/png" || editMask.size > MAX_FILE_BYTES || clean.size + marked.size + editMask.size > MAX_REQUEST_IMAGE_BYTES)) return badRequestResponse("Invalid lighting edit mask");
+    const layers = await preparePreviewLayers(Buffer.from(await clean.arrayBuffer()), Buffer.from(await marked.arrayBuffer()), editMask instanceof File ? Buffer.from(await editMask.arrayBuffer()) : undefined);
+    const outbound = new FormData();
+    outbound.append("model", "gpt-image-1.5");
     outbound.append("prompt", lightingPrompt(option, catalog));
-    outbound.append("size", "1024x1024");
+    outbound.append("size", layers.width > layers.height ? "1536x1024" : layers.height > layers.width ? "1024x1536" : "1024x1024");
     outbound.append("input_fidelity", "high");
-    // First image = clean property (high-fidelity base). Second = brush-marked guide.
-    const cleanType = supportedImageType(clean);
-    const markedType = supportedImageType(marked);
-    outbound.append(
-      "image[]",
-      new Blob([await clean.arrayBuffer()], { type: cleanType }),
-      `property.${imageExtension(cleanType)}`
-    );
-    outbound.append(
-      "image[]",
-      new Blob([await marked.arrayBuffer()], { type: markedType }),
-      `property-marked.${imageExtension(markedType)}`
-    );
+    outbound.append("quality", "high");
+    outbound.append("image[]", new Blob([new Uint8Array(layers.background)], {type:"image/png"}), "property.png");
+    outbound.append("mask", new Blob([new Uint8Array(layers.mask)], {type:"image/png"}), "placement-mask.png");
 
     const res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
@@ -234,18 +207,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "No preview image returned" }, { status: 502 });
     }
 
+    const separated = await separatePreviewLights(layers.background, Buffer.from(b64,"base64"), layers.mask);
+    const previewBackgroundUrl = await saveHolidayPreviewBlob({companyId:user.companyId,quoteId,optionId:`${option.id}-house`,pngBase64:layers.background.toString("base64")});
+    const previewLightsUrl = await saveHolidayPreviewBlob({companyId:user.companyId,quoteId,optionId:`${option.id}-lights`,pngBase64:separated.lights.toString("base64")});
     const previewImageUrl = await saveHolidayPreviewBlob({
       companyId: user.companyId,
       quoteId,
       optionId: option.id,
-      pngBase64: b64,
+      pngBase64: separated.composite.toString("base64"),
     });
 
     // Native clients persist the returned option preview here, atomically. A long
     // generation must not replace a design/photo changed on another device.
     if (form.get("persistOptionPreview") === "true") {
-      await persistNativeHolidayPreview({ companyId: user.companyId, quoteId, sourcePhotoUrl: quote.sourcePhotoUrl, option, catalog, previewImageUrl });
-      return NextResponse.json({ optionId: option.id, previewImageUrl });
+      await persistNativeHolidayPreview({ companyId: user.companyId, quoteId, sourcePhotoUrl: quote.sourcePhotoUrl, option, catalog, previewImageUrl, previewBackgroundUrl, previewLightsUrl });
+      return NextResponse.json({ optionId: option.id, previewImageUrl, previewBackgroundUrl, previewLightsUrl });
     }
 
     const isActiveOption = option.id === rootSelections.activeDesignOptionId;
@@ -263,6 +239,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({
       optionId: option.id,
       previewImageUrl,
+      previewBackgroundUrl, previewLightsUrl,
       quotePreviewImageUrl: isActiveOption || options.length === 1
         ? previewImageUrl
         : quote.previewImageUrl,

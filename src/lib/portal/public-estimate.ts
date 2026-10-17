@@ -59,6 +59,8 @@ export async function findEstimateForStaffPreview(companyId: string, idOrToken: 
 export function portalCompanyPayload(company: PortalCompany) {
   return {
     name: company.name,
+    phone: company.phone,
+    supportEmail: company.supportEmail || company.sendgridFrom,
     emailLogoUrl: company.emailLogoUrl,
     estimateWarrantyText: company.estimateWarrantyText ?? null,
     financingUrl: company.estimateFinancingUrl ?? null,

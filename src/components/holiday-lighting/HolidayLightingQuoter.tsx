@@ -801,7 +801,7 @@ export function HolidayLightingQuoter({
   }, [address, city, state, zip, addressLine]);
 
   async function onPhotoSelected(file: File) {
-    const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
+    const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined, previewBackgroundUrl: undefined, previewLightsUrl: undefined }));
     setDesignOptions(optionsWithoutPreviews);
     setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
     setPhotoUrl(URL.createObjectURL(file));
@@ -838,7 +838,7 @@ export function HolidayLightingQuoter({
         throw new Error("No Street View image for this view — try a different angle or upload a photo.");
       }
       setPhotoUrl(URL.createObjectURL(blob));
-      const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined }));
+      const optionsWithoutPreviews = currentOptions().map((option) => ({ ...option, previewImageUrl: undefined, previewBackgroundUrl: undefined, previewLightsUrl: undefined }));
       setDesignOptions(optionsWithoutPreviews);
       setSelections((current) => ({ ...current, designOptions: optionsWithoutPreviews }));
       setPhotoApproved(false);
@@ -974,7 +974,7 @@ export function HolidayLightingQuoter({
           body: form,
         });
         const responseText = await res.text();
-        let data: { error?: string; optionId?: string; previewImageUrl?: string } = {};
+        let data: { error?: string; optionId?: string; previewImageUrl?: string; previewBackgroundUrl?: string; previewLightsUrl?: string } = {};
         if (responseText.trim()) {
           try {
             data = JSON.parse(responseText) as typeof data;
@@ -994,18 +994,18 @@ export function HolidayLightingQuoter({
         // Show each completed image immediately instead of leaving the preview
         // area looking stalled while the other concurrent requests finish.
         setDesignOptions((current) => current.map((item) => item.id === option.id
-          ? { ...item, previewImageUrl: data.previewImageUrl }
+          ? { ...item, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl }
           : item));
         setSelections((current) => ({
           ...current,
           designOptions: current.designOptions?.map((item) => item.id === option.id
-            ? { ...item, previewImageUrl: data.previewImageUrl }
+            ? { ...item, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl }
             : item),
         }));
-        return { optionId: option.id, previewImageUrl: data.previewImageUrl };
+        return { optionId: option.id, previewImageUrl: data.previewImageUrl, previewBackgroundUrl: data.previewBackgroundUrl, previewLightsUrl: data.previewLightsUrl };
       };
 
-      const results: Array<PromiseSettledResult<{ optionId: string; previewImageUrl: string }>> = [];
+      const results: Array<PromiseSettledResult<{ optionId: string; previewImageUrl: string; previewBackgroundUrl?: string; previewLightsUrl?: string }>> = [];
       // Up to three image edits run at once. Quotes may contain as many as five
       // options, so remaining options run in the next batch.
       for (let start = 0; start < optionsToRender.length; start += 3) {
@@ -1027,10 +1027,10 @@ export function HolidayLightingQuoter({
       const failed = results.flatMap((result) => result.status === "rejected"
         ? [result.reason instanceof Error ? result.reason.message : "Preview generation failed"]
         : []);
-      const previewByOptionId = new Map(successful.map((result) => [result.optionId, result.previewImageUrl]));
+      const previewByOptionId = new Map(successful.map((result) => [result.optionId, result]));
       const generatedOptions = optionsToRender.map((option) => {
-        const previewImageUrl = previewByOptionId.get(option.id);
-        return previewImageUrl ? { ...option, previewImageUrl } : option;
+        const preview = previewByOptionId.get(option.id);
+        return preview ? { ...option, previewImageUrl: preview.previewImageUrl, previewBackgroundUrl: preview.previewBackgroundUrl, previewLightsUrl: preview.previewLightsUrl } : option;
       });
 
       if (successful.length) {

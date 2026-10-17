@@ -1,3 +1,4 @@
+import { customerEstimateDescription } from "./estimate-copy";
 import type { VisitStatus } from "@prisma/client";
 import { holidayBuyBreakdownLines } from "@/lib/holiday-lighting/pricing";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
@@ -143,6 +144,7 @@ export function serializePortalEstimate(estimate: {
     letter: string | null;
     label: string;
     description?: string | null;
+    internalNotes?: string | null;
     photoUrl?: string | null;
     photoAssetId?: string | null;
     declinedAt?: Date | null;
@@ -182,9 +184,15 @@ export function serializePortalEstimate(estimate: {
     estimate.designExportMetadata && typeof estimate.designExportMetadata === "object"
       ? (estimate.designExportMetadata as Record<string, unknown>)
       : null;
+  const internalNotes: unknown[] = [meta?.notes, ...(estimate.options ?? []).map(option => option.internalNotes)];
+  if (Array.isArray(meta?.options)) {
+    for (const option of meta.options) {
+      if (option && typeof option === "object") internalNotes.push((option as Record<string, unknown>).notes);
+    }
+  }
   const holidayStrandMap = holidayStrandMapFromMetadata(meta);
   const holidayPreviewImageUrl =
-    typeof meta?.previewImageUrl === "string" ? meta.previewImageUrl : null;
+    typeof meta?.previewImageUrl === "string" ? estimateOptionPhotoUrl(meta.previewImageUrl) : null;
   const holidayPreviewDisclaimer =
     typeof meta?.previewDisclaimer === "string"
       ? meta.previewDisclaimer
@@ -204,7 +212,7 @@ export function serializePortalEstimate(estimate: {
       id: option.id,
       letter: option.letter,
       label: option.label,
-      description: option.description ?? null,
+      description: customerEstimateDescription(option.description, internalNotes),
       photoUrl: estimateOptionPhotoUrl(option.photoUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
