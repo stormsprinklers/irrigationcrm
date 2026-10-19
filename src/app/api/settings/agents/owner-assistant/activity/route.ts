@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
           startedAt: true,
           endedAt: true,
           failedPinAttempts: true,
+          transcript: true,
         },
       }),
       prisma.ownerAssistantMessage.findMany({

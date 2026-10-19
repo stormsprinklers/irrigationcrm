@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-16T22:06:19.989Z",
-  "digest": "1bb52755b13a03d49fc8285e54efca590983fd525d53456e243bbd9e2a6845bb",
-  "totalRoutes": 565,
+  "generatedAt": "2026-10-17T19:46:50.340Z",
+  "digest": "d617fa38f1bc4ac8b9e40ffde7e74a51a528405148e1f56c5a1897e65912f889",
+  "totalRoutes": 567,
   "highPriorityRoutes": 131,
   "middlewareOnlyRoutes": 0,
-  "mutatingRoutes": 414,
+  "mutatingRoutes": 415,
   "rows": [
     {
       "route": "/api/account/companies/find",
@@ -969,6 +969,32 @@
       "source": "src/app/api/estimates/[id]/options/route.ts"
     },
     {
+      "route": "/api/estimates/:id/payments",
+      "methods": "POST",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "not-explicit",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "yes",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/estimates/[id]/payments/route.ts"
+    },
+    {
+      "route": "/api/estimates/:id/pdf",
+      "methods": "GET",
+      "audience": "staff",
+      "authentication": "staff-session-or-mobile-bearer",
+      "roles": "not-explicit",
+      "tenantEvidence": "present",
+      "rateLimit": "none-detected",
+      "sideEffects": "no",
+      "auditEvidence": "none-detected",
+      "reviewPriority": "standard",
+      "source": "src/app/api/estimates/[id]/pdf/route.ts"
+    },
+    {
       "route": "/api/estimates/:id/post-approval",
       "methods": "POST",
       "audience": "staff",
@@ -1022,7 +1048,7 @@
     },
     {
       "route": "/api/estimates/:id/send",
-      "methods": "POST",
+      "methods": "GET|POST",
       "audience": "staff",
       "authentication": "staff-session-or-mobile-bearer",
       "roles": "not-explicit",

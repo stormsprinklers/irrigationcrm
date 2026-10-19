@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -11,6 +11,10 @@ import {
   HolidayMapPanel,
   type HolidayMapPanelHandle,
 } from "@/components/holiday-lighting/HolidayMapPanel";
+import {
+  PaintCanvas,
+  type PaintCanvasHandle,
+} from "@/components/holiday-lighting/PaintCanvas";
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,6 +29,7 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
 import { optionDetail, type HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
+import { estimatePreviewGenerationProgress } from "@/lib/holiday-lighting/preview-progress";
 import { pruneStrands } from "@/lib/holiday-lighting/strands";
 import {
   DEFAULT_HOLIDAY_CATALOG,
@@ -84,14 +89,107 @@ type Props = {
 };
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
+type PreviewGenerationPhase = "idle" | "generating" | "completed" | "partial" | "failed";
+
+const PREVIEW_REQUEST_TIMEOUT_MS = 270_000;
 
 const WIZARD_STEPS: Array<{ id: WizardStep; label: string }> = [
   { id: 1, label: "Location" },
-  { id: 2, label: "Measure" },
-  { id: 3, label: "Lights" },
-  { id: 4, label: "Preview" },
+  { id: 2, label: "Lights" },
+  { id: 3, label: "Preview" },
+  { id: 4, label: "Measure" },
   { id: 5, label: "Quote" },
 ];
+
+function PreviewProgressRing({
+  progress,
+  complete = false,
+}: {
+  progress: number;
+  complete?: boolean;
+}) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const normalizedProgress = Math.min(1, Math.max(0, progress));
+
+  return (
+    <span
+      className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center"
+      role="progressbar"
+      aria-label={complete ? "Preview generation completed" : "Estimated preview generation progress"}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(normalizedProgress * 100)}
+    >
+      <svg className="h-10 w-10 -rotate-90" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r={radius} fill="none" strokeWidth="4" className="stroke-muted" />
+        <circle
+          cx="20"
+          cy="20"
+          r={radius}
+          fill="none"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - normalizedProgress)}
+          className={cn(
+            "transition-all duration-700 ease-out",
+            complete ? "stroke-emerald-600" : "stroke-primary"
+          )}
+        />
+      </svg>
+      {complete ? (
+        <Check className="absolute h-4 w-4 text-emerald-700" aria-hidden="true" />
+      ) : (
+        <Sparkles className="absolute h-3.5 w-3.5 text-primary" aria-hidden="true" />
+      )}
+    </span>
+  );
+}
+
+function PreviewGenerationStatus({
+  phase,
+  progress,
+  message,
+}: {
+  phase: PreviewGenerationPhase;
+  progress: number;
+  message: string;
+}) {
+  if (phase === "idle") return null;
+  const complete = phase === "completed" || phase === "partial";
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-3 rounded-md border px-3 py-2",
+        phase === "failed"
+          ? "border-red-200 bg-red-50 text-red-900"
+          : phase === "partial"
+            ? "border-amber-200 bg-amber-50 text-amber-900"
+            : phase === "completed"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-border bg-muted/30 text-foreground"
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <PreviewProgressRing progress={progress} complete={complete} />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">
+          {phase === "generating"
+            ? "Generating AI previews"
+            : phase === "completed"
+              ? "Generation completed"
+              : phase === "partial"
+                ? "Generation completed with issues"
+                : "Generation failed"}
+        </p>
+        <p className="text-xs opacity-80">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 function money(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -127,11 +225,9 @@ function displayAddressQuery(
 }
 
 function optionVisualFingerprint(
-  measurements: HolidayMeasurements,
   selections: Pick<HolidayQuoteSelections, "defaultLightStyleKey" | "defaultColorPattern" | "installKind">
 ) {
   return JSON.stringify({
-    measurements,
     defaultLightStyleKey: selections.defaultLightStyleKey,
     defaultColorPattern: selections.defaultColorPattern,
     installKind: selections.installKind,
@@ -155,7 +251,9 @@ export function HolidayLightingQuoter({
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [visualizing, setVisualizing] = useState(false);
-  const [visualizingProgress, setVisualizingProgress] = useState("");
+  const [visualizingProgress, setVisualizingProgress] = useState(0);
+  const [visualizingPhase, setVisualizingPhase] = useState<PreviewGenerationPhase>("idle");
+  const [visualizingMessage, setVisualizingMessage] = useState("");
   const [capturing, setCapturing] = useState(false);
 
   const [address, setAddress] = useState(initialAddress ?? "");
@@ -190,12 +288,16 @@ export function HolidayLightingQuoter({
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [estimateChoiceOpen, setEstimateChoiceOpen] = useState(false);
 
+  const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const quoteIdRef = useRef(initialId ?? "");
   const quoteCreationRef = useRef<Promise<string> | null>(null);
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const quoteRouteReplacedRef = useRef(Boolean(initialId));
+  const visualizationStartedAtRef = useRef(0);
+  const visualizationTotalRef = useRef(1);
+  const visualizationCompletedRef = useRef(0);
   const lastGeocodedKey = useRef("");
   const geocodeSeq = useRef(0);
 
@@ -309,6 +411,23 @@ export function HolidayLightingQuoter({
   }, [initialId, loadQuote, initialCustomerId, initialCustomerName, initialAddress]);
 
   useEffect(() => {
+    if (!visualizing) return;
+
+    const updateEstimate = () => {
+      const estimated = estimatePreviewGenerationProgress({
+        elapsedMs: Date.now() - visualizationStartedAtRef.current,
+        totalItems: visualizationTotalRef.current,
+        completedItems: visualizationCompletedRef.current,
+      });
+      setVisualizingProgress((current) => Math.max(current, estimated));
+    };
+
+    updateEstimate();
+    const timer = window.setInterval(updateEstimate, 750);
+    return () => window.clearInterval(timer);
+  }, [visualizing]);
+
+  useEffect(() => {
     if (!customerId) {
       setProperties([]);
       setPropertyId("");
@@ -383,8 +502,10 @@ export function HolidayLightingQuoter({
       : holidayDesignOptionsFromQuote({ measurements, selections, catalog });
     return base.map((option) => option.id === optionId
       ? (() => {
-          const visualChanged = optionVisualFingerprint(option.measurements, option.selections)
-            !== optionVisualFingerprint(nextMeasurements, nextSelections);
+          // The preview is placed from the user's painted photo lines. Satellite
+          // measurements affect pricing, not the generated image.
+          const visualChanged = optionVisualFingerprint(option.selections)
+            !== optionVisualFingerprint(nextSelections);
           return {
           ...option,
           previewImageUrl: visualChanged ? undefined : option.previewImageUrl,
@@ -855,10 +976,6 @@ export function HolidayLightingQuoter({
       return;
     }
     if (step === 2) {
-      if (measurements.segments.length === 0 && measurements.placements.length === 0) {
-        toast.error("Draw rooflines or mark trees and bushes on the satellite map");
-        return;
-      }
       await save(undefined, { quiet: true });
       setStep(3);
       return;
@@ -869,6 +986,10 @@ export function HolidayLightingQuoter({
       return;
     }
     if (step === 4) {
+      if (measurements.segments.length === 0 && measurements.placements.length === 0) {
+        toast.error("Draw rooflines or mark trees and bushes on the satellite map");
+        return;
+      }
       await save(undefined, { quiet: true });
       setStep(5);
     }
@@ -941,27 +1062,61 @@ export function HolidayLightingQuoter({
   }
 
   async function runVisualize() {
-    if (!photoUrl) { toast.error("Choose a house photo first"); return; }
+    if (!paintRef.current?.hasPaint()) {
+      toast.error("Paint the areas where lights should go");
+      return;
+    }
+    visualizationStartedAtRef.current = Date.now();
+    visualizationTotalRef.current = 1;
+    visualizationCompletedRef.current = 0;
+    setVisualizingProgress(0.04);
+    setVisualizingPhase("generating");
+    setVisualizingMessage("Preparing the photo and lighting design…");
     setVisualizing(true);
     try {
       const id = await ensureQuote();
       const optionsToRender = currentOptions();
-      if (!(await save(undefined, { quiet: true, designOptions: optionsToRender }))) return;
-      const photoResponse = await fetch(photoUrl);
-      if (!photoResponse.ok) throw new Error("Could not load the property photo");
-      const cleanBlob = await photoResponse.blob();
-      if (cleanBlob.size > 4 * 1024 * 1024) throw new Error("This photo is too large to process. Try a smaller photo.");
+      visualizationTotalRef.current = optionsToRender.length;
+      if (!(await save(undefined, { quiet: true, designOptions: optionsToRender }))) {
+        throw new Error("The lighting design could not be saved before generating previews.");
+      }
+      const exported = await paintRef.current.exportForApi();
+      if (!exported) throw new Error("Could not export paint mask");
+      const uploadBytes = exported.cleanBlob.size + exported.markedBlob.size;
+      if (uploadBytes > 4 * 1024 * 1024) {
+        throw new Error("This photo is too large to process. Try a smaller photo.");
+      }
       let completedCount = 0;
-      setVisualizingProgress(`Generating ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}…`);
+      setVisualizingMessage(
+        `Generating ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}. Finished images appear below immediately; you can continue to Measure while the rest finish.`
+      );
 
       const generateOption = async (option: HolidayQuoteDesignOption) => {
         const form = new FormData();
-        form.set("clean", cleanBlob, "property.jpg");
+        form.set("clean", exported.cleanBlob, "property.jpg");
+        form.set("marked", exported.markedBlob, "property-marked.jpg");
         form.set("optionId", option.id);
-        const res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
-          method: "POST",
-          body: form,
-        });
+        // Persist each finished option server-side. This lets generation keep
+        // running while the user measures and prices the quote without a final
+        // browser save overwriting those newer edits.
+        form.set("persistOptionPreview", "true");
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), PREVIEW_REQUEST_TIMEOUT_MS);
+        let res: Response;
+        try {
+          res = await fetch(`/api/holiday-lighting/quotes/${id}/visualize`, {
+            method: "POST",
+            body: form,
+            signal: controller.signal,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") {
+            throw new Error(`${option.label} took too long to generate. Please try again.`);
+          }
+          throw error;
+        } finally {
+          window.clearTimeout(timeout);
+        }
         const responseText = await res.text();
         let data: { error?: string; optionId?: string; previewImageUrl?: string } = {};
         if (responseText.trim()) {
@@ -1004,9 +1159,18 @@ export function HolidayLightingQuoter({
             return await generateOption(option);
           } finally {
             completedCount += 1;
-            setVisualizingProgress(
-              `Generated ${completedCount} of ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"}…`
+            visualizationCompletedRef.current = completedCount;
+            setVisualizingMessage(
+              `${completedCount} of ${optionsToRender.length} preview${optionsToRender.length === 1 ? "" : "s"} finished.`
             );
+            setVisualizingProgress((current) => Math.max(
+              current,
+              estimatePreviewGenerationProgress({
+                elapsedMs: Date.now() - visualizationStartedAtRef.current,
+                totalItems: optionsToRender.length,
+                completedItems: completedCount,
+              })
+            ));
           }
         }));
         results.push(...batchResults);
@@ -1016,34 +1180,28 @@ export function HolidayLightingQuoter({
       const failed = results.flatMap((result) => result.status === "rejected"
         ? [result.reason instanceof Error ? result.reason.message : "Preview generation failed"]
         : []);
-      const previewByOptionId = new Map(successful.map((result) => [result.optionId, result]));
-      const generatedOptions = optionsToRender.map((option) => {
-        const preview = previewByOptionId.get(option.id);
-        return preview ? { ...option, previewImageUrl: preview.previewImageUrl } : option;
-      });
-
-      if (successful.length) {
-        setDesignOptions(generatedOptions);
-        setSelections((current) => ({ ...current, designOptions: generatedOptions }));
-        const activePreview = generatedOptions.find((option) => option.id === activeOptionId)?.previewImageUrl ?? null;
-        const saved = await save(
-          activePreview ? { previewImageUrl: activePreview } : undefined,
-          { quiet: true, designOptions: generatedOptions }
-        );
-        if (!saved) throw new Error("The previews were generated but could not be saved. Please try again.");
-      }
-
       if (!successful.length) throw new Error(failed[0] ?? "No previews could be generated");
+      setVisualizingProgress(1);
       if (failed.length) {
+        setVisualizingPhase("partial");
+        setVisualizingMessage(
+          `Completed with issues — ${successful.length} preview${successful.length === 1 ? " is" : "s are"} ready below and ${failed.length} failed.`
+        );
         toast.warning(`${successful.length} preview${successful.length === 1 ? "" : "s"} generated; ${failed.length} failed. ${failed[0]}`);
       } else {
+        setVisualizingPhase("completed");
+        setVisualizingMessage(
+          `Completed — ${successful.length} preview${successful.length === 1 ? " is" : "s are"} ready below.`
+        );
         toast.success(successful.length === 1 ? "Lighting preview ready" : `${successful.length} option previews ready`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Preview failed");
+      const message = err instanceof Error ? err.message : "Preview failed";
+      setVisualizingPhase("failed");
+      setVisualizingMessage(message);
+      toast.error(message);
     } finally {
       setVisualizing(false);
-      setVisualizingProgress("");
     }
   }
 
@@ -1329,24 +1487,33 @@ export function HolidayLightingQuoter({
 
       {step === 1 ? (
         <p className="text-sm text-muted-foreground">
-          Pick a customer or enter the property address, then continue to measure the home from
-          satellite.
+          Pick a customer or enter the property address. You&apos;ll choose the light style and create
+          the painted AI preview before measuring the home for pricing.
         </p>
       ) : null}
 
-      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 2 && step !== 4 && "hidden")}>
-        {step === 2 ? (
+      {step !== 3 && step !== 5 && visualizingPhase !== "idle" ? (
+        <PreviewGenerationStatus
+          phase={visualizingPhase}
+          progress={visualizingProgress}
+          message={visualizingMessage}
+        />
+      ) : null}
+
+      <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 3 && step !== 4 && "hidden")}>
+        {step === 4 ? (
           <p className="text-sm text-muted-foreground">
             Draw linear rooflines on satellite. Mark any line that includes a peak to bill it at
             1.5×. Click trees and bushes and enter the strand count for the currently selected option.
           </p>
         ) : null}
-        {step === 4 ? (
+        {step === 3 ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
               variant={previewSource === "upload" ? "default" : "outline"}
+              disabled={visualizing}
               onClick={() => {
                 setPreviewSource("upload");
                 fileRef.current?.click();
@@ -1358,6 +1525,7 @@ export function HolidayLightingQuoter({
               type="button"
               size="sm"
               variant={previewSource === "street" ? "default" : "outline"}
+              disabled={visualizing}
               onClick={() => setPreviewSource("street")}
             >
               Find on Google Street View
@@ -1366,7 +1534,7 @@ export function HolidayLightingQuoter({
               <Button
                 type="button"
                 size="sm"
-                disabled={capturing}
+                disabled={capturing || visualizing}
                 onClick={() => void captureStreetView()}
               >
                 {capturing ? "Capturing…" : "Capture this view"}
@@ -1388,7 +1556,7 @@ export function HolidayLightingQuoter({
             />
           </div>
         ) : null}
-        {step === 4 && photoUrl && !photoApproved ? (
+        {step === 3 && photoUrl && !photoApproved ? (
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={photoUrl} alt="Capture preview" className="h-16 w-24 rounded object-cover" />
@@ -1416,8 +1584,8 @@ export function HolidayLightingQuoter({
           defaultColorPattern={selections.defaultColorPattern}
           onSelectSegment={setSelectedSegmentId}
           selectedSegmentId={selectedSegmentId}
-          showStreetView={step === 4 && previewSource === "street"}
-          showSatellite={step === 2}
+          showStreetView={step === 3 && previewSource === "street"}
+          showSatellite={step === 4}
           onChange={(next) => {
             const segments = next.segments.map((seg) => {
               const prev = measurements.segments.find((s) => s.id === seg.id);
@@ -1442,7 +1610,7 @@ export function HolidayLightingQuoter({
         />
       </div>
 
-      {step === 3 ? (
+      {step === 2 ? (
         <section className="max-w-2xl space-y-4 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">Lighting selections</h3>
           <div className="space-y-3 rounded-md border border-border p-3">
@@ -1820,37 +1988,61 @@ export function HolidayLightingQuoter({
         </section>
       ) : null}
 
-      {step === 4 && photoApproved && photoUrl ? (
+      {step === 3 && photoApproved && photoUrl ? (
         <section className="space-y-3 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">AI lighting preview</h3>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={photoUrl} alt="Property photo" className="w-full rounded border border-border" />
-          <label className="block text-sm font-medium" htmlFor="preview-instructions">Preview instructions</label>
-          <textarea id="preview-instructions" rows={4} maxLength={4000} disabled={visualizing}
-            value={activeDesignOption?.previewPrompt ?? ""}
-            placeholder="Warm white C9 lights along the front roofline. Red and green around the porch. Leave trees unlit."
-            onChange={event => setDesignOptions(currentOptions().map(option => option.id === activeOptionId ? {...option,previewPrompt:event.target.value} : option))}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-          <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
-            {visualizing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {visualizingProgress || "Generating…"}
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate previews for {renderedDesignOptions.length === 1 ? "this option" : `all ${renderedDesignOptions.length} options`}
-              </>
-            )}
-          </Button>
-          {renderedDesignOptions.some((option) => option.previewImageUrl) ? (
+          <p className="text-xs text-muted-foreground">
+            Paint where lights should go once. We&apos;ll generate a distinct night preview for every option using that option&apos;s bulb type, colors, and pattern. Permanent lights are rendered as sleek, low-profile architectural LEDs.
+          </p>
+          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
+              {visualizing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating previews…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {visualizingPhase === "completed" || visualizingPhase === "partial" ? "Regenerate" : "Generate"} previews for {renderedDesignOptions.length === 1 ? "this option" : `all ${renderedDesignOptions.length} options`}
+                </>
+              )}
+            </Button>
+            <PreviewGenerationStatus
+              phase={visualizingPhase}
+              progress={visualizingProgress}
+              message={visualizingMessage}
+            />
+          </div>
+          {visualizingPhase !== "idle" || renderedDesignOptions.some((option) => option.previewImageUrl) ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {renderedDesignOptions.filter((option) => option.previewImageUrl).map((option) => (
+              {renderedDesignOptions.map((option) => (
                 <div key={option.id} className={cn("rounded-md border p-2", option.id === activeOptionId ? "border-primary ring-2 ring-primary/20" : "border-border")}>
-                  <p className="mb-2 text-xs font-semibold">{option.label}</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={blobProxyUrl(option.previewImageUrl!) ?? option.previewImageUrl!} alt={`${option.label} lighting preview`} className="w-full rounded border border-border" />
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold">{option.label}</p>
+                    {option.previewImageUrl ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        Completed
+                      </span>
+                    ) : visualizing ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        Generating…
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Preview unavailable</span>
+                    )}
+                  </div>
+                  {option.previewImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={blobProxyUrl(option.previewImageUrl) ?? option.previewImageUrl} alt={`${option.label} lighting preview`} className="w-full rounded border border-border" />
+                  ) : (
+                    <div className="flex aspect-[4/3] items-center justify-center rounded border border-dashed border-border bg-muted/30 text-xs text-muted-foreground">
+                      {visualizing ? "Creating this preview…" : "No preview was created"}
+                    </div>
+                  )}
                 </div>
               ))}
               <p className="text-xs text-muted-foreground md:col-span-2">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
@@ -1861,6 +2053,11 @@ export function HolidayLightingQuoter({
 
       {step === 5 ? (
         <div className="flex max-w-xl flex-col gap-4">
+          <PreviewGenerationStatus
+            phase={visualizingPhase}
+            progress={visualizingProgress}
+            message={visualizingMessage}
+          />
           {activeDesignOption?.previewImageUrl ? (
             <section className="space-y-2 rounded-lg border border-border bg-white p-4">
               <p className="text-xs font-semibold">{activeDesignOption?.label} preview</p>

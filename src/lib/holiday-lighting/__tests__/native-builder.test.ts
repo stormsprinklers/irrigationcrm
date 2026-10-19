@@ -67,6 +67,55 @@ test("a preview generated for an old source photo cannot overwrite a changed quo
   assert.equal(update.mock.callCount(), 0);
 });
 
+test("measurement edits do not invalidate a preview placed from painted photo lines", async t => {
+  const quote = fixture();
+  const option = holidayDesignOptionsFromQuote({ measurements: quote.measurements as any, selections: quote.selections, catalog: DEFAULT_HOLIDAY_CATALOG })[0];
+  const changedSelections = structuredClone(quote.selections) as any;
+  changedSelections.designOptions[0].measurements.segments[0].lengthFt = 80;
+  const latest = { ...quote, measurements: changedSelections.designOptions[0].measurements, selections: changedSelections };
+  stub(t, prisma.holidayLightingQuote, "findFirst", async () => latest);
+  const update = stub(t, prisma.holidayLightingQuote, "update", async () => latest);
+
+  await persistNativeHolidayPreview({ companyId: user.companyId, quoteId: quote.id, sourcePhotoUrl: "source", option, catalog: DEFAULT_HOLIDAY_CATALOG, previewImageUrl: "new-a" });
+
+  assert.equal(update.mock.callCount(), 1);
+  assert.equal(update.mock.calls[0].arguments[0].data.selections.designOptions[0].measurements.segments[0].lengthFt, 80);
+  assert.equal(update.mock.calls[0].arguments[0].data.selections.designOptions[0].previewImageUrl, "new-a");
+});
+
+test("lighting choice edits still reject a stale preview", async t => {
+  const quote = fixture();
+  const option = holidayDesignOptionsFromQuote({ measurements: quote.measurements as any, selections: quote.selections, catalog: DEFAULT_HOLIDAY_CATALOG })[0];
+  const changedSelections = structuredClone(quote.selections) as any;
+  changedSelections.designOptions[0].selections.defaultColorPattern = "Red";
+  const latest = { ...quote, selections: changedSelections };
+  stub(t, prisma.holidayLightingQuote, "findFirst", async () => latest);
+  const update = stub(t, prisma.holidayLightingQuote, "update", async () => latest);
+
+  await assert.rejects(
+    persistNativeHolidayPreview({ companyId: user.companyId, quoteId: quote.id, sourcePhotoUrl: "source", option, catalog: DEFAULT_HOLIDAY_CATALOG, previewImageUrl: "stale" }),
+    HolidayPreviewConflict
+  );
+  assert.equal(update.mock.callCount(), 0);
+});
+
+test("simultaneous preview saves retry an optimistic write conflict", async t => {
+  const quote = fixture();
+  const option = holidayDesignOptionsFromQuote({ measurements: quote.measurements as any, selections: quote.selections, catalog: DEFAULT_HOLIDAY_CATALOG })[0];
+  const find = stub(t, prisma.holidayLightingQuote, "findFirst", async () => quote);
+  let attempts = 0;
+  const update = stub(t, prisma.holidayLightingQuote, "update", async () => {
+    attempts += 1;
+    if (attempts === 1) throw { code: "P2025" };
+    return quote;
+  });
+
+  await persistNativeHolidayPreview({ companyId: user.companyId, quoteId: quote.id, sourcePhotoUrl: "source", option, catalog: DEFAULT_HOLIDAY_CATALOG, previewImageUrl: "new-a" });
+
+  assert.equal(find.mock.callCount(), 2);
+  assert.equal(update.mock.callCount(), 2);
+});
+
 test("native photo endpoints reject anonymous and cross-company quote access", async t => {
   assert.equal((await photo(new NextRequest("https://crm.example.com/api/holiday-lighting/quotes/q/photo", { headers: { authorization: "Bearer invalid" } }), { params: Promise.resolve({ id: "q" }) })).status, 401);
   auth(t);
@@ -131,7 +180,7 @@ test("preview instructions survive parsing and protect against stale generation"
   assert.equal(update.mock.callCount(),0);
 });
 
-test("photo-only generation sends exactly one clean image and no mask to the AI",async t=>{
+test("painted-line generation sends a clean image and marked guide to the AI",async t=>{
   auth(t);
   const quote = fixture();
   quote.selections.designOptions![1].previewPrompt = "Warm white on the front roofline, no trees.";
@@ -147,12 +196,13 @@ test("photo-only generation sends exactly one clean image and no mask to the AI"
   const jpg = await sharp({create:{width:20,height:12,channels:3,background:"white"}}).jpeg().toBuffer();
   const form = new FormData();
   form.set("clean",new Blob([new Uint8Array(jpg)],{type:"image/jpeg"}),"house.jpg");
+  form.set("marked",new Blob([new Uint8Array(jpg)],{type:"image/jpeg"}),"house-marked.jpg");
   form.set("optionId","b");
   const token = await signMobileAccessToken({sub:user.id,companyId:user.companyId,role:user.role});
   const response = await visualize(new NextRequest("https://crm.example.com/api/holiday-lighting/quotes/quote/visualize",{method:"POST",headers:{authorization:`Bearer ${token}`},body:form}),{params:Promise.resolve({id:"quote"})});
   assert.equal(response.status,422);
-  assert.equal(sent?.getAll("image[]").length,1);
+  assert.equal(sent?.getAll("image[]").length,2);
   assert.equal(sent?.has("mask"),false);
   assert.equal(sent?.has("marked"),false);
-  assert.ok(String(sent?.get("prompt")).includes("Warm white on the front roofline, no trees."));
+  assert.ok(String(sent?.get("prompt")).includes("painted guide lines"));
 });
