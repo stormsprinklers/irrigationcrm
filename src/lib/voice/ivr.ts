@@ -24,6 +24,7 @@ import {
 import {
   dialVoiceClient,
   loadVoiceClientBrand,
+  withVoiceCaller,
   type VoiceClientBrand,
 } from "./client-dial";
 import { resolveClockedInDialGroup } from "./clocked-in-group-routing";
@@ -150,7 +151,7 @@ export type FlowContext = {
 };
 
 async function brandOf(ctx: FlowContext): Promise<VoiceClientBrand> {
-  return ctx.clientBrand ?? loadVoiceClientBrand(ctx.companyId);
+  return withVoiceCaller(ctx.clientBrand ?? await loadVoiceClientBrand(ctx.companyId), ctx.from);
 }
 
 async function getAgentGroupIdentities(
