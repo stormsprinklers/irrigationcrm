@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { AlertCircle, CheckCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -22,7 +21,7 @@ type Conversation = {
   title?: string | null;
   unreadCount?: number;
   needsResponse?: boolean;
-  customer?: { id: string; name: string; phone?: string | null; doNotService?: boolean } | null;
+  customer?: { name: string; phone?: string | null; doNotService?: boolean } | null;
   messages: {
     body: string;
     sentAt: string;
@@ -170,9 +169,8 @@ export function SmsThreadList({
 
           return (
             <li key={thread.id}>
-              <div
-                role="button"
-                tabIndex={0}
+              <button
+                type="button"
                 onClick={() => {
                   setThreads((current) =>
                     current.map((item) =>
@@ -181,19 +179,8 @@ export function SmsThreadList({
                   );
                   onSelect(thread.id);
                 }}
-                onKeyDown={(event) => {
-                  if (event.target !== event.currentTarget) return;
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  setThreads((current) =>
-                    current.map((item) =>
-                      item.id === thread.id ? { ...item, unreadCount: 0 } : item
-                    )
-                  );
-                  onSelect(thread.id);
-                }}
                 className={cn(
-                  "flex w-full cursor-pointer items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
+                  "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
                   selectedId === thread.id && "bg-highlight"
                 )}
               >
@@ -214,19 +201,12 @@ export function SmsThreadList({
                         />
                       ) : null}
                       {thread.customer?.name ? (
-                        <Link
-                          href={`/customers/${thread.customer.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                          className="min-w-0 max-w-full rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                          aria-label={`View ${thread.customer.name}'s customer profile`}
-                        >
-                          <CustomerNameWithBadge
-                            name={thread.customer.name}
-                            doNotService={thread.customer.doNotService}
-                            nameClassName="truncate text-sm font-semibold"
-                            className="min-w-0 max-w-full"
-                          />
-                        </Link>
+                        <CustomerNameWithBadge
+                          name={thread.customer.name}
+                          doNotService={thread.customer.doNotService}
+                          nameClassName="truncate text-sm font-semibold"
+                          className="min-w-0 max-w-full"
+                        />
                       ) : (
                         <p className="truncate text-sm font-semibold">{label}</p>
                       )}
@@ -253,7 +233,7 @@ export function SmsThreadList({
                     </p>
                   ) : null}
                 </div>
-              </div>
+              </button>
             </li>
           );
         })}

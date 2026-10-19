@@ -965,34 +965,34 @@ export function HolidayLightingQuoter({
     }
   }
 
-  async function goNext() {
+  async function goToStep(targetStep: WizardStep) {
+    if (targetStep === step) return;
+    if (targetStep < step) {
+      setStep(targetStep);
+      return;
+    }
+
     if (step === 1) {
       if (!address.trim() && !customerId) {
         toast.error("Enter an address or pick a customer");
         return;
       }
-      if (!(await save(undefined, { quiet: true }))) return;
-      setStep(2);
-      return;
     }
-    if (step === 2) {
-      await save(undefined, { quiet: true });
-      setStep(3);
-      return;
-    }
-    if (step === 3) {
-      await save(undefined, { quiet: true });
-      setStep(4);
-      return;
-    }
-    if (step === 4) {
+
+    if (targetStep === 5) {
       if (measurements.segments.length === 0 && measurements.placements.length === 0) {
         toast.error("Draw rooflines or mark trees and bushes on the satellite map");
         return;
       }
-      await save(undefined, { quiet: true });
-      setStep(5);
     }
+
+    if (!(await save(undefined, { quiet: true }))) return;
+    setStep(targetStep);
+  }
+
+  async function goNext() {
+    if (step >= 5) return;
+    await goToStep((step + 1) as WizardStep);
   }
 
   function goBack() {
@@ -1327,9 +1327,7 @@ export function HolidayLightingQuoter({
                       ? "bg-muted text-foreground"
                       : "bg-muted text-muted-foreground"
                 )}
-                onClick={() => {
-                  if (item.id <= step) setStep(item.id);
-                }}
+                onClick={() => void goToStep(item.id)}
               >
                 {item.id} · {item.label}
               </button>
