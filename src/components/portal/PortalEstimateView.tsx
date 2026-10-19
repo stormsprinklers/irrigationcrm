@@ -9,6 +9,14 @@ import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
+import {
+  calculateHolidayLeaseCommitmentPricing,
+  holidayLeaseCommitmentDiscount,
+  isHolidayLeaseCommitmentDiscount,
+  parseHolidayLeaseCommitmentYears,
+  withHolidayLeaseCommitmentDescription,
+  type HolidayLeaseCommitmentYears,
+} from "@/lib/holiday-lighting/lease-commitment";
 
 type LineItem = {
   optionId?: string | null;
@@ -61,6 +69,8 @@ type Estimate = {
     declinedAt?: string | null;
     sortOrder?: number;
     popular?: boolean;
+    pricingMode?: string | null;
+    leaseContractYears?: HolidayLeaseCommitmentYears | null;
     subtotal: number;
     discountTotal: number;
     total: number;
@@ -131,6 +141,9 @@ export function PortalEstimateView({
   const [designSnapshot, setDesignSnapshot] = useState<Record<string, unknown> | null>(null);
   const [selectedTier, setSelectedTier] = useState<"STANDARD" | "PREMIUM">("STANDARD");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [leaseCommitmentYears, setLeaseCommitmentYears] = useState<
+    Record<string, HolidayLeaseCommitmentYears>
+  >({});
   const [drawing, setDrawing] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -170,6 +183,16 @@ export function PortalEstimateView({
         setStaffPreview(preview && Boolean(estData.staffPreview));
         const defaultId = defaultPresentOptionId(estData.estimate.options ?? []);
         setSelectedOptionId(estData.estimate.selectedOptionId ?? defaultId);
+        setLeaseCommitmentYears(
+          Object.fromEntries(
+            (estData.estimate.options ?? [])
+              .filter((option: Estimate["options"][number]) => option.pricingMode === "lease")
+              .map((option: Estimate["options"][number]) => [
+                option.id,
+                parseHolidayLeaseCommitmentYears(option.leaseContractYears),
+              ])
+          )
+        );
 
         if (estData.estimate?.hasDesign) {
           const designRes = await fetch(`/api/portal/estimates/${token}/design`);
@@ -268,10 +291,51 @@ export function PortalEstimateView({
       .finally(() => setPayLaterLoading(false));
   }, [token]);
 
+  const displayOptions = useMemo(() => {
+    if (!estimate) return [];
+    return estimate.options.map((option) => {
+      if (option.pricingMode !== "lease") return option;
+      const years =
+        leaseCommitmentYears[option.id] ??
+        parseHolidayLeaseCommitmentYears(option.leaseContractYears);
+      const applicableDiscounts = (estimate.discounts ?? []).filter(
+        (discount) => !discount.optionId || discount.optionId === option.id
+      );
+      const pricing = calculateHolidayLeaseCommitmentPricing({
+        subtotal: option.subtotal,
+        years,
+        discounts: applicableDiscounts,
+      });
+      return {
+        ...option,
+        leaseContractYears: years,
+        description: withHolidayLeaseCommitmentDescription(option.description, years),
+        discountTotal: pricing.discountTotal,
+        total: pricing.total,
+      };
+    });
+  }, [estimate, leaseCommitmentYears]);
+
+  const displayDiscounts = useMemo(() => {
+    if (!estimate) return [];
+    const discounts = (estimate.discounts ?? []).filter(
+      (discount) => !isHolidayLeaseCommitmentDiscount(discount)
+    );
+    for (const option of displayOptions) {
+      if (option.pricingMode !== "lease") continue;
+      const commitment = holidayLeaseCommitmentDiscount(
+        option.id,
+        option.leaseContractYears ?? 1
+      );
+      if (commitment) discounts.push(commitment);
+    }
+    return discounts;
+  }, [displayOptions, estimate]);
+
   const activeOption = useMemo(() => {
-    if (!estimate?.options?.length) return null;
-    return estimate.options.find((o) => o.id === selectedOptionId) ?? estimate.options[0] ?? null;
-  }, [estimate, selectedOptionId]);
+    if (!displayOptions.length) return null;
+    return displayOptions.find((o) => o.id === selectedOptionId) ?? displayOptions[0] ?? null;
+  }, [displayOptions, selectedOptionId]);
 
   function displayTotal() {
     if (!estimate) return 0;
@@ -353,6 +417,10 @@ export function PortalEstimateView({
           signature: canvas.toDataURL("image/png"),
           selectedQuoteTier: selectedTier,
           selectedOptionId,
+          leaseContractYears:
+            activeOption?.pricingMode === "lease"
+              ? activeOption.leaseContractYears ?? 1
+              : undefined,
         }),
       });
       const data = await res.json();
@@ -471,7 +539,10 @@ export function PortalEstimateView({
       : Math.round(displayTotal() * (Number(estimate.depositAmount ?? 50) / 100) * 100) / 100
     : 0;
   const paymentDue = depositDue > 0 ? depositDue : displayTotal();
-  const warrantyText = estimate.warrantyText ?? company.estimateWarrantyText ?? null;
+  const warrantyText =
+    activeOption?.pricingMode === "lease"
+      ? null
+      : estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
 
@@ -596,15 +667,18 @@ export function PortalEstimateView({
         {(estimate.options?.length ?? 0) > 0 ? (
           <section className="space-y-3">
             <EstimateOptionPresentCards
-              options={estimate.options.map((o) => ({
+              options={displayOptions.map((o) => ({
                 ...o,
                 description: o.description ?? null,
                 photoUrl: o.photoUrl ?? null,
               }))}
               lineItems={estimate.lineItems}
-              discounts={estimate.discounts ?? []}
+              discounts={displayDiscounts}
               selectedId={selectedOptionId}
               onSelect={setSelectedOptionId}
+              onLeaseCommitmentChange={(optionId, years) =>
+                setLeaseCommitmentYears((current) => ({ ...current, [optionId]: years }))
+              }
             />
           </section>
         ) : canSign && estimate.premiumOptionTotal != null ? (

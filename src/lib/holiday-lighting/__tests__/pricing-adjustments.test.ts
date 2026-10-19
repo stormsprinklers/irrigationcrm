@@ -4,6 +4,7 @@ import {
   computeHolidayQuotePricing,
   HOLIDAY_LABOR_ONLY_DISCLAIMER,
   HOLIDAY_INCLUDED_LINES,
+  HOLIDAY_LEASE_INCLUDED_LINES,
   HOLIDAY_PERMANENT_INCLUDED_LINES,
   holidayBuyBreakdownLines,
   holidayDetailedBuyLines,
@@ -504,6 +505,14 @@ test("included holiday services have customer descriptions and permanent options
   assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Storage")!.description, /warehouse/i);
   assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Maintenance")!.description, /48 hours/i);
   assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name.startsWith("3-year"))!.name, /3-year parts and labor/i);
+  assert.match(
+    HOLIDAY_LEASE_INCLUDED_LINES.find((line) => /warranty/i.test(line.name))!.name,
+    /lifetime parts and labor/i
+  );
+  assert.doesNotMatch(
+    HOLIDAY_LEASE_INCLUDED_LINES.map((line) => line.name).join(" "),
+    /3-year parts and labor/i
+  );
   assert.equal(HOLIDAY_PERMANENT_INCLUDED_LINES.length, 1);
   assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].name, /5-year parts and labor/i);
   assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].description, /no cost/i);

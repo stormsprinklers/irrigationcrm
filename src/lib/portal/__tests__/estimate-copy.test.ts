@@ -1,15 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { customerEstimateDescription } from "../estimate-copy";
+import { serializePortalEstimate } from "../serializers";
 
 test("legacy internal holiday notes are removed from customer option copy", () => {
   assert.equal(customerEstimateDescription("Lease Lights\n\nGate code 1234\n\nInstallation and takedown included.", ["Gate code 1234", null]), "Lease Lights\n\nInstallation and takedown included.");
+});
+
+test("holiday lease options expose commitments and replace the legacy warranty", () => {
+  const view = serializePortalEstimate({
+    id: "estimate",
+    publicToken: "token",
+    status: "SENT",
+    total: 900,
+    subtotal: 1_000,
+    discountTotal: 100,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    designExportMetadata: {
+      source: "holiday-lighting-quote",
+      options: [
+        {
+          letter: "B",
+          pricingMode: "lease",
+          leaseContractYears: 3,
+          leaseContractDiscountPercent: 10,
+        },
+      ],
+    },
+    options: [
+      {
+        id: "lease-option",
+        letter: "B",
+        label: "Lease Lights",
+        description: "3-Year Agreement · Save 10% Each Year\n\nAnnual lease.",
+        sortOrder: 0,
+        subtotal: 1_000,
+        discountTotal: 100,
+        total: 900,
+      },
+    ],
+    lineItems: [
+      {
+        optionId: "lease-option",
+        name: "3-year parts and labor warranty",
+        description: "Legacy copy",
+        quantity: 1,
+        unitPrice: 0,
+        unit: "included",
+        total: 0,
+        sortOrder: 1,
+      },
+    ],
+  });
+
+  assert.equal(view.options[0].pricingMode, "lease");
+  assert.equal(view.options[0].leaseContractYears, 3);
+  assert.equal(view.lineItems[0].name, "Lifetime parts and labor warranty");
+  assert.match(view.lineItems[0].description ?? "", /lease remains active/i);
 });
 test("customer authored presentation copy is preserved", () => {
   assert.equal(customerEstimateDescription("Roofline C9 bulbs", ["Call before arrival"]), "Roofline C9 bulbs");
 });
 
-import { serializePortalEstimate } from "../serializers";
 test("public estimate normalizes private preview URLs and excludes internal notes", () => {
   const savedOrigin = process.env.NEXT_PUBLIC_APP_URL;
   process.env.NEXT_PUBLIC_APP_URL = "https://crm.example";

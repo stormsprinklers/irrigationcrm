@@ -13,8 +13,59 @@ import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { toNumber } from "@/lib/visits/totals";
 import type { PortalCompany } from "@/lib/portal/company";
 import { findEstimateByPublicToken } from "@/lib/portal/public-estimate";
+import { DiscountType, Prisma } from "@prisma/client";
+import {
+  calculateHolidayLeaseCommitmentPricing,
+  holidayLeaseCommitmentDiscountPercent,
+  isHolidayLeaseCommitmentDiscount,
+  parseHolidayLeaseCommitmentYears,
+  withHolidayLeaseCommitmentDescription,
+  type HolidayLeaseCommitmentYears,
+} from "@/lib/holiday-lighting/lease-commitment";
 
 type Params = { params: Promise<{ id: string }> };
+
+function holidayOptionMetadata(
+  metadata: unknown,
+  option: { letter: string | null; sortOrder: number }
+) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const root = metadata as Record<string, unknown>;
+  if (root.source !== "holiday-lighting-quote" || !Array.isArray(root.options)) return null;
+  const options = root.options.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item)
+  );
+  return options.find((item) => item.letter === option.letter) ?? options[option.sortOrder] ?? null;
+}
+
+function updateHolidayLeaseMetadata(
+  metadata: unknown,
+  option: { letter: string | null; sortOrder: number },
+  years: HolidayLeaseCommitmentYears,
+  total: number
+) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return metadata;
+  const root = metadata as Record<string, unknown>;
+  if (!Array.isArray(root.options)) return metadata;
+  const discountPercent = holidayLeaseCommitmentDiscountPercent(years);
+  return {
+    ...root,
+    options: root.options.map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const value = item as Record<string, unknown>;
+      const matches = option.letter ? value.letter === option.letter : index === option.sortOrder;
+      return matches
+        ? {
+            ...value,
+            leaseContractYears: years,
+            leaseContractDiscountPercent: discountPercent,
+            total,
+          }
+        : item;
+    }),
+  };
+}
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -27,6 +78,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     null;
   let premiumOptionTotal: unknown = null;
   let totalValue: unknown = null;
+  let subtotalValue: unknown = null;
+  let discountTotalValue: unknown = null;
+  let designExportMetadata: unknown = null;
 
   if (ctx) {
     if (!portalFeatureEnabled(ctx.company, "estimates")) {
@@ -49,6 +103,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       company = ctx.company;
       premiumOptionTotal = estimate.premiumOptionTotal;
       totalValue = estimate.total;
+      subtotalValue = estimate.subtotal;
+      discountTotalValue = estimate.discountTotal;
+      designExportMetadata = estimate.designExportMetadata;
     }
   } else {
     const estimate = await findEstimateByPublicToken(id);
@@ -59,6 +116,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       company = estimate.company;
       premiumOptionTotal = estimate.premiumOptionTotal;
       totalValue = estimate.total;
+      subtotalValue = estimate.subtotal;
+      discountTotalValue = estimate.discountTotal;
+      designExportMetadata = estimate.designExportMetadata;
     }
   }
 
@@ -71,6 +131,16 @@ export async function POST(request: NextRequest, { params }: Params) {
   const selectedQuoteTier = (body.selectedQuoteTier as string | undefined) ?? "STANDARD";
   const selectedOptionId =
     typeof body.selectedOptionId === "string" ? body.selectedOptionId : null;
+  const requestedLeaseContractYears =
+    body.leaseContractYears == null
+      ? null
+      : ([1, 3, 5].includes(Number(body.leaseContractYears))
+          ? (Number(body.leaseContractYears) as HolidayLeaseCommitmentYears)
+          : null);
+
+  if (body.leaseContractYears != null && requestedLeaseContractYears == null) {
+    return NextResponse.json({ error: "Choose a valid lease commitment" }, { status: 400 });
+  }
 
   if (!signature?.startsWith("data:image/")) {
     return NextResponse.json({ error: "signature must be a base64 data URL" }, { status: 400 });
@@ -78,6 +148,23 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return NextResponse.json({ error: "Signature storage is not configured" }, { status: 503 });
+  }
+
+  const selectedOption = selectedOptionId
+    ? await prisma.estimateOption.findFirst({ where: { id: selectedOptionId, estimateId } })
+    : null;
+  if (selectedOptionId && !selectedOption) {
+    return NextResponse.json({ error: "Choose a valid estimate option" }, { status: 400 });
+  }
+  const selectedHolidayMetadata = selectedOption
+    ? holidayOptionMetadata(designExportMetadata, selectedOption)
+    : null;
+  const selectedOptionIsLease = selectedHolidayMetadata?.pricingMode === "lease";
+  if (requestedLeaseContractYears != null && !selectedOptionIsLease) {
+    return NextResponse.json(
+      { error: "Lease commitments are available only for leased lights" },
+      { status: 400 }
+    );
   }
 
   const [header, base64Data] = signature.split(",");
@@ -92,56 +179,153 @@ export async function POST(request: NextRequest, { params }: Params) {
   );
 
   let total = toNumber(totalValue as never);
-  if (selectedOptionId) {
-    const option = await prisma.estimateOption.findFirst({
-      where: { id: selectedOptionId, estimateId },
-    });
-    if (option) {
-      total = toNumber(option.total);
+  let subtotal = toNumber(subtotalValue as never);
+  let discountTotal = toNumber(discountTotalValue as never);
+  let nextMetadata = designExportMetadata;
+  let selectedLeaseYears: HolidayLeaseCommitmentYears | null = null;
+  let selectedLeasePricing:
+    | ReturnType<typeof calculateHolidayLeaseCommitmentPricing>
+    | null = null;
+  let selectedDiscounts: Array<{
+    id: string;
+    optionId: string | null;
+    label: string | null;
+    type: string;
+    amount: number;
+  }> = [];
+
+  if (selectedOption) {
+    subtotal = toNumber(selectedOption.subtotal);
+    discountTotal = toNumber(selectedOption.discountTotal);
+    total = toNumber(selectedOption.total);
+    if (selectedOptionIsLease) {
+      selectedLeaseYears =
+        requestedLeaseContractYears ??
+        parseHolidayLeaseCommitmentYears(selectedHolidayMetadata?.leaseContractYears);
+      const discounts = await prisma.discount.findMany({
+        where: {
+          estimateId,
+          OR: [{ optionId: null }, { optionId: selectedOption.id }],
+        },
+      });
+      selectedDiscounts = discounts.map((discount) => ({
+        id: discount.id,
+        optionId: discount.optionId,
+        label: discount.label,
+        type: discount.type,
+        amount: toNumber(discount.amount),
+      }));
+      selectedLeasePricing = calculateHolidayLeaseCommitmentPricing({
+        subtotal,
+        years: selectedLeaseYears,
+        discounts: selectedDiscounts,
+      });
+      discountTotal = selectedLeasePricing.discountTotal;
+      total = selectedLeasePricing.total;
+      nextMetadata = updateHolidayLeaseMetadata(
+        designExportMetadata,
+        selectedOption,
+        selectedLeaseYears,
+        total
+      );
     }
   } else if (selectedQuoteTier === "PREMIUM" && premiumOptionTotal != null) {
     total = toNumber(premiumOptionTotal as never);
+    subtotal = total;
+    discountTotal = 0;
   }
 
-  const updated = await prisma.estimate.update({
-    where: { id: estimateId },
-    data: {
-      signatureBlobUrl: blob.url,
-      signedAt: new Date(),
-      // Acceptance is recorded now, but the estimate remains SENT until Stripe
-      // confirms either a payment or a saved card.
-      approvedAt: null,
-      selectedQuoteTier,
-      ...(selectedOptionId ? { selectedOptionId } : {}),
-      total,
-      subtotal: total,
-    },
-    include: {
-      lineItems: {
-        orderBy: { sortOrder: "asc" },
-        include: { priceBookItem: { select: { type: true } } },
-      },
-      options: { orderBy: { sortOrder: "asc" } },
-      discounts: true,
-      visit: {
-        select: {
-          id: true,
-          title: true,
-          startAt: true,
-          endAt: true,
-          assignedUser: { select: { name: true, photoUrl: true, title: true } },
+  const updated = await prisma.$transaction(async (tx) => {
+    if (selectedOption && selectedLeaseYears && selectedLeasePricing) {
+      const oldCommitmentDiscountIds = selectedDiscounts
+        .filter(
+          (discount) =>
+            discount.optionId === selectedOption.id &&
+            isHolidayLeaseCommitmentDiscount(discount)
+        )
+        .map((discount) => discount.id);
+      if (oldCommitmentDiscountIds.length) {
+        await tx.discount.deleteMany({ where: { id: { in: oldCommitmentDiscountIds } } });
+      }
+      if (selectedLeasePricing.contractDiscountPercent > 0) {
+        await tx.discount.create({
+          data: {
+            estimateId,
+            optionId: selectedOption.id,
+            label: `${selectedLeaseYears}-year commitment discount`,
+            type: DiscountType.PERCENT,
+            amount: selectedLeasePricing.contractDiscountPercent,
+          },
+        });
+      }
+      await tx.estimateOption.update({
+        where: { id: selectedOption.id },
+        data: {
+          description: withHolidayLeaseCommitmentDescription(
+            selectedOption.description,
+            selectedLeaseYears
+          ),
+          discountTotal,
+          total,
+          declinedAt: null,
         },
-      },
-      company: { select: { estimateWarrantyText: true } },
-    },
-  });
+      });
+      await tx.estimateLineItem.updateMany({
+        where: {
+          estimateId,
+          optionId: selectedOption.id,
+          name: "3-year parts and labor warranty",
+        },
+        data: {
+          name: "Lifetime parts and labor warranty",
+          description:
+            "For as long as your lease remains active, if anything goes wrong, we will make it right at no cost to you.",
+        },
+      });
+    } else if (selectedOption) {
+      await tx.estimateOption.updateMany({
+        where: { estimateId, id: selectedOption.id },
+        data: { declinedAt: null },
+      });
+    }
 
-  if (selectedOptionId) {
-    await prisma.estimateOption.updateMany({
-      where: { estimateId, id: selectedOptionId },
-      data: { declinedAt: null },
+    return tx.estimate.update({
+      where: { id: estimateId },
+      data: {
+        signatureBlobUrl: blob.url,
+        signedAt: new Date(),
+        // Acceptance is recorded now, but the estimate remains SENT until Stripe
+        // confirms either a payment or a saved card.
+        approvedAt: null,
+        selectedQuoteTier,
+        ...(selectedOptionId ? { selectedOptionId } : {}),
+        total,
+        subtotal,
+        discountTotal,
+        ...(nextMetadata
+          ? { designExportMetadata: nextMetadata as Prisma.InputJsonValue }
+          : {}),
+      },
+      include: {
+        lineItems: {
+          orderBy: { sortOrder: "asc" },
+          include: { priceBookItem: { select: { type: true } } },
+        },
+        options: { orderBy: { sortOrder: "asc" } },
+        discounts: true,
+        visit: {
+          select: {
+            id: true,
+            title: true,
+            startAt: true,
+            endAt: true,
+            assignedUser: { select: { name: true, photoUrl: true, title: true } },
+          },
+        },
+        company: { select: { estimateWarrantyText: true } },
+      },
     });
-  }
+  });
 
   void onEstimateClosed(estimateId).catch(() => {});
 

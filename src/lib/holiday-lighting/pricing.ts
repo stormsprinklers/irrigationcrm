@@ -490,6 +490,15 @@ export const HOLIDAY_PERMANENT_INCLUDED_LINES = [
   },
 ] as const;
 
+export const HOLIDAY_LEASE_INCLUDED_LINES = [
+  ...HOLIDAY_INCLUDED_LINES.filter((line) => !/warranty/i.test(line.name)),
+  {
+    name: "Lifetime parts and labor warranty",
+    description:
+      "For as long as your lease remains active, if anything goes wrong, we will make it right at no cost to you.",
+  },
+] as const;
+
 export const HOLIDAY_BUY_DETAIL =
   "Purchasing lights front-loads the cost, but allows you to own the lights so you pay less in future years. This includes installation and take-down as well as any bulb replacements during the season.";
 
@@ -588,5 +597,6 @@ export function holidayOptionLines(params: {
 
 export function holidayIncludedLines(key: HolidayQuoteOptionKey) {
   return key === "permanent" ? HOLIDAY_PERMANENT_INCLUDED_LINES
+    : key === "lease" ? HOLIDAY_LEASE_INCLUDED_LINES
     : key === "labor" ? HOLIDAY_INCLUDED_LINES.filter((line) => line.name === "Takedown") : HOLIDAY_INCLUDED_LINES;
 }

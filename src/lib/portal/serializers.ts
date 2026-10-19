@@ -3,6 +3,7 @@ import type { VisitStatus } from "@prisma/client";
 import { holidayBuyBreakdownLines } from "@/lib/holiday-lighting/pricing";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
+import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
@@ -204,10 +205,22 @@ export function serializePortalEstimate(estimate: {
     isHolidayLightingQuote || holidayStrandMap || holidayPreviewImageUrl
   );
   const optionCount = estimate.options?.length ?? 0;
-  const options = (estimate.options ?? []).map((option) => {
+  const holidayMetadataOptions = Array.isArray(meta?.options)
+    ? meta.options.filter(
+        (option): option is Record<string, unknown> =>
+          Boolean(option) && typeof option === "object" && !Array.isArray(option)
+      )
+    : [];
+  const options = (estimate.options ?? []).map((option, index) => {
     const letter = option.letter;
     const base = estimate.estimateNumber?.trim() || "EST";
     const displayNumber = optionCount <= 1 ? base : `${base}${letter || "A"}`;
+    const holidayOption = isHolidayLightingQuote
+      ? holidayMetadataOptions.find((item) => item.letter === letter) ??
+        holidayMetadataOptions[index]
+      : undefined;
+    const pricingMode =
+      typeof holidayOption?.pricingMode === "string" ? holidayOption.pricingMode : null;
     return {
       id: option.id,
       letter: option.letter,
@@ -221,6 +234,11 @@ export function serializePortalEstimate(estimate: {
       discountTotal: toNumber(option.discountTotal as never),
       total: toNumber(option.total as never),
       displayNumber,
+      pricingMode,
+      leaseContractYears:
+        pricingMode === "lease"
+          ? parseHolidayLeaseCommitmentYears(holidayOption?.leaseContractYears)
+          : null,
     };
   });
 
@@ -235,6 +253,45 @@ export function serializePortalEstimate(estimate: {
     sortOrder: item.sortOrder,
     itemType: item.priceBookItem?.type ?? "SERVICE",
   }));
+
+  // Older lease estimates inherited the purchased-lights three-year warranty.
+  // Keep their customer view accurate without changing non-lease options.
+  const leaseOptionIds = new Set(
+    options.filter((option) => option.pricingMode === "lease").map((option) => option.id)
+  );
+  lineItems = lineItems.map((item) =>
+    item.optionId &&
+    leaseOptionIds.has(item.optionId) &&
+    /^3-year parts and labor warranty$/i.test(item.name.trim())
+      ? {
+          ...item,
+          name: "Lifetime parts and labor warranty",
+          description:
+            "For as long as your lease remains active, if anything goes wrong, we will make it right at no cost to you.",
+        }
+      : item
+  );
+  for (const optionId of leaseOptionIds) {
+    if (
+      lineItems.some(
+        (item) => item.optionId === optionId && /parts and labor warranty/i.test(item.name)
+      )
+    ) {
+      continue;
+    }
+    lineItems.push({
+      optionId,
+      name: "Lifetime parts and labor warranty",
+      description:
+        "For as long as your lease remains active, if anything goes wrong, we will make it right at no cost to you.",
+      quantity: 1,
+      unitPrice: 0,
+      unit: "included",
+      total: 0,
+      sortOrder: 999,
+      itemType: "SERVICE",
+    });
+  }
 
   // Older holiday estimates stored Buy Lights as one generic row. Present the
   // same parts/labor breakdown as new estimates without exposing per-foot rates.

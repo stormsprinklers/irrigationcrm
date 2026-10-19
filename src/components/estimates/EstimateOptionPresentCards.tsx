@@ -33,6 +33,8 @@ export type PresentOption = {
   declinedAt?: string | null;
   sortOrder?: number;
   popular?: boolean;
+  pricingMode?: string | null;
+  leaseContractYears?: 1 | 3 | 5 | null;
 };
 
 export type PresentLineItem = {
@@ -198,6 +200,7 @@ export function EstimateOptionPresentCards({
   onApprove,
   onDecline,
   onRename,
+  onLeaseCommitmentChange,
   decidingId,
 }: {
   options: PresentOption[];
@@ -210,6 +213,7 @@ export function EstimateOptionPresentCards({
   onApprove?: (optionId: string) => void;
   onDecline?: (optionId: string) => void;
   onRename?: (optionId: string, label: string) => void;
+  onLeaseCommitmentChange?: (optionId: string, years: 1 | 3 | 5) => void;
   decidingId?: string | null;
 }) {
   const order = useMemo(() => presentCardsOrder(options), [options]);
@@ -467,6 +471,33 @@ export function EstimateOptionPresentCards({
               <span>{formatCurrency(totals.total)}</span>
             </div>
           </div>
+          {selectedOption.pricingMode === "lease" && onLeaseCommitmentChange ? (
+            <div className="space-y-2 rounded-lg border border-[#4C9BC8]/30 bg-[#4C9BC8]/5 p-4">
+              <p className="text-sm font-semibold">
+                Want to save 20% each year? Select a commitment duration to update your pricing!
+              </p>
+              <label className="block text-sm font-medium">
+                Commitment duration
+                <select
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selectedOption.leaseContractYears ?? 1}
+                  onChange={(event) =>
+                    onLeaseCommitmentChange(
+                      selectedOption.id,
+                      Number(event.target.value) as 1 | 3 | 5
+                    )
+                  }
+                >
+                  <option value={1}>No commitment</option>
+                  <option value={3}>3-year commitment (10%)</option>
+                  <option value={5}>5-year commitment (20%)</option>
+                </select>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Commitment savings apply to the annual lease price in every year of the agreement.
+              </p>
+            </div>
+          ) : null}
           {canDecide ? (
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
