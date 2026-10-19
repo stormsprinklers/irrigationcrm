@@ -1,13 +1,28 @@
 import heicConvert from "heic-convert";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { safeFileName } from "@/lib/inbox/attachments";
-import { readResponseBufferLimited, safeOutboundFetch } from "@/lib/security/outbound-fetch";
+import {
+  readResponseBufferLimited,
+  safeOutboundFetch,
+  validateOutboundUrlSyntax,
+} from "@/lib/security/outbound-fetch";
 
 /**
  * Twilio does not impose an inbound-MMS size limit. Keep a defensive application
  * limit high enough for full-resolution phone photos while bounding function memory.
  */
 export const INBOUND_SMS_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * The Media resource starts on api.twilio.com. With protected media enabled,
+ * Twilio redirects the authenticated request to a short-lived twiliocdn URL;
+ * older unprotected media can redirect to Twilio's legacy S3 host.
+ */
+export const TWILIO_MEDIA_DOWNLOAD_HOSTS = [
+  "api.twilio.com",
+  "mms.twiliocdn.com",
+  "s3-external-1.amazonaws.com",
+] as const;
 
 type MediaAuthCredentials = { username: string; password: string; source: string };
 
@@ -88,13 +103,17 @@ async function fetchTwilioMedia(mediaUrl: string) {
   const candidates = twilioMediaAuthCandidates();
   if (!candidates.length) throw new Error("Twilio media credentials not configured");
 
+  // Never send Twilio credentials to a host supplied by the webhook. Redirects
+  // are separately restricted to Twilio's documented media delivery hosts.
+  validateOutboundUrlSyntax(mediaUrl, { allowedHosts: ["api.twilio.com"] });
+
   let lastStatus: number | null = null;
   for (const credentials of candidates) {
     const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString("base64");
     const response = await safeOutboundFetch(
       mediaUrl,
       { headers: { Authorization: `Basic ${auth}` } },
-      { allowedHosts: ["api.twilio.com"] }
+      { allowedHosts: TWILIO_MEDIA_DOWNLOAD_HOSTS }
     );
     if (response.ok) return response;
     lastStatus = response.status;

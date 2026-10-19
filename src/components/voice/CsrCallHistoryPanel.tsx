@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { FileText, History, Play } from "lucide-react";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallDetailView } from "@/components/voice/CallDetailView";
@@ -178,21 +179,40 @@ export function CsrCallHistoryPanel({ className }: Props) {
             const missed = isUnreviewedMissedInboundCall(call);
             return (
               <li key={call.id}>
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => {
                     setSelectedId(call.id);
                     void markCallReviewed(call.id);
                   }}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    setSelectedId(call.id);
+                    void markCallReviewed(call.id);
+                  }}
                   className={cn(
-                    "flex w-full items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    "flex w-full cursor-pointer items-center gap-3 border-b border-border px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                     selectedId === call.id && "bg-highlight-panel",
                     missed && selectedId !== call.id && "bg-red-50/70"
                   )}
                 >
                   <CallHistoryIcon direction={call.direction} answered={call.answered} />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{label}</p>
+                    {call.customer?.id ? (
+                      <Link
+                        href={`/customers/${call.customer.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="block truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={`View ${call.customer.name}'s customer profile`}
+                      >
+                        {label}
+                      </Link>
+                    ) : (
+                      <p className="truncate text-sm font-medium">{label}</p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {formatCallTime(call.startedAt)}
                       {call.durationSec ? ` · ${formatCallDuration(call.durationSec)}` : ""}
@@ -227,7 +247,7 @@ export function CsrCallHistoryPanel({ className }: Props) {
                       </Badge>
                     ) : null}
                   </div>
-                </button>
+                </div>
               </li>
             );
           })}

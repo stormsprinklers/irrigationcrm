@@ -461,11 +461,17 @@ export function SmsMessagePane({
         <div className="min-w-0">
           {thread?.customer?.name ? (
             <>
-              <CustomerNameWithBadge
-                name={thread.customer.name}
-                doNotService={thread.customer.doNotService}
-                nameClassName="truncate font-semibold"
-              />
+              <Link
+                href={`/customers/${thread.customer.id}`}
+                className="inline-flex rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label={`View ${thread.customer.name}'s customer profile`}
+              >
+                <CustomerNameWithBadge
+                  name={thread.customer.name}
+                  doNotService={thread.customer.doNotService}
+                  nameClassName="truncate font-semibold"
+                />
+              </Link>
               {displayPhone ? <PhoneRow phone={displayPhone} /> : null}
             </>
           ) : (

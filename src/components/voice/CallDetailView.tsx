@@ -226,7 +226,17 @@ export function CallDetailView({
         <CallHistoryIcon direction={detail.direction} answered={detail.answered} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <p className="font-semibold">{displayName}</p>
+            {detail.customer?.id ? (
+              <Link
+                href={`/customers/${detail.customer.id}`}
+                className="rounded-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label={`View ${detail.customer.name}'s customer profile`}
+              >
+                {displayName}
+              </Link>
+            ) : (
+              <p className="font-semibold">{displayName}</p>
+            )}
             {!detail.answered && detail.direction === "INBOUND" ? (
               <span className="rounded-full bg-[#FF3B30] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
                 Missed

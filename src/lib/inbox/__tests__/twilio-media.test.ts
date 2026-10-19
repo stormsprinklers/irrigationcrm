@@ -5,12 +5,21 @@ import {
   missingTwilioMediaItems,
   normalizeInboundTwilioMedia,
   parseTwilioMediaParams,
+  TWILIO_MEDIA_DOWNLOAD_HOSTS,
   twilioMediaAuthCandidates,
 } from "../twilio-media";
 import { isBrowserImageMimeType } from "../attachments";
 
 test("inbound MMS limit accommodates full-resolution phone photos", () => {
   assert.equal(INBOUND_SMS_MEDIA_MAX_BYTES, 25 * 1024 * 1024);
+});
+
+test("Twilio media downloads allow the documented protected-media redirect", () => {
+  assert.deepEqual(TWILIO_MEDIA_DOWNLOAD_HOSTS, [
+    "api.twilio.com",
+    "mms.twiliocdn.com",
+    "s3-external-1.amazonaws.com",
+  ]);
 });
 
 test("Twilio media parsing preserves provider indexes for retry recovery", () => {

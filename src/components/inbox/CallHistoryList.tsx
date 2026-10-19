@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { FileText, Phone, Play } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,7 @@ type CallLog = {
   recordingUrl?: string | null;
   transcript?: string | null;
   startedAt: string;
-  customer?: { name: string } | null;
+  customer?: { id: string; name: string } | null;
   user?: { name: string } | null;
 };
 
@@ -61,11 +62,18 @@ export function CallHistoryList({
 
           return (
             <li key={call.id}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(call.id)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onSelect(call.id);
+                }}
                 className={cn(
-                  "flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50",
+                  "flex w-full cursor-pointer items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset",
                   selectedId === call.id && "bg-highlight"
                 )}
               >
@@ -73,7 +81,18 @@ export function CallHistoryList({
                   <Phone className="h-4 w-4 text-primary" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold">{label}</p>
+                  {call.customer?.id ? (
+                    <Link
+                      href={`/customers/${call.customer.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                      className="block truncate rounded-sm text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`View ${call.customer.name}'s customer profile`}
+                    >
+                      {label}
+                    </Link>
+                  ) : (
+                    <p className="truncate text-sm font-semibold">{label}</p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {call.direction} · {call.status}
                     {call.durationSec ? ` · ${call.durationSec}s` : ""}
@@ -93,7 +112,7 @@ export function CallHistoryList({
                     </Badge>
                   ) : null}
                 </div>
-              </button>
+              </div>
             </li>
           );
         })}
