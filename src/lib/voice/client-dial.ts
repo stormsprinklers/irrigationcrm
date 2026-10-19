@@ -2,9 +2,12 @@ import { listOperatedVoiceAccounts } from "@/lib/account/operated-accounts";
 import { mobileVoiceClientIdentity, parseVoiceClientIdentity } from "./identity";
 import twilio from "twilio";
 import { mixWithWhite, resolveBrandPalette } from "@/lib/brand-palette";
+import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { prisma } from "@/lib/prisma";
 
 export type VoiceClientBrand = {
+  callerName?: string;
+  callerPhone?: string;
   companyId: string;
   companyName: string;
   brandPrimary: string;
@@ -51,6 +54,13 @@ export function voiceClientBrandFromCompany(company: {
   };
 }
 
+/** Resolve the caller within the called tenant, before sending the VoIP invite. */
+export async function withVoiceCaller(brand: VoiceClientBrand, phone?: string): Promise<VoiceClientBrand> {
+  if (!phone) return brand;
+  const customer = await findCustomerByPhone(brand.companyId, phone).catch(() => null);
+  return { ...brand, callerPhone: phone, callerName: customer?.name?.trim() || undefined };
+}
+
 /** Dial a Twilio Client identity and stamp the called company's brand onto the invite. */
 export async function dialVoiceClient(dial: Dial, identity: string, brand: VoiceClientBrand) {
   const identities = [identity];
@@ -73,6 +83,8 @@ export function appendVoiceClients(dial: Dial, identities: string[], brand: Voic
   for (const target of [...new Set(identities)]) {
     const client = dial.client({}, target);
     firstClient ??= client;
+    if (brand.callerName) client.parameter({ name: "callerName", value: brand.callerName });
+    if (brand.callerPhone) client.parameter({ name: "callerPhone", value: brand.callerPhone });
     client.parameter({ name: "companyId", value: brand.companyId });
     client.parameter({ name: "companyName", value: brand.companyName });
     client.parameter({ name: "brandPrimary", value: brand.brandPrimary });

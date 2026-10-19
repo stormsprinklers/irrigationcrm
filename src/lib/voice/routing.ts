@@ -18,7 +18,7 @@ import { appBaseUrl, voiceClientIdentity } from "./identity";
 import { localTimeParts } from "./hours-branch";
 import { renderIvrGather, renderIvrNode, type FlowContext, type IvrNodeConfig } from "./ivr";
 import { getAvailableAgentIdentities, getNextRoundRobinAgent } from "./presence";
-import { dialVoiceClient, voiceClientBrandFromCompany, type VoiceClientBrand } from "./client-dial";
+import { dialVoiceClient, withVoiceCaller, voiceClientBrandFromCompany, type VoiceClientBrand } from "./client-dial";
 import {
   appendCompanyQueueEnqueue,
   markCallSessionQueued,
@@ -111,7 +111,7 @@ async function dialAvailableAgents(
     return;
   }
 
-  const brand = voiceClientBrandFromCompany(company);
+  const brand = await withVoiceCaller(voiceClientBrandFromCompany(company), from);
   const dial = response.dial(
     inboundDialAttributes(company, {
       timeout: 30,
@@ -154,7 +154,7 @@ export async function dialAssignedUser(
   await dialVoiceClient(
     dial,
     voiceClientIdentity(company.id, userId),
-    voiceClientBrandFromCompany(company)
+    await withVoiceCaller(voiceClientBrandFromCompany(company), from)
   );
 }
 
@@ -366,7 +366,7 @@ export async function buildInboundTwiml(params: TwilioParams) {
     callSessionId,
     recordCalls: company.recordCalls,
     transcribeCalls: company.transcribeCalls,
-    clientBrand: voiceClientBrandFromCompany(company),
+    clientBrand: { ...voiceClientBrandFromCompany(company), callerPhone: from, callerName: customer?.name ?? undefined },
   });
 
   if (assignedUser) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { voiceClientIdentity } from "@/lib/voice/identity";
-import { dialVoiceClient, loadVoiceClientBrand } from "@/lib/voice/client-dial";
+import { dialVoiceClient, loadVoiceClientBrand, withVoiceCaller } from "@/lib/voice/client-dial";
 
 export async function POST(request: NextRequest) {
   const params = await parseTwilioWebhook(request);
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
   const identity = voiceClientIdentity(companyId, userId);
-  const brand = await loadVoiceClientBrand(companyId);
+  const brand = await withVoiceCaller(await loadVoiceClientBrand(companyId), params.From);
   const dial = response.dial();
   await dialVoiceClient(dial, identity, brand);
 

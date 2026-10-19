@@ -4,7 +4,7 @@ import { AgentPresenceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseTwilioWebhook } from "@/lib/voice/webhook";
 import { appBaseUrl, voiceClientIdentity } from "@/lib/voice/identity";
-import { dialVoiceClient, voiceClientBrandFromCompany } from "@/lib/voice/client-dial";
+import { dialVoiceClient, withVoiceCaller, voiceClientBrandFromCompany } from "@/lib/voice/client-dial";
 
 /**
  * Fallback human handoff when the AI node has no transferNodeId configured:
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     select: { userId: true },
   });
   if (presence.length) {
-    const brand = voiceClientBrandFromCompany(company);
+    const brand = await withVoiceCaller(voiceClientBrandFromCompany(company), params.From);
     for (const row of presence) {
       await dialVoiceClient(dial, voiceClientIdentity(company.id, row.userId), brand);
     }
