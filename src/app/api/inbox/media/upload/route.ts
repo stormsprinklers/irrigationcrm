@@ -18,7 +18,19 @@ import {
   hasExpectedFileSignature,
 } from "@/lib/inbox/attachments";
 import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
+import { normalizeInboundTwilioMedia } from "@/lib/inbox/twilio-media";
 import { UploadSecurityError } from "@/lib/security/malware-scan";
+
+const HEIC_MIME_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+]);
+
+function jpegFileName(fileName: string) {
+  return `${fileName.replace(/\.[^.]+$/, "") || "photo"}.jpg`;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,16 +59,35 @@ export async function POST(request: NextRequest) {
         return badRequestResponse("File contents do not match the declared media type");
       }
 
-      const safeName = safeFileName(file.name);
+      let uploadBody: File | Buffer = file;
+      let outputMimeType = file.type;
+      let outputFileName = file.name;
+      if (HEIC_MIME_TYPES.has(file.type.toLowerCase())) {
+        const converted = await normalizeInboundTwilioMedia(
+          Buffer.from(await file.arrayBuffer()),
+          file.type
+        );
+        if (!converted.converted) {
+          return badRequestResponse("This HEIC photo could not be converted. Try exporting it as JPEG.");
+        }
+        if (converted.buffer.length > SMS_MEDIA_MAX_BYTES) {
+          return badRequestResponse("Converted photo is too large for MMS (5MB maximum)");
+        }
+        uploadBody = converted.buffer;
+        outputMimeType = converted.mimeType;
+        outputFileName = jpegFileName(file.name);
+      }
+
+      const safeName = safeFileName(outputFileName);
       const pathname = `inbox/${user.companyId}/sms/outbound/${Date.now()}-${safeName}`;
-      const blob = await uploadPrivateBlob(pathname, file, { contentType: file.type });
+      const blob = await uploadPrivateBlob(pathname, uploadBody, { contentType: outputMimeType });
 
       return NextResponse.json({
         blobUrl: blob.url,
         publicUrl: twilioAccessibleMediaUrl(pathname),
-        fileName: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
+        fileName: outputFileName,
+        mimeType: outputMimeType,
+        sizeBytes: uploadBody instanceof File ? uploadBody.size : uploadBody.length,
       });
     }
 

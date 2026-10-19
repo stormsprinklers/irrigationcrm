@@ -13,6 +13,10 @@ export const SMS_ALLOWED_MIME_TYPES = [
   "image/png",
   "image/gif",
   "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
   "video/mp4",
   "video/quicktime",
   "video/3gpp",
@@ -67,6 +71,11 @@ export async function hasExpectedFileSignature(file: File): Promise<boolean> {
   if (mime === "image/webp") {
     return new TextDecoder().decode(bytes.slice(0, 4)) === "RIFF" &&
       new TextDecoder().decode(bytes.slice(8, 12)) === "WEBP";
+  }
+  if (["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"].includes(mime)) {
+    if (new TextDecoder().decode(bytes.slice(4, 8)) !== "ftyp") return false;
+    const brand = new TextDecoder().decode(bytes.slice(8, 12)).toLowerCase();
+    return ["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"].includes(brand);
   }
   if (mime === "application/pdf") {
     return new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";

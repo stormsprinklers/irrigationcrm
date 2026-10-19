@@ -9,6 +9,89 @@ import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { isImageMimeType, isVideoMimeType } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 
+const SMS_BROWSER_UPLOAD_TARGET_BYTES = 3.5 * 1024 * 1024;
+const SMS_BROWSER_IMAGE_MAX_DIMENSION = 2560;
+
+function inferredImageMimeType(file: File) {
+  if (file.type) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const mimeByExtension: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+    heic: "image/heic",
+    heif: "image/heif",
+  };
+  return extension ? mimeByExtension[extension] ?? "" : "";
+}
+
+async function prepareBrowserSmsPhoto(file: File) {
+  const mimeType = inferredImageMimeType(file);
+  const typedFile =
+    mimeType && mimeType !== file.type
+      ? new File([file], file.name, { type: mimeType, lastModified: file.lastModified })
+      : file;
+
+  if (
+    typedFile.size <= SMS_BROWSER_UPLOAD_TARGET_BYTES ||
+    !["image/jpeg", "image/png", "image/webp"].includes(mimeType.toLowerCase()) ||
+    typeof createImageBitmap !== "function"
+  ) {
+    return typedFile;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(typedFile);
+    const scale = Math.min(
+      1,
+      SMS_BROWSER_IMAGE_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return typedFile;
+    }
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+
+    let compressed: Blob | null = null;
+    for (const quality of [0.88, 0.78, 0.68, 0.58]) {
+      compressed = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", quality)
+      );
+      if (compressed && compressed.size <= SMS_BROWSER_UPLOAD_TARGET_BYTES) break;
+    }
+    if (!compressed || compressed.size >= typedFile.size) return typedFile;
+
+    const jpegName = typedFile.name.replace(/\.[^.]+$/, "") + ".jpg";
+    return new File([compressed], jpegName, {
+      type: "image/jpeg",
+      lastModified: typedFile.lastModified,
+    });
+  } catch {
+    return typedFile;
+  }
+}
+
+async function uploadErrorMessage(response: Response, fileName: string) {
+  const fallback = `Failed to upload ${fileName}`;
+  const raw = await response.text().catch(() => "");
+  if (!raw) return response.status === 413 ? "Photo is too large to upload" : fallback;
+  try {
+    const parsed = JSON.parse(raw) as { error?: string };
+    return parsed.error ?? fallback;
+  } catch {
+    return response.status === 413 ? "Photo is too large to upload" : fallback;
+  }
+}
+
 export function InboxAttachmentPicker({
   channel,
   attachments,
@@ -41,24 +124,30 @@ export function InboxAttachmentPicker({
       for (const file of Array.from(files)) {
         if (next.length >= maxCount) break;
 
+        const uploadFile = channel === "sms" ? await prepareBrowserSmsPhoto(file) : file;
         const formData = new FormData();
-        formData.set("file", file);
-        const res = await fetch(`/api/inbox/media/upload?channel=${channel}`, {
-          method: "POST",
-          body: formData,
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          toast.error(data.error ?? `Failed to upload ${file.name}`);
-          continue;
+        formData.set("file", uploadFile);
+        try {
+          const res = await fetch(`/api/inbox/media/upload?channel=${channel}`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) {
+            toast.error(await uploadErrorMessage(res, file.name));
+            continue;
+          }
+          const data = (await res.json()) as PendingAttachment;
+          next.push({
+            blobUrl: data.blobUrl,
+            publicUrl: data.publicUrl,
+            fileName: data.fileName,
+            mimeType: data.mimeType,
+            sizeBytes: data.sizeBytes,
+          });
+        } catch (error) {
+          console.error("Inbox attachment upload failed", error);
+          toast.error(`Failed to upload ${file.name}. Please try again.`);
         }
-        next.push({
-          blobUrl: data.blobUrl,
-          publicUrl: data.publicUrl,
-          fileName: data.fileName,
-          mimeType: data.mimeType,
-          sizeBytes: data.sizeBytes,
-        });
       }
       onChange(next);
     } finally {

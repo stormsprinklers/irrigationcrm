@@ -85,7 +85,7 @@ export async function normalizeInboundTwilioMedia(
 ) {
   const normalized = normalizedMimeType(mimeType);
   try {
-    if (normalized === "image/heic" || normalized === "image/heif") {
+    if (["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"].includes(normalized)) {
       const converted = await convertHeic({ buffer, format: "JPEG", quality: 0.9 });
       return { buffer: Buffer.from(converted), mimeType: "image/jpeg", converted: true };
     }
