@@ -26,7 +26,11 @@ import {
   inboundSmsViaLinePrefix,
   resolveInboundSmsLine,
 } from "@/lib/inbox/conversations";
-import { parseTwilioMediaParams, downloadTwilioMedia } from "@/lib/inbox/twilio-media";
+import {
+  parseTwilioMediaParams,
+  downloadTwilioMedia,
+  missingTwilioMediaItems,
+} from "@/lib/inbox/twilio-media";
 import { messageSharesContactInfo } from "@/lib/inbox/contact-info-detection";
 import { processInboundMessageContactInfo } from "@/lib/inbox/contact-info-process";
 import { notifyInboundSms } from "@/lib/notifications/in-app";
@@ -38,6 +42,45 @@ import {
 } from "@/lib/owner-assistant/sms";
 
 export const maxDuration = 60;
+
+async function saveInboundMedia(params: {
+  messageId: string;
+  companyId: string;
+  mediaItems: ReturnType<typeof parseTwilioMediaParams>;
+}) {
+  const existing = await prisma.messageMedia.findMany({
+    where: { messageId: params.messageId },
+    select: { fileName: true },
+  });
+  const missing = missingTwilioMediaItems(
+    params.mediaItems,
+    existing.map((item) => item.fileName)
+  );
+
+  // Persist each attachment independently. If a later download fails, Twilio's
+  // retry will skip completed indexes and resume the missing ones.
+  for (const item of missing) {
+    const saved = await downloadTwilioMedia({
+      mediaUrl: item.url,
+      companyId: params.companyId,
+      messageId: params.messageId,
+      mimeType: item.contentType,
+      index: item.index,
+    });
+    const alreadySaved = await prisma.messageMedia.findFirst({
+      where: {
+        messageId: params.messageId,
+        fileName: { startsWith: `media-${item.index}.` },
+      },
+      select: { id: true },
+    });
+    if (!alreadySaved) {
+      await prisma.messageMedia.create({
+        data: { messageId: params.messageId, ...saved },
+      });
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -211,15 +254,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    const mediaItems = parseTwilioMediaParams(params);
+
     if (messageSid) {
       const duplicate = await prisma.message.findUnique({
         where: { twilioMessageSid: messageSid },
         select: { id: true },
       });
-      if (duplicate) return NextResponse.json({ ok: true });
+      if (duplicate) {
+        if (mediaItems.length) {
+          await saveInboundMedia({
+            messageId: duplicate.id,
+            companyId: company.id,
+            mediaItems,
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
     }
-
-    const mediaItems = parseTwilioMediaParams(params);
 
     const contactInfoDetected =
       !blocked && scope === Scope.EXTERNAL && body.trim() ? messageSharesContactInfo(body) : false;
@@ -240,26 +292,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (mediaItems.length) {
-      const saved = await Promise.all(
-        mediaItems.map((item, index) =>
-          downloadTwilioMedia({
-            mediaUrl: item.url,
-            companyId: company.id,
-            messageId: message.id,
-            mimeType: item.contentType,
-            index,
-          })
-        )
-      );
-
-      await prisma.messageMedia.createMany({
-        data: saved.map((item) => ({
-          messageId: message.id,
-          blobUrl: item.blobUrl,
-          fileName: item.fileName,
-          mimeType: item.mimeType,
-          sizeBytes: item.sizeBytes,
-        })),
+      await saveInboundMedia({
+        messageId: message.id,
+        companyId: company.id,
+        mediaItems,
       });
     }
 

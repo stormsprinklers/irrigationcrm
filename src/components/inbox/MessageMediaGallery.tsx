@@ -5,7 +5,7 @@ import { Download, FileText } from "lucide-react";
 import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import {
-  isImageMimeType,
+  isBrowserImageMimeType,
   isVideoMimeType,
 } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,7 @@ export function MessageMediaGallery({
       <div className={cn("mt-2 space-y-2", className)}>
         {media.map((item) => {
           const src = mediaSrc(item.blobUrl);
-          if (isImageMimeType(item.mimeType)) {
+          if (isBrowserImageMimeType(item.mimeType)) {
             const alt = item.fileName ?? "Image attachment";
             return (
               <button

@@ -93,6 +93,13 @@ export function isImageMimeType(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
+/** Image formats that current browsers can render directly without conversion. */
+export function isBrowserImageMimeType(mimeType: string) {
+  return ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"].includes(
+    mimeType.toLowerCase().split(";", 1)[0].trim()
+  );
+}
+
 export function isVideoMimeType(mimeType: string) {
   return mimeType.startsWith("video/");
 }
