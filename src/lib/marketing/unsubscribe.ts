@@ -85,6 +85,14 @@ export function marketingUnsubscribeUrl(
   return `${base}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
 }
 
+/** RFC 8058 headers used by Gmail and other inboxes for native one-click unsubscribe. */
+export function oneClickUnsubscribeHeaders(unsubscribeUrl: string): Record<string, string> {
+  return {
+    "List-Unsubscribe": `<${unsubscribeUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+}
+
 /** Small text unsubscribe line for unformatted campaign emails. */
 export function appendPlainUnsubscribeText(text: string, unsubscribeUrl: string): string {
   const existing = text.trimEnd();

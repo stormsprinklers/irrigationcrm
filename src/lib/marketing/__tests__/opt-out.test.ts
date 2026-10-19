@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { isMarketingOptedOut, marketingConsentLabel } from "../opt-out";
-import { appendMarketingUnsubscribeText, appendPlainUnsubscribeText, prefsAllOptedOut } from "../unsubscribe";
+import {
+  appendMarketingUnsubscribeText,
+  appendPlainUnsubscribeText,
+  oneClickUnsubscribeHeaders,
+  prefsAllOptedOut,
+} from "../unsubscribe";
 import {
   isExactSmsStart,
   isExactSmsStop,
@@ -68,6 +73,14 @@ test("appendPlainUnsubscribeText adds a working unsubscribe URL", () => {
   const out = appendPlainUnsubscribeText("Hi there", "https://example.com/unsub?token=abc");
   assert.match(out, /Unsubscribe: https:\/\/example.com\/unsub\?token=abc/);
   assert.doesNotMatch(out, /marketing message/);
+});
+
+test("oneClickUnsubscribeHeaders builds the RFC 8058 Gmail headers", () => {
+  const url = "https://crm.example.com/api/marketing/unsubscribe?token=signed-token";
+  assert.deepEqual(oneClickUnsubscribeHeaders(url), {
+    "List-Unsubscribe": `<${url}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  });
 });
 
 test("appendMarketingUnsubscribeText keeps the designed-email footer", () => {

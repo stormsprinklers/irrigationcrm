@@ -116,6 +116,8 @@ export async function sendCompanyEmail(
     subject: string;
     text?: string;
     html?: string;
+    /** Custom RFC email headers to pass through to the provider. */
+    headers?: Record<string, string>;
     replyTo?: string;
     fromOverride?: string | null;
     attachments?: Array<{
@@ -163,6 +165,7 @@ export async function sendCompanyEmail(
     subject: params.subject,
     text,
     html,
+    headers: params.headers,
     omitHtml: params.omitHtml,
     disableTracking: params.disableTracking,
     replyTo: params.replyTo,

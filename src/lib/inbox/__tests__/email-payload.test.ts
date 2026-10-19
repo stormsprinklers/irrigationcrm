@@ -53,6 +53,7 @@ test("Twilio email payload uses only an unstyled required HTML twin for plaintex
 });
 
 test("campaign payload disables SendGrid tracking and injected footers per message", () => {
+  const unsubscribeUrl = "https://crm.example.com/api/marketing/unsubscribe?token=signed-token";
   const payload = buildTwilioEmailPayload({
     from: "Austin <hello@stormsprinklers.com>",
     to: ["jordan@example.com"],
@@ -60,6 +61,10 @@ test("campaign payload disables SendGrid tracking and injected footers per messa
     text: "Book at https://stormsprinklers.com/book-winterization",
     omitHtml: true,
     disableTracking: true,
+    headers: {
+      "List-Unsubscribe": `<${unsubscribeUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
   });
 
   const content = payload.content as { html?: string; headers?: Record<string, string> };
@@ -76,6 +81,11 @@ test("campaign payload disables SendGrid tracking and injected footers per messa
   assert.equal(smtpApi.filters?.opentrack?.settings?.enable, 0);
   assert.equal(smtpApi.filters?.subscriptiontrack?.settings?.enable, 0);
   assert.equal(smtpApi.filters?.footer?.settings?.enable, 0);
+  assert.equal(content.headers?.["List-Unsubscribe"], `<${unsubscribeUrl}>`);
+  assert.equal(
+    content.headers?.["List-Unsubscribe-Post"],
+    "List-Unsubscribe=One-Click"
+  );
 });
 
 test("signed email webhook verifies raw payload and rejects tampering", () => {

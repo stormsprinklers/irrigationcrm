@@ -21,7 +21,7 @@ import { queryAudienceCustomers } from "@/lib/marketing/audience";
 import { buildCampaignStats, mergeCampaignStatsJson } from "@/lib/marketing/stats";
 import type { AudienceFilters, CampaignStats, DripSettings } from "@/lib/marketing/types";
 import { buildMarketingEmailPayload, campaignPlainBodyText, ensureCampaignGreeting, signatureFieldsFromCompany } from "@/lib/marketing/outbound-email";
-import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
+import { marketingUnsubscribeUrl, oneClickUnsubscribeHeaders } from "@/lib/marketing/unsubscribe";
 import { isMarketingPhoneSuppressed } from "@/lib/marketing/opt-out";
 import {
   resolveMarketingEmailFrom,
@@ -376,6 +376,7 @@ async function sendToRecipient(
     subject,
     text: outbound.text,
     html: outbound.html,
+    headers: oneClickUnsubscribeHeaders(unsubscribeUrl),
     skipBranding: true,
     omitHtml: outbound.omitHtml,
     disableTracking: true,

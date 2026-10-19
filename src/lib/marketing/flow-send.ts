@@ -5,7 +5,7 @@ import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { isContactBlocked, normalizePhone } from "@/lib/inbox/contacts";
 import { phoneDigitsKey } from "@/lib/inbox/phone";
 import { Prisma } from "@prisma/client";
-import { marketingUnsubscribeUrl } from "@/lib/marketing/unsubscribe";
+import { marketingUnsubscribeUrl, oneClickUnsubscribeHeaders } from "@/lib/marketing/unsubscribe";
 import {
   resolveMarketingEmailFrom,
   resolveMarketingSenderName,
@@ -170,14 +170,15 @@ export async function sendCampaignMessage(params: {
       return false;
     }
 
+    const unsubscribeUrl = marketingUnsubscribeUrl(
+      customer.id,
+      campaign.companyId,
+      campaign.company.customerBaseUrl
+    );
     const outbound = buildMarketingEmailPayload({
       bodyHtml,
       bodyText,
-      unsubscribeUrl: marketingUnsubscribeUrl(
-        customer.id,
-        campaign.companyId,
-        campaign.company.customerBaseUrl
-      ),
+      unsubscribeUrl,
       recipientId: recipient.id,
       publicBaseUrl: campaign.company.customerBaseUrl,
       signature: signatureFieldsFromCompany(campaign.company),
@@ -200,6 +201,7 @@ export async function sendCampaignMessage(params: {
         subject: subject || campaign.name,
         text: outbound.text,
         html: outbound.html,
+        headers: oneClickUnsubscribeHeaders(unsubscribeUrl),
         skipBranding: true,
         omitHtml: outbound.omitHtml,
         disableTracking: true,
