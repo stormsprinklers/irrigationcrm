@@ -49,15 +49,16 @@ export function AddressAutocompleteInput({
   const [resolving, setResolving] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [query, setQuery] = useState<string | null>(null);
 
   useEffect(() => {
-    if (disabled) {
+    if (disabled || query === null) {
       setSuggestions([]);
       setOpen(false);
       return;
     }
 
-    const trimmed = value.trim();
+    const trimmed = query.trim();
     if (trimmed.length < 3) {
       setSuggestions([]);
       setOpen(false);
@@ -94,11 +95,12 @@ export function AddressAutocompleteInput({
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [value, disabled]);
+  }, [query, disabled]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
+        setQuery(null);
         setOpen(false);
       }
     }
@@ -108,6 +110,7 @@ export function AddressAutocompleteInput({
   }, []);
 
   async function selectSuggestion(suggestion: Suggestion) {
+    setQuery(null);
     setOpen(false);
     setSuggestions([]);
     setResolving(true);
@@ -129,7 +132,10 @@ export function AddressAutocompleteInput({
         <Input
           id={id}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange(e.target.value);
+          }}
           placeholder={placeholder}
           disabled={disabled}
           autoComplete={autoComplete}
@@ -140,7 +146,11 @@ export function AddressAutocompleteInput({
           onFocus={() => {
             if (suggestions.length > 0) setOpen(true);
           }}
-          onBlur={onBlur}
+          onBlur={() => {
+            setQuery(null);
+            setOpen(false);
+            onBlur?.();
+          }}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (!open || suggestions.length === 0) return;

@@ -18,7 +18,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     return <VoiceDeviceProvider enabled={false}><InboxBadgesProvider><CompanyBrandProvider><TooltipProvider delayDuration={200}>
       <div data-native-shell="true" className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
         <OutboundCommsBanner />
-        <main className="relative min-h-0 flex-1 overflow-auto">{children}</main>
+        <main className="crm-app-main relative min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
     </TooltipProvider></CompanyBrandProvider></InboxBadgesProvider></VoiceDeviceProvider>;
   }
@@ -31,7 +31,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <TopNav />
             <RolePreviewBanner />
             <OutboundCommsBanner />
-            <main className="relative min-h-0 flex-1 overflow-auto">{children}</main>
+            <main className="crm-app-main relative min-h-0 flex-1 overflow-auto">{children}</main>
             <ActiveCallBar />
             <IncomingCallModal />
           </div>

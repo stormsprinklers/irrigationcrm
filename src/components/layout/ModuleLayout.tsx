@@ -31,7 +31,10 @@ export function ModuleLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className={cn("flex h-full min-h-0 w-full overflow-hidden", className)}>
+    <div
+      data-module-layout
+      className={cn("flex h-full min-h-0 w-full overflow-hidden", className)}
+    >
       {!desktopSidebarOnly && sidebarOpen ? (
         <button
           type="button"

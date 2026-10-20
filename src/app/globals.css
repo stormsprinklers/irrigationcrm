@@ -266,6 +266,12 @@
   }
 }
 
+/* ModuleLayout owns its vertical scrolling; keep the app shell from becoming
+ * a second scroll container when a dropdown extends the module's scroll area. */
+.crm-app-main:has([data-module-layout]) {
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .crm-page-enter {
     animation: crm-page-enter 180ms ease-out;
