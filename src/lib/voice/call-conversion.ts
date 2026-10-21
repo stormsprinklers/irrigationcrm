@@ -168,6 +168,19 @@ export async function syncCallConversionFromLog(
     resolvedLeadId = matched.leadId;
   }
 
+  if (log.direction === CallDirection.INBOUND && resolvedCustomerId) {
+    const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+    await advanceCustomerPipeline({
+      companyId: log.companyId,
+      customerId: resolvedCustomerId,
+      stage: "LEAD",
+      occurredAt: log.startedAt,
+      leadSource: trackingSource?.trim() || "Phone call",
+      firstContactedAt: answeredByUserId ? log.startedAt : null,
+      leadId: resolvedLeadId,
+    }).catch((error) => console.error("Inbound call pipeline update failed", error));
+  }
+
   await recordTouchEvent({
     companyId: log.companyId,
     customerId: resolvedCustomerId,

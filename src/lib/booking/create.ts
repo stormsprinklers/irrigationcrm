@@ -253,6 +253,14 @@ export async function createOnlineBooking(companyId: string, input: OnlineBookin
     });
   }
 
+  const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+  await advanceCustomerPipeline({
+    companyId,
+    customerId: customer.id,
+    stage: "LEAD",
+    leadSource: "Online booking",
+  }).catch((error) => console.error("Online booking pipeline update failed", error));
+
   let propertyId: string | null = null;
   if (!virtual || input.address || zip) {
     const property = await prisma.customerProperty.create({

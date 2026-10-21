@@ -58,6 +58,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     void onEstimateClosed(id).catch(() => {});
 
+    const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+    void advanceCustomerPipeline({
+      companyId: estimate.companyId,
+      customerId: estimate.customerId,
+      stage: "CONVERTED",
+    }).catch((error) => console.error("Estimate pipeline conversion failed", error));
+
     const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
     void onReferralEstimateApproved({
       companyId: estimate.companyId,

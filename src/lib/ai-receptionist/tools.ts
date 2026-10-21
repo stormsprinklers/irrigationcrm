@@ -489,6 +489,14 @@ async function runTool(
       const phone = normalizePhone(String(args.phone ?? ctx.fromE164));
       const existing = await findCustomerByPhone(ctx.companyId, phone);
       if (existing) {
+        const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+        await advanceCustomerPipeline({
+          companyId: ctx.companyId,
+          customerId: existing.id,
+          stage: "LEAD",
+          leadSource: "AI receptionist",
+          firstContactedAt: new Date(),
+        }).catch(() => {});
         await patchConversation(ctx.receptionistCallId, { customerId: existing.id });
         return { ok: true, data: { customerId: existing.id, existing: true } };
       }
@@ -509,6 +517,15 @@ async function runTool(
         where: { id: ctx.receptionistCallId },
         data: { customerId: customer.id },
       });
+      const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+      await advanceCustomerPipeline({
+        companyId: ctx.companyId,
+        customerId: customer.id,
+        stage: "LEAD",
+        occurredAt: customer.createdAt,
+        leadSource: "AI receptionist",
+        firstContactedAt: customer.createdAt,
+      }).catch(() => {});
       await patchConversation(ctx.receptionistCallId, { customerId: customer.id });
       return { ok: true, data: { customerId: customer.id, existing: false } };
     }

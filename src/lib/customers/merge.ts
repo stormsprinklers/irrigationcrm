@@ -1,5 +1,18 @@
-import { CampaignEnrollmentStatus } from "@prisma/client";
+import { CampaignEnrollmentStatus, type SalesPipelineStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+function earlierDate(a: Date | null, b: Date | null) {
+  if (!a) return b;
+  if (!b) return a;
+  return a <= b ? a : b;
+}
+
+function mergedPipelineStage(a: SalesPipelineStage | null, b: SalesPipelineStage | null) {
+  const rank = { LEAD: 0, QUALIFIED: 1, CONVERTED: 2, SOLD: 3, DISQUALIFIED: -1 } as const;
+  if (!a) return b;
+  if (!b) return a;
+  return rank[a] >= rank[b] ? a : b;
+}
 
 export async function mergeCustomers(params: {
   companyId: string;
@@ -33,6 +46,15 @@ export async function mergeCustomers(params: {
         zip: target.zip ?? source.zip,
         leadSource: target.leadSource ?? source.leadSource,
         stripeCustomerId: target.stripeCustomerId ?? source.stripeCustomerId,
+        pipelineStage: mergedPipelineStage(target.pipelineStage, source.pipelineStage),
+        pipelineLeadAt: earlierDate(target.pipelineLeadAt, source.pipelineLeadAt),
+        pipelineQualifiedAt: earlierDate(target.pipelineQualifiedAt, source.pipelineQualifiedAt),
+        pipelineConvertedAt: earlierDate(target.pipelineConvertedAt, source.pipelineConvertedAt),
+        pipelineSoldAt: earlierDate(target.pipelineSoldAt, source.pipelineSoldAt),
+        pipelineDisqualifiedAt: earlierDate(target.pipelineDisqualifiedAt, source.pipelineDisqualifiedAt),
+        pipelineLeadSource: target.pipelineLeadSource ?? source.pipelineLeadSource,
+        pipelineFirstContactedAt: earlierDate(target.pipelineFirstContactedAt, source.pipelineFirstContactedAt),
+        pipelineLeadId: target.pipelineLeadId ?? source.pipelineLeadId,
         marketingEmailOptOut: target.doNotService || source.doNotService || target.marketingEmailOptOut || source.marketingEmailOptOut,
         marketingSmsOptOut: target.doNotService || source.doNotService || target.marketingSmsOptOut || source.marketingSmsOptOut,
         appointmentReminderEmailOptOut: target.doNotService || source.doNotService || target.appointmentReminderEmailOptOut || source.appointmentReminderEmailOptOut,

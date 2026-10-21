@@ -98,6 +98,28 @@ function ConsentBadge({ value }: { value: boolean }) {
   );
 }
 
+function PipelineStageBadge({ stage }: { stage: CustomerDTO["pipelineStage"] }) {
+  const label = stage
+    ? {
+        LEAD: "Lead",
+        QUALIFIED: "Qualified Lead",
+        CONVERTED: "Converted Lead",
+        SOLD: "Sold",
+        DISQUALIFIED: "Disqualified",
+      }[stage]
+    : "Not in pipeline";
+  return (
+    <Badge
+      variant="outline"
+      className={stage
+        ? "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300"
+        : "bg-muted text-muted-foreground"}
+    >
+      {label}
+    </Badge>
+  );
+}
+
 function MarketingConsentSelect({
   label,
   value,
@@ -939,6 +961,14 @@ export function CustomerProfile({ customerId }: Props) {
                     />
                   </div>
                   <ProfileDetail label="Lead source" value={customer.leadSource} />
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Sales pipeline
+                    </p>
+                    <div className="mt-1">
+                      <PipelineStageBadge stage={customer.pipelineStage} />
+                    </div>
+                  </div>
                   {customer.doNotService ? (
                     <div className="sm:col-span-2">
                       <Badge variant="destructive">Do not service</Badge>

@@ -75,6 +75,17 @@ export async function POST(request: NextRequest) {
           },
         });
       }
+      if (spamSource !== "call") {
+        const { findCustomerByPhone } = await import("@/lib/inbox/customer-lookup");
+        const customer = await findCustomerByPhone(user.companyId, normalizedPhone);
+        if (customer) {
+          const { disqualifyCustomerPipelineForSmsSpam } = await import("@/lib/customers/pipeline");
+          await disqualifyCustomerPipelineForSmsSpam({
+            companyId: user.companyId,
+            customerId: customer.id,
+          }).catch((error) => console.error("SMS spam pipeline disqualification failed", error));
+        }
+      }
       return NextResponse.json(blocked);
     }
 
@@ -131,6 +142,15 @@ export async function DELETE(request: NextRequest) {
         },
         data: { smsOpen: true, smsClosedAt: null, smsClosedById: null },
       });
+      const { findCustomerByPhone } = await import("@/lib/inbox/customer-lookup");
+      const customer = await findCustomerByPhone(user.companyId, normalizedPhone);
+      if (customer) {
+        const { restoreCustomerPipelineFromSmsSpam } = await import("@/lib/customers/pipeline");
+        await restoreCustomerPipelineFromSmsSpam({
+          companyId: user.companyId,
+          customerId: customer.id,
+        }).catch((error) => console.error("SMS spam pipeline restore failed", error));
+      }
       return NextResponse.json({ success: true });
     }
     if (!id) return badRequestResponse("id or phone required");

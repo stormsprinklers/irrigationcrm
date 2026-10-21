@@ -168,6 +168,15 @@ async function sendSmsMessage(params: {
     });
   });
 
+  if (params.scope === Scope.EXTERNAL && resolvedCustomerId) {
+    const { recordCustomerPipelineContact } = await import("@/lib/customers/pipeline");
+    await recordCustomerPipelineContact({
+      companyId: params.user.companyId,
+      customerId: resolvedCustomerId,
+      contactedAt: message.sentAt,
+    }).catch((error) => console.error("Outbound SMS pipeline contact update failed", error));
+  }
+
   return { conversation, message };
 }
 

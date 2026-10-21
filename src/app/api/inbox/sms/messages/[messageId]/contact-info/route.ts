@@ -338,6 +338,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return resolvedCustomerId;
     });
 
+    const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+    await advanceCustomerPipeline({
+      companyId: user.companyId,
+      customerId,
+      stage: "LEAD",
+      occurredAt: message.sentAt,
+      leadSource: "SMS",
+    }).catch((error) => console.error("SMS contact pipeline update failed", error));
+
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
       select: { id: true, name: true, phone: true, email: true, address: true },

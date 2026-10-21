@@ -38,6 +38,13 @@ async function runNewApprovalSideEffects(estimate: {
   companyId: string;
   customerId: string;
 }) {
+  const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+  await advanceCustomerPipeline({
+    companyId: estimate.companyId,
+    customerId: estimate.customerId,
+    stage: "CONVERTED",
+  }).catch((error) => console.error("Estimate pipeline conversion failed", error));
+
   const { onEstimateClosed } = await import("@/lib/notifications/estimate-followup");
   await onEstimateClosed(estimate.id).catch(() => {});
 

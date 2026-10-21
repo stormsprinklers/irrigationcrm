@@ -312,6 +312,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    if (customer && !blocked && !isStop && !isStart) {
+      const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+      await advanceCustomerPipeline({
+        companyId: company.id,
+        customerId: customer.id,
+        stage: "LEAD",
+        occurredAt: message.sentAt,
+        leadSource: inboundLine.phoneNumber?.trackingSource?.trim() || "SMS",
+      }).catch((error) => console.error("Inbound SMS pipeline update failed", error));
+    }
+
     if (keywordReply && !twilioHandledKeyword) {
       const automaticReply = await prisma.message.create({
         data: {

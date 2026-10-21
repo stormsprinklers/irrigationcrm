@@ -34,6 +34,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       await tx.staffAuditLog.create({ data: { companyId: user.companyId, actorId: user.id, entityType: "Estimate", entityId: id, action: "EMPLOYEE_APPROVAL", customerId: estimate.customerId, visitId: estimate.visitId, before: { status: estimate.status }, after: employeeApproval } });
       await tx.estimateNote.create({ data: { estimateId: id, authorId: user.id, body: `Approved by employee ${user.name} without a customer signature.` } });
     });
+    const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+    await advanceCustomerPipeline({
+      companyId: user.companyId,
+      customerId: estimate.customerId,
+      stage: "CONVERTED",
+      occurredAt: approvedAt,
+    }).catch((error) => console.error("Estimate pipeline conversion failed", error));
     await onEstimateClosed(id).catch(() => {});
     return NextResponse.json(await getEstimateForCompany(user.companyId, id));
   } catch (error) {

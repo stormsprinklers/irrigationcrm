@@ -58,6 +58,7 @@ export const customerSidebar: NavSection[] = [
     items: [
       { label: "Customers", href: "/customers", exact: true },
       { label: "Contacts", href: "/customers/contacts" },
+      { label: "Pipeline", href: "/customers/pipeline" },
       { label: "Visits", href: "/customers/jobs" },
       { label: "Estimates", href: "/customers/estimates" },
       { label: "Leads", href: "/customers/leads" },

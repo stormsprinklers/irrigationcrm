@@ -110,6 +110,7 @@ export async function recordInvoicePayment(
     sentAt: invoice.sentAt,
     hadRefund,
   });
+  const paymentRecordedAt = new Date();
 
   await prisma.$transaction([
     prisma.payment.create({
@@ -119,6 +120,7 @@ export async function recordInvoicePayment(
         method: params.method ?? "STRIPE",
         stripePaymentIntentId: params.stripePaymentIntentId ?? null,
         clientIdempotencyKey: idempotencyKey,
+        paidAt: paymentRecordedAt,
       },
     }),
     prisma.invoice.update({
@@ -135,6 +137,15 @@ export async function recordInvoicePayment(
       },
     }),
   ]);
+
+  const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+  await advanceCustomerPipeline({
+    companyId: invoice.companyId,
+    customerId: invoice.customerId,
+    stage: "SOLD",
+    occurredAt: paymentRecordedAt,
+    leadSource: "Invoice payment",
+  }).catch((error) => console.error("Invoice payment pipeline update failed", error));
 
   if (params.method === "CASH" || params.method === "CHECK") {
     const { notifyCashCheckPayment } = await import("@/lib/notifications/payment-events");

@@ -41,6 +41,26 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       include: leadInclude,
     });
 
+    if (lead.convertedCustomerId && nextStatus === LeadStatus.QUALIFIED) {
+      const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+      await advanceCustomerPipeline({
+        companyId: user.companyId,
+        customerId: lead.convertedCustomerId,
+        stage: "QUALIFIED",
+        occurredAt: new Date(),
+        leadSource: lead.source,
+        firstContactedAt: lead.contactedAt,
+        leadId: lead.id,
+      }).catch((error) => console.error("Lead pipeline qualification failed", error));
+    } else if (lead.convertedCustomerId && lead.contactedAt) {
+      const { recordCustomerPipelineContact } = await import("@/lib/customers/pipeline");
+      await recordCustomerPipelineContact({
+        companyId: user.companyId,
+        customerId: lead.convertedCustomerId,
+        contactedAt: lead.contactedAt,
+      }).catch((error) => console.error("Lead pipeline contact update failed", error));
+    }
+
     return NextResponse.json(serializeLead(lead));
   } catch {
     return unauthorizedResponse();

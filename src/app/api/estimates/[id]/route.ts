@@ -84,6 +84,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         void onEstimateSent(id, user.companyId).catch(() => {});
       }
       if (newStatus === EstimateStatus.APPROVED) {
+        const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+        void advanceCustomerPipeline({
+          companyId: user.companyId,
+          customerId: existing.customerId,
+          stage: "CONVERTED",
+        }).catch((error) => console.error("Estimate pipeline conversion failed", error));
         const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
         void onReferralEstimateApproved({
           companyId: user.companyId,

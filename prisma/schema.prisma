@@ -22,6 +22,14 @@ enum CustomerStatus {
   ARCHIVED
 }
 
+enum SalesPipelineStage {
+  LEAD
+  QUALIFIED
+  CONVERTED
+  SOLD
+  DISQUALIFIED
+}
+
 enum WinterizationTabMode {
   OFF
   ON
@@ -1501,6 +1509,16 @@ model Customer {
   /// Opt out of appointment reminder SMS.
   appointmentReminderSmsOptOut Boolean @default(false)
   tags             String[]       @default([])
+  /// Internal sales pipeline only. Never expose through customer-facing APIs or notifications.
+  pipelineStage              SalesPipelineStage?
+  pipelineLeadAt             DateTime?
+  pipelineQualifiedAt        DateTime?
+  pipelineConvertedAt        DateTime?
+  pipelineSoldAt             DateTime?
+  pipelineDisqualifiedAt     DateTime?
+  pipelineLeadSource         String?
+  pipelineFirstContactedAt   DateTime?
+  pipelineLeadId             String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -1541,6 +1559,8 @@ model Customer {
   @@index([referredByCustomerId])
   @@index([companyId, attributionChannel])
   @@index([companyId, createdAt])
+  @@index([companyId, pipelineStage])
+  @@index([companyId, pipelineLeadAt])
 }
 
 model WinterizationRequest {

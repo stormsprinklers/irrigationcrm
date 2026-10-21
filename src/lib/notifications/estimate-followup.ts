@@ -110,6 +110,20 @@ export async function scheduleEstimateFollowUp(estimateId: string, companyId: st
 }
 
 export async function onEstimateSent(estimateId: string, companyId: string) {
+  const estimate = await prisma.estimate.findFirst({
+    where: { id: estimateId, companyId },
+    select: { customerId: true, sentAt: true },
+  });
+  if (estimate) {
+    const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
+    await advanceCustomerPipeline({
+      companyId,
+      customerId: estimate.customerId,
+      stage: "QUALIFIED",
+      occurredAt: estimate.sentAt ?? new Date(),
+      leadSource: "Estimate",
+    }).catch((error) => console.error("Estimate pipeline qualification failed", error));
+  }
   await scheduleEstimateFollowUp(estimateId, companyId);
 }
 

@@ -22,6 +22,12 @@ export type CustomerDTO = {
   appointmentReminderEmailOptOut: boolean;
   appointmentReminderSmsOptOut: boolean;
   tags: string[];
+  pipelineStage: "LEAD" | "QUALIFIED" | "CONVERTED" | "SOLD" | "DISQUALIFIED" | null;
+  pipelineLeadAt: string | null;
+  pipelineQualifiedAt: string | null;
+  pipelineConvertedAt: string | null;
+  pipelineSoldAt: string | null;
+  pipelineDisqualifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
   propertyCount?: number;

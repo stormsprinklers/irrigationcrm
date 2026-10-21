@@ -146,6 +146,19 @@ export async function createWinterizationRequest(companyId: string, input: Winte
 
   await applyWinterizationSeasonTag(customerId, seasonYear);
 
+  if (customerId) {
+    await prisma.lead.updateMany({
+      where: { id: lead.id, companyId },
+      data: { convertedCustomerId: customerId },
+    });
+    const { addCustomerToPipelineFromLead } = await import("@/lib/customers/pipeline");
+    await addCustomerToPipelineFromLead({
+      companyId,
+      customerId,
+      lead,
+    }).catch((error) => console.error("Winterization pipeline update failed", error));
+  }
+
   return { request, created: true };
 }
 

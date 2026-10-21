@@ -4,6 +4,7 @@ import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
+import { addCustomerToPipelineFromLead } from "@/lib/customers/pipeline";
 
 export const leadInclude = {
   assignedUser: { select: { id: true, name: true, color: true } },
@@ -78,7 +79,15 @@ export async function ensureLeadHasContact(
         data: { status: LeadStatus.WON },
       });
     }
-    return prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
+    const customer = await prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
+    if (customer) {
+      await addCustomerToPipelineFromLead({
+        companyId,
+        customerId: customer.id,
+        lead,
+      }).catch((error) => console.error("Lead pipeline update failed", error));
+    }
+    return customer;
   }
 
   const serviceAddress = parseLeadServiceAddress(lead.notes, lead.metadata);
@@ -161,6 +170,11 @@ export async function ensureLeadHasContact(
   });
 
   await copyLeadFirstTouchToCustomer(leadId, customer.id).catch(() => {});
+  await addCustomerToPipelineFromLead({
+    companyId,
+    customerId: customer.id,
+    lead,
+  }).catch((error) => console.error("Lead pipeline update failed", error));
   return customer;
 }
 
