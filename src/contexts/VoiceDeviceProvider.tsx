@@ -31,9 +31,13 @@ import {
 
 export type { CallerInfo };
 
+export type CallPhase = "connecting" | "ringing" | "connected";
+
 export type ActiveCallState = {
   call: Call;
   direction: "inbound" | "outbound";
+  phase: CallPhase;
+  connectedAt: number | null;
   remoteNumber: string;
   callerInfo: CallerInfo | null;
   sessionId: string | null;
@@ -239,43 +243,25 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
   selectedCompanyIdRef.current = session?.user?.companyId ?? null;
 
   const bindCall = useCallback(
-    async (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
+    (call: Call, direction: "inbound" | "outbound", remoteNumber: string) => {
       const brand = incomingBrandFromCall(call, selectedCompanyIdRef.current);
-      const callerInfo = await lookupCaller(remoteNumber, brand.companyId);
-      const callSid = call.parameters.CallSid;
-      const parentCallSid =
-        (call.parameters as Record<string, string>).ParentCallSid ??
-        (call.parameters as Record<string, string>).parentCallSid ??
-        null;
-      let session = callSid ? await resolveSessionId(callSid, parentCallSid) : null;
-
-      void recordAnswered(callSid, session?.id ?? null, parentCallSid);
-
-      if (!session && callSid) {
-        window.setTimeout(() => {
-          void resolveSessionId(callSid, parentCallSid).then((resolved) => {
-            if (!resolved) return;
-            setActiveCall((prev) =>
-              prev && prev.call === call
-                ? {
-                    ...prev,
-                    sessionId: resolved.id,
-                    inboundLine: resolved.inboundLine ?? prev.inboundLine,
-                  }
-                : prev
-            );
-            void recordAnswered(callSid, resolved.id, parentCallSid);
-          });
-        }, 1500);
-      }
+      const sdkStatus = call.status();
+      const phase: CallPhase =
+        direction === "inbound" || sdkStatus === "open"
+          ? "connected"
+          : sdkStatus === "ringing"
+            ? "ringing"
+            : "connecting";
 
       const state: ActiveCallState = {
         call,
         direction,
+        phase,
+        connectedAt: phase === "connected" ? Date.now() : null,
         remoteNumber,
-        callerInfo,
-        sessionId: session?.id ?? null,
-        inboundLine: session?.inboundLine ?? null,
+        callerInfo: null,
+        sessionId: null,
+        inboundLine: null,
         muted: false,
         onHold: false,
         transferring: false,
@@ -287,9 +273,77 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
       void closeIncomingCallBrowserNotification();
       void patchPresence("ON_CALL");
 
+      let disconnected = false;
+      let answeredRecorded = false;
+
+      const attachSession = async (answered: boolean) => {
+        const callSid = call.parameters.CallSid;
+        const parentCallSid =
+          (call.parameters as Record<string, string>).ParentCallSid ??
+          (call.parameters as Record<string, string>).parentCallSid ??
+          null;
+        if (!callSid) return false;
+        const shouldRecordAnswered = answered && !answeredRecorded;
+        if (shouldRecordAnswered) answeredRecorded = true;
+
+        const resolved = await resolveSessionId(callSid, parentCallSid);
+        if (disconnected) return Boolean(resolved);
+        if (resolved) {
+          setActiveCall((prev) =>
+            prev?.call === call
+              ? {
+                  ...prev,
+                  sessionId: resolved.id,
+                  inboundLine: resolved.inboundLine ?? prev.inboundLine,
+                }
+              : prev
+          );
+        }
+        if (shouldRecordAnswered) {
+          void recordAnswered(callSid, resolved?.id ?? null, parentCallSid);
+        }
+        return Boolean(resolved);
+      };
+
+      const retrySession = (answered: boolean) => {
+        window.setTimeout(() => {
+          if (!disconnected) void attachSession(answered);
+        }, 1500);
+      };
+
+      const markConnected = () => {
+        setActiveCall((prev) =>
+          prev?.call === call
+            ? {
+                ...prev,
+                phase: "connected",
+                connectedAt: prev.connectedAt ?? Date.now(),
+              }
+            : prev
+        );
+        void attachSession(true).then((resolved) => {
+          if (!resolved) retrySession(true);
+        });
+      };
+
+      call.on("ringing", () => {
+        setActiveCall((prev) =>
+          prev?.call === call && prev.phase !== "connected"
+            ? { ...prev, phase: "ringing" }
+            : prev
+        );
+        void attachSession(false).then((resolved) => {
+          if (!resolved) retrySession(false);
+        });
+      });
+
+      call.on("accept", markConnected);
+
       call.on("disconnect", () => {
+        disconnected = true;
         setActiveCall((prev) => {
-          if (prev?.sessionId) {
+          if (prev?.call !== call) return prev;
+          if (prev.phase === "connected" && prev.sessionId) {
             if (prev.transferring) {
               void fetch(`/api/voice/calls/${prev.sessionId}/transfer/leave`, {
                 method: "POST",
@@ -304,13 +358,30 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
       });
 
       call.on("cancel", () => {
+        disconnected = true;
+        setActiveCall((prev) => (prev?.call === call ? null : prev));
         setIncomingCall(null);
         void closeIncomingCallBrowserNotification();
+        void patchPresence("AVAILABLE");
       });
 
       call.on("reject", () => {
+        disconnected = true;
+        setActiveCall((prev) => (prev?.call === call ? null : prev));
         setIncomingCall(null);
         void closeIncomingCallBrowserNotification();
+        void patchPresence("AVAILABLE");
+      });
+
+      void lookupCaller(remoteNumber, brand.companyId).then((callerInfo) => {
+        if (disconnected) return;
+        setActiveCall((prev) =>
+          prev?.call === call ? { ...prev, callerInfo } : prev
+        );
+      });
+
+      void attachSession(phase === "connected").then((resolved) => {
+        if (!resolved) retrySession(phase === "connected");
       });
     },
     []

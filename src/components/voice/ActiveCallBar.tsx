@@ -87,20 +87,22 @@ export function ActiveCallBar() {
   const [waitingQueue, setWaitingQueue] = useState<
     Array<{ id: string; fromNumber: string; customer?: { name: string | null } | null }>
   >([]);
+  const connectedAt = activeCall?.connectedAt ?? null;
 
   useEffect(() => {
-    if (!activeCall) {
+    if (!connectedAt) {
       setSeconds(0);
       setKeypadOpen(false);
       setDtmfSent("");
       return;
     }
-    const start = Date.now();
-    const timer = setInterval(() => {
-      setSeconds(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
+    const updateDuration = () => {
+      setSeconds(Math.max(0, Math.floor((Date.now() - connectedAt) / 1000)));
+    };
+    updateDuration();
+    const timer = setInterval(updateDuration, 1000);
     return () => clearInterval(timer);
-  }, [activeCall]);
+  }, [connectedAt]);
 
   const clampToViewport = useCallback((left: number, top: number): CallBoxPosition => {
     const box = boxRef.current;
@@ -305,7 +307,11 @@ export function ActiveCallBar() {
               ? "Warm transfer"
               : activeCall.direction === "inbound"
                 ? "On call"
-                : "Outbound call"}
+                : activeCall.phase === "connected"
+                  ? "Connected"
+                  : activeCall.phase === "ringing"
+                    ? "Ringing"
+                    : "Connecting"}
           </p>
           <p className="truncate font-semibold text-foreground">{label}</p>
           <CallerIdDetails
@@ -316,7 +322,11 @@ export function ActiveCallBar() {
             <InboundLineCard info={activeCall.inboundLine} className="mt-2" />
           ) : null}
           <p className="text-xs text-muted-foreground">
-            {formatDuration(seconds)}
+            {activeCall.phase === "connected"
+              ? formatDuration(seconds)
+              : activeCall.phase === "ringing"
+                ? "Waiting for answer…"
+                : "Starting call…"}
             {activeCall.onHold ? " · On hold" : ""}
             {activeCall.muted ? " · Muted" : ""}
           </p>

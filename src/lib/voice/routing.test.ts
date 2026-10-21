@@ -1,8 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import twilio from "twilio";
-import { dialAssignedUser } from "./routing";
+import { appendClientOutboundDial, dialAssignedUser } from "./routing";
 import { prisma } from "@/lib/prisma";
+
+test("client outbound calls stay ringing until answer with consistent US ringback", () => {
+  const response = new twilio.twiml.VoiceResponse();
+  appendClientOutboundDial(response, {
+    callerId: "+18015550100",
+    normalizedTo: "+18015550101",
+    statusUrl: "https://example.test/api/twilio/voice/status",
+    actionUrl: "https://example.test/api/twilio/voice/dial-complete",
+    recordCalls: true,
+    recordingStatusUrl: "https://example.test/api/twilio/voice/recording",
+  });
+
+  const xml = response.toString();
+  assert.match(xml, /answerOnBridge="true"/);
+  assert.match(xml, /ringTone="us"/);
+  assert.match(xml, /record="record-from-answer-dual"/);
+  assert.match(xml, /statusCallbackEvent="initiated ringing answered completed"/);
+});
 
 test("assigned number rings browser and linked-company iPhone identities with original company branding", async (t) => {
   const company = { id: "chestnut", name: "Chestnut & Cheer", recordCalls: false, brandPrimaryColor: "#123456", brandSecondaryColor: "#abcdef" };

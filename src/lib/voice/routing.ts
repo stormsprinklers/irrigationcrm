@@ -54,6 +54,44 @@ function firstAiReceptionistOnBranch<T extends FlowNodeRow>(
 
 type TwilioParams = Record<string, string>;
 
+type VoiceResponse = InstanceType<typeof twilio.twiml.VoiceResponse>;
+
+export function appendClientOutboundDial(
+  response: VoiceResponse,
+  input: {
+    callerId: string;
+    normalizedTo: string;
+    statusUrl: string;
+    actionUrl: string;
+    recordCalls: boolean;
+    recordingStatusUrl: string;
+  }
+) {
+  const dial = response.dial({
+    callerId: input.callerId,
+    action: input.actionUrl,
+    method: "POST",
+    // Keep the browser leg in a ringing state until the PSTN leg answers.
+    // This makes the SDK's ringing/accept events reflect the customer's leg.
+    answerOnBridge: true,
+    // Do not switch between Twilio and carrier-provided early-media ringback.
+    ringTone: "us",
+    record: input.recordCalls ? "record-from-answer-dual" : undefined,
+    recordingStatusCallback: input.recordCalls
+      ? input.recordingStatusUrl
+      : undefined,
+    recordingStatusCallbackMethod: input.recordCalls ? "POST" : undefined,
+  });
+
+  dial.number(
+    {
+      statusCallback: input.statusUrl,
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+    },
+    input.normalizedTo
+  );
+}
+
 /** After a spam-gate IVR, prefer the "press 1" (or first) destination dial node. */
 function resolvePostIvrDestination<
   T extends { id: string; type: CallFlowNodeType; sortOrder: number; config: unknown },
@@ -505,24 +543,14 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
 
   const normalizedTo = normalizePhone(to);
   const statusUrl = `${appBaseUrl()}/api/twilio/voice/status`;
-  const dial = response.dial({
+  appendClientOutboundDial(response, {
     callerId,
-    action: `${appBaseUrl()}/api/twilio/voice/dial-complete`,
-    method: "POST",
-    record: company.recordCalls ? "record-from-answer-dual" : undefined,
-    recordingStatusCallback: company.recordCalls
-      ? `${appBaseUrl()}/api/twilio/voice/recording`
-      : undefined,
-    recordingStatusCallbackMethod: company.recordCalls ? "POST" : undefined,
+    normalizedTo,
+    statusUrl,
+    actionUrl: `${appBaseUrl()}/api/twilio/voice/dial-complete`,
+    recordCalls: company.recordCalls,
+    recordingStatusUrl: `${appBaseUrl()}/api/twilio/voice/recording`,
   });
-
-  dial.number(
-    {
-      statusCallback: statusUrl,
-      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
-    },
-    normalizedTo
-  );
 
   if (params.CallSid) {
     const session = await prisma.callSession.upsert({
@@ -531,13 +559,13 @@ export async function buildClientOutboundTwiml(params: TwilioParams) {
         companyId,
         callSid: params.CallSid,
         direction: CallDirection.OUTBOUND,
-        status: CallSessionStatus.IN_PROGRESS,
+        status: CallSessionStatus.RINGING,
         fromNumber: callerId,
         toNumber: normalizedTo,
         customerId: customerId || null,
         assignedUserId: params.userId || null,
       },
-      update: { status: CallSessionStatus.IN_PROGRESS },
+      update: { status: CallSessionStatus.RINGING },
     });
 
     await prisma.callLog.upsert({
