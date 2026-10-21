@@ -155,7 +155,8 @@ export function CsrDeskPanel({
     }
     const res = await fetch(`/api/voice/queue/${id}/accept`, { method: "POST" });
     if (!res.ok) {
-      toast.error("Failed to pick up queued caller");
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error ?? "Failed to pick up queued caller");
       return;
     }
     toast.success("Connecting queued caller…");

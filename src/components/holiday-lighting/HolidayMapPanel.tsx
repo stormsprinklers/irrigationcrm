@@ -88,6 +88,10 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const circles = useRef<google.maps.Circle[]>([]);
     const draftPath = useRef<HolidayLatLng[]>([]);
     const draftLine = useRef<google.maps.Polyline | null>(null);
+    const mapDragging = useRef(false);
+    const mapDragResetTimer = useRef<number | null>(null);
+    const mapTapFallbackTimer = useRef<number | null>(null);
+    const lastHandledMapPoint = useRef<{ point: HolidayLatLng; at: number } | null>(null);
 
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -106,6 +110,8 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     placementKindRef.current = placementKind;
     const measurementsRef = useRef(measurements);
     measurementsRef.current = measurements;
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
 
     const highlightSegmentIds = useMemo(() => {
       const ids = new Set<string>();
@@ -166,6 +172,10 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             zoom: 20,
             mapTypeId: "satellite",
             tilt: 0,
+            // Touch-enabled Windows laptops otherwise use cooperative gestures,
+            // which can swallow the single tap used to place quote measurements.
+            gestureHandling: "greedy",
+            clickableIcons: false,
             streetViewControl: true,
             fullscreenControl: false,
             mapTypeControl: true,
@@ -183,9 +193,52 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           mapObj.current = map;
           panoObj.current = pano;
 
+          const dispatchMapPoint = (point: HolidayLatLng) => {
+            const now = performance.now();
+            const previous = lastHandledMapPoint.current;
+            const duplicate =
+              previous &&
+              now - previous.at < 350 &&
+              Math.abs(previous.point.lat - point.lat) < 0.0000001 &&
+              Math.abs(previous.point.lng - point.lng) < 0.0000001;
+            if (duplicate) return;
+            lastHandledMapPoint.current = { point, at: now };
+            handleMapClick(point);
+          };
+
+          map.addListener("dragstart", () => {
+            mapDragging.current = true;
+            if (mapDragResetTimer.current != null) {
+              window.clearTimeout(mapDragResetTimer.current);
+            }
+          });
+          map.addListener("dragend", () => {
+            if (mapDragResetTimer.current != null) {
+              window.clearTimeout(mapDragResetTimer.current);
+            }
+            mapDragResetTimer.current = window.setTimeout(() => {
+              mapDragging.current = false;
+              mapDragResetTimer.current = null;
+            }, 150);
+          });
+
           map.addListener("click", (e: google.maps.MapMouseEvent) => {
             if (!e.latLng) return;
-            handleMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+            dispatchMapPoint({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+          });
+          // Google Maps' synthetic click is unreliable on some touch-enabled
+          // Windows laptops. Mouseup is emitted for those taps; defer it so the
+          // normal click can win, then deduplicate when both events fire.
+          map.addListener("mouseup", (e: google.maps.MapMouseEvent) => {
+            if (!e.latLng || mapDragging.current) return;
+            const point = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+            if (mapTapFallbackTimer.current != null) {
+              window.clearTimeout(mapTapFallbackTimer.current);
+            }
+            mapTapFallbackTimer.current = window.setTimeout(() => {
+              mapTapFallbackTimer.current = null;
+              if (!mapDragging.current) dispatchMapPoint(point);
+            }, 80);
           });
 
           setReady(true);
@@ -194,6 +247,14 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
 
       return () => {
         cancelled = true;
+        if (mapDragResetTimer.current != null) {
+          window.clearTimeout(mapDragResetTimer.current);
+          mapDragResetTimer.current = null;
+        }
+        if (mapTapFallbackTimer.current != null) {
+          window.clearTimeout(mapTapFallbackTimer.current);
+          mapTapFallbackTimer.current = null;
+        }
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -207,18 +268,38 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
 
     useEffect(() => {
       if (!ready) return;
-      const timer = window.setTimeout(() => {
+      let frame = 0;
+      let nestedFrame = 0;
+      const syncVisibleMaps = () => {
         const g = window.google;
         if (!g) return;
-        if (mapObj.current) {
+        if (mapObj.current && mapRef.current?.offsetWidth && mapRef.current.offsetHeight) {
           g.maps.event.trigger(mapObj.current, "resize");
           if (center) mapObj.current.setCenter(center);
         }
-        if (panoObj.current && center) {
-          panoObj.current.setPosition(center);
+        if (panoObj.current && panoRef.current?.offsetWidth && panoRef.current.offsetHeight) {
+          g.maps.event.trigger(panoObj.current, "resize");
         }
-      }, 80);
-      return () => window.clearTimeout(timer);
+      };
+      const scheduleSync = () => {
+        window.cancelAnimationFrame(frame);
+        window.cancelAnimationFrame(nestedFrame);
+        frame = window.requestAnimationFrame(() => {
+          // The second frame waits until Tailwind's hidden/display change has
+          // produced a measurable map container on slower laptops.
+          nestedFrame = window.requestAnimationFrame(syncVisibleMaps);
+        });
+      };
+      const observer =
+        typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleSync);
+      if (mapRef.current) observer?.observe(mapRef.current);
+      if (panoRef.current) observer?.observe(panoRef.current);
+      scheduleSync();
+      return () => {
+        observer?.disconnect();
+        window.cancelAnimationFrame(frame);
+        window.cancelAnimationFrame(nestedFrame);
+      };
     }, [ready, showStreetView, showSatellite, center]);
 
     useEffect(() => {
@@ -247,7 +328,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           lightStyleKey: "mini",
           colorPattern: defaultColorPattern,
         };
-        onChange({
+        onChangeRef.current({
           ...measurementsRef.current,
           placements: [...measurementsRef.current.placements, placement],
         });

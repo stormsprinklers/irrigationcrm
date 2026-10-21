@@ -8,6 +8,7 @@ import { twimlHangup, twimlResponse } from "@/lib/voice/twiml-response";
 import {
   companyHasAgentsOnCall,
   enqueueCallerBecauseAgentsBusyTwiml,
+  shouldOverflowDialToQueue,
 } from "@/lib/voice/call-queue";
 
 /**
@@ -83,9 +84,10 @@ export async function handleDialComplete(request: NextRequest) {
         session?.status === CallSessionStatus.TRANSFERRING;
 
       if (!alreadyAnswered) {
-        const overflowToQueue =
-          dialStatus === "busy" ||
-          (dialStatus === "no-answer" && (await companyHasAgentsOnCall(companyId)));
+        const overflowToQueue = shouldOverflowDialToQueue(
+          dialStatus,
+          await companyHasAgentsOnCall(companyId)
+        );
         if (overflowToQueue) {
           const twiml = await enqueueCallerBecauseAgentsBusyTwiml(companyId, callSid);
           return twimlResponse(twiml);

@@ -92,3 +92,22 @@ export async function companyHasAgentsOnCall(companyId: string) {
   });
   return count > 0;
 }
+
+/**
+ * A rejected browser invite reports `busy`, but that may be an employee
+ * declining while they handle a call outside Radar. Only keep the caller in
+ * Radar's queue when Radar can confirm an agent is already on a Radar call.
+ */
+export function shouldOverflowDialToQueue(
+  dialStatus: string,
+  hasAgentsOnCall: boolean
+) {
+  return hasAgentsOnCall && (dialStatus === "busy" || dialStatus === "no-answer");
+}
+
+export function queueSidByFriendlyName(
+  queues: Array<{ sid: string; friendlyName: string }>,
+  friendlyName: string
+) {
+  return queues.find((queue) => queue.friendlyName === friendlyName)?.sid ?? null;
+}
