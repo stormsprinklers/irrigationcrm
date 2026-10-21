@@ -9,6 +9,10 @@ import { HolidayLightingPlanSection } from "@/components/holiday-lighting/Holida
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
 import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
+import {
+  defaultEstimatePreviewOption,
+  estimatePreviewTotals,
+} from "@/lib/estimates/preview-option";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type EstimatePreview = {
@@ -16,6 +20,7 @@ type EstimatePreview = {
   estimateNumber: string | null;
   portalPath: string | null;
   status: string;
+  selectedOptionId: string | null;
   total: number;
   subtotal: number;
   discountTotal: number;
@@ -29,6 +34,8 @@ type EstimatePreview = {
     id: string;
     label: string;
     displayNumber: string;
+    subtotal: number;
+    discountTotal: number;
     total: number;
   }>;
   lineItems: Array<{
@@ -106,7 +113,9 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
         if (!res.ok) throw new Error(data.error ?? "Failed to load estimate");
         if (cancelled) return;
         setEstimate(data as EstimatePreview);
-        setActiveOptionId(data.options?.[0]?.id ?? null);
+        setActiveOptionId(
+          defaultEstimatePreviewOption(data.options ?? [], data.selectedOptionId)?.id ?? null
+        );
         const hasEmail = Boolean(data.customer?.email);
         const hasPhone = Boolean(data.customer?.phone);
         setChannel(hasEmail ? "email" : hasPhone ? "sms" : "email");
@@ -148,6 +157,9 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
   }, [estimate, activeOption]);
 
   const previewImage = lightingPreviewUrl(estimate);
+  const activeTotals = estimate
+    ? estimatePreviewTotals(estimate, activeOption)
+    : { subtotal: 0, discountTotal: 0, total: 0 };
 
   async function send() {
     if (!estimateId || !estimate) return;
@@ -229,7 +241,7 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                   <div className="text-right">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Total</p>
                     <p className="text-xl font-semibold">
-                      {money(activeOption?.total ?? estimate.total)}
+                      {money(activeTotals.total)}
                     </p>
                   </div>
                 </div>
@@ -292,21 +304,21 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                 <div className="mt-4 space-y-1 border-t border-border/70 pt-3 text-sm">
                   <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal</span>
-                    <span>{money(estimate.subtotal)}</span>
+                    <span>{money(activeTotals.subtotal)}</span>
                   </div>
-                  {estimate.discountTotal > 0 ? (
+                  {activeTotals.discountTotal > 0 ? (
                     <div className="flex justify-between text-muted-foreground">
                       <span>
                         {activeDiscounts.length === 1
                           ? activeDiscounts[0]?.label || "Discount"
                           : "Discounts"}
                       </span>
-                      <span>-{money(estimate.discountTotal)}</span>
+                      <span>-{money(activeTotals.discountTotal)}</span>
                     </div>
                   ) : null}
                   <div className="flex justify-between text-base font-semibold">
                     <span>Total</span>
-                    <span>{money(activeOption?.total ?? estimate.total)}</span>
+                    <span>{money(activeTotals.total)}</span>
                   </div>
                 </div>
               </div>
