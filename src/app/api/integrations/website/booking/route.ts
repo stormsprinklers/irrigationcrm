@@ -3,6 +3,7 @@ import { IntegrationType } from "@prisma/client";
 import { authenticateIntegration, isIntegrationContext } from "@/lib/integrations/auth";
 import { logIntegrationAudit } from "@/lib/integrations/audit";
 import { createOnlineBooking, getPublicOnlineBookingOffer, OnlineBookingError } from "@/lib/booking/create";
+import { parseAttributionFromMetadata } from "@/lib/attribution";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateIntegration(request, IntegrationType.WEBSITE);
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
       startAt: String(body.startAt ?? ""),
       endAt: String(body.endAt ?? ""),
       notes: body.notes ? String(body.notes) : null,
+      tracking: parseAttributionFromMetadata({ attribution: body.tracking }),
     });
     await logIntegrationAudit({
       companyId: auth.companyId,

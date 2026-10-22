@@ -33,6 +33,12 @@ export async function mergeCustomers(params: {
     throw new Error("Customer not found");
   }
 
+  const sourceHasEarlierFirstTouch =
+    Boolean(source.firstTouchAt) &&
+    (!target.firstTouchAt || source.firstTouchAt! < target.firstTouchAt);
+  const firstTouchPrimary = sourceHasEarlierFirstTouch ? source : target;
+  const firstTouchFallback = sourceHasEarlierFirstTouch ? target : source;
+
   await prisma.$transaction(async (tx) => {
     await tx.customer.update({
       where: { id: targetId },
@@ -45,6 +51,22 @@ export async function mergeCustomers(params: {
         state: target.state ?? source.state,
         zip: target.zip ?? source.zip,
         leadSource: target.leadSource ?? source.leadSource,
+        attributionChannel: firstTouchPrimary.attributionChannel ?? firstTouchFallback.attributionChannel,
+        attributionSource: firstTouchPrimary.attributionSource ?? firstTouchFallback.attributionSource,
+        attributionMedium: firstTouchPrimary.attributionMedium ?? firstTouchFallback.attributionMedium,
+        attributionCampaign: firstTouchPrimary.attributionCampaign ?? firstTouchFallback.attributionCampaign,
+        attributionTerm: firstTouchPrimary.attributionTerm ?? firstTouchFallback.attributionTerm,
+        attributionContent: firstTouchPrimary.attributionContent ?? firstTouchFallback.attributionContent,
+        gclid: firstTouchPrimary.gclid ?? firstTouchFallback.gclid,
+        gbraid: firstTouchPrimary.gbraid ?? firstTouchFallback.gbraid,
+        wbraid: firstTouchPrimary.wbraid ?? firstTouchFallback.wbraid,
+        fbc: firstTouchPrimary.fbc ?? firstTouchFallback.fbc,
+        fbp: firstTouchPrimary.fbp ?? firstTouchFallback.fbp,
+        userAgent: firstTouchPrimary.userAgent ?? firstTouchFallback.userAgent,
+        fbclid: firstTouchPrimary.fbclid ?? firstTouchFallback.fbclid,
+        msclkid: firstTouchPrimary.msclkid ?? firstTouchFallback.msclkid,
+        firstTouchAt: earlierDate(target.firstTouchAt, source.firstTouchAt),
+        firstTouchMethod: firstTouchPrimary.firstTouchMethod ?? firstTouchFallback.firstTouchMethod,
         stripeCustomerId: target.stripeCustomerId ?? source.stripeCustomerId,
         pipelineStage: mergedPipelineStage(target.pipelineStage, source.pipelineStage),
         pipelineLeadAt: earlierDate(target.pipelineLeadAt, source.pipelineLeadAt),

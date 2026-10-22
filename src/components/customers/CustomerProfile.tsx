@@ -33,6 +33,7 @@ import { CustomerPaymentMethodsSection } from "@/components/customers/CustomerPa
 import { CustomerPropertyMap } from "@/components/customers/CustomerPropertyMap";
 import { CustomerSummaryCard } from "@/components/customers/CustomerSummaryCard";
 import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection";
+import { TrackingDataDisclosure } from "@/components/customers/TrackingDataDisclosure";
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
@@ -969,6 +970,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <PipelineStageBadge stage={customer.pipelineStage} />
                     </div>
                   </div>
+                  <TrackingDataDisclosure data={customer} className="sm:col-span-2" />
                   {customer.doNotService ? (
                     <div className="sm:col-span-2">
                       <Badge variant="destructive">Do not service</Badge>

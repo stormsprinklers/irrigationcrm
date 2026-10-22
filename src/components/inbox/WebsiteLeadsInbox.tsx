@@ -17,6 +17,7 @@ import { leadAddressQueryParams, parseLeadServiceAddress } from "@/lib/leads/add
 import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
+import { TrackingDataDisclosure, type CustomerTrackingData } from "@/components/customers/TrackingDataDisclosure";
 
 type LeadFilterTab = "to_contact" | "contacted" | "spam";
 
@@ -41,7 +42,7 @@ type WebsiteLeadInboxItem = {
   leadCity?: string | null;
   leadState?: string | null;
   leadZip?: string | null;
-};
+} & CustomerTrackingData;
 
 type EmailDetail = {
   id: string;
@@ -859,6 +860,7 @@ export function WebsiteLeadsInbox() {
       </div>
 
       <div className="p-4">
+        <TrackingDataDisclosure data={selected} className="mb-4" />
         {loadingDetail && !submissionText && !emailDetail?.bodyHtml ? (
           <p className="text-sm text-muted-foreground">Loading submission…</p>
         ) : submissionText ? (

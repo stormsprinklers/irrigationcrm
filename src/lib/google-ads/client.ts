@@ -18,6 +18,7 @@ import type {
   GoogleLsaCategoryRow,
   GoogleLsaLeadRow,
   GoogleLsaSummary,
+  GooglePipelineConversionActions,
 } from "@/lib/google-ads/types";
 import { GOOGLE_ADS_SCOPE } from "@/lib/google-ads/types";
 import { prisma } from "@/lib/prisma";
@@ -355,12 +356,24 @@ export async function getGoogleAdsConnectionStatus(
       googleAdsCustomerName: true,
       googleAdsLoginCustomerId: true,
       googleAdsConnectedAt: true,
+      googleAdsPipelineLeadActionId: true,
+      googleAdsPipelineQualifiedActionId: true,
+      googleAdsPipelineConvertedActionId: true,
+      googleAdsPipelineSoldActionId: true,
+      googleAdsPipelineConfiguredAt: true,
     },
   });
 
   if (!company) return null;
 
   const env = getGeneralGoogleOAuthConfig();
+
+  const pipelineActions = {
+    lead: company.googleAdsPipelineLeadActionId,
+    qualified: company.googleAdsPipelineQualifiedActionId,
+    converted: company.googleAdsPipelineConvertedActionId,
+    sold: company.googleAdsPipelineSoldActionId,
+  };
 
   return {
     connected: Boolean(company.googleAdsRefreshToken),
@@ -370,6 +383,9 @@ export async function getGoogleAdsConnectionStatus(
     connectedAt: company.googleAdsConnectedAt?.toISOString() ?? null,
     configured: isGoogleAdsConfigured(),
     hasDeveloperToken: hasGoogleAdsDeveloperToken(),
+    pipelineReady: Object.values(pipelineActions).every(Boolean),
+    pipelineConfiguredAt: company.googleAdsPipelineConfiguredAt?.toISOString() ?? null,
+    pipelineActions,
     oauthEnv: {
       hasClientId: Boolean(env.clientId),
       hasClientSecret: Boolean(env.clientSecret),
@@ -419,8 +435,24 @@ export async function saveGoogleAdsCustomer(
       googleAdsCustomerName: customerName,
       googleAdsLoginCustomerId: resolvedLoginId,
       googleAdsConnectedAt: new Date(),
+      googleAdsPipelineLeadActionId: null,
+      googleAdsPipelineQualifiedActionId: null,
+      googleAdsPipelineConvertedActionId: null,
+      googleAdsPipelineSoldActionId: null,
+      googleAdsPipelineConfiguredAt: null,
     },
   });
+
+  try {
+    const pipelineActions = await ensureGooglePipelineConversionActions(companyId);
+    return { pipelineActions, setupError: null };
+  } catch (error) {
+    return {
+      pipelineActions: null,
+      setupError:
+        error instanceof Error ? error.message : "Could not create pipeline conversion actions",
+    };
+  }
 }
 
 async function getSelectedGoogleAdsAccount(companyId: string) {
@@ -469,6 +501,98 @@ async function getSelectedGoogleAdsAccount(companyId: string) {
     customerName: company.googleAdsCustomerName ?? company.googleAdsCustomerId,
     loginCustomerId,
   };
+}
+
+const PIPELINE_CONVERSION_ACTIONS = [
+  { key: "lead", name: "CRM Pipeline - Lead", category: "SUBMIT_LEAD_FORM" },
+  { key: "qualified", name: "CRM Pipeline - Qualified Lead", category: "QUALIFIED_LEAD" },
+  { key: "converted", name: "CRM Pipeline - Converted Lead", category: "CONVERTED_LEAD" },
+  { key: "sold", name: "CRM Pipeline - Sold", category: "PURCHASE" },
+] as const;
+
+type PipelineActionKey = (typeof PIPELINE_CONVERSION_ACTIONS)[number]["key"];
+
+function conversionActionId(resourceName: string | undefined) {
+  return resourceName?.split("/").pop()?.trim() || null;
+}
+
+/** Find or create the four UPLOAD_CLICKS actions required by Data Manager. */
+export async function ensureGooglePipelineConversionActions(
+  companyId: string
+): Promise<GooglePipelineConversionActions> {
+  const account = await getSelectedGoogleAdsAccount(companyId);
+  const accessToken = await getGoogleAdsAccessToken(companyId);
+
+  const load = async () => {
+    const rows = await googleAdsSearchAll<{
+      conversionAction?: { id?: string; name?: string; resourceName?: string };
+    }>(
+      accessToken,
+      account.customerId,
+      `SELECT conversion_action.id, conversion_action.name, conversion_action.resource_name
+       FROM conversion_action
+       WHERE conversion_action.type = 'UPLOAD_CLICKS'
+         AND conversion_action.status != 'REMOVED'`,
+      account.loginCustomerId
+    );
+    const byName = new Map(
+      rows.map((row) => [row.conversionAction?.name ?? "", row.conversionAction])
+    );
+    return Object.fromEntries(
+      PIPELINE_CONVERSION_ACTIONS.map((definition) => [
+        definition.key,
+        String(byName.get(definition.name)?.id ?? "").trim() ||
+          conversionActionId(byName.get(definition.name)?.resourceName),
+      ])
+    ) as GooglePipelineConversionActions;
+  };
+
+  let actions = await load();
+  const missing = PIPELINE_CONVERSION_ACTIONS.filter((definition) => !actions[definition.key]);
+  if (missing.length) {
+    await googleAdsFetch(
+      accessToken,
+      `/customers/${account.customerId}/conversionActions:mutate`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          operations: missing.map((definition) => ({
+            create: {
+              name: definition.name,
+              type: "UPLOAD_CLICKS",
+              category: definition.category,
+              status: "ENABLED",
+              countingType: "ONE_PER_CLICK",
+            },
+          })),
+          partialFailure: false,
+        }),
+      },
+      account.loginCustomerId
+    );
+    actions = await load();
+  }
+
+  if (!Object.values(actions).every(Boolean)) {
+    throw new GoogleAdsApiError("Google did not return all four pipeline conversion actions", 502);
+  }
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: {
+      googleAdsPipelineLeadActionId: actions.lead,
+      googleAdsPipelineQualifiedActionId: actions.qualified,
+      googleAdsPipelineConvertedActionId: actions.converted,
+      googleAdsPipelineSoldActionId: actions.sold,
+      googleAdsPipelineConfiguredAt: new Date(),
+    },
+  });
+
+  const { requeueCompanyPipelineDeliveries } = await import(
+    "@/lib/marketing/pipeline-conversion-delivery"
+  );
+  await requeueCompanyPipelineDeliveries(companyId, "GOOGLE");
+  return actions;
 }
 
 function mapCampaignRows(

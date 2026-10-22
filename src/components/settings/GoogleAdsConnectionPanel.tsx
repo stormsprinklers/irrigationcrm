@@ -30,6 +30,7 @@ export function GoogleAdsConnectionPanel() {
   const [loading, setLoading] = useState(true);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [savingCustomer, setSavingCustomer] = useState(false);
+  const [settingUpPipeline, setSettingUpPipeline] = useState(false);
 
   const redirectUri =
     typeof window !== "undefined"
@@ -92,18 +93,40 @@ export function GoogleAdsConnectionPanel() {
           loginCustomerId: customer.suggestedLoginCustomerId,
         }),
       });
-      const data = await readJsonResponse<{ error?: string }>(res);
+      const data = await readJsonResponse<{ error?: string; setupError?: string | null }>(res);
       if (!res.ok) throw new Error(data.error ?? "Failed to save account");
       toast.success(
         customer.suggestedLoginCustomerId
           ? "Google Ads account saved (via manager account)"
           : "Google Ads account saved"
       );
+      if (data.setupError) {
+        toast.warning(`Account linked, but conversion setup needs attention: ${data.setupError}`, {
+          duration: 10000,
+        });
+      }
       await loadStatus();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save account");
     } finally {
       setSavingCustomer(false);
+    }
+  }
+
+  async function setupPipelineConversions() {
+    setSettingUpPipeline(true);
+    try {
+      const res = await fetch("/api/marketing/google-ads/pipeline-conversions", { method: "PUT" });
+      const data = await readJsonResponse<{ error?: string }>(res);
+      if (!res.ok) throw new Error(data.error ?? "Failed to configure conversion actions");
+      await loadStatus();
+      toast.success("Google pipeline conversion actions are ready");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to configure conversion actions", {
+        duration: 10000,
+      });
+    } finally {
+      setSettingUpPipeline(false);
     }
   }
 
@@ -223,6 +246,9 @@ export function GoogleAdsConnectionPanel() {
               Since {format(new Date(status.connectedAt), "MMM d, yyyy")}
             </span>
           ) : null}
+          <Button variant="outline" size="sm" asChild>
+            <a href="/api/marketing/google-ads">Reconnect permissions</a>
+          </Button>
           <Button variant="outline" size="sm" onClick={disconnect}>
             <Unplug className="mr-1 h-4 w-4" />
             Disconnect
@@ -291,6 +317,40 @@ export function GoogleAdsConnectionPanel() {
             </div>
           ))
         )}
+        <div className="space-y-3 rounded-md border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium">CRM sales pipeline conversions</p>
+              <p className="text-xs text-muted-foreground">
+                Data Manager sends Lead, Qualified, Converted, and Sold as separate actions.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Reconnect once after this feature is deployed to grant the Google Data Manager scope.
+              </p>
+            </div>
+            <Badge variant={status.pipelineReady ? "success" : "outline"}>
+              {status.pipelineReady ? "Ready" : "Setup needed"}
+            </Badge>
+          </div>
+          {status.pipelineReady ? (
+            <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+              <span>Lead: {status.pipelineActions.lead}</span>
+              <span>Qualified: {status.pipelineActions.qualified}</span>
+              <span>Converted: {status.pipelineActions.converted}</span>
+              <span>Sold: {status.pipelineActions.sold}</span>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!status.customerId || settingUpPipeline}
+              onClick={() => void setupPipelineConversions()}
+            >
+              {settingUpPipeline ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Create conversion actions
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

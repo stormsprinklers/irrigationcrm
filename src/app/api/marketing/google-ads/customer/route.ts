@@ -23,8 +23,13 @@ export async function PUT(request: NextRequest) {
     if (!customerId) return badRequestResponse("customerId is required");
     if (!customerName) return badRequestResponse("customerName is required");
 
-    await saveGoogleAdsCustomer(user.companyId, customerId, customerName, loginCustomerId);
-    return NextResponse.json({ ok: true });
+    const setup = await saveGoogleAdsCustomer(
+      user.companyId,
+      customerId,
+      customerName,
+      loginCustomerId
+    );
+    return NextResponse.json({ ok: true, ...setup });
   } catch (error) {
     if (error instanceof GoogleAdsApiError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

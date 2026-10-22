@@ -182,6 +182,149 @@ async function ensureSalesPipeline() {
   console.log(`Ensured customer sales pipeline (${updated} historical customers updated)`);
 }
 
+async function ensureCustomerTrackingData() {
+  for (const table of ["Customer", "Lead"] as const) {
+    for (const column of ["gbraid", "wbraid", "fbc", "fbp", "userAgent"] as const) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" TEXT`
+      );
+    }
+  }
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Lead" SET
+      gbraid = COALESCE(gbraid, NULLIF(COALESCE(metadata #>> '{tracking,gbraid}', metadata #>> '{attribution,gbraid}', metadata ->> 'gbraid'), '')),
+      wbraid = COALESCE(wbraid, NULLIF(COALESCE(metadata #>> '{tracking,wbraid}', metadata #>> '{attribution,wbraid}', metadata ->> 'wbraid'), '')),
+      fbc = COALESCE(fbc, NULLIF(COALESCE(metadata #>> '{tracking,fbc}', metadata #>> '{attribution,fbc}', metadata ->> 'fbc'), '')),
+      fbp = COALESCE(fbp, NULLIF(COALESCE(metadata #>> '{tracking,fbp}', metadata #>> '{attribution,fbp}', metadata ->> 'fbp'), '')),
+      "userAgent" = COALESCE("userAgent", NULLIF(COALESCE(metadata #>> '{tracking,user_agent}', metadata #>> '{attribution,user_agent}', metadata ->> 'user_agent'), ''))
+    WHERE metadata IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    WITH first_lead AS (
+      SELECT DISTINCT ON ("convertedCustomerId")
+        "convertedCustomerId", gbraid, wbraid, fbc, fbp, "userAgent"
+      FROM "Lead"
+      WHERE "convertedCustomerId" IS NOT NULL
+      ORDER BY "convertedCustomerId", "firstTouchAt" ASC NULLS LAST, "createdAt" ASC
+    )
+    UPDATE "Customer" c SET
+      gbraid = COALESCE(c.gbraid, l.gbraid),
+      wbraid = COALESCE(c.wbraid, l.wbraid),
+      fbc = COALESCE(c.fbc, l.fbc),
+      fbp = COALESCE(c.fbp, l.fbp),
+      "userAgent" = COALESCE(c."userAgent", l."userAgent")
+    FROM first_lead l
+    WHERE c.id = l."convertedCustomerId"
+  `);
+  console.log("Ensured customer and lead tracking data columns");
+}
+
+async function ensurePipelineConversionDelivery() {
+  const companyColumns = [
+    "googleAdsPipelineLeadActionId",
+    "googleAdsPipelineQualifiedActionId",
+    "googleAdsPipelineConvertedActionId",
+    "googleAdsPipelineSoldActionId",
+    "metaConversionsAccessToken",
+    "metaConversionsDatasetId",
+    "metaConversionsTestEventCode",
+  ];
+  for (const column of companyColumns) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "${column}" TEXT`
+    );
+  }
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "googleAdsPipelineConfiguredAt" TIMESTAMP(3)`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "metaConversionsConfiguredAt" TIMESTAMP(3)`
+  );
+
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "PipelineConversionPlatform" AS ENUM ('GOOGLE', 'META');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$
+  `);
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "PipelineConversionDeliveryStatus" AS ENUM ('PENDING', 'PROCESSING', 'SENT', 'FAILED');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PipelineConversionEvent" (
+      "id" TEXT NOT NULL,
+      "companyId" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "stage" "SalesPipelineStage" NOT NULL,
+      "occurredAt" TIMESTAMP(3) NOT NULL,
+      "value" DECIMAL(12,2),
+      "currency" TEXT NOT NULL DEFAULT 'USD',
+      "eventSource" TEXT NOT NULL DEFAULT 'WEB',
+      "emailSha256" TEXT,
+      "phoneSha256" TEXT,
+      "gclid" TEXT,
+      "gbraid" TEXT,
+      "wbraid" TEXT,
+      "fbc" TEXT,
+      "fbp" TEXT,
+      "userAgent" TEXT,
+      "sourceEntityType" TEXT,
+      "sourceEntityId" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "PipelineConversionEvent_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PipelineConversionDelivery" (
+      "id" TEXT NOT NULL,
+      "eventId" TEXT NOT NULL,
+      "platform" "PipelineConversionPlatform" NOT NULL,
+      "status" "PipelineConversionDeliveryStatus" NOT NULL DEFAULT 'PENDING',
+      "attempts" INTEGER NOT NULL DEFAULT 0,
+      "nextAttemptAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "leaseUntil" TIMESTAMP(3),
+      "sentAt" TIMESTAMP(3),
+      "providerRequestId" TEXT,
+      "lastError" TEXT,
+      "responseMetadata" JSONB,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "PipelineConversionDelivery_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "PipelineConversionEvent" ADD COLUMN IF NOT EXISTS "eventSource" TEXT NOT NULL DEFAULT 'WEB'`
+  );
+
+  const indexes = [
+    `CREATE UNIQUE INDEX IF NOT EXISTS "PipelineConversionEvent_companyId_customerId_stage_key" ON "PipelineConversionEvent"("companyId", "customerId", "stage")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineConversionEvent_companyId_occurredAt_idx" ON "PipelineConversionEvent"("companyId", "occurredAt")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineConversionEvent_customerId_occurredAt_idx" ON "PipelineConversionEvent"("customerId", "occurredAt")`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "PipelineConversionDelivery_eventId_platform_key" ON "PipelineConversionDelivery"("eventId", "platform")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineConversionDelivery_status_nextAttemptAt_idx" ON "PipelineConversionDelivery"("status", "nextAttemptAt")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineConversionDelivery_leaseUntil_idx" ON "PipelineConversionDelivery"("leaseUntil")`,
+  ];
+  for (const statement of indexes) await prisma.$executeRawUnsafe(statement);
+
+  const foreignKeys = [
+    `ALTER TABLE "PipelineConversionEvent" ADD CONSTRAINT "PipelineConversionEvent_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    `ALTER TABLE "PipelineConversionEvent" ADD CONSTRAINT "PipelineConversionEvent_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    `ALTER TABLE "PipelineConversionDelivery" ADD CONSTRAINT "PipelineConversionDelivery_eventId_fkey" FOREIGN KEY ("eventId") REFERENCES "PipelineConversionEvent"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+  ];
+  for (const statement of foreignKeys) {
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch (error) {
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+    }
+  }
+  console.log("Ensured pipeline conversion delivery tables and configuration columns");
+}
+
 async function ensureSecurityHardeningTables() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "OAuthStateNonce" (
@@ -501,6 +644,8 @@ async function ensureOwnerAssistantTables() {
 async function main() {
   await ensureMarketerRole();
   await ensureSalesPipeline();
+  await ensureCustomerTrackingData();
+  await ensurePipelineConversionDelivery();
   await ensureOwnerAssistantTables();
   await ensureSecurityRateLimitTable();
   await ensureSecurityHardeningTables();

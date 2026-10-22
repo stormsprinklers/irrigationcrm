@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pipelineAdvanceData, pipelineSpeedSeconds } from "./pipeline";
+import {
+  newlyReachedPipelineStages,
+  pipelineAdvanceData,
+  pipelineSpeedSeconds,
+} from "./pipeline";
 
 const emptyPipeline = {
   pipelineStage: null,
@@ -77,4 +81,18 @@ test("speed to lead is calculated from the first immutable timestamps", () => {
     }),
     null
   );
+});
+
+test("a direct conversion emits every newly reached stage", () => {
+  assert.deepEqual(newlyReachedPipelineStages(null, "CONVERTED"), [
+    "LEAD",
+    "QUALIFIED",
+    "CONVERTED",
+  ]);
+  assert.deepEqual(newlyReachedPipelineStages("LEAD", "SOLD"), [
+    "QUALIFIED",
+    "CONVERTED",
+    "SOLD",
+  ]);
+  assert.deepEqual(newlyReachedPipelineStages("SOLD", "SOLD"), []);
 });

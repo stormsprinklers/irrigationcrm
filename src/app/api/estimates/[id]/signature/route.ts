@@ -5,6 +5,7 @@ import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
+import { toNumber } from "@/lib/visits/totals";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,7 +13,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id } = await params;
-    const estimate = await prisma.estimate.findFirst({ where: { id, companyId: user.companyId } });
+    const estimate = await prisma.estimate.findFirst({
+      where: { id, companyId: user.companyId },
+      include: { options: { select: { id: true, total: true } } },
+    });
     if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
@@ -38,13 +42,14 @@ export async function POST(request: NextRequest, { params }: Params) {
       { contentType: mimeType }
     );
 
+    const approvedAt = new Date();
     await prisma.estimate.update({
       where: { id },
       data: {
         signatureBlobUrl: blob.url,
         signedAt: new Date(),
         status: EstimateStatus.APPROVED,
-        approvedAt: new Date(),
+        approvedAt,
         ...(selectedOptionId ? { selectedOptionId } : {}),
       },
     });
@@ -63,6 +68,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       companyId: estimate.companyId,
       customerId: estimate.customerId,
       stage: "CONVERTED",
+      occurredAt: approvedAt,
+      value: toNumber(
+        estimate.options.find((option) => option.id === selectedOptionId)?.total ?? estimate.total
+      ),
+      sourceEntityType: "ESTIMATE",
+      sourceEntityId: id,
     }).catch((error) => console.error("Estimate pipeline conversion failed", error));
 
     const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");

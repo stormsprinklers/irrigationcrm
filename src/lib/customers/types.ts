@@ -13,6 +13,15 @@ export type CustomerDTO = {
   attributionChannel: string | null;
   attributionCampaign: string | null;
   attributionSource: string | null;
+  attributionMedium: string | null;
+  attributionContent: string | null;
+  attributionTerm: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  userAgent: string | null;
   firstTouchAt: string | null;
   firstTouchMethod: string | null;
   status: "ACTIVE" | "ARCHIVED";

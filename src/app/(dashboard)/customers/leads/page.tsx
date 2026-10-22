@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { TrackingDataDisclosure, type CustomerTrackingData } from "@/components/customers/TrackingDataDisclosure";
 
 const STATUSES = ["NEW", "CONTACTED", "QUALIFIED", "WON", "LOST", "SPAM"];
 
@@ -34,7 +35,7 @@ export default function CustomerLeadsPage() {
       assignedUser: { name: string } | null;
       convertedCustomer: { id: string; name: string } | null;
       createdAt: string;
-    }>
+    } & CustomerTrackingData>
   >([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -159,7 +160,10 @@ export default function CustomerLeadsPage() {
                     </div>
                     <div className="text-xs text-muted-foreground">{lead.email ?? ""}</div>
                   </TableCell>
-                  <TableCell>{lead.source ?? "—"}</TableCell>
+                  <TableCell className="min-w-64 align-top">
+                    <div>{lead.source ?? "—"}</div>
+                    <TrackingDataDisclosure data={lead} className="mt-2" />
+                  </TableCell>
                   <TableCell><Badge variant="outline">{lead.status}</Badge></TableCell>
                   <TableCell>{lead.assignedUser?.name ?? "—"}</TableCell>
                   <TableCell>{format(new Date(lead.createdAt), "MMM d, yyyy")}</TableCell>

@@ -1,4 +1,6 @@
 import { createHash } from "crypto";
+import type { SalesPipelineStage } from "@prisma/client";
+import { hashPipelineExternalId } from "@/lib/marketing/pipeline-conversion-identifiers";
 
 const DEFAULT_DATASET_ID = "28571679552473353";
 const DEFAULT_API_VERSION = "v26.0";
@@ -146,4 +148,104 @@ export async function sendMetaCrmLeadEvent(input: MetaCrmLeadInput) {
       error: error instanceof Error ? error.message : "Meta request failed",
     };
   }
+}
+
+export type PipelineConversionPayloadInput = {
+  id: string;
+  customerId: string;
+  stage: SalesPipelineStage;
+  occurredAt: Date;
+  value: { toNumber(): number } | number | null;
+  currency: string;
+  emailSha256: string | null;
+  phoneSha256: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  userAgent: string | null;
+};
+
+const META_PIPELINE_EVENT_NAMES: Partial<Record<SalesPipelineStage, string>> = {
+  LEAD: "Lead",
+  QUALIFIED: "QualifiedLead",
+  CONVERTED: "ConvertedLead",
+  SOLD: "Purchase",
+};
+
+function numericValue(value: PipelineConversionPayloadInput["value"]) {
+  if (value == null) return null;
+  const number = typeof value === "number" ? value : value.toNumber();
+  return Number.isFinite(number) ? number : null;
+}
+
+export function buildMetaPipelineEvent(input: PipelineConversionPayloadInput) {
+  const eventName = META_PIPELINE_EVENT_NAMES[input.stage];
+  if (!eventName) throw new Error(`Unsupported Meta pipeline stage: ${input.stage}`);
+
+  const userData: Record<string, string | string[]> = {
+    external_id: [hashPipelineExternalId(input.customerId)],
+  };
+  if (input.emailSha256) userData.em = [input.emailSha256];
+  if (input.phoneSha256) userData.ph = [input.phoneSha256];
+  if (input.fbc) userData.fbc = input.fbc;
+  if (input.fbp) userData.fbp = input.fbp;
+  if (input.userAgent) userData.client_user_agent = input.userAgent;
+
+  const value = numericValue(input.value);
+  return {
+    event_name: eventName,
+    event_time: Math.floor(input.occurredAt.getTime() / 1000),
+    event_id: `crm-pipeline-${input.id}`,
+    action_source: "system_generated",
+    user_data: userData,
+    custom_data: {
+      pipeline_stage: input.stage,
+      event_source: "crm",
+      ...(value != null ? { value, currency: input.currency || "USD" } : {}),
+    },
+  };
+}
+
+export async function sendMetaPipelineEvent(params: {
+  event: PipelineConversionPayloadInput;
+  accessToken: string;
+  datasetId: string;
+  testEventCode?: string | null;
+}) {
+  const apiVersion = process.env.META_CONVERSIONS_API_VERSION?.trim() || DEFAULT_API_VERSION;
+  const endpoint = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(params.datasetId)}/events`;
+  const payload = {
+    data: [buildMetaPipelineEvent(params.event)],
+    ...(params.testEventCode?.trim() ? { test_event_code: params.testEventCode.trim() } : {}),
+  };
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  const result = (await response.json().catch(() => ({}))) as {
+    events_received?: number;
+    fbtrace_id?: string;
+    messages?: string[];
+    error?: { message?: string; code?: number; error_subcode?: number; is_transient?: boolean };
+  };
+  if (!response.ok || result.error || result.events_received !== 1) {
+    const error = new Error(result.error?.message || `Meta returned HTTP ${response.status}`) as Error & {
+      status?: number;
+      transient?: boolean;
+    };
+    error.status = response.status;
+    error.transient = Boolean(result.error?.is_transient) || response.status === 429 || response.status >= 500;
+    throw error;
+  }
+  return {
+    requestId: result.fbtrace_id ?? null,
+    metadata: { eventsReceived: result.events_received, messages: result.messages ?? [] },
+  };
 }

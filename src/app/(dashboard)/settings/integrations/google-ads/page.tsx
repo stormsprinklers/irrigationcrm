@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { GoogleAdsConnectionPanel } from "@/components/settings/GoogleAdsConnectionPanel";
+import { PipelineConversionDeliveryPanel } from "@/components/settings/PipelineConversionDeliveryPanel";
 import { Button } from "@/components/ui/button";
 
 export default function GoogleAdsIntegrationsPage() {
@@ -11,7 +12,7 @@ export default function GoogleAdsIntegrationsPage() {
       <PageHeader
         breadcrumb={["Settings", "Integrations", "Google Ads"]}
         title="Google Ads"
-        subtitle="Connect Google Ads and choose the customer account for PPC campaign reporting in Marketing → Ads."
+        subtitle="Connect Google Ads for reporting and automatic CRM pipeline conversion delivery through Data Manager."
         actions={
           <Button size="sm" variant="outline" asChild>
             <Link href="/settings/integrations">Back to integrations</Link>
@@ -21,6 +22,9 @@ export default function GoogleAdsIntegrationsPage() {
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading...</p>}>
         <GoogleAdsConnectionPanel />
       </Suspense>
+      <div className="mt-6">
+        <PipelineConversionDeliveryPanel platform="GOOGLE" />
+      </div>
     </ContentArea>
   );
 }

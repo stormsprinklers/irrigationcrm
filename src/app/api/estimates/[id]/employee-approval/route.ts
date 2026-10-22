@@ -4,6 +4,7 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse, forbidden
 import { prisma } from "@/lib/prisma";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
+import { toNumber } from "@/lib/visits/totals";
 
 type Params = { params: Promise<{ id: string }> };
 export async function POST(request: NextRequest, { params }: Params) {
@@ -40,6 +41,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       customerId: estimate.customerId,
       stage: "CONVERTED",
       occurredAt: approvedAt,
+      value: toNumber(option?.total ?? estimate.total),
+      sourceEntityType: "ESTIMATE",
+      sourceEntityId: id,
     }).catch((error) => console.error("Estimate pipeline conversion failed", error));
     await onEstimateClosed(id).catch(() => {});
     return NextResponse.json(await getEstimateForCompany(user.companyId, id));

@@ -30,6 +30,18 @@ enum SalesPipelineStage {
   DISQUALIFIED
 }
 
+enum PipelineConversionPlatform {
+  GOOGLE
+  META
+}
+
+enum PipelineConversionDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
 enum WinterizationTabMode {
   OFF
   ON
@@ -695,6 +707,11 @@ model Company {
   googleAdsCustomerName           String?
   googleAdsLoginCustomerId        String?
   googleAdsConnectedAt            DateTime?
+  googleAdsPipelineLeadActionId       String?
+  googleAdsPipelineQualifiedActionId  String?
+  googleAdsPipelineConvertedActionId  String?
+  googleAdsPipelineSoldActionId       String?
+  googleAdsPipelineConfiguredAt       DateTime?
   // @deprecated GA4 CRM OAuth — use native website analytics. See lib/google-analytics/DEPRECATED.md
   googleAnalyticsRefreshToken     String?
   googleAnalyticsPropertyId       String?
@@ -712,6 +729,11 @@ model Company {
   metaAdAccountId              String?
   metaAdAccountName            String?
   metaAdsConnectedAt           DateTime?
+  /// Dedicated server-side Conversions API credentials. Never expose the token to clients.
+  metaConversionsAccessToken   String?
+  metaConversionsDatasetId     String?
+  metaConversionsTestEventCode String?
+  metaConversionsConfiguredAt  DateTime?
   slackGbpReviewsEnabled       Boolean  @default(false)
   slackGbpReviewsChannelId     String?
   slackGbpReviewsBootstrapped  Boolean  @default(false)
@@ -862,6 +884,7 @@ model Company {
   hiringScreenBookings   HiringScreenBooking[]
   marketingTouchEvents   MarketingTouchEvent[]
   marketingSpendDaily    MarketingSpendDaily[]
+  pipelineConversionEvents PipelineConversionEvent[]
   vehicles               Vehicle[]
   stormAiConversations   StormAiConversation[]
   stormAiAuditLogs       StormAiAuditLog[]
@@ -1492,6 +1515,11 @@ model Customer {
   attributionTerm      String?
   attributionContent   String?
   gclid                String?
+  gbraid               String?
+  wbraid               String?
+  fbc                   String?
+  fbp                   String?
+  userAgent             String?
   fbclid               String?
   msclkid              String?
   firstTouchAt         DateTime?
@@ -1553,6 +1581,7 @@ model Customer {
   notificationDeliveries NotificationDelivery[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
   marketingTouchEvents   MarketingTouchEvent[]
+  pipelineConversionEvents PipelineConversionEvent[]
   gbpReviews             GbpReview[]
   winterizationRequests  WinterizationRequest[]
 
@@ -1561,6 +1590,60 @@ model Customer {
   @@index([companyId, createdAt])
   @@index([companyId, pipelineStage])
   @@index([companyId, pipelineLeadAt])
+}
+
+/// Immutable snapshot emitted exactly once for every newly reached sales stage.
+/// Customer PII is normalized and hashed before it is stored here.
+model PipelineConversionEvent {
+  id               String   @id @default(cuid())
+  companyId        String
+  customerId       String
+  stage            SalesPipelineStage
+  occurredAt       DateTime
+  value            Decimal? @db.Decimal(12, 2)
+  currency         String   @default("USD")
+  eventSource      String   @default("WEB")
+  emailSha256      String?
+  phoneSha256      String?
+  gclid            String?
+  gbraid           String?
+  wbraid           String?
+  fbc              String?
+  fbp              String?
+  userAgent        String?
+  sourceEntityType String?
+  sourceEntityId   String?
+  createdAt        DateTime @default(now())
+
+  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deliveries PipelineConversionDelivery[]
+
+  @@unique([companyId, customerId, stage])
+  @@index([companyId, occurredAt])
+  @@index([customerId, occurredAt])
+}
+
+model PipelineConversionDelivery {
+  id                String   @id @default(cuid())
+  eventId           String
+  platform          PipelineConversionPlatform
+  status            PipelineConversionDeliveryStatus @default(PENDING)
+  attempts          Int      @default(0)
+  nextAttemptAt     DateTime @default(now())
+  leaseUntil        DateTime?
+  sentAt            DateTime?
+  providerRequestId String?
+  lastError         String?  @db.Text
+  responseMetadata  Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  event PipelineConversionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, platform])
+  @@index([status, nextAttemptAt])
+  @@index([leaseUntil])
 }
 
 model WinterizationRequest {
@@ -1701,6 +1784,11 @@ model Lead {
   attributionTerm     String?
   attributionContent  String?
   gclid               String?
+  gbraid              String?
+  wbraid              String?
+  fbc                  String?
+  fbp                  String?
+  userAgent            String?
   fbclid              String?
   msclkid             String?
   firstTouchAt        DateTime?

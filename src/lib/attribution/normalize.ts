@@ -32,6 +32,11 @@ export type AttributionInput = {
   sourceBucket?: string | null;
   trackingSource?: string | null;
   gclid?: string | null;
+  gbraid?: string | null;
+  wbraid?: string | null;
+  fbc?: string | null;
+  fbp?: string | null;
+  userAgent?: string | null;
   fbclid?: string | null;
   msclkid?: string | null;
   leadSource?: string | null;
@@ -50,6 +55,11 @@ export type NormalizedAttribution = {
   term: string | null;
   content: string | null;
   gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  userAgent: string | null;
   fbclid: string | null;
   msclkid: string | null;
   trackingSource: string | null;
@@ -75,6 +85,11 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   const content = clean(input.content);
   const trackingSource = clean(input.trackingSource);
   const gclid = clean(input.gclid);
+  const gbraid = clean(input.gbraid);
+  const wbraid = clean(input.wbraid);
+  const fbc = clean(input.fbc);
+  const fbp = clean(input.fbp);
+  const userAgent = clean(input.userAgent);
   const fbclid = clean(input.fbclid);
   const msclkid = clean(input.msclkid);
   const bucket = lower(input.sourceBucket);
@@ -98,6 +113,8 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     channel = "google_lsa";
   } else if (
     gclid ||
+    gbraid ||
+    wbraid ||
     bucket === "google_ads" ||
     tracking.includes("google ads") ||
     tracking.includes("google ppc") ||
@@ -118,6 +135,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     channel = "meta_ads";
   } else if (
     fbclid ||
+    fbc ||
     bucket === "meta" ||
     bucket === "facebook" ||
     bucket === "instagram" ||
@@ -140,7 +158,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     channel = "gbp";
   } else if (msclkid || lower(medium).includes("cpc") || lower(medium).includes("ppc") || lower(medium) === "paid") {
     channel = "other_paid";
-  } else if (bucket === "direct" || (!source && !medium && !trackingSource && !gclid && !fbclid)) {
+  } else if (bucket === "direct" || (!source && !medium && !trackingSource && !gclid && !gbraid && !wbraid && !fbclid && !fbc)) {
     channel = bucket === "direct" || (!source && !trackingSource) ? "direct" : "unknown";
   } else if (bucket === "referral") {
     channel = "referral";
@@ -185,6 +203,11 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     term,
     content,
     gclid,
+    gbraid,
+    wbraid,
+    fbc,
+    fbp,
+    userAgent,
     fbclid,
     msclkid,
     trackingSource,
@@ -234,6 +257,11 @@ export function firstTouchStructuredData(
     attributionTerm: normalized.term,
     attributionContent: normalized.content,
     gclid: normalized.gclid,
+    gbraid: normalized.gbraid,
+    wbraid: normalized.wbraid,
+    fbc: normalized.fbc,
+    fbp: normalized.fbp,
+    userAgent: normalized.userAgent,
     fbclid: normalized.fbclid,
     msclkid: normalized.msclkid,
     firstTouchAt: occurredAt,
@@ -293,6 +321,11 @@ export function parseAttributionFromMetadata(metadata: unknown): AttributionInpu
     content: str("content") ?? str("utm_content"),
     sourceBucket: str("sourceBucket") ?? str("source_bucket"),
     gclid: str("gclid"),
+    gbraid: str("gbraid"),
+    wbraid: str("wbraid"),
+    fbc: str("fbc"),
+    fbp: str("fbp"),
+    userAgent: str("user_agent") ?? str("userAgent"),
     fbclid: str("fbclid"),
     msclkid: str("msclkid"),
     trackingSource: str("trackingSource") ?? str("tracking_source"),

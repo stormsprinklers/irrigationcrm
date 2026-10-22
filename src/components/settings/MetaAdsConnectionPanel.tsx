@@ -18,6 +18,11 @@ type MetaAdsSettings = {
   fallbackTokenPreview: string | null;
   adAccountId: string | null;
   adAccountName: string | null;
+  conversionsReady: boolean;
+  conversionsTokenPreview: string | null;
+  conversionsDatasetId: string | null;
+  conversionsTestEventCode: string | null;
+  conversionsConfiguredAt: string | null;
 };
 
 export function MetaAdsConnectionPanel() {
@@ -29,6 +34,10 @@ export function MetaAdsConnectionPanel() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingAccount, setSavingAccount] = useState(false);
+  const [savingConversions, setSavingConversions] = useState(false);
+  const [conversionsAccessToken, setConversionsAccessToken] = useState("");
+  const [conversionsDatasetId, setConversionsDatasetId] = useState("");
+  const [conversionsTestEventCode, setConversionsTestEventCode] = useState("");
 
   const loadStatus = useCallback(async () => {
     const res = await fetch("/api/marketing/meta-ads/status");
@@ -37,7 +46,12 @@ export function MetaAdsConnectionPanel() {
 
   const loadSettings = useCallback(async () => {
     const res = await fetch("/api/marketing/meta-ads/settings");
-    if (res.ok) setSettings(await res.json());
+    if (res.ok) {
+      const data = (await res.json()) as MetaAdsSettings;
+      setSettings(data);
+      setConversionsDatasetId(data.conversionsDatasetId ?? "");
+      setConversionsTestEventCode(data.conversionsTestEventCode ?? "");
+    }
   }, []);
 
   const loadAccounts = useCallback(async () => {
@@ -115,6 +129,40 @@ export function MetaAdsConnectionPanel() {
     }
   }
 
+  async function saveConversions() {
+    if (!conversionsAccessToken.trim() && !settings?.conversionsTokenPreview) {
+      toast.error("Paste a Meta Conversions API access token");
+      return;
+    }
+    if (!conversionsDatasetId.replace(/\D/g, "")) {
+      toast.error("Enter the Meta dataset or pixel ID");
+      return;
+    }
+    setSavingConversions(true);
+    try {
+      const res = await fetch("/api/marketing/meta-ads/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(conversionsAccessToken.trim()
+            ? { metaConversionsAccessToken: conversionsAccessToken.trim() }
+            : {}),
+          metaConversionsDatasetId: conversionsDatasetId,
+          metaConversionsTestEventCode: conversionsTestEventCode,
+        }),
+      });
+      const data = (await res.json()) as MetaAdsSettings & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to save Meta Conversions API settings");
+      setConversionsAccessToken("");
+      setSettings(data);
+      toast.success("Meta pipeline conversions are ready");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save conversions settings");
+    } finally {
+      setSavingConversions(false);
+    }
+  }
+
   async function disconnect() {
     const res = await fetch("/api/marketing/meta-ads/settings", { method: "DELETE" });
     if (!res.ok) {
@@ -185,6 +233,71 @@ export function MetaAdsConnectionPanel() {
           <Button size="sm" disabled={saving} onClick={() => void saveToken()}>
             {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             Save token
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0">
+          <div>
+            <CardTitle className="text-base">Meta Conversions API</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Sends Lead, QualifiedLead, ConvertedLead, and Purchase from the CRM.
+            </p>
+          </div>
+          <Badge variant={settings?.conversionsReady ? "success" : "outline"}>
+            {settings?.conversionsReady ? "Ready" : "Setup needed"}
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            In Meta Events Manager, choose the dataset used by your ad account and generate a
+            Conversions API access token. The reporting token above is kept separate.
+          </p>
+          {settings?.conversionsTokenPreview ? (
+            <p className="text-xs text-muted-foreground">
+              Saved CAPI token: {settings.conversionsTokenPreview}
+            </p>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Dataset / pixel ID</label>
+              <Input
+                inputMode="numeric"
+                value={conversionsDatasetId}
+                onChange={(event) => setConversionsDatasetId(event.target.value)}
+                placeholder="123456789012345"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">
+                Test event code (optional)
+              </label>
+              <Input
+                value={conversionsTestEventCode}
+                onChange={(event) => setConversionsTestEventCode(event.target.value)}
+                placeholder="TEST12345"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Conversions API access token
+            </label>
+            <Input
+              type="password"
+              value={conversionsAccessToken}
+              onChange={(event) => setConversionsAccessToken(event.target.value)}
+              placeholder={settings?.conversionsTokenPreview ? "Leave blank to keep saved token" : "Paste token"}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Google click IDs are not sent to Meta. Meta receives hashed email/phone plus fbc, fbp,
+            and browser user agent when available.
+          </p>
+          <Button size="sm" disabled={savingConversions} onClick={() => void saveConversions()}>
+            {savingConversions ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+            Save Conversions API
           </Button>
         </CardContent>
       </Card>

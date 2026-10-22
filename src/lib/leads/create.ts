@@ -1,6 +1,11 @@
 import { AttributionFirstTouchMethod, LeadStatus, Prisma } from "@prisma/client";
 import { after } from "next/server";
-import { parseAttributionFromMetadata, recordTouchEvent } from "@/lib/attribution";
+import {
+  firstTouchStructuredData,
+  normalizeAttribution,
+  parseAttributionFromMetadata,
+  recordTouchEvent,
+} from "@/lib/attribution";
 import { prisma } from "@/lib/prisma";
 import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { notifyLeadAcknowledged } from "@/lib/notifications/lead-acknowledged";
@@ -119,6 +124,13 @@ export async function createLeadFromIntegration(
     ...(input.address ? { address: input.address } : {}),
     ...(input.city ? { city: input.city } : {}),
   };
+  const attributionInput = {
+    ...parseAttributionFromMetadata(metadata),
+    formSource: input.source ?? "website",
+    leadSource: input.source ?? "website",
+  };
+  const normalizedAttribution = normalizeAttribution(attributionInput);
+  const firstTouchOccurredAt = new Date();
 
   let lead = await prisma.lead.create({
     data: {
@@ -134,6 +146,11 @@ export async function createLeadFromIntegration(
         ? (metadata as Prisma.InputJsonValue)
         : undefined,
       assignedUserId: company?.defaultLeadAssigneeId ?? null,
+      ...firstTouchStructuredData(
+        normalizedAttribution,
+        AttributionFirstTouchMethod.FORM,
+        firstTouchOccurredAt
+      ),
     },
   });
 
@@ -175,11 +192,7 @@ export async function createLeadFromIntegration(
         leadId: leadForNotify.id,
         eventType: "FORM_SUBMIT",
         method: AttributionFirstTouchMethod.FORM,
-        attribution: {
-          ...parseAttributionFromMetadata(metadata),
-          formSource: input.source ?? "website",
-          leadSource: input.source ?? "website",
-        },
+        attribution: attributionInput,
         sessionId,
         phone: input.source === "share-the-cheer-nomination" || input.source === "share-the-cheer-partner" ? null : input.phone,
         metadata: {

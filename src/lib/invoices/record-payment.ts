@@ -145,6 +145,9 @@ export async function recordInvoicePayment(
     stage: "SOLD",
     occurredAt: paymentRecordedAt,
     leadSource: "Invoice payment",
+    value: total,
+    sourceEntityType: "INVOICE",
+    sourceEntityId: invoice.id,
   }).catch((error) => console.error("Invoice payment pipeline update failed", error));
 
   if (params.method === "CASH" || params.method === "CHECK") {

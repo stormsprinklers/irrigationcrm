@@ -4,6 +4,7 @@ import { forbiddenForFieldRole, requireSessionUser, unauthorizedResponse } from 
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed, onEstimateSent, onEstimateStatusChange } from "@/lib/notifications/estimate-followup";
 import { prisma } from "@/lib/prisma";
+import { toNumber } from "@/lib/visits/totals";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -89,6 +90,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           companyId: user.companyId,
           customerId: existing.customerId,
           stage: "CONVERTED",
+          value: toNumber(existing.total),
+          sourceEntityType: "ESTIMATE",
+          sourceEntityId: id,
         }).catch((error) => console.error("Estimate pipeline conversion failed", error));
         const { onReferralEstimateApproved } = await import("@/lib/referrals/conversion");
         void onReferralEstimateApproved({

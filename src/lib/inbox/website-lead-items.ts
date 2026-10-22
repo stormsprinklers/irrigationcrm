@@ -32,6 +32,17 @@ export type WebsiteLeadInboxItem = {
   leadCity: string | null;
   leadState: string | null;
   leadZip: string | null;
+  attributionSource: string | null;
+  attributionMedium: string | null;
+  attributionCampaign: string | null;
+  attributionContent: string | null;
+  attributionTerm: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  userAgent: string | null;
 };
 
 type LeadRow = {
@@ -47,6 +58,17 @@ type LeadRow = {
   convertedCustomerId: string | null;
   notes: string | null;
   metadata: unknown;
+  attributionSource: string | null;
+  attributionMedium: string | null;
+  attributionCampaign: string | null;
+  attributionContent: string | null;
+  attributionTerm: string | null;
+  gclid: string | null;
+  gbraid: string | null;
+  wbraid: string | null;
+  fbc: string | null;
+  fbp: string | null;
+  userAgent: string | null;
 };
 
 const leadSelect = {
@@ -62,6 +84,17 @@ const leadSelect = {
   convertedCustomerId: true,
   notes: true,
   metadata: true,
+  attributionSource: true,
+  attributionMedium: true,
+  attributionCampaign: true,
+  attributionContent: true,
+  attributionTerm: true,
+  gclid: true,
+  gbraid: true,
+  wbraid: true,
+  fbc: true,
+  fbp: true,
+  userAgent: true,
 } as const;
 
 function isCareersLeadRow(lead: LeadRow | null | undefined) {
@@ -115,6 +148,17 @@ function withLead(
     leadCity: addr.city,
     leadState: addr.state,
     leadZip: addr.zip,
+    attributionSource: lead?.attributionSource ?? null,
+    attributionMedium: lead?.attributionMedium ?? null,
+    attributionCampaign: lead?.attributionCampaign ?? null,
+    attributionContent: lead?.attributionContent ?? null,
+    attributionTerm: lead?.attributionTerm ?? null,
+    gclid: lead?.gclid ?? null,
+    gbraid: lead?.gbraid ?? null,
+    wbraid: lead?.wbraid ?? null,
+    fbc: lead?.fbc ?? null,
+    fbp: lead?.fbp ?? null,
+    userAgent: lead?.userAgent ?? null,
   };
 }
 

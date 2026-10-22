@@ -1,4 +1,15 @@
-export const GOOGLE_ADS_SCOPE = "https://www.googleapis.com/auth/adwords";
+export const GOOGLE_ADS_SCOPES = [
+  "https://www.googleapis.com/auth/adwords",
+  "https://www.googleapis.com/auth/datamanager",
+] as const;
+export const GOOGLE_ADS_SCOPE = GOOGLE_ADS_SCOPES.join(" ");
+
+export type GooglePipelineConversionActions = {
+  lead: string | null;
+  qualified: string | null;
+  converted: string | null;
+  sold: string | null;
+};
 
 export type GoogleAdsConnectionStatus = {
   connected: boolean;
@@ -8,6 +19,9 @@ export type GoogleAdsConnectionStatus = {
   connectedAt: string | null;
   configured: boolean;
   hasDeveloperToken: boolean;
+  pipelineReady: boolean;
+  pipelineConfiguredAt: string | null;
+  pipelineActions: GooglePipelineConversionActions;
   oauthEnv: {
     hasClientId: boolean;
     hasClientSecret: boolean;

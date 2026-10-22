@@ -1,5 +1,6 @@
 import { isHolidayLightingCompany } from "@/lib/company/industry";
-import { Division, VisitStatus } from "@prisma/client";
+import { AttributionFirstTouchMethod, Division, VisitStatus } from "@prisma/client";
+import { recordTouchEvent, type AttributionInput } from "@/lib/attribution";
 import { getAvailableSlots, BOOKING_SLOT_MINUTES, clampOnlineBookingSlotMinutes } from "@/lib/booking/availability";
 import {
   getStaffOnlineBookingSlots,
@@ -36,6 +37,7 @@ export type OnlineBookingInput = {
   startAt: string;
   endAt: string;
   notes?: string | null;
+  tracking?: AttributionInput;
 };
 
 type InternalSlot = { startAt: string; endAt: string; availableUserIds?: string[] };
@@ -260,6 +262,20 @@ export async function createOnlineBooking(companyId: string, input: OnlineBookin
     stage: "LEAD",
     leadSource: "Online booking",
   }).catch((error) => console.error("Online booking pipeline update failed", error));
+
+  await recordTouchEvent({
+    companyId,
+    customerId: customer.id,
+    eventType: "FORM_SUBMIT",
+    method: AttributionFirstTouchMethod.FORM,
+    attribution: {
+      ...input.tracking,
+      formSource: "online-booking",
+      leadSource: "online-booking",
+    },
+    pagePath: "/book",
+    phone,
+  }).catch((error) => console.error("Online booking attribution update failed", error));
 
   let propertyId: string | null = null;
   if (!virtual || input.address || zip) {

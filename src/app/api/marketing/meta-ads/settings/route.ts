@@ -22,6 +22,10 @@ export async function GET() {
         metaPageAccessToken: true,
         metaAdAccountId: true,
         metaAdAccountName: true,
+        metaConversionsAccessToken: true,
+        metaConversionsDatasetId: true,
+        metaConversionsTestEventCode: true,
+        metaConversionsConfiguredAt: true,
       },
     });
 
@@ -32,6 +36,13 @@ export async function GET() {
       fallbackTokenPreview: maskSecret(company?.metaPageAccessToken),
       adAccountId: company?.metaAdAccountId,
       adAccountName: company?.metaAdAccountName,
+      conversionsReady: Boolean(
+        company?.metaConversionsAccessToken && company.metaConversionsDatasetId
+      ),
+      conversionsTokenPreview: maskSecret(company?.metaConversionsAccessToken),
+      conversionsDatasetId: company?.metaConversionsDatasetId ?? null,
+      conversionsTestEventCode: company?.metaConversionsTestEventCode ?? null,
+      conversionsConfiguredAt: company?.metaConversionsConfiguredAt?.toISOString() ?? null,
     });
   } catch {
     return unauthorizedResponse();
@@ -58,6 +69,45 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    if (
+      body.metaConversionsAccessToken !== undefined ||
+      body.metaConversionsDatasetId !== undefined ||
+      body.metaConversionsTestEventCode !== undefined
+    ) {
+      const existing = await prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: {
+          metaConversionsAccessToken: true,
+          metaConversionsDatasetId: true,
+        },
+      });
+      const token =
+        body.metaConversionsAccessToken !== undefined
+          ? String(body.metaConversionsAccessToken ?? "").trim()
+          : existing?.metaConversionsAccessToken ?? "";
+      const datasetId =
+        body.metaConversionsDatasetId !== undefined
+          ? String(body.metaConversionsDatasetId ?? "").replace(/\D/g, "")
+          : existing?.metaConversionsDatasetId ?? "";
+      const testEventCode = String(body.metaConversionsTestEventCode ?? "").trim() || null;
+      if (!token) return badRequestResponse("Meta Conversions API access token is required");
+      if (!datasetId) return badRequestResponse("Meta dataset or pixel ID is required");
+
+      await prisma.company.update({
+        where: { id: user.companyId },
+        data: {
+          metaConversionsAccessToken: token,
+          metaConversionsDatasetId: datasetId,
+          metaConversionsTestEventCode: testEventCode,
+          metaConversionsConfiguredAt: new Date(),
+        },
+      });
+      const { requeueCompanyPipelineDeliveries } = await import(
+        "@/lib/marketing/pipeline-conversion-delivery"
+      );
+      await requeueCompanyPipelineDeliveries(user.companyId, "META");
+    }
+
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
       select: {
@@ -65,6 +115,10 @@ export async function PATCH(request: NextRequest) {
         metaAdAccountId: true,
         metaAdAccountName: true,
         metaAdsConnectedAt: true,
+        metaConversionsAccessToken: true,
+        metaConversionsDatasetId: true,
+        metaConversionsTestEventCode: true,
+        metaConversionsConfiguredAt: true,
       },
     });
 
@@ -74,6 +128,13 @@ export async function PATCH(request: NextRequest) {
       adAccountId: company?.metaAdAccountId,
       adAccountName: company?.metaAdAccountName,
       connectedAt: company?.metaAdsConnectedAt?.toISOString() ?? null,
+      conversionsReady: Boolean(
+        company?.metaConversionsAccessToken && company.metaConversionsDatasetId
+      ),
+      conversionsTokenPreview: maskSecret(company?.metaConversionsAccessToken),
+      conversionsDatasetId: company?.metaConversionsDatasetId ?? null,
+      conversionsTestEventCode: company?.metaConversionsTestEventCode ?? null,
+      conversionsConfiguredAt: company?.metaConversionsConfiguredAt?.toISOString() ?? null,
     });
   } catch (error) {
     if (error instanceof MetaAdsApiError) {
@@ -124,6 +185,10 @@ export async function DELETE() {
         metaAdAccountId: null,
         metaAdAccountName: null,
         metaAdsConnectedAt: null,
+        metaConversionsAccessToken: null,
+        metaConversionsDatasetId: null,
+        metaConversionsTestEventCode: null,
+        metaConversionsConfiguredAt: null,
       },
     });
 

@@ -46,6 +46,11 @@ export async function DELETE() {
         googleAdsCustomerName: null,
         googleAdsLoginCustomerId: null,
         googleAdsConnectedAt: null,
+        googleAdsPipelineLeadActionId: null,
+        googleAdsPipelineQualifiedActionId: null,
+        googleAdsPipelineConvertedActionId: null,
+        googleAdsPipelineSoldActionId: null,
+        googleAdsPipelineConfiguredAt: null,
       },
     });
 

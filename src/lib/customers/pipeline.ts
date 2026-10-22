@@ -1,5 +1,6 @@
 import { LeadStatus, Prisma, SalesPipelineStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { buildPipelineIdentitySnapshot } from "@/lib/marketing/pipeline-conversion-identifiers";
 
 const STAGE_RANK: Record<SalesPipelineStage, number> = {
   LEAD: 0,
@@ -29,7 +30,32 @@ type AdvanceInput = {
   leadSource?: string | null;
   firstContactedAt?: Date | null;
   leadId?: string | null;
+  /** Full job/invoice value. Stored only for Converted and Sold events. */
+  value?: number | null;
+  sourceEntityType?: "ESTIMATE" | "INVOICE" | null;
+  sourceEntityId?: string | null;
 };
+
+const TRACKED_STAGES: AdvanceInput["stage"][] = ["LEAD", "QUALIFIED", "CONVERTED", "SOLD"];
+
+function googleEventSource(leadSource: string | null | undefined) {
+  const normalized = leadSource?.trim().toLowerCase() ?? "";
+  if (/sms|text|message/.test(normalized)) return "MESSAGE";
+  if (/call|phone|receptionist/.test(normalized)) return "CALL";
+  return "WEB";
+}
+
+export function newlyReachedPipelineStages(
+  current: SalesPipelineStage | null,
+  target: AdvanceInput["stage"]
+): AdvanceInput["stage"][] {
+  if (current === "SOLD") return [];
+  if (current === "DISQUALIFIED" && target === "LEAD") return [];
+  const currentRank = current && current !== "DISQUALIFIED" ? STAGE_RANK[current] : -1;
+  return TRACKED_STAGES.filter(
+    (stage) => STAGE_RANK[stage] > currentRank && STAGE_RANK[stage] <= STAGE_RANK[target]
+  );
+}
 
 function stagesAllowedBefore(target: AdvanceInput["stage"]): Array<SalesPipelineStage> {
   return (Object.keys(STAGE_RANK) as SalesPipelineStage[]).filter(
@@ -72,35 +98,74 @@ export function pipelineAdvanceData(
 }
 
 export async function advanceCustomerPipeline(input: AdvanceInput) {
-  const current = await prisma.customer.findFirst({
-    where: { id: input.customerId, companyId: input.companyId },
-    select: {
-      pipelineStage: true,
-      pipelineLeadAt: true,
-      pipelineQualifiedAt: true,
-      pipelineConvertedAt: true,
-      pipelineSoldAt: true,
-      pipelineDisqualifiedAt: true,
-      pipelineLeadSource: true,
-      pipelineFirstContactedAt: true,
-      pipelineLeadId: true,
-    },
-  });
-  if (!current) return false;
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.customer.findFirst({
+      where: { id: input.customerId, companyId: input.companyId },
+      select: {
+        email: true,
+        phone: true,
+        gclid: true,
+        gbraid: true,
+        wbraid: true,
+        fbc: true,
+        fbp: true,
+        userAgent: true,
+        pipelineStage: true,
+        pipelineLeadAt: true,
+        pipelineQualifiedAt: true,
+        pipelineConvertedAt: true,
+        pipelineSoldAt: true,
+        pipelineDisqualifiedAt: true,
+        pipelineLeadSource: true,
+        pipelineFirstContactedAt: true,
+        pipelineLeadId: true,
+      },
+    });
+    if (!current) return false;
 
-  const data = pipelineAdvanceData(current, input.stage, input.occurredAt ?? new Date(), input);
-  if (!data) return false;
+    const occurredAt = input.occurredAt ?? new Date();
+    const data = pipelineAdvanceData(current, input.stage, occurredAt, input);
+    if (!data) return false;
 
-  const allowed = stagesAllowedBefore(input.stage);
-  const result = await prisma.customer.updateMany({
-    where: {
-      id: input.customerId,
-      companyId: input.companyId,
-      OR: [{ pipelineStage: null }, { pipelineStage: { in: allowed } }],
-    },
-    data,
+    const allowed = stagesAllowedBefore(input.stage);
+    const result = await tx.customer.updateMany({
+      where: {
+        id: input.customerId,
+        companyId: input.companyId,
+        OR: [{ pipelineStage: null }, { pipelineStage: { in: allowed } }],
+      },
+      data,
+    });
+    if (result.count === 0) return false;
+
+    const identity = buildPipelineIdentitySnapshot(current);
+    const value =
+      typeof input.value === "number" && Number.isFinite(input.value)
+        ? Math.max(0, Math.round(input.value * 100) / 100)
+        : null;
+
+    for (const stage of newlyReachedPipelineStages(current.pipelineStage, input.stage)) {
+      await tx.pipelineConversionEvent.create({
+        data: {
+          companyId: input.companyId,
+          customerId: input.customerId,
+          stage,
+          occurredAt,
+          value: stage === "CONVERTED" || stage === "SOLD" ? value : null,
+          currency: "USD",
+          eventSource: googleEventSource(current.pipelineLeadSource ?? input.leadSource),
+          ...identity,
+          sourceEntityType: input.sourceEntityType ?? null,
+          sourceEntityId: input.sourceEntityId ?? null,
+          deliveries: {
+            create: [{ platform: "GOOGLE" }, { platform: "META" }],
+          },
+        },
+      });
+    }
+
+    return true;
   });
-  return result.count > 0;
 }
 
 export async function addCustomerToPipelineFromLead(params: {

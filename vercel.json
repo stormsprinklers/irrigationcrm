@@ -19,6 +19,10 @@
       "schedule": "15 8 * * *"
     },
     {
+      "path": "/api/cron/marketing/pipeline-conversions",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/vehicles/reminders",
       "schedule": "0 14 * * *"
     },
