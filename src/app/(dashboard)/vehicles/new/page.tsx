@@ -16,6 +16,7 @@ export default function NewVehiclePage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [saving, setSaving] = useState(false);
+  const [vehicleNumber, setVehicleNumber] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -52,6 +53,7 @@ export default function NewVehiclePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          vehicleNumber: vehicleNumber || null,
           make,
           model,
           year: Number(year),
@@ -92,7 +94,17 @@ export default function NewVehiclePage() {
       />
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <label htmlFor="vehicleNumber" className="text-sm font-medium">Vehicle number</label>
+            <Input
+              id="vehicleNumber"
+              value={vehicleNumber}
+              onChange={(e) => setVehicleNumber(e.target.value)}
+              placeholder="e.g. 12 or TRUCK 12"
+              maxLength={50}
+            />
+          </div>
           <div className="space-y-2">
             <label htmlFor="year" className="text-sm font-medium">Year</label>
             <Input

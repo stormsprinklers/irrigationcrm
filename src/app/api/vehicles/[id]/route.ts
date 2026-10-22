@@ -10,6 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { computeOilDue } from "@/lib/vehicles/oil";
 import { canManageVehicles, canViewVehicles } from "@/lib/vehicles/permissions";
 import { getVehicleDetail } from "@/lib/vehicles/queries";
+import {
+  normalizeVehicleNumber,
+  vehicleNumberValidationError,
+} from "@/lib/vehicles/vehicle-number";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -45,6 +49,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const body = await request.json();
     const data: Record<string, unknown> = {};
+
+    if (body.vehicleNumber !== undefined) {
+      const vehicleNumberError = vehicleNumberValidationError(body.vehicleNumber);
+      if (vehicleNumberError) return badRequestResponse(vehicleNumberError);
+      const vehicleNumber = normalizeVehicleNumber(body.vehicleNumber);
+      if (vehicleNumber) {
+        const duplicate = await prisma.vehicle.findFirst({
+          where: {
+            companyId: user.companyId,
+            vehicleNumber,
+            NOT: { id },
+          },
+          select: { id: true },
+        });
+        if (duplicate) return badRequestResponse("That vehicle number is already assigned");
+      }
+      data.vehicleNumber = vehicleNumber;
+    }
 
     if (body.make !== undefined) {
       const make = String(body.make).trim();

@@ -4731,6 +4731,7 @@ enum VehicleIssueStatus {
 model Vehicle {
   id                      String        @id @default(cuid())
   companyId               String
+  vehicleNumber           String?
   make                    String
   model                   String
   year                    Int
@@ -4760,6 +4761,7 @@ model Vehicle {
   issues         VehicleIssue[]
 
   @@unique([companyId, vin])
+  @@unique([companyId, vehicleNumber])
   @@index([companyId])
   @@index([assignedUserId])
   @@index([vin])

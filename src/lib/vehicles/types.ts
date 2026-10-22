@@ -24,6 +24,7 @@ export type VehicleAssignee = {
 export type VehicleListItem = Pick<
   Vehicle,
   | "id"
+  | "vehicleNumber"
   | "make"
   | "model"
   | "year"

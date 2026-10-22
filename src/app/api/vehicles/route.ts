@@ -10,6 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { computeOilDue } from "@/lib/vehicles/oil";
 import { canManageVehicles, canViewVehicles } from "@/lib/vehicles/permissions";
 import { getCompanyEmployees, listVehicles } from "@/lib/vehicles/queries";
+import {
+  normalizeVehicleNumber,
+  vehicleNumberValidationError,
+} from "@/lib/vehicles/vehicle-number";
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,6 +53,9 @@ export async function POST(request: NextRequest) {
     if (!canManageVehicles(user.role)) return forbiddenResponse();
 
     const body = await request.json();
+    const vehicleNumberError = vehicleNumberValidationError(body.vehicleNumber);
+    if (vehicleNumberError) return badRequestResponse(vehicleNumberError);
+    const vehicleNumber = normalizeVehicleNumber(body.vehicleNumber);
     const make = String(body.make ?? "").trim();
     const model = String(body.model ?? "").trim();
     const year = Number(body.year);
@@ -92,6 +99,14 @@ export async function POST(request: NextRequest) {
       if (existing) return badRequestResponse("A vehicle with this VIN already exists");
     }
 
+    if (vehicleNumber) {
+      const existing = await prisma.vehicle.findFirst({
+        where: { companyId: user.companyId, vehicleNumber },
+        select: { id: true },
+      });
+      if (existing) return badRequestResponse("That vehicle number is already assigned");
+    }
+
     const due = computeOilDue({
       lastOilChangeAt,
       lastOilChangeMileage,
@@ -103,6 +118,7 @@ export async function POST(request: NextRequest) {
     const vehicle = await prisma.vehicle.create({
       data: {
         companyId: user.companyId,
+        vehicleNumber,
         make,
         model,
         year: Math.round(year),

@@ -68,6 +68,7 @@ type Issue = {
 
 type Vehicle = {
   id: string;
+  vehicleNumber: string | null;
   make: string;
   model: string;
   year: number;
@@ -237,6 +238,7 @@ export default function VehicleDetailPage() {
   const [summarizing, setSummarizing] = useState(false);
   const [attachmentKindFilter, setAttachmentKindFilter] = useState("ALL");
 
+  const [editVehicleNumber, setEditVehicleNumber] = useState("");
   const [editMake, setEditMake] = useState("");
   const [editModel, setEditModel] = useState("");
   const [editYear, setEditYear] = useState("");
@@ -263,6 +265,7 @@ export default function VehicleDetailPage() {
   const [issueDescription, setIssueDescription] = useState("");
 
   const syncForm = useCallback((v: Vehicle) => {
+    setEditVehicleNumber(v.vehicleNumber ?? "");
     setEditMake(v.make);
     setEditModel(v.model);
     setEditYear(String(v.year));
@@ -347,6 +350,7 @@ export default function VehicleDetailPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          vehicleNumber: editVehicleNumber || null,
           make: editMake,
           model: editModel,
           year: Number(editYear),
@@ -562,7 +566,7 @@ export default function VehicleDetailPage() {
       <PageHeader
         breadcrumb={["Vehicles", vehicleDisplayName(vehicle)]}
         title={vehicleDisplayName(vehicle)}
-        subtitle={`${assigneeLabel(vehicle.assignedUser)} · ${vehicle.status.replaceAll("_", " ")}`}
+        subtitle={`${vehicle.vehicleNumber ? `#${vehicle.vehicleNumber} · ` : ""}${assigneeLabel(vehicle.assignedUser)} · ${vehicle.status.replaceAll("_", " ")}`}
         actions={
           <div className="flex gap-2">
             <Button asChild variant="outline">
@@ -673,7 +677,16 @@ export default function VehicleDetailPage() {
               void saveVehicle();
             }}
           >
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Vehicle number</label>
+              <Input
+                value={editVehicleNumber}
+                onChange={(e) => setEditVehicleNumber(e.target.value)}
+                placeholder="e.g. 12 or TRUCK 12"
+                maxLength={50}
+              />
+            </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Year</label>
               <Input value={editYear} onChange={(e) => setEditYear(e.target.value)} type="number" />
@@ -743,6 +756,10 @@ export default function VehicleDetailPage() {
       ) : (
         <Section title="Profile">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Vehicle number</dt>
+              <dd>{vehicle.vehicleNumber || "—"}</dd>
+            </div>
             <div>
               <dt className="text-muted-foreground">VIN</dt>
               <dd>{vehicle.vin || "—"}</dd>

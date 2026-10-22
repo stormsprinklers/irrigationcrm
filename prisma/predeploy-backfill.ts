@@ -82,6 +82,17 @@ async function ensureVehicleNotesColumn() {
   }
 }
 
+async function ensureVehicleNumberColumn() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Vehicle" ADD COLUMN IF NOT EXISTS "vehicleNumber" TEXT`
+  );
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "Vehicle_companyId_vehicleNumber_key"
+    ON "Vehicle"("companyId", "vehicleNumber")
+  `);
+  console.log(`Ensured "Vehicle"."vehicleNumber" column and company unique index`);
+}
+
 async function ensureSecurityRateLimitTable() {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "SecurityRateLimitBucket" (
@@ -518,6 +529,11 @@ async function main() {
     await ensureVehicleNotesColumn();
   } catch (err) {
     console.warn("Vehicle notes column ensure skipped:", err);
+  }
+  try {
+    await ensureVehicleNumberColumn();
+  } catch (err) {
+    console.warn("Vehicle number column ensure skipped:", err);
   }
   try {
     await ensureEstimateDepositThresholds();

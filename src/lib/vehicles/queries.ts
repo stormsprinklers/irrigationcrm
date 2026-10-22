@@ -27,6 +27,7 @@ export async function listVehicles(filters: VehicleListFilters) {
       ...(q
         ? {
             OR: [
+              { vehicleNumber: { contains: q, mode: "insensitive" } },
               { make: { contains: q, mode: "insensitive" } },
               { model: { contains: q, mode: "insensitive" } },
               { vin: { contains: q, mode: "insensitive" } },
@@ -38,6 +39,7 @@ export async function listVehicles(filters: VehicleListFilters) {
     orderBy: [{ status: "asc" }, { year: "desc" }, { make: "asc" }, { model: "asc" }],
     select: {
       id: true,
+      vehicleNumber: true,
       make: true,
       model: true,
       year: true,

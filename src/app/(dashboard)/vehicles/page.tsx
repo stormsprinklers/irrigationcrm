@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 type VehicleRow = {
   id: string;
+  vehicleNumber: string | null;
   make: string;
   model: string;
   year: number;
@@ -85,14 +86,24 @@ export default function VehiclesPage() {
         title="Fleet"
         subtitle="Company vehicles, mileage, maintenance, and issues"
         actions={
-          canManage ? (
-            <Button asChild>
-              <Link href="/vehicles/new">
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add vehicle
-              </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.location.assign("/api/vehicles/export")}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Export all
             </Button>
-          ) : null
+            {canManage ? (
+              <Button asChild>
+                <Link href="/vehicles/new">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add vehicle
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
@@ -100,7 +111,7 @@ export default function VehiclesPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search make, model, plate, or VIN…"
+            placeholder="Search vehicle #, make, model, plate, or VIN…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9"
@@ -147,6 +158,7 @@ export default function VehiclesPage() {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="px-4 py-3 font-medium">Vehicle #</th>
                 <th className="px-4 py-3 font-medium">Vehicle</th>
                 <th className="hidden px-4 py-3 font-medium md:table-cell">Assignee</th>
                 <th className="hidden px-4 py-3 font-medium sm:table-cell">Mileage</th>
@@ -173,6 +185,9 @@ export default function VehiclesPage() {
                 });
                 return (
                   <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-3 font-medium tabular-nums">
+                      {v.vehicleNumber || "—"}
+                    </td>
                     <td className="px-4 py-3">
                       <Link href={`/vehicles/${v.id}`} className="flex items-center gap-3">
                         <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded bg-muted">
