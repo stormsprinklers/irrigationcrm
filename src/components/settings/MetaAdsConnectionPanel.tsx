@@ -25,6 +25,19 @@ type MetaAdsSettings = {
   conversionsConfiguredAt: string | null;
 };
 
+type ConversionTestResult = {
+  requestId: string | null;
+  metadata: {
+    eventsReceived: number;
+    datasetId: string;
+    eventName: string;
+    eventId: string;
+    actionSource: string;
+    testMode: boolean;
+    testEventCode: string | null;
+  };
+};
+
 export function MetaAdsConnectionPanel() {
   const [status, setStatus] = useState<MetaAdsConnectionStatus | null>(null);
   const [settings, setSettings] = useState<MetaAdsSettings | null>(null);
@@ -35,6 +48,8 @@ export function MetaAdsConnectionPanel() {
   const [saving, setSaving] = useState(false);
   const [savingAccount, setSavingAccount] = useState(false);
   const [savingConversions, setSavingConversions] = useState(false);
+  const [testingConversions, setTestingConversions] = useState(false);
+  const [conversionTestResult, setConversionTestResult] = useState<ConversionTestResult | null>(null);
   const [conversionsAccessToken, setConversionsAccessToken] = useState("");
   const [conversionsDatasetId, setConversionsDatasetId] = useState("");
   const [conversionsTestEventCode, setConversionsTestEventCode] = useState("");
@@ -160,6 +175,24 @@ export function MetaAdsConnectionPanel() {
       toast.error(err instanceof Error ? err.message : "Failed to save conversions settings");
     } finally {
       setSavingConversions(false);
+    }
+  }
+
+  async function sendConversionsTest() {
+    setTestingConversions(true);
+    setConversionTestResult(null);
+    try {
+      const res = await fetch("/api/marketing/meta-ads/conversions/test", { method: "POST" });
+      const data = (await res.json()) as ConversionTestResult & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Meta test event failed");
+      setConversionTestResult(data);
+      toast.success("Meta accepted the diagnostic test event");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Meta test event failed", {
+        duration: 10000,
+      });
+    } finally {
+      setTestingConversions(false);
     }
   }
 
@@ -299,6 +332,37 @@ export function MetaAdsConnectionPanel() {
             {savingConversions ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
             Save Conversions API
           </Button>
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">
+              Send a diagnostic Lead directly to Meta with the saved dataset and test event code.
+              This bypasses the pipeline queue and scheduled worker.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                testingConversions ||
+                !settings?.conversionsReady ||
+                !settings.conversionsTestEventCode
+              }
+              onClick={() => void sendConversionsTest()}
+            >
+              {testingConversions ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              Send Meta test event
+            </Button>
+            {conversionTestResult ? (
+              <div className="space-y-1 break-all text-xs text-muted-foreground">
+                <p>
+                  Accepted {conversionTestResult.metadata.eventsReceived} event · test mode{" "}
+                  {conversionTestResult.metadata.testMode ? "on" : "off"}
+                </p>
+                <p>Dataset: {conversionTestResult.metadata.datasetId}</p>
+                <p>Test code: {conversionTestResult.metadata.testEventCode ?? "none"}</p>
+                <p>Event ID: {conversionTestResult.metadata.eventId}</p>
+                <p>Meta trace ID: {conversionTestResult.requestId ?? "not returned"}</p>
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

@@ -246,6 +246,15 @@ export async function sendMetaPipelineEvent(params: {
   }
   return {
     requestId: result.fbtrace_id ?? null,
-    metadata: { eventsReceived: result.events_received, messages: result.messages ?? [] },
+    metadata: {
+      eventsReceived: result.events_received,
+      messages: result.messages ?? [],
+      datasetId: params.datasetId,
+      eventName: META_PIPELINE_EVENT_NAMES[params.event.stage] ?? params.event.stage,
+      eventId: `crm-pipeline-${params.event.id}`,
+      actionSource: "system_generated",
+      testMode: Boolean(params.testEventCode?.trim()),
+      testEventCode: params.testEventCode?.trim() || null,
+    },
   };
 }
