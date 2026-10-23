@@ -239,7 +239,7 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
-    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null || adjustment?.lineItems != null) {
+    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null || adjustment?.lineItems != null || detail.displayLines.length > 1) {
       const breakdown = detail.displayLines;
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({

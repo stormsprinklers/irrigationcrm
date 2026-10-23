@@ -470,7 +470,7 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     add(placement.installSku, `${placement.label} — labor`, "each");
     add(placement.leaseSku, `${placement.label} — lease`, "each");
   }
-  add(catalog.liftRentalSku, "Lift rental (internal; folded into tree price)", "each");
+  add(catalog.liftRentalSku, "Lift rental", "each");
   return rows;
 }
 

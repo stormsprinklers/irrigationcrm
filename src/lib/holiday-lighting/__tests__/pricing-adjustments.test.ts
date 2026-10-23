@@ -202,7 +202,7 @@ test("legacy tree and bush sizes migrate to strand counts", () => {
   assert.equal(parsed.placements[2]?.liftRentalNeeded, false);
 });
 
-test("tree and bush prices use strand counts, difficulty multipliers, and one lift rental", () => {
+test("tree and bush prices itemize one lift rental with every affected tree", () => {
   const catalog = parseHolidayCatalog(DEFAULT_HOLIDAY_CATALOG);
   const tree = catalog.placements.find((item) => item.kind === "tree")!;
   const liftSku = catalog.liftRentalSku!;
@@ -228,14 +228,40 @@ test("tree and bush prices use strand counts, difficulty multipliers, and one li
   assert.equal(result.optionDetails.buy.calculated, 900);
   assert.equal(result.calculatedReinstallTotal, 500);
   assert.equal(result.optionDetails.lease.calculated, 780);
-  assert.match(result.lines[0]!.staffDetail, /2 strands.*1\.25×.*Lift rental \$300\.00/);
-  assert.match(result.lines[1]!.staffDetail, /Lift rental included on another tree/);
+  assert.match(result.lines[0]!.staffDetail, /2 strands.*1\.25×.*Lift required/);
+  assert.match(result.lines[1]!.staffDetail, /Lift required/);
+  const liftLine = result.lines.find((line) => line.kind === "lift");
+  assert.equal(liftLine?.name, "Lift rental");
+  assert.equal(liftLine?.purchaseTotal, 300);
+  assert.equal(liftLine?.laborTotal, 300);
+  assert.equal(liftLine?.priceBookItemId, "lift");
+  assert.equal(liftLine?.description, "Lift rental required for: Front tree, Side tree.");
 
   const customerLines = holidayDetailedBuyLines({
     lines: result.lines,
     targetSubtotal: result.optionDetails.buy.subtotal,
   });
-  assert.doesNotMatch(JSON.stringify(customerLines), /strand|difficulty|lift rental/i);
+  assert.doesNotMatch(JSON.stringify(customerLines), /strand|difficulty/i);
+  assert.deepEqual(
+    customerLines.filter((line) => line.name === "Lift rental"),
+    [{
+      name: "Lift rental",
+      description: "Lift rental required for: Front tree, Side tree.",
+      total: 300,
+      itemType: "SERVICE",
+    }]
+  );
+  for (const key of ["lease", "permanent"] as const) {
+    assert.deepEqual(
+      result.optionDetails[key].displayLines.find((line) => line.name === "Lift rental"),
+      {
+        name: "Lift rental",
+        description: "Lift rental required for: Front tree, Side tree.",
+        total: 300,
+        itemType: "SERVICE",
+      }
+    );
+  }
 });
 
 test("detailed buy lines explain future-year labor without per-foot pricing", () => {

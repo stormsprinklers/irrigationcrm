@@ -1759,7 +1759,7 @@ export function HolidayLightingQuoter({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-semibold">Trees and bushes</h4>
-                <p className="text-xs text-muted-foreground">Strand count, difficulty, and lift rental are internal and are folded into the customer price.</p>
+                <p className="text-xs text-muted-foreground">Strand count and difficulty are internal. Required lift rental is shown as a separate customer line item.</p>
               </div>
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => addPlacement("tree")}>Add tree</Button>
@@ -1809,12 +1809,12 @@ export function HolidayLightingQuoter({
               </div>
             ))}
             <datalist id="holiday-color-patterns">{HOLIDAY_COLOR_PATTERNS.filter((color) => color !== "Other").map((color) => <option key={color} value={color} />)}</datalist>
-            {pricing?.lines.some((line) => line.kind === "tree" || line.kind === "bush") ? (
+            {pricing?.lines.some((line) => line.kind === "tree" || line.kind === "bush" || line.kind === "lift") ? (
               <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
-                <p className="text-xs font-semibold">Internal tree and bush pricing</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">These details are not shown on the customer estimate.</p>
+                <p className="text-xs font-semibold">Tree, bush, and lift pricing</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Tree inputs stay internal; required lift rental is itemized for the customer.</p>
                 <div className="mt-2 space-y-2">
-                  {pricing.lines.filter((line) => line.kind === "tree" || line.kind === "bush").map((line) => (
+                  {pricing.lines.filter((line) => line.kind === "tree" || line.kind === "bush" || line.kind === "lift").map((line) => (
                     <div key={line.key} className="flex items-start justify-between gap-3 text-xs">
                       <div><span className="font-medium text-foreground">{line.name}</span><p className="text-muted-foreground">{line.staffDetail}</p></div>
                       <span className="shrink-0 font-medium">{money(activePricingKey === "lease" ? line.leaseTotal : activePricingKey === "labor" ? line.reinstallTotal : line.purchaseTotal)}</span>

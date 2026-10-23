@@ -24,7 +24,7 @@ export type HolidayPricedLine = {
   reinstallTotal: number;
   colorPattern?: string;
   lightStyleLabel?: string;
-  kind: "roofline" | "tree" | "bush";
+  kind: "roofline" | "tree" | "bush" | "lift";
   priceBookItemId?: string | null;
 };
 
@@ -133,7 +133,7 @@ export function computeHolidayQuotePricing(params: {
   let placementsReinstall = 0;
   let placementsLease = 0;
   let placementsPermanent = 0;
-  let liftRentalApplied = false;
+  const liftRentalTreeLabels: string[] = [];
   const lines: HolidayPricedLine[] = [];
 
   for (const segment of measurements.segments) {
@@ -182,15 +182,16 @@ export function computeHolidayQuotePricing(params: {
     const partsAmount = money((item?.unitPrice ?? 0) * strandCount * difficultyMultiplier);
     const baseLaborAmount = money((laborItem?.unitPrice ?? 0) * strandCount * difficultyMultiplier);
     const needsLift = placement.kind === "tree" && placement.liftRentalNeeded === true;
-    const applyLiftHere = needsLift && !liftRentalApplied;
-    const liftAmount = applyLiftHere ? rate(prices, catalog.liftRentalSku) : 0;
-    if (needsLift) liftRentalApplied = true;
-    const laborAmount = money(baseLaborAmount + liftAmount);
+    const liftTreeLabel = placement.label.trim() || "Unnamed tree";
+    if (needsLift && !liftRentalTreeLabels.includes(liftTreeLabel)) {
+      liftRentalTreeLabels.push(liftTreeLabel);
+    }
+    const laborAmount = baseLaborAmount;
     const amount = money(partsAmount + laborAmount);
     const leaseBaseAmount = leaseItem && leaseItem.unitPrice > 0
       ? money(leaseItem.unitPrice * strandCount * difficultyMultiplier)
       : money(partsAmount + baseLaborAmount);
-    const leaseAmount = money(leaseBaseAmount + liftAmount);
+    const leaseAmount = leaseBaseAmount;
     placementsYear1 += amount;
     placementsReinstall += laborAmount;
     placementsLease += leaseAmount;
@@ -199,7 +200,7 @@ export function computeHolidayQuotePricing(params: {
       key: placement.id,
       name: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.label}`,
       description: placement.label,
-      staffDetail: `${strandCount} strand${strandCount === 1 ? "" : "s"} · Difficulty ${difficulty} (${difficultyMultiplier}×)${applyLiftHere ? ` · Lift rental $${liftAmount.toFixed(2)} (charged once)` : needsLift ? " · Lift rental included on another tree" : ""}`,
+      staffDetail: `${strandCount} strand${strandCount === 1 ? "" : "s"} · Difficulty ${difficulty} (${difficultyMultiplier}×)${needsLift ? " · Lift required" : ""}`,
       purchaseTotal: money(amount),
       leaseTotal: money(leaseAmount),
       partsTotal: money(partsAmount),
@@ -209,6 +210,28 @@ export function computeHolidayQuotePricing(params: {
       lightStyleLabel: "Mini LEDs",
       kind: placement.kind,
       priceBookItemId: item?.id ?? null,
+    });
+  }
+
+  if (liftRentalTreeLabels.length) {
+    const liftAmount = money(rate(prices, catalog.liftRentalSku));
+    const liftDescription = `Lift rental required for: ${liftRentalTreeLabels.join(", ")}.`;
+    placementsYear1 += liftAmount;
+    placementsReinstall += liftAmount;
+    placementsLease += liftAmount;
+    placementsPermanent += liftAmount;
+    lines.push({
+      key: "lift-rental",
+      name: "Lift rental",
+      description: liftDescription,
+      staffDetail: `${liftDescription} Charged once per quote.`,
+      purchaseTotal: liftAmount,
+      leaseTotal: liftAmount,
+      partsTotal: 0,
+      laborTotal: liftAmount,
+      reinstallTotal: liftAmount,
+      kind: "lift",
+      priceBookItemId: itemId(prices, catalog.liftRentalSku),
     });
   }
 
@@ -367,7 +390,8 @@ export function holidayDetailedBuyLines(params: {
   }> = [];
 
   const rooflines = params.lines.filter((line) => line.kind === "roofline");
-  const placements = params.lines.filter((line) => line.kind !== "roofline");
+  const placements = params.lines.filter((line) => line.kind === "tree" || line.kind === "bush");
+  const liftLines = params.lines.filter((line) => line.kind === "lift");
   if (rooflines.length) {
     const selections = [...new Set(
       rooflines
@@ -405,6 +429,14 @@ export function holidayDetailedBuyLines(params: {
       itemType: "SERVICE",
     });
   }
+  for (const line of liftLines) {
+    result.push({
+      name: line.name,
+      description: line.description,
+      total: line.laborTotal,
+      itemType: "SERVICE",
+    });
+  }
   const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
   const adjustment = money(params.targetSubtotal - detailedTotal);
   if (adjustment !== 0 && result.length) {
@@ -428,7 +460,8 @@ export function holidayDetailedLaborOnlyLines(params: {
     itemType: "SERVICE";
   }> = [];
   const rooflines = params.lines.filter((line) => line.kind === "roofline");
-  const placements = params.lines.filter((line) => line.kind !== "roofline");
+  const placements = params.lines.filter((line) => line.kind === "tree" || line.kind === "bush");
+  const liftLines = params.lines.filter((line) => line.kind === "lift");
 
   if (rooflines.length) {
     const selections = [...new Set(
@@ -453,6 +486,14 @@ export function holidayDetailedLaborOnlyLines(params: {
       description: `Installation and take-down labor for customer-supplied lights. Lights and materials are not included.${lights}`,
       total: line.laborTotal,
       itemType: "SERVICE" as const,
+    });
+  }
+  for (const line of liftLines) {
+    result.push({
+      name: line.name,
+      description: line.description,
+      total: line.reinstallTotal,
+      itemType: "SERVICE",
     });
   }
   const detailedTotal = money(result.reduce((sum, line) => sum + line.total, 0));
@@ -571,12 +612,52 @@ export function holidayOptionLines(params: {
   lines: HolidayPricedLine[]; key: HolidayQuoteOptionKey; targetSubtotal: number;
   partsPrice?: number; laborPrice?: number;
 }): HolidayDisplayLine[] {
+  const liftLine = params.lines.find((line) => line.kind === "lift");
+  const liftTotal = liftLine
+    ? params.key === "lease"
+      ? liftLine.leaseTotal
+      : params.key === "permanent"
+        ? liftLine.purchaseTotal
+        : 0
+    : 0;
+  const visibleLiftTotal = money(Math.min(Math.max(0, params.targetSubtotal), liftTotal));
   const result: HolidayDisplayLine[] = params.key === "labor"
     ? holidayDetailedLaborOnlyLines(params)
     : params.key === "buy" ? holidayDetailedBuyLines(params)
-    : [{ name: "Holiday lighting", description: "Holiday lighting installation", total: params.targetSubtotal, itemType: "SERVICE" }];
+    : [
+        {
+          name: "Holiday lighting",
+          description: "Holiday lighting installation",
+          total: money(params.targetSubtotal - visibleLiftTotal),
+          itemType: "SERVICE",
+        },
+        ...(liftLine
+          ? [{
+              name: liftLine.name,
+              description: liftLine.description,
+              total: visibleLiftTotal,
+              itemType: "SERVICE" as const,
+            }]
+          : []),
+      ];
   if (params.partsPrice == null && params.laborPrice == null) return result;
-  if (params.key === "lease" || params.key === "permanent") result.length = 0;
+  if (params.key === "lease" || params.key === "permanent") {
+    const lift = result.find((line) => line.name === "Lift rental");
+    result.length = 0;
+    if (lift) {
+      const serviceTarget = money(Math.max(0, params.laborPrice ?? 0));
+      const allocatedLift = money(Math.min(serviceTarget, Math.max(0, lift.total)));
+      if (serviceTarget > allocatedLift) {
+        result.push({
+          name: "Labor",
+          description: "Holiday lighting",
+          total: money(serviceTarget - allocatedLift),
+          itemType: "SERVICE",
+        });
+      }
+      result.push({ ...lift, total: allocatedLift });
+    }
+  }
   for (const type of ["PRODUCT", "SERVICE"] as const) {
     const target = type === "PRODUCT" ? params.partsPrice ?? 0 : params.laborPrice ?? 0;
     const rows = result.filter((line) => line.itemType === type);
