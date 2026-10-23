@@ -184,7 +184,7 @@ async function ensureSalesPipeline() {
 
 async function ensureCustomerTrackingData() {
   for (const table of ["Customer", "Lead"] as const) {
-    for (const column of ["gbraid", "wbraid", "fbc", "fbp", "userAgent"] as const) {
+    for (const column of ["gbraid", "wbraid", "fbc", "fbp", "metaLeadId", "userAgent"] as const) {
       await prisma.$executeRawUnsafe(
         `ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" TEXT`
       );
@@ -197,6 +197,14 @@ async function ensureCustomerTrackingData() {
       wbraid = COALESCE(wbraid, NULLIF(COALESCE(metadata #>> '{tracking,wbraid}', metadata #>> '{attribution,wbraid}', metadata ->> 'wbraid'), '')),
       fbc = COALESCE(fbc, NULLIF(COALESCE(metadata #>> '{tracking,fbc}', metadata #>> '{attribution,fbc}', metadata ->> 'fbc'), '')),
       fbp = COALESCE(fbp, NULLIF(COALESCE(metadata #>> '{tracking,fbp}', metadata #>> '{attribution,fbp}', metadata ->> 'fbp'), '')),
+      "metaLeadId" = COALESCE("metaLeadId", NULLIF(COALESCE(
+        metadata #>> '{tracking,facebook_lead_id}',
+        metadata #>> '{attribution,facebook_lead_id}',
+        metadata ->> 'facebook_lead_id',
+        metadata ->> 'facebookLeadId',
+        metadata ->> 'meta_lead_id',
+        metadata ->> 'leadgen_id'
+      ), '')),
       "userAgent" = COALESCE("userAgent", NULLIF(COALESCE(metadata #>> '{tracking,user_agent}', metadata #>> '{attribution,user_agent}', metadata ->> 'user_agent'), ''))
     WHERE metadata IS NOT NULL
   `);
@@ -204,7 +212,7 @@ async function ensureCustomerTrackingData() {
   await prisma.$executeRawUnsafe(`
     WITH first_lead AS (
       SELECT DISTINCT ON ("convertedCustomerId")
-        "convertedCustomerId", gbraid, wbraid, fbc, fbp, "userAgent"
+        "convertedCustomerId", gbraid, wbraid, fbc, fbp, "metaLeadId", "userAgent"
       FROM "Lead"
       WHERE "convertedCustomerId" IS NOT NULL
       ORDER BY "convertedCustomerId", "firstTouchAt" ASC NULLS LAST, "createdAt" ASC
@@ -214,9 +222,26 @@ async function ensureCustomerTrackingData() {
       wbraid = COALESCE(c.wbraid, l.wbraid),
       fbc = COALESCE(c.fbc, l.fbc),
       fbp = COALESCE(c.fbp, l.fbp),
+      "metaLeadId" = COALESCE(c."metaLeadId", l."metaLeadId"),
       "userAgent" = COALESCE(c."userAgent", l."userAgent")
     FROM first_lead l
     WHERE c.id = l."convertedCustomerId"
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    WITH first_meta_lead AS (
+      SELECT DISTINCT ON ("convertedCustomerId")
+        "convertedCustomerId", "metaLeadId"
+      FROM "Lead"
+      WHERE "convertedCustomerId" IS NOT NULL
+        AND "metaLeadId" IS NOT NULL
+      ORDER BY "convertedCustomerId", "firstTouchAt" ASC NULLS LAST, "createdAt" ASC
+    )
+    UPDATE "Customer" c SET
+      "metaLeadId" = l."metaLeadId"
+    FROM first_meta_lead l
+    WHERE c.id = l."convertedCustomerId"
+      AND c."metaLeadId" IS NULL
   `);
   console.log("Ensured customer and lead tracking data columns");
 }
@@ -271,6 +296,7 @@ async function ensurePipelineConversionDelivery() {
       "wbraid" TEXT,
       "fbc" TEXT,
       "fbp" TEXT,
+      "metaLeadId" TEXT,
       "userAgent" TEXT,
       "sourceEntityType" TEXT,
       "sourceEntityId" TEXT,
@@ -299,6 +325,17 @@ async function ensurePipelineConversionDelivery() {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "PipelineConversionEvent" ADD COLUMN IF NOT EXISTS "eventSource" TEXT NOT NULL DEFAULT 'WEB'`
   );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "PipelineConversionEvent" ADD COLUMN IF NOT EXISTS "metaLeadId" TEXT`
+  );
+  await prisma.$executeRawUnsafe(`
+    UPDATE "PipelineConversionEvent" e
+    SET "metaLeadId" = c."metaLeadId"
+    FROM "Customer" c
+    WHERE e."customerId" = c.id
+      AND e."metaLeadId" IS NULL
+      AND c."metaLeadId" IS NOT NULL
+  `);
 
   const indexes = [
     `CREATE UNIQUE INDEX IF NOT EXISTS "PipelineConversionEvent_companyId_customerId_stage_key" ON "PipelineConversionEvent"("companyId", "customerId", "stage")`,

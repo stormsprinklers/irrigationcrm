@@ -164,6 +164,7 @@ export type PipelineConversionPayloadInput = {
   wbraid: string | null;
   fbc: string | null;
   fbp: string | null;
+  metaLeadId: string | null;
   userAgent: string | null;
 };
 
@@ -191,6 +192,8 @@ export function buildMetaPipelineEvent(input: PipelineConversionPayloadInput) {
   if (input.phoneSha256) userData.ph = [input.phoneSha256];
   if (input.fbc) userData.fbc = input.fbc;
   if (input.fbp) userData.fbp = input.fbp;
+  // Meta Instant Form lead IDs are provider identifiers and must not be hashed.
+  if (input.metaLeadId) userData.lead_id = input.metaLeadId;
   if (input.userAgent) userData.client_user_agent = input.userAgent;
 
   const value = numericValue(input.value);

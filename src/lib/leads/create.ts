@@ -32,6 +32,17 @@ export async function createLeadFromIntegration(
   companyId: string,
   input: WebsiteLeadInput
 ) {
+  const inputMetadata =
+    input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+      ? (input.metadata as Record<string, unknown>)
+      : {};
+  const attributionInput = {
+    ...parseAttributionFromMetadata(inputMetadata),
+    formSource: input.source ?? "website",
+    leadSource: input.source ?? "website",
+  };
+  const normalizedAttribution = normalizeAttribution(attributionInput);
+
   const existing = input.externalId
     ? await prisma.lead.findFirst({
         where: { companyId, externalId: input.externalId },
@@ -39,6 +50,27 @@ export async function createLeadFromIntegration(
     : null;
 
   if (existing) {
+    if (normalizedAttribution.metaLeadId && !existing.metaLeadId) {
+      const existingMeta =
+        existing.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+          ? (existing.metadata as Record<string, unknown>)
+          : {};
+      const updated = await prisma.lead.update({
+        where: { id: existing.id },
+        data: {
+          metaLeadId: normalizedAttribution.metaLeadId,
+          metadata: { ...existingMeta, ...inputMetadata } as Prisma.InputJsonValue,
+        },
+      });
+      if (updated.convertedCustomerId) {
+        await prisma.customer.updateMany({
+          where: { id: updated.convertedCustomerId, metaLeadId: null },
+          data: { metaLeadId: normalizedAttribution.metaLeadId },
+        });
+      }
+      return { lead: await withAutomaticContact(companyId, updated), created: false };
+    }
+
     // Website sometimes first-pushed without quote prices; heal when a later
     // payload (e.g. delayed no-book cron) includes a priced snapshot.
     if (isPricingQuoteLead(input.source) && input.metadata) {
@@ -117,19 +149,11 @@ export async function createLeadFromIntegration(
   if (input.city) notesParts.push(`City: ${input.city}`);
 
   const metadata: Record<string, unknown> = {
-    ...((input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
-      ? input.metadata
-      : {}) as Record<string, unknown>),
+    ...inputMetadata,
     ...(enrichment?.metadataPatch ?? {}),
     ...(input.address ? { address: input.address } : {}),
     ...(input.city ? { city: input.city } : {}),
   };
-  const attributionInput = {
-    ...parseAttributionFromMetadata(metadata),
-    formSource: input.source ?? "website",
-    leadSource: input.source ?? "website",
-  };
-  const normalizedAttribution = normalizeAttribution(attributionInput);
   const firstTouchOccurredAt = new Date();
 
   let lead = await prisma.lead.create({

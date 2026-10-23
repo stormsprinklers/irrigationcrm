@@ -62,6 +62,7 @@ export async function mergeCustomers(params: {
         wbraid: firstTouchPrimary.wbraid ?? firstTouchFallback.wbraid,
         fbc: firstTouchPrimary.fbc ?? firstTouchFallback.fbc,
         fbp: firstTouchPrimary.fbp ?? firstTouchFallback.fbp,
+        metaLeadId: firstTouchPrimary.metaLeadId ?? firstTouchFallback.metaLeadId,
         userAgent: firstTouchPrimary.userAgent ?? firstTouchFallback.userAgent,
         fbclid: firstTouchPrimary.fbclid ?? firstTouchFallback.fbclid,
         msclkid: firstTouchPrimary.msclkid ?? firstTouchFallback.msclkid,

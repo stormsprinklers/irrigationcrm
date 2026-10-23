@@ -42,6 +42,7 @@ export type WebsiteLeadInboxItem = {
   wbraid: string | null;
   fbc: string | null;
   fbp: string | null;
+  metaLeadId: string | null;
   userAgent: string | null;
 };
 
@@ -68,6 +69,7 @@ type LeadRow = {
   wbraid: string | null;
   fbc: string | null;
   fbp: string | null;
+  metaLeadId: string | null;
   userAgent: string | null;
 };
 
@@ -94,6 +96,7 @@ const leadSelect = {
   wbraid: true,
   fbc: true,
   fbp: true,
+  metaLeadId: true,
   userAgent: true,
 } as const;
 
@@ -158,6 +161,7 @@ function withLead(
     wbraid: lead?.wbraid ?? null,
     fbc: lead?.fbc ?? null,
     fbp: lead?.fbp ?? null,
+    metaLeadId: lead?.metaLeadId ?? null,
     userAgent: lead?.userAgent ?? null,
   };
 }

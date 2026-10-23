@@ -36,6 +36,7 @@ export type AttributionInput = {
   wbraid?: string | null;
   fbc?: string | null;
   fbp?: string | null;
+  metaLeadId?: string | null;
   userAgent?: string | null;
   fbclid?: string | null;
   msclkid?: string | null;
@@ -59,6 +60,7 @@ export type NormalizedAttribution = {
   wbraid: string | null;
   fbc: string | null;
   fbp: string | null;
+  metaLeadId: string | null;
   userAgent: string | null;
   fbclid: string | null;
   msclkid: string | null;
@@ -89,6 +91,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   const wbraid = clean(input.wbraid);
   const fbc = clean(input.fbc);
   const fbp = clean(input.fbp);
+  const metaLeadId = clean(input.metaLeadId);
   const userAgent = clean(input.userAgent);
   const fbclid = clean(input.fbclid);
   const msclkid = clean(input.msclkid);
@@ -125,6 +128,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
   ) {
     channel = "google_ads";
   } else if (
+    metaLeadId ||
     bucket === "meta_ads" ||
     bucket === "facebook_ads" ||
     (hasMetaSource && hasPaidMedium) ||
@@ -207,6 +211,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
     wbraid,
     fbc,
     fbp,
+    metaLeadId,
     userAgent,
     fbclid,
     msclkid,
@@ -261,6 +266,7 @@ export function firstTouchStructuredData(
     wbraid: normalized.wbraid,
     fbc: normalized.fbc,
     fbp: normalized.fbp,
+    metaLeadId: normalized.metaLeadId,
     userAgent: normalized.userAgent,
     fbclid: normalized.fbclid,
     msclkid: normalized.msclkid,
@@ -325,6 +331,11 @@ export function parseAttributionFromMetadata(metadata: unknown): AttributionInpu
     wbraid: str("wbraid"),
     fbc: str("fbc"),
     fbp: str("fbp"),
+    metaLeadId:
+      str("facebook_lead_id") ??
+      str("facebookLeadId") ??
+      str("meta_lead_id") ??
+      str("leadgen_id"),
     userAgent: str("user_agent") ?? str("userAgent"),
     fbclid: str("fbclid"),
     msclkid: str("msclkid"),

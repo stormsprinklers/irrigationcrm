@@ -1519,6 +1519,7 @@ model Customer {
   wbraid               String?
   fbc                   String?
   fbp                   String?
+  metaLeadId            String?
   userAgent             String?
   fbclid               String?
   msclkid              String?
@@ -1610,6 +1611,7 @@ model PipelineConversionEvent {
   wbraid           String?
   fbc              String?
   fbp              String?
+  metaLeadId       String?
   userAgent        String?
   sourceEntityType String?
   sourceEntityId   String?
@@ -1788,6 +1790,7 @@ model Lead {
   wbraid              String?
   fbc                  String?
   fbp                  String?
+  metaLeadId           String?
   userAgent            String?
   fbclid              String?
   msclkid             String?

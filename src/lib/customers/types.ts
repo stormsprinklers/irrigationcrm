@@ -21,6 +21,7 @@ export type CustomerDTO = {
   wbraid: string | null;
   fbc: string | null;
   fbp: string | null;
+  metaLeadId: string | null;
   userAgent: string | null;
   firstTouchAt: string | null;
   firstTouchMethod: string | null;

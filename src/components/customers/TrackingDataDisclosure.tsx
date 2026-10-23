@@ -4,6 +4,7 @@ export type CustomerTrackingData = {
   wbraid?: string | null;
   fbc?: string | null;
   fbp?: string | null;
+  metaLeadId?: string | null;
   userAgent?: string | null;
   attributionSource?: string | null;
   attributionMedium?: string | null;
@@ -18,6 +19,7 @@ const TRACKING_FIELDS: Array<[keyof CustomerTrackingData, string]> = [
   ["wbraid", "wbraid"],
   ["fbc", "fbc"],
   ["fbp", "fbp"],
+  ["metaLeadId", "facebook_lead_id"],
   ["userAgent", "user_agent"],
   ["attributionSource", "utm_source"],
   ["attributionMedium", "utm_medium"],

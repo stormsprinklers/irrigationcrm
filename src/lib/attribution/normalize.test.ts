@@ -15,6 +15,7 @@ test("parses website tracking fields from nested form metadata", () => {
       wbraid: "web-braid",
       fbc: "facebook-click",
       fbp: "facebook-browser",
+      facebook_lead_id: "1485075230355177",
       user_agent: "Test Browser",
       utm_source: "google",
       utm_medium: "cpc",
@@ -36,6 +37,7 @@ test("parses website tracking fields from nested form metadata", () => {
     wbraid: "web-braid",
     fbc: "facebook-click",
     fbp: "facebook-browser",
+    metaLeadId: "1485075230355177",
     userAgent: "Test Browser",
     fbclid: null,
     msclkid: null,
@@ -57,6 +59,7 @@ test("keeps every customer tracking value in structured first-touch data", () =>
     wbraid: "web-braid",
     fbc: "facebook-click",
     fbp: "facebook-browser",
+    metaLeadId: "1485075230355177",
     userAgent: "Test Browser",
   });
   const occurredAt = new Date("2026-10-21T12:00:00.000Z");
@@ -72,6 +75,7 @@ test("keeps every customer tracking value in structured first-touch data", () =>
   assert.equal(data.wbraid, "web-braid");
   assert.equal(data.fbc, "facebook-click");
   assert.equal(data.fbp, "facebook-browser");
+  assert.equal(data.metaLeadId, "1485075230355177");
   assert.equal(data.userAgent, "Test Browser");
   assert.equal(data.firstTouchAt, occurredAt);
 });

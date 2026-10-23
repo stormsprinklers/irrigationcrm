@@ -180,6 +180,7 @@ export async function copyLeadFirstTouchToCustomer(leadId: string, customerId: s
       wbraid: true,
       fbc: true,
       fbp: true,
+      metaLeadId: true,
       userAgent: true,
       fbclid: true,
       msclkid: true,
@@ -188,6 +189,17 @@ export async function copyLeadFirstTouchToCustomer(leadId: string, customerId: s
       source: true,
     },
   });
+
+  // A Meta Instant Form can match an existing contact whose first-touch attribution
+  // is already set. Preserve the first Meta lead ID independently so the pipeline
+  // event can still be matched back to the original Instant Form submission.
+  if (lead?.metaLeadId) {
+    await prisma.customer.updateMany({
+      where: { id: customerId, metaLeadId: null },
+      data: { metaLeadId: lead.metaLeadId },
+    });
+  }
+
   if (!lead?.attributionChannel && !lead?.firstTouchAt) {
     // Fall back: stamp from coarse source if present
     if (lead?.source) {
@@ -224,6 +236,7 @@ export async function copyLeadFirstTouchToCustomer(leadId: string, customerId: s
       wbraid: lead.wbraid,
       fbc: lead.fbc,
       fbp: lead.fbp,
+      metaLeadId: lead.metaLeadId,
       userAgent: lead.userAgent,
       fbclid: lead.fbclid,
       msclkid: lead.msclkid,

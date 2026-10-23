@@ -29,6 +29,7 @@ export function buildPipelineIdentitySnapshot(input: {
   wbraid?: string | null;
   fbc?: string | null;
   fbp?: string | null;
+  metaLeadId?: string | null;
   userAgent?: string | null;
 }) {
   const email = normalizePipelineEmail(input.email);
@@ -41,6 +42,7 @@ export function buildPipelineIdentitySnapshot(input: {
     wbraid: clean(input.wbraid),
     fbc: clean(input.fbc),
     fbp: clean(input.fbp),
+    metaLeadId: clean(input.metaLeadId),
     userAgent: clean(input.userAgent),
   };
 }

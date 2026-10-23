@@ -21,6 +21,7 @@ function event(
     wbraid: null,
     fbc: "fb.1.click",
     fbp: "fb.1.browser",
+    metaLeadId: "1485075230355177",
     userAgent: "Example Browser",
     eventSource: "WEB",
   };
@@ -53,4 +54,5 @@ test("Meta uses custom middle-funnel events and standard Lead/Purchase events", 
   assert.equal(sold.custom_data.currency, "USD");
   assert.equal(sold.user_data.fbc, "fb.1.click");
   assert.equal(sold.user_data.fbp, "fb.1.browser");
+  assert.equal(sold.user_data.lead_id, "1485075230355177");
 });

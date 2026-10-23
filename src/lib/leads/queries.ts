@@ -34,6 +34,7 @@ export function serializeLead(lead: LeadPayload) {
     wbraid: lead.wbraid,
     fbc: lead.fbc,
     fbp: lead.fbp,
+    metaLeadId: lead.metaLeadId,
     userAgent: lead.userAgent,
     contactedAt: lead.contactedAt?.toISOString() ?? null,
     createdAt: lead.createdAt.toISOString(),

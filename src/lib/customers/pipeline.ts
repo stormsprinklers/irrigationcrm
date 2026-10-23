@@ -109,6 +109,7 @@ export async function advanceCustomerPipeline(input: AdvanceInput) {
         wbraid: true,
         fbc: true,
         fbp: true,
+        metaLeadId: true,
         userAgent: true,
         pipelineStage: true,
         pipelineLeadAt: true,

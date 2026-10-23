@@ -32,6 +32,7 @@ export function serializeCustomer(customer: CustomerPayload): CustomerDTO {
     wbraid: customer.wbraid,
     fbc: customer.fbc,
     fbp: customer.fbp,
+    metaLeadId: customer.metaLeadId,
     userAgent: customer.userAgent,
     firstTouchAt: customer.firstTouchAt?.toISOString() ?? null,
     firstTouchMethod: customer.firstTouchMethod ?? null,

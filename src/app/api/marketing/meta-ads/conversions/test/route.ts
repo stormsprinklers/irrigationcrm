@@ -49,6 +49,7 @@ export async function POST() {
         wbraid: null,
         fbc: null,
         fbp: null,
+        metaLeadId: null,
         userAgent: null,
       },
     });
