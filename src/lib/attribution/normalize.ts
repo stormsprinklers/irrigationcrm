@@ -172,7 +172,7 @@ export function normalizeAttribution(input: AttributionInput): NormalizedAttribu
 
   // Refine direct vs unknown when we only have form source with no UTMs
   if (channel === "unknown" && (leadSource || trackingSource)) {
-    if (["contact", "website", "pricing-quote", "commercial-bid", "maintenance-signup"].includes(leadSource)) {
+    if (["contact", "website", "pricing-quote", "commercial-bid", "maintenance-signup", "christmas-gift-card"].includes(leadSource)) {
       channel = "direct";
     }
   }

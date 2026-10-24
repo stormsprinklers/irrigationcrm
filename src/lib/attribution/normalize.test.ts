@@ -79,3 +79,13 @@ test("keeps every customer tracking value in structured first-touch data", () =>
   assert.equal(data.userAgent, "Test Browser");
   assert.equal(data.firstTouchAt, occurredAt);
 });
+
+test("classifies the Christmas gift card quote as a direct website form", () => {
+  const normalized = normalizeAttribution({
+    formSource: "christmas-gift-card",
+    leadSource: "christmas-gift-card",
+  });
+
+  assert.equal(normalized.channel, "direct");
+  assert.equal(normalized.displayLabel, "christmas-gift-card");
+});
