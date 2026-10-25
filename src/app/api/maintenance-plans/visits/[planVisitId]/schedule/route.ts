@@ -112,11 +112,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     await applyPlanDiscountsToVisit(visit.id, planVisit.enrollmentId);
     await syncVisitChecklists(visit.id, user.companyId);
 
-    void onVisitTimeChanged({
-      visitId: visit.id,
-      companyId: user.companyId,
-      isInitialSchedule: true,
-    }).catch(() => {});
+    if (body.notifyCustomer !== false) {
+      void onVisitTimeChanged({
+        visitId: visit.id,
+        companyId: user.companyId,
+        isInitialSchedule: true,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({ ...visit, warning: availability.warning }, { status: 201 });
   } catch {

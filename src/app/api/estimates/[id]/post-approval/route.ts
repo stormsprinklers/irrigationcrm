@@ -10,6 +10,8 @@ import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { toNumber } from "@/lib/visits/totals";
 import { defaultEstimateVisitTitle } from "@/lib/estimates/visit-title";
+import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
+import { attachEstimateInvoicesToVisit } from "@/lib/estimates/attach-invoices-to-visit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -173,9 +175,23 @@ export async function POST(request: NextRequest, { params }: Params) {
       data: {
         visitId,
         status: "CONVERTED",
+        needsScheduling: false,
         ...(optionId ? { selectedOptionId: optionId } : {}),
       },
     });
+    await attachEstimateInvoicesToVisit({
+      companyId: user.companyId,
+      estimateId: estimate.id,
+      visitId,
+    });
+
+    if (timing === "another_day" && body.notifyCustomer !== false) {
+      void onVisitTimeChanged({
+        visitId,
+        companyId: user.companyId,
+        isInitialSchedule: true,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       visitId,
@@ -251,6 +267,7 @@ async function createScheduledVisitFromEstimate(params: {
   const visit = await prisma.visit.create({
     data: {
       companyId: params.companyId,
+      estimateId: params.estimate.id,
       customerId: params.estimate.customerId,
       propertyId: params.estimate.propertyId,
       title: holiday && ["Service appointment", "Install", "Service visit"].includes(params.title) ? "Holiday lighting appointment" : params.title,

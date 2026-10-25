@@ -14,6 +14,7 @@ type Props = {
   phone?: string | null;
   email?: string | null;
   size?: "sm" | "icon";
+  showCallLabel?: boolean;
 };
 
 export function CustomerPhoneActions({
@@ -21,7 +22,8 @@ export function CustomerPhoneActions({
   name,
   phone,
   size = "icon",
-}: Pick<Props, "customerId" | "name" | "phone" | "size">) {
+  showCallLabel = false,
+}: Pick<Props, "customerId" | "name" | "phone" | "size" | "showCallLabel">) {
   const { ready, connect, activeCall } = useVoiceDevice();
 
   if (!phone) return null;
@@ -53,13 +55,14 @@ export function CustomerPhoneActions({
     <span className="inline-flex items-center gap-1">
       <Button
         type="button"
-        variant="ghost"
+        variant={showCallLabel ? "outline" : "ghost"}
         size={buttonSize}
-        className="h-8 w-8 shrink-0 text-primary"
+        className={showCallLabel ? "h-8 shrink-0 gap-2 px-3 text-primary" : "h-8 w-8 shrink-0 text-primary"}
         aria-label={`Call ${displayPhone}`}
         onClick={() => void handleCall()}
       >
         <Phone className={iconClass} />
+        {showCallLabel ? "Call" : null}
       </Button>
       <Button variant="ghost" size={buttonSize} className="h-8 w-8 shrink-0 text-primary" asChild>
         <Link href={buildInboxCustomerUrl("sms", linkParams)} aria-label={`Text ${displayPhone}`}>

@@ -47,6 +47,7 @@ export function ScheduleQuickAddDialog({
   const [crewId, setCrewId] = useState<string | null>(null);
   const [crewName, setCrewName] = useState<string | null>(null);
   const [division, setDivision] = useState<"SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS">("SERVICE");
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +56,7 @@ export function ScheduleQuickAddDialog({
     setCustomerId("");
     setCustomerName("");
     setSelectedCustomer(null);
+    setNotifyCustomer(true);
     setDivision(holiday ? "HOLIDAY_LIGHTS" : "SERVICE");
     setCrewId(slot?.crewId ?? null);
     setCrewName(slot?.crewName ?? null);
@@ -117,6 +119,7 @@ export function ScheduleQuickAddDialog({
           address: selectedCustomer?.address || undefined,
           city: selectedCustomer?.city || undefined,
           state: selectedCustomer?.state || undefined,
+          notifyCustomer,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -223,6 +226,20 @@ export function ScheduleQuickAddDialog({
                 <option value="HOLIDAY_LIGHTS">Holiday Lights</option>
               </select>
             </div>
+            <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={notifyCustomer}
+                onChange={(event) => setNotifyCustomer(event.target.checked)}
+              />
+              <span>
+                <span className="block font-medium">Notify customer</span>
+                <span className="block text-xs text-muted-foreground">
+                  Send the scheduled-visit notification after saving.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="flex shrink-0 justify-end gap-2 border-t bg-background px-4 py-3">

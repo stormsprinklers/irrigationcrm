@@ -11,7 +11,7 @@ test("pipeline template renderer replaces every supported employee and customer 
   assert.equal(
     renderPipelineTemplate("Hi {customer first name}, {employee} from {company}. {customer_first_name}!", {
       customerFirstName: "Alex",
-      employee: "Jordan",
+      employee: "Jordan Smith",
       company: "Chestnut & Cheer",
     }),
     "Hi Alex, Jordan from Chestnut & Cheer. Alex!"

@@ -27,7 +27,6 @@ export function receiptAttachmentPublicUrl(
 
 export function buildPaidReceiptExtras(params: {
   workSummary: string | null;
-  reviewUrl: string | null;
   invoicePublicToken: string;
   media: ReceiptMediaItem[];
   publicBaseUrl?: string | null;
@@ -64,13 +63,6 @@ export function buildPaidReceiptExtras(params: {
       `<div style="margin-top:20px"><p style="margin:0 0 12px;font-weight:600">Photos &amp; videos from the job</p>${cards}</div>`
     );
     partsText.push("Photos and videos from your visit are included in this email.");
-  }
-
-  if (params.reviewUrl) {
-    partsHtml.push(
-      `<div style="margin-top:24px"><a href="{review_link}" style="display:inline-block;background:#0f2744;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">Leave a review</a></div>`
-    );
-    partsText.push("Leave a review: {review_link}");
   }
 
   return {

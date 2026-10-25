@@ -76,6 +76,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           ? { installDurationDays: Math.max(1, Number(body.installDurationDays) || 4) }
           : {}),
         ...(newStatus === EstimateStatus.APPROVED ? { approvedAt: new Date() } : {}),
+        ...(newStatus === EstimateStatus.DECLINED ? { needsScheduling: false } : {}),
       },
     });
 

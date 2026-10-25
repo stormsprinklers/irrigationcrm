@@ -37,6 +37,7 @@ export async function pipelineFollowUpPreview(params: {
   customerId: string;
   stage: ActiveStage;
   employeeName: string;
+  sequence?: number;
 }) {
   const customer = await prisma.customer.findFirst({
     where: { id: params.customerId, companyId: params.companyId },
@@ -44,10 +45,19 @@ export async function pipelineFollowUpPreview(params: {
   });
   if (!customer) throw new Error("Customer not found");
   const settings = normalizePipelineFollowUpSettings(customer.company.pipelineFollowUpSettings);
-  const completed = await prisma.pipelineFollowUp.count({
-    where: { customerId: customer.id, stage: params.stage, status: PipelineFollowUpStatus.COMPLETED },
+  const finished = await prisma.pipelineFollowUp.findMany({
+    where: {
+      customerId: customer.id,
+      stage: params.stage,
+      status: { in: [PipelineFollowUpStatus.COMPLETED, PipelineFollowUpStatus.SKIPPED] },
+    },
+    select: { sequence: true },
   });
-  const sequence = Math.min(3, completed + 1);
+  const finishedSequences = new Set(finished.map((item) => item.sequence));
+  const requestedSequence = Math.floor(params.sequence ?? 0);
+  const sequence = requestedSequence >= 1 && requestedSequence <= 3
+    ? requestedSequence
+    : [1, 2, 3].find((item) => !finishedSequences.has(item)) ?? 3;
   const template = settings[stageKey(params.stage)][sequence - 1];
   const values = {
     customerFirstName: customerFirstName(customer.name),
@@ -121,13 +131,17 @@ export async function sendPipelineFollowUp(params: {
   const existing = await prisma.pipelineFollowUp.findUnique({
     where: { customerId_stage_sequence: { customerId: customer.id, stage: params.stage, sequence: params.sequence } },
   });
-  if (existing?.status === PipelineFollowUpStatus.COMPLETED) return existing;
+  if (
+    existing?.status === PipelineFollowUpStatus.COMPLETED ||
+    existing?.status === PipelineFollowUpStatus.SKIPPED
+  ) return existing;
 
   const preview = await pipelineFollowUpPreview({
     companyId: params.companyId,
     customerId: params.customerId,
     stage: params.stage,
     employeeName: params.employeeName,
+    sequence: params.sequence,
   });
   const smsBody = params.smsBody?.trim() || preview.sms;
   const emailSubject = params.emailSubject?.trim() || preview.emailSubject;
@@ -261,6 +275,55 @@ export async function sendPipelineFollowUp(params: {
   }
 }
 
+export async function skipPipelineFollowUp(params: {
+  companyId: string;
+  customerId: string;
+  stage: ActiveStage;
+  sequence: number;
+  employeeId: string;
+}) {
+  const customer = await prisma.customer.findFirst({
+    where: { id: params.customerId, companyId: params.companyId },
+    select: { id: true, pipelineRemovedAt: true },
+  });
+  if (!customer) throw new Error("Customer not found");
+  if (customer.pipelineRemovedAt) throw new Error("Customer is not in the pipeline");
+
+  return prisma.pipelineFollowUp.upsert({
+    where: {
+      customerId_stage_sequence: {
+        customerId: customer.id,
+        stage: params.stage,
+        sequence: params.sequence,
+      },
+    },
+    create: {
+      companyId: params.companyId,
+      customerId: customer.id,
+      stage: params.stage,
+      sequence: params.sequence,
+      method: PipelineFollowUpMethod.CALL,
+      status: PipelineFollowUpStatus.SKIPPED,
+      automated: false,
+      performedById: params.employeeId,
+      attemptedAt: new Date(),
+      completedAt: new Date(),
+      body: "Manually checked off",
+    },
+    update: {
+      status: PipelineFollowUpStatus.SKIPPED,
+      automated: false,
+      performedById: params.employeeId,
+      attemptedAt: new Date(),
+      completedAt: new Date(),
+      scheduledFor: null,
+      lastError: null,
+      subject: null,
+      body: "Manually checked off",
+    },
+  });
+}
+
 export async function processDuePipelineFollowUps(limit = 75) {
   const companies = await prisma.company.findMany({
     where: { pipelineFollowUpsEnabled: true, outboundCommsDisabled: false },
@@ -292,7 +355,10 @@ export async function processDuePipelineFollowUps(limit = 75) {
         email: true,
         marketingSmsOptOut: true,
         marketingEmailOptOut: true,
-        pipelineFollowUps: { where: { status: PipelineFollowUpStatus.COMPLETED }, select: { sequence: true, stage: true } },
+        pipelineFollowUps: {
+          where: { status: { in: [PipelineFollowUpStatus.COMPLETED, PipelineFollowUpStatus.SKIPPED] } },
+          select: { sequence: true, stage: true },
+        },
       },
       take: limit,
     });

@@ -11,7 +11,7 @@ import {
   type SendResult,
 } from "./send";
 
-export type EstimateSendChannel = "email" | "sms";
+export type EstimateSendChannel = "email" | "sms" | "both";
 
 export async function notifyEstimateViaTemplates(
   estimateId: string,

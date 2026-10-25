@@ -111,6 +111,7 @@ export async function recordInvoicePayment(
     hadRefund,
   });
   const paymentRecordedAt = new Date();
+  const becameFullyPaid = priorPaid < total && nextPaid >= total;
 
   await prisma.$transaction([
     prisma.payment.create({
@@ -215,7 +216,7 @@ export async function recordInvoicePayment(
     });
   }
 
-  if (invoice.company.notifyInvoicePaid) {
+  if (becameFullyPaid && invoice.company.notifyInvoicePaid) {
     await notifyInvoiceViaTemplates({
       invoiceId: invoice.id,
       companyId: invoice.companyId,
@@ -224,7 +225,18 @@ export async function recordInvoicePayment(
     });
   }
 
-  if (nextStatus === "PAID") {
+  if (becameFullyPaid && invoice.visitId) {
+    const { onInvoiceFullyPaid } = await import("@/lib/notifications/visit-events");
+    await onInvoiceFullyPaid({
+      visitId: invoice.visitId,
+      companyId: invoice.companyId,
+      paidAt: paymentRecordedAt,
+    }).catch((err) => {
+      console.error("Paid invoice review request scheduling failed:", err);
+    });
+  }
+
+  if (becameFullyPaid) {
     await prisma.maintenancePlanBillingPeriod.updateMany({
       where: { invoiceId: invoice.id, status: { not: "PAID" } },
       data: {
@@ -237,7 +249,7 @@ export async function recordInvoicePayment(
     });
   }
 
-  if (nextStatus === "PAID") {
+  if (becameFullyPaid) {
     const { onReferralInvoicePaid } = await import("@/lib/referrals/conversion");
     await onReferralInvoicePaid({
       companyId: invoice.companyId,

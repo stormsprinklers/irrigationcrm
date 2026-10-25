@@ -704,9 +704,10 @@ export function HolidayLightingQuoter({
     const snapshot = currentOptions();
     if (snapshot.length <= 1) return;
     const activeIndex = snapshot.findIndex((option) => option.id === activeOptionId);
-    const remaining = snapshot
-      .filter((option) => option.id !== activeOptionId)
-      .map((option, index) => ({ ...option, label: `Option ${index + 1}` }));
+    // Keep every surviving option exactly as the employee named and described it.
+    // Renumbering here used to overwrite custom labels (and could then feed stale
+    // option state into the save that follows).
+    const remaining = snapshot.filter((option) => option.id !== activeOptionId);
     const target = remaining[Math.min(Math.max(activeIndex, 0), remaining.length - 1)]!;
     setDesignOptions(remaining);
     setActiveOptionId(target.id);

@@ -48,10 +48,16 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
     propertyId: primaryProperty?.id ?? "",
     zip: primaryProperty?.zip ?? customer.zip ?? "",
     isCallback: false,
+    notifyCustomer: true,
   });
 
   useEffect(() => {
-    if (open && holiday) setForm(f => ({...f, title: f.title || "Holiday lighting appointment", division: "HOLIDAY_LIGHTS"}));
+    if (!open) return;
+    setForm(f => ({
+      ...f,
+      notifyCustomer: true,
+      ...(holiday ? { title: f.title || "Holiday lighting appointment", division: "HOLIDAY_LIGHTS" as const } : {}),
+    }));
   }, [open, holiday]);
 
   useEffect(() => {
@@ -146,6 +152,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
           city: property?.city || customer.city || undefined,
           state: property?.state || customer.state || undefined,
           isCallback: form.isCallback,
+          notifyCustomer: form.notifyCustomer,
         }),
       });
       if (!res.ok) {
@@ -267,6 +274,20 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
               onChange={(e) => setForm({ ...form, isCallback: e.target.checked })}
             />
             Callback visit
+          </label>
+          <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={form.notifyCustomer}
+              onChange={(e) => setForm({ ...form, notifyCustomer: e.target.checked })}
+            />
+            <span>
+              <span className="block font-medium">Notify customer</span>
+              <span className="block text-xs text-muted-foreground">
+                Send the scheduled-visit notification after saving.
+              </span>
+            </span>
           </label>
           <div className="flex gap-2 pt-1">
             <Button type="submit" disabled={saving}>

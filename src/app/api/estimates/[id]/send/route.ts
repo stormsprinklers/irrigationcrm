@@ -48,9 +48,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         if (!body.message.trim() || body.message.length > 10000) return badRequestResponse("Enter a message under 10,000 characters");
         compose = { message: body.message, subject: typeof body.subject === "string" ? body.subject.replace(/[\r\n]/g, " ").slice(0, 200) : undefined };
       }
-      if (body.channel !== undefined && body.channel !== "email" && body.channel !== "sms") return badRequestResponse("Choose email or text");
+      if (body.channel !== undefined && body.channel !== "email" && body.channel !== "sms" && body.channel !== "both") return badRequestResponse("Choose email, text, or both");
       if (body.message !== undefined && typeof body.message !== "string") return badRequestResponse("Enter a message");
-      if (body.channel === "email" || body.channel === "sms") {
+      if (body.channel === "email" || body.channel === "sms" || body.channel === "both") {
         channel = body.channel;
       }
     } catch {
@@ -62,6 +62,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
     if (channel === "sms" && !estimate.customer.phone) {
       return badRequestResponse("Customer has no phone number");
+    }
+    if (channel === "both" && (!estimate.customer.email || !estimate.customer.phone)) {
+      return badRequestResponse("Customer needs both an email address and phone number");
     }
     if (!channel && !estimate.customer.email && !estimate.customer.phone) {
       return badRequestResponse("Customer must have an email or phone to send estimate");

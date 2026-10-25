@@ -244,11 +244,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (visit.customerId && nextStatus !== VisitStatus.UNSCHEDULED) {
-      void onVisitTimeChanged({
-        visitId: visit.id,
-        companyId: user.companyId,
-        isInitialSchedule: true,
-      }).catch(() => {});
+      if (body.notifyCustomer !== false) {
+        void onVisitTimeChanged({
+          visitId: visit.id,
+          companyId: user.companyId,
+          isInitialSchedule: true,
+        }).catch(() => {});
+      }
 
       const { onReferralVisitBooked } = await import("@/lib/referrals/conversion");
       void onReferralVisitBooked({

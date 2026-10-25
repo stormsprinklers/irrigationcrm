@@ -5,6 +5,7 @@ import { DepositType, Division, EstimateStatus, VisitStatus } from "@prisma/clie
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 import { sendSupplierPartsList } from "@/lib/design/supplier-email";
+import { attachEstimateInvoicesToVisit } from "@/lib/estimates/attach-invoices-to-visit";
 
 export function computeDepositAmount(estimate: {
   total: unknown;
@@ -100,7 +101,14 @@ export async function createInstallVisitFromEstimate(estimateId: string) {
   const existing = await prisma.visit.findFirst({
     where: { companyId: estimate.companyId, estimateId: estimate.id },
   });
-  if (existing) return existing;
+  if (existing) {
+    await attachEstimateInvoicesToVisit({
+      companyId: estimate.companyId,
+      estimateId: estimate.id,
+      visitId: existing.id,
+    });
+    return existing;
+  }
 
   const serviceArea = await prisma.serviceArea.findFirst({
     where: { companyId: estimate.companyId },
@@ -145,6 +153,12 @@ export async function createInstallVisitFromEstimate(estimateId: string) {
         })),
       },
     },
+  });
+
+  await attachEstimateInvoicesToVisit({
+    companyId: estimate.companyId,
+    estimateId: estimate.id,
+    visitId: visit.id,
   });
 
   return visit;

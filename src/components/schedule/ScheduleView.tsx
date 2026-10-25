@@ -39,6 +39,7 @@ import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import { useSession } from "next-auth/react";
 import { isFieldRole } from "@/lib/employees";
+import { Button } from "@/components/ui/button";
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
@@ -107,6 +108,12 @@ export function ScheduleView({
   });
   const [loading, setLoading] = useState(true);
   const [quickAddSlot, setQuickAddSlot] = useState<ScheduleSlotClick | null>(null);
+  const [pendingTimeChange, setPendingTimeChange] = useState<{
+    job: ScheduleJobDTO;
+    startAt: Date;
+    endAt: Date;
+  } | null>(null);
+  const [timeChangeSaving, setTimeChangeSaving] = useState(false);
 
   useEffect(() => {
     if (!initialDate) return;
@@ -298,9 +305,9 @@ export function ScheduleView({
     else setWeekStart((d) => addWeeks(d, 1));
   }
 
-  async function updateJobTime(jobId: string, startAt: Date, endAt: Date) {
+  async function updateJobTime(jobId: string, startAt: Date, endAt: Date, notifyCustomer: boolean) {
     const previousJob = jobs.find((job) => job.id === jobId);
-    if (!previousJob) return;
+    if (!previousJob) return false;
 
     setJobs((current) =>
       current.map((job) =>
@@ -317,6 +324,7 @@ export function ScheduleView({
         body: JSON.stringify({
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
+          notifyCustomer,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -325,14 +333,32 @@ export function ScheduleView({
           current.map((job) => (job.id === jobId ? previousJob : job))
         );
         toast.error(data.error ?? "Failed to update the arrival window");
-        return;
+        return false;
       }
       setJobs((current) => current.map((job) => (job.id === jobId ? data : job)));
       if (data.warning) toast.warning(data.warning);
       toast.success("Arrival window updated");
+      return true;
     } catch {
       setJobs((current) => current.map((job) => (job.id === jobId ? previousJob : job)));
       toast.error("Failed to update the arrival window");
+      return false;
+    }
+  }
+
+  async function confirmTimeChange(notifyCustomer: boolean) {
+    if (!pendingTimeChange) return;
+    setTimeChangeSaving(true);
+    try {
+      const updated = await updateJobTime(
+        pendingTimeChange.job.id,
+        pendingTimeChange.startAt,
+        pendingTimeChange.endAt,
+        notifyCustomer
+      );
+      if (updated) setPendingTimeChange(null);
+    } finally {
+      setTimeChangeSaving(false);
     }
   }
 
@@ -466,7 +492,10 @@ export function ScheduleView({
             }}
             onJobTimeChange={
               !fieldRole && !onSelectSlot
-                ? (jobId, startAt, endAt) => void updateJobTime(jobId, startAt, endAt)
+                ? (jobId, startAt, endAt) => {
+                    const job = jobs.find((item) => item.id === jobId);
+                    if (job) setPendingTimeChange({ job, startAt, endAt });
+                  }
                 : undefined
             }
           />
@@ -486,6 +515,50 @@ export function ScheduleView({
         }}
       />
       )}
+      {pendingTimeChange ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Cancel reschedule"
+            onClick={() => !timeChangeSaving && setPendingTimeChange(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-5 shadow-xl">
+            <h2 className="font-semibold">Update arrival window?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {pendingTimeChange.job.customer?.name ?? pendingTimeChange.job.title} ·{" "}
+              {format(pendingTimeChange.startAt, "EEE, MMM d, h:mm a")}–
+              {format(pendingTimeChange.endAt, "h:mm a")}
+            </p>
+            <p className="mt-3 text-sm">Choose whether the customer should be notified about this change.</p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={timeChangeSaving}
+                onClick={() => setPendingTimeChange(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={timeChangeSaving}
+                onClick={() => void confirmTimeChange(false)}
+              >
+                Update only
+              </Button>
+              <Button
+                type="button"
+                disabled={timeChangeSaving}
+                onClick={() => void confirmTimeChange(true)}
+              >
+                {timeChangeSaving ? "Updating…" : "Update & notify"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

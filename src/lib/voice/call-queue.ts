@@ -100,9 +100,10 @@ export async function companyHasAgentsOnCall(companyId: string) {
  */
 export function shouldOverflowDialToQueue(
   dialStatus: string,
-  hasAgentsOnCall: boolean
+  hasAgentsOnCall: boolean,
+  explicitlyDeclined = false
 ) {
-  return hasAgentsOnCall && (dialStatus === "busy" || dialStatus === "no-answer");
+  return !explicitlyDeclined && hasAgentsOnCall && (dialStatus === "busy" || dialStatus === "no-answer");
 }
 
 export function queueSidByFriendlyName(

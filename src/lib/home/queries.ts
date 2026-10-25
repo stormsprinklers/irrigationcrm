@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { endOfDay, startOfDay, startOfMonth, startOfYear, subDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { reconcileNeedsSchedulingEstimates } from "@/lib/estimates/scheduling";
 import { sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { HomeDateRange, HomeKpi, HomeSummaryCard, HomeSummaryDTO } from "./types";
 
@@ -35,6 +36,7 @@ export async function getHomeSummary(
   dateRange: HomeDateRange = "ytd"
 ): Promise<Omit<HomeSummaryDTO, "greeting">> {
   const { start, end } = getRangeBounds(dateRange);
+  await reconcileNeedsSchedulingEstimates(companyId);
 
   const [openEstimates, unscheduledVisits, needsSchedulingEstimates, openInvoices, completedVisits, newCustomers, paidInvoices] =
     await Promise.all([

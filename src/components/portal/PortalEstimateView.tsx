@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
+import { Mail, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import {
   calculateHolidayLeaseCommitmentPricing,
   holidayLeaseCommitmentDiscount,
@@ -568,14 +570,14 @@ export function PortalEstimateView({
 
         <div>
           <h1 className="text-2xl font-semibold">Proposal from {company.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            {company.supportEmail ? <a className="text-primary hover:underline" href={`mailto:${company.supportEmail}`}>Email {company.supportEmail}</a> : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            {company.supportEmail ? <a className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-primary transition-colors hover:bg-muted" href={`mailto:${company.supportEmail}`}><Mail className="h-4 w-4" aria-hidden="true" /><span><span className="font-medium">Email</span> {company.supportEmail}</span></a> : null}
             {company.phone ? <>
-              <a className="text-primary hover:underline" href={`sms:${company.phone.replace(/[^+\d]/g, "")}`}>Text</a>
-              <a className="text-primary hover:underline" href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}>Call {company.phone}</a>
+              <a className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-primary transition-colors hover:bg-muted" href={`tel:${company.phone.replace(/[^+\d]/g, "")}`}><Phone className="h-4 w-4" aria-hidden="true" /><span><span className="font-medium">Call</span> {formatPhoneDisplay(company.phone)}</span></a>
+              <a className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-primary transition-colors hover:bg-muted" href={`sms:${company.phone.replace(/[^+\d]/g, "")}`}><MessageSquare className="h-4 w-4" aria-hidden="true" /><span><span className="font-medium">Text</span> {formatPhoneDisplay(company.phone)}</span></a>
             </> : null}
-            {company.termsOfServiceUrl ? <LegalDocLink href={company.termsOfServiceUrl}>Terms and conditions</LegalDocLink> : null}
           </div>
+          {company.termsOfServiceUrl ? <div className="mt-2 text-sm"><LegalDocLink href={company.termsOfServiceUrl}>Terms and conditions</LegalDocLink></div> : null}
           <p className="text-sm text-muted-foreground capitalize">
             {estimate.status === "SENT" && estimate.signedAt
               ? "Pending payment arrangement"
@@ -676,6 +678,8 @@ export function PortalEstimateView({
               discounts={displayDiscounts}
               selectedId={selectedOptionId}
               onSelect={setSelectedOptionId}
+              approvedId={estimate.signedAt ? estimate.selectedOptionId : null}
+              approvedLabel={estimate.status === "APPROVED" ? "Approved option" : "Customer selected"}
               onLeaseCommitmentChange={(optionId, years) =>
                 setLeaseCommitmentYears((current) => ({ ...current, [optionId]: years }))
               }

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { GitBranch } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { KpiStrip } from "@/components/home/KpiStrip";
@@ -12,7 +15,7 @@ import { useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandPro
 import type { HomeDateRange, HomeKpi, HomeSummaryCard } from "@/lib/home/types";
 import { toast } from "sonner";
 
-export function HomePageInner() {
+export function HomePageInner({ showPipelineShortcut = false }: { showPipelineShortcut?: boolean }) {
   const { enabled: maintenancePlansEnabled } = useMaintenancePlansFeatures();
   const [greeting, setGreeting] = useState("");
   const [cards, setCards] = useState<HomeSummaryCard[]>([]);
@@ -44,9 +47,19 @@ export function HomePageInner() {
 
   return (
     <ContentArea className="max-w-[1400px]">
-      <h1 className="mb-6 text-3xl font-semibold tracking-tight">
-        Hi, {greeting || "there"}
-      </h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Hi, {greeting || "there"}
+        </h1>
+        {showPipelineShortcut ? (
+          <Button asChild>
+            <Link href="/customers/pipeline">
+              <GitBranch className="h-4 w-4" />
+              Sales pipeline
+            </Link>
+          </Button>
+        ) : null}
+      </div>
 
       <ClockInOutButton />
 

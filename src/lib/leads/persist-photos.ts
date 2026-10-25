@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { getBlobToken, uploadPrivateBlob } from "@/lib/blob/storage";
+import { storedLeadPhotos } from "@/lib/leads/photos";
+import { ensureWebsiteFormsSystemUser } from "@/lib/leads/website-forms-user";
 import { prisma } from "@/lib/prisma";
 
 type IncomingPhoto = {
@@ -49,7 +51,7 @@ export async function persistLeadPhotosFromMetadata(
     : [];
   if (!incoming.length) return metadata;
 
-  const uploaded: { name: string; url: string; pathname: string }[] = [];
+  const uploaded: { name: string; url: string; pathname: string; mimeType: string }[] = [];
 
   for (let i = 0; i < incoming.length; i++) {
     const photo = incoming[i];
@@ -63,7 +65,12 @@ export async function persistLeadPhotosFromMetadata(
         contentType: parsed.contentType,
         addRandomSuffix: false,
       });
-      uploaded.push({ name: safeName, url: blob.url, pathname: blob.pathname });
+      uploaded.push({
+        name: safeName,
+        url: blob.url,
+        pathname: blob.pathname,
+        mimeType: parsed.contentType,
+      });
     } catch (err) {
       console.error("Failed to upload lead photo", err);
     }
@@ -71,11 +78,57 @@ export async function persistLeadPhotosFromMetadata(
 
   return {
     ...metadata,
-    photos: uploaded.map((p) => ({ name: p.name, url: p.url, pathname: p.pathname })),
+    photos: uploaded.map((p) => ({
+      name: p.name,
+      url: p.url,
+      pathname: p.pathname,
+      mimeType: p.mimeType,
+    })),
     photoUrls: uploaded.map((p) => p.url),
     photoCount: uploaded.length || metadata.photoCount,
     photosPendingCsr: uploaded.length === 0 && incoming.length > 0,
   };
+}
+
+/**
+ * Reference persisted lead photos from the customer's Attachments tab. The
+ * blob itself remains single-copy; CustomerAttachment provides the durable
+ * customer-profile association.
+ */
+export async function attachLeadPhotosToCustomer(params: {
+  companyId: string;
+  leadId: string;
+  customerId: string;
+  metadata: Record<string, unknown>;
+}) {
+  const photos = storedLeadPhotos(params.metadata, {
+    companyId: params.companyId,
+    leadId: params.leadId,
+  });
+  if (!photos.length) return 0;
+
+  const existing = await prisma.customerAttachment.findMany({
+    where: {
+      customerId: params.customerId,
+      blobUrl: { in: photos.map((photo) => photo.url) },
+    },
+    select: { blobUrl: true },
+  });
+  const existingUrls = new Set(existing.map((attachment) => attachment.blobUrl));
+  const missing = photos.filter((photo) => !existingUrls.has(photo.url));
+  if (!missing.length) return 0;
+
+  const uploadedById = await ensureWebsiteFormsSystemUser(params.companyId);
+  const created = await prisma.customerAttachment.createMany({
+    data: missing.map((photo) => ({
+      customerId: params.customerId,
+      uploadedById,
+      blobUrl: photo.url,
+      fileName: photo.name,
+      mimeType: photo.mimeType,
+    })),
+  });
+  return created.count;
 }
 
 export async function updateLeadMetadataPhotos(

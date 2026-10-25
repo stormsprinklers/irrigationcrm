@@ -10,6 +10,7 @@ test("a declined Radar invite queues only when Radar confirms an active call", (
   assert.equal(shouldOverflowDialToQueue("busy", true), true);
   assert.equal(shouldOverflowDialToQueue("no-answer", true), true);
   assert.equal(shouldOverflowDialToQueue("failed", true), false);
+  assert.equal(shouldOverflowDialToQueue("busy", true, true), false);
 });
 
 test("queue pickup resolves the Twilio SID from the friendly name", () => {

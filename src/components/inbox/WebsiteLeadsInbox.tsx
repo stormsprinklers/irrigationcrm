@@ -18,6 +18,8 @@ import { websiteLeadFormLabel } from "@/lib/leads/form-labels";
 import { cn } from "@/lib/utils";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { TrackingDataDisclosure, type CustomerTrackingData } from "@/components/customers/TrackingDataDisclosure";
+import { ImageLightbox } from "@/components/ui/ImageLightbox";
+import { blobProxyUrl } from "@/lib/blob/urls";
 
 type LeadFilterTab = "to_contact" | "contacted" | "spam";
 
@@ -38,6 +40,7 @@ type WebsiteLeadInboxItem = {
   leadPhone: string | null;
   leadEmail: string | null;
   convertedCustomerId: string | null;
+  leadPhotos: Array<{ name: string; url: string; pathname: string; mimeType: string }>;
   leadAddress?: string | null;
   leadCity?: string | null;
   leadState?: string | null;
@@ -198,6 +201,8 @@ export function WebsiteLeadsInbox() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const [convertBusy, setConvertBusy] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<{ src: string; alt: string } | null>(null);
+  const closePhotoPreview = useCallback(() => setPhotoPreview(null), []);
   /** Tracks which deep-link query we've already applied so list refreshes don't fight clicks. */
   const appliedDeepLinkRef = useRef<string | null>(null);
 
@@ -245,6 +250,8 @@ export function WebsiteLeadsInbox() {
         match.leadEmail === current.leadEmail &&
         match.preview === current.preview &&
         match.convertedCustomerId === current.convertedCustomerId &&
+        match.leadPhotos.map((photo) => photo.url).join("|") ===
+          current.leadPhotos.map((photo) => photo.url).join("|") &&
         match.conversationId === current.conversationId
       ) {
         return current;
@@ -259,18 +266,21 @@ export function WebsiteLeadsInbox() {
     return () => clearInterval(interval);
   }, [loadItems]);
 
-  // Deep-link from notifications: apply once per emailId/conversationId, then stop
+  // Deep-link from notifications or the Customers → Leads table, then stop
   // re-forcing selection so clicking other leads works.
   useEffect(() => {
     const emailId = searchParams.get("emailId");
     const conversationId = searchParams.get("conversationId");
+    const leadId = searchParams.get("leadId");
     if (!items.length) return;
 
     const deepLinkKey = emailId
       ? `email:${emailId}`
       : conversationId
         ? `sms:${conversationId}`
-        : null;
+        : leadId
+          ? `lead:${leadId}`
+          : null;
 
     if (!deepLinkKey) {
       appliedDeepLinkRef.current = null;
@@ -280,6 +290,16 @@ export function WebsiteLeadsInbox() {
 
     if (emailId) {
       const match = items.find((item) => item.channel === "email" && item.id === emailId);
+      if (match) {
+        setFilterTab(tabForLeadStatus(match.leadStatus));
+        setSelected(match);
+        appliedDeepLinkRef.current = deepLinkKey;
+      }
+      return;
+    }
+
+    if (leadId) {
+      const match = items.find((item) => item.leadId === leadId);
       if (match) {
         setFilterTab(tabForLeadStatus(match.leadStatus));
         setSelected(match);
@@ -389,9 +409,14 @@ export function WebsiteLeadsInbox() {
   }, [selectedDetailKey]);
 
   function selectItem(item: WebsiteLeadInboxItem) {
+    setPhotoPreview(null);
     setSelected(item);
     // Drop notification deep-link params so they can't snap selection back.
-    if (searchParams.get("emailId") || searchParams.get("conversationId")) {
+    if (
+      searchParams.get("emailId") ||
+      searchParams.get("conversationId") ||
+      searchParams.get("leadId")
+    ) {
       appliedDeepLinkRef.current = null;
       router.replace("/inbox/leads", { scroll: false });
     }
@@ -575,7 +600,11 @@ export function WebsiteLeadsInbox() {
     }
     toast.success("Removed");
     setSelected(null);
-    if (searchParams.get("emailId") || searchParams.get("conversationId")) {
+    if (
+      searchParams.get("emailId") ||
+      searchParams.get("conversationId") ||
+      searchParams.get("leadId")
+    ) {
       appliedDeepLinkRef.current = null;
       router.replace("/inbox/leads", { scroll: false });
     }
@@ -861,6 +890,37 @@ export function WebsiteLeadsInbox() {
 
       <div className="p-4">
         <TrackingDataDisclosure data={selected} className="mb-4" />
+        {selected.leadPhotos.length ? (
+          <section className="mb-5" aria-labelledby="lead-photos-heading">
+            <h4 id="lead-photos-heading" className="mb-2 text-sm font-semibold">
+              Customer photos ({selected.leadPhotos.length})
+            </h4>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {selected.leadPhotos.map((photo) => {
+                const src = blobProxyUrl(photo.url) ?? photo.url;
+                return (
+                  <button
+                    key={photo.pathname}
+                    type="button"
+                    className="overflow-hidden rounded-md border bg-muted/20 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Preview ${photo.name}`}
+                    onClick={() => setPhotoPreview({ src, alt: photo.name })}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={src}
+                      alt={photo.name}
+                      className="aspect-square w-full bg-muted/30 object-cover"
+                    />
+                    <span className="block truncate border-t bg-background px-2 py-1.5 text-xs">
+                      {photo.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
         {loadingDetail && !submissionText && !emailDetail?.bodyHtml ? (
           <p className="text-sm text-muted-foreground">Loading submission…</p>
         ) : submissionText ? (
@@ -876,6 +936,11 @@ export function WebsiteLeadsInbox() {
           <p className="text-sm text-muted-foreground">No additional details in this submission.</p>
         )}
       </div>
+      <ImageLightbox
+        src={photoPreview?.src ?? null}
+        alt={photoPreview?.alt}
+        onClose={closePhotoPreview}
+      />
     </div>
   );
 

@@ -208,6 +208,24 @@ async function recordAnswered(
   }
 }
 
+async function recordDeclined(call: Call) {
+  const params = call.parameters as Record<string, string>;
+  try {
+    await fetch("/api/voice/sessions/by-call", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callSid: params.CallSid || undefined,
+        parentCallSid: params.ParentCallSid || params.parentCallSid || undefined,
+        declined: true,
+      }),
+    });
+  } catch {
+    // The Twilio reject still proceeds; this only prevents a manual decline
+    // from being mistaken for an overflow-to-queue event.
+  }
+}
+
 async function patchPresence(status: "AVAILABLE" | "ON_CALL" | "OFFLINE" | "AWAY") {
   try {
     await fetch("/api/voice/presence", {
@@ -275,29 +293,38 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
 
       let disconnected = false;
       let answeredRecorded = false;
+      let resolvedSessionId: string | null = null;
+      let wasConnected = phase === "connected";
+      let wrapUpOpened = false;
 
-      const attachSession = async (answered: boolean) => {
-        const callSid = call.parameters.CallSid;
-        const parentCallSid =
+      const callSids = () => ({
+        callSid: call.parameters.CallSid,
+        parentCallSid:
           (call.parameters as Record<string, string>).ParentCallSid ??
           (call.parameters as Record<string, string>).parentCallSid ??
-          null;
+          null,
+      });
+
+      const attachSession = async (answered: boolean) => {
+        const { callSid, parentCallSid } = callSids();
         if (!callSid) return false;
         const shouldRecordAnswered = answered && !answeredRecorded;
         if (shouldRecordAnswered) answeredRecorded = true;
 
         const resolved = await resolveSessionId(callSid, parentCallSid);
-        if (disconnected) return Boolean(resolved);
         if (resolved) {
-          setActiveCall((prev) =>
-            prev?.call === call
-              ? {
-                  ...prev,
-                  sessionId: resolved.id,
-                  inboundLine: resolved.inboundLine ?? prev.inboundLine,
-                }
-              : prev
-          );
+          resolvedSessionId = resolved.id;
+          if (!disconnected) {
+            setActiveCall((prev) =>
+              prev?.call === call
+                ? {
+                    ...prev,
+                    sessionId: resolved.id,
+                    inboundLine: resolved.inboundLine ?? prev.inboundLine,
+                  }
+                : prev
+            );
+          }
         }
         if (shouldRecordAnswered) {
           void recordAnswered(callSid, resolved?.id ?? null, parentCallSid);
@@ -312,6 +339,7 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
       };
 
       const markConnected = () => {
+        wasConnected = true;
         setActiveCall((prev) =>
           prev?.call === call
             ? {
@@ -340,20 +368,36 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
       call.on("accept", markConnected);
 
       call.on("disconnect", () => {
+        const snapshot = activeCallRef.current?.call === call ? activeCallRef.current : null;
+        wasConnected = wasConnected || snapshot?.phase === "connected";
         disconnected = true;
-        setActiveCall((prev) => {
-          if (prev?.call !== call) return prev;
-          if (prev.phase === "connected" && prev.sessionId) {
-            if (prev.transferring) {
-              void fetch(`/api/voice/calls/${prev.sessionId}/transfer/leave`, {
-                method: "POST",
-              }).catch(() => {});
+        setActiveCall((prev) => (prev?.call === call ? null : prev));
+
+        // Session creation and the browser disconnect event race each other. Resolve
+        // once more after disconnect so every connected call gets a wrap-up prompt.
+        void (async () => {
+          let sessionId = resolvedSessionId ?? snapshot?.sessionId ?? null;
+          const { callSid, parentCallSid } = callSids();
+          for (const delayMs of [0, 400, 1200, 2400]) {
+            if (sessionId || !callSid) break;
+            if (delayMs) {
+              await new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
             }
-            setWrapUpSessionId(prev.sessionId);
+            sessionId = (await resolveSessionId(callSid, parentCallSid))?.id ?? null;
+          }
+          if (!sessionId) return;
+          resolvedSessionId = sessionId;
+          if (snapshot?.transferring) {
+            void fetch(`/api/voice/calls/${sessionId}/transfer/leave`, {
+              method: "POST",
+            }).catch(() => {});
+          }
+          if (wasConnected && !wrapUpOpened) {
+            wrapUpOpened = true;
+            setWrapUpSessionId(sessionId);
             setWrapUpOpen(true);
           }
-          return null;
-        });
+        })();
         void patchPresence("AVAILABLE");
       });
 
@@ -440,7 +484,11 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
           const payload = await fetchVoiceTokenPayload();
           const current = deviceRef.current;
           if (!current) return false;
-          current.updateToken(payload.token);
+          const currentIdentity = deviceIdentityRef.current.get(current);
+          const currentToken = currentIdentity
+            ? payload.identities.find((item) => item.identity === currentIdentity)?.token
+            : null;
+          current.updateToken(currentToken ?? payload.token);
           for (const extra of extraDevicesRef.current) {
             const identity = deviceIdentityRef.current.get(extra);
             const match = payload.identities.find((item) => item.identity === identity);
@@ -490,7 +538,7 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
           if (!device) return false;
 
           // Don't bounce registration mid-call — only refresh the JWT.
-          if (device.isBusy) {
+          if (device.isBusy || activeCallRef.current) {
             return refreshDeviceToken({ silent: opts?.silent ?? true });
           }
 
@@ -500,7 +548,7 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
           if (!tokenOk) return false;
 
           const current = deviceRef.current;
-          if (!current || current.isBusy) return tokenOk;
+          if (!current || current.isBusy || activeCallRef.current) return tokenOk;
 
           // State can still say "registered" with a dead signaling socket after a
           // backgrounded tab. Bounce registration to rebuild the transport.
@@ -790,7 +838,7 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, sessionStatus, session?.user?.id, fetchVoiceTokenPayload, refreshDeviceToken, recoverVoiceTransport]);
+  }, [enabled, sessionStatus, fetchVoiceTokenPayload, refreshDeviceToken, recoverVoiceTransport]);
 
   const connect = useCallback(
     async (to: string, customerId?: string) => {
@@ -834,10 +882,11 @@ export function VoiceDeviceProvider({ children, enabled = true }: { children: Re
     void bindCall(incomingCall.call, "inbound", from);
   }, [bindCall, incomingCall]);
 
-  const rejectIncoming = useCallback(() => {
+  const rejectIncoming = useCallback(async () => {
     if (!incomingCall) return;
     settleInviteRef.current.get(incomingCall.call)?.(false);
-    incomingCall.call.reject();
+    await recordDeclined(incomingCall.call);
+    if (inviteStillRinging(incomingCall.call)) incomingCall.call.reject();
   }, [incomingCall]);
 
   const disconnect = useCallback(() => {

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { canViewSalesPipeline } from "@/lib/customers/permissions";
-import { pipelineFollowUpPreview, sendPipelineFollowUp } from "@/lib/customers/pipeline-followups";
+import {
+  pipelineFollowUpPreview,
+  sendPipelineFollowUp,
+  skipPipelineFollowUp,
+} from "@/lib/customers/pipeline-followups";
 
 const STAGES = new Set(["LEAD", "QUALIFIED"] as const);
 const METHODS = new Set(["CALL", "SMS", "EMAIL", "SMS_EMAIL"] as const);
@@ -12,8 +16,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!canViewSalesPipeline(user.role)) return forbiddenResponse();
     const { id } = await params;
     const stage = request.nextUrl.searchParams.get("stage") as "LEAD" | "QUALIFIED" | null;
+    const requestedSequence = Math.floor(Number(request.nextUrl.searchParams.get("sequence")));
     if (!stage || !STAGES.has(stage)) return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
-    return NextResponse.json(await pipelineFollowUpPreview({ companyId: user.companyId, customerId: id, stage, employeeName: user.name }));
+    return NextResponse.json(await pipelineFollowUpPreview({
+      companyId: user.companyId,
+      customerId: id,
+      stage,
+      employeeName: user.name,
+      sequence: requestedSequence >= 1 && requestedSequence <= 3 ? requestedSequence : undefined,
+    }));
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") return unauthorizedResponse();
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not prepare follow-up" }, { status: 500 });
@@ -29,7 +40,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const stage = String(body.stage ?? "") as "LEAD" | "QUALIFIED";
     const method = String(body.method ?? "") as "CALL" | "SMS" | "EMAIL" | "SMS_EMAIL";
     const sequence = Math.floor(Number(body.sequence));
-    if (!STAGES.has(stage) || !METHODS.has(method) || sequence < 1 || sequence > 3) {
+    if (!STAGES.has(stage) || sequence < 1 || sequence > 3) {
+      return NextResponse.json({ error: "Invalid follow-up" }, { status: 400 });
+    }
+    if (body.action === "skip") {
+      const result = await skipPipelineFollowUp({
+        companyId: user.companyId,
+        customerId: id,
+        stage,
+        sequence,
+        employeeId: user.id,
+      });
+      return NextResponse.json({ ok: true, followUp: result });
+    }
+    if (!METHODS.has(method)) {
       return NextResponse.json({ error: "Invalid follow-up" }, { status: 400 });
     }
     const result = await sendPipelineFollowUp({

@@ -11,8 +11,9 @@ import {
   startOfDay,
   startOfWeek,
 } from "date-fns";
-import { Truck, Wrench } from "lucide-react";
+import { Clock3, Mail, MapPin, MessageSquare, StickyNote, Truck, UserRound, Users, Wrench } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jobCardStyle } from "@/lib/schedule/colors";
 import type { ColorByMode, ScheduleJobDTO } from "@/lib/schedule/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/schedule/open-time-slots";
 import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { isFieldRole } from "@/lib/employees";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 const SCHEDULE_START_HOUR = 4;
 const SCHEDULE_END_HOUR = 22;
@@ -115,6 +117,56 @@ function assignLanes(jobs: ScheduleJobDTO[]) {
 
 function jobLocation(job: ScheduleJobDTO) {
   return [job.city, job.state].filter(Boolean).join(", ") || job.serviceArea?.name || "No area";
+}
+
+function jobAddress(job: ScheduleJobDTO) {
+  const street = job.address || job.property?.address || job.customer?.address;
+  const city = job.city || job.property?.city || job.customer?.city;
+  const state = job.state || job.property?.state || job.customer?.state;
+  const zip = job.zip || job.property?.zip || job.customer?.zip;
+  const cityLine = [city, state].filter(Boolean).join(", ");
+  return [street, [cityLine, zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ") || "No location saved";
+}
+
+function JobHoverPreview({ job }: { job: ScheduleJobDTO }) {
+  const start = new Date(job.startAt);
+  const end = new Date(job.endAt);
+  const technicians = job.assignedUsers?.length
+    ? job.assignedUsers.map((employee) => employee.name)
+    : job.assignedUser
+      ? [job.assignedUser.name]
+      : [];
+
+  return (
+    <div className="w-80 space-y-3 p-1 text-left text-popover-foreground">
+      <div>
+        <p className="font-semibold leading-tight">{job.title}</p>
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Clock3 className="h-3.5 w-3.5 shrink-0" />
+          {format(start, "EEE, MMM d · h:mm a")}–{format(end, "h:mm a")} · {job.status.replaceAll("_", " ")}
+        </p>
+      </div>
+      <div className="space-y-1.5 text-xs">
+        <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><span>{jobAddress(job)}</span></p>
+        <div className="flex items-start gap-2">
+          <Users className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div>
+            {job.crew ? <p><span className="font-medium">Crew:</span> {job.crew.name}</p> : null}
+            <p><span className="font-medium">Technicians:</span> {technicians.length ? technicians.join(", ") : "Unassigned"}</p>
+          </div>
+        </div>
+        {job.customer ? <div className="flex items-start gap-2"><UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><div><p className="font-medium">{job.customer.name}</p>{job.customer.phone ? <p className="flex items-center gap-1 text-muted-foreground"><MessageSquare className="h-3 w-3" />{formatPhoneDisplay(job.customer.phone)}</p> : null}{job.customer.email ? <p className="flex items-center gap-1 break-all text-muted-foreground"><Mail className="h-3 w-3 shrink-0" />{job.customer.email}</p> : null}</div></div> : null}
+      </div>
+      {job.notes?.length ? (
+        <div className="border-t pt-2">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"><StickyNote className="h-3.5 w-3.5" />Recent notes</p>
+          <div className="space-y-1">
+            {job.notes.map((note) => <p key={note.id} className="line-clamp-2 text-xs leading-snug">{note.body}</p>)}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function JobBlock({
@@ -224,22 +276,23 @@ function JobBlock({
   }
 
   return (
-    <Link
-      href={`/visits/${job.id}`}
-      onClick={(event) => {
-        if (resizedRef.current || resizeState.current) event.preventDefault();
-      }}
-      className="absolute z-10 block overflow-hidden rounded border shadow-sm transition-shadow hover:z-20 hover:shadow-md"
-      style={{
-        top: top + 1,
-        height,
-        left,
-        width: laneCount > 1 ? laneWidth : columnWidth - 8,
-        backgroundColor: style.backgroundColor,
-        borderColor: style.borderColor,
-      }}
-      title={`${job.title} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`}
-    >
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={`/visits/${job.id}`}
+          onClick={(event) => {
+            if (resizedRef.current || resizeState.current) event.preventDefault();
+          }}
+          className="absolute z-10 block overflow-hidden rounded border shadow-sm transition-shadow hover:z-20 hover:shadow-md"
+          style={{
+            top: top + 1,
+            height,
+            left,
+            width: laneCount > 1 ? laneWidth : columnWidth - 8,
+            backgroundColor: style.backgroundColor,
+            borderColor: style.borderColor,
+          }}
+        >
       {onTimeChange ? (
         <>
           <span
@@ -264,7 +317,7 @@ function JobBlock({
           />
         </>
       ) : null}
-      <div className="flex h-full flex-col p-1 text-[9px]">
+          <div className="flex h-full flex-col p-1 text-[9px]">
         <div className="flex items-center gap-0.5">
           <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
           {(job.assignedUsers?.length ? job.assignedUsers : job.assignedUser ? [job.assignedUser] : [])
@@ -291,8 +344,13 @@ function JobBlock({
         {height >= 56 ? (
           <p className="mt-0.5 truncate text-[8px] text-muted-foreground">{jobLocation(job)}</p>
         ) : null}
-      </div>
-    </Link>
+          </div>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-none border bg-popover p-3 text-popover-foreground shadow-xl">
+        <JobHoverPreview job={job} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -671,32 +729,38 @@ function TimeGrid({
                     const end = new Date(job.endAt);
 
                     return (
-                      <Link
-                        key={job.id}
-                        href={`/visits/${job.id}`}
-                        className="absolute z-10 flex items-center gap-2 overflow-hidden rounded border px-2 py-1 text-[10px] shadow-sm transition-shadow hover:shadow-md"
-                        style={{
-                          top: lane * MULTI_DAY_ROW_HEIGHT + 4,
-                          left,
-                          width,
-                          height: MULTI_DAY_ROW_HEIGHT - 8,
-                          backgroundColor: cardStyle.backgroundColor,
-                          borderColor: cardStyle.borderColor,
-                        }}
-                      >
-                        {job.crew ? (
-                          <Truck className="h-3 w-3 shrink-0" />
-                        ) : (
-                          <Wrench className="h-3 w-3 shrink-0" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{jobLocation(job)}</p>
-                          <p className="truncate text-muted-foreground">
-                            {format(start, "h:mm a")} – {format(end, "h:mm a")}
-                            {job.crew ? ` · ${job.crew.name}` : ""}
-                          </p>
-                        </div>
-                      </Link>
+                      <Tooltip key={job.id}>
+                        <TooltipTrigger asChild>
+                          <Link
+                            href={`/visits/${job.id}`}
+                            className="absolute z-10 flex items-center gap-2 overflow-hidden rounded border px-2 py-1 text-[10px] shadow-sm transition-shadow hover:shadow-md"
+                            style={{
+                              top: lane * MULTI_DAY_ROW_HEIGHT + 4,
+                              left,
+                              width,
+                              height: MULTI_DAY_ROW_HEIGHT - 8,
+                              backgroundColor: cardStyle.backgroundColor,
+                              borderColor: cardStyle.borderColor,
+                            }}
+                          >
+                            {job.crew ? (
+                              <Truck className="h-3 w-3 shrink-0" />
+                            ) : (
+                              <Wrench className="h-3 w-3 shrink-0" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-medium">{jobLocation(job)}</p>
+                              <p className="truncate text-muted-foreground">
+                                {format(start, "h:mm a")} – {format(end, "h:mm a")}
+                                {job.crew ? ` · ${job.crew.name}` : ""}
+                              </p>
+                            </div>
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" align="start" className="max-w-none border bg-popover p-3 text-popover-foreground shadow-xl">
+                          <JobHoverPreview job={job} />
+                        </TooltipContent>
+                      </Tooltip>
                     );
                   })}
                 </div>

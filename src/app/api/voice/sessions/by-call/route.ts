@@ -38,6 +38,7 @@ export async function PATCH(request: NextRequest) {
       sessionId?: string;
       agentCallSid?: string;
       answered?: boolean;
+      declined?: boolean;
     };
 
     let sessionId = body.sessionId?.trim() || null;
@@ -62,6 +63,17 @@ export async function PATCH(request: NextRequest) {
 
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId or callSid required" }, { status: 400 });
+    }
+
+    if (body.declined === true) {
+      await prisma.callSession.update({
+        where: { id: sessionId },
+        data: {
+          status: "COMPLETED",
+          endedAt: new Date(),
+        },
+      });
+      return NextResponse.json({ ok: true, sessionId, declined: true });
     }
 
     if (body.answered === false) {

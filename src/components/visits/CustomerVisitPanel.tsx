@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { ChevronDown, ChevronRight, Mail, MapPin, MessageSquare, Phone } from "lucide-react";
+import { ChevronDown, ChevronRight, Mail, MapPin, MessageSquare } from "lucide-react";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
+import { CustomerPhoneActions } from "@/components/customers/CustomerContactActions";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -144,12 +145,13 @@ export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl, onC
           </Link>
           {customer.phone ? (
             <>
-              <Button variant="outline" size="sm" asChild>
-                <Link href={buildInboxCustomerUrl("voice", linkParams)}>
-                  <Phone className="h-4 w-4" />
-                  Call
-                </Link>
-              </Button>
+              <CustomerPhoneActions
+                customerId={customer.id}
+                name={customer.name}
+                phone={customer.phone}
+                size="sm"
+                showCallLabel
+              />
               <Button variant="outline" size="sm" asChild>
                 <Link href={buildInboxCustomerUrl("sms", linkParams)}>
                   <MessageSquare className="h-4 w-4" />

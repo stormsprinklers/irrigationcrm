@@ -111,7 +111,12 @@ type VisitDetailData = {
     total: string | number;
     paidAt: string | null;
     publicToken: string;
-    payments: Array<{ amount: string | number; refundedAt: string | null }>;
+    createdAt: string;
+    payments: Array<{
+      amount: string | number;
+      paidAt: string;
+      refundedAt: string | null;
+    }>;
   }>;
 };
 
@@ -146,20 +151,50 @@ function toAmount(value: string | number) {
 }
 
 function getVisitPaymentSummary(visit: VisitDetailData) {
-  const invoice = visit.invoices?.[0];
-  if (!invoice) {
-    return { isPaid: false, amountPaid: 0, balanceDue: null as number | null, invoice: null };
-  }
+  const invoices = (visit.invoices ?? []).filter((invoice) => invoice.status !== "VOID");
+  const invoicePaidAmount = (invoice: (typeof invoices)[number]) => {
+    const recorded = invoice.payments.reduce((sum, payment) => {
+      if (payment.refundedAt) return sum;
+      return sum + toAmount(payment.amount);
+    }, 0);
+    return recorded > 0 || invoice.status !== "PAID" ? recorded : toAmount(invoice.total);
+  };
+  const amountPaid = invoices.reduce((sum, invoice) => sum + invoicePaidAmount(invoice), 0);
+  const depositInvoices = invoices.filter((invoice) => invoice.invoiceNumber.includes("-DEP-"));
+  const depositPaid = depositInvoices.reduce(
+    (sum, invoice) => sum + invoicePaidAmount(invoice),
+    0
+  );
+  const latestDepositPaymentAt = depositInvoices
+    .flatMap((invoice) => [
+      ...invoice.payments.filter((payment) => !payment.refundedAt).map((payment) => payment.paidAt),
+      ...(invoice.paidAt ? [invoice.paidAt] : []),
+    ])
+    .sort()
+    .at(-1) ?? null;
+  const invoice =
+    invoices.find(
+      (candidate) =>
+        !candidate.invoiceNumber.includes("-DEP-") &&
+        !candidate.invoiceNumber.includes("-PAY-") &&
+        ["DRAFT", "SENT", "PARTIAL"].includes(candidate.status)
+    ) ??
+    invoices.find(
+      (candidate) =>
+        !candidate.invoiceNumber.includes("-DEP-") &&
+        !candidate.invoiceNumber.includes("-PAY-")
+    ) ??
+    invoices[0] ??
+    null;
 
-  const invoiceTotal = toAmount(invoice.total);
-  const amountPaid = invoice.payments.reduce((sum, payment) => {
-    if (payment.refundedAt) return sum;
-    return sum + toAmount(payment.amount);
-  }, 0);
-  const balanceDue = Math.max(0, invoiceTotal - amountPaid);
-  const isPaid = balanceDue <= 0 || invoice.status === "PAID";
-
-  return { isPaid, amountPaid, balanceDue, invoice };
+  return {
+    isPaid: false,
+    amountPaid,
+    depositPaid,
+    latestDepositPaymentAt,
+    balanceDue: null as number | null,
+    invoice,
+  };
 }
 
 export function VisitDetail({ visitId }: Props) {
@@ -342,7 +377,15 @@ export function VisitDetail({ visitId }: Props) {
   const subtotal = sumLineItems(visit.lineItems);
   const discountTotal = sumDiscounts(subtotal, visit.discounts);
   const { total } = computeTotals(subtotal, discountTotal);
-  const paymentSummary = getVisitPaymentSummary(visit);
+  const basePaymentSummary = getVisitPaymentSummary(visit);
+  const paymentSummary = {
+    ...basePaymentSummary,
+    balanceDue: Math.max(0, total - basePaymentSummary.amountPaid),
+    isPaid:
+      total > 0 &&
+      basePaymentSummary.amountPaid > 0 &&
+      total - basePaymentSummary.amountPaid <= 0.005,
+  };
   const jobAddress =
     formatPostalAddress(visit) ||
     (visit.property ? formatPostalAddress(visit.property) : null) ||
@@ -507,6 +550,21 @@ export function VisitDetail({ visitId }: Props) {
           <div className="rounded-lg border p-4">
             <p className="text-sm text-muted-foreground">Visit total</p>
             <p className="text-2xl font-semibold">{formatCurrency(total)}</p>
+            {paymentSummary.depositPaid > 0 ? (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                <p className="font-medium">
+                  Deposit paid: {formatCurrency(paymentSummary.depositPaid)}
+                </p>
+                {paymentSummary.latestDepositPaymentAt ? (
+                  <p className="text-xs text-blue-700">
+                    {format(
+                      new Date(paymentSummary.latestDepositPaymentAt),
+                      "MMM d, yyyy h:mm a"
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {paymentSummary.isPaid ? (
               <div className="mt-3 flex items-start gap-2 rounded-md bg-green-50 p-3 text-sm text-green-800">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -525,6 +583,12 @@ export function VisitDetail({ visitId }: Props) {
               <p className="mt-2 text-sm text-muted-foreground">
                 Invoice {paymentSummary.invoice.invoiceNumber}:{" "}
                 {formatCurrency(paymentSummary.balanceDue ?? total)} due
+              </p>
+            ) : null}
+            {paymentSummary.amountPaid > 0 && !paymentSummary.isPaid ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Total paid {formatCurrency(paymentSummary.amountPaid)} · Remaining balance{" "}
+                {formatCurrency(paymentSummary.balanceDue ?? total)}
               </p>
             ) : null}
             {discountTotal > 0 ? (

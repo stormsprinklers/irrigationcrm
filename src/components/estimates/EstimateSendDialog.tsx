@@ -63,7 +63,7 @@ type EstimatePreview = {
   designExportMetadata?: Record<string, unknown> | null;
 };
 
-type Channel = "email" | "sms";
+type Channel = "email" | "sms" | "both";
 
 type Props = {
   open: boolean;
@@ -118,7 +118,7 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
         );
         const hasEmail = Boolean(data.customer?.email);
         const hasPhone = Boolean(data.customer?.phone);
-        setChannel(hasEmail ? "email" : hasPhone ? "sms" : "email");
+        setChannel(hasEmail && hasPhone ? "both" : hasEmail ? "email" : hasPhone ? "sms" : "email");
       })
       .catch((err) => {
         if (!cancelled) {
@@ -171,6 +171,10 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
       toast.error("Customer has no phone number");
       return;
     }
+    if (channel === "both" && (!estimate.customer.email || !estimate.customer.phone)) {
+      toast.error("Customer needs both an email address and phone number");
+      return;
+    }
     setSending(true);
     try {
       const res = await fetch(`/api/estimates/${estimateId}/send`, {
@@ -184,7 +188,7 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
         toast.error(reason || data.error || "Failed to send estimate");
         return;
       }
-      toast.success(channel === "email" ? "Estimate emailed" : "Estimate texted");
+      toast.success(channel === "email" ? "Estimate emailed" : channel === "sms" ? "Estimate texted" : "Estimate emailed and texted");
       onSent?.();
       onClose();
     } finally {
@@ -208,7 +212,7 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
               Preview &amp; send estimate
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Review what the customer will see, then send by email or text.
+              Review what the customer will see, then send by email, text, or both.
             </p>
           </div>
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={sending}>
@@ -363,6 +367,16 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
               </Button>
               <Button
                 type="button"
+                variant={channel === "both" ? "default" : "outline"}
+                size="sm"
+                disabled={!estimate?.customer.email || !estimate?.customer.phone || sending}
+                onClick={() => setChannel("both")}
+              >
+                <Send className="h-4 w-4" />
+                Text + email
+              </Button>
+              <Button
+                type="button"
                 variant={channel === "sms" ? "default" : "outline"}
                 size="sm"
                 disabled={!estimate?.customer.phone || sending}
@@ -395,7 +409,11 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                 sending ||
                 loading ||
                 !estimate ||
-                (channel === "email" ? !estimate.customer.email : !estimate.customer.phone)
+                (channel === "email"
+                  ? !estimate.customer.email
+                  : channel === "sms"
+                    ? !estimate.customer.phone
+                    : !estimate.customer.email || !estimate.customer.phone)
               }
               onClick={() => void send()}
             >
@@ -404,7 +422,7 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
               ) : (
                 <Send className="h-4 w-4" />
               )}
-              {channel === "email" ? "Send email" : "Send text"}
+              {channel === "email" ? "Send email" : channel === "sms" ? "Send text" : "Send text + email"}
             </Button>
           </div>
         </div>

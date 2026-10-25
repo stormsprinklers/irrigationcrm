@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { activePublicCapability } from "@/lib/security/public-capability";
 import { toNumber } from "@/lib/visits/totals";
 import { ensureLatePlanBillingInvoices } from "@/lib/maintenance-plans/late-invoices";
+import { attachEstimateInvoicesForCustomer } from "@/lib/estimates/attach-invoices-to-visit";
 import type { InvoiceDTO, PublicInvoiceDTO } from "./types";
 
 export const invoiceInclude = {
@@ -104,6 +105,12 @@ export async function listInvoices(
   companyId: string,
   filters?: { customerId?: string; status?: string; search?: string }
 ) {
+  if (filters?.customerId) {
+    await attachEstimateInvoicesForCustomer({
+      companyId,
+      customerId: filters.customerId,
+    });
+  }
   await ensureLatePlanBillingInvoices(companyId, filters?.customerId).catch((err) => {
     console.error("Late maintenance plan invoices failed:", err);
   });

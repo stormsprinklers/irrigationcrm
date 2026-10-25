@@ -4,7 +4,13 @@
  * Apply reviewed, additive compatibility changes before the application build.
  * Production deploys must not run `prisma db push` or accept destructive drift.
  */
-import { CampaignEnrollmentStatus, Channel, PrismaClient, Scope } from "@prisma/client";
+import {
+  CampaignEnrollmentStatus,
+  Channel,
+  PrismaClient,
+  Scope,
+  UserRole,
+} from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -91,6 +97,134 @@ async function ensureVehicleNumberColumn() {
     ON "Vehicle"("companyId", "vehicleNumber")
   `);
   console.log(`Ensured "Vehicle"."vehicleNumber" column and company unique index`);
+}
+
+const WEBSITE_FORMS_SYSTEM_KIND = "WEBSITE_FORMS";
+
+async function ensureWebsiteFormsSystemUser(companyId: string) {
+  const existing = await prisma.user.findFirst({
+    where: { companyId, systemKind: WEBSITE_FORMS_SYSTEM_KIND },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const email = `website-forms+${companyId}@system.local`;
+  const byEmail = await prisma.user.findFirst({
+    where: { companyId, email },
+    select: { id: true, systemKind: true },
+  });
+  if (byEmail) {
+    if (byEmail.systemKind !== WEBSITE_FORMS_SYSTEM_KIND) {
+      await prisma.user.update({
+        where: { id: byEmail.id },
+        data: { systemKind: WEBSITE_FORMS_SYSTEM_KIND },
+      });
+    }
+    return byEmail.id;
+  }
+
+  const created = await prisma.user.create({
+    data: {
+      companyId,
+      email,
+      name: "Website Forms",
+      firstName: "Website",
+      lastName: "Forms",
+      role: UserRole.CSR,
+      systemKind: WEBSITE_FORMS_SYSTEM_KIND,
+      passwordHash: null,
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+function storedPhotosForBackfill(
+  metadata: unknown,
+  companyId: string,
+  leadId: string
+) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return [];
+  const photos = (metadata as Record<string, unknown>).photos;
+  if (!Array.isArray(photos)) return [];
+  const expectedPrefix = `leads/${companyId}/${leadId}/`;
+
+  return photos.flatMap((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const photo = value as Record<string, unknown>;
+    const url = typeof photo.url === "string" ? photo.url.trim() : "";
+    const pathname =
+      typeof photo.pathname === "string" ? photo.pathname.replace(/^\/+/, "") : "";
+    if (!url || !pathname.startsWith(expectedPrefix)) return [];
+    try {
+      if (!new URL(url).hostname.endsWith(".blob.vercel-storage.com")) return [];
+    } catch {
+      return [];
+    }
+    return [
+      {
+        url,
+        fileName:
+          typeof photo.name === "string" && photo.name.trim()
+            ? photo.name.trim()
+            : `quote-photo-${index + 1}.jpg`,
+        mimeType:
+          typeof photo.mimeType === "string" && photo.mimeType.startsWith("image/")
+            ? photo.mimeType
+            : "image/jpeg",
+      },
+    ];
+  });
+}
+
+/** Make historical website quote photos visible in each linked customer profile. */
+async function backfillLeadPhotoAttachments() {
+  const leads = await prisma.lead.findMany({
+    where: { convertedCustomerId: { not: null } },
+    select: {
+      id: true,
+      companyId: true,
+      convertedCustomerId: true,
+      metadata: true,
+    },
+  });
+  const uploaderByCompany = new Map<string, string>();
+  let attached = 0;
+
+  for (const lead of leads) {
+    if (!lead.convertedCustomerId) continue;
+    const photos = storedPhotosForBackfill(lead.metadata, lead.companyId, lead.id);
+    if (!photos.length) continue;
+
+    const existing = await prisma.customerAttachment.findMany({
+      where: {
+        customerId: lead.convertedCustomerId,
+        blobUrl: { in: photos.map((photo) => photo.url) },
+      },
+      select: { blobUrl: true },
+    });
+    const existingUrls = new Set(existing.map((attachment) => attachment.blobUrl));
+    const missing = photos.filter((photo) => !existingUrls.has(photo.url));
+    if (!missing.length) continue;
+
+    let uploadedById = uploaderByCompany.get(lead.companyId);
+    if (!uploadedById) {
+      uploadedById = await ensureWebsiteFormsSystemUser(lead.companyId);
+      uploaderByCompany.set(lead.companyId, uploadedById);
+    }
+    const created = await prisma.customerAttachment.createMany({
+      data: missing.map((photo) => ({
+        customerId: lead.convertedCustomerId!,
+        uploadedById,
+        blobUrl: photo.url,
+        fileName: photo.fileName,
+        mimeType: photo.mimeType,
+      })),
+    });
+    attached += created.count;
+  }
+
+  console.log(`Backfilled lead photos into customer attachments (${attached} created)`);
 }
 
 async function ensureSecurityRateLimitTable() {
@@ -758,6 +892,11 @@ async function main() {
     await ensureVehicleNumberColumn();
   } catch (err) {
     console.warn("Vehicle number column ensure skipped:", err);
+  }
+  try {
+    await backfillLeadPhotoAttachments();
+  } catch (err) {
+    console.warn("Lead photo attachment backfill skipped:", err);
   }
   try {
     await ensureEstimateDepositThresholds();

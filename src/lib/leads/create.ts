@@ -11,6 +11,7 @@ import { notifyLeadCreated } from "@/lib/notifications/lead-created";
 import { notifyLeadAcknowledged } from "@/lib/notifications/lead-acknowledged";
 import { createInboxEntriesFromWebsiteLead } from "@/lib/leads/inbox-from-lead";
 import {
+  attachLeadPhotosToCustomer,
   persistLeadPhotosFromMetadata,
   updateLeadMetadataPhotos,
 } from "@/lib/leads/persist-photos";
@@ -201,8 +202,16 @@ export async function createLeadFromIntegration(
       if (nextMeta !== metadata) {
         leadForNotify = await updateLeadMetadataPhotos(lead.id, nextMeta);
       }
+      if (leadForNotify.convertedCustomerId) {
+        await attachLeadPhotosToCustomer({
+          companyId,
+          leadId: lead.id,
+          customerId: leadForNotify.convertedCustomerId,
+          metadata: nextMeta,
+        });
+      }
     } catch (err) {
-      console.error("Failed to persist lead photos", err);
+      console.error("Failed to persist or attach lead photos", err);
     }
   }
 

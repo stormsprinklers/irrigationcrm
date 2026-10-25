@@ -50,7 +50,11 @@ export async function GET(request: NextRequest) {
     fileName = attachment.fileName;
 
     const pathname = isBlobStorageUrl(blobUrl) ? blobPathnameFromUrl(blobUrl) : null;
-    if (!pathname?.startsWith(`customers/${ctx.companyId}/${ctx.customerId}/`)) {
+    const isCustomerUpload = pathname?.startsWith(
+      `customers/${ctx.companyId}/${ctx.customerId}/`
+    );
+    const isWebsiteLeadUpload = pathname?.startsWith(`leads/${ctx.companyId}/`);
+    if (!isCustomerUpload && !isWebsiteLeadUpload) {
       return forbiddenResponse();
     }
   }

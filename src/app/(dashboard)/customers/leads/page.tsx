@@ -153,7 +153,18 @@ export default function CustomerLeadsPage() {
             <TableBody>
               {leads.map((lead) => (
                 <TableRow key={lead.id}>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={
+                        lead.convertedCustomer
+                          ? `/customers/${lead.convertedCustomer.id}`
+                          : `/inbox/leads?leadId=${encodeURIComponent(lead.id)}`
+                      }
+                      className="text-primary hover:underline"
+                    >
+                      {lead.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     <div className="text-sm">
                       {lead.phone ? formatPhoneDisplay(lead.phone) : "—"}

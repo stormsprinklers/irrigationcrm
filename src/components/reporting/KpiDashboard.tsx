@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Wrench, Headphones, UsersRound, TrendingUp } from "lucide-react";
+import { GitBranch, Wrench, Headphones, UsersRound, TrendingUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ReportDateRangeControl } from "@/components/reporting/ReportDateRangeControl";
@@ -206,13 +207,23 @@ export function KpiDashboard({
       <PageHeader
         title={isHome ? "Dashboard" : "KPI Dashboard"}
         actions={
-          <ReportDateRangeControl
-            value={rangeInput}
-            label={rangeLabel}
-            onChange={setRangeInput}
-            presets={presets}
-            allowCustom={allowCustom}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            {isHome ? (
+              <Button asChild>
+                <Link href="/customers/pipeline">
+                  <GitBranch className="h-4 w-4" />
+                  Sales pipeline
+                </Link>
+              </Button>
+            ) : null}
+            <ReportDateRangeControl
+              value={rangeInput}
+              label={rangeLabel}
+              onChange={setRangeInput}
+              presets={presets}
+              allowCustom={allowCustom}
+            />
+          </div>
         }
       />
 

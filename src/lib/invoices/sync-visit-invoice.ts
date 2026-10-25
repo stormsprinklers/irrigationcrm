@@ -15,6 +15,10 @@ export type SyncVisitInvoiceResult =
     }
   | { ok: false; error: string; status: number };
 
+function isApprovalPaymentInvoice(invoiceNumber: string) {
+  return invoiceNumber.includes("-DEP-") || invoiceNumber.includes("-PAY-");
+}
+
 export async function syncVisitInvoice(params: {
   companyId: string;
   visitId: string;
@@ -44,22 +48,59 @@ export async function syncVisitInvoice(params: {
     return { ok: false, error: "Visit total must be greater than zero", status: 400 };
   }
 
-  let invoice = await prisma.invoice.findFirst({
+  const visitInvoices = await prisma.invoice.findMany({
     where: {
       visitId: visit.id,
       companyId: params.companyId,
-      status: { in: ["DRAFT", "SENT", "PARTIAL"] },
     },
+    orderBy: { createdAt: "desc" },
     include: { payments: true },
   });
 
-  const computeBalanceDue = (inv: NonNullable<typeof invoice>) => {
-    const paid = inv.payments.reduce((sum, payment) => {
+  const paidAmount = (inv: (typeof visitInvoices)[number]) => {
+    const recorded = inv.payments.reduce((sum, payment) => {
       if (payment.refundedAt) return sum;
       return sum + toNumber(payment.amount);
     }, 0);
-    return Math.max(0, total - paid);
+    return recorded > 0 || inv.status !== "PAID" ? recorded : toNumber(inv.total);
   };
+
+  let invoice = visitInvoices.find(
+    (candidate) =>
+      !isApprovalPaymentInvoice(candidate.invoiceNumber) &&
+      ["DRAFT", "SENT", "PARTIAL"].includes(candidate.status)
+  );
+  const priorPaid = visitInvoices.reduce((sum, candidate) => {
+    if (candidate.id === invoice?.id || candidate.status === "VOID") return sum;
+    return sum + paidAmount(candidate);
+  }, 0);
+  const invoiceTotal = Math.max(0, total - priorPaid);
+  const invoicePayments = invoice ? paidAmount(invoice) : 0;
+
+  if (invoiceTotal - invoicePayments <= 0.005) {
+    return { ok: false, error: "This visit is already paid", status: 400 };
+  }
+
+  const invoiceLineItems = [
+    ...visit.lineItems.map((item, index) => ({
+      name: item.name,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+      sortOrder: index,
+    })),
+    ...(priorPaid > 0
+      ? [{
+          name: "Previous payment",
+          description: "Deposit or payment already received",
+          quantity: 1,
+          unitPrice: -priorPaid,
+          total: -priorPaid,
+          sortOrder: visit.lineItems.length,
+        }]
+      : []),
+  ];
 
   if (!invoice) {
     const created = await prisma.invoice.create({
@@ -70,18 +111,11 @@ export async function syncVisitInvoice(params: {
         visitId: visit.id,
         invoiceNumber: await nextInvoiceNumber(params.companyId),
         status: "SENT",
-        subtotal,
+        subtotal: Math.max(0, subtotal - priorPaid),
         discountTotal,
-        total,
+        total: invoiceTotal,
         lineItems: {
-          create: visit.lineItems.map((item, index) => ({
-            name: item.name,
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            total: item.total,
-            sortOrder: index,
-          })),
+          create: invoiceLineItems,
         },
       },
     });
@@ -92,12 +126,18 @@ export async function syncVisitInvoice(params: {
   } else {
     invoice = await prisma.invoice.update({
       where: { id: invoice.id },
-      data: { subtotal, discountTotal, total, status: "SENT" },
+      data: {
+        subtotal: Math.max(0, subtotal - priorPaid),
+        discountTotal,
+        total: invoiceTotal,
+        status: invoicePayments > 0 ? "PARTIAL" : "SENT",
+        lineItems: { deleteMany: {}, create: invoiceLineItems },
+      },
       include: { payments: true },
     });
   }
 
-  const balanceDue = computeBalanceDue(invoice);
+  const balanceDue = Math.max(0, invoiceTotal - paidAmount(invoice));
   if (balanceDue <= 0) {
     return { ok: false, error: "This visit invoice is already paid", status: 400 };
   }

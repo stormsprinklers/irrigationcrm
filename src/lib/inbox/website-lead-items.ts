@@ -9,6 +9,7 @@ import {
 } from "@/lib/inbox/website-leads";
 import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { leadPhoneKey } from "@/lib/leads/contact-status";
+import { storedLeadPhotos, type StoredLeadPhoto } from "@/lib/leads/photos";
 import { prisma } from "@/lib/prisma";
 
 export type WebsiteLeadInboxItem = {
@@ -28,6 +29,7 @@ export type WebsiteLeadInboxItem = {
   leadPhone: string | null;
   leadEmail: string | null;
   convertedCustomerId: string | null;
+  leadPhotos: StoredLeadPhoto[];
   leadAddress: string | null;
   leadCity: string | null;
   leadState: string | null;
@@ -127,7 +129,8 @@ function withLead(
     fallbackPhone?: string | null;
     fallbackEmail?: string | null;
   },
-  lead: LeadRow | null | undefined
+  lead: LeadRow | null | undefined,
+  companyId: string
 ): WebsiteLeadInboxItem {
   const addr = parseLeadServiceAddress(lead?.notes, lead?.metadata, base.preview);
   return {
@@ -147,6 +150,9 @@ function withLead(
     leadPhone: lead?.phone ?? base.fallbackPhone ?? null,
     leadEmail: lead?.email ?? base.fallbackEmail ?? null,
     convertedCustomerId: lead?.convertedCustomerId ?? null,
+    leadPhotos: lead
+      ? storedLeadPhotos(lead.metadata, { companyId, leadId: lead.id })
+      : [],
     leadAddress: addr.address,
     leadCity: addr.city,
     leadState: addr.state,
@@ -257,7 +263,8 @@ export async function listWebsiteLeadInboxItems(companyId: string): Promise<Webs
         leadId,
         fallbackEmail,
       },
-      lead
+      lead,
+      companyId
     );
   });
 
@@ -283,7 +290,8 @@ export async function listWebsiteLeadInboxItems(companyId: string): Promise<Webs
         conversationId: row.conversationId,
         fallbackPhone: row.conversation.participantPhone,
       },
-      lead
+      lead,
+      companyId
     );
   });
 

@@ -2,10 +2,17 @@ import { VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { customerPortalHomeUrl, customerSurveyUrl } from "@/lib/company/customer-url";
 import { buildNotificationContext } from "./context";
-import { scheduleNotificationJob } from "./jobs";
+import { cancelPendingJobsForVisit, scheduleNotificationJob } from "./jobs";
 import { sendOperationalNotification } from "./send";
 import type { NotificationEvent } from "./templates";
 import { createFeedbackSurveyToken } from "./survey";
+
+export function resolveReviewDestination(
+  googleReviewUrl?: string | null,
+  surveyUrl?: string | null
+): string | null {
+  return googleReviewUrl?.trim() || surveyUrl?.trim() || null;
+}
 
 export async function notifyVisitEvent(params: {
   visitId: string;
@@ -24,8 +31,11 @@ export async function notifyVisitEvent(params: {
   if (!visit?.customerId || !visit.customer) return;
 
   const company = visit.company;
+  const needsSurveyFallback =
+    params.event === "FEEDBACK_SURVEY" ||
+    (params.event === "REVIEW_REQUEST" && !company.googleReviewUrl?.trim());
   const surveyToken =
-    params.event === "FEEDBACK_SURVEY"
+    needsSurveyFallback
       ? await createFeedbackSurveyToken(visit.id)
       : null;
   const surveyUrl = surveyToken ? customerSurveyUrl(company, surveyToken) : null;
@@ -59,7 +69,11 @@ export async function notifyVisitEvent(params: {
   });
 
   const linkPlaceholders: Record<string, string> = {};
-  if (company.googleReviewUrl) linkPlaceholders.review = company.googleReviewUrl;
+  const reviewUrl = resolveReviewDestination(company.googleReviewUrl, surveyUrl);
+  // A review template without a destination produces a broken, linkless ask.
+  // If neither Google nor the built-in survey can be resolved, do not send it.
+  if (params.event === "REVIEW_REQUEST" && !reviewUrl) return;
+  if (reviewUrl) linkPlaceholders.review = reviewUrl;
   if (portalHome) linkPlaceholders.portal = portalHome;
   if (surveyUrl) linkPlaceholders.survey = surveyUrl;
   if (visit.assignedUser?.websiteTeamSlug) {
@@ -89,41 +103,55 @@ export async function notifyVisitEvent(params: {
 }
 
 export async function onVisitCompleted(visitId: string, companyId: string) {
+  // Review requests are payment follow-ups. Clear legacy completion-based jobs
+  // so completing a visit (often immediately before sending its invoice) cannot
+  // ask for a review before the balance is paid.
+  await cancelPendingJobsForVisit(visitId, ["REVIEW_REQUEST", "FEEDBACK_SURVEY"]);
   await notifyVisitEvent({ visitId, event: "VISIT_COMPLETED", companyId });
+}
+
+export async function onInvoiceFullyPaid(params: {
+  visitId: string;
+  companyId: string;
+  paidAt?: Date;
+}) {
+  await cancelPendingJobsForVisit(params.visitId, ["REVIEW_REQUEST", "FEEDBACK_SURVEY"]);
+
+  const alreadySent = await prisma.notificationDelivery.findFirst({
+    where: {
+      companyId: params.companyId,
+      visitId: params.visitId,
+      event: "REVIEW_REQUEST",
+      OR: [{ emailSent: true }, { smsSent: true }],
+    },
+    select: { id: true },
+  });
+  if (alreadySent) return;
 
   const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { reviewRequestDelayHours: true, feedbackSurveyDelayHours: true },
+    where: { id: params.companyId },
+    select: { notifyReviewRequest: true, reviewRequestDelayHours: true },
   });
-  if (!company) return;
+  if (!company?.notifyReviewRequest) return;
 
   if (company.reviewRequestDelayHours <= 0) {
-    await notifyVisitEvent({ visitId, event: "REVIEW_REQUEST", companyId });
+    await notifyVisitEvent({
+      visitId: params.visitId,
+      event: "REVIEW_REQUEST",
+      companyId: params.companyId,
+    });
   } else {
     await scheduleNotificationJob({
-      companyId,
-      visitId,
+      companyId: params.companyId,
+      visitId: params.visitId,
       event: "REVIEW_REQUEST",
       delayHours: company.reviewRequestDelayHours,
-      from: new Date(),
-    });
-  }
-
-  if (company.feedbackSurveyDelayHours <= 0) {
-    await notifyVisitEvent({ visitId, event: "FEEDBACK_SURVEY", companyId });
-  } else {
-    await scheduleNotificationJob({
-      companyId,
-      visitId,
-      event: "FEEDBACK_SURVEY",
-      delayHours: company.feedbackSurveyDelayHours,
-      from: new Date(),
+      from: params.paidAt ?? new Date(),
     });
   }
 }
 
 export async function onVisitCancelled(visitId: string, companyId: string) {
-  const { cancelPendingJobsForVisit } = await import("./jobs");
   await cancelPendingJobsForVisit(visitId, ["REVIEW_REQUEST", "FEEDBACK_SURVEY"]);
   await notifyVisitEvent({ visitId, event: "VISIT_CANCELLED", companyId });
 }

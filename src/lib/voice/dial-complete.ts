@@ -82,11 +82,14 @@ export async function handleDialComplete(request: NextRequest) {
         session?.status === CallSessionStatus.IN_PROGRESS ||
         session?.status === CallSessionStatus.ON_HOLD ||
         session?.status === CallSessionStatus.TRANSFERRING;
+      const explicitlyDeclined =
+        session?.status === CallSessionStatus.COMPLETED && !session.agentCallSid;
 
       if (!alreadyAnswered) {
         const overflowToQueue = shouldOverflowDialToQueue(
           dialStatus,
-          await companyHasAgentsOnCall(companyId)
+          await companyHasAgentsOnCall(companyId),
+          explicitlyDeclined
         );
         if (overflowToQueue) {
           const twiml = await enqueueCallerBecauseAgentsBusyTwiml(companyId, callSid);

@@ -75,8 +75,8 @@ const EVENT_TIMING_FIELDS: Partial<Record<NotificationEvent, TimingField[]>> = {
   REVIEW_REQUEST: [
     {
       key: "reviewRequestDelayHours",
-      label: "Delay after visit is completed (hours)",
-      hint: "Counted from when the visit is marked completed, not the appointment time.",
+      label: "Delay after invoice is fully paid (hours)",
+      hint: "Counted from when the invoice balance reaches zero.",
       min: 0,
     },
   ],

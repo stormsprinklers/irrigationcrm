@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
               [1, 2, 3].map((sequence) => {
                 const item = row.followUps.find((followUp) => followUp.stage === stage && followUp.sequence === sequence);
                 if (!item) return "";
+                if (item.status === "SKIPPED") return `SKIPPED | ${item.completedAt ?? ""} | manual`;
                 const channels = [item.smsSentAt ? "SMS" : null, item.emailSentAt ? "EMAIL" : null].filter(Boolean);
                 const method = channels.length ? channels.join("+") : item.method;
                 return `${method} | ${item.completedAt ?? ""}${item.automated ? " | automated" : " | manual"}`;

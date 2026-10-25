@@ -242,7 +242,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       void onVisitCompleted(id, user.companyId).catch((err) =>
         console.error("Visit completed notification error:", err)
       );
-    } else if (existing.customerId && body.status !== VisitStatus.CANCELLED) {
+    } else if (existing.customerId && body.status !== VisitStatus.CANCELLED && body.notifyCustomer !== false) {
       if (becameScheduled) {
         void onVisitTimeChanged({
           visitId: id,

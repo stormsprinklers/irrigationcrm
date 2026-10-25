@@ -220,7 +220,8 @@ export function NotificationBell() {
               securityAction: { type: "switch-account", targetUserId: data.session.id },
             });
           }
-          window.location.href = item.href;
+          router.push(item.href);
+          router.refresh();
         } finally {
           setSwitching(false);
         }

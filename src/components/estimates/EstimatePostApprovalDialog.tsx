@@ -53,6 +53,7 @@ export function EstimatePostApprovalDialog({
   const [percent, setPercent] = useState(50);
   const [resultVisitId, setResultVisitId] = useState<string | null>(null);
   const [depositDue, setDepositDue] = useState(0);
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
   const autoRan = useRef(false);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export function EstimatePostApprovalDialog({
     }
     setResultVisitId(null);
     setDepositDue(0);
+    setNotifyCustomer(true);
     const start = addHours(new Date(), 24);
     setStartLocal(toLocalInputValue(start));
     setEndLocal(toLocalInputValue(addHours(start, 2)));
@@ -105,6 +107,7 @@ export function EstimatePostApprovalDialog({
           endAt: endAt.toISOString(),
           division: "SERVICE",
         };
+        body.notifyCustomer = notifyCustomer;
       }
 
       const res = await fetch(`/api/estimates/${estimateId}/post-approval`, {
@@ -241,6 +244,20 @@ export function EstimatePostApprovalDialog({
                   </>
                 )}
               </div>
+              <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={notifyCustomer}
+                  onChange={(event) => setNotifyCustomer(event.target.checked)}
+                />
+                <span>
+                  <span className="block font-medium">Notify customer</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Send the scheduled-visit notification after saving.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               {initialMode === "choose" ? (

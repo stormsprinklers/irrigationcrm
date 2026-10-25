@@ -2,6 +2,7 @@
 
 import { format } from "date-fns";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import { toast } from "sonner";
@@ -60,6 +61,7 @@ type InboxReviewCard = {
 };
 
 export function GoogleReviewsInbox() {
+  const router = useRouter();
   const { data: session, update: updateSession } = useSession();
   const inboxBadges = useInboxBadges();
   const [googleReviews, setGoogleReviews] = useState<GbpReviewDto[]>([]);
@@ -141,7 +143,7 @@ export function GoogleReviewsInbox() {
       await updateSession({
         securityAction: { type: "switch-account", targetUserId: data.session.id },
       });
-      window.location.reload();
+      router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to switch companies");
       setSwitchingCompanyId(null);

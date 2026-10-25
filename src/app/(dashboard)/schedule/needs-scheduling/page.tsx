@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Calendar, ArrowLeft } from "lucide-react";
+import { Calendar, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 
 type QueueItem = {
@@ -25,14 +27,47 @@ function formatCurrency(value: number) {
 export default function NeedsSchedulingPage() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDismissal, setPendingDismissal] = useState<QueueItem | null>(null);
+  const [dismissing, setDismissing] = useState(false);
 
-  useEffect(() => {
+  const loadItems = useCallback(() => {
     fetch("/api/estimates/needs-scheduling")
       .then((r) => r.json())
       .then((data) => setItems(data.estimates ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadItems();
+    const timer = window.setInterval(loadItems, 30_000);
+    window.addEventListener("focus", loadItems);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", loadItems);
+    };
+  }, [loadItems]);
+
+  async function dismissItem() {
+    if (!pendingDismissal || dismissing) return;
+    setDismissing(true);
+    try {
+      const res = await fetch("/api/estimates/needs-scheduling", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estimateId: pendingDismissal.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not check off this job");
+      setItems((current) => current.filter((item) => item.id !== pendingDismissal.id));
+      setPendingDismissal(null);
+      toast.success("Removed from needs scheduling");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check off this job");
+    } finally {
+      setDismissing(false);
+    }
+  }
 
   return (
     <div className="space-y-6 p-6">
@@ -105,12 +140,25 @@ export default function NeedsSchedulingPage() {
                       Schedule board
                     </Link>
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPendingDismissal(est)}>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Check off
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDismissal)}
+        title="Check off this scheduling item?"
+        description={`${pendingDismissal?.customer.name ?? "This job"} will be removed from the needs-scheduling list without changing the appointment.`}
+        confirmLabel="Check off"
+        busy={dismissing}
+        onCancel={() => setPendingDismissal(null)}
+        onConfirm={() => void dismissItem()}
+      />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { EstimateStatus } from "@prisma/client";
 import { addHours } from "date-fns";
 import { formatArrivalWindow } from "../arrival-window";
 import { isEstimateOpenForFollowUp } from "../estimate-followup";
-import { followUpRunAt } from "../jobs";
+import { followUpRunAt, holdUntilCompletedDelay } from "../jobs";
 import { splitCustomerName } from "../name-utils";
 import {
   leadAcknowledgementSnippets,
@@ -18,6 +18,7 @@ import {
 } from "../templates";
 import { buildNotificationContext, buildEnRouteContext, EN_ROUTE_ETA_FALLBACK } from "../context";
 import { buildPaidReceiptExtras } from "../receipt-extras";
+import { resolveReviewDestination } from "../visit-events";
 import {
   injectTrackedUrlsInText,
   templateContextWithTrackedPlaceholders,
@@ -253,20 +254,29 @@ test("review links in SMS templates use tracked redirect URLs", () => {
   assert.doesNotMatch(body, /g\.page\/r\/storm\/review/);
 });
 
-test("paid receipt extras include summary, review placeholder, and photo markup", () => {
+test("review request falls back to the built-in survey when Google review URL is missing", () => {
+  assert.equal(
+    resolveReviewDestination(null, "https://portal.example.com/feedback/token"),
+    "https://portal.example.com/feedback/token"
+  );
+  assert.equal(
+    resolveReviewDestination(" https://g.page/r/storm/review ", "https://portal.example.com/feedback/token"),
+    "https://g.page/r/storm/review"
+  );
+});
+
+test("paid receipt extras include summary and photo markup without a duplicate review ask", () => {
   const { html, text } = buildPaidReceiptExtras({
     workSummary: "Replaced the broken sprinkler head.",
-    reviewUrl: "https://g.page/r/storm/review",
     invoicePublicToken: "tok_abc",
     media: [{ id: "att1", fileName: "zone.jpg", mimeType: "image/jpeg" }],
   });
   assert.match(html, /Summary of work/);
   assert.match(html, /Replaced the broken sprinkler head/);
-  assert.match(html, /Leave a review/);
-  assert.match(html, /\{review_link\}/);
   assert.match(html, /tok_abc/);
   assert.match(html, /att1/);
-  assert.match(text, /Leave a review: \{review_link\}/);
+  assert.doesNotMatch(html, /Leave a review/);
+  assert.doesNotMatch(text, /review_link/);
 });
 
 test("organizeMergeFields uses folders when there are more than 20 variables", () => {
@@ -320,22 +330,41 @@ test("buildNotificationContext uses the website booking URL when set", () => {
   assert.equal(ctx.booking_link, "https://www.stormsprinklers.com/booking");
 });
 
-test("followUpRunAt is 24 hours after completion, not the appointment time", () => {
-  const completedAt = new Date("2026-09-11T18:00:00.000Z");
+test("followUpRunAt is 24 hours after full payment, not the appointment time", () => {
+  const paidAt = new Date("2026-09-11T18:00:00.000Z");
   const appointmentEnd = new Date("2026-09-10T16:00:00.000Z");
   const runAt = followUpRunAt({
-    completedAt,
+    anchorAt: paidAt,
     delayHours: 24,
     timeZone: "America/Denver",
   });
   assert.ok(runAt);
-  assert.equal(runAt.getTime(), addHours(completedAt, 24).getTime());
+  assert.equal(runAt.getTime(), addHours(paidAt, 24).getTime());
   assert.notEqual(runAt.getTime(), addHours(appointmentEnd, 24).getTime());
 });
 
 test("followUpRunAt returns null when delay is 0 so the message can send immediately", () => {
   assert.equal(
-    followUpRunAt({ completedAt: new Date("2026-09-11T18:00:00.000Z"), delayHours: 0 }),
+    followUpRunAt({ anchorAt: new Date("2026-09-11T18:00:00.000Z"), delayHours: 0 }),
     null
+  );
+});
+
+test("legacy feedback jobs are cancelled while paid review jobs send at their stored time", async () => {
+  assert.deepEqual(
+    await holdUntilCompletedDelay({
+      visitId: "visit_1",
+      companyId: "company_1",
+      event: "FEEDBACK_SURVEY",
+    }),
+    { action: "cancel" }
+  );
+  assert.deepEqual(
+    await holdUntilCompletedDelay({
+      visitId: "visit_1",
+      companyId: "company_1",
+      event: "REVIEW_REQUEST",
+    }),
+    { action: "send" }
   );
 });

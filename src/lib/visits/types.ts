@@ -33,8 +33,19 @@ export type VisitDTO = {
     phone: string | null;
     email: string | null;
     doNotService?: boolean;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
   } | null;
-  property: { id: string; name: string; address: string | null } | null;
+  property: {
+    id: string;
+    name: string;
+    address: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+  } | null;
   serviceArea: { id: string; name: string; color: string } | null;
   assignedUser: {
     id: string;
@@ -49,6 +60,7 @@ export type VisitDTO = {
     photoUrl: string | null;
   }>;
   crew: { id: string; name: string; color: string } | null;
+  notes?: Array<{ id: string; body: string; createdAt: string }>;
   subtotal?: number;
   total?: number;
   enRouteEtaSeconds?: number | null;

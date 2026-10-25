@@ -53,6 +53,7 @@ export function UnscheduledVisitsCard() {
   const [endTime, setEndTime] = useState("11:00");
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/maintenance-plans/visits/unscheduled");
@@ -102,6 +103,7 @@ export function UnscheduledVisitsCard() {
           assignedUserId,
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
+          notifyCustomer,
         }),
       });
       if (!res.ok) {
@@ -113,6 +115,7 @@ export function UnscheduledVisitsCard() {
       toast.success("Visit scheduled");
       setScheduleDialogId(null);
       setAssignedUserId("");
+      setNotifyCustomer(true);
       router.push(`/visits/${visit.id}`);
     } catch {
       toast.error("Failed to schedule visit");
@@ -214,6 +217,7 @@ export function UnscheduledVisitsCard() {
                           setScheduleDate("");
                           setStartTime("09:00");
                           setEndTime("11:00");
+                          setNotifyCustomer(true);
                         }}
                       >
                         <CalendarPlus className="h-4 w-4" />
@@ -295,6 +299,20 @@ export function UnscheduledVisitsCard() {
                 </option>
               ))}
             </select>
+            <label className="mt-4 flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={notifyCustomer}
+                onChange={(event) => setNotifyCustomer(event.target.checked)}
+              />
+              <span>
+                <span className="block font-medium">Notify customer</span>
+                <span className="block text-xs text-muted-foreground">
+                  Send the scheduled-visit notification after saving.
+                </span>
+              </span>
+            </label>
             <div className="mt-6 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setScheduleDialogId(null)}>
                 Cancel

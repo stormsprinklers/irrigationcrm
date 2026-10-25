@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   ArrowLeftRight,
@@ -45,6 +46,7 @@ function getInitials(name: string) {
 }
 
 export function UserAccountMenu() {
+  const router = useRouter();
   const { data: session, update } = useSession();
   const [current, setCurrent] = useState<AccountOption | null>(null);
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -81,9 +83,9 @@ export function UserAccountMenu() {
       await update({
         securityAction: { type: "switch-account", targetUserId: data.session.id },
       });
-      // Reload the same URL so all server and client data is resolved for the
-      // newly selected company without losing the user's current page context.
-      window.location.reload();
+      // Refresh server data without tearing down the app shell. A full browser
+      // reload destroys the Twilio device and disconnects any active call.
+      router.refresh();
     } finally {
       setSwitching(false);
     }

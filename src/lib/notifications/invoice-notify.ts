@@ -103,7 +103,6 @@ export async function notifyInvoiceViaTemplates(params: {
     params.event === "INVOICE_PAID_RECEIPT"
       ? buildPaidReceiptExtras({
           workSummary: customerWorkSummary,
-          reviewUrl: invoice.company.googleReviewUrl?.trim() || null,
           invoicePublicToken: publicToken,
           publicBaseUrl: invoice.company.customerBaseUrl,
           media: (invoice.visit?.attachments ?? []).map((item) => ({
@@ -121,7 +120,7 @@ export async function notifyInvoiceViaTemplates(params: {
         invoiceId: invoice.id,
         companyId: params.companyId,
         workSummary: customerWorkSummary,
-        reviewUrl: invoice.company.googleReviewUrl?.trim() || null,
+        reviewUrl: null,
       });
       if (pdf) {
         emailAttachments = [
@@ -151,9 +150,6 @@ export async function notifyInvoiceViaTemplates(params: {
       visitId: invoice.visitId ?? undefined,
       linkPlaceholders: {
         invoice: payUrl,
-        ...(invoice.company.googleReviewUrl?.trim()
-          ? { review: invoice.company.googleReviewUrl.trim() }
-          : {}),
       },
       htmlAppend: receiptExtras.html || undefined,
       textAppend: receiptExtras.text || undefined,

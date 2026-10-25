@@ -91,12 +91,16 @@ export function renderPipelineTemplate(
   return template
     .replace(/\{customer first name\}/gi, values.customerFirstName)
     .replace(/\{customer_first_name\}/gi, values.customerFirstName)
-    .replace(/\{employee\}/gi, values.employee)
+    .replace(/\{employee\}/gi, employeeFirstName(values.employee))
     .replace(/\{company\}/gi, values.company);
 }
 
 export function customerFirstName(name: string) {
   return name.trim().split(/\s+/)[0] || "there";
+}
+
+export function employeeFirstName(name: string) {
+  return name.trim().split(/\s+/)[0] || "Team";
 }
 
 /** A manual resume starts a fresh clock for every remaining automated step. */

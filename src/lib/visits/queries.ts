@@ -7,6 +7,7 @@ import { isFieldRole } from "@/lib/employees";
 import { getUserCrewIds } from "@/lib/field/access";
 import { sumDiscounts, sumLineItems, toNumber } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
+import { attachEstimateInvoicesForVisit } from "@/lib/estimates/attach-invoices-to-visit";
 
 export const visitInclude = {
   customer: {
@@ -51,6 +52,11 @@ export const visitInclude = {
     include: { priceBookItem: { select: { type: true, unit: true } } },
   },
   discounts: true,
+  notes: {
+    orderBy: { createdAt: "desc" as const },
+    take: 3,
+    select: { id: true, body: true, createdAt: true },
+  },
 } satisfies Prisma.VisitInclude;
 
 export const visitDetailInclude = {
@@ -97,7 +103,6 @@ export const visitDetailInclude = {
   },
   invoices: {
     orderBy: { createdAt: "desc" as const },
-    take: 1,
     select: {
       id: true,
       invoiceNumber: true,
@@ -105,7 +110,8 @@ export const visitDetailInclude = {
       total: true,
       paidAt: true,
       publicToken: true,
-      payments: { select: { amount: true, refundedAt: true } },
+      createdAt: true,
+      payments: { select: { amount: true, paidAt: true, refundedAt: true } },
     },
   },
 } satisfies Prisma.VisitInclude;
@@ -138,6 +144,11 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     assignedUser: visit.assignedUser,
     assignedUsers,
     crew: visit.crew,
+    notes: visit.notes.map((note) => ({
+      id: note.id,
+      body: note.body,
+      createdAt: note.createdAt.toISOString(),
+    })),
     subtotal,
     total: Math.max(0, subtotal - discountTotal),
     enRouteEtaSeconds: visit.enRouteEtaSeconds,
@@ -360,6 +371,7 @@ export async function getScheduleFilters(
 
 export async function getVisitForCompany(companyId: string, visitId: string) {
   await expireEnRouteVisits(companyId, visitId);
+  await attachEstimateInvoicesForVisit({ companyId, visitId });
   return prisma.visit.findFirst({
     where: { id: visitId, companyId },
     include: visitDetailInclude,
@@ -418,6 +430,18 @@ export async function serializeVisitDetail(
     property,
     assignedUsers,
     estimates: visit.estimates.map(serializeVisitEstimateSummary),
+    invoices: visit.invoices.map((invoice) => ({
+      ...invoice,
+      total: toNumber(invoice.total),
+      createdAt: invoice.createdAt.toISOString(),
+      paidAt: invoice.paidAt?.toISOString() ?? null,
+      payments: invoice.payments.map((payment) => ({
+        ...payment,
+        amount: toNumber(payment.amount),
+        paidAt: payment.paidAt.toISOString(),
+        refundedAt: payment.refundedAt?.toISOString() ?? null,
+      })),
+    })),
     startAt: visit.startAt.toISOString(),
     endAt: visit.endAt.toISOString(),
     enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,

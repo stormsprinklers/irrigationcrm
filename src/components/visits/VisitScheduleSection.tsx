@@ -89,6 +89,7 @@ export function VisitScheduleSection({
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [notifyCustomer, setNotifyCustomer] = useState(true);
 
   useEffect(() => {
     setVisitTitle(title);
@@ -160,6 +161,7 @@ export function VisitScheduleSection({
           endAt: nextEnd.toISOString(),
           assignedUserIds,
           status: "SCHEDULED",
+          notifyCustomer,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -169,6 +171,7 @@ export function VisitScheduleSection({
       }
       if (data.warning) toast.warning(data.warning);
       toast.success("Schedule updated");
+      setNotifyCustomer(true);
       await onUpdated();
     } finally {
       setSaving(false);
@@ -258,6 +261,20 @@ export function VisitScheduleSection({
               The first technician selected is the primary assignee.
             </p>
           </div>
+          <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={notifyCustomer}
+              onChange={(event) => setNotifyCustomer(event.target.checked)}
+            />
+            <span>
+              <span className="block font-medium">Notify customer</span>
+              <span className="block text-xs text-muted-foreground">
+                Send an appointment notification if the visit is newly scheduled or its time changes.
+              </span>
+            </span>
+          </label>
           <Button type="submit" size="sm" className="w-full" disabled={saving}>
             {saving ? "Saving..." : status === "UNSCHEDULED" ? "Save to schedule" : "Save schedule"}
           </Button>

@@ -202,6 +202,8 @@ export function EstimateOptionPresentCards({
   onRename,
   onLeaseCommitmentChange,
   decidingId,
+  approvedId,
+  approvedLabel = "Approved option",
 }: {
   options: PresentOption[];
   lineItems: PresentLineItem[];
@@ -215,6 +217,8 @@ export function EstimateOptionPresentCards({
   onRename?: (optionId: string, label: string) => void;
   onLeaseCommitmentChange?: (optionId: string, years: 1 | 3 | 5) => void;
   decidingId?: string | null;
+  approvedId?: string | null;
+  approvedLabel?: string;
 }) {
   const order = useMemo(() => presentCardsOrder(options), [options]);
   const ranked = useMemo(() => rankPresentOptions(options, order), [options, order]);
@@ -226,6 +230,9 @@ export function EstimateOptionPresentCards({
   const visible = ranked.slice(start, start + pageSize);
   const selected = selectedId ?? internalSelected ?? ranked[0]?.id ?? null;
   const selectedOption = ranked.find((option) => option.id === selected) ?? ranked[0] ?? null;
+  const approvedOption = approvedId
+    ? ranked.find((option) => option.id === approvedId) ?? null
+    : null;
   const clampLines = useMemo(() => {
     const lines = ranked.map((option) => {
       const { tagline, detail } = splitPresentCopy(customerFacingOptionDescription(option.description));
@@ -263,6 +270,14 @@ export function EstimateOptionPresentCards({
 
   return (
     <div className="space-y-4">
+      {approvedOption ? (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+          <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden="true" />
+          <span>
+            <span className="font-semibold">{approvedLabel}:</span> {approvedOption.label} · {formatCurrency(approvedOption.total)}
+          </span>
+        </div>
+      ) : null}
       <div
         className={cn(
           "overflow-x-auto px-2 py-4",
@@ -272,6 +287,7 @@ export function EstimateOptionPresentCards({
         <div className="flex items-stretch gap-4">
           {visible.map((option) => {
             const isSelected = option.id === selected;
+            const isApproved = option.id === approvedId;
             const popular = isMostPopularPresentOption(option);
             const { tagline, detail } = splitPresentCopy(customerFacingOptionDescription(option.description));
             const cardCopy = tagline ?? detail;
@@ -324,7 +340,15 @@ export function EstimateOptionPresentCards({
                   ) : (
                     <h3 className="text-lg font-semibold">{option.label}</h3>
                   )}
-                  <p className="shrink-0 text-lg font-semibold">{formatCurrency(option.total)}</p>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <p className="text-lg font-semibold">{formatCurrency(option.total)}</p>
+                    {isApproved ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        {approvedLabel}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 {tagline ? (
                   <p className="px-4 pt-1 text-sm font-medium text-foreground">{tagline}</p>
@@ -366,7 +390,7 @@ export function EstimateOptionPresentCards({
                 </div>
                 <div className="mt-auto flex items-center justify-end gap-2 px-4 pb-4">
                   <span className="text-sm font-medium text-[#4C9BC8]">
-                    {isSelected ? "Selected" : "View option"}
+                    {isApproved ? approvedLabel : isSelected ? "Selected" : "View option"}
                   </span>
                 </div>
               </article>
@@ -377,6 +401,11 @@ export function EstimateOptionPresentCards({
 
       {selectedOption && totals ? (
         <div className="space-y-3 rounded-xl border bg-white px-4 py-4 shadow-sm">
+          {approvedOption && selectedOption.id !== approvedOption.id ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              You are viewing {selectedOption.label}. The approved option is {approvedOption.label}.
+            </p>
+          ) : null}
           {showFullDescription ? (
             <div className="space-y-2">
               {selectedCopy.tagline ? (

@@ -4,7 +4,7 @@ import { pipelineSpeedSeconds } from "@/lib/customers/pipeline";
 
 export type PipelineSpeedFilter = "UNDER_5" | "FIVE_TO_30" | "OVER_30";
 export type PipelineFilters = { search?: string; city?: string; zip?: string; source?: string; createdFrom?: Date; createdTo?: Date; speed?: PipelineSpeedFilter };
-export type PipelineFollowUpRow = { id: string; stage: string; sequence: number; method: string; automated: boolean; completedAt: string | null; smsSentAt: string | null; emailSentAt: string | null };
+export type PipelineFollowUpRow = { id: string; stage: string; sequence: number; method: string; status: string; automated: boolean; completedAt: string | null; smsSentAt: string | null; emailSentAt: string | null };
 export type PipelineRow = {
   id: string; name: string; phone: string | null; email: string | null; city: string | null; zip: string | null; createdAt: Date;
   pipelineStage: string; pipelineLeadAt: Date; pipelineQualifiedAt: Date | null; pipelineConvertedAt: Date | null;
@@ -40,8 +40,8 @@ const PIPELINE_SELECT = Prisma.sql`
     COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel") AS "pipelineLeadSource", c."pipelineFirstContactedAt",
     c."pipelineDeclinedAt", c."pipelineDeclineReason"::text AS "pipelineDeclineReason", c."pipelineFollowUpsPausedAt",
     ${QUALIFIED_VALUE}::float8 AS "qualifiedValue", ${CONVERTED_VALUE}::float8 AS "convertedValue", ${SOLD_VALUE}::float8 AS "soldValue",
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id', pf.id, 'stage', pf.stage::text, 'sequence', pf.sequence, 'method', pf.method::text, 'automated', pf.automated, 'completedAt', pf."completedAt", 'smsSentAt', pf."smsSentAt", 'emailSentAt', pf."emailSentAt") ORDER BY pf.stage, pf.sequence)
-      FROM "PipelineFollowUp" pf WHERE pf."customerId" = c.id AND pf.status = 'COMPLETED'), '[]'::jsonb) AS "followUps"
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('id', pf.id, 'stage', pf.stage::text, 'sequence', pf.sequence, 'method', pf.method::text, 'status', pf.status::text, 'automated', pf.automated, 'completedAt', pf."completedAt", 'smsSentAt', pf."smsSentAt", 'emailSentAt', pf."emailSentAt") ORDER BY pf.stage, pf.sequence)
+      FROM "PipelineFollowUp" pf WHERE pf."customerId" = c.id AND pf.status IN ('COMPLETED', 'SKIPPED')), '[]'::jsonb) AS "followUps"
   FROM "Customer" c LEFT JOIN LATERAL (SELECT p.city, p.zip FROM "CustomerProperty" p WHERE p."customerId" = c.id ORDER BY p."isPrimary" DESC, p."createdAt" ASC LIMIT 1) primary_property ON true
 `;
 

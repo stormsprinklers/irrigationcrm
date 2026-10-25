@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, Phone, User, UserPlus } from "lucide-react";
+import { Calendar, CheckCircle2, Phone, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CallerIdDetails } from "@/components/voice/CallerIdDetails";
 import { InboundLineCard } from "@/components/voice/InboundLineCard";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PhoneText } from "@/components/ui/PhoneText";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
@@ -90,8 +91,14 @@ export function CsrDeskPanel({
       property: { id: string; name: string; address: string | null; city: string | null } | null;
       total: number;
       installDurationDays: number | null;
+      visitId: string | null;
     }>
   >([]);
+  const [pendingSchedulingDismissal, setPendingSchedulingDismissal] = useState<{
+    id: string;
+    customerName: string;
+  } | null>(null);
+  const [dismissingScheduling, setDismissingScheduling] = useState(false);
 
   const callerPhone = activeCall?.remoteNumber ?? activeCall?.callerInfo?.phone;
   const knownCustomerId = activeCall?.callerInfo?.customerId ?? customer?.id;
@@ -129,12 +136,45 @@ export function CsrDeskPanel({
       .catch(() => toast.error("Failed to place call"));
   }, [activeCall, connect, pendingOutboundCall, ready]);
 
-  useEffect(() => {
+  const loadNeedsScheduling = useCallback(() => {
     fetch("/api/estimates/needs-scheduling")
       .then((r) => r.json())
       .then((data) => setNeedsScheduling(data.estimates ?? []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadNeedsScheduling();
+    const timer = window.setInterval(loadNeedsScheduling, 30_000);
+    window.addEventListener("focus", loadNeedsScheduling);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", loadNeedsScheduling);
+    };
+  }, [loadNeedsScheduling]);
+
+  async function dismissNeedsScheduling() {
+    if (!pendingSchedulingDismissal || dismissingScheduling) return;
+    setDismissingScheduling(true);
+    try {
+      const res = await fetch("/api/estimates/needs-scheduling", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estimateId: pendingSchedulingDismissal.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not check off this job");
+      setNeedsScheduling((items) =>
+        items.filter((item) => item.id !== pendingSchedulingDismissal.id)
+      );
+      setPendingSchedulingDismissal(null);
+      toast.success("Removed from needs scheduling");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check off this job");
+    } finally {
+      setDismissingScheduling(false);
+    }
+  }
 
   useEffect(() => {
     const loadQueue = () => {
@@ -271,9 +311,29 @@ export function CsrDeskPanel({
                   {est.property?.city ? ` · ${est.property.city}` : ""}
                   {est.installDurationDays ? ` · ${est.installDurationDays}-day install` : ""}
                 </span>
-                <Button variant="link" className="h-auto p-0" asChild>
-                  <Link href="/schedule/needs-scheduling">Schedule</Link>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="link" className="h-auto p-0" asChild>
+                    <Link href={est.visitId ? `/visits/${est.visitId}` : "/schedule/needs-scheduling"}>
+                      Schedule
+                    </Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-emerald-700"
+                    aria-label={`Check off ${est.customer.name}`}
+                    title="Check off manually"
+                    onClick={() =>
+                      setPendingSchedulingDismissal({
+                        id: est.id,
+                        customerName: est.customer.name,
+                      })
+                    }
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -492,6 +552,15 @@ export function CsrDeskPanel({
       </div>
 
       <CsrCallHistoryPanel className="min-h-[36rem]" />
+      <ConfirmDialog
+        open={Boolean(pendingSchedulingDismissal)}
+        title="Check off this scheduling item?"
+        description={`${pendingSchedulingDismissal?.customerName ?? "This job"} will be removed from the needs-scheduling list without changing the appointment.`}
+        confirmLabel="Check off"
+        busy={dismissingScheduling}
+        onCancel={() => setPendingSchedulingDismissal(null)}
+        onConfirm={() => void dismissNeedsScheduling()}
+      />
     </div>
   );
 }

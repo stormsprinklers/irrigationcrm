@@ -133,7 +133,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (cancelled && existing.customerId) {
       void onVisitCancelled(id, user.companyId).catch(() => {});
-    } else if (timeChanged && existing.customerId && visit.status !== VisitStatus.CANCELLED) {
+    } else if (timeChanged && existing.customerId && visit.status !== VisitStatus.CANCELLED && body.notifyCustomer !== false) {
       void onVisitTimeChanged({ visitId: id, companyId: user.companyId }).catch(() => {});
     }
 

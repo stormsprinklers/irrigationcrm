@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       }
 
       if (job.estimateId && job.event.startsWith("ESTIMATE_SCHEDULED_SEND:")) {
-        const payload = JSON.parse(job.event.slice("ESTIMATE_SCHEDULED_SEND:".length)) as {channel:"sms"|"email";message:string;subject?:string};
+        const payload = JSON.parse(job.event.slice("ESTIMATE_SCHEDULED_SEND:".length)) as {channel:"sms"|"email"|"both";message:string;subject?:string};
         const claim = await prisma.notificationJob.updateMany({where:{id:job.id,processedAt:null},data:{processedAt:new Date()}});
         if (!claim.count) continue;
         try {

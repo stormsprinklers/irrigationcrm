@@ -1387,6 +1387,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Total</TableHead>
+                      <TableHead>Payments</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1395,6 +1396,19 @@ export function CustomerProfile({ customerId }: Props) {
                         visit.assignedUser?.name,
                         visit.crew?.name,
                       ].filter(Boolean);
+                      const visitPayments = invoices.filter(
+                        (invoice) =>
+                          invoice.visit?.id === visit.id &&
+                          invoice.status !== "VOID" &&
+                          invoice.status !== "REFUNDED"
+                      );
+                      const depositPaid = visitPayments
+                        .filter((invoice) => invoice.invoiceNumber.includes("-DEP-"))
+                        .reduce((sum, invoice) => sum + (invoice.amountPaid ?? 0), 0);
+                      const totalPaid = visitPayments.reduce(
+                        (sum, invoice) => sum + (invoice.amountPaid ?? 0),
+                        0
+                      );
                       return (
                       <TableRow key={visit.id}>
                         <TableCell>
@@ -1411,6 +1425,26 @@ export function CustomerProfile({ customerId }: Props) {
                         <TableCell>{format(new Date(visit.startAt), "MMM d, yyyy")}</TableCell>
                         <TableCell>
                           {visit.total != null ? formatCurrency(visit.total) : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {depositPaid > 0 ? (
+                            <div className="space-y-0.5 text-sm">
+                              <p className="font-medium text-blue-700">
+                                Deposit {formatCurrency(depositPaid)} paid
+                              </p>
+                              {totalPaid > depositPaid ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Total paid {formatCurrency(totalPaid)}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : totalPaid > 0 ? (
+                            <span className="text-sm font-medium text-green-700">
+                              {formatCurrency(totalPaid)} paid
+                            </span>
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                       </TableRow>
                       );

@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import {
   ArrowLeft,
   Banknote,
+  Ban,
   CheckCircle2,
   ChevronDown,
   Copy,
@@ -254,6 +255,8 @@ export function EstimateDetail({ estimateId }: Props) {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
@@ -539,6 +542,27 @@ export function EstimateDetail({ estimateId }: Props) {
     }
   }
 
+  async function declineEstimate() {
+    setDeclining(true);
+    try {
+      const res = await fetch(`/api/estimates/${estimateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DECLINED" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to decline estimate");
+        return;
+      }
+      setEstimate(data as EstimateData);
+      toast.success("Estimate declined");
+    } finally {
+      setDeclining(false);
+      setDeclineOpen(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">Loading estimate...</p>;
 
   if (!estimate) {
@@ -775,6 +799,18 @@ export function EstimateDetail({ estimateId }: Props) {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
+          {canDelete && ["DRAFT", "SENT", "APPROVED"].includes(estimate.status) ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeclineOpen(true)}
+              disabled={saving}
+            >
+              <Ban className="h-4 w-4" />
+              Decline
+            </Button>
+          ) : null}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} disabled={saving}>
               <Trash2 className="h-4 w-4" />
@@ -833,6 +869,8 @@ export function EstimateDetail({ estimateId }: Props) {
               <div className="flex flex-wrap gap-2">
                 {estimate.options.map((option) => {
                   const selected = option.id === activeOption?.id;
+                  const approved = option.id === estimate.selectedOptionId &&
+                    Boolean(estimate.signedAt || estimate.employeeApproval || ["APPROVED", "CONVERTED"].includes(estimate.status));
                   return (
                     <button
                       key={option.id}
@@ -845,9 +883,15 @@ export function EstimateDetail({ estimateId }: Props) {
                       }`}
                     >
                       <div
-                        className={`font-semibold ${selected ? "text-primary" : ""}`}
+                        className={`flex items-center gap-1.5 font-semibold ${selected ? "text-primary" : ""}`}
                       >
                         {option.label}
+                        {approved ? (
+                          <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
+                            Approved
+                          </Badge>
+                        ) : null}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {option.displayNumber} · {formatCurrency(option.total)}
@@ -1307,6 +1351,50 @@ export function EstimateDetail({ estimateId }: Props) {
           ) : null}
         </div>
       </div>
+
+      {declineOpen ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close"
+            onClick={() => setDeclineOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">
+              {estimate.status === "APPROVED" ? "Decline approved estimate?" : "Decline estimate?"}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The estimate will be closed and the customer will no longer be able to approve it
+              through the estimate link. Any existing signature and approval timestamp will remain
+              in the audit history.
+            </p>
+            {estimate.visit || estimate.status === "APPROVED" ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                This does not cancel a linked visit or invoice.
+              </p>
+            ) : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDeclineOpen(false)}
+                disabled={declining}
+              >
+                Keep estimate
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void declineEstimate()}
+                disabled={declining}
+              >
+                {declining ? "Declining..." : "Decline estimate"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {deleteOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
