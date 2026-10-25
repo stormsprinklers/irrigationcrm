@@ -218,6 +218,7 @@ export const customerSettingsSidebar: NavSection[] = [
       { label: "Booking", href: "/settings/booking" },
       { label: "Customer portal", href: "/settings/customer-portal" },
       { label: "Lead Sources", href: "/settings/leads" },
+      { label: "Pipeline", href: "/settings/pipeline" },
     ],
   },
 ];
@@ -327,6 +328,7 @@ export const settingsSidebar: NavSection[] = [
           "/settings/booking",
           "/settings/customer-portal",
           "/settings/leads",
+          "/settings/pipeline",
         ],
         children: customerSettingsSidebar[0]!.items,
       },

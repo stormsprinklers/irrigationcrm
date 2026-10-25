@@ -1,340 +1,81 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, Download } from "lucide-react";
+import { CheckCircle2, Circle, Download, Mail, MessageCircle, MoreVertical, Pause, Phone, Play, Send, ThumbsDown, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ModalPortal } from "@/components/ui/ModalPortal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { VoiceDialerDialog } from "@/components/voice/VoiceDialer";
 
+type FollowUp = { id: string; stage: string; sequence: number; method: string; automated: boolean; completedAt: string | null; smsSentAt: string | null; emailSentAt: string | null };
 type PipelineRow = {
-  id: string;
-  name: string;
-  city: string | null;
-  zip: string | null;
-  createdAt: string;
-  pipelineStage: string;
-  pipelineLeadAt: string;
-  pipelineQualifiedAt: string | null;
-  pipelineConvertedAt: string | null;
-  pipelineSoldAt: string | null;
-  pipelineDisqualifiedAt: string | null;
-  pipelineLeadSource: string | null;
-  pipelineFirstContactedAt: string | null;
-  speedSeconds: number | null;
+  id: string; name: string; phone: string | null; email: string | null; city: string | null; zip: string | null; createdAt: string;
+  pipelineStage: string; pipelineLeadAt: string; pipelineQualifiedAt: string | null; pipelineConvertedAt: string | null; pipelineSoldAt: string | null;
+  pipelineDisqualifiedAt: string | null; pipelineLeadSource: string | null; pipelineFirstContactedAt: string | null; speedSeconds: number | null;
+  pipelineDeclinedAt: string | null; pipelineDeclineReason: string | null; pipelineFollowUpsPausedAt: string | null;
+  qualifiedValue: number | null; convertedValue: number | null; soldValue: number | null; followUps: FollowUp[];
 };
+type PipelineResponse = { rows: PipelineRow[]; total: number; page: number; pageSize: number; leadSources: string[]; metrics: { leadCount: number; qualifiedCount: number; convertedCount: number; soldCount: number; averageSpeedSeconds: number | null; qualifiedTotal: number; convertedTotal: number; soldTotal: number } };
+type FilterDraft = { search: string; city: string; zip: string; source: string; createdFrom: string; createdTo: string; speed: string };
+type Composer = { row: PipelineRow; stage: "LEAD" | "QUALIFIED"; method: "SMS" | "EMAIL" | "SMS_EMAIL"; sequence: number; sms: string; emailSubject: string; emailBody: string };
+type PendingCall = { row: PipelineRow; stage: "LEAD" | "QUALIFIED"; sequence: number };
 
-type PipelineResponse = {
-  rows: PipelineRow[];
-  total: number;
-  page: number;
-  pageSize: number;
-  metrics: {
-    leadCount: number;
-    qualifiedCount: number;
-    convertedCount: number;
-    soldCount: number;
-    averageSpeedSeconds: number | null;
-  };
-};
+function draftFromParams(params: URLSearchParams): FilterDraft { return { search: params.get("search") ?? "", city: params.get("city") ?? "", zip: params.get("zip") ?? "", source: params.get("source") ?? "", createdFrom: params.get("createdFrom") ?? "", createdTo: params.get("createdTo") ?? "", speed: params.get("speed") ?? "" }; }
+function formatDateTime(value: string | null) { if (!value) return "—"; return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value)); }
+function formatSpeed(seconds: number | null) { if (seconds == null) return "No response time"; if (seconds < 60) return `${seconds}s`; if (seconds < 3600) return `${Math.round(seconds / 60)}m`; return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`; }
+function speedClass(seconds: number | null) { if (seconds == null) return "border-muted bg-muted/40 text-muted-foreground"; if (seconds < 300) return "border-green-200 bg-green-100 text-green-800"; if (seconds <= 1800) return "border-yellow-200 bg-yellow-100 text-yellow-800"; return "border-red-200 bg-red-100 text-red-800"; }
+function percent(count: number, previous: number) { return previous <= 0 ? "0%" : `${Math.round((count / previous) * 100)}%`; }
+function money(value: number | null | undefined) { return value == null ? "" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value); }
+function followUpsFor(row: PipelineRow, stage: "LEAD" | "QUALIFIED") { return row.followUps.filter((item) => item.stage === stage).sort((a, b) => a.sequence - b.sequence); }
 
-type FilterDraft = {
-  search: string;
-  city: string;
-  zip: string;
-  createdFrom: string;
-  createdTo: string;
-  speed: string;
-};
-
-function draftFromParams(params: URLSearchParams): FilterDraft {
-  return {
-    search: params.get("search") ?? "",
-    city: params.get("city") ?? "",
-    zip: params.get("zip") ?? "",
-    createdFrom: params.get("createdFrom") ?? "",
-    createdTo: params.get("createdTo") ?? "",
-    speed: params.get("speed") ?? "",
-  };
+function FollowUpDots({ count }: { count: number }) {
+  return <div className="mt-2 flex items-center gap-1" title={`${count}/3 follow-ups completed`}><span className="mr-1 text-[11px] text-muted-foreground">Follow-ups</span>{[1, 2, 3].map((number) => number <= count ? <CheckCircle2 key={number} className="h-4 w-4 text-green-600" /> : <Circle key={number} className="h-4 w-4 fill-muted text-muted-foreground/40" />)}<span className="ml-1 text-[11px] text-muted-foreground">{count}/3</span></div>;
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatSpeed(seconds: number | null) {
-  if (seconds == null) return "No response time";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.round((seconds % 3600) / 60);
-  return `${hours}h ${minutes}m`;
-}
-
-function speedClass(seconds: number | null) {
-  if (seconds == null) return "border-muted bg-muted/40 text-muted-foreground";
-  if (seconds < 300) return "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300";
-  if (seconds <= 1800) return "border-yellow-200 bg-yellow-100 text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-300";
-  return "border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300";
-}
-
-function percent(count: number, previous: number) {
-  if (previous <= 0) return "0%";
-  return `${Math.round((count / previous) * 100)}%`;
-}
-
-function StageCell({ at }: { at: string | null }) {
+function StageCell({ row, stage, at, value, onFollowUp }: { row: PipelineRow; stage: "LEAD" | "QUALIFIED" | "CONVERTED" | "SOLD"; at: string | null; value?: number | null; onFollowUp: (row: PipelineRow, stage: "LEAD" | "QUALIFIED", method: "CALL" | "SMS" | "EMAIL" | "SMS_EMAIL") => void }) {
   if (!at) return <span className="text-muted-foreground">—</span>;
-  return (
-    <div className="flex min-w-40 items-start gap-2">
-      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
-      <span className="text-xs leading-5">{formatDateTime(at)}</span>
-    </div>
-  );
+  const followUpStage = stage === "LEAD" || stage === "QUALIFIED" ? stage : null;
+  const followUps = followUpStage ? followUpsFor(row, followUpStage) : [];
+  const active = Boolean(followUpStage && row.pipelineStage === stage && !row.pipelineDeclinedAt && followUps.length < 3);
+  return <div className="min-w-44"><div className="flex items-start justify-between gap-2"><div className="flex items-start gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" /><div><span className="block text-xs leading-5">{formatDateTime(at)}</span>{value != null ? <span className="text-sm font-semibold">{money(value)}</span> : null}</div></div>{active && followUpStage ? <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" className="h-7 w-7" title="Follow up"><Send className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => onFollowUp(row, followUpStage, "CALL")}><Phone />Call</DropdownMenuItem><DropdownMenuItem onSelect={() => onFollowUp(row, followUpStage, "SMS")}><MessageCircle />Text</DropdownMenuItem><DropdownMenuItem onSelect={() => onFollowUp(row, followUpStage, "EMAIL")}><Mail />Email</DropdownMenuItem><DropdownMenuItem onSelect={() => onFollowUp(row, followUpStage, "SMS_EMAIL")}><Send />Text + email</DropdownMenuItem></DropdownMenuContent></DropdownMenu> : null}</div>{followUpStage ? <FollowUpDots count={followUps.length} /> : null}</div>;
 }
+
 export function PipelinePageContent() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const queryString = searchParams.toString();
-  const [draft, setDraft] = useState<FilterDraft>(() =>
-    draftFromParams(new URLSearchParams(queryString))
-  );
-  const [data, setData] = useState<PipelineResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const router = useRouter(); const pathname = usePathname(); const searchParams = useSearchParams(); const queryString = searchParams.toString();
+  const [draft, setDraft] = useState<FilterDraft>(() => draftFromParams(new URLSearchParams(queryString)));
+  const [data, setData] = useState<PipelineResponse | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const [refresh, setRefresh] = useState(0);
+  const [confirm, setConfirm] = useState<{ row: PipelineRow; action: "remove" | "decline" } | null>(null); const [declineReason, setDeclineReason] = useState(""); const [busy, setBusy] = useState(false); const [composer, setComposer] = useState<Composer | null>(null);
+  const [pendingCall, setPendingCall] = useState<PendingCall | null>(null);
 
-  useEffect(() => {
-    setDraft(draftFromParams(new URLSearchParams(queryString)));
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    fetch(`/api/customers/pipeline${queryString ? `?${queryString}` : ""}`, {
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await response.json().catch(() => ({}));
-          throw new Error(body.error ?? "Could not load pipeline");
-        }
-        return response.json() as Promise<PipelineResponse>;
-      })
-      .then(setData)
-      .catch((fetchError) => {
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError") return;
-        setError(fetchError instanceof Error ? fetchError.message : "Could not load pipeline");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [queryString]);
+  const load = useCallback(() => { const controller = new AbortController(); setLoading(true); setError(null); fetch(`/api/customers/pipeline${queryString ? `?${queryString}` : ""}`, { signal: controller.signal }).then(async (response) => { const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error ?? "Could not load pipeline"); return body as PipelineResponse; }).then(setData).catch((fetchError) => { if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) setError(fetchError instanceof Error ? fetchError.message : "Could not load pipeline"); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [queryString]);
+  useEffect(() => { setDraft(draftFromParams(new URLSearchParams(queryString))); return load(); }, [queryString, refresh, load]);
+  const exportHref = useMemo(() => { const params = new URLSearchParams(queryString); params.delete("page"); params.set("format", "csv"); return `/api/customers/pipeline?${params.toString()}`; }, [queryString]);
+  function applyFilters(event: FormEvent) { event.preventDefault(); const params = new URLSearchParams(); for (const [key, value] of Object.entries(draft)) if (value.trim()) params.set(key, value.trim()); router.push(`${pathname}${params.size ? `?${params}` : ""}`); }
+  function clearFilters() { setDraft({ search: "", city: "", zip: "", source: "", createdFrom: "", createdTo: "", speed: "" }); router.push(pathname); }
+  function setPage(page: number) { const params = new URLSearchParams(queryString); if (page <= 1) params.delete("page"); else params.set("page", String(page)); router.push(`${pathname}${params.size ? `?${params}` : ""}`); }
+  async function action(row: PipelineRow, nextAction: "remove" | "decline" | "pause" | "resume", reason?: string) { setBusy(true); try { const res = await fetch(`/api/customers/pipeline/${row.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: nextAction, reason }) }); const body = await res.json(); if (!res.ok) throw new Error(body.error ?? "Could not update customer"); toast.success(nextAction === "remove" ? "Removed from pipeline" : nextAction === "decline" ? "Customer marked declined" : nextAction === "pause" ? "Reminders paused" : "Reminders resumed"); setConfirm(null); setDeclineReason(""); setRefresh((value) => value + 1); } catch (actionError) { toast.error(actionError instanceof Error ? actionError.message : "Could not update customer"); } finally { setBusy(false); } }
+  async function startFollowUp(row: PipelineRow, stage: "LEAD" | "QUALIFIED", method: "CALL" | "SMS" | "EMAIL" | "SMS_EMAIL") { const sequence = Math.min(3, followUpsFor(row, stage).length + 1); if (method === "CALL") { if (!row.phone) { toast.error("This customer has no phone number"); return; } setPendingCall({ row, stage, sequence }); return; } try { const res = await fetch(`/api/customers/pipeline/${row.id}/follow-up?stage=${stage}`); const body = await res.json(); if (!res.ok) throw new Error(body.error ?? "Could not prepare follow-up"); setComposer({ row, stage, method, sequence, sms: body.sms, emailSubject: body.emailSubject, emailBody: body.emailBody }); } catch (followUpError) { toast.error(followUpError instanceof Error ? followUpError.message : "Could not prepare follow-up"); } }
+  async function recordStartedCall() { if (!pendingCall) return; try { const res = await fetch(`/api/customers/pipeline/${pendingCall.row.id}/follow-up`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: pendingCall.stage, method: "CALL", sequence: pendingCall.sequence }) }); const body = await res.json(); if (!res.ok) throw new Error(body.error ?? "Could not record call follow-up"); setRefresh((value) => value + 1); } catch (followUpError) { toast.error(followUpError instanceof Error ? followUpError.message : "Call started, but the follow-up could not be recorded"); } }
+  async function sendFollowUp() { if (!composer) return; setBusy(true); try { const res = await fetch(`/api/customers/pipeline/${composer.row.id}/follow-up`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: composer.stage, method: composer.method, sequence: composer.sequence, smsBody: composer.sms, emailSubject: composer.emailSubject, emailBody: composer.emailBody }) }); const body = await res.json(); if (!res.ok) throw new Error(body.error ?? "Could not send follow-up"); toast.success("Follow-up sent"); setComposer(null); setRefresh((value) => value + 1); } catch (followUpError) { toast.error(followUpError instanceof Error ? followUpError.message : "Could not send follow-up"); } finally { setBusy(false); } }
+  const metrics = data?.metrics; const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
-  const exportHref = useMemo(() => {
-    const params = new URLSearchParams(queryString);
-    params.delete("page");
-    params.set("format", "csv");
-    return `/api/customers/pipeline?${params.toString()}`;
-  }, [queryString]);
-
-  function applyFilters(event: FormEvent) {
-    event.preventDefault();
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(draft)) {
-      if (value.trim()) params.set(key, value.trim());
-    }
-    router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`);
-  }
-
-  function clearFilters() {
-    setDraft({ search: "", city: "", zip: "", createdFrom: "", createdTo: "", speed: "" });
-    router.push(pathname);
-  }
-
-  function setPage(page: number) {
-    const params = new URLSearchParams(queryString);
-    if (page <= 1) params.delete("page");
-    else params.set("page", String(page));
-    router.push(`${pathname}${params.size ? `?${params.toString()}` : ""}`);
-  }
-
-  const metrics = data?.metrics;
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
-
-  return (
-    <ContentArea>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <PageHeader
-          breadcrumb={["Customers", "Pipeline"]}
-          title="Sales pipeline"
-          subtitle="Track each customer from first lead through paid work. Pipeline stages are internal and are never shown to customers."
-        />
-        <Button variant="outline" asChild>
-          <a href={exportHref} download>
-            <Download className="h-4 w-4" />
-            Export CSV
-          </a>
-        </Button>
-      </div>
-
-      <form onSubmit={applyFilters} className="mb-5 grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-7">
-        <Input
-          aria-label="Search customer name"
-          placeholder="Customer name"
-          value={draft.search}
-          onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))}
-        />
-        <Input
-          aria-label="Filter by city"
-          placeholder="City"
-          value={draft.city}
-          onChange={(event) => setDraft((current) => ({ ...current, city: event.target.value }))}
-        />
-        <Input
-          aria-label="Filter by ZIP code"
-          placeholder="ZIP code"
-          value={draft.zip}
-          onChange={(event) => setDraft((current) => ({ ...current, zip: event.target.value }))}
-        />
-        <Input
-          aria-label="Created from"
-          type="date"
-          value={draft.createdFrom}
-          onChange={(event) => setDraft((current) => ({ ...current, createdFrom: event.target.value }))}
-        />
-        <Input
-          aria-label="Created through"
-          type="date"
-          value={draft.createdTo}
-          onChange={(event) => setDraft((current) => ({ ...current, createdTo: event.target.value }))}
-        />
-        <select
-          aria-label="Filter by speed to lead"
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-          value={draft.speed}
-          onChange={(event) => setDraft((current) => ({ ...current, speed: event.target.value }))}
-        >
-          <option value="">All response times</option>
-          <option value="UNDER_5">Under 5 minutes</option>
-          <option value="FIVE_TO_30">5–30 minutes</option>
-          <option value="OVER_30">Over 30 minutes</option>
-        </select>
-        <div className="flex gap-2">
-          <Button type="submit" className="flex-1">Apply</Button>
-          <Button type="button" variant="outline" onClick={clearFilters}>Clear</Button>
-        </div>
-      </form>
-
-      {error ? <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div> : null}
-      {loading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading pipeline…</p> : null}
-
-      {!loading && data ? (
-        <>
-          <div className="overflow-x-auto rounded-lg border bg-card">
-            <Table className="min-w-[1050px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer name</TableHead>
-                  <TableHead>
-                    <div>Lead</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {metrics?.leadCount ?? 0} leads · Avg {formatSpeed(metrics?.averageSpeedSeconds ?? null)}
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div>Qualified</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {percent(metrics?.qualifiedCount ?? 0, metrics?.leadCount ?? 0)} from lead
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div>Converted</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {percent(metrics?.convertedCount ?? 0, metrics?.qualifiedCount ?? 0)} from qualified
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div>Sold</div>
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {percent(metrics?.soldCount ?? 0, metrics?.convertedCount ?? 0)} from converted
-                    </div>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="align-top">
-                      <Link className="font-medium text-primary hover:underline" href={`/customers/${row.id}`}>
-                        {row.name}
-                      </Link>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {[row.city, row.zip].filter(Boolean).join(" · ") || "No location"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Created {formatDateTime(row.createdAt)}</div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <StageCell at={row.pipelineLeadAt} />
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        <Badge variant="outline">{row.pipelineLeadSource || "Unknown source"}</Badge>
-                        <Badge variant="outline" className={speedClass(row.speedSeconds)}>
-                          {formatSpeed(row.speedSeconds)}
-                        </Badge>
-                        {row.pipelineStage === "DISQUALIFIED" ? (
-                          <Badge variant="destructive">SMS spam</Badge>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top"><StageCell at={row.pipelineQualifiedAt} /></TableCell>
-                    <TableCell className="align-top"><StageCell at={row.pipelineConvertedAt} /></TableCell>
-                    <TableCell className="align-top"><StageCell at={row.pipelineSoldAt} /></TableCell>
-                  </TableRow>
-                ))}
-                {!data.rows.length ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
-                      No customers match these pipeline filters.
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-            <span>
-              {data.total === 0 ? "0 customers" : `Showing ${(data.page - 1) * data.pageSize + 1}–${Math.min(data.page * data.pageSize, data.total)} of ${data.total}`}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}>
-                Previous
-              </Button>
-              <span>Page {data.page} of {totalPages}</span>
-              <Button variant="outline" size="sm" disabled={data.page >= totalPages} onClick={() => setPage(data.page + 1)}>
-                Next
-              </Button>
-            </div>
-          </div>
-        </>
-      ) : null}
-    </ContentArea>
-  );
+  return <ContentArea>
+    <div className="flex flex-wrap items-start justify-between gap-3"><PageHeader breadcrumb={["Customers", "Pipeline"]} title="Sales pipeline" subtitle="Track customers, values, and follow-ups from first lead through paid work." /><Button variant="outline" asChild><a href={exportHref} download><Download className="h-4 w-4" />Export CSV</a></Button></div>
+    <form onSubmit={applyFilters} className="mb-5 grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-4"><Input placeholder="Customer name" value={draft.search} onChange={(e) => setDraft((v) => ({ ...v, search: e.target.value }))} /><Input placeholder="City" value={draft.city} onChange={(e) => setDraft((v) => ({ ...v, city: e.target.value }))} /><Input placeholder="ZIP code" value={draft.zip} onChange={(e) => setDraft((v) => ({ ...v, zip: e.target.value }))} /><select className="h-10 rounded-md border bg-background px-3 text-sm" value={draft.source} onChange={(e) => setDraft((v) => ({ ...v, source: e.target.value }))}><option value="">All lead sources</option>{data?.leadSources.map((source) => <option key={source}>{source}</option>)}</select><Input type="date" value={draft.createdFrom} onChange={(e) => setDraft((v) => ({ ...v, createdFrom: e.target.value }))} /><Input type="date" value={draft.createdTo} onChange={(e) => setDraft((v) => ({ ...v, createdTo: e.target.value }))} /><select className="h-10 rounded-md border bg-background px-3 text-sm" value={draft.speed} onChange={(e) => setDraft((v) => ({ ...v, speed: e.target.value }))}><option value="">All response times</option><option value="UNDER_5">Under 5 minutes</option><option value="FIVE_TO_30">5–30 minutes</option><option value="OVER_30">Over 30 minutes</option></select><div className="flex gap-2"><Button type="submit" className="flex-1">Apply</Button><Button type="button" variant="outline" onClick={clearFilters}>Clear</Button></div></form>
+    {error ? <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">{error}</div> : null}{loading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading pipeline…</p> : null}
+    {!loading && data ? <><div className="overflow-x-auto rounded-lg border bg-card"><Table className="min-w-[1180px]"><TableHeader><TableRow><TableHead>Customer name</TableHead><TableHead><div>Lead</div><div className="text-xs font-normal text-muted-foreground">{metrics?.leadCount ?? 0} leads · Avg {formatSpeed(metrics?.averageSpeedSeconds ?? null)}</div></TableHead><TableHead><div>Qualified</div><div className="text-xs font-normal text-muted-foreground">{percent(metrics?.qualifiedCount ?? 0, metrics?.leadCount ?? 0)} · {money(metrics?.qualifiedTotal)}</div></TableHead><TableHead><div>Converted</div><div className="text-xs font-normal text-muted-foreground">{percent(metrics?.convertedCount ?? 0, metrics?.qualifiedCount ?? 0)} · {money(metrics?.convertedTotal)}</div></TableHead><TableHead><div>Sold</div><div className="text-xs font-normal text-muted-foreground">{percent(metrics?.soldCount ?? 0, metrics?.convertedCount ?? 0)} · {money(metrics?.soldTotal)}</div></TableHead></TableRow></TableHeader><TableBody>{data.rows.map((row) => <TableRow key={row.id}><TableCell className="align-top"><div className="flex items-start gap-1"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="-ml-2 h-7 w-7"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="start"><DropdownMenuItem className="text-destructive" onSelect={() => setConfirm({ row, action: "remove" })}><Trash2 />Delete</DropdownMenuItem><DropdownMenuItem onSelect={() => setConfirm({ row, action: "decline" })}><ThumbsDown />Customer declined</DropdownMenuItem><DropdownMenuItem onSelect={() => void action(row, row.pipelineFollowUpsPausedAt ? "resume" : "pause")} >{row.pipelineFollowUpsPausedAt ? <Play /> : <Pause />}{row.pipelineFollowUpsPausedAt ? "Resume reminders" : "Pause reminders"}</DropdownMenuItem></DropdownMenuContent></DropdownMenu><div><div className="flex flex-wrap items-center gap-1.5"><Link className="font-medium text-primary hover:underline" href={`/customers/${row.id}`}>{row.name}</Link>{row.pipelineDeclinedAt ? <Badge variant="destructive" className="h-5">Declined</Badge> : null}{row.pipelineFollowUpsPausedAt ? <Pause className="h-3.5 w-3.5 fill-orange-500 text-orange-500" aria-label="Reminders paused" /> : null}</div><div className="mt-1 text-xs text-muted-foreground">{[row.city, row.zip].filter(Boolean).join(" · ") || "No location"}</div><div className="text-xs text-muted-foreground">Created {formatDateTime(row.createdAt)}</div></div></div></TableCell><TableCell className="align-top"><StageCell row={row} stage="LEAD" at={row.pipelineLeadAt} onFollowUp={startFollowUp} /><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{row.pipelineLeadSource || "Unknown source"}</Badge><Badge variant="outline" className={speedClass(row.speedSeconds)}>{formatSpeed(row.speedSeconds)}</Badge>{row.pipelineStage === "DISQUALIFIED" ? <Badge variant="destructive">SMS spam</Badge> : null}</div></TableCell><TableCell className="align-top"><StageCell row={row} stage="QUALIFIED" at={row.pipelineQualifiedAt} value={row.qualifiedValue} onFollowUp={startFollowUp} /></TableCell><TableCell className="align-top"><StageCell row={row} stage="CONVERTED" at={row.pipelineConvertedAt} value={row.convertedValue} onFollowUp={startFollowUp} /></TableCell><TableCell className="align-top"><StageCell row={row} stage="SOLD" at={row.pipelineSoldAt} value={row.soldValue} onFollowUp={startFollowUp} /></TableCell></TableRow>)}{!data.rows.length ? <TableRow><TableCell colSpan={5} className="h-28 text-center text-muted-foreground">No customers match these pipeline filters.</TableCell></TableRow> : null}</TableBody></Table></div><div className="mt-4 flex items-center justify-between gap-3 text-sm text-muted-foreground"><span>{data.total === 0 ? "0 customers" : `Showing ${(data.page - 1) * data.pageSize + 1}–${Math.min(data.page * data.pageSize, data.total)} of ${data.total}`}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}>Previous</Button><span>Page {data.page} of {totalPages}</span><Button variant="outline" size="sm" disabled={data.page >= totalPages} onClick={() => setPage(data.page + 1)}>Next</Button></div></div></> : null}
+    <ConfirmDialog open={confirm?.action === "remove"} title="Remove from pipeline?" description="The customer and all contact history will remain in the CRM. Only this pipeline row will be hidden." confirmLabel="Delete from pipeline" confirmVariant="destructive" busy={busy} onCancel={() => setConfirm(null)} onConfirm={() => confirm && void action(confirm.row, "remove")} />
+    {confirm?.action === "decline" ? <ModalPortal><div className="fixed inset-0 z-[300] flex items-center justify-center p-4"><button className="absolute inset-0 bg-black/50" onClick={() => setConfirm(null)} /><div className="relative w-full max-w-md rounded-lg border bg-background p-5 shadow-xl"><h2 className="font-semibold">Mark customer declined?</h2><p className="mt-2 text-sm text-muted-foreground">This stops automated follow-ups and marks the customer declined in the pipeline.</p><label className="mt-4 block text-sm font-medium">Reason<select className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={declineReason} onChange={(e) => setDeclineReason(e.target.value)}><option value="">Select a reason</option><option value="PRICING">Pricing</option><option value="TIMING">Timing</option><option value="UNRESPONSIVE">Unresponsive</option><option value="OTHER">Other</option></select></label><div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button><Button variant="destructive" disabled={!declineReason || busy} onClick={() => void action(confirm.row, "decline", declineReason)}>{busy ? "Saving…" : "Confirm declined"}</Button></div></div></div></ModalPortal> : null}
+    {composer ? <ModalPortal><div className="fixed inset-0 z-[300] flex items-center justify-center p-4"><button className="absolute inset-0 bg-black/50" onClick={() => setComposer(null)} /><div className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-lg border bg-background p-5 shadow-xl"><h2 className="font-semibold">Follow-up {composer.sequence} · {composer.row.name}</h2><p className="mt-1 text-sm text-muted-foreground">Review and edit before sending.</p>{composer.method !== "EMAIL" ? <label className="mt-4 block text-sm font-medium">Text message<textarea className="mt-1 min-h-28 w-full rounded-md border bg-background p-3 font-normal" value={composer.sms} onChange={(e) => setComposer((value) => value ? { ...value, sms: e.target.value } : value)} /></label> : null}{composer.method !== "SMS" ? <><label className="mt-4 block text-sm font-medium">Email subject<Input className="mt-1" value={composer.emailSubject} onChange={(e) => setComposer((value) => value ? { ...value, emailSubject: e.target.value } : value)} /></label><label className="mt-4 block text-sm font-medium">Email body<textarea className="mt-1 min-h-40 w-full rounded-md border bg-background p-3 font-normal" value={composer.emailBody} onChange={(e) => setComposer((value) => value ? { ...value, emailBody: e.target.value } : value)} /></label></> : null}<div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setComposer(null)}>Cancel</Button><Button disabled={busy} onClick={() => void sendFollowUp()}>{busy ? "Sending…" : "Send follow-up"}</Button></div></div></div></ModalPortal> : null}
+    <VoiceDialerDialog open={Boolean(pendingCall)} onClose={() => setPendingCall(null)} initialPhone={pendingCall?.row.phone} initialCustomerId={pendingCall?.row.id} initialName={pendingCall?.row.name} onCallStarted={() => void recordStartedCall()} />
+  </ContentArea>;
 }

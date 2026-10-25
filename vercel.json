@@ -23,6 +23,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/customers/pipeline-followups",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/vehicles/reminders",
       "schedule": "0 14 * * *"
     },

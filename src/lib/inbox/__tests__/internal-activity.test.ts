@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   estimateSentActivityStatus,
+  parsePipelineEmailActivity,
+  pipelineEmailActivityStatus,
   parseEstimateSentActivity,
 } from "../internal-activity";
 
@@ -14,4 +16,10 @@ test("estimate activity status round-trips the estimate id", () => {
 test("ordinary Twilio delivery statuses are not internal estimate activities", () => {
   assert.equal(parseEstimateSentActivity("delivered"), null);
   assert.equal(parseEstimateSentActivity(null), null);
+});
+
+test("pipeline email activity status round-trips without looking like an SMS", () => {
+  const status = pipelineEmailActivityStatus("followup_123");
+  assert.deepEqual(parsePipelineEmailActivity(status), { followUpId: "followup_123" });
+  assert.equal(parsePipelineEmailActivity("delivered"), null);
 });

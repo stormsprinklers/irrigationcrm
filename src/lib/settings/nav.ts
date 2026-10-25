@@ -73,7 +73,8 @@ const SETTINGS_SECTIONS: Array<{
     match: (pathname) =>
       pathname.startsWith("/settings/booking") ||
       pathname.startsWith("/settings/customer-portal") ||
-      pathname.startsWith("/settings/leads"),
+      pathname.startsWith("/settings/leads") ||
+      pathname.startsWith("/settings/pipeline"),
     sections: customerSettingsSidebar,
   },
   {

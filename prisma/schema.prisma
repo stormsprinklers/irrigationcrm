@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -40,6 +41,28 @@ enum PipelineConversionDeliveryStatus {
   PROCESSING
   SENT
   FAILED
+}
+
+enum PipelineDeclineReason {
+  PRICING
+  TIMING
+  UNRESPONSIVE
+  OTHER
+}
+
+enum PipelineFollowUpMethod {
+  CALL
+  SMS
+  EMAIL
+  SMS_EMAIL
+}
+
+enum PipelineFollowUpStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
 }
 
 enum WinterizationTabMode {
@@ -533,366 +556,372 @@ enum CampaignFlowNodeType {
 }
 
 model Company {
-  id                       String   @id @default(cuid())
-  name                     String
-  address                  String?
-  city                     String?
-  state                    String?
-  zip                      String?
-  timezone                 String?  @default("America/Denver")
-  supportEmail             String?
-  phone                    String?
-  website                  String?
+  id                                       String               @id @default(cuid())
+  name                                     String
+  address                                  String?
+  city                                     String?
+  state                                    String?
+  zip                                      String?
+  timezone                                 String?              @default("America/Denver")
+  supportEmail                             String?
+  phone                                    String?
+  website                                  String?
   /// Public URL for company Terms of Service (iOS, receipts, portal).
-  termsOfServiceUrl        String?
+  termsOfServiceUrl                        String?
   /// Public URL for company Privacy Policy (iOS, receipts, portal).
-  privacyPolicyUrl         String?
-  legalName                String?
-  industry                 String?
+  privacyPolicyUrl                         String?
+  legalName                                String?
+  industry                                 String?
   /// When false, hide irrigation-specific tools (Rachio, maps, programming, parts suppliers, portal irrigation).
-  irrigationFeaturesEnabled Boolean @default(true)
+  irrigationFeaturesEnabled                Boolean              @default(true)
   /// Top-nav Winterization list: off, always on, or only during a calendar window.
-  winterizationTabMode WinterizationTabMode @default(SCHEDULED)
-  winterizationTabStartMonth Int @default(8)
-  winterizationTabStartDay Int @default(1)
-  winterizationTabEndMonth Int @default(11)
-  winterizationTabEndDay Int @default(15)
+  winterizationTabMode                     WinterizationTabMode @default(SCHEDULED)
+  winterizationTabStartMonth               Int                  @default(8)
+  winterizationTabStartDay                 Int                  @default(1)
+  winterizationTabEndMonth                 Int                  @default(11)
+  winterizationTabEndDay                   Int                  @default(15)
   /// When true, show holiday lighting quoting tools (maps measure, catalog, AI preview).
-  holidayLightingFeaturesEnabled Boolean @default(false)
+  holidayLightingFeaturesEnabled           Boolean              @default(false)
   /// When false, hide maintenance plan tools (templates, enrollments, portal plans).
-  maintenancePlansFeaturesEnabled Boolean @default(true)
+  maintenancePlansFeaturesEnabled          Boolean              @default(true)
   /// Holiday lighting catalog mapping (light types → price book SKUs, lease rates, etc.).
-  holidayLightingCatalog   Json?
-  description              String?
-  twilioPhone              String?
+  holidayLightingCatalog                   Json?
+  description                              String?
+  twilioPhone                              String?
   /// Twilio Messaging Service SID (MG…) for this company’s A2P / 10DLC campaign.
-  a2pMessagingServiceSid   String?
-  sendgridFrom             String?
+  a2pMessagingServiceSid                   String?
+  sendgridFrom                             String?
   /// From number for marketing SMS campaigns (E.164). Falls back to twilioPhone when unset.
-  marketingTwilioPhone     String?
+  marketingTwilioPhone                     String?
   /// From address for marketing email campaigns. Falls back to sendgridFrom when unset.
-  marketingSendgridFrom    String?
-  sendgridInboundDomain    String?
-  emailSenderName          String?
-  emailLogoUrl             String?
+  marketingSendgridFrom                    String?
+  sendgridInboundDomain                    String?
+  emailSenderName                          String?
+  emailLogoUrl                             String?
   /// BIMI SVG Tiny PS logo URL (inbox avatar in Gmail/Yahoo/Apple when DNS + DMARC are set).
-  bimiLogoUrl              String?
+  bimiLogoUrl                              String?
   /// Optional BIMI VMC/CMC PEM certificate URL (`a=` tag in the BIMI DNS record).
-  bimiCertificateUrl       String?
+  bimiCertificateUrl                       String?
   /// CRM app logo shown in the staff dashboard nav (per company).
-  brandLogoUrl             String?
+  brandLogoUrl                             String?
   /// Hex primary brand color for CRM chrome (e.g. #4C9BC8).
-  brandPrimaryColor        String?
+  brandPrimaryColor                        String?
   /// Hex secondary / accent brand color (e.g. navy #102341).
-  brandSecondaryColor      String?
+  brandSecondaryColor                      String?
   /// Full brand palette JSON: primary, secondary, soft, panel, accent, extras[].
-  brandPalette             Json?
+  brandPalette                             Json?
   /// Campaign CTA links: { bookingUrl?, custom: [{ id, label, url }] }. Privacy/terms use company URL fields.
-  campaignCtaLinks         Json?
-  recordCalls              Boolean  @default(true)
-  transcribeCalls          Boolean  @default(true)
+  campaignCtaLinks                         Json?
+  recordCalls                              Boolean              @default(true)
+  transcribeCalls                          Boolean              @default(true)
   /// When true (default), known customers skip entry IVR / spam gate and ring agents directly.
-  skipIvrForKnownCustomers Boolean  @default(true)
+  skipIvrForKnownCustomers                 Boolean              @default(true)
   /// Audio clip played while callers wait in the company queue (required for production queue).
-  queueWaitClipId          String?
+  queueWaitClipId                          String?
   /// Audio clip played when a CSR puts a live call on hold.
-  holdMusicClipId          String?
-  estimateExpiryDays       Int      @default(14)
-  estimateDepositRequired  Boolean  @default(true)
-  estimateDepositType      DepositType? @default(PERCENT)
-  estimateDepositAmount    Decimal? @default(50) @db.Decimal(10, 2)
+  holdMusicClipId                          String?
+  estimateExpiryDays                       Int                  @default(14)
+  estimateDepositRequired                  Boolean              @default(true)
+  estimateDepositType                      DepositType?         @default(PERCENT)
+  estimateDepositAmount                    Decimal?             @default(50) @db.Decimal(10, 2)
   /// Estimates above this total require the configured deposit upon approval.
-  estimateDepositThreshold Decimal  @default(999) @db.Decimal(10, 2)
+  estimateDepositThreshold                 Decimal              @default(999) @db.Decimal(10, 2)
   /// After estimate approval, when work is booked for another day: require a deposit if visit total exceeds this amount (USD).
-  deferredVisitDepositThreshold Decimal @default(1000) @db.Decimal(10, 2)
+  deferredVisitDepositThreshold            Decimal              @default(1000) @db.Decimal(10, 2)
   /// Percent of visit total to collect as deposit when over the deferred-visit threshold (e.g. 50 = 50%).
-  deferredVisitDepositPercent   Decimal @default(50) @db.Decimal(5, 2)
+  deferredVisitDepositPercent              Decimal              @default(50) @db.Decimal(5, 2)
   /// Customer-facing warranty copy shown on sent estimate links.
-  estimateWarrantyText     String?  @db.Text
+  estimateWarrantyText                     String?              @db.Text
   /// Public financing application URL (soft-pull) sent from estimates.
-  estimateFinancingUrl     String?
-  defaultInstallDurationDays Int    @default(4)
-  supplierEmail            String?
-  supplierPartsAutoSend    Boolean  @default(false)
-  invoicePrefix            String?  @default("INV")
+  estimateFinancingUrl                     String?
+  defaultInstallDurationDays               Int                  @default(4)
+  supplierEmail                            String?
+  supplierPartsAutoSend                    Boolean              @default(false)
+  invoicePrefix                            String?              @default("INV")
   /// Prefix for human-readable estimate numbers (e.g. EST-1012).
-  estimatePrefix           String?  @default("EST")
+  estimatePrefix                           String?              @default("EST")
   /// Next sequential integer used when minting estimate numbers (atomic increment).
-  estimateNextNumber       Int      @default(1)
-  invoiceTerms             String?
-  invoiceFooter            String?
-  onlineBookingEnabled     Boolean  @default(false)
+  estimateNextNumber                       Int                  @default(1)
+  invoiceTerms                             String?
+  invoiceFooter                            String?
+  onlineBookingEnabled                     Boolean              @default(false)
   /// When true, Radar public booking is virtual consults (Google Meet), not on-site jobs.
-  onlineBookingVirtualOnly Boolean  @default(false)
-  bookingSlug              String?
-  bookingLeadTimeHours     Int      @default(24)
+  onlineBookingVirtualOnly                 Boolean              @default(false)
+  bookingSlug                              String?
+  bookingLeadTimeHours                     Int                  @default(24)
   /// On-site Radar booker slot length. Website HCP jobs are typically 180 minutes; not wired to HCP.
-  onlineBookingSlotMinutes Int      @default(120)
+  onlineBookingSlotMinutes                 Int                  @default(120)
   /// Customer-facing marketing-site booking page (e.g. https://www.stormsprinklers.com/booking).
-  websiteBookingUrl        String?
+  websiteBookingUrl                        String?
   /// Optional week-request page (e.g. https://www.stormsprinklers.com/book-winterization).
-  websiteWinterizationBookingUrl String?
-  googleCalendarRefreshToken    String?
-  googleCalendarConnectedEmail  String?
-  googleCalendarConnectedAt     DateTime?
-  portalEnabled            Boolean  @default(false)
-  portalShowInvoices       Boolean  @default(true)
-  portalShowEstimates      Boolean  @default(true)
-  portalShowJobs           Boolean  @default(true)
+  websiteWinterizationBookingUrl           String?
+  googleCalendarRefreshToken               String?
+  googleCalendarConnectedEmail             String?
+  googleCalendarConnectedAt                DateTime?
+  portalEnabled                            Boolean              @default(false)
+  portalShowInvoices                       Boolean              @default(true)
+  portalShowEstimates                      Boolean              @default(true)
+  portalShowJobs                           Boolean              @default(true)
   /// Public origin for customer links (estimates, portal, pay). Staff CRM still works on any attached host.
-  customerBaseUrl          String?
-  portalSlug               String?
-  portalRescheduleLeadHours Int     @default(24)
-  portalCancelLeadHours    Int      @default(24)
-  portalAllowSchedule      Boolean  @default(true)
-  portalShowMaintenance    Boolean  @default(true)
-  portalShowChecklists     Boolean  @default(true)
+  customerBaseUrl                          String?
+  portalSlug                               String?
+  portalRescheduleLeadHours                Int                  @default(24)
+  portalCancelLeadHours                    Int                  @default(24)
+  portalAllowSchedule                      Boolean              @default(true)
+  portalShowMaintenance                    Boolean              @default(true)
+  portalShowChecklists                     Boolean              @default(true)
   /// When true, visit UI presents all applied checklists as one combined checklist.
-  mergeVisitChecklists     Boolean  @default(false)
-  portalShowRachio         Boolean  @default(true)
-  portalShowOffers         Boolean  @default(true)
-  portalShowReferrals      Boolean  @default(true)
-  portalRachioAllowRun     Boolean  @default(false)
-  notifyEstimateSent       Boolean  @default(true)
-  notifyInvoicePaid        Boolean  @default(true)
+  mergeVisitChecklists                     Boolean              @default(false)
+  portalShowRachio                         Boolean              @default(true)
+  portalShowOffers                         Boolean              @default(true)
+  portalShowReferrals                      Boolean              @default(true)
+  portalRachioAllowRun                     Boolean              @default(false)
+  notifyEstimateSent                       Boolean              @default(true)
+  notifyInvoicePaid                        Boolean              @default(true)
   /// Customer email/SMS when a Stripe Checkout / card payment fails, with retry link.
-  notifyInvoicePaymentFailed Boolean @default(true)
-  notifyVisitScheduled     Boolean  @default(true)
-  notifyVisitEnRoute       Boolean  @default(true)
-  notifyVisitEnRouteIncludeTechnicianPhoto Boolean @default(false)
-  notifyVisitTimeUpdated   Boolean  @default(true)
-  notifyVisitCancelled     Boolean  @default(true)
-  notifyVisitCompleted     Boolean  @default(true)
-  notifyReviewRequest      Boolean  @default(true)
-  notifyFeedbackSurvey     Boolean  @default(true)
-  notifyEstimateFollowUp   Boolean  @default(false)
-  googleReviewUrl          String?
-  websiteBaseUrl           String?
-  arrivalWindowHours       Int      @default(3)
+  notifyInvoicePaymentFailed               Boolean              @default(true)
+  notifyVisitScheduled                     Boolean              @default(true)
+  notifyVisitEnRoute                       Boolean              @default(true)
+  notifyVisitEnRouteIncludeTechnicianPhoto Boolean              @default(false)
+  notifyVisitTimeUpdated                   Boolean              @default(true)
+  notifyVisitCancelled                     Boolean              @default(true)
+  notifyVisitCompleted                     Boolean              @default(true)
+  notifyReviewRequest                      Boolean              @default(true)
+  notifyFeedbackSurvey                     Boolean              @default(true)
+  notifyEstimateFollowUp                   Boolean              @default(false)
+  /// Sales-pipeline follow-ups are deliberately opt-in for each company.
+  pipelineFollowUpsEnabled                 Boolean              @default(false)
+  pipelineFollowUpsEnabledAt               DateTime?
+  /// Editable delays and SMS/email templates for lead and qualified stages.
+  pipelineFollowUpSettings                 Json?
+  googleReviewUrl                          String?
+  websiteBaseUrl                           String?
+  arrivalWindowHours                       Int                  @default(3)
   /// When true, schedule Day view shows dashed open booking windows.
-  openTimeSlotsEnabled     Boolean  @default(true)
+  openTimeSlotsEnabled                     Boolean              @default(true)
   /// Per-division booking windows: { SERVICE: [{start,end}], INSTALL: [...] }
-  divisionBookingWindows   Json?
-  feedbackSurveyDelayHours Int      @default(24)
-  reviewRequestDelayHours  Int      @default(2)
-  estimateFollowUpIntervalDays Int  @default(3)
-  leadSources              String[] @default([])
+  divisionBookingWindows                   Json?
+  feedbackSurveyDelayHours                 Int                  @default(24)
+  reviewRequestDelayHours                  Int                  @default(2)
+  estimateFollowUpIntervalDays             Int                  @default(3)
+  leadSources                              String[]             @default([])
   /// Soft-removed lead sources kept for history / filters.
-  archivedLeadSources      String[] @default([])
-  intakeRequiredFields     String[] @default([])
+  archivedLeadSources                      String[]             @default([])
+  intakeRequiredFields                     String[]             @default([])
   /// Days before today that field techs may access customer SMS (assigned visits).
-  techSmsPastDays          Int      @default(7)
+  techSmsPastDays                          Int                  @default(7)
   /// Days after today that field techs may access customer SMS (assigned visits).
-  techSmsFutureDays        Int      @default(7)
-  businessHours            Json?
-  referralCode             String?
-  stripeConnectAccountId   String?
-  subscriptionTier         String?  @default("Professional")
-  customReportPresets      Json?
-  rachioApiKey             String?
-  rachioPersonId           String?
-  hydrawiseApiKey          String?
-  googleBusinessRefreshToken   String?
-  googleBusinessAccountId      String?
-  googleBusinessLocationId     String?
-  googleBusinessLocationTitle  String?
-  organicSearchWebsiteUrl      String?
-  googleBusinessConnectedAt    DateTime?
-  googleBusinessCatalogJson    Json?
-  googleSearchConsoleRefreshToken String?
-  googleSearchConsoleSiteUrl      String?
-  googleSearchConsoleConnectedAt  DateTime?
-  googleAdsRefreshToken           String?
-  googleAdsCustomerId             String?
-  googleAdsCustomerName           String?
-  googleAdsLoginCustomerId        String?
-  googleAdsConnectedAt            DateTime?
-  googleAdsPipelineLeadActionId       String?
-  googleAdsPipelineQualifiedActionId  String?
-  googleAdsPipelineConvertedActionId  String?
-  googleAdsPipelineSoldActionId       String?
-  googleAdsPipelineConfiguredAt       DateTime?
+  techSmsFutureDays                        Int                  @default(7)
+  businessHours                            Json?
+  referralCode                             String?
+  stripeConnectAccountId                   String?
+  subscriptionTier                         String?              @default("Professional")
+  customReportPresets                      Json?
+  rachioApiKey                             String?
+  rachioPersonId                           String?
+  hydrawiseApiKey                          String?
+  googleBusinessRefreshToken               String?
+  googleBusinessAccountId                  String?
+  googleBusinessLocationId                 String?
+  googleBusinessLocationTitle              String?
+  organicSearchWebsiteUrl                  String?
+  googleBusinessConnectedAt                DateTime?
+  googleBusinessCatalogJson                Json?
+  googleSearchConsoleRefreshToken          String?
+  googleSearchConsoleSiteUrl               String?
+  googleSearchConsoleConnectedAt           DateTime?
+  googleAdsRefreshToken                    String?
+  googleAdsCustomerId                      String?
+  googleAdsCustomerName                    String?
+  googleAdsLoginCustomerId                 String?
+  googleAdsConnectedAt                     DateTime?
+  googleAdsPipelineLeadActionId            String?
+  googleAdsPipelineQualifiedActionId       String?
+  googleAdsPipelineConvertedActionId       String?
+  googleAdsPipelineSoldActionId            String?
+  googleAdsPipelineConfiguredAt            DateTime?
   // @deprecated GA4 CRM OAuth — use native website analytics. See lib/google-analytics/DEPRECATED.md
-  googleAnalyticsRefreshToken     String?
-  googleAnalyticsPropertyId       String?
-  googleAnalyticsConnectedAt      DateTime?
-  metaWebhookVerifyToken       String?   @unique
-  metaAppId                    String?
-  metaAppSecret                String?
-  metaPageId                   String?
-  metaInstagramAccountId        String?
-  metaPageAccessToken          String?
-  metaSocialSyncedAt           DateTime?
-  metaSocialMetricsJson        Json?
-  metaWebhookVerifiedAt        DateTime?
-  metaAdsAccessToken           String?
-  metaAdAccountId              String?
-  metaAdAccountName            String?
-  metaAdsConnectedAt           DateTime?
+  googleAnalyticsRefreshToken              String?
+  googleAnalyticsPropertyId                String?
+  googleAnalyticsConnectedAt               DateTime?
+  metaWebhookVerifyToken                   String?              @unique
+  metaAppId                                String?
+  metaAppSecret                            String?
+  metaPageId                               String?
+  metaInstagramAccountId                   String?
+  metaPageAccessToken                      String?
+  metaSocialSyncedAt                       DateTime?
+  metaSocialMetricsJson                    Json?
+  metaWebhookVerifiedAt                    DateTime?
+  metaAdsAccessToken                       String?
+  metaAdAccountId                          String?
+  metaAdAccountName                        String?
+  metaAdsConnectedAt                       DateTime?
   /// Dedicated server-side Conversions API credentials. Never expose the token to clients.
-  metaConversionsAccessToken   String?
-  metaConversionsDatasetId     String?
-  metaConversionsTestEventCode String?
-  metaConversionsConfiguredAt  DateTime?
-  slackGbpReviewsEnabled       Boolean  @default(false)
-  slackGbpReviewsChannelId     String?
-  slackGbpReviewsBootstrapped  Boolean  @default(false)
-  outboundCommsDisabled        Boolean  @default(false)
-  outboundCommsDisabledReason  String?
-  outboundCommsDisabledAt      DateTime?
-  outboundCommsDisabledById    String?
+  metaConversionsAccessToken               String?
+  metaConversionsDatasetId                 String?
+  metaConversionsTestEventCode             String?
+  metaConversionsConfiguredAt              DateTime?
+  slackGbpReviewsEnabled                   Boolean              @default(false)
+  slackGbpReviewsChannelId                 String?
+  slackGbpReviewsBootstrapped              Boolean              @default(false)
+  outboundCommsDisabled                    Boolean              @default(false)
+  outboundCommsDisabledReason              String?
+  outboundCommsDisabledAt                  DateTime?
+  outboundCommsDisabledById                String?
   /// Feature flag: AI receptionist call-flow node may connect Media Streams.
-  aiReceptionistEnabled        Boolean  @default(false)
-  aiReceptionistMaxMinutes     Int      @default(12)
-  aiReceptionistSmsConfirm     Boolean  @default(true)
+  aiReceptionistEnabled                    Boolean              @default(false)
+  aiReceptionistMaxMinutes                 Int                  @default(12)
+  aiReceptionistSmsConfirm                 Boolean              @default(true)
   /// Optional prompt overrides for the AI receptionist (tone, policies, FAQ/knowledge).
-  aiReceptionistTone           String?  @db.Text
-  aiReceptionistPolicies       String?  @db.Text
-  aiReceptionistKnowledge      String?  @db.Text
-  defaultLeadAssigneeId    String?
-  notifyLeadCreated        Boolean  @default(true)
-  flatRatePricingEnabled   Boolean  @default(false)
-  materialMarkupsEnabled   Boolean  @default(true)
+  aiReceptionistTone                       String?              @db.Text
+  aiReceptionistPolicies                   String?              @db.Text
+  aiReceptionistKnowledge                  String?              @db.Text
+  defaultLeadAssigneeId                    String?
+  notifyLeadCreated                        Boolean              @default(true)
+  flatRatePricingEnabled                   Boolean              @default(false)
+  materialMarkupsEnabled                   Boolean              @default(true)
   /// Stripe Issuing expense cards program for this company.
-  expenseCardsEnabled      Boolean  @default(false)
+  expenseCardsEnabled                      Boolean              @default(false)
   /// Default spend limits and card controls (daily/monthly cents, block flags, MCC allowlist).
-  expenseCardDefaultsJson  Json?
+  expenseCardDefaultsJson                  Json?
   /// Auto-refill Issuing when available balance falls below the minimum.
-  expenseCardAutoTopUpEnabled     Boolean   @default(false)
+  expenseCardAutoTopUpEnabled              Boolean              @default(false)
   /// Trigger a refill when Issuing available balance is below this (cents).
-  expenseCardMinBalanceCents      Int       @default(50000)
+  expenseCardMinBalanceCents               Int                  @default(50000)
   /// Amount to move into Issuing when below the minimum (cents).
-  expenseCardTopUpAmountCents     Int       @default(100000)
+  expenseCardTopUpAmountCents              Int                  @default(100000)
   /// If Stripe Payments balance cannot cover the refill, attempt ACH pull from the linked bank.
-  expenseCardAchFallbackEnabled   Boolean   @default(false)
-  expenseCardLastTopUpAt          DateTime?
-  expenseCardLastTopUpAmountCents Int?
+  expenseCardAchFallbackEnabled            Boolean              @default(false)
+  expenseCardLastTopUpAt                   DateTime?
+  expenseCardLastTopUpAmountCents          Int?
   /// stripe_balance | ach_topup
-  expenseCardLastTopUpMethod      String?
+  expenseCardLastTopUpMethod               String?
   /// succeeded | pending | failed | skipped
-  expenseCardLastTopUpStatus      String?
-  expenseCardLastTopUpError       String?   @db.Text
-  expenseCardLastTopUpStripeId    String?
-  commissionBasis          CommissionBasis @default(COMPLETED_JOB_REVENUE)
-  payPeriodType            PayPeriodType   @default(BIWEEKLY)
-  payPeriodAnchorDate      DateTime?
-  defaultTechnicianPayType           PayType  @default(HYBRID)
-  defaultTechnicianHourlyRate        Decimal  @default(25) @db.Decimal(10, 2)
-  defaultTechnicianCommissionPercent Decimal  @default(20) @db.Decimal(5, 2)
-  overtimeWeeklyThresholdHours       Decimal  @default(40) @db.Decimal(5, 2)
-  overtimeRateMultiplier             Decimal  @default(1.5) @db.Decimal(4, 2)
+  expenseCardLastTopUpStatus               String?
+  expenseCardLastTopUpError                String?              @db.Text
+  expenseCardLastTopUpStripeId             String?
+  commissionBasis                          CommissionBasis      @default(COMPLETED_JOB_REVENUE)
+  payPeriodType                            PayPeriodType        @default(BIWEEKLY)
+  payPeriodAnchorDate                      DateTime?
+  defaultTechnicianPayType                 PayType              @default(HYBRID)
+  defaultTechnicianHourlyRate              Decimal              @default(25) @db.Decimal(10, 2)
+  defaultTechnicianCommissionPercent       Decimal              @default(20) @db.Decimal(5, 2)
+  overtimeWeeklyThresholdHours             Decimal              @default(40) @db.Decimal(5, 2)
+  overtimeRateMultiplier                   Decimal              @default(1.5) @db.Decimal(4, 2)
   /// Show the floating Storm AI assistant on authenticated CRM pages.
-  showStormAiFab           Boolean  @default(true)
+  showStormAiFab                           Boolean              @default(true)
   /// Optional monthly revenue target in USD for Storm AI / reporting.
-  monthlyRevenueTarget     Decimal? @db.Decimal(12, 2)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  monthlyRevenueTarget                     Decimal?             @db.Decimal(12, 2)
+  createdAt                                DateTime             @default(now())
+  updatedAt                                DateTime             @updatedAt
 
-  defaultLeadAssignee    User?                    @relation("DefaultLeadAssignee", fields: [defaultLeadAssigneeId], references: [id], onDelete: SetNull)
-  users                  User[]
-  customers              Customer[]
-  winterizationRequests  WinterizationRequest[]
-  customerPhones         CustomerPhone[]
-  customerEmails         CustomerEmail[]
-  mediaAssets            CompanyMediaAsset[]
-  blockedContacts        BlockedContact[]
-  marketingSmsSuppressions MarketingSmsSuppression[]
-  callLogs               CallLog[]
-  callConversions        CallConversion[]
-  conversations          Conversation[]
-  emailMessages          EmailMessage[]
-  internalGroups         InternalGroup[]
-  serviceAreas           ServiceArea[]
-  partsSuppliers         PartsSupplier[]
-  crews                  Crew[]
-  visits                 Visit[]
-  properties             CustomerProperty[]
-  priceBookCategories    PriceBookCategory[]
-  priceBookDiscounts     PriceBookDiscount[]
-  estimateTemplates      EstimateTemplate[]
-  pricingForms           PricingForm[]
-  leads                  Lead[]
-  estimates              Estimate[]
-  holidayLightingQuotes  HolidayLightingQuote[]
-  invoices               Invoice[]
-  maintenancePlans       MaintenancePlanTemplate[]
-  maintenanceEnrollments MaintenancePlanEnrollment[]
-  phoneNumbers           PhoneNumber[]
-  twilioPortInRequests   TwilioPortInRequest[]
-  callFlows              CallFlow[]
-  agentGroups            AgentGroup[]
-  agentPresences         AgentPresence[]
-  callSessions           CallSession[]
-  callParticipants       CallParticipant[]
-  receptionistCalls      ReceptionistCall[]
-  appointmentHolds       AppointmentHold[]
-  receptionistToolInvocations ReceptionistToolInvocation[]
-  ownerAssistantConfigs OwnerAssistantConfig[] @relation("OwnerAssistantHomeCompany")
-  ownerAssistantSessions OwnerAssistantSession[]
+  defaultLeadAssignee           User?                          @relation("DefaultLeadAssignee", fields: [defaultLeadAssigneeId], references: [id], onDelete: SetNull)
+  users                         User[]
+  customers                     Customer[]
+  winterizationRequests         WinterizationRequest[]
+  customerPhones                CustomerPhone[]
+  customerEmails                CustomerEmail[]
+  mediaAssets                   CompanyMediaAsset[]
+  blockedContacts               BlockedContact[]
+  marketingSmsSuppressions      MarketingSmsSuppression[]
+  callLogs                      CallLog[]
+  callConversions               CallConversion[]
+  conversations                 Conversation[]
+  emailMessages                 EmailMessage[]
+  internalGroups                InternalGroup[]
+  serviceAreas                  ServiceArea[]
+  partsSuppliers                PartsSupplier[]
+  crews                         Crew[]
+  visits                        Visit[]
+  properties                    CustomerProperty[]
+  priceBookCategories           PriceBookCategory[]
+  priceBookDiscounts            PriceBookDiscount[]
+  estimateTemplates             EstimateTemplate[]
+  pricingForms                  PricingForm[]
+  leads                         Lead[]
+  estimates                     Estimate[]
+  holidayLightingQuotes         HolidayLightingQuote[]
+  invoices                      Invoice[]
+  maintenancePlans              MaintenancePlanTemplate[]
+  maintenanceEnrollments        MaintenancePlanEnrollment[]
+  phoneNumbers                  PhoneNumber[]
+  twilioPortInRequests          TwilioPortInRequest[]
+  callFlows                     CallFlow[]
+  agentGroups                   AgentGroup[]
+  agentPresences                AgentPresence[]
+  callSessions                  CallSession[]
+  callParticipants              CallParticipant[]
+  receptionistCalls             ReceptionistCall[]
+  appointmentHolds              AppointmentHold[]
+  receptionistToolInvocations   ReceptionistToolInvocation[]
+  ownerAssistantConfigs         OwnerAssistantConfig[]         @relation("OwnerAssistantHomeCompany")
+  ownerAssistantSessions        OwnerAssistantSession[]
   ownerAssistantToolInvocations OwnerAssistantToolInvocation[]
-  laborRates             LaborRate[]
-  materialMarkupTiers    MaterialMarkupTier[]
-  timeClockEntries       TimeClockEntry[]
-  techTimeSegments       TechTimeSegment[]
-  techTimeCorrections    TechTimeCorrection[]
-  expenseCardRolePolicies ExpenseCardRolePolicy[]
-  expenseCards           ExpenseCard[]
-  staffAuditLogs         StaffAuditLog[]
-  voiceClips             VoiceClip[]
-  queueWaitClip          VoiceClip?  @relation("CompanyQueueWaitClip", fields: [queueWaitClipId], references: [id], onDelete: SetNull)
-  holdMusicClip          VoiceClip?  @relation("CompanyHoldMusicClip", fields: [holdMusicClipId], references: [id], onDelete: SetNull)
-  appNotifications       AppNotification[]
-  notificationTemplates  NotificationTemplate[]
-  notificationRules      NotificationRule[]
-  notificationDeliveries NotificationDelivery[]
-  notificationJobs       NotificationJob[]
-  contactLists           ContactList[]
-  campaigns              Campaign[]
-  housecallProMigrations HousecallProMigration[]
-  hcpEntityMappings      HcpEntityMapping[]
-  employeeWorkSchedules  EmployeeWorkSchedule[]
-  timeOffRequests        TimeOffRequest[]
-  officeTodos            OfficeTodo[]
-  importantUpdates       ImportantUpdate[]
-  checklistTemplates     ChecklistTemplate[]
-  portalLoginTokens      CustomerPortalLoginToken[]
-  portalOffers           PortalOffer[]
-  integrationCredentials IntegrationCredential[]
-  mobileSessions         MobileSession[]
-  mobilePushDevices      MobilePushDevice[]
-  fieldDeviceLocations   FieldDeviceLocation[]
-  webPushSubscriptions   WebPushSubscription[]
-  metaWebhookEvents      MetaWebhookEvent[]
-  socialPosts            SocialPost[]
-  socialPostSubmissions  SocialPostSubmission[]
-  integrationAuditLogs   IntegrationAuditLog[]
-  marketingEvents        MarketingEvent[]
-  gbpReviewSlackDeliveries GbpReviewSlackDelivery[]
-  gbpReviewStaffNotifies   GbpReviewStaffNotify[]
-  gbpReviews               GbpReview[]
-  localSeoKeywords     LocalSeoKeyword[]
-  localSeoTargetCities LocalSeoTargetCity[]
-  localSeoSerpSearches LocalSeoSerpSearch[]
-  localSeoRankingCaches LocalSeoRankingCache[]
-  seoTasks               SeoTask[]
-  referralProgramSettings ReferralProgramSettings?
-  referralMembers        ReferralMember[]
-  referralSubmissions    ReferralSubmission[]
-  jobApplicants          JobApplicant[]
-  hiringRoleAssignments  HiringRoleAssignment[]
-  hiringManagerAvailabilities HiringManagerAvailability[]
-  hiringScreenBookings   HiringScreenBooking[]
-  marketingTouchEvents   MarketingTouchEvent[]
-  marketingSpendDaily    MarketingSpendDaily[]
-  pipelineConversionEvents PipelineConversionEvent[]
-  vehicles               Vehicle[]
-  stormAiConversations   StormAiConversation[]
-  stormAiAuditLogs       StormAiAuditLog[]
-  techAssistIssues       TechAssistIssue[]
-  techAssistSessions     TechAssistSession[]
-  techAssistPartSections TechAssistPartSection[]
-  techAssistParts        TechAssistPart[]
-  stormAiCompanyPolicies StormAiCompanyPolicy[]
+  laborRates                    LaborRate[]
+  materialMarkupTiers           MaterialMarkupTier[]
+  timeClockEntries              TimeClockEntry[]
+  techTimeSegments              TechTimeSegment[]
+  techTimeCorrections           TechTimeCorrection[]
+  expenseCardRolePolicies       ExpenseCardRolePolicy[]
+  expenseCards                  ExpenseCard[]
+  staffAuditLogs                StaffAuditLog[]
+  voiceClips                    VoiceClip[]
+  queueWaitClip                 VoiceClip?                     @relation("CompanyQueueWaitClip", fields: [queueWaitClipId], references: [id], onDelete: SetNull)
+  holdMusicClip                 VoiceClip?                     @relation("CompanyHoldMusicClip", fields: [holdMusicClipId], references: [id], onDelete: SetNull)
+  appNotifications              AppNotification[]
+  notificationTemplates         NotificationTemplate[]
+  notificationRules             NotificationRule[]
+  notificationDeliveries        NotificationDelivery[]
+  notificationJobs              NotificationJob[]
+  contactLists                  ContactList[]
+  campaigns                     Campaign[]
+  housecallProMigrations        HousecallProMigration[]
+  hcpEntityMappings             HcpEntityMapping[]
+  employeeWorkSchedules         EmployeeWorkSchedule[]
+  timeOffRequests               TimeOffRequest[]
+  officeTodos                   OfficeTodo[]
+  importantUpdates              ImportantUpdate[]
+  checklistTemplates            ChecklistTemplate[]
+  portalLoginTokens             CustomerPortalLoginToken[]
+  portalOffers                  PortalOffer[]
+  integrationCredentials        IntegrationCredential[]
+  mobileSessions                MobileSession[]
+  mobilePushDevices             MobilePushDevice[]
+  fieldDeviceLocations          FieldDeviceLocation[]
+  webPushSubscriptions          WebPushSubscription[]
+  metaWebhookEvents             MetaWebhookEvent[]
+  socialPosts                   SocialPost[]
+  socialPostSubmissions         SocialPostSubmission[]
+  integrationAuditLogs          IntegrationAuditLog[]
+  marketingEvents               MarketingEvent[]
+  gbpReviewSlackDeliveries      GbpReviewSlackDelivery[]
+  gbpReviewStaffNotifies        GbpReviewStaffNotify[]
+  gbpReviews                    GbpReview[]
+  localSeoKeywords              LocalSeoKeyword[]
+  localSeoTargetCities          LocalSeoTargetCity[]
+  localSeoSerpSearches          LocalSeoSerpSearch[]
+  localSeoRankingCaches         LocalSeoRankingCache[]
+  seoTasks                      SeoTask[]
+  referralProgramSettings       ReferralProgramSettings?
+  referralMembers               ReferralMember[]
+  referralSubmissions           ReferralSubmission[]
+  jobApplicants                 JobApplicant[]
+  hiringRoleAssignments         HiringRoleAssignment[]
+  hiringManagerAvailabilities   HiringManagerAvailability[]
+  hiringScreenBookings          HiringScreenBooking[]
+  marketingTouchEvents          MarketingTouchEvent[]
+  marketingSpendDaily           MarketingSpendDaily[]
+  pipelineConversionEvents      PipelineConversionEvent[]
+  pipelineFollowUps             PipelineFollowUp[]
+  vehicles                      Vehicle[]
+  stormAiConversations          StormAiConversation[]
+  stormAiAuditLogs              StormAiAuditLog[]
+  techAssistIssues              TechAssistIssue[]
+  techAssistSessions            TechAssistSession[]
+  techAssistPartSections        TechAssistPartSection[]
+  techAssistParts               TechAssistPart[]
+  stormAiCompanyPolicies        StormAiCompanyPolicy[]
 }
 
 model LocalSeoSerpSearch {
@@ -911,14 +940,14 @@ model LocalSeoSerpSearch {
 }
 
 model LocalSeoRankingCache {
-  id            String           @id @default(cuid())
+  id            String          @id @default(cuid())
   companyId     String
-  channel       LocalSeoChannel  @default(GBP)
+  channel       LocalSeoChannel @default(GBP)
   keyword       String
   cityId        String
   ourRank       Int?
   topBusinesses Json
-  fetchedAt     DateTime         @default(now())
+  fetchedAt     DateTime        @default(now())
 
   company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   city    LocalSeoTargetCity @relation(fields: [cityId], references: [id], onDelete: Cascade)
@@ -962,7 +991,7 @@ model LocalSeoTargetCity {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company       Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
   rankingCaches LocalSeoRankingCache[]
 
   @@unique([companyId, canonicalName])
@@ -991,118 +1020,118 @@ model SeoTask {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  companyId    String
-  firstName    String         @default("")
-  lastName     String         @default("")
-  name         String
-  email        String
-  passwordHash String?
-  phone        String?
-  role         UserRole       @default(CSR)
-  title        String?
-  status       EmployeeStatus @default(ACTIVE)
-  division     Division?
-  color        String?
-  photoUrl     String?
-  websiteTeamSlug String?
-  address      String?
-  city         String?
-  state        String?
-  zip          String?
-  birthDate    DateTime?
-  tags         String[]       @default([])
+  id                   String         @id @default(cuid())
+  companyId            String
+  firstName            String         @default("")
+  lastName             String         @default("")
+  name                 String
+  email                String
+  passwordHash         String?
+  phone                String?
+  role                 UserRole       @default(CSR)
+  title                String?
+  status               EmployeeStatus @default(ACTIVE)
+  division             Division?
+  color                String?
+  photoUrl             String?
+  websiteTeamSlug      String?
+  address              String?
+  city                 String?
+  state                String?
+  zip                  String?
+  birthDate            DateTime?
+  tags                 String[]       @default([])
   /// Alternate spellings of the first name for Google review matching.
-  reviewNameAliases String[]      @default([])
+  reviewNameAliases    String[]       @default([])
   /// When set (e.g. AI_RECEPTIONIST), this is a non-login system account for automated notes.
-  systemKind   String?
+  systemKind           String?
   /// App Store review / Apple demo technician — no phone or MFA required; disable via Integrations.
-  appleDemoAccount Boolean @default(false)
+  appleDemoAccount     Boolean        @default(false)
   /// When true, this person can be assigned public / website online bookings.
-  onlineBookingEnabled Boolean @default(false)
-  payType            PayType?
-  hourlyRate         Decimal?       @db.Decimal(10, 2)
-  commissionPercent  Decimal?       @db.Decimal(5, 2)
-  annualSalary       Decimal?       @db.Decimal(12, 2)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  onlineBookingEnabled Boolean        @default(false)
+  payType              PayType?
+  hourlyRate           Decimal?       @db.Decimal(10, 2)
+  commissionPercent    Decimal?       @db.Decimal(5, 2)
+  annualSalary         Decimal?       @db.Decimal(12, 2)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  callLogs           CallLog[]
-  sentMessages       Message[]
-  closedSmsConversations Conversation[] @relation("SmsConversationClosedBy")
-  emailMessages      EmailMessage[]
-  blockedContacts    BlockedContact[]     @relation("BlockedByUser")
-  groupMemberships   InternalGroupMember[]
-  serviceAreas       UserServiceArea[]
-  crewMemberships    CrewMember[]
-  crewsAsForeman     Crew[]               @relation("CrewForeman")
-  assignedVisits     Visit[]              @relation("AssignedVisits")
+  company                    Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callLogs                   CallLog[]
+  sentMessages               Message[]
+  closedSmsConversations     Conversation[]             @relation("SmsConversationClosedBy")
+  emailMessages              EmailMessage[]
+  blockedContacts            BlockedContact[]           @relation("BlockedByUser")
+  groupMemberships           InternalGroupMember[]
+  serviceAreas               UserServiceArea[]
+  crewMemberships            CrewMember[]
+  crewsAsForeman             Crew[]                     @relation("CrewForeman")
+  assignedVisits             Visit[]                    @relation("AssignedVisits")
   additionalVisitAssignments VisitAssignee[]
-  createdVisits      Visit[]              @relation("CreatedVisits")
-  assignedLeads      Lead[]               @relation("AssignedLeads")
-  mobileSessions     MobileSession[]
-  mobilePushDevices  MobilePushDevice[]
-  fieldDeviceLocations FieldDeviceLocation[]
-  webPushSubscriptions WebPushSubscription[]
-  defaultLeadFor     Company[]            @relation("DefaultLeadAssignee")
-  visitTimeEvents    VisitTimeEvent[]
-  visitNotes         VisitNote[]
-  visitAttachments   VisitAttachment[]
-  customerNotes      CustomerNote[]
-  invoiceNotes       InvoiceNote[]
-  customerAttachments CustomerAttachment[]
-  mediaAssets        CompanyMediaAsset[]
-  agentPresence      AgentPresence?
-  agentGroupMembers  AgentGroupMember[]
-  assignedCallSessions CallSession[] @relation("AssignedCallSessions")
-  transferTargetSessions CallSession[] @relation("TransferTargetSessions")
-  timeClockEntries       TimeClockEntry[]
-  techTimeSegments       TechTimeSegment[]
-  techTimeCorrections    TechTimeCorrection[] @relation("TechTimeCorrectionRequester")
-  reviewedTimeCorrections TechTimeCorrection[] @relation("TechTimeCorrectionReviewer")
-  staffAuditLogs         StaffAuditLog[]
-  assignedPhoneNumbers   PhoneNumber[]        @relation("AssignedPhoneNumbers")
-  twilioPortInRequests   TwilioPortInRequest[] @relation("PortInCreatedBy")
-  handledCallLogs        CallLog[]            @relation("HandledCallLogs")
-  answeredCallConversions CallConversion[]    @relation("AnsweredCallConversions")
-  ownerAssistantConfig OwnerAssistantConfig? @relation("OwnerAssistantOwner")
-  callParticipants         CallParticipant[]
-  workScheduleDays       EmployeeWorkSchedule[]
-  timeOffRequests        TimeOffRequest[]     @relation("TimeOffEmployee")
-  reviewedTimeOff        TimeOffRequest[]     @relation("TimeOffReviewer")
-  createdTimeOff         TimeOffRequest[]     @relation("TimeOffCreator")
-  createdOfficeTodos     OfficeTodo[]         @relation("OfficeTodoCreator")
-  completedOfficeTodos   OfficeTodo[]         @relation("OfficeTodoCompleter")
-  createdImportantUpdates ImportantUpdate[]    @relation("ImportantUpdateCreator")
-  lmsUserId              String?
-  lmsSyncStatus          String?
-  lmsLastSyncedAt        DateTime?
-  socialPostSubmissions  SocialPostSubmission[] @relation("SocialSubmissionAuthor")
-  reviewedSocialPosts    SocialPostSubmission[] @relation("SocialSubmissionReviewer")
-  socialPostReviewComments SocialPostReviewComment[]
-  appNotifications         AppNotification[]
-  holidayLightingQuotes    HolidayLightingQuote[]
-  hiringRoleAssignments    HiringRoleAssignment[] @relation("HiringRoleManager")
-  hiringManagerAvailability HiringManagerAvailability?
-  hiringScreenBookings     HiringScreenBooking[]  @relation("HiringScreenManager")
-  assignedVehicles         Vehicle[]              @relation("VehicleAssignee")
-  vehicleAttachments       VehicleAttachment[]
-  vehicleMileageLogs       VehicleMileageLog[]
-  vehicleServiceRecords    VehicleServiceRecord[] @relation("VehicleServicePerformer")
-  reportedVehicleIssues    VehicleIssue[]         @relation("VehicleIssueReporter")
-  resolvedVehicleIssues    VehicleIssue[]         @relation("VehicleIssueResolver")
-  authMfaChallenges        AuthMfaChallenge[]
-  passwordResetTokens      PasswordResetToken[]
-  expenseCard              ExpenseCard?
-  createdExpenseCards      ExpenseCard[] @relation("ExpenseCardCreator")
-  accountLinksFrom         UserAccountLink[] @relation("AccountLinkFrom")
-  accountLinksTo           UserAccountLink[] @relation("AccountLinkTo")
-  gbpReviewAssignments     GbpReviewAssignment[]
-  stormAiConversations     StormAiConversation[]
-  stormAiMessages          StormAiMessage[]
-  stormAiAuditLogs         StormAiAuditLog[]
-  techAssistSessions       TechAssistSession[]
+  createdVisits              Visit[]                    @relation("CreatedVisits")
+  assignedLeads              Lead[]                     @relation("AssignedLeads")
+  mobileSessions             MobileSession[]
+  mobilePushDevices          MobilePushDevice[]
+  fieldDeviceLocations       FieldDeviceLocation[]
+  webPushSubscriptions       WebPushSubscription[]
+  defaultLeadFor             Company[]                  @relation("DefaultLeadAssignee")
+  visitTimeEvents            VisitTimeEvent[]
+  visitNotes                 VisitNote[]
+  visitAttachments           VisitAttachment[]
+  customerNotes              CustomerNote[]
+  invoiceNotes               InvoiceNote[]
+  customerAttachments        CustomerAttachment[]
+  mediaAssets                CompanyMediaAsset[]
+  agentPresence              AgentPresence?
+  agentGroupMembers          AgentGroupMember[]
+  assignedCallSessions       CallSession[]              @relation("AssignedCallSessions")
+  transferTargetSessions     CallSession[]              @relation("TransferTargetSessions")
+  timeClockEntries           TimeClockEntry[]
+  techTimeSegments           TechTimeSegment[]
+  techTimeCorrections        TechTimeCorrection[]       @relation("TechTimeCorrectionRequester")
+  reviewedTimeCorrections    TechTimeCorrection[]       @relation("TechTimeCorrectionReviewer")
+  staffAuditLogs             StaffAuditLog[]
+  assignedPhoneNumbers       PhoneNumber[]              @relation("AssignedPhoneNumbers")
+  twilioPortInRequests       TwilioPortInRequest[]      @relation("PortInCreatedBy")
+  handledCallLogs            CallLog[]                  @relation("HandledCallLogs")
+  answeredCallConversions    CallConversion[]           @relation("AnsweredCallConversions")
+  ownerAssistantConfig       OwnerAssistantConfig?      @relation("OwnerAssistantOwner")
+  callParticipants           CallParticipant[]
+  workScheduleDays           EmployeeWorkSchedule[]
+  timeOffRequests            TimeOffRequest[]           @relation("TimeOffEmployee")
+  reviewedTimeOff            TimeOffRequest[]           @relation("TimeOffReviewer")
+  createdTimeOff             TimeOffRequest[]           @relation("TimeOffCreator")
+  createdOfficeTodos         OfficeTodo[]               @relation("OfficeTodoCreator")
+  completedOfficeTodos       OfficeTodo[]               @relation("OfficeTodoCompleter")
+  createdImportantUpdates    ImportantUpdate[]          @relation("ImportantUpdateCreator")
+  lmsUserId                  String?
+  lmsSyncStatus              String?
+  lmsLastSyncedAt            DateTime?
+  socialPostSubmissions      SocialPostSubmission[]     @relation("SocialSubmissionAuthor")
+  reviewedSocialPosts        SocialPostSubmission[]     @relation("SocialSubmissionReviewer")
+  socialPostReviewComments   SocialPostReviewComment[]
+  appNotifications           AppNotification[]
+  holidayLightingQuotes      HolidayLightingQuote[]
+  hiringRoleAssignments      HiringRoleAssignment[]     @relation("HiringRoleManager")
+  hiringManagerAvailability  HiringManagerAvailability?
+  hiringScreenBookings       HiringScreenBooking[]      @relation("HiringScreenManager")
+  assignedVehicles           Vehicle[]                  @relation("VehicleAssignee")
+  vehicleAttachments         VehicleAttachment[]
+  vehicleMileageLogs         VehicleMileageLog[]
+  vehicleServiceRecords      VehicleServiceRecord[]     @relation("VehicleServicePerformer")
+  reportedVehicleIssues      VehicleIssue[]             @relation("VehicleIssueReporter")
+  resolvedVehicleIssues      VehicleIssue[]             @relation("VehicleIssueResolver")
+  authMfaChallenges          AuthMfaChallenge[]
+  passwordResetTokens        PasswordResetToken[]
+  expenseCard                ExpenseCard?
+  createdExpenseCards        ExpenseCard[]              @relation("ExpenseCardCreator")
+  accountLinksFrom           UserAccountLink[]          @relation("AccountLinkFrom")
+  accountLinksTo             UserAccountLink[]          @relation("AccountLinkTo")
+  gbpReviewAssignments       GbpReviewAssignment[]
+  stormAiConversations       StormAiConversation[]
+  stormAiMessages            StormAiMessage[]
+  stormAiAuditLogs           StormAiAuditLog[]
+  techAssistSessions         TechAssistSession[]
 
   @@unique([companyId, email])
   @@unique([companyId, lmsUserId])
@@ -1132,10 +1161,10 @@ model StormAiConversation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages StormAiMessage[]
-  auditLogs StormAiAuditLog[]
+  company            Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages           StormAiMessage[]
+  auditLogs          StormAiAuditLog[]
   techAssistSessions TechAssistSession[]
 
   @@index([userId, updatedAt])
@@ -1143,17 +1172,17 @@ model StormAiConversation {
 }
 
 model StormAiMessage {
-  id             String   @id @default(cuid())
-  conversationId String
-  userId         String
-  role           String
-  content        String   @db.Text
+  id              String   @id @default(cuid())
+  conversationId  String
+  userId          String
+  role            String
+  content         String   @db.Text
   /// Optional user uploads for this turn (photos for part ID, etc.).
   attachmentsJson Json?
-  toolName       String?
-  toolCallId     String?
-  usageJson      Json?
-  createdAt      DateTime @default(now())
+  toolName        String?
+  toolCallId      String?
+  usageJson       Json?
+  createdAt       DateTime @default(now())
 
   conversation StormAiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1162,19 +1191,19 @@ model StormAiMessage {
 }
 
 model StormAiAuditLog {
-  id             String   @id @default(cuid())
-  companyId      String
-  userId         String
-  conversationId String?
-  question       String   @db.Text
-  toolsJson      Json?
-  ok             Boolean
-  model          String?
-  responsePreview String? @db.Text
-  promptTokens   Int?
+  id               String   @id @default(cuid())
+  companyId        String
+  userId           String
+  conversationId   String?
+  question         String   @db.Text
+  toolsJson        Json?
+  ok               Boolean
+  model            String?
+  responsePreview  String?  @db.Text
+  promptTokens     Int?
   completionTokens Int?
-  error          String?  @db.Text
-  createdAt      DateTime @default(now())
+  error            String?  @db.Text
+  createdAt        DateTime @default(now())
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1225,7 +1254,7 @@ model TechAssistIssue {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company  Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nodes    TechAssistNode[]
   sessions TechAssistSession[]
 
@@ -1243,29 +1272,29 @@ model TechAssistNode {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
-  issue              TechAssistIssue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  sessionsAtNode     TechAssistSession[]
+  issue          TechAssistIssue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  sessionsAtNode TechAssistSession[]
 
   @@index([issueId, sortOrder])
 }
 
 model TechAssistSession {
-  id             String                   @id @default(cuid())
+  id             String                  @id @default(cuid())
   companyId      String
   userId         String
   conversationId String
   issueId        String
   currentNodeId  String?
-  status         TechAssistSessionStatus  @default(ACTIVE)
-  history        Json                     @default("[]")
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  status         TechAssistSessionStatus @default(ACTIVE)
+  history        Json                    @default("[]")
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversation StormAiConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  issue        TechAssistIssue      @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  currentNode  TechAssistNode?      @relation(fields: [currentNodeId], references: [id], onDelete: SetNull)
-  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation StormAiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  issue        TechAssistIssue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  currentNode  TechAssistNode?     @relation(fields: [currentNodeId], references: [id], onDelete: SetNull)
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, status])
   @@index([userId, status])
@@ -1288,26 +1317,26 @@ model TechAssistPartSection {
 
 /// Part catalog entry with visual/technical copy, photos, and optional manual PDF.
 model TechAssistPart {
-  id                    String   @id @default(cuid())
-  companyId             String
-  sectionId             String
-  name                  String
-  manufacturer          String?
-  partNumber            String?
+  id                   String   @id @default(cuid())
+  companyId            String
+  sectionId            String
+  name                 String
+  manufacturer         String?
+  partNumber           String?
   /// How the part looks / how to recognize it in the field.
-  visualDescription     String?  @db.Text
+  visualDescription    String?  @db.Text
   /// Specs, wiring, ratings, install notes.
-  technicalDescription  String?  @db.Text
-  manualUrl             String?
-  manualFileName        String?
-  manualMimeType        String?
-  active                Boolean  @default(true)
-  sortOrder             Int      @default(0)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  technicalDescription String?  @db.Text
+  manualUrl            String?
+  manualFileName       String?
+  manualMimeType       String?
+  active               Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  company Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  section TechAssistPartSection   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  company Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  section TechAssistPartSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   photos  TechAssistPartPhoto[]
 
   @@index([companyId, sectionId, sortOrder])
@@ -1370,23 +1399,23 @@ model ExpenseCardRolePolicy {
 
 /// Maps an employee to a Stripe Issuing virtual card. Never stores PAN/CVC/PIN.
 model ExpenseCard {
-  id                   String            @id @default(cuid())
-  companyId            String
-  userId               String            @unique
-  stripeCardholderId   String
-  stripeCardId         String            @unique
-  status               ExpenseCardStatus @default(ACTIVE)
-  last4                String?
+  id                 String            @id @default(cuid())
+  companyId          String
+  userId             String            @unique
+  stripeCardholderId String
+  stripeCardId       String            @unique
+  status             ExpenseCardStatus @default(ACTIVE)
+  last4              String?
   /// Per-employee overrides; null inherits role → company defaults.
-  dailyLimitCents      Int?
-  monthlyLimitCents    Int?
-  blockAtm             Boolean?
-  blockInternational   Boolean?
-  blockOnline          Boolean?
-  allowedCategories    String[]          @default([])
-  createdByUserId      String?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
+  dailyLimitCents    Int?
+  monthlyLimitCents  Int?
+  blockAtm           Boolean?
+  blockInternational Boolean?
+  blockOnline        Boolean?
+  allowedCategories  String[]          @default([])
+  createdByUserId    String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1434,11 +1463,11 @@ model PasswordResetToken {
 /// Shared fixed-window rate-limit state for authentication and other abuse-sensitive flows.
 /// Keys are one-way hashes; raw email addresses, IP addresses, and tokens are never stored.
 model SecurityRateLimitBucket {
-  key             String   @id
-  count           Int      @default(0)
-  windowStartedAt DateTime @default(now())
+  key             String    @id
+  count           Int       @default(0)
+  windowStartedAt DateTime  @default(now())
   blockedUntil    DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
 
   @@index([updatedAt])
 }
@@ -1496,95 +1525,106 @@ model SecurityAuditEvent {
 }
 
 model Customer {
-  id          String   @id @default(cuid())
-  companyId   String
-  name        String
-  phone       String?
-  email       String?
-  companyName String?
-  address     String?
-  city        String?
-  state       String?
-  zip         String?
-  leadSource       String?
+  id                             String                       @id @default(cuid())
+  companyId                      String
+  name                           String
+  phone                          String?
+  email                          String?
+  companyName                    String?
+  address                        String?
+  city                           String?
+  state                          String?
+  zip                            String?
+  leadSource                     String?
   /// Normalized first-touch marketing channel (never overwritten once set).
-  attributionChannel   String?
-  attributionSource    String?
-  attributionMedium    String?
-  attributionCampaign  String?
-  attributionTerm      String?
-  attributionContent   String?
-  gclid                String?
-  gbraid               String?
-  wbraid               String?
-  fbc                   String?
-  fbp                   String?
-  metaLeadId            String?
-  userAgent             String?
-  fbclid               String?
-  msclkid              String?
-  firstTouchAt         DateTime?
-  firstTouchMethod     AttributionFirstTouchMethod?
-  referredByCustomerId String?
-  stripeCustomerId String?
-  status           CustomerStatus @default(ACTIVE)
-  doNotService     Boolean        @default(false)
+  attributionChannel             String?
+  attributionSource              String?
+  attributionMedium              String?
+  attributionCampaign            String?
+  attributionTerm                String?
+  attributionContent             String?
+  gclid                          String?
+  gbraid                         String?
+  wbraid                         String?
+  fbc                            String?
+  fbp                            String?
+  metaLeadId                     String?
+  userAgent                      String?
+  fbclid                         String?
+  msclkid                        String?
+  firstTouchAt                   DateTime?
+  firstTouchMethod               AttributionFirstTouchMethod?
+  referredByCustomerId           String?
+  stripeCustomerId               String?
+  status                         CustomerStatus               @default(ACTIVE)
+  doNotService                   Boolean                      @default(false)
   /// Opt out of marketing email only — appointment/invoice/portal mail still allowed. Default false = opted in.
-  marketingEmailOptOut Boolean    @default(false)
+  marketingEmailOptOut           Boolean                      @default(false)
   /// Opt out of marketing SMS (campaigns / offers). Default false = opted in.
-  marketingSmsOptOut Boolean      @default(false)
+  marketingSmsOptOut             Boolean                      @default(false)
   /// Opt out of appointment reminder emails (visit scheduled/updated/en-route/etc.).
-  appointmentReminderEmailOptOut Boolean @default(false)
+  appointmentReminderEmailOptOut Boolean                      @default(false)
   /// Opt out of appointment reminder SMS.
-  appointmentReminderSmsOptOut Boolean @default(false)
-  tags             String[]       @default([])
+  appointmentReminderSmsOptOut   Boolean                      @default(false)
+  tags                           String[]                     @default([])
   /// Internal sales pipeline only. Never expose through customer-facing APIs or notifications.
-  pipelineStage              SalesPipelineStage?
-  pipelineLeadAt             DateTime?
-  pipelineQualifiedAt        DateTime?
-  pipelineConvertedAt        DateTime?
-  pipelineSoldAt             DateTime?
-  pipelineDisqualifiedAt     DateTime?
-  pipelineLeadSource         String?
-  pipelineFirstContactedAt   DateTime?
-  pipelineLeadId             String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  pipelineStage                  SalesPipelineStage?
+  pipelineLeadAt                 DateTime?
+  pipelineQualifiedAt            DateTime?
+  pipelineConvertedAt            DateTime?
+  pipelineSoldAt                 DateTime?
+  pipelineDisqualifiedAt         DateTime?
+  pipelineLeadSource             String?
+  pipelineFirstContactedAt       DateTime?
+  pipelineLeadId                 String?
+  /// Pipeline-only suppression. Customer/contact records remain intact.
+  pipelineRemovedAt              DateTime?
+  pipelineRemovedById            String?
+  pipelineDeclinedAt             DateTime?
+  pipelineDeclineReason          PipelineDeclineReason?
+  pipelineDeclinedById           String?
+  pipelineFollowUpsPausedAt      DateTime?
+  pipelineFollowUpsPausedById    String?
+  /// Latest manual resume; remaining automated steps count their delay from here.
+  pipelineFollowUpsResumedAt     DateTime?
+  createdAt                      DateTime                     @default(now())
+  updatedAt                      DateTime                     @updatedAt
 
-  company              Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  referredBy           Customer?                  @relation("CustomerReferrals", fields: [referredByCustomerId], references: [id], onDelete: SetNull)
-  referredCustomers    Customer[]                 @relation("CustomerReferrals")
-  referralMember       ReferralMember?
-  referralSubmissionsAsReferrer ReferralSubmission[] @relation("ReferrerCustomer")
-  referralSubmissionsAsReferred ReferralSubmission[] @relation("ReferredCustomer")
-  blockedEntry         BlockedContact?
-  callLogs             CallLog[]
-  callConversions      CallConversion[]
-  receptionistCalls    ReceptionistCall[]
-  conversations        Conversation[]
-  emailMessages        EmailMessage[]
-  properties           CustomerProperty[]
-  visits               Visit[]
-  estimates            Estimate[]
-  holidayLightingQuotes HolidayLightingQuote[]
-  invoices             Invoice[]
-  maintenanceEnrollments MaintenancePlanEnrollment[]
-  convertedFromLeads     Lead[]
-  callSessions           CallSession[]
-  contactListMembers     ContactListMember[]
-  campaignRecipients     CampaignRecipient[]
-  campaignEnrollments    CampaignEnrollment[]
-  phones                 CustomerPhone[]
-  emails                 CustomerEmail[]
-  notes                  CustomerNote[]
-  attachments            CustomerAttachment[]
-  portalLoginTokens      CustomerPortalLoginToken[]
-  notificationDeliveries NotificationDelivery[]
-  feedbackSurveyResponses FeedbackSurveyResponse[]
-  marketingTouchEvents   MarketingTouchEvent[]
-  pipelineConversionEvents PipelineConversionEvent[]
-  gbpReviews             GbpReview[]
-  winterizationRequests  WinterizationRequest[]
+  company                       Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  referredBy                    Customer?                   @relation("CustomerReferrals", fields: [referredByCustomerId], references: [id], onDelete: SetNull)
+  referredCustomers             Customer[]                  @relation("CustomerReferrals")
+  referralMember                ReferralMember?
+  referralSubmissionsAsReferrer ReferralSubmission[]        @relation("ReferrerCustomer")
+  referralSubmissionsAsReferred ReferralSubmission[]        @relation("ReferredCustomer")
+  blockedEntry                  BlockedContact?
+  callLogs                      CallLog[]
+  callConversions               CallConversion[]
+  receptionistCalls             ReceptionistCall[]
+  conversations                 Conversation[]
+  emailMessages                 EmailMessage[]
+  properties                    CustomerProperty[]
+  visits                        Visit[]
+  estimates                     Estimate[]
+  holidayLightingQuotes         HolidayLightingQuote[]
+  invoices                      Invoice[]
+  maintenanceEnrollments        MaintenancePlanEnrollment[]
+  convertedFromLeads            Lead[]
+  callSessions                  CallSession[]
+  contactListMembers            ContactListMember[]
+  campaignRecipients            CampaignRecipient[]
+  campaignEnrollments           CampaignEnrollment[]
+  phones                        CustomerPhone[]
+  emails                        CustomerEmail[]
+  notes                         CustomerNote[]
+  attachments                   CustomerAttachment[]
+  portalLoginTokens             CustomerPortalLoginToken[]
+  notificationDeliveries        NotificationDelivery[]
+  feedbackSurveyResponses       FeedbackSurveyResponse[]
+  marketingTouchEvents          MarketingTouchEvent[]
+  pipelineConversionEvents      PipelineConversionEvent[]
+  pipelineFollowUps             PipelineFollowUp[]
+  gbpReviews                    GbpReview[]
+  winterizationRequests         WinterizationRequest[]
 
   @@index([referredByCustomerId])
   @@index([companyId, attributionChannel])
@@ -1593,17 +1633,47 @@ model Customer {
   @@index([companyId, pipelineLeadAt])
 }
 
+/// Internal follow-up ledger. It does not create or modify advertising conversion events.
+model PipelineFollowUp {
+  id            String                 @id @default(cuid())
+  companyId     String
+  customerId    String
+  stage         SalesPipelineStage
+  sequence      Int
+  method        PipelineFollowUpMethod
+  status        PipelineFollowUpStatus @default(PENDING)
+  automated     Boolean                @default(false)
+  performedById String?
+  scheduledFor  DateTime?
+  attemptedAt   DateTime?
+  completedAt   DateTime?
+  smsSentAt     DateTime?
+  emailSentAt   DateTime?
+  subject       String?
+  body          String?                @db.Text
+  lastError     String?                @db.Text
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, stage, sequence])
+  @@index([companyId, status, scheduledFor])
+  @@index([customerId, stage, sequence])
+}
+
 /// Immutable snapshot emitted exactly once for every newly reached sales stage.
 /// Customer PII is normalized and hashed before it is stored here.
 model PipelineConversionEvent {
-  id               String   @id @default(cuid())
+  id               String             @id @default(cuid())
   companyId        String
   customerId       String
   stage            SalesPipelineStage
   occurredAt       DateTime
-  value            Decimal? @db.Decimal(12, 2)
-  currency         String   @default("USD")
-  eventSource      String   @default("WEB")
+  value            Decimal?           @db.Decimal(12, 2)
+  currency         String             @default("USD")
+  eventSource      String             @default("WEB")
   emailSha256      String?
   phoneSha256      String?
   gclid            String?
@@ -1615,10 +1685,10 @@ model PipelineConversionEvent {
   userAgent        String?
   sourceEntityType String?
   sourceEntityId   String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime           @default(now())
 
-  company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  company    Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer   Customer                     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   deliveries PipelineConversionDelivery[]
 
   @@unique([companyId, customerId, stage])
@@ -1627,19 +1697,19 @@ model PipelineConversionEvent {
 }
 
 model PipelineConversionDelivery {
-  id                String   @id @default(cuid())
+  id                String                           @id @default(cuid())
   eventId           String
   platform          PipelineConversionPlatform
   status            PipelineConversionDeliveryStatus @default(PENDING)
-  attempts          Int      @default(0)
-  nextAttemptAt     DateTime @default(now())
+  attempts          Int                              @default(0)
+  nextAttemptAt     DateTime                         @default(now())
   leaseUntil        DateTime?
   sentAt            DateTime?
   providerRequestId String?
-  lastError         String?  @db.Text
+  lastError         String?                          @db.Text
   responseMetadata  Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime                         @default(now())
+  updatedAt         DateTime                         @updatedAt
 
   event PipelineConversionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -1649,32 +1719,32 @@ model PipelineConversionDelivery {
 }
 
 model WinterizationRequest {
-  id        String   @id @default(cuid())
-  companyId String
-  customerId String?
-  leadId     String?
-  status     WinterizationRequestStatus @default(NEED_BOOKING)
-  seasonYear Int
-  weekStart  DateTime
-  weekEnd    DateTime
-  weekLabel  String
-  zoneCount  Int?
-  quotedPrice Decimal? @db.Decimal(10, 2)
-  name       String
-  phone      String?
-  email      String?
-  address    String?
-  city       String?
-  state      String?
-  zip        String?
-  schedulingNotes        String? @db.Text
-  shutoffValveLocation   String? @db.Text
-  timerLocation          String? @db.Text
-  scheduledDate DateTime?
-  source     String  @default("website")
-  externalId String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                   String                     @id @default(cuid())
+  companyId            String
+  customerId           String?
+  leadId               String?
+  status               WinterizationRequestStatus @default(NEED_BOOKING)
+  seasonYear           Int
+  weekStart            DateTime
+  weekEnd              DateTime
+  weekLabel            String
+  zoneCount            Int?
+  quotedPrice          Decimal?                   @db.Decimal(10, 2)
+  name                 String
+  phone                String?
+  email                String?
+  address              String?
+  city                 String?
+  state                String?
+  zip                  String?
+  schedulingNotes      String?                    @db.Text
+  shutoffValveLocation String?                    @db.Text
+  timerLocation        String?                    @db.Text
+  scheduledDate        DateTime?
+  source               String                     @default("website")
+  externalId           String?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -1765,13 +1835,13 @@ model CompanyMediaAsset {
 }
 
 model Lead {
-  id                  String     @id @default(cuid())
+  id                  String                       @id @default(cuid())
   companyId           String
   name                String
   phone               String?
   email               String?
   source              String?
-  status              LeadStatus @default(NEW)
+  status              LeadStatus                   @default(NEW)
   assignedUserId      String?
   notes               String?
   externalId          String?
@@ -1788,22 +1858,22 @@ model Lead {
   gclid               String?
   gbraid              String?
   wbraid              String?
-  fbc                  String?
-  fbp                  String?
-  metaLeadId           String?
-  userAgent            String?
+  fbc                 String?
+  fbp                 String?
+  metaLeadId          String?
+  userAgent           String?
   fbclid              String?
   msclkid             String?
   firstTouchAt        DateTime?
   firstTouchMethod    AttributionFirstTouchMethod?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
 
-  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  assignedUser      User?     @relation("AssignedLeads", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  convertedCustomer Customer? @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
-  referralSubmission ReferralSubmission?
-  callLogs          CallLog[]
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedUser         User?                 @relation("AssignedLeads", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  convertedCustomer    Customer?             @relation(fields: [convertedCustomerId], references: [id], onDelete: SetNull)
+  referralSubmission   ReferralSubmission?
+  callLogs             CallLog[]
   marketingTouchEvents MarketingTouchEvent[]
 
   @@unique([companyId, externalId])
@@ -1815,27 +1885,27 @@ model Lead {
 }
 
 model JobApplicant {
-  id                          String               @id @default(cuid())
-  companyId                   String
-  externalId                  String
-  name                        String
-  email                       String
-  phone                       String?
-  jobSlug                     String
-  jobTitle                    String?
-  interest                    String?              @db.Text
-  hardWorkMeaning             String               @db.Text
-  integrityMeaning            String               @db.Text
-  inconvenientServiceExample  String               @db.Text
-  personalGoals               String               @db.Text
-  aiScore                     Int?
-  stage                       ApplicantStage       @default(MAYBE)
-  stageSource                 ApplicantStageSource @default(AI)
-  bookingToken                String?              @unique
-  bookingInviteSentAt         DateTime?
-  metadata                    Json?
-  createdAt                   DateTime             @default(now())
-  updatedAt                   DateTime             @updatedAt
+  id                         String               @id @default(cuid())
+  companyId                  String
+  externalId                 String
+  name                       String
+  email                      String
+  phone                      String?
+  jobSlug                    String
+  jobTitle                   String?
+  interest                   String?              @db.Text
+  hardWorkMeaning            String               @db.Text
+  integrityMeaning           String               @db.Text
+  inconvenientServiceExample String               @db.Text
+  personalGoals              String               @db.Text
+  aiScore                    Int?
+  stage                      ApplicantStage       @default(MAYBE)
+  stageSource                ApplicantStageSource @default(AI)
+  bookingToken               String?              @unique
+  bookingInviteSentAt        DateTime?
+  metadata                   Json?
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
 
   company  Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   bookings HiringScreenBooking[]
@@ -1857,8 +1927,8 @@ model HiringRoleAssignment {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  company        Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  hiringManager  User    @relation("HiringRoleManager", fields: [hiringManagerUserId], references: [id], onDelete: Cascade)
+  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  hiringManager User    @relation("HiringRoleManager", fields: [hiringManagerUserId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, jobSlug])
   @@index([companyId])
@@ -1867,14 +1937,14 @@ model HiringRoleAssignment {
 }
 
 model HiringManagerAvailability {
-  id           String   @id @default(cuid())
-  companyId    String
-  userId       String   @unique
-  weeklyHours  Json?
-  blockedSlots Json?
-  leadTimeHours Int     @default(2)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  companyId     String
+  userId        String   @unique
+  weeklyHours   Json?
+  blockedSlots  Json?
+  leadTimeHours Int      @default(2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1884,15 +1954,15 @@ model HiringManagerAvailability {
 }
 
 model HiringScreenBooking {
-  id          String                    @id @default(cuid())
-  companyId   String
-  applicantId String
+  id            String                    @id @default(cuid())
+  companyId     String
+  applicantId   String
   managerUserId String
-  startAt     DateTime
-  endAt       DateTime
-  status      HiringScreenBookingStatus @default(SCHEDULED)
-  createdAt   DateTime                  @default(now())
-  updatedAt   DateTime                  @updatedAt
+  startAt       DateTime
+  endAt         DateTime
+  status        HiringScreenBookingStatus @default(SCHEDULED)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
 
   company   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   applicant JobApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
@@ -1905,54 +1975,54 @@ model HiringScreenBooking {
 }
 
 model CustomerProperty {
-  id         String   @id @default(cuid())
-  companyId  String
-  customerId String
-  name       String
-  address    String?
-  city       String?
-  state      String?
-  zip        String?
-  isPrimary  Boolean  @default(false)
-  propertyDiagramUrl String?
-  latitude   Float?
-  longitude  Float?
-  mapBounds  Json?
-  aerialImageUrl    String?
-  aerialCenterLat   Float?
-  aerialCenterLng   Float?
-  aerialZoom        Int?
-  stylizedImageUrl  String?
-  irrigationZoneCount     Int?
-  shutoffValveLocation    String?
-  controllerLocation      String?
-  irrigationWizardStep Int?
-  irrigationMapStatus  IrrigationMapStatus?
-  waterSource          PropertyWaterSource?
-  designProjectId      String?
-  grassSeason              GrassSeason           @default(COOL)
+  id                        String               @id @default(cuid())
+  companyId                 String
+  customerId                String
+  name                      String
+  address                   String?
+  city                      String?
+  state                     String?
+  zip                       String?
+  isPrimary                 Boolean              @default(false)
+  propertyDiagramUrl        String?
+  latitude                  Float?
+  longitude                 Float?
+  mapBounds                 Json?
+  aerialImageUrl            String?
+  aerialCenterLat           Float?
+  aerialCenterLng           Float?
+  aerialZoom                Int?
+  stylizedImageUrl          String?
+  irrigationZoneCount       Int?
+  shutoffValveLocation      String?
+  controllerLocation        String?
+  irrigationWizardStep      Int?
+  irrigationMapStatus       IrrigationMapStatus?
+  waterSource               PropertyWaterSource?
+  designProjectId           String?
+  grassSeason               GrassSeason          @default(COOL)
   droughtRestrictionsActive Boolean              @default(true)
-  cycleSoakEnabled         Boolean              @default(false)
-  etoOverrideInches        Float?
-  etoWeeklyInches          Float?
-  etoCachedAt              DateTime?
-  rainfallWeeklyInches     Float?
-  programGuideJson         Json?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  cycleSoakEnabled          Boolean              @default(false)
+  etoOverrideInches         Float?
+  etoWeeklyInches           Float?
+  etoCachedAt               DateTime?
+  rainfallWeeklyInches      Float?
+  programGuideJson          Json?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer         Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  visits           Visit[]
-  estimates        Estimate[]
+  company               Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer              Customer                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  visits                Visit[]
+  estimates             Estimate[]
   holidayLightingQuotes HolidayLightingQuote[]
-  maintenancePlans MaintenancePlanEnrollment[]
-  smartControllers PropertySmartController[]
-  irrigationZones  PropertyIrrigationZone[]
-  irrigationMapZones PropertyIrrigationMapZone[]
-  irrigationValves   PropertyIrrigationValve[]
+  maintenancePlans      MaintenancePlanEnrollment[]
+  smartControllers      PropertySmartController[]
+  irrigationZones       PropertyIrrigationZone[]
+  irrigationMapZones    PropertyIrrigationMapZone[]
+  irrigationValves      PropertyIrrigationValve[]
   irrigationControllers PropertyIrrigationController[]
-  irrigationMapMarkers PropertyIrrigationMapMarker[]
+  irrigationMapMarkers  PropertyIrrigationMapMarker[]
 
   @@index([companyId, customerId])
 }
@@ -1977,10 +2047,10 @@ model BlockedContact {
 
 /// Phone-level STOP suppression. Kept separate from blocked contacts so opt-outs stay in the normal inbox.
 model MarketingSmsSuppression {
-  id          String   @id @default(cuid())
-  companyId   String
-  phone       String
-  optedOutAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  companyId  String
+  phone      String
+  optedOutAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -1989,55 +2059,55 @@ model MarketingSmsSuppression {
 }
 
 model CallLog {
-  id            String        @id @default(cuid())
-  companyId     String
-  scope         Scope
-  direction     CallDirection
-  fromNumber    String
-  toNumber      String
-  customerId    String?
-  userId        String?
-  sessionId     String?
-  conferenceSid String?
-  queueWaitSec  Int?
-  twilioCallSid String        @unique
-  status        String
-  durationSec   Int?
-  recordingUrl  String?
-  transcript    String?
+  id                String                 @id @default(cuid())
+  companyId         String
+  scope             Scope
+  direction         CallDirection
+  fromNumber        String
+  toNumber          String
+  customerId        String?
+  userId            String?
+  sessionId         String?
+  conferenceSid     String?
+  queueWaitSec      Int?
+  twilioCallSid     String                 @unique
+  status            String
+  durationSec       Int?
+  recordingUrl      String?
+  transcript        String?
   /// One-paragraph AI summary generated from the transcript.
-  aiSummary     String?
+  aiSummary         String?
   /// Parsed from the AI summary JSON. NA when the call booked.
   objectionCategory CallObjectionCategory?
   /// Why they did not book / where value was missed. Null when booked or N/A.
   objectionReason   String?
-  disposition   CallDisposition @default(NONE)
-  dispositionNote String?
-  visitId       String?
-  leadId        String?
-  handledByUserId String?
+  disposition       CallDisposition        @default(NONE)
+  dispositionNote   String?
+  visitId           String?
+  leadId            String?
+  handledByUserId   String?
   /// Dialed company Twilio number (inbound tracking / primary).
-  phoneNumberId String?
+  phoneNumberId     String?
   /// Copied from PhoneNumber.trackingSource when known (e.g. "Google Ads", "Yard sign").
-  trackingSource String?
-  attributionMethod CallAttributionMethod @default(UNKNOWN)
+  trackingSource    String?
+  attributionMethod CallAttributionMethod  @default(UNKNOWN)
   /// Matched Google Local Services lead id when attribution is LSA_CALLER_MATCH.
-  googleLsaLeadId String?
-  startedAt     DateTime      @default(now())
-  endedAt       DateTime?
+  googleLsaLeadId   String?
+  startedAt         DateTime               @default(now())
+  endedAt           DateTime?
   /// When set, this missed inbound call no longer counts toward CSR Desk badges.
-  missedReviewedAt DateTime?
+  missedReviewedAt  DateTime?
 
-  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  user     User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  session  CallSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  visit    Visit?       @relation("CallLogVisit", fields: [visitId], references: [id], onDelete: SetNull)
-  lead     Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  handledBy User?       @relation("HandledCallLogs", fields: [handledByUserId], references: [id], onDelete: SetNull)
-  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  conversion CallConversion?
-  visitNotes VisitNote[]
+  company      Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer     Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session      CallSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  visit        Visit?            @relation("CallLogVisit", fields: [visitId], references: [id], onDelete: SetNull)
+  lead         Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  handledBy    User?             @relation("HandledCallLogs", fields: [handledByUserId], references: [id], onDelete: SetNull)
+  phoneNumber  PhoneNumber?      @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  conversion   CallConversion?
+  visitNotes   VisitNote[]
   participants CallParticipant[]
 
   @@index([companyId, scope, startedAt])
@@ -2072,13 +2142,13 @@ model CallConversion {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
-  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  callLog       CallLog      @relation(fields: [callLogId], references: [id], onDelete: Cascade)
-  callSession   CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
-  answeredBy    User?        @relation("AnsweredCallConversions", fields: [answeredByUserId], references: [id], onDelete: SetNull)
-  visit         Visit?       @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  phoneNumber   PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callLog     CallLog      @relation(fields: [callLogId], references: [id], onDelete: Cascade)
+  callSession CallSession? @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+  answeredBy  User?        @relation("AnsweredCallConversions", fields: [answeredByUserId], references: [id], onDelete: SetNull)
+  visit       Visit?       @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  phoneNumber PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([companyId, booked, convertedAt])
   @@index([companyId, attributionMethod, convertedAt])
@@ -2089,35 +2159,35 @@ model CallConversion {
 }
 
 model PhoneNumber {
-  id             String          @id @default(cuid())
-  companyId      String
-  e164           String
+  id                       String          @id @default(cuid())
+  companyId                String
+  e164                     String
   /// Display title shown in the CRM (e.g. "PPC Repair tracking").
-  friendlyName   String?
-  numberType     PhoneNumberType @default(TRACKING)
-  isPrimary      Boolean         @default(false)
+  friendlyName             String?
+  numberType               PhoneNumberType @default(TRACKING)
+  isPrimary                Boolean         @default(false)
   /// Whether Twilio reports SMS capability for this number (null = unknown / not synced).
-  smsEnabled     Boolean?
+  smsEnabled               Boolean?
   /// Whether Twilio reports voice capability for this number.
-  voiceEnabled   Boolean?
-  callFlowId     String?
-  assignedUserId String?
-  trackingSource String?
-  twilioSid      String?
+  voiceEnabled             Boolean?
+  callFlowId               String?
+  assignedUserId           String?
+  trackingSource           String?
+  twilioSid                String?
   /// When true, company and A2P campaign cannot be changed without step-up MFA.
-  assignmentLocked Boolean @default(false)
-  assignmentLockedAt DateTime?
+  assignmentLocked         Boolean         @default(false)
+  assignmentLockedAt       DateTime?
   assignmentLockedByUserId String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
 
-  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  callFlow     CallFlow?    @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
-  assignedUser User?        @relation("AssignedPhoneNumbers", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  callSessions CallSession[]
-  callLogs     CallLog[]
-  callConversions CallConversion[]
-  portInRequests TwilioPortInRequest[]
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  callFlow             CallFlow?             @relation(fields: [callFlowId], references: [id], onDelete: SetNull)
+  assignedUser         User?                 @relation("AssignedPhoneNumbers", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  callSessions         CallSession[]
+  callLogs             CallLog[]
+  callConversions      CallConversion[]
+  portInRequests       TwilioPortInRequest[]
   ownerAssistantConfig OwnerAssistantConfig?
 
   @@unique([companyId, e164])
@@ -2126,28 +2196,28 @@ model PhoneNumber {
 
 /// Twilio Porting API (Public Beta) port-in request tracked in CRM settings.
 model TwilioPortInRequest {
-  id                          String    @id @default(cuid())
-  companyId                   String
-  createdByUserId             String?
-  e164                        String
+  id                         String    @id @default(cuid())
+  companyId                  String
+  createdByUserId            String?
+  e164                       String
   /// Shared across numbers submitted in the same Twilio Port-In request.
-  twilioPortInRequestSid      String
-  twilioPortInPhoneNumberSid  String?
-  twilioDocumentSid           String?
+  twilioPortInRequestSid     String
+  twilioPortInPhoneNumberSid String?
+  twilioDocumentSid          String?
   /// Mirror of Twilio port-in request / phone-number status.
-  status                      String    @default("In Review")
-  portable                    Boolean?
-  rejectionReason             String?
-  rejectionReasonCode         String?
-  notPortableReason           String?
-  losingCarrierJson           Json?
-  notificationEmails          String[]  @default([])
-  targetPortInDate            DateTime?
-  targetPortInTimeRangeStart  String?
-  targetPortInTimeRangeEnd    String?
-  phoneNumberId               String?
-  createdAt                   DateTime  @default(now())
-  updatedAt                   DateTime  @updatedAt
+  status                     String    @default("In Review")
+  portable                   Boolean?
+  rejectionReason            String?
+  rejectionReasonCode        String?
+  notPortableReason          String?
+  losingCarrierJson          Json?
+  notificationEmails         String[]  @default([])
+  targetPortInDate           DateTime?
+  targetPortInTimeRangeStart String?
+  targetPortInTimeRangeEnd   String?
+  phoneNumberId              String?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdBy   User?        @relation("PortInCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -2235,7 +2305,7 @@ enum AppNotificationType {
 }
 
 model NotificationTemplate {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   companyId String
   channel   Channel
   slug      String
@@ -2253,11 +2323,11 @@ model NotificationTemplate {
 }
 
 model NotificationRule {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   companyId  String
   event      String
   templateId String
-  enabled    Boolean @default(true)
+  enabled    Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -2269,7 +2339,7 @@ model NotificationRule {
 }
 
 model NotificationDelivery {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   companyId     String
   customerId    String?
   event         String
@@ -2277,10 +2347,10 @@ model NotificationDelivery {
   visitId       String?
   invoiceId     String?
   estimateId    String?
-  emailSent     Boolean  @default(false)
-  smsSent       Boolean  @default(false)
+  emailSent     Boolean   @default(false)
+  smsSent       Boolean   @default(false)
   emailFailedAt DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   company  Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -2291,14 +2361,14 @@ model NotificationDelivery {
 }
 
 model TrackedLink {
-  id              String    @id @default(cuid())
-  deliveryId      String
-  kind            String
-  destinationUrl  String
-  token           String    @unique
-  clickedAt       DateTime?
-  clickCount      Int       @default(0)
-  createdAt       DateTime  @default(now())
+  id             String    @id @default(cuid())
+  deliveryId     String
+  kind           String
+  destinationUrl String
+  token          String    @unique
+  clickedAt      DateTime?
+  clickCount     Int       @default(0)
+  createdAt      DateTime  @default(now())
 
   delivery NotificationDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
@@ -2325,12 +2395,12 @@ model NotificationJob {
 }
 
 model FeedbackSurveyToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   visitId   String
-  token     String   @unique
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   visit     Visit                    @relation(fields: [visitId], references: [id], onDelete: Cascade)
   responses FeedbackSurveyResponse[]
@@ -2363,8 +2433,8 @@ model ContactList {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  members  ContactListMember[]
+  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members   ContactListMember[]
   campaigns Campaign[]
 
   @@index([companyId])
@@ -2443,8 +2513,8 @@ model CampaignEnrollment {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
-  campaign Campaign                 @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  customer Customer                 @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  campaign Campaign                  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer                  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   events   CampaignEnrollmentEvent[]
 
   @@unique([campaignId, customerId])
@@ -2503,24 +2573,24 @@ model CampaignRecipient {
   campaign Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
+  @@unique([campaignId, flowNodeId, dedupeKey])
   @@index([campaignId, status])
   @@index([campaignId, customerId])
-  @@unique([campaignId, flowNodeId, dedupeKey])
   @@index([flowNodeId])
   @@index([twilioMessageSid])
 }
 
 model CallFlow {
-  id                 String   @id @default(cuid())
-  companyId          String
-  name               String
-  description        String?
-  entryNodeId        String?
-  afterHoursNodeId   String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  companyId        String
+  name             String
+  description      String?
+  entryNodeId      String?
+  afterHoursNodeId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   nodes        CallFlowNode[]
   phoneNumbers PhoneNumber[]
 
@@ -2541,13 +2611,13 @@ model CallFlowNode {
 }
 
 model AgentGroup {
-  id              String        @id @default(cuid())
-  companyId       String
-  name            String
-  ringStrategy    RingStrategy  @default(SIMULTANEOUS)
-  ringTimeoutSec  Int           @default(30)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String       @id @default(cuid())
+  companyId      String
+  name           String
+  ringStrategy   RingStrategy @default(SIMULTANEOUS)
+  ringTimeoutSec Int          @default(30)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   company Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   members AgentGroupMember[]
@@ -2558,7 +2628,7 @@ model AgentGroup {
 model AgentGroupMember {
   groupId   String
   userId    String
-  sortOrder Int @default(0)
+  sortOrder Int    @default(0)
 
   group AgentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -2600,15 +2670,15 @@ model CallSession {
   updatedAt            DateTime          @updatedAt
   endedAt              DateTime?
 
-  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  assignedUser   User?        @relation("AssignedCallSessions", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  transferTarget User?        @relation("TransferTargetSessions", fields: [transferTargetUserId], references: [id], onDelete: SetNull)
-  phoneNumber    PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  callLogs       CallLog[]
-  visits         Visit[]
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignedUser    User?             @relation("AssignedCallSessions", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  transferTarget  User?             @relation("TransferTargetSessions", fields: [transferTargetUserId], references: [id], onDelete: SetNull)
+  phoneNumber     PhoneNumber?      @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  callLogs        CallLog[]
+  visits          Visit[]
   callConversions CallConversion[]
-  participants   CallParticipant[]
+  participants    CallParticipant[]
 
   @@index([companyId, status])
   @@index([assignedUserId])
@@ -2637,8 +2707,8 @@ model ReceptionistCall {
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
-  company  Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer?                 @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  company  Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer?                    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   holds    AppointmentHold[]
   tools    ReceptionistToolInvocation[]
 
@@ -2648,14 +2718,14 @@ model ReceptionistCall {
 
 /// Soft hold on a booking slot while the AI confirms details with the caller.
 model AppointmentHold {
-  id               String   @id @default(cuid())
-  companyId        String
+  id                 String   @id @default(cuid())
+  companyId          String
   receptionistCallId String?
-  startAt          DateTime
-  endAt            DateTime
-  expiresAt        DateTime
-  idempotencyKey   String
-  createdAt        DateTime @default(now())
+  startAt            DateTime
+  endAt              DateTime
+  expiresAt          DateTime
+  idempotencyKey     String
+  createdAt          DateTime @default(now())
 
   company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   receptionistCall ReceptionistCall? @relation(fields: [receptionistCallId], references: [id], onDelete: SetNull)
@@ -2684,7 +2754,6 @@ model ReceptionistToolInvocation {
   @@index([receptionistCallId, createdAt])
   @@index([companyId, tool])
 }
-
 
 /// Private voice/SMS assistant owned by one administrator and available across
 /// that administrator's linked company accounts.
@@ -2801,25 +2870,25 @@ model CallParticipant {
 }
 
 model Conversation {
-  id               String   @id @default(cuid())
-  companyId        String
-  channel          Channel
-  scope            Scope
-  customerId       String?
-  participantPhone String?
+  id                String    @id @default(cuid())
+  companyId         String
+  channel           Channel
+  scope             Scope
+  customerId        String?
+  participantPhone  String?
   participantMetaId String?
-  title            String?
+  title             String?
   /// Explicit CSR workflow state for external SMS. Null preserves legacy conversations until opened or closed.
-  smsOpen          Boolean?
-  smsClosedAt      DateTime?
-  smsClosedById    String?
-  lastMessageAt    DateTime @default(now())
-  createdAt        DateTime @default(now())
+  smsOpen           Boolean?
+  smsClosedAt       DateTime?
+  smsClosedById     String?
+  lastMessageAt     DateTime  @default(now())
+  createdAt         DateTime  @default(now())
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  smsClosedBy User?   @relation("SmsConversationClosedBy", fields: [smsClosedById], references: [id], onDelete: SetNull)
-  messages Message[]
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  smsClosedBy User?     @relation("SmsConversationClosedBy", fields: [smsClosedById], references: [id], onDelete: SetNull)
+  messages    Message[]
 
   @@index([companyId, channel, scope, lastMessageAt])
   @@index([companyId, channel, scope, smsOpen, lastMessageAt])
@@ -2827,26 +2896,26 @@ model Conversation {
 }
 
 model Message {
-  id               String           @id @default(cuid())
-  conversationId   String
-  senderId         String?
-  direction        MessageDirection
-  body             String
-  twilioMessageSid String?          @unique
-  metaMessageId    String?          @unique
-  deliveryStatus   String?
+  id                   String           @id @default(cuid())
+  conversationId       String
+  senderId             String?
+  direction            MessageDirection
+  body                 String
+  twilioMessageSid     String?          @unique
+  metaMessageId        String?          @unique
+  deliveryStatus       String?
   /// Twilio ErrorCode from status callback (e.g. "30007").
-  deliveryErrorCode String?
+  deliveryErrorCode    String?
   /// Twilio ErrorMessage or friendly explanation.
-  deliveryError     String?
-  sentAt           DateTime         @default(now())
-  readAt           DateTime?
-  contactInfoDetected Boolean       @default(false)
-  parsedContactInfo   Json?
+  deliveryError        String?
+  sentAt               DateTime         @default(now())
+  readAt               DateTime?
+  contactInfoDetected  Boolean          @default(false)
+  parsedContactInfo    Json?
   contactInfoAppliedAt DateTime?
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User?        @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  conversation Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?          @relation(fields: [senderId], references: [id], onDelete: SetNull)
   media        MessageMedia[]
 
   @@index([conversationId, sentAt])
@@ -2885,9 +2954,9 @@ model EmailMessage {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user        User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   attachments EmailAttachment[]
 
   @@index([companyId, scope, folder, createdAt])
@@ -2938,7 +3007,7 @@ model ServiceArea {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   zips    ServiceAreaZip[]
   users   UserServiceArea[]
   visits  Visit[]
@@ -3028,44 +3097,44 @@ model CrewMember {
 }
 
 model Visit {
-  id             String      @id @default(cuid())
-  companyId      String
-  customerId     String?
-  propertyId     String?
-  title          String
-  startAt        DateTime
-  endAt          DateTime
-  division       Division
-  serviceAreaId  String?
-  assignedUserId String?
-  crewId         String?
+  id                     String      @id @default(cuid())
+  companyId              String
+  customerId             String?
+  propertyId             String?
+  title                  String
+  startAt                DateTime
+  endAt                  DateTime
+  division               Division
+  serviceAreaId          String?
+  assignedUserId         String?
+  crewId                 String?
   /// Staff user who created the visit (self-scheduled field jobs).
-  createdByUserId String?
-  status         VisitStatus @default(SCHEDULED)
-  tags           String[]    @default([])
-  workSummary    String?     @db.Text
+  createdByUserId        String?
+  status                 VisitStatus @default(SCHEDULED)
+  tags                   String[]    @default([])
+  workSummary            String?     @db.Text
   /// Customer-facing rewrite of workSummary (spelling/grammar only). Internal notes stay on workSummary.
-  customerWorkSummary String? @db.Text
-  isCallback     Boolean     @default(false)
-  address        String?
-  city           String?
-  state          String?
-  zip            String?
+  customerWorkSummary    String?     @db.Text
+  isCallback             Boolean     @default(false)
+  address                String?
+  city                   String?
+  state                  String?
+  zip                    String?
   /// Google Meet (or other video) link for virtual appointments.
-  meetingUrl     String?
-  enRouteEtaSeconds     Int?
-  enRouteEtaAt          DateTime?
-  enRouteCalculatedAt   DateTime?
-  enRouteOriginLat      Decimal?  @db.Decimal(10, 7)
-  enRouteOriginLng      Decimal?  @db.Decimal(10, 7)
+  meetingUrl             String?
+  enRouteEtaSeconds      Int?
+  enRouteEtaAt           DateTime?
+  enRouteCalculatedAt    DateTime?
+  enRouteOriginLat       Decimal?    @db.Decimal(10, 7)
+  enRouteOriginLng       Decimal?    @db.Decimal(10, 7)
   /// Public token for customer live-tracking page (SMS link).
-  liveTrackToken        String?   @unique
-  liveLat               Decimal?  @db.Decimal(10, 7)
-  liveLng               Decimal?  @db.Decimal(10, 7)
-  liveLocationAt        DateTime?
-  liveTrackingActive    Boolean   @default(false)
+  liveTrackToken         String?     @unique
+  liveLat                Decimal?    @db.Decimal(10, 7)
+  liveLng                Decimal?    @db.Decimal(10, 7)
+  liveLocationAt         DateTime?
+  liveTrackingActive     Boolean     @default(false)
   /// Customer tracking page is valid until this time (set on EN_ROUTE).
-  liveTrackExpiresAt    DateTime?
+  liveTrackExpiresAt     DateTime?
   maintenancePlanVisitId String?     @unique
   callSessionId          String?
   designProjectId        String?
@@ -3073,34 +3142,34 @@ model Visit {
   designExportMetadata   Json?
   installDurationDays    Int?
   estimateId             String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
-  company              Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer             Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  property             CustomerProperty?       @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  serviceArea          ServiceArea?            @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
-  assignedUser         User?                   @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  additionalAssignees  VisitAssignee[]
-  createdByUser        User?                   @relation("CreatedVisits", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  crew                 Crew?                   @relation(fields: [crewId], references: [id], onDelete: SetNull)
-  maintenancePlanVisit MaintenancePlanVisit?   @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
-  timeEvents   VisitTimeEvent[]
-  techTimeSegments TechTimeSegment[]
-  lineItems    VisitLineItem[]
-  notes        VisitNote[]
-  attachments  VisitAttachment[]
-  discounts    Discount[]        @relation("VisitDiscounts")
-  estimates    Estimate[]
-  invoices     Invoice[]
-  callLogs     CallLog[]         @relation("CallLogVisit")
-  callConversions CallConversion[]
-  callSession  CallSession?      @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
-  visitChecklists VisitChecklist[]
-  notificationJobs NotificationJob[]
+  company                 Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer                Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  property                CustomerProperty?        @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  serviceArea             ServiceArea?             @relation(fields: [serviceAreaId], references: [id], onDelete: SetNull)
+  assignedUser            User?                    @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  additionalAssignees     VisitAssignee[]
+  createdByUser           User?                    @relation("CreatedVisits", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  crew                    Crew?                    @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  maintenancePlanVisit    MaintenancePlanVisit?    @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
+  timeEvents              VisitTimeEvent[]
+  techTimeSegments        TechTimeSegment[]
+  lineItems               VisitLineItem[]
+  notes                   VisitNote[]
+  attachments             VisitAttachment[]
+  discounts               Discount[]               @relation("VisitDiscounts")
+  estimates               Estimate[]
+  invoices                Invoice[]
+  callLogs                CallLog[]                @relation("CallLogVisit")
+  callConversions         CallConversion[]
+  callSession             CallSession?             @relation(fields: [callSessionId], references: [id], onDelete: SetNull)
+  visitChecklists         VisitChecklist[]
+  notificationJobs        NotificationJob[]
   feedbackSurveyResponses FeedbackSurveyResponse[]
-  feedbackSurveyTokens FeedbackSurveyToken[]
-  holidayLightingQuotes HolidayLightingQuote[]
+  feedbackSurveyTokens    FeedbackSurveyToken[]
+  holidayLightingQuotes   HolidayLightingQuote[]
 
   @@index([companyId, startAt])
   @@index([serviceAreaId])
@@ -3114,8 +3183,8 @@ model Visit {
 /// Additional technicians assigned to a visit. `Visit.assignedUserId` remains
 /// the primary technician for compatibility with reporting and integrations.
 model VisitAssignee {
-  visitId  String
-  userId   String
+  visitId   String
+  userId    String
   createdAt DateTime @default(now())
 
   visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
@@ -3200,9 +3269,9 @@ model TechTimeSegment {
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  visit   Visit?  @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visit       Visit?               @relation(fields: [visitId], references: [id], onDelete: SetNull)
   corrections TechTimeCorrection[]
 
   @@index([companyId, userId, startedAt])
@@ -3217,19 +3286,19 @@ enum TechTimeCorrectionStatus {
 }
 
 model TechTimeCorrection {
-  id              String                   @id @default(cuid())
-  companyId       String
-  segmentId       String
-  requestedById   String
-  reviewedById    String?
-  status          TechTimeCorrectionStatus @default(PENDING)
-  requestedStart  DateTime?
-  requestedEnd    DateTime?
+  id                String                   @id @default(cuid())
+  companyId         String
+  segmentId         String
+  requestedById     String
+  reviewedById      String?
+  status            TechTimeCorrectionStatus @default(PENDING)
+  requestedStart    DateTime?
+  requestedEnd      DateTime?
   requestedCategory TechTimeCategory?
-  note            String?                  @db.Text
-  reviewNote      String?                  @db.Text
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  note              String?                  @db.Text
+  reviewNote        String?                  @db.Text
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
 
   company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   segment     TechTimeSegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
@@ -3285,19 +3354,19 @@ model EmployeeWorkSchedule {
 }
 
 model OfficeTodo {
-  id               String               @id @default(cuid())
-  companyId        String
-  title            String
-  notes            String?
-  sortOrder        Int                  @default(0)
-  recurrence       OfficeTodoRecurrence @default(NONE)
+  id              String               @id @default(cuid())
+  companyId       String
+  title           String
+  notes           String?
+  sortOrder       Int                  @default(0)
+  recurrence      OfficeTodoRecurrence @default(NONE)
   /// Days (EVERY_N_DAYS), weekday 0–6 Sun–Sat (WEEKLY_ON_DAY), or day of month 1–31 (MONTHLY_ON_DAY).
-  recurrenceEvery  Int?
-  completedAt      DateTime?
-  completedById    String?
-  createdById      String
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  recurrenceEvery Int?
+  completedAt     DateTime?
+  completedById   String?
+  createdById     String
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdBy   User    @relation("OfficeTodoCreator", fields: [createdById], references: [id], onDelete: Cascade)
@@ -3326,21 +3395,21 @@ model ImportantUpdate {
 }
 
 model TimeOffRequest {
-  id            String        @id @default(cuid())
-  companyId     String
-  userId        String
-  startAt       DateTime
-  endAt         DateTime
-  allDay        Boolean       @default(true)
-  type          TimeOffType   @default(TIME_OFF)
-  status        TimeOffStatus @default(PENDING)
-  reason        String?
-  reviewNotes   String?
-  reviewedById  String?
-  reviewedAt    DateTime?
-  createdById   String
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  companyId    String
+  userId       String
+  startAt      DateTime
+  endAt        DateTime
+  allDay       Boolean       @default(true)
+  type         TimeOffType   @default(TIME_OFF)
+  status       TimeOffStatus @default(PENDING)
+  reason       String?
+  reviewNotes  String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   company    Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user       User    @relation("TimeOffEmployee", fields: [userId], references: [id], onDelete: Cascade)
@@ -3415,8 +3484,8 @@ model PriceBookCategory {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
-  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  parent   PriceBookCategory?  @relation("PriceBookCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  company      Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent       PriceBookCategory?  @relation("PriceBookCategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
   children     PriceBookCategory[] @relation("PriceBookCategoryTree")
   items        PriceBookItem[]
   pricingForms PricingForm[]
@@ -3450,13 +3519,13 @@ model PriceBookItem {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  category          PriceBookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  laborRatePreset   LaborRate?                 @relation(fields: [laborRateId], references: [id], onDelete: SetNull)
-  serviceMaterials  PriceBookServiceMaterial[] @relation("ServiceItemMaterials")
-  usedInServices    PriceBookServiceMaterial[] @relation("MaterialInServices")
-  visitLineItems           VisitLineItem[]
-  estimateLineItems        EstimateLineItem[]
-  estimateTemplateLineItems EstimateTemplateLineItem[]
+  category                   PriceBookCategory           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  laborRatePreset            LaborRate?                  @relation(fields: [laborRateId], references: [id], onDelete: SetNull)
+  serviceMaterials           PriceBookServiceMaterial[]  @relation("ServiceItemMaterials")
+  usedInServices             PriceBookServiceMaterial[]  @relation("MaterialInServices")
+  visitLineItems             VisitLineItem[]
+  estimateLineItems          EstimateLineItem[]
+  estimateTemplateLineItems  EstimateTemplateLineItem[]
   checklistTemplateLineItems ChecklistTemplateLineItem[]
 
   @@index([categoryId, active])
@@ -3466,15 +3535,15 @@ model PriceBookItem {
 }
 
 model LaborRate {
-  id           String   @id @default(cuid())
-  companyId    String
-  name         String
-  hourlyCost   Decimal  @db.Decimal(10, 2)
-  hourlyPrice  Decimal  @db.Decimal(10, 2)
-  isDefault    Boolean  @default(false)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  hourlyCost  Decimal  @db.Decimal(10, 2)
+  hourlyPrice Decimal  @db.Decimal(10, 2)
+  isDefault   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   company Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   items   PriceBookItem[]
@@ -3483,14 +3552,14 @@ model LaborRate {
 }
 
 model MaterialMarkupTier {
-  id             String   @id @default(cuid())
-  companyId      String
-  minCost        Decimal  @db.Decimal(10, 2)
-  maxCost        Decimal? @db.Decimal(10, 2)
-  markupPercent  Decimal  @db.Decimal(10, 2)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  companyId     String
+  minCost       Decimal  @db.Decimal(10, 2)
+  maxCost       Decimal? @db.Decimal(10, 2)
+  markupPercent Decimal  @db.Decimal(10, 2)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -3511,60 +3580,60 @@ model PriceBookServiceMaterial {
 }
 
 model Estimate {
-  id              String         @id @default(cuid())
-  companyId       String
-  customerId      String
-  propertyId      String?
-  visitId         String?
+  id                   String         @id @default(cuid())
+  companyId            String
+  customerId           String
+  propertyId           String?
+  visitId              String?
   /// Human-readable base number, e.g. EST-1012. Options append A/B/C when multiple exist.
-  estimateNumber  String?
-  publicToken     String         @unique @default(cuid())
-  publicTokenExpiresAt DateTime  @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '180 days')"))
+  estimateNumber       String?
+  publicToken          String         @unique @default(cuid())
+  publicTokenExpiresAt DateTime       @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '180 days')"))
   publicTokenRevokedAt DateTime?
-  publicTokenVersion   Int       @default(1)
-  status          EstimateStatus @default(DRAFT)
-  expiresAt       DateTime?
-  depositRequired  Boolean        @default(true)
-  depositType      DepositType?   @default(PERCENT)
-  depositAmount    Decimal?       @default(50) @db.Decimal(10, 2)
+  publicTokenVersion   Int            @default(1)
+  status               EstimateStatus @default(DRAFT)
+  expiresAt            DateTime?
+  depositRequired      Boolean        @default(true)
+  depositType          DepositType?   @default(PERCENT)
+  depositAmount        Decimal?       @default(50) @db.Decimal(10, 2)
   /// Snapshot of the company threshold when the estimate is created.
-  depositThreshold Decimal        @default(999) @db.Decimal(10, 2)
-  signatureBlobUrl String?
-  signedAt        DateTime?
-  approvedAt      DateTime?
+  depositThreshold     Decimal        @default(999) @db.Decimal(10, 2)
+  signatureBlobUrl     String?
+  signedAt             DateTime?
+  approvedAt           DateTime?
   /// Last time the estimate was emailed/texted to the customer.
-  sentAt          DateTime?
+  sentAt               DateTime?
   /// Option the customer approved / staff is converting (required when multiple options).
-  selectedOptionId String?
-  subtotal        Decimal        @default(0) @db.Decimal(10, 2)
-  discountTotal   Decimal        @default(0) @db.Decimal(10, 2)
-  total           Decimal        @default(0) @db.Decimal(10, 2)
-  designProjectId String?
-  designVersionId String?
+  selectedOptionId     String?
+  subtotal             Decimal        @default(0) @db.Decimal(10, 2)
+  discountTotal        Decimal        @default(0) @db.Decimal(10, 2)
+  total                Decimal        @default(0) @db.Decimal(10, 2)
+  designProjectId      String?
+  designVersionId      String?
   designExportMetadata Json?
-  quoteTier              String?
-  selectedQuoteTier      String?
-  estimatedManHours      Float?
-  installDurationDays    Int        @default(4)
-  needsScheduling        Boolean    @default(false)
-  depositPaidAt          DateTime?
-  designInternalBom      Json?
-  premiumOptionTotal     Decimal?   @db.Decimal(10, 2)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  quoteTier            String?
+  selectedQuoteTier    String?
+  estimatedManHours    Float?
+  installDurationDays  Int            @default(4)
+  needsScheduling      Boolean        @default(false)
+  depositPaidAt        DateTime?
+  designInternalBom    Json?
+  premiumOptionTotal   Decimal?       @db.Decimal(10, 2)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  property    CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  visit       Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  selectedOption EstimateOption? @relation("EstimateSelectedOption", fields: [selectedOptionId], references: [id], onDelete: SetNull)
-  options     EstimateOption[]  @relation("EstimateOptions")
-  lineItems   EstimateLineItem[]
-  notes       EstimateNote[]
-  attachments EstimateAttachment[]
-  discounts   Discount[]        @relation("EstimateDiscounts")
-  invoices    Invoice[]
-  notificationJobs NotificationJob[]
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer             Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property             CustomerProperty?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  visit                Visit?                @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  selectedOption       EstimateOption?       @relation("EstimateSelectedOption", fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  options              EstimateOption[]      @relation("EstimateOptions")
+  lineItems            EstimateLineItem[]
+  notes                EstimateNote[]
+  attachments          EstimateAttachment[]
+  discounts            Discount[]            @relation("EstimateDiscounts")
+  invoices             Invoice[]
+  notificationJobs     NotificationJob[]
   holidayLightingQuote HolidayLightingQuote?
 
   @@unique([companyId, estimateNumber])
@@ -3576,34 +3645,34 @@ model Estimate {
 }
 
 model HolidayLightingQuote {
-  id               String                     @id @default(cuid())
-  companyId        String
-  customerId       String?
-  propertyId       String?
-  visitId          String?
-  estimateId       String?                    @unique
-  createdById      String?
-  address          String?
-  city             String?
-  state            String?
-  zip              String?
-  lat              Float?
-  lng              Float?
+  id              String                     @id @default(cuid())
+  companyId       String
+  customerId      String?
+  propertyId      String?
+  visitId         String?
+  estimateId      String?                    @unique
+  createdById     String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+  lat             Float?
+  lng             Float?
   /// Named polyline segments + tree/bush placements.
-  measurements     Json
+  measurements    Json
   /// Light type/color choices, marginPct, includeLease, etc.
-  selections       Json
-  previewImageUrl  String?
-  sourcePhotoUrl   String?
-  status           HolidayLightingQuoteStatus @default(DRAFT)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
+  selections      Json
+  previewImageUrl String?
+  sourcePhotoUrl  String?
+  status          HolidayLightingQuoteStatus @default(DRAFT)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
 
   company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer  Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   property  CustomerProperty? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   visit     Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  estimate  Estimate?          @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  estimate  Estimate?         @relation(fields: [estimateId], references: [id], onDelete: SetNull)
   createdBy User?             @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([companyId, status])
@@ -3614,25 +3683,25 @@ model HolidayLightingQuote {
 
 /// A priced package within an estimate (EST-1012, EST-1012A, EST-1012B, …).
 model EstimateOption {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   estimateId    String
   /// Letter suffix when multiple options exist (A, B, C…). Null when the estimate has a single option.
   letter        String?
-  label         String   @default("Option")
+  label         String    @default("Option")
   /// Customer-facing option title. AI polishes generic names (Option A/B) when Present is opened.
   /// Short customer-facing copy; AI fills this the first time Present is opened if empty.
-  description   String?  @db.Text
+  description   String?   @db.Text
   /// Staff-only notes. Never used for customer copy or exposed to customers.
-  internalNotes String?  @db.Text
+  internalNotes String?   @db.Text
   photoUrl      String?
   photoAssetId  String?
   declinedAt    DateTime?
-  sortOrder     Int      @default(0)
-  subtotal      Decimal  @default(0) @db.Decimal(10, 2)
-  discountTotal Decimal  @default(0) @db.Decimal(10, 2)
-  total         Decimal  @default(0) @db.Decimal(10, 2)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  sortOrder     Int       @default(0)
+  subtotal      Decimal   @default(0) @db.Decimal(10, 2)
+  discountTotal Decimal   @default(0) @db.Decimal(10, 2)
+  total         Decimal   @default(0) @db.Decimal(10, 2)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   estimate   Estimate           @relation("EstimateOptions", fields: [estimateId], references: [id], onDelete: Cascade)
   selectedBy Estimate[]         @relation("EstimateSelectedOption")
@@ -3656,9 +3725,9 @@ model EstimateLineItem {
   total           Decimal @db.Decimal(10, 2)
   sortOrder       Int     @default(0)
 
-  estimate      Estimate       @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  estimate      Estimate        @relation(fields: [estimateId], references: [id], onDelete: Cascade)
   option        EstimateOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
-  priceBookItem PriceBookItem? @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
+  priceBookItem PriceBookItem?  @relation(fields: [priceBookItemId], references: [id], onDelete: SetNull)
 
   @@index([estimateId])
   @@index([optionId])
@@ -3712,13 +3781,13 @@ model Invoice {
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
-  company   Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer  Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  visit     Visit?            @relation(fields: [visitId], references: [id], onDelete: SetNull)
-  estimate  Estimate?         @relation(fields: [estimateId], references: [id], onDelete: SetNull)
-  lineItems InvoiceLineItem[]
-  payments  Payment[]
-  notes     InvoiceNote[]
+  company                   Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer                  Customer                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  visit                     Visit?                         @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  estimate                  Estimate?                      @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  lineItems                 InvoiceLineItem[]
+  payments                  Payment[]
+  notes                     InvoiceNote[]
   maintenanceBillingPeriods MaintenancePlanBillingPeriod[]
 
   @@unique([companyId, invoiceNumber])
@@ -3728,12 +3797,12 @@ model Invoice {
 
 /// Private office follow-up history. Never included in public invoice or portal queries.
 model InvoiceNote {
-  id          String   @id @default(cuid())
-  invoiceId   String
-  authorId    String?
-  body        String
-  automated   Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  invoiceId String
+  authorId  String?
+  body      String
+  automated Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
@@ -3775,32 +3844,32 @@ model Payment {
 }
 
 model MaintenancePlanTemplate {
-  id                       String             @id @default(cuid())
-  companyId                String
-  name                     String
-  description              String?
-  termsText                String?
-  termsHtml                String?
-  basePrice                Decimal            @db.Decimal(10, 2)
-  active                   Boolean            @default(true)
-  durationType             PlanDurationType   @default(FIXED_TERM)
-  durationYears            Int?
-  allowedBillingFrequencies BillingFrequency[] @default([ANNUAL])
-  autoRenewDefault         Boolean            @default(true)
-  cancellationFeeType      CancellationFeeType @default(NONE)
-  cancellationFeeAmount    Decimal?           @db.Decimal(10, 2)
-  cancellationNoticeDays   Int                @default(0)
-  benefits                 String[]           @default([])
-  stripeProductId          String?
-  stripePriceIds           Json?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  id                        String              @id @default(cuid())
+  companyId                 String
+  name                      String
+  description               String?
+  termsText                 String?
+  termsHtml                 String?
+  basePrice                 Decimal             @db.Decimal(10, 2)
+  active                    Boolean             @default(true)
+  durationType              PlanDurationType    @default(FIXED_TERM)
+  durationYears             Int?
+  allowedBillingFrequencies BillingFrequency[]  @default([ANNUAL])
+  autoRenewDefault          Boolean             @default(true)
+  cancellationFeeType       CancellationFeeType @default(NONE)
+  cancellationFeeAmount     Decimal?            @db.Decimal(10, 2)
+  cancellationNoticeDays    Int                 @default(0)
+  benefits                  String[]            @default([])
+  stripeProductId           String?
+  stripePriceIds            Json?
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
 
-  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company        Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   visitTemplates MaintenancePlanVisitTemplate[]
-  addons       MaintenancePlanAddon[]
-  discounts    MaintenancePlanDiscount[]
-  enrollments  MaintenancePlanEnrollment[]
+  addons         MaintenancePlanAddon[]
+  discounts      MaintenancePlanDiscount[]
+  enrollments    MaintenancePlanEnrollment[]
 
   @@index([companyId, active])
   @@map("MaintenancePlan")
@@ -3817,8 +3886,8 @@ model MaintenancePlanVisitTemplate {
   estimatedMinutes Int             @default(60)
   sortOrder        Int             @default(0)
 
-  template     MaintenancePlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  planVisits   MaintenancePlanVisit[]
+  template   MaintenancePlanTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  planVisits MaintenancePlanVisit[]
 
   @@index([templateId, sortOrder])
 }
@@ -3851,34 +3920,34 @@ model MaintenancePlanDiscount {
 }
 
 model MaintenancePlanEnrollment {
-  id                      String            @id @default(cuid())
-  companyId               String
-  customerId              String
-  propertyId              String
-  templateId              String
-  status                  EnrollmentStatus  @default(DRAFT)
-  billingFrequency        BillingFrequency  @default(ANNUAL)
-  startDate               DateTime          @default(now())
-  endDate                 DateTime?
-  nextBillingDate         DateTime?
-  renewalDate             DateTime?
-  autoRenew               Boolean           @default(true)
-  acceptedAt              DateTime?
-  cancelledAt             DateTime?
-  cancellationReason      String?
-  cancellationFeeCharged  Decimal?          @db.Decimal(10, 2)
-  stripeCustomerId        String?
-  stripeSubscriptionId    String?
-  stripePaymentMethodId   String?
-  selectedAddonIds        String[]          @default([])
-  createdAt               DateTime          @default(now())
-  updatedAt               DateTime          @updatedAt
+  id                     String           @id @default(cuid())
+  companyId              String
+  customerId             String
+  propertyId             String
+  templateId             String
+  status                 EnrollmentStatus @default(DRAFT)
+  billingFrequency       BillingFrequency @default(ANNUAL)
+  startDate              DateTime         @default(now())
+  endDate                DateTime?
+  nextBillingDate        DateTime?
+  renewalDate            DateTime?
+  autoRenew              Boolean          @default(true)
+  acceptedAt             DateTime?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  cancellationFeeCharged Decimal?         @db.Decimal(10, 2)
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+  stripePaymentMethodId  String?
+  selectedAddonIds       String[]         @default([])
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
-  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer     Customer                      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  property     CustomerProperty              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  template     MaintenancePlanTemplate       @relation(fields: [templateId], references: [id])
-  planVisits   MaintenancePlanVisit[]
+  company        Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer       Customer                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property       CustomerProperty               @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  template       MaintenancePlanTemplate        @relation(fields: [templateId], references: [id])
+  planVisits     MaintenancePlanVisit[]
   billingPeriods MaintenancePlanBillingPeriod[]
 
   @@index([companyId, status])
@@ -3915,7 +3984,7 @@ model MaintenancePlanBillingPeriod {
   dueDate               DateTime
   paidAt                DateTime?
   invoiceId             String?
-  stripePaymentIntentId  String?
+  stripePaymentIntentId String?
 
   enrollment MaintenancePlanEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   invoice    Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
@@ -3943,16 +4012,16 @@ model PropertySmartController {
 }
 
 model PriceBookDiscount {
-  id        String                   @id @default(cuid())
+  id        String                     @id @default(cuid())
   companyId String
   name      String
   code      String?
   type      DiscountType
-  amount    Decimal                  @db.Decimal(10, 2)
-  active    Boolean                  @default(true)
+  amount    Decimal                    @db.Decimal(10, 2)
+  active    Boolean                    @default(true)
   appliesTo PriceBookDiscountAppliesTo @default(ALL)
-  createdAt DateTime                 @default(now())
-  updatedAt DateTime                 @updatedAt
+  createdAt DateTime                   @default(now())
+  updatedAt DateTime                   @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4006,17 +4075,17 @@ model PricingForm {
 }
 
 model HousecallProMigration {
-  id           String                        @id @default(cuid())
-  companyId    String
-  status       HousecallProMigrationStatus   @default(DRAFT)
-  currentStep  HousecallProMigrationStepType @default(CONNECT)
-  previewJson  Json?
-  optionsJson  Json?
-  startedAt    DateTime?
-  pausedAt     DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime                      @default(now())
-  updatedAt    DateTime                      @updatedAt
+  id          String                        @id @default(cuid())
+  companyId   String
+  status      HousecallProMigrationStatus   @default(DRAFT)
+  currentStep HousecallProMigrationStepType @default(CONNECT)
+  previewJson Json?
+  optionsJson Json?
+  startedAt   DateTime?
+  pausedAt    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime                      @default(now())
+  updatedAt   DateTime                      @updatedAt
 
   company  Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   steps    HousecallProMigrationStep[]
@@ -4084,9 +4153,9 @@ model ChecklistTemplate {
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
 
-  company      Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  items        ChecklistItemTemplate[]
-  lineItemLinks ChecklistTemplateLineItem[]
+  company         Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  items           ChecklistItemTemplate[]
+  lineItemLinks   ChecklistTemplateLineItem[]
   visitChecklists VisitChecklist[]
 
   @@index([companyId, active, sortOrder])
@@ -4134,8 +4203,8 @@ model VisitChecklist {
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
-  visit    Visit                 @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  template ChecklistTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  visit    Visit                @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  template ChecklistTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
   items    VisitChecklistItem[]
 
   @@unique([visitId, templateId])
@@ -4202,7 +4271,7 @@ model PortalOffer {
 }
 
 model PropertyIrrigationZone {
-  id            String  @id @default(cuid())
+  id            String   @id @default(cuid())
   propertyId    String
   stationNumber Int
   name          String
@@ -4211,7 +4280,7 @@ model PropertyIrrigationZone {
   wateringGuide String?
   runMinutes    Int?
   rachioZoneId  String?
-  sortOrder     Int     @default(0)
+  sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -4276,17 +4345,17 @@ model MobileSession {
 
 /// Last known GPS for a logged-in iPad / iPhone (lost-device + fleet map).
 model FieldDeviceLocation {
-  id              String   @id @default(cuid())
-  companyId       String
-  userId          String
-  deviceId        String
-  deviceName      String?
-  lat             Decimal  @db.Decimal(10, 7)
-  lng             Decimal  @db.Decimal(10, 7)
-  heading         Decimal? @db.Decimal(6, 2)
-  accuracyMeters  Decimal? @db.Decimal(8, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  companyId      String
+  userId         String
+  deviceId       String
+  deviceName     String?
+  lat            Decimal  @db.Decimal(10, 7)
+  lng            Decimal  @db.Decimal(10, 7)
+  heading        Decimal? @db.Decimal(6, 2)
+  accuracyMeters Decimal? @db.Decimal(8, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4333,16 +4402,16 @@ model WebPushSubscription {
 }
 
 model IntegrationCredential {
-  id         String           @id @default(cuid())
+  id         String          @id @default(cuid())
   companyId  String
   type       IntegrationType
   label      String
   keyHash    String
   keyPrefix  String
-  enabled    Boolean          @default(true)
+  enabled    Boolean         @default(true)
   lastUsedAt DateTime?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4494,33 +4563,33 @@ model MarketingEvent {
 
 /// Immutable first-party attribution audit log for every marketing touch.
 model MarketingTouchEvent {
-  id                String   @id @default(cuid())
-  companyId         String
-  customerId        String?
-  leadId            String?
-  callLogId         String?
-  conversationId    String?
-  sessionId         String?
-  eventType         String
-  channel           String
-  source            String?
-  medium            String?
-  campaign          String?
-  term              String?
-  content           String?
-  gclid             String?
-  fbclid            String?
-  msclkid           String?
-  trackingSource    String?
-  phone             String?
-  pagePath          String?
-  occurredAt        DateTime
-  metadata          Json?
-  createdAt         DateTime @default(now())
+  id             String   @id @default(cuid())
+  companyId      String
+  customerId     String?
+  leadId         String?
+  callLogId      String?
+  conversationId String?
+  sessionId      String?
+  eventType      String
+  channel        String
+  source         String?
+  medium         String?
+  campaign       String?
+  term           String?
+  content        String?
+  gclid          String?
+  fbclid         String?
+  msclkid        String?
+  trackingSource String?
+  phone          String?
+  pagePath       String?
+  occurredAt     DateTime
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([companyId, occurredAt])
   @@index([companyId, channel])
@@ -4551,11 +4620,11 @@ model MarketingSpendDaily {
 }
 
 model GbpReviewSlackDelivery {
-  id         String   @id @default(cuid())
-  companyId  String
-  reviewId   String
-  reviewName String?
-  starRating Int?
+  id          String   @id @default(cuid())
+  companyId   String
+  reviewId    String
+  reviewName  String?
+  starRating  Int?
   deliveredAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -4566,10 +4635,10 @@ model GbpReviewSlackDelivery {
 
 /// Tracks Google reviews already pushed to staff (Radar PWA / in-app).
 model GbpReviewStaffNotify {
-  id          String   @id @default(cuid())
-  companyId   String
-  reviewId    String
-  notifiedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  companyId  String
+  reviewId   String
+  notifiedAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -4599,9 +4668,9 @@ model GbpReview {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  company      Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  customer     Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  assignments  GbpReviewAssignment[]
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  assignments GbpReviewAssignment[]
 
   @@unique([companyId, reviewId])
   @@index([companyId, status])
@@ -4637,15 +4706,15 @@ model ReferralProgramSettings {
 }
 
 model ReferralMember {
-  id                        String    @id @default(cuid())
-  companyId                 String
-  customerId                String    @unique
-  token                     String    @unique
-  enrolledAt                DateTime  @default(now())
-  stripeConnectAccountId    String?
-  stripeConnectOnboardedAt  DateTime?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  id                       String    @id @default(cuid())
+  companyId                String
+  customerId               String    @unique
+  token                    String    @unique
+  enrolledAt               DateTime  @default(now())
+  stripeConnectAccountId   String?
+  stripeConnectOnboardedAt DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -4654,36 +4723,36 @@ model ReferralMember {
 }
 
 model ReferralSubmission {
-  id                  String                   @id @default(cuid())
-  companyId           String
-  referrerCustomerId  String
-  referredName        String
-  referredPhone       String?
-  referredEmail       String?
-  referredAddress     String?
-  referredCity        String?
-  referredState       String?
-  referredZip         String?
-  leadId              String?                  @unique
-  referredCustomerId  String?
-  visitId             String?
-  estimateId          String?
-  invoiceId           String?
-  status              ReferralSubmissionStatus @default(SUBMITTED)
-  division            Division?
-  revenueCents        Int?
-  rewardCents         Int?
-  bookedAt            DateTime?
-  estimateApprovedAt  DateTime?
-  paidAt              DateTime?
-  rewardedAt          DateTime?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  id                 String                   @id @default(cuid())
+  companyId          String
+  referrerCustomerId String
+  referredName       String
+  referredPhone      String?
+  referredEmail      String?
+  referredAddress    String?
+  referredCity       String?
+  referredState      String?
+  referredZip        String?
+  leadId             String?                  @unique
+  referredCustomerId String?
+  visitId            String?
+  estimateId         String?
+  invoiceId          String?
+  status             ReferralSubmissionStatus @default(SUBMITTED)
+  division           Division?
+  revenueCents       Int?
+  rewardCents        Int?
+  bookedAt           DateTime?
+  estimateApprovedAt DateTime?
+  paidAt             DateTime?
+  rewardedAt         DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
-  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  referrerCustomer Customer         @relation("ReferrerCustomer", fields: [referrerCustomerId], references: [id], onDelete: Cascade)
-  referredCustomer Customer?        @relation("ReferredCustomer", fields: [referredCustomerId], references: [id], onDelete: SetNull)
-  lead             Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  company          Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  referrerCustomer Customer        @relation("ReferrerCustomer", fields: [referrerCustomerId], references: [id], onDelete: Cascade)
+  referredCustomer Customer?       @relation("ReferredCustomer", fields: [referredCustomerId], references: [id], onDelete: SetNull)
+  lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
   reward           ReferralReward?
 
   @@index([companyId, status, createdAt])
@@ -4692,15 +4761,15 @@ model ReferralSubmission {
 }
 
 model ReferralReward {
-  id                   String               @id @default(cuid())
-  submissionId         String               @unique
-  amountCents          Int
-  status               ReferralRewardStatus @default(PENDING_ONBOARDING)
-  stripeTransferId     String?
-  failureReason        String?
-  paidAt               DateTime?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  id               String               @id @default(cuid())
+  submissionId     String               @unique
+  amountCents      Int
+  status           ReferralRewardStatus @default(PENDING_ONBOARDING)
+  stripeTransferId String?
+  failureReason    String?
+  paidAt           DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   submission ReferralSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -4708,44 +4777,44 @@ model ReferralReward {
 }
 
 model PropertyIrrigationMapZone {
-  id                  String   @id @default(cuid())
-  propertyId          String
-  name                String
-  polygonGeoJson      Json
-  vegetationType      String?
-  shadeLevel          String?
-  slopeLevel          String?
-  soilType            String?
-  irrigationType      String?
-  nozzleCount         Int?
-  estimatedGpm        Float?
-  baseRuntimeMinutes  Int?
-  irrigatedSqFt           Int?
-  irrigationEfficiencyScore Int?
-  establishmentStage      ZoneEstablishmentStage @default(NORMAL)
-  nozzleGpm               Float?
+  id                           String                 @id @default(cuid())
+  propertyId                   String
+  name                         String
+  polygonGeoJson               Json
+  vegetationType               String?
+  shadeLevel                   String?
+  slopeLevel                   String?
+  soilType                     String?
+  irrigationType               String?
+  nozzleCount                  Int?
+  estimatedGpm                 Float?
+  baseRuntimeMinutes           Int?
+  irrigatedSqFt                Int?
+  irrigationEfficiencyScore    Int?
+  establishmentStage           ZoneEstablishmentStage @default(NORMAL)
+  nozzleGpm                    Float?
   computedWeeklyRuntimeMinutes Int?
   computedGallonsPerWeek       Float?
-  designVersionId     String?
-  sortOrder           Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  designVersionId              String?
+  sortOrder                    Int                    @default(0)
+  createdAt                    DateTime               @default(now())
+  updatedAt                    DateTime               @updatedAt
 
-  property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property     CustomerProperty      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   zoneStations PropertyZoneStation[]
 
   @@index([propertyId, sortOrder])
 }
 
 model PropertyIrrigationValve {
-  id         String   @id @default(cuid())
-  propertyId String
-  label      String
+  id           String   @id @default(cuid())
+  propertyId   String
+  label        String
   pointGeoJson Json
-  zoneIds    String[] @default([])
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  zoneIds      String[] @default([])
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   property CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
@@ -4763,14 +4832,14 @@ model PropertyIrrigationController {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  property     CustomerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property     CustomerProperty      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   zoneStations PropertyZoneStation[]
 
   @@index([propertyId])
 }
 
 model PropertyZoneStation {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   controllerId  String
   stationNumber Int
   mapZoneId     String?
@@ -4844,8 +4913,8 @@ model Vehicle {
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
 
-  company        Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  assignedUser   User?                   @relation("VehicleAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  company        Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedUser   User?                  @relation("VehicleAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
   attachments    VehicleAttachment[]
   mileageLogs    VehicleMileageLog[]
   serviceRecords VehicleServiceRecord[]
@@ -4861,14 +4930,14 @@ model Vehicle {
 }
 
 model VehicleAttachment {
-  id           String                 @id @default(cuid())
+  id           String                @id @default(cuid())
   vehicleId    String
   uploadedById String
   blobUrl      String
   fileName     String
   mimeType     String
-  kind         VehicleAttachmentKind  @default(OTHER)
-  createdAt    DateTime               @default(now())
+  kind         VehicleAttachmentKind @default(OTHER)
+  createdAt    DateTime              @default(now())
 
   vehicle    Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   uploadedBy User    @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
@@ -4893,17 +4962,17 @@ model VehicleMileageLog {
 }
 
 model VehicleServiceRecord {
-  id               String    @id @default(cuid())
+  id               String   @id @default(cuid())
   vehicleId        String
-  performedAt      DateTime  @default(now())
+  performedAt      DateTime @default(now())
   mileageAtService Int?
   title            String
   description      String?
-  cost             Decimal?  @db.Decimal(10, 2)
+  cost             Decimal? @db.Decimal(10, 2)
   performedById    String?
   vendor           String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   vehicle     Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   performedBy User?   @relation("VehicleServicePerformer", fields: [performedById], references: [id], onDelete: SetNull)

@@ -25,6 +25,7 @@ function filtersFromRequest(request: NextRequest): PipelineFilters {
     search: params.get("search") || undefined,
     city: params.get("city") || undefined,
     zip: params.get("zip") || undefined,
+    source: params.get("source") || undefined,
     createdFrom: parseDate(params.get("createdFrom")),
     createdTo: parseDate(params.get("createdTo"), true),
     speed: speed && SPEED_FILTERS.has(speed) ? speed : undefined,
@@ -65,9 +66,21 @@ export async function GET(request: NextRequest) {
         "Lead Source",
         "Speed to Lead",
         "Qualified At",
+        "Qualified Value",
         "Converted At",
+        "Converted Value",
         "Sold At",
+        "Sold Value",
         "Disqualified At",
+        "Declined At",
+        "Decline Reason",
+        "Reminders Paused",
+        "Lead Follow-up 1",
+        "Lead Follow-up 2",
+        "Lead Follow-up 3",
+        "Qualified Follow-up 1",
+        "Qualified Follow-up 2",
+        "Qualified Follow-up 3",
       ];
       const csv = [
         header.map(csvCell).join(","),
@@ -82,9 +95,24 @@ export async function GET(request: NextRequest) {
             row.pipelineLeadSource,
             speedLabel(row.speedSeconds),
             csvDate(row.pipelineQualifiedAt),
+            row.qualifiedValue,
             csvDate(row.pipelineConvertedAt),
+            row.convertedValue,
             csvDate(row.pipelineSoldAt),
+            row.soldValue,
             csvDate(row.pipelineDisqualifiedAt),
+            csvDate(row.pipelineDeclinedAt),
+            row.pipelineDeclineReason,
+            row.pipelineFollowUpsPausedAt ? "Yes" : "No",
+            ...(["LEAD", "QUALIFIED"] as const).flatMap((stage) =>
+              [1, 2, 3].map((sequence) => {
+                const item = row.followUps.find((followUp) => followUp.stage === stage && followUp.sequence === sequence);
+                if (!item) return "";
+                const channels = [item.smsSentAt ? "SMS" : null, item.emailSentAt ? "EMAIL" : null].filter(Boolean);
+                const method = channels.length ? channels.join("+") : item.method;
+                return `${method} | ${item.completedAt ?? ""}${item.automated ? " | automated" : " | manual"}`;
+              })
+            ),
           ].map(csvCell).join(",")
         ),
       ].join("\r\n");

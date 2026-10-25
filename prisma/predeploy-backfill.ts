@@ -678,11 +678,53 @@ async function ensureOwnerAssistantTables() {
   console.log("Ensured owner assistant tables");
 }
 
+async function ensurePipelineFollowUps() {
+  const statements = [
+    `DO $$ BEGIN CREATE TYPE "PipelineDeclineReason" AS ENUM ('PRICING','TIMING','UNRESPONSIVE','OTHER'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN CREATE TYPE "PipelineFollowUpMethod" AS ENUM ('CALL','SMS','EMAIL','SMS_EMAIL'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN CREATE TYPE "PipelineFollowUpStatus" AS ENUM ('PENDING','PROCESSING','COMPLETED','FAILED','SKIPPED'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "pipelineFollowUpsEnabled" BOOLEAN NOT NULL DEFAULT false`,
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "pipelineFollowUpsEnabledAt" TIMESTAMP(3)`,
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "pipelineFollowUpSettings" JSONB`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineRemovedAt" TIMESTAMP(3)`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineRemovedById" TEXT`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineDeclinedAt" TIMESTAMP(3)`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineDeclineReason" "PipelineDeclineReason"`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineDeclinedById" TEXT`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineFollowUpsPausedAt" TIMESTAMP(3)`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineFollowUpsPausedById" TEXT`,
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "pipelineFollowUpsResumedAt" TIMESTAMP(3)`,
+    `CREATE TABLE IF NOT EXISTS "PipelineFollowUp" (
+      "id" TEXT NOT NULL, "companyId" TEXT NOT NULL, "customerId" TEXT NOT NULL,
+      "stage" "SalesPipelineStage" NOT NULL, "sequence" INTEGER NOT NULL,
+      "method" "PipelineFollowUpMethod" NOT NULL, "status" "PipelineFollowUpStatus" NOT NULL DEFAULT 'PENDING',
+      "automated" BOOLEAN NOT NULL DEFAULT false, "performedById" TEXT, "scheduledFor" TIMESTAMP(3),
+      "attemptedAt" TIMESTAMP(3), "completedAt" TIMESTAMP(3), "smsSentAt" TIMESTAMP(3), "emailSentAt" TIMESTAMP(3),
+      "subject" TEXT, "body" TEXT, "lastError" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL,
+      CONSTRAINT "PipelineFollowUp_pkey" PRIMARY KEY ("id"))`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "PipelineFollowUp_customerId_stage_sequence_key" ON "PipelineFollowUp"("customerId","stage","sequence")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineFollowUp_companyId_status_scheduledFor_idx" ON "PipelineFollowUp"("companyId","status","scheduledFor")`,
+    `CREATE INDEX IF NOT EXISTS "PipelineFollowUp_customerId_stage_sequence_idx" ON "PipelineFollowUp"("customerId","stage","sequence")`,
+  ];
+  for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+  for (const statement of [
+    `ALTER TABLE "PipelineFollowUp" ADD CONSTRAINT "PipelineFollowUp_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    `ALTER TABLE "PipelineFollowUp" ADD CONSTRAINT "PipelineFollowUp_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+  ]) {
+    try { await prisma.$executeRawUnsafe(statement); } catch (error) {
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+    }
+  }
+  console.log("Ensured pipeline follow-up tables and fields");
+}
+
 async function main() {
   await ensureMarketerRole();
   await ensureSalesPipeline();
   await ensureCustomerTrackingData();
   await ensurePipelineConversionDelivery();
+  await ensurePipelineFollowUps();
   await ensureOwnerAssistantTables();
   await ensureSecurityRateLimitTable();
   await ensureSecurityHardeningTables();

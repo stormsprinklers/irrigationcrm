@@ -299,12 +299,14 @@ export function VoiceDialerDialog({
   initialPhone,
   initialCustomerId,
   initialName,
+  onCallStarted,
 }: {
   open: boolean;
   onClose: () => void;
   initialPhone?: string | null;
   initialCustomerId?: string | null;
   initialName?: string | null;
+  onCallStarted?: () => void;
 }) {
   const { activeCall } = useVoiceDevice();
 
@@ -338,6 +340,7 @@ export function VoiceDialerDialog({
           initialPhone={initialPhone}
           initialCustomerId={initialCustomerId}
           initialName={initialName}
+          onCallStarted={onCallStarted}
           compact
         />
       </div>
