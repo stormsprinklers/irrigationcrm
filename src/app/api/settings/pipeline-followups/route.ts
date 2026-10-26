@@ -32,6 +32,22 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const enabled = body.enabled === true;
     const settings = normalizePipelineFollowUpSettings(body.settings);
+    if (settings.senderUserId) {
+      const sender = await prisma.user.findFirst({
+        where: {
+          id: settings.senderUserId,
+          companyId: user.companyId,
+          status: "ACTIVE",
+        },
+        select: { id: true },
+      });
+      if (!sender) {
+        return NextResponse.json(
+          { error: "Select an active employee as the automated follow-up sender" },
+          { status: 400 }
+        );
+      }
+    }
     const current = await prisma.company.findUnique({ where: { id: user.companyId }, select: { pipelineFollowUpsEnabled: true, pipelineFollowUpsEnabledAt: true } });
     if (!current) return NextResponse.json({ error: "Company not found" }, { status: 404 });
     const now = new Date();

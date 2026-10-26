@@ -335,6 +335,12 @@ export async function processDuePipelineFollowUps(limit = 75) {
   for (const company of companies) {
     if (sent + failed >= limit) break;
     const settings = normalizePipelineFollowUpSettings(company.pipelineFollowUpSettings);
+    const configuredSender = settings.senderUserId
+      ? await prisma.user.findFirst({
+          where: { id: settings.senderUserId, companyId: company.id, status: "ACTIVE" },
+          select: { id: true, name: true },
+        })
+      : null;
     const customers = await prisma.customer.findMany({
       where: {
         companyId: company.id,
@@ -387,7 +393,8 @@ export async function processDuePipelineFollowUps(limit = 75) {
               select: { assignedUser: { select: { id: true, name: true } } },
             })
           : null;
-        const employee = assignedLead?.assignedUser ?? company.defaultLeadAssignee;
+        const employee =
+          configuredSender ?? assignedLead?.assignedUser ?? company.defaultLeadAssignee;
         try {
           await sendPipelineFollowUp({
             companyId: company.id,

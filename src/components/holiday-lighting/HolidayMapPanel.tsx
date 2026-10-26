@@ -51,6 +51,7 @@ export type HolidayMapPanelHandle = {
 };
 
 type DrawMode = "select" | "roofline" | "treeShrub";
+type StreetViewState = "loading" | "ready" | "unavailable" | "error";
 
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -91,10 +92,12 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const mapDragging = useRef(false);
     const mapDragResetTimer = useRef<number | null>(null);
     const mapTapFallbackTimer = useRef<number | null>(null);
+    const streetViewWaitTimer = useRef<number | null>(null);
     const lastHandledMapPoint = useRef<{ point: HolidayLatLng; at: number } | null>(null);
 
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [streetViewState, setStreetViewState] = useState<StreetViewState>("loading");
     const [mode, setMode] = useState<DrawMode>("roofline");
     const [placementStrandCount, setPlacementStrandCount] = useState(1);
     const [placementKind, setPlacementKind] = useState<"tree" | "bush">("tree");
@@ -140,6 +143,25 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       setActiveSegmentId(id);
       setActivePlacementId(null);
       onSelectSegment?.(id);
+    }
+
+    function beginStreetViewWait() {
+      setStreetViewState("loading");
+      if (streetViewWaitTimer.current != null) {
+        window.clearTimeout(streetViewWaitTimer.current);
+      }
+      streetViewWaitTimer.current = window.setTimeout(() => {
+        setStreetViewState((current) => (current === "loading" ? "error" : current));
+        streetViewWaitTimer.current = null;
+      }, 12_000);
+    }
+
+    function finishStreetViewWait(next: StreetViewState) {
+      if (streetViewWaitTimer.current != null) {
+        window.clearTimeout(streetViewWaitTimer.current);
+        streetViewWaitTimer.current = null;
+      }
+      setStreetViewState(next);
     }
 
     useImperativeHandle(ref, () => ({
@@ -192,6 +214,17 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           map.setStreetView(pano);
           mapObj.current = map;
           panoObj.current = pano;
+          beginStreetViewWait();
+          pano.addListener("status_changed", () => {
+            const status = pano.getStatus();
+            if (status === g.maps.StreetViewStatus.OK) {
+              finishStreetViewWait("ready");
+            } else if (status === g.maps.StreetViewStatus.ZERO_RESULTS) {
+              finishStreetViewWait("unavailable");
+            } else if (status === g.maps.StreetViewStatus.UNKNOWN_ERROR) {
+              finishStreetViewWait("error");
+            }
+          });
 
           const dispatchMapPoint = (point: HolidayLatLng) => {
             const now = performance.now();
@@ -255,6 +288,10 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           window.clearTimeout(mapTapFallbackTimer.current);
           mapTapFallbackTimer.current = null;
         }
+        if (streetViewWaitTimer.current != null) {
+          window.clearTimeout(streetViewWaitTimer.current);
+          streetViewWaitTimer.current = null;
+        }
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -263,6 +300,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       if (!mapObj.current || !center) return;
       mapObj.current.setCenter(center);
       mapObj.current.setZoom(20);
+      beginStreetViewWait();
       panoObj.current?.setPosition(center);
     }, [center]);
 
@@ -609,7 +647,6 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
             )}
           />
           <div
-            ref={panoRef}
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
               !ready && "animate-pulse",
@@ -617,7 +654,29 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               panoVisible && !mapVisible && "min-h-[520px]"
             )}
             aria-hidden={!panoVisible}
-          />
+          >
+            <div ref={panoRef} className="absolute inset-0" />
+            {streetViewState !== "ready" ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-muted/95 p-6 text-center">
+                <div className="max-w-sm space-y-2">
+                  {streetViewState === "loading" ? (
+                    <p className="text-sm text-muted-foreground">Loading Street View…</p>
+                  ) : (
+                    <>
+                      <p className="font-medium text-foreground">
+                        {streetViewState === "unavailable"
+                          ? "Street View is unavailable for this property."
+                          : "Street View could not be displayed."}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Use the satellite view or upload a property photo instead.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {active || activePlacementId ? (

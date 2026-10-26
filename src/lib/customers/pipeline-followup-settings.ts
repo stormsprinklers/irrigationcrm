@@ -6,11 +6,14 @@ export type PipelineFollowUpTemplate = {
 };
 
 export type PipelineFollowUpSettings = {
+  /** Optional employee whose first name is used for every automated follow-up. */
+  senderUserId: string | null;
   lead: PipelineFollowUpTemplate[];
   qualified: PipelineFollowUpTemplate[];
 };
 
 export const DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS: PipelineFollowUpSettings = {
+  senderUserId: null,
   lead: [
     {
       delayHours: 24,
@@ -75,6 +78,10 @@ function validTemplate(value: unknown, fallback: PipelineFollowUpTemplate) {
 export function normalizePipelineFollowUpSettings(value: unknown): PipelineFollowUpSettings {
   const source = value && typeof value === "object" ? value as Partial<PipelineFollowUpSettings> : {};
   return {
+    senderUserId:
+      typeof source.senderUserId === "string" && source.senderUserId.trim()
+        ? source.senderUserId.trim()
+        : null,
     lead: DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.lead.map((fallback, index) =>
       validTemplate(source.lead?.[index], fallback)
     ),

@@ -277,6 +277,7 @@ export function HolidayLightingQuoter({
   const [selections, setSelections] = useState<HolidayQuoteSelections>(DEFAULT_HOLIDAY_SELECTIONS);
   const [designOptions, setDesignOptions] = useState<HolidayQuoteDesignOption[]>([]);
   const [activeOptionId, setActiveOptionId] = useState("option-1");
+  const [customColorEditingOptionId, setCustomColorEditingOptionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -1698,9 +1699,23 @@ export function HolidayLightingQuoter({
               <label className="text-xs text-muted-foreground">Color / pattern
                 <select
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) ? selections.defaultColorPattern : "Other"}
+                  value={
+                    customColorEditingOptionId === activeOptionId ||
+                    !HOLIDAY_COLOR_PATTERNS.includes(
+                      (selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]
+                    )
+                      ? "Other"
+                      : selections.defaultColorPattern
+                  }
                   onChange={(event) => {
                     const colorPattern = event.target.value;
+                    setCustomColorEditingOptionId((current) =>
+                      colorPattern === "Other"
+                        ? activeOptionId
+                        : current === activeOptionId
+                          ? null
+                          : current
+                    );
                     const nextSelections = { ...selections, defaultColorPattern: colorPattern };
                     const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
                     setSelections(nextSelections);
@@ -1739,20 +1754,23 @@ export function HolidayLightingQuoter({
             </div>
           ) : null}
           {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" &&
-          (!HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) || selections.defaultColorPattern === "Other") ? (
+          (customColorEditingOptionId === activeOptionId ||
+          !HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) ||
+          selections.defaultColorPattern === "Other") ? (
             <label className="block text-xs text-muted-foreground">Custom color / pattern
               <input
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 value={selections.defaultColorPattern === "Other" ? "" : selections.defaultColorPattern ?? ""}
                 placeholder="Describe the color or alternating pattern"
+                onFocus={() => setCustomColorEditingOptionId(activeOptionId)}
                 onChange={(event) => {
                   const colorPattern = event.target.value || "Other";
                   const nextSelections = { ...selections, defaultColorPattern: colorPattern };
                   const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
                   setSelections(nextSelections);
                   setMeasurements(pruneStrands(nextMeasurements));
-                  void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
                 }}
+                onBlur={() => void save(undefined, { quiet: true })}
               />
             </label>
           ) : null}

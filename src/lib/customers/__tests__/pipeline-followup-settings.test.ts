@@ -34,3 +34,11 @@ test("pipeline settings retain three valid steps and repair invalid delay values
   assert.equal(settings.lead[0].delayHours, 24);
   assert.equal(settings.qualified[2].delayHours, 168);
 });
+
+test("pipeline settings preserve a configured automated sender", () => {
+  const settings = normalizePipelineFollowUpSettings({
+    senderUserId: "  employee-123  ",
+  });
+
+  assert.equal(settings.senderUserId, "employee-123");
+});

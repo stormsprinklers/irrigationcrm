@@ -9,19 +9,42 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { PipelineFollowUpSettings } from "@/lib/customers/pipeline-followup-settings";
 
+type EmployeeOption = {
+  id: string;
+  name: string;
+};
+
 export default function PipelineSettingsPage() {
   const [enabled, setEnabled] = useState(false);
   const [settings, setSettings] = useState<PipelineFollowUpSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
   useEffect(() => {
-    fetch("/api/settings/pipeline-followups")
-      .then(async (res) => {
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? "Could not load settings");
+    Promise.all([
+      fetch("/api/settings/pipeline-followups"),
+      fetch("/api/settings/employees?status=ACTIVE"),
+    ])
+      .then(async ([settingsResponse, employeesResponse]) => {
+        const body = await settingsResponse.json();
+        if (!settingsResponse.ok) throw new Error(body.error ?? "Could not load settings");
         setEnabled(body.enabled);
         setSettings(body.settings);
+
+        if (employeesResponse.ok) {
+          const employeeBody = await employeesResponse.json();
+          setEmployees(
+            Array.isArray(employeeBody)
+              ? employeeBody
+                  .filter(
+                    (employee): employee is EmployeeOption =>
+                      typeof employee?.id === "string" && typeof employee?.name === "string"
+                  )
+                  .sort((a, b) => a.name.localeCompare(b.name))
+              : []
+          );
+        }
       })
       .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load settings"))
       .finally(() => setLoading(false));
@@ -71,6 +94,33 @@ export default function PipelineSettingsPage() {
             </span>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </label>
+          <section className="space-y-2 rounded-lg border bg-card p-4">
+            <label htmlFor="pipeline-follow-up-sender" className="block font-medium">
+              Automated follow-up sender
+            </label>
+            <p className="text-sm text-muted-foreground">
+              This employee&apos;s first name will be used for every automated SMS and email.
+              Leave it unselected to use the employee assigned to the lead, then the company&apos;s
+              default lead assignee.
+            </p>
+            <select
+              id="pipeline-follow-up-sender"
+              className="flex h-10 w-full max-w-md rounded-md border border-input bg-background px-3 text-sm"
+              value={settings.senderUserId ?? ""}
+              onChange={(event) =>
+                setSettings((current) =>
+                  current ? { ...current, senderUserId: event.target.value || null } : current
+                )
+              }
+            >
+              <option value="">Use the assigned employee</option>
+              {employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </section>
           {(["lead", "qualified"] as const).map((stage) => (
             <section key={stage} className="space-y-3">
               <h2 className="text-lg font-semibold capitalize">{stage} follow-ups</h2>
