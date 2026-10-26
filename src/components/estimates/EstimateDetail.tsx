@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
+import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
@@ -731,7 +732,7 @@ export function EstimateDetail({ estimateId }: Props) {
             <Send className="h-4 w-4" />
             Send
           </Button>
-          {estimate.financingUrl ? (
+          {estimate.financingUrl && hasPermanentLightingOption(estimate) ? (
             <Button
               variant="outline"
               size="sm"
@@ -743,7 +744,7 @@ export function EstimateDetail({ estimateId }: Props) {
               ) : (
                 <Banknote className="h-4 w-4" />
               )}
-              Explore financing options
+              Send financing link
             </Button>
           ) : null}
           {estimate.status === "APPROVED" ? (

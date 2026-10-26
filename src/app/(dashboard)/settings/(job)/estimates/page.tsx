@@ -106,7 +106,9 @@ export default function SettingsEstimatesPage() {
               </p>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Financing link</label>
+              <label className="mb-1 block text-sm font-medium">
+                Permanent lights financing link
+              </label>
               <Input
                 type="url"
                 value={settings.estimateFinancingUrl ?? ""}
@@ -119,8 +121,8 @@ export default function SettingsEstimatesPage() {
                 placeholder="https://..."
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Shown as “Explore financing options” on estimates. Tapping it texts the customer this
-                link so they can check options without affecting their credit score.
+                Shown only while a customer is viewing a permanent-lighting option. The “Pay as low
+                as $99/mo when you qualify” button opens this link in a separate tab.
               </p>
             </div>
             <div className="flex items-center gap-2">

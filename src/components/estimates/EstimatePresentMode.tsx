@@ -5,16 +5,19 @@ import { Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
+import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 
 type EstimateLike = {
   id: string;
   status: string;
   financingUrl?: string | null;
+  designExportMetadata?: Record<string, unknown> | null;
   selectedOptionId?: string | null;
   options: Array<{
     id: string;
     letter?: string | null;
     label: string;
+    pricingMode?: string | null;
     description: string | null;
     photoUrl: string | null;
     total: number;
@@ -180,13 +183,13 @@ export function EstimatePresentMode({
             >
               Save and send
             </Button>
-            {estimate?.financingUrl ? (
+            {estimate?.financingUrl && hasPermanentLightingOption(estimate) ? (
               <Button
                 variant="secondary"
                 disabled={financingSending}
                 onClick={() => void sendFinancingText()}
               >
-                {financingSending ? "Texting…" : "Explore financing options"}
+                {financingSending ? "Texting…" : "Send financing link"}
               </Button>
             ) : null}
           </div>

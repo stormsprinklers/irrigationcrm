@@ -2,6 +2,7 @@ import { sendSms } from "@/lib/inbox/twilio";
 import { recordOutboundCustomerSms } from "@/lib/inbox/record-outbound-sms";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import { prisma } from "@/lib/prisma";
+import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 
 export function normalizeFinancingUrl(raw: string | null | undefined): string | null {
   const trimmed = (raw ?? "").trim();
@@ -32,10 +33,19 @@ export async function sendEstimateFinancingSms(params: {
     include: {
       customer: { select: { id: true, phone: true } },
       company: { select: { name: true, estimateFinancingUrl: true, twilioPhone: true } },
+      options: { select: { label: true } },
+      lineItems: { select: { name: true } },
     },
   });
   if (!estimate) {
     return { ok: false, error: "Estimate not found", status: 404 };
+  }
+  if (!hasPermanentLightingOption(estimate)) {
+    return {
+      ok: false,
+      error: "Financing is available only for permanent-lighting estimates",
+      status: 400,
+    };
   }
 
   const financingUrl = normalizeFinancingUrl(estimate.company.estimateFinancingUrl);

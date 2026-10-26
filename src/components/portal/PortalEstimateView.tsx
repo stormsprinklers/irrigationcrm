@@ -11,6 +11,7 @@ import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
+import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 import {
   calculateHolidayLeaseCommitmentPricing,
   holidayLeaseCommitmentDiscount,
@@ -151,7 +152,6 @@ export function PortalEstimateView({
   const [loading, setLoading] = useState(false);
   const [payLaterLoading, setPayLaterLoading] = useState(false);
   const [paymentReady, setPaymentReady] = useState(false);
-  const [financingSending, setFinancingSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -478,34 +478,6 @@ export function PortalEstimateView({
     }
   }
 
-  async function exploreFinancing() {
-    if (staffPreview) {
-      toast.message("Financing actions are disabled in customer preview mode");
-      return;
-    }
-    setFinancingSending(true);
-    try {
-      const res = await fetch(`/api/portal/estimates/${token}/financing`, { method: "POST" });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        financingUrl?: string | null;
-        smsSent?: boolean;
-      };
-      if (data.financingUrl) {
-        window.open(data.financingUrl, "_blank", "noopener,noreferrer");
-      }
-      if (!res.ok && !data.financingUrl) {
-        toast.error(data.error ?? "Financing is not available");
-        return;
-      }
-      if (data.smsSent) {
-        toast.success("We texted you the financing link");
-      }
-    } finally {
-      setFinancingSending(false);
-    }
-  }
-
   if (pageLoading) {
     return (
       <main className="mx-auto max-w-lg p-8">
@@ -547,6 +519,16 @@ export function PortalEstimateView({
       : estimate.warrantyText ?? company.estimateWarrantyText ?? null;
   const tech = estimate.visit?.technician ?? null;
   const photoSrc = techPhotoSrc(tech?.photoUrl);
+  const showPermanentFinancing = Boolean(
+    company.financingUrl &&
+      activeOption &&
+      hasPermanentLightingOption({
+        options: [activeOption],
+        lineItems: estimate.lineItems.filter(
+          (item) => !item.optionId || item.optionId === activeOption.id
+        ),
+      })
+  );
 
   return (
     <PortalShell
@@ -586,14 +568,11 @@ export function PortalEstimateView({
           {estimate.expiresAt ? (
             <p className="text-sm">Expires {format(new Date(estimate.expiresAt), "MMM d, yyyy")}</p>
           ) : null}
-          {company.financingUrl ? (
-            <Button
-              className="mt-3"
-              variant="outline"
-              disabled={financingSending}
-              onClick={() => void exploreFinancing()}
-            >
-              {financingSending ? "Opening…" : "Explore financing options"}
+          {showPermanentFinancing && company.financingUrl ? (
+            <Button className="mt-3" variant="outline" asChild>
+              <a href={company.financingUrl} target="_blank" rel="noopener noreferrer">
+                Pay as low as $99/mo when you qualify
+              </a>
             </Button>
           ) : null}
         </div>
