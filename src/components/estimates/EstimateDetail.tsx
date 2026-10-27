@@ -10,13 +10,10 @@ import {
   Banknote,
   Ban,
   CheckCircle2,
-  ChevronDown,
   Copy,
   FileText,
   Eye,
   Loader2,
-  Mail,
-  MessageSquare,
   Pencil,
   Plus,
   Presentation,
@@ -27,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { isFieldRole } from "@/lib/employees";
 import { EstimateDesignSection } from "@/components/estimates/EstimateDesignSection";
+import { EstimateInvoiceDialog } from "@/components/estimates/EstimateInvoiceDialog";
 import { EstimatePostApprovalDialog } from "@/components/estimates/EstimatePostApprovalDialog";
 import { EstimatePresentMode } from "@/components/estimates/EstimatePresentMode";
 import { EstimateSendDialog } from "@/components/estimates/EstimateSendDialog";
@@ -37,12 +35,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
 import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
@@ -261,9 +253,9 @@ export function EstimateDetail({ estimateId }: Props) {
   const [declining, setDeclining] = useState(false);
   const [postApprovalOpen, setPostApprovalOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [presentOpen, setPresentOpen] = useState(false);
   const [financingSending, setFinancingSending] = useState(false);
-  const [invoiceSending, setInvoiceSending] = useState(false);
   const [postApprovalMode, setPostApprovalMode] = useState<"choose" | "today" | "schedule">(
     "choose"
   );
@@ -466,42 +458,6 @@ export function EstimateDetail({ estimateId }: Props) {
       toast.success("Financing options texted to the customer");
     } finally {
       setFinancingSending(false);
-    }
-  }
-
-  async function sendInvoice(channel: "EMAIL" | "SMS") {
-    setInvoiceSending(true);
-    try {
-      const res = await fetch(`/api/estimates/${estimateId}/invoice`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (typeof data.payUrl === "string") {
-          await navigator.clipboard.writeText(data.payUrl);
-          toast.message(data.error ?? "Invoice delivery is not configured", {
-            description: "The invoice payment link was copied to your clipboard.",
-          });
-        } else {
-          toast.error(data.error ?? "Invoice could not be sent");
-        }
-        return;
-      }
-      const sentBy =
-        data.emailSent && data.smsSent
-          ? " by email and SMS"
-          : data.emailSent
-            ? " by email"
-            : data.smsSent
-              ? " by SMS"
-              : "";
-      toast.success(`Invoice sent${sentBy}`);
-    } catch {
-      toast.error("Invoice could not be sent. Check your connection and try again.");
-    } finally {
-      setInvoiceSending(false);
     }
   }
 
@@ -769,37 +725,15 @@ export function EstimateDetail({ estimateId }: Props) {
             </>
           ) : null}
           {estimate.status === "APPROVED" || estimate.status === "CONVERTED" ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={saving || invoiceSending}>
-                  {invoiceSending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4" />
-                  )}
-                  Send Invoice
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  disabled={!estimate.customer.email}
-                  onSelect={() => void sendInvoice("EMAIL")}
-                >
-                  <Mail />
-                  Send via email
-                  {!estimate.customer.email ? " (no email)" : ""}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!estimate.customer.phone}
-                  onSelect={() => void sendInvoice("SMS")}
-                >
-                  <MessageSquare />
-                  Send via SMS
-                  {!estimate.customer.phone ? " (no phone)" : ""}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => setInvoiceDialogOpen(true)}
+            >
+              <FileText className="h-4 w-4" />
+              Send Invoice
+            </Button>
           ) : null}
           {canDelete && ["DRAFT", "SENT", "APPROVED"].includes(estimate.status) ? (
             <Button
@@ -1474,6 +1408,19 @@ export function EstimateDetail({ estimateId }: Props) {
         open={sendDialogOpen}
         estimateId={estimateId}
         onClose={() => setSendDialogOpen(false)}
+        onSent={() => {
+          void load();
+        }}
+      />
+
+      <EstimateInvoiceDialog
+        open={invoiceDialogOpen}
+        estimateId={estimateId}
+        estimateNumber={activeOption?.displayNumber ?? estimate.estimateNumber}
+        customerName={estimate.customer.name}
+        customerEmail={estimate.customer.email}
+        customerPhone={estimate.customer.phone}
+        onClose={() => setInvoiceDialogOpen(false)}
         onSent={() => {
           void load();
         }}

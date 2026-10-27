@@ -1,6 +1,10 @@
 import { InvoiceStatus } from "@prisma/client";
 import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
 import { getInvoiceForCompany } from "@/lib/invoices/queries";
+import {
+  resolveEstimateInvoiceBalance,
+  type EstimateInvoiceAmountSelection,
+} from "@/lib/invoices/estimate-invoice-amount";
 import { prisma } from "@/lib/prisma";
 import { nextInvoiceNumber } from "@/lib/visits/queries";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
@@ -16,9 +20,57 @@ function isApprovalPaymentInvoice(invoiceNumber: string) {
   return invoiceNumber.includes("-DEP-") || invoiceNumber.includes("-PAY-");
 }
 
+export async function getEstimateInvoiceAvailability(params: {
+  companyId: string;
+  estimateId: string;
+}) {
+  const estimate = await prisma.estimate.findFirst({
+    where: {
+      id: params.estimateId,
+      companyId: params.companyId,
+      status: { in: ["APPROVED", "CONVERTED"] },
+    },
+    select: {
+      total: true,
+      invoices: {
+        select: {
+          payments: { select: { amount: true, refundedAt: true } },
+        },
+      },
+    },
+  });
+  if (!estimate) {
+    return { ok: false as const, error: "Approved estimate not found", status: 404 };
+  }
+
+  const estimateTotal = toNumber(estimate.total);
+  const paid = estimate.invoices.reduce(
+    (invoiceSum, invoice) =>
+      invoiceSum +
+      invoice.payments.reduce(
+        (paymentSum, payment) =>
+          payment.refundedAt ? paymentSum : paymentSum + toNumber(payment.amount),
+        0
+      ),
+    0
+  );
+  const remainingBalance = Math.max(
+    0,
+    Math.round((estimateTotal - paid) * 100) / 100
+  );
+
+  return {
+    ok: true as const,
+    estimateTotal,
+    paid: Math.round(paid * 100) / 100,
+    remainingBalance,
+  };
+}
+
 export async function syncEstimateInvoice(params: {
   companyId: string;
   estimateId: string;
+  amountSelection?: EstimateInvoiceAmountSelection;
 }) {
   const estimate = await prisma.estimate.findFirst({
     where: {
@@ -86,46 +138,63 @@ export async function syncEstimateInvoice(params: {
       )
     );
   }, 0);
-  const invoiceTotal = Math.max(0, Math.round((estimateTotal - priorPaid) * 100) / 100);
-  if (invoiceTotal <= 0) {
-    return { ok: false as const, error: "This estimate is already paid", status: 400 };
-  }
-
   const candidatePaid =
     existing?.payments.reduce(
       (sum, payment) => (payment.refundedAt ? sum : sum + toNumber(payment.amount)),
       0
     ) ?? 0;
-  if (invoiceTotal - candidatePaid <= 0) {
-    return { ok: false as const, error: "This estimate is already paid", status: 400 };
+  const remainingBalance = Math.max(
+    0,
+    Math.round((estimateTotal - priorPaid - candidatePaid) * 100) / 100
+  );
+  const resolvedAmount = resolveEstimateInvoiceBalance(
+    remainingBalance,
+    params.amountSelection
+  );
+  if (!resolvedAmount.ok) {
+    return { ok: false as const, error: resolvedAmount.error, status: 400 };
   }
+  const invoiceTotal = Math.round((candidatePaid + resolvedAmount.amount) * 100) / 100;
+  const fullRemainingInvoiceTotal = Math.round((estimateTotal - priorPaid) * 100) / 100;
+  const isPartialInvoice = invoiceTotal < fullRemainingInvoiceTotal;
   const invoiceNumber =
     existing && !isApprovalPaymentInvoice(existing.invoiceNumber)
       ? existing.invoiceNumber
       : await nextInvoiceNumber(params.companyId);
-  const lineItems = [
-    ...visibleItems.map((item, index) => ({
-      name: item.name,
-      description: item.description,
-      // Customer invoices show a packaged price, never estimate footage/rates.
-      quantity: 1,
-      unitPrice: item.total,
-      total: item.total,
-      sortOrder: index,
-    })),
-    ...(priorPaid > 0
-      ? [
-          {
-            name: "Previous payment",
-            description: "Deposit or payment already received.",
-            quantity: 1,
-            unitPrice: -priorPaid,
-            total: -priorPaid,
-            sortOrder: visibleItems.length,
-          },
-        ]
-      : []),
-  ];
+  const lineItems = isPartialInvoice
+    ? [
+        {
+          name: "Progress invoice",
+          description: `Partial invoice for estimate ${estimate.estimateNumber ?? estimate.id}`,
+          quantity: 1,
+          unitPrice: invoiceTotal,
+          total: invoiceTotal,
+          sortOrder: 0,
+        },
+      ]
+    : [
+        ...visibleItems.map((item, index) => ({
+          name: item.name,
+          description: item.description,
+          // Customer invoices show a packaged price, never estimate footage/rates.
+          quantity: 1,
+          unitPrice: item.total,
+          total: item.total,
+          sortOrder: index,
+        })),
+        ...(priorPaid > 0
+          ? [
+              {
+                name: "Previous payment",
+                description: "Deposit or payment already received.",
+                quantity: 1,
+                unitPrice: -priorPaid,
+                total: -priorPaid,
+                sortOrder: visibleItems.length,
+              },
+            ]
+          : []),
+      ];
 
   const invoice = await prisma.$transaction(async (tx) => {
     const saved = existing
@@ -134,8 +203,8 @@ export async function syncEstimateInvoice(params: {
           data: {
             invoiceNumber,
             status: candidatePaid > 0 ? InvoiceStatus.PARTIAL : InvoiceStatus.DRAFT,
-            subtotal: Math.max(0, subtotal - priorPaid),
-            discountTotal,
+            subtotal: isPartialInvoice ? invoiceTotal : Math.max(0, subtotal - priorPaid),
+            discountTotal: isPartialInvoice ? 0 : discountTotal,
             total: invoiceTotal,
             sentAt: null,
             lineItems: {
@@ -152,8 +221,8 @@ export async function syncEstimateInvoice(params: {
             estimateId: estimate.id,
             invoiceNumber,
             status: InvoiceStatus.DRAFT,
-            subtotal: Math.max(0, subtotal - priorPaid),
-            discountTotal,
+            subtotal: isPartialInvoice ? invoiceTotal : Math.max(0, subtotal - priorPaid),
+            discountTotal: isPartialInvoice ? 0 : discountTotal,
             total: invoiceTotal,
             lineItems: { create: lineItems },
           },
