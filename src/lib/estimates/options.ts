@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
 import { formatEstimateOptionNumber, optionLetterForIndex } from "@/lib/estimates/numbering";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 
@@ -155,6 +156,10 @@ export async function createEstimateOption(params: {
     where: { estimateId: params.estimateId },
     orderBy: { sortOrder: "asc" },
   });
+
+  if (existing.length >= MAX_ESTIMATE_OPTIONS) {
+    throw new Error(`An estimate can have up to ${MAX_ESTIMATE_OPTIONS} options`);
+  }
 
   const sortOrder = existing.length === 0 ? 0 : Math.max(...existing.map((o) => o.sortOrder)) + 1;
   const letter = optionLetterForIndex(existing.length === 0 ? 0 : existing.length);

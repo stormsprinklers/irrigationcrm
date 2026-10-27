@@ -44,6 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
+import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { blobProxyUrl } from "@/lib/blob/urls";
@@ -854,19 +855,31 @@ export function EstimateDetail({ estimateId }: Props) {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={saving || !activeOptionId}
+                  disabled={
+                    saving ||
+                    !activeOptionId ||
+                    estimate.options.length >= MAX_ESTIMATE_OPTIONS
+                  }
                   onClick={() => addOption("duplicate")}
                 >
                   <Copy className="h-4 w-4" />
                   Duplicate current
                 </Button>
-                <Button variant="outline" size="sm" disabled={saving} onClick={() => addOption("fresh")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving || estimate.options.length >= MAX_ESTIMATE_OPTIONS}
+                  onClick={() => addOption("fresh")}
+                >
                   <Plus className="h-4 w-4" />
                   New blank
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {estimate.options.length} of {MAX_ESTIMATE_OPTIONS} options
+              </p>
               <div className="flex flex-wrap gap-2">
                 {estimate.options.map((option) => {
                   const selected = option.id === activeOption?.id;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -222,12 +222,12 @@ export function EstimateOptionPresentCards({
 }) {
   const order = useMemo(() => presentCardsOrder(options), [options]);
   const ranked = useMemo(() => rankPresentOptions(options, order), [options, order]);
-  const [start, setStart] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const [internalSelected, setInternalSelected] = useState<string | null>(
     defaultPresentOptionId(options)
   );
-  const pageSize = 3;
-  const visible = ranked.slice(start, start + pageSize);
   const selected = selectedId ?? internalSelected ?? ranked[0]?.id ?? null;
   const selectedOption = ranked.find((option) => option.id === selected) ?? ranked[0] ?? null;
   const approvedOption = approvedId
@@ -241,6 +241,35 @@ export function EstimateOptionPresentCards({
     if (!lines.length) return 2;
     return Math.max(1, Math.min(...lines));
   }, [ranked]);
+
+  const updateScrollButtons = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const remaining = scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft;
+    setCanScrollLeft(scroller.scrollLeft > 4);
+    setCanScrollRight(remaining > 4);
+  }, []);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    updateScrollButtons();
+    scroller.addEventListener("scroll", updateScrollButtons, { passive: true });
+    window.addEventListener("resize", updateScrollButtons);
+    return () => {
+      scroller.removeEventListener("scroll", updateScrollButtons);
+      window.removeEventListener("resize", updateScrollButtons);
+    };
+  }, [ranked.length, updateScrollButtons]);
+
+  function scrollOptions(direction: -1 | 1) {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({
+      left: direction * Math.max(280, scroller.clientWidth * 0.82),
+      behavior: "smooth",
+    });
+  }
 
   function select(optionId: string) {
     setInternalSelected(optionId);
@@ -278,23 +307,38 @@ export function EstimateOptionPresentCards({
           </span>
         </div>
       ) : null}
-      <div
-        className={cn(
-          "overflow-x-auto px-2 py-4",
-          "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-        )}
-      >
-        <div className="flex items-stretch gap-4">
-          {visible.map((option) => {
-            const isSelected = option.id === selected;
-            const isApproved = option.id === approvedId;
-            const popular = isMostPopularPresentOption(option);
-            const { tagline, detail } = splitPresentCopy(customerFacingOptionDescription(option.description));
-            const cardCopy = tagline ?? detail;
-            const cardDescription = tagline ? detail : cardCopy;
-            const hasMore = approxDescriptionLines(cardDescription) > 2;
-            return (
-              <article
+      <div className="relative">
+        {ranked.length > 3 ? (
+          <button
+            type="button"
+            className="absolute left-2 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border bg-white text-foreground shadow-lg transition hover:bg-muted disabled:pointer-events-none disabled:opacity-35 sm:flex"
+            disabled={!canScrollLeft}
+            onClick={() => scrollOptions(-1)}
+            aria-label="View previous options"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+        ) : null}
+        <div
+          ref={scrollerRef}
+          className={cn(
+            "touch-pan-x snap-x snap-mandatory overflow-x-auto px-2 py-4 scroll-smooth sm:px-14",
+            "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          )}
+        >
+          <div className="flex items-stretch gap-4">
+            {ranked.map((option) => {
+              const isSelected = option.id === selected;
+              const isApproved = option.id === approvedId;
+              const popular = isMostPopularPresentOption(option);
+              const { tagline, detail } = splitPresentCopy(
+                customerFacingOptionDescription(option.description)
+              );
+              const cardCopy = tagline ?? detail;
+              const cardDescription = tagline ? detail : cardCopy;
+              const hasMore = approxDescriptionLines(cardDescription) > 2;
+              return (
+                <article
                 key={option.id}
                 role="button"
                 tabIndex={0}
@@ -306,7 +350,7 @@ export function EstimateOptionPresentCards({
                   }
                 }}
                 className={cn(
-                  "relative flex min-w-[240px] max-w-sm flex-1 cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-all duration-200",
+                  "relative flex min-w-[86%] basis-[86%] shrink-0 snap-start cursor-pointer flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm outline-none transition-all duration-200 sm:min-w-[calc((100%_-_2rem)/3)] sm:basis-[calc((100%_-_2rem)/3)]",
                   isSelected
                     ? "border-[#4C9BC8] ring-4 ring-[#4C9BC8]/30 shadow-[0_0_28px_rgba(76,155,200,0.65)]"
                     : popular
@@ -393,10 +437,22 @@ export function EstimateOptionPresentCards({
                     {isApproved ? approvedLabel : isSelected ? "Selected" : "View option"}
                   </span>
                 </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+          </div>
         </div>
+        {ranked.length > 3 ? (
+          <button
+            type="button"
+            className="absolute right-2 top-1/2 z-20 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border bg-white text-foreground shadow-lg transition hover:bg-muted disabled:pointer-events-none disabled:opacity-35 sm:flex"
+            disabled={!canScrollRight}
+            onClick={() => scrollOptions(1)}
+            aria-label="View more options"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        ) : null}
       </div>
 
       {selectedOption && totals ? (
@@ -544,33 +600,6 @@ export function EstimateOptionPresentCards({
               </Button>
             </div>
           ) : null}
-        </div>
-      ) : null}
-
-      {ranked.length > pageSize ? (
-        <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-          <button
-            type="button"
-            className="rounded-full p-2 hover:bg-muted disabled:opacity-40"
-            disabled={start === 0}
-            onClick={() => setStart((value) => Math.max(0, value - 1))}
-            aria-label="Previous options"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <span>
-            Showing options {start + 1}-{Math.min(start + visible.length, ranked.length)} of{" "}
-            {ranked.length}
-          </span>
-          <button
-            type="button"
-            className="rounded-full p-2 hover:bg-muted disabled:opacity-40"
-            disabled={start + pageSize >= ranked.length}
-            onClick={() => setStart((value) => Math.min(ranked.length - 1, value + 1))}
-            aria-label="Next options"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
         </div>
       ) : null}
     </div>
