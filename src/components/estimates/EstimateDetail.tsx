@@ -1376,6 +1376,8 @@ export function EstimateDetail({ estimateId }: Props) {
         estimateTotal={optionTotal}
         linkedVisitId={estimate.visit?.id ?? null}
         optionId={activeOptionId}
+        customerEmail={estimate.customer.email}
+        customerPhone={estimate.customer.phone}
         initialMode={postApprovalMode}
         onClose={() => setPostApprovalOpen(false)}
         onConverted={() => {

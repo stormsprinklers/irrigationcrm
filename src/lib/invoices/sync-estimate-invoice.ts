@@ -202,6 +202,7 @@ export async function syncEstimateInvoice(params: {
           where: { id: existing.id },
           data: {
             invoiceNumber,
+            ...(estimate.visitId ? { visitId: estimate.visitId } : {}),
             status: candidatePaid > 0 ? InvoiceStatus.PARTIAL : InvoiceStatus.DRAFT,
             subtotal: isPartialInvoice ? invoiceTotal : Math.max(0, subtotal - priorPaid),
             discountTotal: isPartialInvoice ? 0 : discountTotal,
@@ -219,6 +220,7 @@ export async function syncEstimateInvoice(params: {
             companyId: estimate.companyId,
             customerId: estimate.customerId,
             estimateId: estimate.id,
+            ...(estimate.visitId ? { visitId: estimate.visitId } : {}),
             invoiceNumber,
             status: InvoiceStatus.DRAFT,
             subtotal: isPartialInvoice ? invoiceTotal : Math.max(0, subtotal - priorPaid),

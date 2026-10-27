@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addHours, format } from "date-fns";
-import { CalendarClock, Loader2 } from "lucide-react";
+import { CalendarClock, Loader2, Mail, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,8 @@ type Props = {
   estimateTotal: number;
   linkedVisitId: string | null;
   optionId: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
   /** choose = ask; today = complete today immediately; schedule = date picker */
   initialMode?: "choose" | "today" | "schedule";
   onClose: () => void;
@@ -38,6 +40,8 @@ export function EstimatePostApprovalDialog({
   estimateTotal,
   linkedVisitId,
   optionId,
+  customerEmail,
+  customerPhone,
   initialMode = "choose",
   onClose,
   onConverted,
@@ -54,6 +58,7 @@ export function EstimatePostApprovalDialog({
   const [resultVisitId, setResultVisitId] = useState<string | null>(null);
   const [depositDue, setDepositDue] = useState(0);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
+  const [sendingInvoice, setSendingInvoice] = useState<"EMAIL" | "SMS" | null>(null);
   const autoRan = useRef(false);
 
   useEffect(() => {
@@ -64,6 +69,7 @@ export function EstimatePostApprovalDialog({
     setResultVisitId(null);
     setDepositDue(0);
     setNotifyCustomer(true);
+    setSendingInvoice(null);
     const start = addHours(new Date(), 24);
     setStartLocal(toLocalInputValue(start));
     setEndLocal(toLocalInputValue(addHours(start, 2)));
@@ -143,6 +149,45 @@ export function EstimatePostApprovalDialog({
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function sendDepositInvoice(channel: "EMAIL" | "SMS") {
+    if (depositDue <= 0 || sendingInvoice) return;
+
+    setSendingInvoice(channel);
+    try {
+      const response = await fetch(`/api/estimates/${estimateId}/invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel,
+          amountType: "FIXED",
+          amountValue: depositDue,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (typeof data.payUrl === "string") {
+          await navigator.clipboard.writeText(data.payUrl);
+          toast.message(data.error ?? "Invoice delivery is not configured", {
+            description: "The payable invoice link was copied to your clipboard.",
+          });
+        } else {
+          toast.error(data.error ?? "Deposit invoice could not be sent");
+        }
+        return;
+      }
+
+      toast.success(
+        `${formatCurrency(depositDue)} deposit invoice sent by ${channel === "EMAIL" ? "email" : "text"}`
+      );
+      router.push(`/visits/${resultVisitId}`);
+      onClose();
+    } catch {
+      toast.error("Deposit invoice could not be sent. Check your connection and try again.");
+    } finally {
+      setSendingInvoice(null);
     }
   }
 
@@ -296,10 +341,44 @@ export function EstimatePostApprovalDialog({
                 visitId={resultVisitId}
                 total={depositDue}
                 amount={depositDue}
+                disabled={Boolean(sendingInvoice)}
               />
               <Button
                 type="button"
                 variant="outline"
+                disabled={Boolean(sendingInvoice) || !customerEmail}
+                onClick={() => void sendDepositInvoice("EMAIL")}
+              >
+                {sendingInvoice === "EMAIL" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                Send {formatCurrency(depositDue)} invoice by email
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(sendingInvoice) || !customerPhone}
+                onClick={() => void sendDepositInvoice("SMS")}
+              >
+                {sendingInvoice === "SMS" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                Text {formatCurrency(depositDue)} invoice
+              </Button>
+              {!customerEmail || !customerPhone ? (
+                <p className="px-1 text-xs text-muted-foreground">
+                  {!customerEmail ? "Add an email to the customer to send by email. " : ""}
+                  {!customerPhone ? "Add a phone number to the customer to send by text." : ""}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(sendingInvoice)}
                 onClick={() => {
                   router.push(`/visits/${resultVisitId}`);
                   onClose();
