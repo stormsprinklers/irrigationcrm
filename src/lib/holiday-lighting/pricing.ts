@@ -198,7 +198,9 @@ export function computeHolidayQuotePricing(params: {
     placementsPermanent += amount;
     lines.push({
       key: placement.id,
-      name: `${placement.kind === "tree" ? "Tree" : "Bush"} wrap — ${placement.label}`,
+      name:
+        placement.label.trim() ||
+        (placement.kind === "tree" ? "Unnamed tree" : "Unnamed bush"),
       description: placement.label,
       staffDetail: `${strandCount} strand${strandCount === 1 ? "" : "s"} · Difficulty ${difficulty} (${difficultyMultiplier}×)${needsLift ? " · Lift required" : ""}`,
       purchaseTotal: money(amount),

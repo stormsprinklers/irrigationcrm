@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             estimateDepositRequired: true,
             estimateDepositType: true,
             estimateDepositAmount: true,
-            estimateDepositThreshold: true,
+            deferredVisitDepositThreshold: true,
           },
         },
       },
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         depositRequired: estimate.company.estimateDepositRequired,
         depositType: estimate.company.estimateDepositType,
         depositAmount: estimate.company.estimateDepositAmount,
-        depositThreshold: estimate.company.estimateDepositThreshold,
+        depositThreshold: estimate.company.deferredVisitDepositThreshold,
       },
     });
 

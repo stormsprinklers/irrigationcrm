@@ -29,7 +29,7 @@ function formatLeadInboxBody(
   if (input.address) lines.push(`Address: ${input.address}`);
   if (input.city) lines.push(`City: ${input.city}`);
 
-  const detailLines = websiteFormDetailLines(input.metadata);
+  const detailLines = websiteFormDetailLines(input.metadata, input.source);
   if (detailLines.length) {
     lines.push(``, ...detailLines);
   } else if (input.notes) {

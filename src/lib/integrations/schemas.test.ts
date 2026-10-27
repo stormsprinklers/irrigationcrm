@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { websiteLeadSchema } from "./schemas";
+import { captureWebsiteLeadFormFields, websiteLeadSchema } from "./schemas";
 
 test("accepts the Christmas gift card landing-page payload", () => {
   const parsed = websiteLeadSchema.safeParse({
@@ -33,4 +33,23 @@ test("accepts the Christmas gift card landing-page payload", () => {
     assert.equal(parsed.data.email, null);
     assert.equal(parsed.data.metadata?.giftCardValue, 100);
   }
+});
+
+test("preserves arbitrary webhook answers under metadata form fields", () => {
+  const parsed = websiteLeadSchema.parse({
+    externalId: "leadconnector:contact-123",
+    name: "Jordan Smith",
+    phone: "385-555-1234",
+    source: "meta-instant",
+    property_type: "Two story home",
+    desired_timeline: "Within 30 days",
+    metadata: { facebook_lead_id: "1485075230355177" },
+  });
+  const captured = captureWebsiteLeadFormFields(parsed);
+
+  assert.deepEqual(captured.metadata?.form_fields, {
+    property_type: "Two story home",
+    desired_timeline: "Within 30 days",
+  });
+  assert.equal(captured.metadata?.facebook_lead_id, "1485075230355177");
 });

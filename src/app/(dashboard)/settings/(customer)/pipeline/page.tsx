@@ -20,6 +20,7 @@ export default function PipelineSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [timezone, setTimezone] = useState("America/Denver");
 
   useEffect(() => {
     Promise.all([
@@ -31,6 +32,9 @@ export default function PipelineSettingsPage() {
         if (!settingsResponse.ok) throw new Error(body.error ?? "Could not load settings");
         setEnabled(body.enabled);
         setSettings(body.settings);
+        if (typeof body.timezone === "string" && body.timezone.trim()) {
+          setTimezone(body.timezone.trim());
+        }
 
         if (employeesResponse.ok) {
           const employeeBody = await employeesResponse.json();
@@ -94,6 +98,44 @@ export default function PipelineSettingsPage() {
             </span>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </label>
+          <section className="space-y-3 rounded-lg border bg-card p-4">
+            <div>
+              <h2 className="font-medium">Automated sending hours</h2>
+              <p className="text-sm text-muted-foreground">
+                Automated pipeline SMS and email will only send during this window in {timezone}.
+                Messages that become due overnight wait until the window opens. Manual follow-ups
+                are not restricted.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <label className="text-sm font-medium">
+                Start
+                <Input
+                  className="mt-1 w-40"
+                  type="time"
+                  value={settings.sendWindowStart}
+                  onChange={(event) =>
+                    setSettings((current) =>
+                      current ? { ...current, sendWindowStart: event.target.value } : current
+                    )
+                  }
+                />
+              </label>
+              <label className="text-sm font-medium">
+                End
+                <Input
+                  className="mt-1 w-40"
+                  type="time"
+                  value={settings.sendWindowEnd}
+                  onChange={(event) =>
+                    setSettings((current) =>
+                      current ? { ...current, sendWindowEnd: event.target.value } : current
+                    )
+                  }
+                />
+              </label>
+            </div>
+          </section>
           <section className="space-y-2 rounded-lg border bg-card p-4">
             <label htmlFor="pipeline-follow-up-sender" className="block font-medium">
               Automated follow-up sender

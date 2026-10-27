@@ -30,6 +30,12 @@ export function hexToRgba(hex: string, alpha: number) {
 }
 
 export function jobCardStyle(job: ScheduleJobDTO, colorBy: ColorByMode) {
+  if (job.kind === "TIME_OFF") {
+    return {
+      backgroundColor: "rgba(245, 158, 11, 0.18)",
+      borderColor: "#d97706",
+    };
+  }
   const color = getJobColor(job, colorBy);
   return {
     backgroundColor: hexToRgba(color, 0.15),

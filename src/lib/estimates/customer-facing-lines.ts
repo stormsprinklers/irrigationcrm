@@ -11,6 +11,11 @@ const INTERNAL_ADJUSTMENT_NAMES = new Set([
   "labor minimum adjustment",
 ]);
 
+/** Remove legacy holiday-builder category prefixes while keeping the chosen item name. */
+export function customerFacingHolidayPlacementName(name: string) {
+  return name.replace(/^(?:tree|bush)(?:\s+wrap)?\s*(?:—|–|-|:)\s*/i, "").trim() || name;
+}
+
 /**
  * Hide legacy internal reconciliation rows while preserving the displayed
  * subtotal by folding their value into the corresponding roofline row.

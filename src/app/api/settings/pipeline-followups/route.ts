@@ -11,12 +11,13 @@ export async function GET(request: NextRequest) {
     if (!canManageCustomers(user.role)) return forbiddenResponse();
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { pipelineFollowUpsEnabled: true, pipelineFollowUpsEnabledAt: true, pipelineFollowUpSettings: true },
+      select: { timezone: true, pipelineFollowUpsEnabled: true, pipelineFollowUpsEnabledAt: true, pipelineFollowUpSettings: true },
     });
     if (!company) return NextResponse.json({ error: "Company not found" }, { status: 404 });
     return NextResponse.json({
       enabled: company.pipelineFollowUpsEnabled,
       enabledAt: company.pipelineFollowUpsEnabledAt,
+      timezone: company.timezone,
       settings: normalizePipelineFollowUpSettings(company.pipelineFollowUpSettings),
     });
   } catch (error) {

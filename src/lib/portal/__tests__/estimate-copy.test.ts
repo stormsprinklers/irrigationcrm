@@ -65,6 +65,32 @@ test("customer authored presentation copy is preserved", () => {
   assert.equal(customerEstimateDescription("Roofline C9 bulbs", ["Call before arrival"]), "Roofline C9 bulbs");
 });
 
+test("customer approval uses the shared current deposit threshold", () => {
+  const view = serializePortalEstimate({
+    id: "estimate",
+    publicToken: "token",
+    status: "SENT",
+    total: 500,
+    subtotal: 500,
+    discountTotal: 0,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    depositRequired: true,
+    depositType: "PERCENT",
+    depositAmount: 50,
+    depositThreshold: 999,
+    lineItems: [],
+    company: {
+      estimateWarrantyText: null,
+      deferredVisitDepositThreshold: 100,
+    },
+  });
+
+  assert.equal(view.depositThreshold, 100);
+});
+
 test("public estimate normalizes private preview URLs and excludes internal notes", () => {
   const savedOrigin = process.env.NEXT_PUBLIC_APP_URL;
   process.env.NEXT_PUBLIC_APP_URL = "https://crm.example";

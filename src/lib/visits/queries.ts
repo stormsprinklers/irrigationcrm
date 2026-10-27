@@ -127,6 +127,7 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
   ];
   return {
     id: visit.id,
+    kind: "VISIT",
     title: visit.title,
     startAt: visit.startAt.toISOString(),
     endAt: visit.endAt.toISOString(),

@@ -23,6 +23,10 @@ export async function notifyStaffInApp(params: {
   href?: string | null;
   userIds?: string[];
   conversationId?: string;
+  visitId?: string;
+  customerId?: string;
+  estimateId?: string;
+  deepLink?: string;
   /** When false, send push only — skip the CRM bell/toast feed. */
   createInApp?: boolean;
 }) {
@@ -66,6 +70,11 @@ export async function notifyStaffInApp(params: {
     body: params.body,
     href: params.href,
     conversationId: params.conversationId,
+    visitId: params.visitId,
+    customerId: params.customerId,
+    estimateId: params.estimateId,
+    type: params.type,
+    deepLink: params.deepLink,
   });
 }
 

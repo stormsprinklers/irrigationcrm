@@ -79,7 +79,7 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
       bodyLines.push("", lead.notes);
     }
   } else {
-    const detailLines = websiteFormDetailLines(meta);
+    const detailLines = websiteFormDetailLines(meta, lead.source);
     if (detailLines.length) {
       bodyLines.push("", ...detailLines);
     } else if (lead.notes) {

@@ -40,7 +40,12 @@ async function loadEstimate(companyId: string, customerId: string, idOrToken: st
           assignedUser: { select: { name: true, photoUrl: true, title: true } },
         },
       },
-      company: { select: { estimateWarrantyText: true } },
+      company: {
+        select: {
+          estimateWarrantyText: true,
+          deferredVisitDepositThreshold: true,
+        },
+      },
     },
   });
 }

@@ -5,6 +5,7 @@ import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map"
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
+import { customerFacingHolidayPlacementName } from "@/lib/estimates/customer-facing-lines";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
@@ -178,7 +179,10 @@ export function serializePortalEstimate(estimate: {
     endAt: Date | null;
     assignedUser?: { name: string; photoUrl: string | null; title: string | null } | null;
   } | null;
-  company?: { estimateWarrantyText?: string | null } | null;
+  company?: {
+    estimateWarrantyText?: string | null;
+    deferredVisitDepositThreshold?: { toNumber?: () => number } | number | null;
+  } | null;
 }) {
   const hasDesign = Boolean(estimate.designProjectId);
   const meta =
@@ -244,7 +248,9 @@ export function serializePortalEstimate(estimate: {
 
   let lineItems = estimate.lineItems.map((item) => ({
     optionId: item.optionId ?? null,
-    name: item.name,
+    name: hasHolidayLighting
+      ? customerFacingHolidayPlacementName(item.name)
+      : item.name,
     description: item.description,
     quantity: toNumber(item.quantity as never),
     unitPrice: toNumber(item.unitPrice as never),
@@ -375,7 +381,11 @@ export function serializePortalEstimate(estimate: {
     depositAmount:
       estimate.depositAmount != null ? toNumber(estimate.depositAmount as never) : null,
     depositThreshold:
-      estimate.depositThreshold != null ? toNumber(estimate.depositThreshold as never) : 999,
+      estimate.company?.deferredVisitDepositThreshold != null
+        ? toNumber(estimate.company.deferredVisitDepositThreshold as never)
+        : estimate.depositThreshold != null
+          ? toNumber(estimate.depositThreshold as never)
+          : 1000,
     depositPaidAt: estimate.depositPaidAt?.toISOString() ?? null,
     needsScheduling: estimate.needsScheduling ?? false,
     hasDesign,

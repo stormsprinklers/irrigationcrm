@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { customerFacingEstimateLines } from "../customer-facing-lines";
+import {
+  customerFacingEstimateLines,
+  customerFacingHolidayPlacementName,
+} from "../customer-facing-lines";
+
+test("holiday placement names omit legacy tree and bush prefixes", () => {
+  assert.equal(customerFacingHolidayPlacementName("Tree - Front maple"), "Front maple");
+  assert.equal(customerFacingHolidayPlacementName("Tree wrap — Front maple — parts"), "Front maple — parts");
+  assert.equal(customerFacingHolidayPlacementName("Bush: Entry planters"), "Entry planters");
+  assert.equal(customerFacingHolidayPlacementName("Entry garland"), "Entry garland");
+});
 
 test("legacy labor minimum adjustment is hidden and folded into roofline labor", () => {
   const lines = customerFacingEstimateLines([

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import {
@@ -10,6 +10,7 @@ import { portalFeatureEnabled } from "@/lib/portal/permissions";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
 import { computeApprovalPaymentAmount, computeDepositAmount } from "@/lib/estimates/booking";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
+import { notifyCustomerEstimateApproved } from "@/lib/notifications/estimate-approved";
 import { toNumber } from "@/lib/visits/totals";
 import type { PortalCompany } from "@/lib/portal/company";
 import { findEstimateByPublicToken } from "@/lib/portal/public-estimate";
@@ -322,15 +323,29 @@ export async function POST(request: NextRequest, { params }: Params) {
             assignedUser: { select: { name: true, photoUrl: true, title: true } },
           },
         },
-        company: { select: { estimateWarrantyText: true } },
+        company: {
+          select: {
+            estimateWarrantyText: true,
+            deferredVisitDepositThreshold: true,
+          },
+        },
       },
     });
   });
 
   void onEstimateClosed(estimateId).catch(() => {});
+  after(() =>
+    notifyCustomerEstimateApproved(estimateId).catch((error) =>
+      console.error("Estimate approval staff notification failed", error)
+    )
+  );
 
-  const depositAmount = computeDepositAmount(updated);
-  const paymentAmount = computeApprovalPaymentAmount(updated);
+  const currentDepositPolicy = {
+    ...updated,
+    depositThreshold: updated.company.deferredVisitDepositThreshold,
+  };
+  const depositAmount = computeDepositAmount(currentDepositPolicy);
+  const paymentAmount = computeApprovalPaymentAmount(currentDepositPolicy);
 
   return NextResponse.json({
     estimate: serializePortalEstimate(updated),

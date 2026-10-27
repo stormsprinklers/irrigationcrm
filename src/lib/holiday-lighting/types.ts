@@ -20,6 +20,7 @@ export const HOLIDAY_COLOR_PATTERNS = [
   "Yellow",
   "Pink",
   "Orange",
+  "Multicolor",
   "Other",
 ] as const;
 

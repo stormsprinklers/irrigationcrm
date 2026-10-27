@@ -16,6 +16,7 @@ import { pipelineEmailActivityStatus } from "@/lib/inbox/internal-activity";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
 import {
   customerFirstName,
+  isWithinPipelineFollowUpSendWindow,
   normalizePipelineFollowUpSettings,
   pipelineFollowUpAnchorAt,
   renderPipelineTemplate,
@@ -127,6 +128,12 @@ export async function sendPipelineFollowUp(params: {
   if (!customer) throw new Error("Customer not found");
   if (customer.pipelineRemovedAt || customer.pipelineDeclinedAt) throw new Error("Follow-ups are disabled for this customer");
   if (params.automated && customer.pipelineFollowUpsPausedAt) throw new Error("Automatic reminders are paused");
+  if (params.automated) {
+    const settings = normalizePipelineFollowUpSettings(customer.company.pipelineFollowUpSettings);
+    if (!isWithinPipelineFollowUpSendWindow(new Date(), customer.company.timezone, settings)) {
+      throw new Error("Automatic follow-ups are outside the configured sending hours");
+    }
+  }
 
   const existing = await prisma.pipelineFollowUp.findUnique({
     where: { customerId_stage_sequence: { customerId: customer.id, stage: params.stage, sequence: params.sequence } },
@@ -327,14 +334,16 @@ export async function skipPipelineFollowUp(params: {
 export async function processDuePipelineFollowUps(limit = 75) {
   const companies = await prisma.company.findMany({
     where: { pipelineFollowUpsEnabled: true, outboundCommsDisabled: false },
-    select: { id: true, name: true, pipelineFollowUpSettings: true, defaultLeadAssignee: { select: { id: true, name: true } } },
+    select: { id: true, name: true, timezone: true, pipelineFollowUpSettings: true, defaultLeadAssignee: { select: { id: true, name: true } } },
   });
   let sent = 0;
   let failed = 0;
-  const now = Date.now();
+  const nowDate = new Date();
+  const now = nowDate.getTime();
   for (const company of companies) {
     if (sent + failed >= limit) break;
     const settings = normalizePipelineFollowUpSettings(company.pipelineFollowUpSettings);
+    if (!isWithinPipelineFollowUpSendWindow(nowDate, company.timezone, settings)) continue;
     const configuredSender = settings.senderUserId
       ? await prisma.user.findFirst({
           where: { id: settings.senderUserId, companyId: company.id, status: "ACTIVE" },

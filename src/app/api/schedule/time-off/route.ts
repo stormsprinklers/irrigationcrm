@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       userId: targetUserId,
+      userIds: targetUserIds,
       startAt,
       endAt,
       allDay = true,
@@ -71,56 +72,76 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("Invalid time range");
     }
 
-    const requestedFor = targetUserId ?? user.id;
-    const isSelf = requestedFor === user.id;
-    if (!isSelf && !canManageTeamSchedule(user.role)) {
+    if (!Object.values(TimeOffType).includes(type as TimeOffType)) {
+      return badRequestResponse("Invalid time-off type");
+    }
+
+    const requestedUserIds = Array.from(
+      new Set(
+        (Array.isArray(targetUserIds) && targetUserIds.length > 0
+          ? targetUserIds
+          : [targetUserId ?? user.id]
+        )
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      )
+    );
+    if (requestedUserIds.length === 0) {
+      return badRequestResponse("At least one employee is required");
+    }
+    if (requestedUserIds.length > 20) {
+      return badRequestResponse("Time off can be scheduled for up to 20 employees at once");
+    }
+
+    const canManage = canManageTeamSchedule(user.role);
+    if (!canManage && requestedUserIds.some((id) => id !== user.id)) {
       return forbiddenResponse();
     }
 
-    const employee = await prisma.user.findFirst({
-      where: { id: requestedFor, companyId: user.companyId, status: "ACTIVE" },
+    const employees = await prisma.user.findMany({
+      where: {
+        id: { in: requestedUserIds },
+        companyId: user.companyId,
+        status: "ACTIVE",
+      },
       select: { id: true, name: true },
     });
-    if (!employee) return badRequestResponse("Employee not found");
-
-    let status: TimeOffStatus = TimeOffStatus.PENDING;
-    let reviewedById: string | null = null;
-    let reviewedAt: Date | null = null;
-
-    if (approveImmediately && canManageTeamSchedule(user.role)) {
-      status = TimeOffStatus.APPROVED;
-      reviewedById = user.id;
-      reviewedAt = new Date();
-    } else if (isSelf && !canManageTeamSchedule(user.role)) {
-      status = TimeOffStatus.PENDING;
-    } else if (canManageTeamSchedule(user.role) && !isSelf) {
-      status = TimeOffStatus.APPROVED;
-      reviewedById = user.id;
-      reviewedAt = new Date();
+    if (employees.length !== requestedUserIds.length) {
+      return badRequestResponse("One or more employees were not found");
     }
 
-    const entry = await prisma.timeOffRequest.create({
-      data: {
-        companyId: user.companyId,
-        userId: requestedFor,
-        startAt: start,
-        endAt: end,
-        allDay: Boolean(allDay),
-        type: type as TimeOffType,
-        status,
-        reason: reason ? String(reason) : null,
-        reviewedById,
-        reviewedAt,
-        createdById: user.id,
-      },
-      include: timeOffInclude,
-    });
+    const reviewedAt = new Date();
+    const entries = await prisma.$transaction(
+      requestedUserIds.map((requestedFor) => {
+        const shouldApprove = canManage && (approveImmediately || requestedFor !== user.id);
+        return prisma.timeOffRequest.create({
+          data: {
+            companyId: user.companyId,
+            userId: requestedFor,
+            startAt: start,
+            endAt: end,
+            allDay: Boolean(allDay),
+            type: type as TimeOffType,
+            status: shouldApprove ? TimeOffStatus.APPROVED : TimeOffStatus.PENDING,
+            reason: reason ? String(reason) : null,
+            reviewedById: shouldApprove ? user.id : null,
+            reviewedAt: shouldApprove ? reviewedAt : null,
+            createdById: user.id,
+          },
+          include: timeOffInclude,
+        });
+      })
+    );
 
-    if (status === TimeOffStatus.PENDING) {
+    const employeesById = new Map(employees.map((employee) => [employee.id, employee]));
+    for (const entry of entries) {
+      if (entry.status !== TimeOffStatus.PENDING) continue;
+      const employee = employeesById.get(entry.userId);
       await notifyTimeOffRequestSubmitted({
         companyId: user.companyId,
-        employeeUserId: employee.id,
-        employeeName: employee.name?.trim() || "An employee",
+        employeeUserId: entry.userId,
+        employeeName: employee?.name?.trim() || "An employee",
         startAt: start,
         endAt: end,
         type: type as string,
@@ -130,7 +151,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(serializeTimeOffRequest(entry), { status: 201 });
+    const serialized = entries.map(serializeTimeOffRequest);
+    return NextResponse.json(
+      Array.isArray(targetUserIds) ? { requests: serialized } : serialized[0],
+      { status: 201 }
+    );
   } catch {
     return unauthorizedResponse();
   }

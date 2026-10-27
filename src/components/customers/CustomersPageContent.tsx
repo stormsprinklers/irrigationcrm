@@ -15,8 +15,8 @@ import { toast } from "sonner";
 import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
+import { AddCustomerQuickDialog } from "@/components/customers/AddCustomerQuickDialog";
 import type { CustomerDTO, CustomerListFilters } from "@/lib/customers/types";
-import { createDraftCustomer } from "@/lib/schedule/create-draft";
 
 const emptyFilters: CustomerListFilters = {
   search: "",
@@ -83,7 +83,7 @@ export default function CustomersPageContent({ segment }: Props) {
     segment,
   }));
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
   const hasActiveFilters = useMemo(
@@ -193,18 +193,6 @@ export default function CustomersPageContent({ segment }: Props) {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function createCustomer() {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const customer = await createDraftCustomer();
-      window.location.href = `/customers/${customer.id}?edit=1`;
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : isContacts ? "Failed to create contact" : "Failed to create customer");
-      setCreating(false);
-    }
-  }
-
   return (
     <ContentArea>
       <PageHeader
@@ -223,14 +211,21 @@ export default function CustomersPageContent({ segment }: Props) {
         }
         actions={<div className="flex gap-2">
           {canManage ? <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>Import customers</Button> : null}
-          <Button size="sm" onClick={() => void createCustomer()} disabled={creating}>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
-            {creating ? "Creating…" : isContacts ? "Create contact" : "Create customer"}
+            {isContacts ? "Create contact" : "Create customer"}
           </Button>
         </div>}
       />
 
       <CustomerImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImported={() => void load(filters)} />
+      <AddCustomerQuickDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(customer) => {
+          window.location.href = `/customers/${customer.id}`;
+        }}
+      />
 
       <div className="mb-4 space-y-3">
         <Input

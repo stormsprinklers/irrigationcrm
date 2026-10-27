@@ -11,7 +11,7 @@ import {
   startOfDay,
   startOfWeek,
 } from "date-fns";
-import { Clock3, Mail, MapPin, MessageSquare, StickyNote, Truck, UserRound, Users, Wrench } from "lucide-react";
+import { CalendarOff, Clock3, Mail, MapPin, MessageSquare, StickyNote, Truck, UserRound, Users, Wrench } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jobCardStyle } from "@/lib/schedule/colors";
@@ -147,7 +147,11 @@ function JobHoverPreview({ job }: { job: ScheduleJobDTO }) {
         </p>
       </div>
       <div className="space-y-1.5 text-xs">
-        <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><span>{jobAddress(job)}</span></p>
+        {job.kind === "TIME_OFF" ? (
+          job.timeOffReason ? <p className="text-muted-foreground">{job.timeOffReason}</p> : null
+        ) : (
+          <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" /><span>{jobAddress(job)}</span></p>
+        )}
         <div className="flex items-start gap-2">
           <Users className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <div>
@@ -203,11 +207,12 @@ function JobBlock({
   const top = (startFraction - startHour) * HOUR_HEIGHT;
   const height = Math.max((endFraction - startFraction) * HOUR_HEIGHT - 2, 22);
   const style = jobCardStyle(job, colorBy);
+  const canResize = Boolean(onTimeChange && job.kind !== "TIME_OFF");
   const laneWidth = Math.max(28, Math.floor((columnWidth - 8) / laneCount) - 2);
   const left = 4 + lane * (laneWidth + 2);
 
   function beginResize(edge: "start" | "end", event: React.PointerEvent<HTMLSpanElement>) {
-    if (!onTimeChange) return;
+    if (!canResize) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -279,7 +284,7 @@ function JobBlock({
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          href={`/visits/${job.id}`}
+          href={job.kind === "TIME_OFF" ? "/schedule?panel=team" : `/visits/${job.id}`}
           onClick={(event) => {
             if (resizedRef.current || resizeState.current) event.preventDefault();
           }}
@@ -293,7 +298,7 @@ function JobBlock({
             borderColor: style.borderColor,
           }}
         >
-      {onTimeChange ? (
+      {canResize ? (
         <>
           <span
             role="separator"
@@ -319,7 +324,11 @@ function JobBlock({
       ) : null}
           <div className="flex h-full flex-col p-1 text-[9px]">
         <div className="flex items-center gap-0.5">
-          <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
+          {job.kind === "TIME_OFF" ? (
+            <CalendarOff className="h-2.5 w-2.5 shrink-0 opacity-80" />
+          ) : (
+            <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
+          )}
           {(job.assignedUsers?.length ? job.assignedUsers : job.assignedUser ? [job.assignedUser] : [])
             .slice(0, 3)
             .map((employee, index) => (
@@ -338,11 +347,13 @@ function JobBlock({
         </div>
         {height >= 40 ? (
           <p className="mt-0.5 truncate font-medium leading-tight">
-            {format(start, "h:mm")}
+            {job.kind === "TIME_OFF" ? job.title : format(start, "h:mm")}
           </p>
         ) : null}
         {height >= 56 ? (
-          <p className="mt-0.5 truncate text-[8px] text-muted-foreground">{jobLocation(job)}</p>
+          <p className="mt-0.5 truncate text-[8px] text-muted-foreground">
+            {job.kind === "TIME_OFF" ? `${format(start, "h:mm a")}–${format(end, "h:mm a")}` : jobLocation(job)}
+          </p>
         ) : null}
           </div>
         </Link>
@@ -732,7 +743,7 @@ function TimeGrid({
                       <Tooltip key={job.id}>
                         <TooltipTrigger asChild>
                           <Link
-                            href={`/visits/${job.id}`}
+                            href={job.kind === "TIME_OFF" ? "/schedule?panel=team" : `/visits/${job.id}`}
                             className="absolute z-10 flex items-center gap-2 overflow-hidden rounded border px-2 py-1 text-[10px] shadow-sm transition-shadow hover:shadow-md"
                             style={{
                               top: lane * MULTI_DAY_ROW_HEIGHT + 4,
@@ -743,13 +754,17 @@ function TimeGrid({
                               borderColor: cardStyle.borderColor,
                             }}
                           >
-                            {job.crew ? (
+                            {job.kind === "TIME_OFF" ? (
+                              <CalendarOff className="h-3 w-3 shrink-0" />
+                            ) : job.crew ? (
                               <Truck className="h-3 w-3 shrink-0" />
                             ) : (
                               <Wrench className="h-3 w-3 shrink-0" />
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{jobLocation(job)}</p>
+                              <p className="truncate font-medium">
+                                {job.kind === "TIME_OFF" ? job.title : jobLocation(job)}
+                              </p>
                               <p className="truncate text-muted-foreground">
                                 {format(start, "h:mm a")} – {format(end, "h:mm a")}
                                 {job.crew ? ` · ${job.crew.name}` : ""}
@@ -987,13 +1002,14 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
 
   const dayStats = useMemo(() => {
-    const stats = new Map<string, { jobCount: number; revenue: number }>();
+    const stats = new Map<string, { jobCount: number; revenue: number; timeOffCount: number }>();
     for (const job of jobs) {
       const key = startOfDay(new Date(job.startAt)).toDateString();
-      const current = stats.get(key) ?? { jobCount: 0, revenue: 0 };
+      const current = stats.get(key) ?? { jobCount: 0, revenue: 0, timeOffCount: 0 };
       stats.set(key, {
-        jobCount: current.jobCount + 1,
+        jobCount: current.jobCount + (job.kind === "TIME_OFF" ? 0 : 1),
         revenue: current.revenue + (job.total ?? 0),
+        timeOffCount: current.timeOffCount + (job.kind === "TIME_OFF" ? 1 : 0),
       });
     }
     return stats;
@@ -1003,13 +1019,21 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
     let total = 0;
     for (const job of jobs) {
       const d = startOfDay(new Date(job.startAt));
-      if (isSameMonth(d, monthStart)) total += job.total ?? 0;
+      if (job.kind !== "TIME_OFF" && isSameMonth(d, monthStart)) total += job.total ?? 0;
     }
     return total;
   }, [jobs, monthStart]);
 
   const monthJobCount = useMemo(() => {
-    return jobs.filter((job) => isSameMonth(new Date(job.startAt), monthStart)).length;
+    return jobs.filter(
+      (job) => job.kind !== "TIME_OFF" && isSameMonth(new Date(job.startAt), monthStart)
+    ).length;
+  }, [jobs, monthStart]);
+
+  const monthTimeOffCount = useMemo(() => {
+    return jobs.filter(
+      (job) => job.kind === "TIME_OFF" && isSameMonth(new Date(job.startAt), monthStart)
+    ).length;
   }, [jobs, monthStart]);
 
   return (
@@ -1017,6 +1041,7 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
       <div className="shrink-0 border-b border-border px-4 py-3 text-sm text-muted-foreground">
         <span>
           {monthJobCount} visit{monthJobCount === 1 ? "" : "s"} ·{" "}
+          {monthTimeOffCount} time-off block{monthTimeOffCount === 1 ? "" : "s"} ·{" "}
           <strong className="text-foreground">
             {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
               monthRevenue
@@ -1041,6 +1066,7 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
             const stats = dayStats.get(startOfDay(day).toDateString());
             const jobCount = stats?.jobCount ?? 0;
             const revenue = stats?.revenue ?? 0;
+            const timeOffCount = stats?.timeOffCount ?? 0;
 
             return (
               <button
@@ -1061,18 +1087,27 @@ function MonthScheduleGrid({ jobs, monthStart, onDayClick }: MonthGridProps) {
                 >
                   {format(day, "d")}
                 </p>
-                {inMonth && jobCount > 0 ? (
+                {inMonth && (jobCount > 0 || timeOffCount > 0) ? (
                   <div className="space-y-0.5 text-[11px]">
-                    <p className="font-medium text-foreground">
-                      {jobCount} visit{jobCount === 1 ? "" : "s"}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        maximumFractionDigits: 0,
-                      }).format(revenue)}
-                    </p>
+                    {jobCount > 0 ? (
+                      <>
+                        <p className="font-medium text-foreground">
+                          {jobCount} visit{jobCount === 1 ? "" : "s"}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {new Intl.NumberFormat("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 0,
+                          }).format(revenue)}
+                        </p>
+                      </>
+                    ) : null}
+                    {timeOffCount > 0 ? (
+                      <p className="font-medium text-amber-700">
+                        {timeOffCount} time-off block{timeOffCount === 1 ? "" : "s"}
+                      </p>
+                    ) : null}
                   </div>
                 ) : inMonth ? (
                   <p className="text-[11px] text-muted-foreground">—</p>

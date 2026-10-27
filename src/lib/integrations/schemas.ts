@@ -1,17 +1,97 @@
 import { z } from "zod";
 
-export const websiteLeadSchema = z.object({
-  externalId: z.string().min(1),
-  name: z.string().min(1),
-  phone: z.string().optional().nullable(),
-  email: z.string().email().optional().nullable().or(z.literal("")),
-  source: z.string().optional().nullable(),
-  status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "LOST", "WON"]).optional(),
-  notes: z.string().optional().nullable(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  address: z.string().optional().nullable(),
-  city: z.string().optional().nullable(),
-});
+export const websiteLeadSchema = z
+  .object({
+    externalId: z.string().min(1),
+    name: z.string().min(1),
+    phone: z.string().optional().nullable(),
+    email: z.string().email().optional().nullable().or(z.literal("")),
+    source: z.string().optional().nullable(),
+    status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "LOST", "WON"]).optional(),
+    notes: z.string().optional().nullable(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    address: z.string().optional().nullable(),
+    city: z.string().optional().nullable(),
+  })
+  // Meta/GHL forms may contain arbitrary custom-question keys. Preserve them
+  // so the intake layer can store every answer instead of silently stripping it.
+  .passthrough();
+
+const WEBSITE_LEAD_CORE_KEYS = new Set([
+  "externalId",
+  "name",
+  "phone",
+  "email",
+  "source",
+  "status",
+  "notes",
+  "metadata",
+  "address",
+  "city",
+]);
+
+const WEBSITE_LEAD_METADATA_KEYS = new Set([
+  "facebook_lead_id",
+  "facebookLeadId",
+  "meta_lead_id",
+  "leadgen_id",
+  "leadconnector_contact_id",
+  "meta_page_id",
+  "meta_form_id",
+  "meta_campaign_id",
+  "meta_adset_id",
+  "meta_ad_id",
+  "gclid",
+  "gbraid",
+  "wbraid",
+  "fbclid",
+  "fbc",
+  "fbp",
+  "user_agent",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+]);
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Move arbitrary integration fields into a stable metadata container. */
+export function captureWebsiteLeadFormFields(
+  input: WebsiteLeadInput
+): WebsiteLeadInput {
+  const extras = Object.fromEntries(
+    Object.entries(input).filter(
+      ([key, value]) => !WEBSITE_LEAD_CORE_KEYS.has(key) && value !== undefined && value !== null
+    )
+  );
+  if (!Object.keys(extras).length) return input;
+
+  const metadata = recordValue(input.metadata) ?? {};
+  const existingFields =
+    recordValue(metadata.form_fields) ?? recordValue(metadata.formFields) ?? {};
+  const metadataFields = Object.fromEntries(
+    Object.entries(extras).filter(([key]) => WEBSITE_LEAD_METADATA_KEYS.has(key))
+  );
+  const formFields = Object.fromEntries(
+    Object.entries(extras).filter(([key]) => !WEBSITE_LEAD_METADATA_KEYS.has(key))
+  );
+  return {
+    ...input,
+    metadata: {
+      ...metadata,
+      ...metadataFields,
+      ...(Object.keys(formFields).length
+        ? { form_fields: { ...existingFields, ...formFields } }
+        : {}),
+    },
+  };
+}
 
 export const websiteCareersApplicationSchema = z.object({
   externalId: z.string().min(1),

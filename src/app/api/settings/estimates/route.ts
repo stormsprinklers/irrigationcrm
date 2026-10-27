@@ -26,7 +26,12 @@ export async function GET() {
       where: { id: user.companyId },
       select: estimateSettingsSelect,
     });
-    return NextResponse.json(company);
+    if (!company) return NextResponse.json(company);
+    return NextResponse.json({
+      ...company,
+      // One threshold controls both customer approval and deferred visit deposits.
+      estimateDepositThreshold: company.deferredVisitDepositThreshold,
+    });
   } catch {
     return unauthorizedResponse();
   }
@@ -40,6 +45,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
+    const sharedDepositThreshold =
+      body.deferredVisitDepositThreshold !== undefined
+        ? Math.max(0, Number(body.deferredVisitDepositThreshold))
+        : body.estimateDepositThreshold !== undefined
+          ? Math.max(0, Number(body.estimateDepositThreshold))
+          : undefined;
     const company = await prisma.company.update({
       where: { id: user.companyId },
       data: {
@@ -55,20 +66,10 @@ export async function PATCH(request: NextRequest) {
         ...(body.estimateDepositAmount !== undefined
           ? { estimateDepositAmount: body.estimateDepositAmount ?? null }
           : {}),
-        ...(body.estimateDepositThreshold !== undefined
+        ...(sharedDepositThreshold !== undefined
           ? {
-              estimateDepositThreshold: Math.max(
-                0,
-                Number(body.estimateDepositThreshold)
-              ),
-            }
-          : {}),
-        ...(body.deferredVisitDepositThreshold !== undefined
-          ? {
-              deferredVisitDepositThreshold: Math.max(
-                0,
-                Number(body.deferredVisitDepositThreshold)
-              ),
+              estimateDepositThreshold: sharedDepositThreshold,
+              deferredVisitDepositThreshold: sharedDepositThreshold,
             }
           : {}),
         ...(body.deferredVisitDepositPercent !== undefined

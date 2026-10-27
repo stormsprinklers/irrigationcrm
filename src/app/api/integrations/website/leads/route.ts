@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { IntegrationType } from "@prisma/client";
 import { authenticateIntegration, isIntegrationContext } from "@/lib/integrations/auth";
 import { logIntegrationAudit } from "@/lib/integrations/audit";
-import { websiteLeadSchema } from "@/lib/integrations/schemas";
+import {
+  captureWebsiteLeadFormFields,
+  websiteLeadSchema,
+} from "@/lib/integrations/schemas";
 import { createLeadFromIntegration } from "@/lib/leads/create";
 
 export async function POST(request: NextRequest) {
@@ -25,7 +28,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await createLeadFromIntegration(auth.companyId, parsed.data);
+    const leadInput = captureWebsiteLeadFormFields(parsed.data);
+    const result = await createLeadFromIntegration(auth.companyId, leadInput);
     await logIntegrationAudit({
       companyId: auth.companyId,
       integrationType: IntegrationType.WEBSITE,

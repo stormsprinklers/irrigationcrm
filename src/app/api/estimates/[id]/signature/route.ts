@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { EstimateStatus } from "@prisma/client";
 import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { getEstimateForCompany } from "@/lib/estimates/queries";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
+import { notifyCustomerEstimateApproved } from "@/lib/notifications/estimate-approved";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/visits/totals";
 
@@ -62,6 +63,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     void onEstimateClosed(id).catch(() => {});
+    after(() =>
+      notifyCustomerEstimateApproved(id).catch((error) =>
+        console.error("Estimate approval staff notification failed", error)
+      )
+    );
 
     const { advanceCustomerPipeline } = await import("@/lib/customers/pipeline");
     void advanceCustomerPipeline({

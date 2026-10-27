@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
         depositRequired: company.estimateDepositRequired,
         depositType: company.estimateDepositType,
         depositAmount: company.estimateDepositAmount,
-        depositThreshold: company.estimateDepositThreshold,
+        depositThreshold: company.deferredVisitDepositThreshold,
         designProjectId: input.designProjectId ?? null,
         designVersionId: input.designVersionId ?? null,
         quoteTier: input.quoteTier ?? "STANDARD",

@@ -144,18 +144,20 @@ export default function SettingsEstimatesPage() {
                     type="number"
                     min={0}
                     step="0.01"
-                    value={Number(settings.estimateDepositThreshold ?? 999)}
+                    value={Number(settings.deferredVisitDepositThreshold ?? 1000)}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
-                        estimateDepositThreshold: e.target.value
+                        estimateDepositThreshold: e.target.value ? Number(e.target.value) : 0,
+                        deferredVisitDepositThreshold: e.target.value
                           ? Number(e.target.value)
                           : 0,
                       })
                     }
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Estimates at or below this amount do not require a deposit.
+                    Used when the customer approves the estimate and when approved work is booked
+                    for another day. Totals at or below this amount do not require a deposit.
                   </p>
                 </div>
                 <div>
@@ -209,30 +211,6 @@ export default function SettingsEstimatesPage() {
           </p>
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">
-                Deposit threshold (USD)
-              </label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={Number(settings.deferredVisitDepositThreshold ?? 1000)}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    deferredVisitDepositThreshold: e.target.value
-                      ? Number(e.target.value)
-                      : 1000,
-                  })
-                }
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Visits booked for another day with line items totaling more than this amount
-                require a deposit. At or under this amount, no deposit is required. Default:
-                $1,000.
-              </p>
-            </div>
-            <div>
               <label className="mb-1 block text-sm font-medium">Deposit percent</label>
               <Input
                 type="number"
@@ -250,9 +228,8 @@ export default function SettingsEstimatesPage() {
                 }
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                When the threshold is exceeded, collect this percentage of the visit total.
-                Example with defaults: a $1,200 job requires a $600 deposit (50%); a $900 job
-                requires none. Default: 50%.
+                Uses the shared threshold above. When it is exceeded, collect this percentage of
+                the visit total for work booked for another day.
               </p>
             </div>
           </div>

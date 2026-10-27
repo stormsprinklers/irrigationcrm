@@ -1,3 +1,6 @@
+import { getZonedParts } from "@/lib/datetime/zoned";
+import { resolveNotificationTimezone } from "@/lib/notifications/timezone";
+
 export type PipelineFollowUpTemplate = {
   delayHours: number;
   sms: string;
@@ -8,12 +11,17 @@ export type PipelineFollowUpTemplate = {
 export type PipelineFollowUpSettings = {
   /** Optional employee whose first name is used for every automated follow-up. */
   senderUserId: string | null;
+  /** Company-local quiet-hours boundary. Start is inclusive; end is exclusive. */
+  sendWindowStart: string;
+  sendWindowEnd: string;
   lead: PipelineFollowUpTemplate[];
   qualified: PipelineFollowUpTemplate[];
 };
 
 export const DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS: PipelineFollowUpSettings = {
   senderUserId: null,
+  sendWindowStart: "08:00",
+  sendWindowEnd: "21:00",
   lead: [
     {
       delayHours: 24,
@@ -75,13 +83,38 @@ function validTemplate(value: unknown, fallback: PipelineFollowUpTemplate) {
   };
 }
 
+function validLocalTime(value: unknown, fallback: string) {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(trimmed) ? trimmed : fallback;
+}
+
+function localTimeMinutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
 export function normalizePipelineFollowUpSettings(value: unknown): PipelineFollowUpSettings {
   const source = value && typeof value === "object" ? value as Partial<PipelineFollowUpSettings> : {};
+  let sendWindowStart = validLocalTime(
+    source.sendWindowStart,
+    DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.sendWindowStart
+  );
+  let sendWindowEnd = validLocalTime(
+    source.sendWindowEnd,
+    DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.sendWindowEnd
+  );
+  if (localTimeMinutes(sendWindowStart) >= localTimeMinutes(sendWindowEnd)) {
+    sendWindowStart = DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.sendWindowStart;
+    sendWindowEnd = DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.sendWindowEnd;
+  }
   return {
     senderUserId:
       typeof source.senderUserId === "string" && source.senderUserId.trim()
         ? source.senderUserId.trim()
         : null,
+    sendWindowStart,
+    sendWindowEnd,
     lead: DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS.lead.map((fallback, index) =>
       validTemplate(source.lead?.[index], fallback)
     ),
@@ -89,6 +122,21 @@ export function normalizePipelineFollowUpSettings(value: unknown): PipelineFollo
       validTemplate(source.qualified?.[index], fallback)
     ),
   };
+}
+
+/** True only during the configured company-local pipeline automation window. */
+export function isWithinPipelineFollowUpSendWindow(
+  at: Date,
+  timeZone: string | null | undefined,
+  settings: Pick<PipelineFollowUpSettings, "sendWindowStart" | "sendWindowEnd">
+) {
+  const tz = resolveNotificationTimezone(timeZone);
+  const { hour, minute } = getZonedParts(at, tz);
+  const localMinutes = hour * 60 + minute;
+  return (
+    localMinutes >= localTimeMinutes(settings.sendWindowStart) &&
+    localMinutes < localTimeMinutes(settings.sendWindowEnd)
+  );
 }
 
 export function renderPipelineTemplate(

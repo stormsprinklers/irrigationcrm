@@ -33,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
             estimateDepositRequired: true,
             estimateDepositType: true,
             estimateDepositAmount: true,
-            estimateDepositThreshold: true,
+            deferredVisitDepositThreshold: true,
           },
         },
       },
@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
               depositRequired: existing.company.estimateDepositRequired,
               depositType: existing.company.estimateDepositType,
               depositAmount: existing.company.estimateDepositAmount,
-              depositThreshold: existing.company.estimateDepositThreshold,
+              depositThreshold: existing.company.deferredVisitDepositThreshold,
             }
           : {}),
         ...(body.propertyId !== undefined ? { propertyId: body.propertyId ?? null } : {}),

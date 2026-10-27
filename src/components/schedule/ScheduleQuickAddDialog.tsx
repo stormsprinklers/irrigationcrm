@@ -23,15 +23,30 @@ type Props = {
   slot: ScheduleSlotClick | null;
   serviceAreas: { id: string; name: string }[];
   employees: { id: string; name: string }[];
+  crews?: {
+    id: string;
+    members?: { userId?: string; user: { id: string } }[];
+  }[];
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   onClose: () => void;
   onCreated: (visitId: string) => void;
+};
+
+type BookingKind = "VISIT" | "TIME_OFF";
+type TimeOffType = "TIME_OFF" | "PTO" | "SICK" | "OTHER";
+
+const TIME_OFF_TYPE_LABELS: Record<TimeOffType, string> = {
+  TIME_OFF: "Time off",
+  PTO: "PTO",
+  SICK: "Sick",
+  OTHER: "Other",
 };
 
 export function ScheduleQuickAddDialog({
   open,
   slot,
   employees,
+  crews = [],
   workSchedules,
   onClose,
   onCreated,
@@ -39,6 +54,7 @@ export function ScheduleQuickAddDialog({
   const { brand } = useCompanyBrand();
   const holiday = isHolidayLightingCompany(brand);
   const [saving, setSaving] = useState(false);
+  const [bookingKind, setBookingKind] = useState<BookingKind>("VISIT");
   const [title, setTitle] = useState("Service visit");
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -48,15 +64,20 @@ export function ScheduleQuickAddDialog({
   const [crewName, setCrewName] = useState<string | null>(null);
   const [division, setDivision] = useState<"SERVICE" | "INSTALL" | "HOLIDAY_LIGHTS">("SERVICE");
   const [notifyCustomer, setNotifyCustomer] = useState(true);
+  const [timeOffType, setTimeOffType] = useState<TimeOffType>("TIME_OFF");
+  const [timeOffReason, setTimeOffReason] = useState("");
 
   useEffect(() => {
     if (!open) return;
 
+    setBookingKind("VISIT");
     setTitle(holiday ? "Holiday lighting appointment" : "Service visit");
     setCustomerId("");
     setCustomerName("");
     setSelectedCustomer(null);
     setNotifyCustomer(true);
+    setTimeOffType("TIME_OFF");
+    setTimeOffReason("");
     setDivision(holiday ? "HOLIDAY_LIGHTS" : "SERVICE");
     setCrewId(slot?.crewId ?? null);
     setCrewName(slot?.crewName ?? null);
@@ -74,7 +95,7 @@ export function ScheduleQuickAddDialog({
     ? `${arrivalWindowHours}h`
     : `${arrivalWindowHours.toFixed(1)}h`;
 
-  const offMessages = !crewId
+  const offMessages = bookingKind === "VISIT" && !crewId
     ? assignedUserIds.flatMap((employeeId) => {
         const employee = employees.find((item) => item.id === employeeId);
         const message = assignmentOffMessage(
@@ -87,49 +108,85 @@ export function ScheduleQuickAddDialog({
       })
     : [];
 
+  function changeBookingKind(kind: BookingKind) {
+    setBookingKind(kind);
+    if (kind === "TIME_OFF" && slot?.crewId) {
+      const crew = crews.find((item) => item.id === slot.crewId);
+      const memberIds = (crew?.members ?? [])
+        .map((member) => member.userId ?? member.user.id)
+        .filter((id) => employees.some((employee) => employee.id === id));
+      setAssignedUserIds(Array.from(new Set(memberIds)));
+    } else if (slot?.assignedUserId && slot.assignedUserId !== "__unassigned__") {
+      setAssignedUserIds([slot.assignedUserId]);
+    } else {
+      setAssignedUserIds([]);
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!slot) return;
-    if (!customerId) {
+    if (bookingKind === "VISIT" && !customerId) {
       toast.error("Select a customer");
       return;
     }
-    if (!crewId && assignedUserIds.length === 0) {
-      toast.error("Assign a technician or crew");
+    if ((bookingKind === "TIME_OFF" || !crewId) && assignedUserIds.length === 0) {
+      toast.error(bookingKind === "TIME_OFF" ? "Select at least one employee" : "Assign a technician or crew");
       return;
     }
-    if (selectedCustomer?.doNotService) {
+    if (bookingKind === "VISIT" && selectedCustomer?.doNotService) {
       toast.error("This customer is marked DO NOT SERVICE");
       return;
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/schedule/jobs", {
+      const isTimeOff = bookingKind === "TIME_OFF";
+      const res = await fetch(isTimeOff ? "/api/schedule/time-off" : "/api/schedule/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim() || "Service visit",
-          startAt: slot.startAt.toISOString(),
-          endAt: slot.endAt.toISOString(),
-          division,
-          assignedUserIds: assignedUserIds.length ? assignedUserIds : undefined,
-          crewId: crewId || undefined,
-          customerId,
-          zip: selectedCustomer?.zip || undefined,
-          address: selectedCustomer?.address || undefined,
-          city: selectedCustomer?.city || undefined,
-          state: selectedCustomer?.state || undefined,
-          notifyCustomer,
-        }),
+        body: JSON.stringify(
+          isTimeOff
+            ? {
+                userIds: assignedUserIds,
+                startAt: slot.startAt.toISOString(),
+                endAt: slot.endAt.toISOString(),
+                allDay: false,
+                type: timeOffType,
+                reason: timeOffReason.trim() || undefined,
+                approveImmediately: true,
+              }
+            : {
+                title: title.trim() || "Service visit",
+                startAt: slot.startAt.toISOString(),
+                endAt: slot.endAt.toISOString(),
+                division,
+                assignedUserIds: assignedUserIds.length ? assignedUserIds : undefined,
+                crewId: crewId || undefined,
+                customerId,
+                zip: selectedCustomer?.zip || undefined,
+                address: selectedCustomer?.address || undefined,
+                city: selectedCustomer?.city || undefined,
+                state: selectedCustomer?.state || undefined,
+                notifyCustomer,
+              }
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "Failed to create visit");
+        toast.error(data.error ?? (isTimeOff ? "Failed to schedule time off" : "Failed to create visit"));
         return;
       }
       if (data.warning) toast.warning(data.warning);
-      toast.success("Visit scheduled");
-      onCreated(data.id);
+      const createdRequests = Array.isArray(data.requests) ? data.requests : [];
+      const timeOffApproved = createdRequests.every(
+        (request: { status?: string }) => request.status === "APPROVED"
+      );
+      toast.success(isTimeOff
+        ? timeOffApproved
+          ? `Time off scheduled for ${assignedUserIds.length} ${assignedUserIds.length === 1 ? "employee" : "employees"}`
+          : "Time-off request submitted"
+        : "Visit scheduled");
+      onCreated(data.id ?? data.requests?.[0]?.id ?? "");
       onClose();
     } finally {
       setSaving(false);
@@ -147,10 +204,13 @@ export function ScheduleQuickAddDialog({
       <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col rounded-lg border bg-background shadow-lg">
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
           <div>
-            <h2 className="font-semibold">Schedule visit</h2>
+            <h2 className="font-semibold">
+              {bookingKind === "TIME_OFF" ? "Schedule time off" : "Schedule visit"}
+            </h2>
             <p className="text-xs text-muted-foreground">
               {format(slot.startAt, "EEE, MMM d")} · {format(slot.startAt, "h:mm a")} –{" "}
-              {format(slot.endAt, "h:mm a")} ({arrivalWindowLabel} arrival window)
+              {format(slot.endAt, "h:mm a")} ({arrivalWindowLabel}
+              {bookingKind === "VISIT" ? " arrival window" : ""})
             </p>
             {offMessages.map((message) => (
               <p key={message} className="mt-1 text-xs font-medium text-amber-700">
@@ -166,6 +226,28 @@ export function ScheduleQuickAddDialog({
         <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={(e) => void handleCreate(e)}>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden p-4">
             <div>
+              <label className="text-xs font-medium text-muted-foreground">Appointment type</label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={bookingKind === "VISIT" ? "default" : "outline"}
+                  onClick={() => changeBookingKind("VISIT")}
+                >
+                  Customer visit
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={bookingKind === "TIME_OFF" ? "default" : "outline"}
+                  onClick={() => changeBookingKind("TIME_OFF")}
+                >
+                  Time off
+                </Button>
+              </div>
+            </div>
+
+            {bookingKind === "VISIT" ? <div>
               <label className="text-xs font-medium text-muted-foreground">Title</label>
               <Input
                 className="mt-1"
@@ -173,9 +255,9 @@ export function ScheduleQuickAddDialog({
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Service visit"
               />
-            </div>
+            </div> : null}
 
-            <div>
+            {bookingKind === "VISIT" ? <div>
               <label className="text-xs font-medium text-muted-foreground">Customer</label>
               <div className="mt-1">
                 <CustomerSearchPicker
@@ -191,9 +273,9 @@ export function ScheduleQuickAddDialog({
                   onCustomerSelect={setSelectedCustomer}
                 />
               </div>
-            </div>
+            </div> : null}
 
-            {crewId ? (
+            {crewId && bookingKind === "VISIT" ? (
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Crew</label>
                 <p className="mt-1 rounded-md border border-border px-3 py-2 text-sm">{crewName}</p>
@@ -209,12 +291,38 @@ export function ScheduleQuickAddDialog({
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  The first technician selected is the primary assignee.
+                  {bookingKind === "TIME_OFF"
+                    ? "Each selected employee will be unavailable for this exact time frame."
+                    : "The first technician selected is the primary assignee."}
                 </p>
               </div>
             )}
 
-            <div>
+            {bookingKind === "TIME_OFF" ? (
+              <>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Time-off type</label>
+                  <select
+                    className={`${selectClassName} mt-1`}
+                    value={timeOffType}
+                    onChange={(e) => setTimeOffType(e.target.value as TimeOffType)}
+                  >
+                    {Object.entries(TIME_OFF_TYPE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Reason (optional)</label>
+                  <Input
+                    className="mt-1"
+                    value={timeOffReason}
+                    onChange={(e) => setTimeOffReason(e.target.value)}
+                    placeholder="Vacation, appointment, personal, etc."
+                  />
+                </div>
+              </>
+            ) : <div>
               <label className="text-xs font-medium text-muted-foreground">Division</label>
               <select
                 className={`${selectClassName} mt-1`}
@@ -225,8 +333,8 @@ export function ScheduleQuickAddDialog({
                 <option value="INSTALL">Install</option>
                 <option value="HOLIDAY_LIGHTS">Holiday Lights</option>
               </select>
-            </div>
-            <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+            </div>}
+            {bookingKind === "VISIT" ? <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
               <input
                 type="checkbox"
                 className="mt-0.5"
@@ -239,7 +347,7 @@ export function ScheduleQuickAddDialog({
                   Send the scheduled-visit notification after saving.
                 </span>
               </span>
-            </label>
+            </label> : null}
           </div>
 
           <div className="flex shrink-0 justify-end gap-2 border-t bg-background px-4 py-3">
@@ -248,7 +356,7 @@ export function ScheduleQuickAddDialog({
             </Button>
             <Button type="submit" disabled={saving}>
               {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-              Create visit
+              {bookingKind === "TIME_OFF" ? "Schedule time off" : "Create visit"}
             </Button>
           </div>
         </form>

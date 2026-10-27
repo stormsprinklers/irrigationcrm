@@ -19,8 +19,12 @@ export async function createEstimateDepositCheckout(params: {
     throw new Error("Sign the estimate before submitting payment");
   }
 
-  const depositAmount = computeDepositAmount(estimate);
-  const paymentAmount = computeApprovalPaymentAmount(estimate);
+  const currentDepositPolicy = {
+    ...estimate,
+    depositThreshold: estimate.company.deferredVisitDepositThreshold,
+  };
+  const depositAmount = computeDepositAmount(currentDepositPolicy);
+  const paymentAmount = computeApprovalPaymentAmount(currentDepositPolicy);
   if (paymentAmount <= 0) throw new Error("This estimate does not have a balance to pay");
   const isDeposit = depositAmount > 0;
 

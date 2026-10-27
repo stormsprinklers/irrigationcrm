@@ -70,6 +70,18 @@ const EMPTY_PROPERTY_FORM = {
 
 type Props = { customerId: string };
 
+function splitCustomerName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function joinCustomerName(firstName: string, lastName: string) {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+}
+
 function ProfileDetail({
   label,
   value,
@@ -458,6 +470,7 @@ export function CustomerProfile({ customerId }: Props) {
   }
 
   const profileCustomer = editMode ? draftCustomer : customer;
+  const profileName = splitCustomerName(profileCustomer?.name ?? "");
   const formattedAddress = customer
     ? formatCustomerAddress({
         address: customer.address,
@@ -1001,12 +1014,31 @@ export function CustomerProfile({ customerId }: Props) {
               ) : profileCustomer ? (
                 <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Name</label>
+                    <label className="mb-1 block text-sm font-medium">First name</label>
                     <Input
-                      value={profileCustomer.name}
+                      value={profileName.firstName}
                       onChange={(e) =>
-                        setDraftCustomer({ ...profileCustomer, name: e.target.value })
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          name: joinCustomerName(e.target.value, profileName.lastName),
+                        })
                       }
+                      autoComplete="given-name"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Last name</label>
+                    <Input
+                      value={profileName.lastName}
+                      onChange={(e) =>
+                        setDraftCustomer({
+                          ...profileCustomer,
+                          name: joinCustomerName(profileName.firstName, e.target.value),
+                        })
+                      }
+                      autoComplete="family-name"
+                      required
                     />
                   </div>
                   <div>

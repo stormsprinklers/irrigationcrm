@@ -11,14 +11,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { createDraftCustomer, createDraftVisit } from "@/lib/schedule/create-draft";
+import { createDraftVisit } from "@/lib/schedule/create-draft";
 import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
 import { holidayEstimateWizardUrl } from "@/lib/holiday-lighting/routes";
+import { AddCustomerQuickDialog } from "@/components/customers/AddCustomerQuickDialog";
 
 export function NewMenu() {
   const router = useRouter();
   const { enabled: holidayLightingEnabled } = useHolidayLightingFeatures();
   const [creating, setCreating] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
 
   async function runCreate(action: () => Promise<void>) {
     if (creating) return;
@@ -33,51 +35,50 @@ export function NewMenu() {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="dark" size="sm" className="rounded-full px-4" disabled={creating}>
-          <Plus className="h-4 w-4" />
-          {creating ? "Creating…" : "New"}
-          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem
-          disabled={creating}
-          onSelect={() =>
-            void runCreate(async () => {
-              const customer = await createDraftCustomer();
-              router.push(`/customers/${customer.id}?edit=1`);
-            })
-          }
-        >
-          <UserPlus />
-          New customer
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={creating}
-          onSelect={() =>
-            void runCreate(async () => {
-              const visit = await createDraftVisit();
-              router.push(`/visits/${visit.id}`);
-            })
-          }
-        >
-          <Calendar />
-          New visit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={creating}
-          onSelect={() =>
-            router.push(
-              holidayLightingEnabled ? holidayEstimateWizardUrl() : "/estimates/new"
-            )
-          }
-        >
-          <FileText />
-          New estimate
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="dark" size="sm" className="rounded-full px-4" disabled={creating}>
+            <Plus className="h-4 w-4" />
+            {creating ? "Creating…" : "New"}
+            <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuItem disabled={creating} onSelect={() => setCustomerOpen(true)}>
+            <UserPlus />
+            New customer
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={creating}
+            onSelect={() =>
+              void runCreate(async () => {
+                const visit = await createDraftVisit();
+                router.push(`/visits/${visit.id}`);
+              })
+            }
+          >
+            <Calendar />
+            New visit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={creating}
+            onSelect={() =>
+              router.push(
+                holidayLightingEnabled ? holidayEstimateWizardUrl() : "/estimates/new"
+              )
+            }
+          >
+            <FileText />
+            New estimate
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AddCustomerQuickDialog
+        open={customerOpen}
+        onClose={() => setCustomerOpen(false)}
+        onCreated={(customer) => router.push(`/customers/${customer.id}`)}
+      />
+    </>
   );
 }

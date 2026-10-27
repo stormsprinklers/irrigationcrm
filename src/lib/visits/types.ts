@@ -16,6 +16,9 @@ export const DEFAULT_SCHEDULE_FILTERS: ScheduleFilters = {
 
 export type VisitDTO = {
   id: string;
+  kind?: "VISIT" | "TIME_OFF";
+  timeOffType?: "TIME_OFF" | "PTO" | "SICK" | "OTHER";
+  timeOffReason?: string | null;
   title: string;
   startAt: string;
   endAt: string;

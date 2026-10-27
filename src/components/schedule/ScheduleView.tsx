@@ -35,7 +35,7 @@ import {
   scheduleCrewColumnId,
 } from "@/lib/schedule/columns";
 import type { DivisionBookingWindows } from "@/lib/schedule/open-time-slots";
-import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import { useSession } from "next-auth/react";
 import { isFieldRole } from "@/lib/employees";
@@ -69,6 +69,57 @@ type FilterOptions = {
   };
   arrivalWindowHours?: number;
 };
+
+const TIME_OFF_LABELS: Record<string, string> = {
+  TIME_OFF: "Time off",
+  PTO: "PTO",
+  SICK: "Sick",
+  OTHER: "Other",
+};
+
+function timeOffAsScheduleJob(
+  request: TimeOffRequestDTO,
+  options: Pick<FilterOptions, "employees" | "crews">
+): ScheduleJobDTO {
+  const employee = options.employees.find((item) => item.id === request.userId);
+  const employeeCrew = options.crews.find((crew) =>
+    (crew.members ?? []).some((member) => (member.userId ?? member.user.id) === request.userId)
+  );
+  const assignedUser = {
+    id: request.userId,
+    name: employee?.name ?? request.userName,
+    color: employee?.color ?? null,
+    photoUrl: employee?.photoUrl ?? null,
+  };
+
+  return {
+    id: `time-off:${request.id}`,
+    kind: "TIME_OFF",
+    timeOffType: request.type as ScheduleJobDTO["timeOffType"],
+    timeOffReason: request.reason,
+    title: TIME_OFF_LABELS[request.type] ?? "Time off",
+    startAt: request.startAt,
+    endAt: request.endAt,
+    division: employee?.division ?? "SERVICE",
+    status: "TIME_OFF",
+    tags: [],
+    address: null,
+    city: null,
+    state: null,
+    zip: null,
+    customer: null,
+    property: null,
+    serviceArea: null,
+    assignedUser,
+    assignedUsers: [assignedUser],
+    crew: employeeCrew
+      ? { id: employeeCrew.id, name: employeeCrew.name, color: employeeCrew.color }
+      : null,
+    notes: [],
+    subtotal: 0,
+    total: 0,
+  };
+}
 
 export function ScheduleView({
   embedded = false,
@@ -251,13 +302,30 @@ export function ScheduleView({
       const summaryParams = new URLSearchParams({ start, end });
       buildFilterQuery(summaryParams);
 
-      const [jobsRes, summaryRes, filtersRes] = await Promise.all([
+      const timeOffParams = new URLSearchParams({ start, end, status: "APPROVED" });
+
+      const [jobsRes, summaryRes, filtersRes, timeOffRes] = await Promise.all([
         fetch(`/api/schedule/jobs?${jobsParams}`),
         fetch(`/api/schedule/summary?${summaryParams}`),
         fetch("/api/schedule/filters"),
+        fetch(`/api/schedule/time-off?${timeOffParams}`),
       ]);
 
-      if (jobsRes.ok) setJobs(await jobsRes.json());
+      const loadedJobs: ScheduleJobDTO[] = jobsRes.ok ? await jobsRes.json() : [];
+      const loadedFilters: FilterOptions | null = filtersRes.ok ? await filtersRes.json() : null;
+      const loadedTimeOff: { requests?: TimeOffRequestDTO[] } | null = timeOffRes.ok
+        ? await timeOffRes.json()
+        : null;
+
+      setJobs([
+        ...loadedJobs,
+        ...(loadedTimeOff?.requests ?? []).map((request) =>
+          timeOffAsScheduleJob(request, {
+            employees: loadedFilters?.employees ?? [],
+            crews: loadedFilters?.crews ?? [],
+          })
+        ),
+      ]);
       if (summaryRes.ok) {
         const data = await summaryRes.json();
         setSummary({
@@ -265,8 +333,8 @@ export function ScheduleView({
           scheduledHoursFormatted: data.scheduledHoursFormatted,
         });
       }
-      if (filtersRes.ok) {
-        const data = await filtersRes.json();
+      if (loadedFilters) {
+        const data = loadedFilters;
         setFilterOptions({
           serviceAreas: data.serviceAreas,
           employees: data.employees,
@@ -508,6 +576,7 @@ export function ScheduleView({
         slot={quickAddSlot}
         serviceAreas={filterOptions.serviceAreas}
         employees={filterOptions.employees}
+        crews={filterOptions.crews}
         workSchedules={filterOptions.openTimeSlots?.workSchedules}
         onClose={() => setQuickAddSlot(null)}
         onCreated={() => {

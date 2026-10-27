@@ -185,7 +185,7 @@ export async function createEstimateFromHolidayQuote(params: {
           depositRequired: company.estimateDepositRequired,
           depositType: company.estimateDepositType,
           depositAmount: company.estimateDepositAmount,
-          depositThreshold: company.estimateDepositThreshold,
+          depositThreshold: company.deferredVisitDepositThreshold,
           selectedOptionId: null,
           designExportMetadata: metadata,
         },
@@ -203,7 +203,7 @@ export async function createEstimateFromHolidayQuote(params: {
           depositRequired: company.estimateDepositRequired,
           depositType: company.estimateDepositType,
           depositAmount: company.estimateDepositAmount,
-          depositThreshold: company.estimateDepositThreshold,
+          depositThreshold: company.deferredVisitDepositThreshold,
           designExportMetadata: metadata,
         },
       });

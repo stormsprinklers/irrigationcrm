@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_PIPELINE_FOLLOW_UP_SETTINGS,
+  isWithinPipelineFollowUpSendWindow,
   normalizePipelineFollowUpSettings,
   pipelineFollowUpAnchorAt,
   renderPipelineTemplate,
@@ -41,4 +42,53 @@ test("pipeline settings preserve a configured automated sender", () => {
   });
 
   assert.equal(settings.senderUserId, "employee-123");
+});
+
+test("pipeline automation defaults to 8am through 9pm company local time", () => {
+  const settings = normalizePipelineFollowUpSettings(null);
+
+  assert.equal(settings.sendWindowStart, "08:00");
+  assert.equal(settings.sendWindowEnd, "21:00");
+  assert.equal(
+    isWithinPipelineFollowUpSendWindow(
+      new Date("2026-06-24T13:59:00.000Z"),
+      "America/Denver",
+      settings
+    ),
+    false
+  );
+  assert.equal(
+    isWithinPipelineFollowUpSendWindow(
+      new Date("2026-06-24T14:00:00.000Z"),
+      "America/Denver",
+      settings
+    ),
+    true
+  );
+  assert.equal(
+    isWithinPipelineFollowUpSendWindow(
+      new Date("2026-06-25T02:59:00.000Z"),
+      "America/Denver",
+      settings
+    ),
+    true
+  );
+  assert.equal(
+    isWithinPipelineFollowUpSendWindow(
+      new Date("2026-06-25T03:00:00.000Z"),
+      "America/Denver",
+      settings
+    ),
+    false
+  );
+});
+
+test("pipeline automation repairs invalid or reversed sending hours", () => {
+  const settings = normalizePipelineFollowUpSettings({
+    sendWindowStart: "22:00",
+    sendWindowEnd: "07:00",
+  });
+
+  assert.equal(settings.sendWindowStart, "08:00");
+  assert.equal(settings.sendWindowEnd, "21:00");
 });
