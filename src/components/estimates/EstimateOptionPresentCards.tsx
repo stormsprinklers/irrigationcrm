@@ -322,8 +322,8 @@ export function EstimateOptionPresentCards({
         <div
           ref={scrollerRef}
           className={cn(
-            "touch-pan-x snap-x snap-mandatory overflow-x-auto px-2 py-4 scroll-smooth sm:px-14",
-            "[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            "touch-auto snap-x snap-mandatory overflow-x-auto overscroll-x-contain px-2 py-4 scroll-smooth sm:px-14",
+            "[-webkit-overflow-scrolling:touch] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
           )}
         >
           <div className="flex items-stretch gap-4">
@@ -403,7 +403,8 @@ export function EstimateOptionPresentCards({
                     <img
                       src={option.photoUrl}
                       alt=""
-                      className="absolute inset-0 h-full w-full object-cover"
+                      draggable={false}
+                      className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
                       }}

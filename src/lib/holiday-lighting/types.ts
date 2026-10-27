@@ -1,3 +1,5 @@
+import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
+
 export type HolidayLatLng = { lat: number; lng: number };
 
 export type HolidaySegmentKind = "roofline" | "peak" | "garland" | "custom";
@@ -652,7 +654,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
         ? 5
         : 1;
   const designOptions: HolidayQuoteDesignOption[] = Array.isArray(obj.designOptions)
-    ? obj.designOptions.slice(0, 5).flatMap((rawOption, index) => {
+    ? obj.designOptions.slice(0, MAX_ESTIMATE_OPTIONS).flatMap((rawOption, index) => {
         if (!rawOption || typeof rawOption !== "object") return [];
         const option = rawOption as Partial<HolidayQuoteDesignOption>;
         const nested = parseHolidaySelections(
@@ -727,7 +729,7 @@ export function holidayDesignOptionsFromQuote(params: {
 }): HolidayQuoteDesignOption[] {
   const { measurements, selections, catalog } = params;
   if (selections.designOptions?.length) {
-    return selections.designOptions.slice(0, 5).map((option, index) => {
+    return selections.designOptions.slice(0, MAX_ESTIMATE_OPTIONS).map((option, index) => {
       const normalized = applyHolidayCatalogPolicy(
         { ...option.selections, designOptions: undefined },
         catalog

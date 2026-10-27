@@ -465,8 +465,8 @@ test("labor-only disclaimer covers third-party materials and replacement visits"
   assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not included/i);
 });
 
-test("quote design options preserve independent scope and measurements and cap at five", () => {
-  const rawOptions = Array.from({ length: 6 }, (_, index) => ({
+test("quote design options preserve independent scope and measurements and cap at seven", () => {
+  const rawOptions = Array.from({ length: 8 }, (_, index) => ({
     id: `design-${index + 1}`,
     label: `Option ${index + 1}`,
     previewImageUrl: index === 1 ? "https://example.com/option-2.png" : undefined,
@@ -489,7 +489,7 @@ test("quote design options preserve independent scope and measurements and cap a
     selections: parsed,
     catalog: DEFAULT_HOLIDAY_CATALOG,
   });
-  assert.equal(options.length, 5);
+  assert.equal(options.length, 7);
   assert.equal(options[0]?.selections.pricingMode, "labor");
   assert.equal(options[1]?.selections.defaultColorPattern, "Red");
   assert.equal(options[1]?.selections.notes, "Customer-facing option note");

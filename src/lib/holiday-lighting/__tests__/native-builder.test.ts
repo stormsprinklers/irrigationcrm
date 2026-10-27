@@ -58,6 +58,28 @@ test("saving a native preview updates only that option and uses the latest revis
   assert.equal(call.data.previewImageUrl, undefined, "inactive preview must not replace active option B");
 });
 
+test("deleting a preview clears only the selected option", async t => {
+  const quote = fixture();
+  stub(t, prisma.holidayLightingQuote, "findFirst", async () => quote);
+  const update = stub(t, prisma.holidayLightingQuote, "update", async () => quote);
+  const option = holidayDesignOptionsFromQuote({ measurements: quote.measurements as any, selections: quote.selections, catalog: DEFAULT_HOLIDAY_CATALOG })[1];
+
+  await persistNativeHolidayPreview({
+    companyId: user.companyId,
+    quoteId: quote.id,
+    sourcePhotoUrl: "source",
+    option,
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    previewImageUrl: null,
+    expectedPreviewUrl: "old-b",
+  });
+
+  const data = update.mock.calls[0].arguments[0].data;
+  assert.equal(data.selections.designOptions[0].previewImageUrl, "old-a");
+  assert.equal(data.selections.designOptions[1].previewImageUrl, undefined);
+  assert.equal(data.previewImageUrl, null);
+});
+
 test("a preview generated for an old source photo cannot overwrite a changed quote", async t => {
   const quote = fixture();
   stub(t, prisma.holidayLightingQuote, "findFirst", async () => ({ ...quote, sourcePhotoUrl: "replacement-photo" }));

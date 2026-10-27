@@ -21,7 +21,7 @@ function isOptimisticWriteConflict(error: unknown) {
 
 export async function persistNativeHolidayPreview(params: {
   companyId: string; quoteId: string; sourcePhotoUrl: string | null;
-  option: HolidayQuoteDesignOption; catalog: HolidayLightingCatalog; previewImageUrl: string; expectedPreviewUrl?: string;
+  option: HolidayQuoteDesignOption; catalog: HolidayLightingCatalog; previewImageUrl: string | null; expectedPreviewUrl?: string;
 }) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const latest = await prisma.holidayLightingQuote.findFirst({ where: { id: params.quoteId, companyId: params.companyId } });
@@ -32,11 +32,22 @@ export async function persistNativeHolidayPreview(params: {
     if (!current || (params.expectedPreviewUrl !== undefined && current.previewImageUrl !== params.expectedPreviewUrl) || previewSignature(current) !== previewSignature(params.option) || latest.sourcePhotoUrl !== params.sourcePhotoUrl) {
       throw new HolidayPreviewConflict("The lighting choices or photo changed while generating. Please generate the preview again.");
     }
-    selections.designOptions = options.map(item => item.id === params.option.id ? { ...item, previewImageUrl: params.previewImageUrl } : item);
+    selections.designOptions = options.map((item) => {
+      if (item.id !== params.option.id) return item;
+      const updated = { ...item };
+      if (params.previewImageUrl) updated.previewImageUrl = params.previewImageUrl;
+      else delete updated.previewImageUrl;
+      return updated;
+    });
     try {
       await prisma.holidayLightingQuote.update({
         where: { id: params.quoteId, companyId: params.companyId, updatedAt: latest.updatedAt },
-        data: { selections, ...(selections.activeDesignOptionId === params.option.id || options.length === 1 ? { previewImageUrl: params.previewImageUrl } : {}) },
+        data: {
+          selections,
+          ...(selections.activeDesignOptionId === params.option.id || options.length === 1
+            ? { previewImageUrl: params.previewImageUrl }
+            : {}),
+        },
       });
       return;
     } catch (error) {

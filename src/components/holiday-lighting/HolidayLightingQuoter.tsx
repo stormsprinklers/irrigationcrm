@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -28,6 +28,7 @@ import { ModalPortal } from "@/components/ui/ModalPortal";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ResolvedAddress } from "@/lib/customers/address-autocomplete";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
+import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
 import { optionDetail, type HolidayPricingResult } from "@/lib/holiday-lighting/pricing";
 import { estimatePreviewGenerationProgress } from "@/lib/holiday-lighting/preview-progress";
 import { pruneStrands } from "@/lib/holiday-lighting/strands";
@@ -254,6 +255,8 @@ export function HolidayLightingQuoter({
   const [visualizingProgress, setVisualizingProgress] = useState(0);
   const [visualizingPhase, setVisualizingPhase] = useState<PreviewGenerationPhase>("idle");
   const [visualizingMessage, setVisualizingMessage] = useState("");
+  const [visualizingOptionIds, setVisualizingOptionIds] = useState<string[]>([]);
+  const [previewActionOptionId, setPreviewActionOptionId] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
 
   const [address, setAddress] = useState(initialAddress ?? "");
@@ -292,6 +295,8 @@ export function HolidayLightingQuoter({
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const optionPreviewFileRef = useRef<HTMLInputElement>(null);
+  const optionPreviewTargetRef = useRef<string | null>(null);
   const quoteIdRef = useRef(initialId ?? "");
   const quoteCreationRef = useRef<Promise<string> | null>(null);
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -644,8 +649,8 @@ export function HolidayLightingQuoter({
 
   function addDesignOption(copyCurrent: boolean) {
     const snapshot = currentOptions();
-    if (snapshot.length >= 5) {
-      toast.error("Holiday estimates can have up to five options");
+    if (snapshot.length >= MAX_ESTIMATE_OPTIONS) {
+      toast.error(`Holiday estimates can have up to ${MAX_ESTIMATE_OPTIONS} options`);
       return;
     }
     const number = snapshot.length + 1;
@@ -1063,7 +1068,25 @@ export function HolidayLightingQuoter({
     );
   }
 
-  async function runVisualize() {
+  function updateOptionPreview(optionId: string, previewImageUrl: string | null) {
+    setDesignOptions((current) =>
+      current.map((item) =>
+        item.id === optionId
+          ? { ...item, previewImageUrl: previewImageUrl ?? undefined }
+          : item
+      )
+    );
+    setSelections((current) => ({
+      ...current,
+      designOptions: current.designOptions?.map((item) =>
+        item.id === optionId
+          ? { ...item, previewImageUrl: previewImageUrl ?? undefined }
+          : item
+      ),
+    }));
+  }
+
+  async function runVisualize(optionId?: string) {
     if (!paintRef.current?.hasPaint()) {
       toast.error("Paint the areas where lights should go");
       return;
@@ -1077,9 +1100,14 @@ export function HolidayLightingQuoter({
     setVisualizing(true);
     try {
       const id = await ensureQuote();
-      const optionsToRender = currentOptions();
+      const allOptions = currentOptions();
+      const optionsToRender = optionId
+        ? allOptions.filter((option) => option.id === optionId)
+        : allOptions;
+      if (!optionsToRender.length) throw new Error("This option is no longer available");
+      setVisualizingOptionIds(optionsToRender.map((option) => option.id));
       visualizationTotalRef.current = optionsToRender.length;
-      if (!(await save(undefined, { quiet: true, designOptions: optionsToRender }))) {
+      if (!(await save(undefined, { quiet: true, designOptions: allOptions }))) {
         throw new Error("The lighting design could not be saved before generating previews.");
       }
       const exported = await paintRef.current.exportForApi();
@@ -1139,15 +1167,7 @@ export function HolidayLightingQuoter({
         if (!data.previewImageUrl) throw new Error(`${option.label} completed without an image URL`);
         // Show each completed image immediately instead of leaving the preview
         // area looking stalled while the other concurrent requests finish.
-        setDesignOptions((current) => current.map((item) => item.id === option.id
-          ? { ...item, previewImageUrl: data.previewImageUrl }
-          : item));
-        setSelections((current) => ({
-          ...current,
-          designOptions: current.designOptions?.map((item) => item.id === option.id
-            ? { ...item, previewImageUrl: data.previewImageUrl }
-            : item),
-        }));
+        updateOptionPreview(option.id, data.previewImageUrl);
         return { optionId: option.id, previewImageUrl: data.previewImageUrl };
       };
 
@@ -1204,6 +1224,64 @@ export function HolidayLightingQuoter({
       toast.error(message);
     } finally {
       setVisualizing(false);
+      setVisualizingOptionIds([]);
+    }
+  }
+
+  function chooseOptionPreviewFile(optionId: string) {
+    optionPreviewTargetRef.current = optionId;
+    optionPreviewFileRef.current?.click();
+  }
+
+  async function uploadOptionPreview(optionId: string, file: File) {
+    setPreviewActionOptionId(optionId);
+    try {
+      const id = await ensureQuote();
+      const options = currentOptions();
+      if (!(await save(undefined, { quiet: true, designOptions: options }))) {
+        throw new Error("The option could not be saved before uploading its preview");
+      }
+      const form = new FormData();
+      form.set("optionId", optionId);
+      form.set("file", file);
+      const res = await fetch(`/api/holiday-lighting/quotes/${id}/option-preview`, {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        previewImageUrl?: string;
+      };
+      if (!res.ok || !data.previewImageUrl) {
+        throw new Error(data.error ?? "Could not upload this option preview");
+      }
+      updateOptionPreview(optionId, data.previewImageUrl);
+      toast.success("Option preview uploaded");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload option preview");
+    } finally {
+      setPreviewActionOptionId(null);
+    }
+  }
+
+  async function deleteOptionPreview(option: HolidayQuoteDesignOption) {
+    if (!option.previewImageUrl) return;
+    if (!confirm(`Delete the preview for ${option.label}?`)) return;
+    setPreviewActionOptionId(option.id);
+    try {
+      const id = await ensureQuote();
+      const res = await fetch(
+        `/api/holiday-lighting/quotes/${id}/option-preview?optionId=${encodeURIComponent(option.id)}`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Could not delete this option preview");
+      updateOptionPreview(option.id, null);
+      toast.success("Option preview deleted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete option preview");
+    } finally {
+      setPreviewActionOptionId(null);
     }
   }
 
@@ -1440,7 +1518,7 @@ export function HolidayLightingQuoter({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={visualizing || renderedDesignOptions.length >= 5}
+                disabled={visualizing || renderedDesignOptions.length >= MAX_ESTIMATE_OPTIONS}
                 className="gap-1"
               >
                 + New Option
@@ -1478,7 +1556,9 @@ export function HolidayLightingQuoter({
               Remove current
             </Button>
           ) : null}
-          <span className="text-xs text-muted-foreground">Up to 5 options per estimate</span>
+          <span className="text-xs text-muted-foreground">
+            Up to {MAX_ESTIMATE_OPTIONS} options per estimate
+          </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           Each option keeps its own roofline strands, tree and bush strand counts, colors, scope, and pricing. Switch options before editing to change only that option.
@@ -2012,6 +2092,19 @@ export function HolidayLightingQuoter({
             Paint where lights should go once. We&apos;ll generate a distinct night preview for every option using that option&apos;s bulb type, colors, and pattern. Permanent lights are rendered as sleek, low-profile architectural LEDs.
           </p>
           <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+          <input
+            ref={optionPreviewFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              const optionId = optionPreviewTargetRef.current;
+              event.target.value = "";
+              optionPreviewTargetRef.current = null;
+              if (file && optionId) void uploadOptionPreview(optionId, file);
+            }}
+          />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
               {visualizing ? (
@@ -2032,9 +2125,12 @@ export function HolidayLightingQuoter({
               message={visualizingMessage}
             />
           </div>
-          {visualizingPhase !== "idle" || renderedDesignOptions.some((option) => option.previewImageUrl) ? (
+          {renderedDesignOptions.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {renderedDesignOptions.map((option) => (
+              {renderedDesignOptions.map((option) => {
+                const isGenerating = visualizingOptionIds.includes(option.id);
+                const isUpdating = previewActionOptionId === option.id;
+                return (
                 <div key={option.id} className={cn("rounded-md border p-2", option.id === activeOptionId ? "border-primary ring-2 ring-primary/20" : "border-border")}>
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold">{option.label}</p>
@@ -2043,7 +2139,7 @@ export function HolidayLightingQuoter({
                         <Check className="h-3.5 w-3.5" aria-hidden="true" />
                         Completed
                       </span>
-                    ) : visualizing ? (
+                    ) : isGenerating ? (
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                         Generating…
@@ -2057,11 +2153,55 @@ export function HolidayLightingQuoter({
                     <img src={blobProxyUrl(option.previewImageUrl) ?? option.previewImageUrl} alt={`${option.label} lighting preview`} className="w-full rounded border border-border" />
                   ) : (
                     <div className="flex aspect-[4/3] items-center justify-center rounded border border-dashed border-border bg-muted/30 text-xs text-muted-foreground">
-                      {visualizing ? "Creating this preview…" : "No preview was created"}
+                      {isGenerating ? "Creating this preview…" : "No preview was created"}
                     </div>
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={visualizing || isUpdating}
+                      onClick={() => void runVisualize(option.id)}
+                    >
+                      {isGenerating ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {option.previewImageUrl ? "Regenerate" : "Generate"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={visualizing || isUpdating}
+                      onClick={() => chooseOptionPreviewFile(option.id)}
+                    >
+                      {isUpdating ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      Upload image
+                    </Button>
+                    {option.previewImageUrl ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={visualizing || isUpdating}
+                        onClick={() => void deleteOptionPreview(option)}
+                      >
+                        <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                        Delete preview
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
               <p className="text-xs text-muted-foreground md:col-span-2">{HOLIDAY_PREVIEW_DISCLAIMER}</p>
             </div>
           ) : null}
