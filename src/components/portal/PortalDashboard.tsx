@@ -43,11 +43,22 @@ export function PortalDashboard({ slug }: { slug: string }) {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/portal/me").then((r) => r.json()),
+      fetch("/api/portal/me").then(async (r) => {
+        if (r.status === 401) {
+          const callbackUrl = `/portal/${slug}`;
+          window.location.replace(
+            `/portal/${slug}/login?callbackUrl=${encodeURIComponent(callbackUrl)}`
+          );
+          return null;
+        }
+        if (!r.ok) throw new Error("Failed to load the customer portal");
+        return r.json() as Promise<MeResponse>;
+      }),
       fetch("/api/portal/visits").then((r) => (r.ok ? r.json() : { upcoming: [] })),
       fetch("/api/portal/offers").then((r) => (r.ok ? r.json() : { offers: [] })),
       fetch("/api/portal/billing-summary").then((r) => (r.ok ? r.json() : null)),
     ]).then(([meData, visitsData, offersData, billing]) => {
+      if (!meData) return;
       setMe(meData);
       setUpcoming(visitsData.upcoming?.slice(0, 3) ?? []);
       setOffers(offersData.offers?.slice(0, 2) ?? []);
@@ -55,8 +66,10 @@ export function PortalDashboard({ slug }: { slug: string }) {
         setBalanceDue(Number(billing.totalBalanceDue) || 0);
         setOverdueTotal(Number(billing.overdueTotal) || 0);
       }
+    }).catch(() => {
+      // Keep the loading state instead of rendering malformed API data.
     });
-  }, []);
+  }, [slug]);
 
   if (!me) {
     return <p className="text-sm text-muted-foreground">Loading...</p>;

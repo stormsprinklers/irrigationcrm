@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { getAuthSecret } from "@/lib/auth-secret";
+import { PORTAL_SESSION_COOKIE } from "@/lib/portal/constants";
 import { enforceBrowserMutationOrigin } from "@/lib/security/csrf";
 
 const publicPaths = [
@@ -12,7 +13,6 @@ const publicPaths = [
   "/pay",
   "/book",
   "/refer",
-  "/portal",
   "/api/auth",
   "/api/book/public",
   "/api/book/hiring",
@@ -66,6 +66,26 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (pathname === "/portal" || pathname.startsWith("/portal/")) {
+    const segments = pathname.split("/").filter(Boolean);
+    const slug = segments[1];
+    const section = segments[2];
+    const isPublicPortalPage =
+      !slug ||
+      section === "login" ||
+      section === "track" ||
+      section === "estimates" ||
+      section === "feedback";
+
+    if (isPublicPortalPage || request.cookies.has(PORTAL_SESSION_COOKIE)) {
+      return withNoIndex(NextResponse.next());
+    }
+
+    const loginUrl = new URL(`/portal/${slug}/login`, request.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return withNoIndex(NextResponse.redirect(loginUrl));
+  }
+
   const isPublic = publicPaths.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
@@ -88,20 +108,6 @@ export async function middleware(request: NextRequest) {
 
     if (pathname.startsWith("/api/portal/")) {
       // Portal APIs authenticate via customer session cookie in route handlers.
-      return withNoIndex(NextResponse.next());
-    }
-    if (pathname.startsWith("/portal/")) {
-      const segments = pathname.split("/").filter(Boolean);
-      const slug = segments[1];
-      // Guest live-tracking links from On my way texts (no portal login).
-      if (segments[2] === "track") {
-        return withNoIndex(NextResponse.next());
-      }
-      if (slug && segments[2] !== "login") {
-        const loginUrl = new URL(`/portal/${slug}/login`, request.url);
-        loginUrl.searchParams.set("callbackUrl", pathname);
-        return withNoIndex(NextResponse.redirect(loginUrl));
-      }
       return withNoIndex(NextResponse.next());
     }
     if (pathname.startsWith("/api/")) {
