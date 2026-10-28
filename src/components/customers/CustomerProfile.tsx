@@ -1632,15 +1632,26 @@ export function CustomerProfile({ customerId }: Props) {
                             invoice.status !== "VOID" &&
                             invoice.status !== "REFUNDED" &&
                             invoice.publicToken ? (
-                              <Button type="button" variant="ghost" size="sm" asChild>
-                                <Link
-                                  href={`/pay/${invoice.publicToken}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                              invoice.visit ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setViewInvoiceId(invoice.id)}
                                 >
-                                  Take payment
-                                </Link>
-                              </Button>
+                                  Payment options
+                                </Button>
+                              ) : (
+                                <Button type="button" variant="ghost" size="sm" asChild>
+                                  <Link
+                                    href={`/pay/${invoice.publicToken}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Take full payment
+                                  </Link>
+                                </Button>
+                              )
                             ) : null}
                             <Button type="button" variant="ghost" size="sm" onClick={() => setViewInvoiceId(invoice.id)}>
                               View

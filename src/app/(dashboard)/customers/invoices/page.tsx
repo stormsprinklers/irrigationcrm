@@ -231,15 +231,25 @@ export default function CustomerInvoicesPage() {
                       invoice.status !== "VOID" &&
                       invoice.status !== "REFUNDED" ? (
                         <>
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link
-                              href={`/pay/${invoice.publicToken}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                          {invoice.visit ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewInvoiceId(invoice.id)}
                             >
-                              Take payment
-                            </Link>
-                          </Button>
+                              Payment options
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link
+                                href={`/pay/${invoice.publicToken}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Take full payment
+                              </Link>
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

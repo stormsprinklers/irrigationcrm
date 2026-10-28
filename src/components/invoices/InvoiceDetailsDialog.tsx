@@ -6,6 +6,7 @@ import { ExternalLink, FileText, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
 import type { InvoiceDTO } from "@/lib/invoices/types";
 
 type Props = {
@@ -24,11 +25,13 @@ function dateTime(value: string) {
 export function InvoiceDetailsDialog({ invoiceId, onClose }: Props) {
   const [invoice, setInvoice] = useState<InvoiceDTO | null>(null);
   const [loading, setLoading] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
 
   useEffect(() => {
     if (!invoiceId) return;
     let cancelled = false;
     setInvoice(null);
+    setBillingOpen(false);
     setLoading(true);
     fetch(`/api/invoices/${invoiceId}`)
       .then(async (response) => {
@@ -53,6 +56,7 @@ export function InvoiceDetailsDialog({ invoiceId, onClose }: Props) {
   if (!invoiceId) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <button type="button" aria-label="Close invoice details" className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-labelledby="invoice-details-title" className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border bg-background p-6 shadow-xl">
@@ -113,12 +117,40 @@ export function InvoiceDetailsDialog({ invoiceId, onClose }: Props) {
             ) : null}
 
             <div className="flex flex-wrap justify-end gap-2">
-              {invoice.balanceDue > 0 && invoice.status !== "VOID" && invoice.status !== "REFUNDED" ? <Button type="button" asChild><Link href={`/pay/${invoice.publicToken}`} target="_blank" rel="noopener noreferrer">Take payment <ExternalLink className="h-4 w-4" /></Link></Button> : null}
+              {invoice.balanceDue > 0 && invoice.status !== "VOID" && invoice.status !== "REFUNDED" ? (
+                invoice.visit ? (
+                  <Button type="button" onClick={() => setBillingOpen(true)}>
+                    Invoice / payment options
+                  </Button>
+                ) : (
+                  <Button type="button" asChild>
+                    <Link href={`/pay/${invoice.publicToken}`} target="_blank" rel="noopener noreferrer">
+                      Take full payment <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                )
+              ) : null}
               <Button type="button" variant="outline" onClick={onClose}>Close</Button>
             </div>
           </div>
         )}
       </div>
     </div>
+    {billingOpen && invoice?.visit ? (
+      <VisitBillingDialog
+        open
+        visitId={invoice.visit.id}
+        visitTitle={invoice.visit.title}
+        customerName={invoice.customer.name}
+        customerEmail={invoice.customer.email}
+        customerPhone={invoice.customer.phone}
+        onClose={() => setBillingOpen(false)}
+        onUpdated={() => {
+          setBillingOpen(false);
+          onClose();
+        }}
+      />
+    ) : null}
+    </>
   );
 }

@@ -7,9 +7,10 @@ import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
-import { ArrowLeft, CheckCircle2, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
+import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
 import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
@@ -33,6 +34,7 @@ import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 import { requestCurrentPosition } from "@/lib/maps/geolocation";
 import { useMaintenancePlansFeatures, useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
+import { canAccessInvoices } from "@/lib/invoices/permissions";
 
 type VisitDetailData = {
   id: string;
@@ -204,6 +206,7 @@ export function VisitDetail({ visitId }: Props) {
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const canDelete = !isFieldRole(session?.user?.role ?? "");
+  const canChooseBillingAmount = canAccessInvoices(session?.user?.role ?? "");
   const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
   const showProfit = canViewProfitMargins(session?.user?.role ?? "");
   const paymentStatus = searchParams.get("payment");
@@ -217,6 +220,7 @@ export function VisitDetail({ visitId }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [partsRunOpen, setPartsRunOpen] = useState(false);
+  const [billingOpen, setBillingOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [visitRes, timeRes, notesRes, attachmentsRes] = await Promise.all([
@@ -416,14 +420,25 @@ export function VisitDetail({ visitId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <CollectPaymentButton
-            visitId={visit.id}
-            total={paymentSummary.balanceDue ?? total}
-            disabled={paymentSummary.isPaid || total <= 0}
-            paid={paymentSummary.isPaid}
-            allowInvoice
-            onInvoiceSent={load}
-          />
+          {canChooseBillingAmount ? (
+            <Button
+              type="button"
+              disabled={paymentSummary.isPaid || total <= 0}
+              onClick={() => setBillingOpen(true)}
+            >
+              <CreditCard className="h-4 w-4" />
+              {paymentSummary.isPaid ? "Paid" : "Pay now"}
+            </Button>
+          ) : (
+            <CollectPaymentButton
+              visitId={visit.id}
+              total={paymentSummary.balanceDue ?? total}
+              disabled={paymentSummary.isPaid || total <= 0}
+              paid={paymentSummary.isPaid}
+              allowInvoice
+              onInvoiceSent={load}
+            />
+          )}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="h-4 w-4" />
@@ -432,6 +447,19 @@ export function VisitDetail({ visitId }: Props) {
           ) : null}
         </div>
       </div>
+
+      {billingOpen && visit.customer ? (
+        <VisitBillingDialog
+          open
+          visitId={visit.id}
+          visitTitle={visit.title}
+          customerName={visit.customer.name}
+          customerEmail={visit.customer.email}
+          customerPhone={visit.customer.phone}
+          onClose={() => setBillingOpen(false)}
+          onUpdated={load}
+        />
+      ) : null}
 
       <TimeTrackingBar
         status={visit.status}
