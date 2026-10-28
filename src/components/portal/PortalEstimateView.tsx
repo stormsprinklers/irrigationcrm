@@ -171,7 +171,10 @@ export function PortalEstimateView({
       setPageLoading(true);
       setError(null);
       try {
-        const estRes = await fetch(`/api/portal/estimates/${token}`);
+        const continueQuery = vslRefresh > 0 ? "?continueAfterVsl=1" : "";
+        const estRes = await fetch(`/api/portal/estimates/${token}${continueQuery}`, {
+          cache: "no-store",
+        });
         const estData = await estRes.json().catch(() => ({}));
         if (!estRes.ok) {
           if (!cancelled) {

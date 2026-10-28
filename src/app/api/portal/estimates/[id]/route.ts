@@ -52,8 +52,9 @@ async function loadEstimate(companyId: string, customerId: string, idOrToken: st
   });
 }
 
-export async function GET(_request: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const continueAfterVsl = request.nextUrl.searchParams.get("continueAfterVsl") === "1";
   const ctx = await requirePortalCustomer();
 
   if (ctx) {
@@ -62,12 +63,15 @@ export async function GET(_request: NextRequest, { params }: Params) {
     }
     const estimate = await loadEstimate(ctx.companyId, ctx.customerId, id);
     if (!estimate) return portalNotFoundResponse();
-    const vslGate = await createEstimateVslGate({
-      company: ctx.company,
-      customerId: ctx.customerId,
-      estimateId: estimate.id,
-      viewedAt: estimate.customer.estimateVslViewedAt,
-    });
+    const vslGate =
+      continueAfterVsl && estimate.customer.estimateVslViewedAt
+        ? null
+        : await createEstimateVslGate({
+            company: ctx.company,
+            customerId: ctx.customerId,
+            estimateId: estimate.id,
+            viewedAt: estimate.customer.estimateVslViewedAt,
+          });
     if (vslGate) {
       return NextResponse.json({
         vslGate,
@@ -84,7 +88,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   // The staff send dialog opens the branded customer view while the estimate
   // is still a draft. Keep that preview private to a signed-in company user.
-  const staff = await getSessionUser(_request);
+  const staff = await getSessionUser(request);
   if (staff) {
     const estimate = await findEstimateForStaffPreview(staff.companyId, id);
     if (estimate) {
@@ -101,12 +105,15 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const estimate = await findEstimateByPublicToken(id);
   if (!estimate) return portalNotFoundResponse();
 
-  const vslGate = await createEstimateVslGate({
-    company: estimate.company,
-    customerId: estimate.customerId,
-    estimateId: estimate.id,
-    viewedAt: estimate.customer.estimateVslViewedAt,
-  });
+  const vslGate =
+    continueAfterVsl && estimate.customer.estimateVslViewedAt
+      ? null
+      : await createEstimateVslGate({
+          company: estimate.company,
+          customerId: estimate.customerId,
+          estimateId: estimate.id,
+          viewedAt: estimate.customer.estimateVslViewedAt,
+        });
   if (vslGate) {
     return NextResponse.json({
       vslGate,
