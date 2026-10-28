@@ -13,6 +13,7 @@ import {
   findEstimateForStaffPreview,
   portalCompanyPayload,
 } from "@/lib/portal/public-estimate";
+import { createEstimateVslGate } from "@/lib/portal/estimate-vsl";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -25,6 +26,7 @@ async function loadEstimate(companyId: string, customerId: string, idOrToken: st
       status: { not: "DRAFT" },
     },
     include: {
+      customer: { select: { estimateVslViewedAt: true } },
       lineItems: {
         orderBy: { sortOrder: "asc" },
         include: { priceBookItem: { select: { type: true } } },
@@ -60,6 +62,19 @@ export async function GET(_request: NextRequest, { params }: Params) {
     }
     const estimate = await loadEstimate(ctx.companyId, ctx.customerId, id);
     if (!estimate) return portalNotFoundResponse();
+    const vslGate = createEstimateVslGate({
+      company: ctx.company,
+      customerId: ctx.customerId,
+      estimateId: estimate.id,
+      viewedAt: estimate.customer.estimateVslViewedAt,
+    });
+    if (vslGate) {
+      return NextResponse.json({
+        vslGate,
+        company: portalCompanyPayload(ctx.company),
+        authenticated: true,
+      });
+    }
     return NextResponse.json({
       estimate: serializePortalEstimate(estimate),
       company: portalCompanyPayload(ctx.company),
@@ -85,6 +100,20 @@ export async function GET(_request: NextRequest, { params }: Params) {
   // Unauthenticated: estimate link from SMS/email uses publicToken only.
   const estimate = await findEstimateByPublicToken(id);
   if (!estimate) return portalNotFoundResponse();
+
+  const vslGate = createEstimateVslGate({
+    company: estimate.company,
+    customerId: estimate.customerId,
+    estimateId: estimate.id,
+    viewedAt: estimate.customer.estimateVslViewedAt,
+  });
+  if (vslGate) {
+    return NextResponse.json({
+      vslGate,
+      company: portalCompanyPayload(estimate.company),
+      authenticated: false,
+    });
+  }
 
   return NextResponse.json({
     estimate: serializePortalEstimate(estimate),

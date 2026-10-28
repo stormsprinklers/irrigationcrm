@@ -63,7 +63,7 @@ const SETTINGS_KEYWORDS: Record<string, string> = {
   "/settings/price-book/labor-rates": "labor rates hourly technician cost pricing",
   "/settings/price-book/material-markups": "material markups parts margin cost pricing",
   "/settings/price-book/bulk-adjust": "bulk adjust prices pricing increase decrease",
-  "/settings/estimates": "estimates quotes proposals options expiration deposit",
+  "/settings/estimates": "estimates quotes proposals options expiration deposit vsl video sales letter intro",
   "/settings/checklists": "checklists visits jobs technician tasks",
   "/settings/invoices": "invoices billing payments terms due tax",
 };

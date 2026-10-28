@@ -4,6 +4,7 @@ import { portalFeatureEnabled } from "./permissions";
 import { activePublicCapability } from "@/lib/security/public-capability";
 
 const estimateLineItemsInclude = {
+  customer: { select: { estimateVslViewedAt: true } },
   lineItems: {
     orderBy: { sortOrder: "asc" as const },
     include: { priceBookItem: { select: { type: true } } },

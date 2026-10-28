@@ -34,6 +34,9 @@ export const portalCompanySelect = {
   maintenancePlansFeaturesEnabled: true,
   estimateWarrantyText: true,
   estimateFinancingUrl: true,
+  estimateVslEnabled: true,
+  estimateVslVideoUrl: true,
+  estimateVslWaitSeconds: true,
   deferredVisitDepositThreshold: true,
   termsOfServiceUrl: true,
   privacyPolicyUrl: true,
@@ -73,6 +76,9 @@ export type PortalCompany = {
   maintenancePlansFeaturesEnabled: boolean;
   estimateWarrantyText: string | null;
   estimateFinancingUrl: string | null;
+  estimateVslEnabled: boolean;
+  estimateVslVideoUrl: string | null;
+  estimateVslWaitSeconds: number;
   deferredVisitDepositThreshold: unknown;
   termsOfServiceUrl: string | null;
   privacyPolicyUrl: string | null;

@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { DepositType } from "@prisma/client";
 import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { normalizeFinancingUrl } from "@/lib/estimates/financing";
+import { normalizeEstimateVslWaitSeconds } from "@/lib/portal/estimate-vsl";
 import { prisma } from "@/lib/prisma";
 
 const estimateSettingsSelect = {
+  id: true,
   estimateExpiryDays: true,
   estimateDepositRequired: true,
   estimateDepositType: true,
@@ -14,6 +16,9 @@ const estimateSettingsSelect = {
   deferredVisitDepositPercent: true,
   estimateWarrantyText: true,
   estimateFinancingUrl: true,
+  estimateVslEnabled: true,
+  estimateVslVideoUrl: true,
+  estimateVslWaitSeconds: true,
   defaultInstallDurationDays: true,
   supplierEmail: true,
   supplierPartsAutoSend: true,
@@ -94,6 +99,16 @@ export async function PATCH(request: NextRequest) {
                 typeof body.estimateFinancingUrl === "string"
                   ? normalizeFinancingUrl(body.estimateFinancingUrl)
                   : null,
+            }
+          : {}),
+        ...(body.estimateVslEnabled !== undefined
+          ? { estimateVslEnabled: Boolean(body.estimateVslEnabled) }
+          : {}),
+        ...(body.estimateVslWaitSeconds !== undefined
+          ? {
+              estimateVslWaitSeconds: normalizeEstimateVslWaitSeconds(
+                body.estimateVslWaitSeconds
+              ),
             }
           : {}),
         ...(body.defaultInstallDurationDays !== undefined

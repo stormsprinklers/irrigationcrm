@@ -10,6 +10,7 @@ import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
+import { EstimateVslGate } from "./EstimateVslGate";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 import {
@@ -101,6 +102,13 @@ type CompanyBranding = {
   features: Record<string, boolean>;
 };
 
+type VslGate = {
+  videoUrl: string;
+  waitSeconds: number;
+  gateToken: string;
+  canSkipImmediately: boolean;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
@@ -141,6 +149,8 @@ export function PortalEstimateView({
   const [authenticated, setAuthenticated] = useState(false);
   const [staffPreview, setStaffPreview] = useState(false);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [vslGate, setVslGate] = useState<VslGate | null>(null);
+  const [vslRefresh, setVslRefresh] = useState(0);
   const [designSnapshot, setDesignSnapshot] = useState<Record<string, unknown> | null>(null);
   const [selectedTier, setSelectedTier] = useState<"STANDARD" | "PREMIUM">("STANDARD");
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -163,15 +173,32 @@ export function PortalEstimateView({
       try {
         const estRes = await fetch(`/api/portal/estimates/${token}`);
         const estData = await estRes.json().catch(() => ({}));
-        if (!estRes.ok || !estData.estimate) {
+        if (!estRes.ok) {
           if (!cancelled) {
             setError(estData.error ?? "This estimate link is invalid or no longer available.");
             setEstimate(null);
+            setVslGate(null);
             setCompany(null);
           }
           return;
         }
         if (cancelled) return;
+        if (estData.vslGate) {
+          setVslGate(estData.vslGate as VslGate);
+          setEstimate(null);
+          setCompany(estData.company ?? null);
+          setAuthenticated(Boolean(estData.authenticated));
+          setStaffPreview(false);
+          return;
+        }
+        if (!estData.estimate) {
+          setError("This estimate link is invalid or no longer available.");
+          setEstimate(null);
+          setVslGate(null);
+          setCompany(null);
+          return;
+        }
+        setVslGate(null);
         setEstimate((current) =>
           current?.status === "APPROVED" && estData.estimate.status === "SENT"
             ? current
@@ -218,7 +245,7 @@ export function PortalEstimateView({
     return () => {
       cancelled = true;
     };
-  }, [preview, token]);
+  }, [preview, token, vslRefresh]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -483,6 +510,19 @@ export function PortalEstimateView({
       <main className="mx-auto max-w-lg p-8">
         <p className="text-sm text-muted-foreground">Loading your estimate…</p>
       </main>
+    );
+  }
+
+  if (vslGate && company) {
+    return (
+      <EstimateVslGate
+        slug={slug}
+        token={token}
+        gate={vslGate}
+        company={company}
+        authenticated={authenticated}
+        onContinue={() => setVslRefresh((current) => current + 1)}
+      />
     );
   }
 

@@ -99,6 +99,22 @@ async function ensureVehicleNumberColumn() {
   console.log(`Ensured "Vehicle"."vehicleNumber" column and company unique index`);
 }
 
+async function ensureEstimateVslSettings() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "estimateVslEnabled" BOOLEAN NOT NULL DEFAULT false`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "estimateVslVideoUrl" TEXT`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "estimateVslWaitSeconds" INTEGER NOT NULL DEFAULT 30`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "estimateVslViewedAt" TIMESTAMP(3)`
+  );
+  console.log("Ensured estimate VSL settings and customer completion field");
+}
+
 const WEBSITE_FORMS_SYSTEM_KIND = "WEBSITE_FORMS";
 
 async function ensureWebsiteFormsSystemUser(companyId: string) {
@@ -903,6 +919,7 @@ async function main() {
   } catch (err) {
     console.warn("Estimate deposit threshold ensure skipped:", err);
   }
+  await ensureEstimateVslSettings();
 }
 
 main()

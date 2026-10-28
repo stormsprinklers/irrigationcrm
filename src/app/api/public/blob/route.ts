@@ -19,18 +19,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Blob storage is not configured" }, { status: 503 });
     }
 
+    const range = request.headers.get("range");
     const result = await get(pathname, {
       access: "private",
       token,
+      ...(range ? { headers: { Range: range } } : {}),
     });
 
     if (!result || result.statusCode !== 200 || !result.stream) {
       return new NextResponse("Not found", { status: 404 });
     }
 
+    const contentRange = result.headers.get("content-range");
     return new NextResponse(result.stream, {
+      status: contentRange ? 206 : 200,
       headers: {
         "Content-Type": contentTypeForPathname(pathname, result.blob.contentType),
+        ...(result.headers.get("content-length")
+          ? { "Content-Length": result.headers.get("content-length")! }
+          : {}),
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+        "Accept-Ranges": result.headers.get("accept-ranges") ?? "bytes",
         "Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
         "Cache-Control": "public, max-age=86400",
         "X-Content-Type-Options": "nosniff",

@@ -634,6 +634,12 @@ model Company {
   estimateWarrantyText                     String?              @db.Text
   /// Public financing application URL (soft-pull) sent from estimates.
   estimateFinancingUrl                     String?
+  /// Require first-time customers to view a sales video before revealing an estimate.
+  estimateVslEnabled                       Boolean              @default(false)
+  /// Private Blob URL for the customer-facing estimate sales video.
+  estimateVslVideoUrl                      String?
+  /// Seconds before the estimate reveal button unlocks (video completion unlocks sooner).
+  estimateVslWaitSeconds                   Int                  @default(30)
   defaultInstallDurationDays               Int                  @default(4)
   supplierEmail                            String?
   supplierPartsAutoSend                    Boolean              @default(false)
@@ -1587,6 +1593,8 @@ model Customer {
   pipelineFollowUpsPausedById    String?
   /// Latest manual resume; remaining automated steps count their delay from here.
   pipelineFollowUpsResumedAt     DateTime?
+  /// Once set, this customer may skip the estimate VSL on future and revised estimates.
+  estimateVslViewedAt            DateTime?
   createdAt                      DateTime                     @default(now())
   updatedAt                      DateTime                     @updatedAt
 

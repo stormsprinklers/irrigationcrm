@@ -19,7 +19,7 @@ export function blobPathnameFromUrl(url: string) {
 
 export function canAccessBlobPath(companyId: string, pathname: string) {
   const match = pathname.match(
-    /^(employees|visits|estimates|customers|leads|voice-clips|marketing|inbox|vehicles|company-email|company-brand|company-bimi|company-holiday|portal-offers|media|price-book|parts-info|storm-ai)\/([^/]+)\//
+    /^(employees|visits|estimates|estimate-vsl|customers|leads|voice-clips|marketing|inbox|vehicles|company-email|company-brand|company-bimi|company-holiday|portal-offers|media|price-book|parts-info|storm-ai)\/([^/]+)\//
   );
   if (match) return match[2] === companyId;
 
@@ -29,7 +29,7 @@ export function canAccessBlobPath(companyId: string, pathname: string) {
 
 /** Paths safe to expose without auth (email logos, marketing media, portal offers, present photos). */
 export function canPublicAccessBlobPath(pathname: string) {
-  return /^(company-email|company-brand|company-bimi|company-holiday|gbp\/local-posts|portal-offers|employees|media|price-book)\/[^/]+\//.test(
+  return /^(company-email|company-brand|company-bimi|company-holiday|estimate-vsl|gbp\/local-posts|portal-offers|employees|media|price-book)\/[^/]+\//.test(
     pathname
   );
 }
