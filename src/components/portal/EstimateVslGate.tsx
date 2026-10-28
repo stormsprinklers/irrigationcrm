@@ -94,18 +94,13 @@ export function EstimateVslGate({
           <h1 className="mt-2 text-2xl font-semibold text-storm-navy">
             Watch this short video from {company.name}
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {gate.canSkipImmediately
-              ? "You have already watched this video, so you can continue to your estimate right away."
-              : "You can pause, seek, or fast-forward. Your estimate unlocks when the video ends or the required viewing time has passed."}
-          </p>
         </div>
 
         <video
           src={gate.videoUrl}
           controls
           playsInline
-          preload="metadata"
+          preload="auto"
           onEnded={() => setVideoFinished(true)}
           className="aspect-video w-full rounded-xl border border-border bg-black shadow-sm"
         />

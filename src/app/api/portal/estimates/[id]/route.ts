@@ -62,7 +62,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     }
     const estimate = await loadEstimate(ctx.companyId, ctx.customerId, id);
     if (!estimate) return portalNotFoundResponse();
-    const vslGate = createEstimateVslGate({
+    const vslGate = await createEstimateVslGate({
       company: ctx.company,
       customerId: ctx.customerId,
       estimateId: estimate.id,
@@ -101,7 +101,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const estimate = await findEstimateByPublicToken(id);
   if (!estimate) return portalNotFoundResponse();
 
-  const vslGate = createEstimateVslGate({
+  const vslGate = await createEstimateVslGate({
     company: estimate.company,
     customerId: estimate.customerId,
     estimateId: estimate.id,

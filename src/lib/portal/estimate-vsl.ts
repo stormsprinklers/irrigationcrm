@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { getAuthSecret } from "@/lib/auth-secret";
-import { absolutePublicBlobUrl } from "@/lib/blob/urls";
+import { getBlobToken } from "@/lib/blob/storage";
+import {
+  absolutePublicBlobUrl,
+  blobPathnameFromUrl,
+  isBlobStorageUrl,
+} from "@/lib/blob/urls";
 
 const GATE_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_WAIT_SECONDS = 60 * 60;
@@ -85,17 +91,45 @@ export function decodeEstimateVslGateToken(token: string): GateTokenPayload | nu
   }
 }
 
-export function createEstimateVslGate(params: {
+async function estimateVslPlaybackUrl(storedVideoUrl: string) {
+  if (!isBlobStorageUrl(storedVideoUrl)) return storedVideoUrl;
+
+  const pathname = blobPathnameFromUrl(storedVideoUrl);
+  const token = getBlobToken();
+  if (!pathname || !token) return absolutePublicBlobUrl(storedVideoUrl);
+
+  try {
+    const validUntil = Date.now() + GATE_TOKEN_TTL_MS;
+    const signedToken = await issueSignedToken({
+      pathname,
+      operations: ["get"],
+      validUntil,
+      token,
+    });
+    const { presignedUrl } = await presignUrl(signedToken, {
+      access: "private",
+      operation: "get",
+      pathname,
+      validUntil,
+    });
+    return presignedUrl;
+  } catch (error) {
+    console.error("Could not create direct estimate VSL playback URL", error);
+    return absolutePublicBlobUrl(storedVideoUrl);
+  }
+}
+
+export async function createEstimateVslGate(params: {
   company: EstimateVslCompany;
   customerId: string;
   estimateId: string;
   viewedAt: Date | null;
-}): EstimateVslGate | null {
+}): Promise<EstimateVslGate | null> {
   const { company } = params;
   const storedVideoUrl = company.estimateVslVideoUrl?.trim();
   if (!company.estimateVslEnabled || !storedVideoUrl) return null;
 
-  const videoUrl = absolutePublicBlobUrl(storedVideoUrl);
+  const videoUrl = await estimateVslPlaybackUrl(storedVideoUrl);
   if (!videoUrl) return null;
   const waitSeconds = normalizeEstimateVslWaitSeconds(company.estimateVslWaitSeconds);
   const startedAt = Date.now();

@@ -14,11 +14,11 @@ test("estimate VSL wait defaults to 30 seconds and stays within limits", () => {
   assert.equal(normalizeEstimateVslWaitSeconds(10_000), 3_600);
 });
 
-test("first-time customers receive a timed signed gate", () => {
+test("first-time customers receive a timed signed gate", async () => {
   const previousSecret = process.env.AUTH_SECRET;
   process.env.AUTH_SECRET = "estimate-vsl-test-secret";
   try {
-    const gate = createEstimateVslGate({
+    const gate = await createEstimateVslGate({
       company: {
         id: "company",
         estimateVslEnabled: true,
@@ -49,11 +49,11 @@ test("first-time customers receive a timed signed gate", () => {
   }
 });
 
-test("returning customers may skip the VSL immediately", () => {
+test("returning customers may skip the VSL immediately", async () => {
   const previousSecret = process.env.AUTH_SECRET;
   process.env.AUTH_SECRET = "estimate-vsl-test-secret";
   try {
-    const gate = createEstimateVslGate({
+    const gate = await createEstimateVslGate({
       company: {
         id: "company",
         estimateVslEnabled: true,
@@ -72,9 +72,9 @@ test("returning customers may skip the VSL immediately", () => {
   }
 });
 
-test("disabled or unconfigured VSL does not gate estimates", () => {
+test("disabled or unconfigured VSL does not gate estimates", async () => {
   assert.equal(
-    createEstimateVslGate({
+    await createEstimateVslGate({
       company: {
         id: "company",
         estimateVslEnabled: false,
