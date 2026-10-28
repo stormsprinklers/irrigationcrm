@@ -44,6 +44,8 @@ import { buildGoogleMapsUrl, formatCustomerAddress } from "@/lib/customers/maps"
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
 import { InvoiceNotesDialog } from "@/components/invoices/InvoiceNotesDialog";
+import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
+import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { canAccessInvoices, canIssueRefunds } from "@/lib/invoices/permissions";
 import { EnrollPlanModal } from "@/components/maintenance-plans/EnrollPlanModal";
@@ -288,6 +290,8 @@ export function CustomerProfile({ customerId }: Props) {
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [voidInvoiceId, setVoidInvoiceId] = useState<string | null>(null);
   const [notesInvoiceId, setNotesInvoiceId] = useState<string | null>(null);
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null);
+  const [billingVisitId, setBillingVisitId] = useState<string | null>(null);
   const [invoiceActingId, setInvoiceActingId] = useState<string | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -1420,6 +1424,7 @@ export function CustomerProfile({ customerId }: Props) {
                       <TableHead>Date</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Payments</TableHead>
+                      {canManagePayments ? <TableHead className="text-right">Actions</TableHead> : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1478,6 +1483,19 @@ export function CustomerProfile({ customerId }: Props) {
                             "—"
                           )}
                         </TableCell>
+                        {canManagePayments ? (
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={!visit.total || visit.total <= 0}
+                              onClick={() => setBillingVisitId(visit.id)}
+                            >
+                              Invoice / payment
+                            </Button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                       );
                     })}
@@ -1593,7 +1611,15 @@ export function CustomerProfile({ customerId }: Props) {
                       const acting = invoiceActingId === invoice.id;
                       return (
                       <TableRow key={invoice.id}>
-                        <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                        <TableCell>
+                          <button
+                            type="button"
+                            className="font-medium text-primary hover:underline"
+                            onClick={() => setViewInvoiceId(invoice.id)}
+                          >
+                            {invoice.invoiceNumber}
+                          </button>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{invoice.status}</Badge>
                         </TableCell>
@@ -1616,6 +1642,9 @@ export function CustomerProfile({ customerId }: Props) {
                                 </Link>
                               </Button>
                             ) : null}
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setViewInvoiceId(invoice.id)}>
+                              View
+                            </Button>
                             {balanceDue > 0 && invoice.status !== "VOID" ? (
                               <Button
                                 type="button"
@@ -1941,6 +1970,21 @@ export function CustomerProfile({ customerId }: Props) {
         onClose={() => setEnrollOpen(false)}
         onEnrolled={load}
       />
+
+      <InvoiceDetailsDialog invoiceId={viewInvoiceId} onClose={() => setViewInvoiceId(null)} />
+
+      {billingVisitId && customer ? (
+        <VisitBillingDialog
+          open
+          visitId={billingVisitId}
+          visitTitle={visits.find((visit) => visit.id === billingVisitId)?.title ?? "scheduled job"}
+          customerName={customer.name}
+          customerEmail={customer.email}
+          customerPhone={customer.phone}
+          onClose={() => setBillingVisitId(null)}
+          onUpdated={load}
+        />
+      ) : null}
 
       {refundInvoiceId && customer ? (
         <IssueRefundDialog

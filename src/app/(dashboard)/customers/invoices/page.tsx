@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { DeleteInvoiceDialog } from "@/components/invoices/DeleteInvoiceDialog";
 import { InvoiceNotesDialog } from "@/components/invoices/InvoiceNotesDialog";
+import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { IssueRefundDialog } from "@/components/invoices/IssueRefundDialog";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -60,6 +61,7 @@ export default function CustomerInvoicesPage() {
   const [deleteInvoice, setDeleteInvoice] = useState<InvoiceRow | null>(null);
   const [voidInvoice, setVoidInvoice] = useState<InvoiceRow | null>(null);
   const [notesInvoice, setNotesInvoice] = useState<InvoiceRow | null>(null);
+  const [viewInvoiceId, setViewInvoiceId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -199,7 +201,15 @@ export default function CustomerInvoicesPage() {
             <TableBody>
               {invoices.map((invoice) => (
                 <TableRow key={invoice.id}>
-                  <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                  <TableCell>
+                    <button
+                      type="button"
+                      className="font-medium text-primary hover:underline"
+                      onClick={() => setViewInvoiceId(invoice.id)}
+                    >
+                      {invoice.invoiceNumber}
+                    </button>
+                  </TableCell>
                   <TableCell>
                     <CustomerNameWithBadge
                       name={invoice.customer.name}
@@ -214,6 +224,9 @@ export default function CustomerInvoicesPage() {
                   <TableCell>{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => setViewInvoiceId(invoice.id)}>
+                        View
+                      </Button>
                       {invoice.balanceDue > 0 &&
                       invoice.status !== "VOID" &&
                       invoice.status !== "REFUNDED" ? (
@@ -309,6 +322,7 @@ export default function CustomerInvoicesPage() {
           </Table>
         </div>
       )}
+      <InvoiceDetailsDialog invoiceId={viewInvoiceId} onClose={() => setViewInvoiceId(null)} />
       {refundInvoice ? (
         <IssueRefundDialog
           invoiceId={refundInvoice.id}

@@ -3,6 +3,7 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
 import { prisma } from "@/lib/prisma";
+import type { EstimateInvoiceAmountSelection } from "@/lib/invoices/estimate-invoice-amount";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +16,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "STRIPE_SECRET_KEY is not configured" }, { status: 503 });
     }
 
-    const synced = await syncVisitInvoice({ companyId: user.companyId, visitId });
+    let amountSelection: EstimateInvoiceAmountSelection | undefined;
+    if (body.amountType !== undefined || body.amountValue !== undefined) {
+      if (
+        (body.amountType !== "PERCENT" && body.amountType !== "FIXED") ||
+        typeof body.amountValue !== "number"
+      ) {
+        return badRequestResponse("Enter a valid payment amount");
+      }
+      amountSelection = { type: body.amountType, value: body.amountValue };
+    }
+
+    const synced = await syncVisitInvoice({
+      companyId: user.companyId,
+      visitId,
+      amountSelection,
+    });
     if (!synced.ok) {
       return NextResponse.json({ error: synced.error }, { status: synced.status });
     }

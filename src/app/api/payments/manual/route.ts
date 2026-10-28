@@ -3,6 +3,7 @@ import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/
 import { recordInvoicePayment } from "@/lib/invoices/record-payment";
 import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { prisma } from "@/lib/prisma";
+import type { EstimateInvoiceAmountSelection } from "@/lib/invoices/estimate-invoice-amount";
 
 const MANUAL_METHODS = new Set(["CASH", "CHECK"]);
 
@@ -22,13 +23,29 @@ export async function POST(request: NextRequest) {
       return badRequestResponse("method must be CASH or CHECK");
     }
 
-    const synced = await syncVisitInvoice({ companyId: user.companyId, visitId });
+    let amountSelection: EstimateInvoiceAmountSelection | undefined;
+    if (body.amountType !== undefined || body.amountValue !== undefined) {
+      if (
+        (body.amountType !== "PERCENT" && body.amountType !== "FIXED") ||
+        typeof body.amountValue !== "number"
+      ) {
+        return badRequestResponse("Enter a valid payment amount");
+      }
+      amountSelection = { type: body.amountType, value: body.amountValue };
+    }
+
+    const synced = await syncVisitInvoice({
+      companyId: user.companyId,
+      visitId,
+      amountSelection,
+    });
     if (!synced.ok) {
       return NextResponse.json({ error: synced.error }, { status: synced.status });
     }
 
-    const amount =
-      typeof body.amount === "number" && body.amount > 0 ? body.amount : synced.balanceDue;
+    const requestedAmount =
+      typeof body.amount === "number" && body.amount > 0 ? body.amount : null;
+    const amount = requestedAmount ? Math.min(requestedAmount, synced.balanceDue) : synced.balanceDue;
 
     if (amount <= 0) {
       return badRequestResponse("Nothing due on this visit");
