@@ -1627,6 +1627,7 @@ export async function processCampaignTriggers(companyId?: string) {
           companyId: campaign.companyId,
           status: "ACTIVE",
           doNotService: false,
+          givingProgramOnly: false,
           marketingEmailOptOut: campaign.channel === "EMAIL" ? false : undefined,
           marketingSmsOptOut: campaign.channel === "SMS" ? false : undefined,
           OR: [
@@ -1707,11 +1708,12 @@ export async function processCampaignTriggers(companyId?: string) {
         where: { id: customerId, companyId: campaign.companyId },
         select: {
           doNotService: true,
+          givingProgramOnly: true,
           marketingEmailOptOut: true,
           marketingSmsOptOut: true,
         },
       });
-      if (!customer || customer.doNotService) continue;
+      if (!customer || customer.doNotService || customer.givingProgramOnly) continue;
       if (campaign.channel === "EMAIL" && customer.marketingEmailOptOut === true) continue;
       if (campaign.channel === "SMS" && customer.marketingSmsOptOut === true) continue;
       await prisma.campaignEnrollment.create({

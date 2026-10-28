@@ -1572,6 +1572,8 @@ model Customer {
   appointmentReminderEmailOptOut Boolean                      @default(false)
   /// Opt out of appointment reminder SMS.
   appointmentReminderSmsOptOut   Boolean                      @default(false)
+  /// Contact exists only for a giving-program submission. Excluded from sales and marketing automation.
+  givingProgramOnly              Boolean                      @default(false)
   tags                           String[]                     @default([])
   /// Internal sales pipeline only. Never expose through customer-facing APIs or notifications.
   pipelineStage                  SalesPipelineStage?
@@ -1639,6 +1641,7 @@ model Customer {
   @@index([companyId, createdAt])
   @@index([companyId, pipelineStage])
   @@index([companyId, pipelineLeadAt])
+  @@index([companyId, givingProgramOnly])
 }
 
 /// Internal follow-up ledger. It does not create or modify advertising conversion events.

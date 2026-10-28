@@ -11,6 +11,7 @@ import { parseLeadServiceAddress } from "@/lib/leads/address-from-notes";
 import { leadPhoneKey } from "@/lib/leads/contact-status";
 import { storedLeadPhotos, type StoredLeadPhoto } from "@/lib/leads/photos";
 import { prisma } from "@/lib/prisma";
+import { isGivingLeadSource } from "@/lib/leads/categories";
 
 export type WebsiteLeadInboxItem = {
   id: string;
@@ -300,6 +301,7 @@ export async function listWebsiteLeadInboxItems(companyId: string): Promise<Webs
       if (item.source?.toLowerCase() === "careers") return false;
       const lead = item.leadId ? leadsById.get(item.leadId) : null;
       if (isCareersLeadRow(lead)) return false;
+      if (isGivingLeadSource(lead?.source ?? item.source)) return false;
       return true;
     })
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())

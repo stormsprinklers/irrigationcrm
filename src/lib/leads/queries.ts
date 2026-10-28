@@ -5,6 +5,8 @@ import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 import { addCustomerToPipelineFromLead } from "@/lib/customers/pipeline";
+import { GIVING_LEAD_SOURCES, isGivingLeadSource } from "@/lib/leads/categories";
+import { websiteFormDetailLines } from "@/lib/leads/form-details";
 
 export const leadInclude = {
   assignedUser: { select: { id: true, name: true, color: true } },
@@ -22,6 +24,7 @@ export function serializeLead(lead: LeadPayload) {
     source: lead.source,
     status: lead.status,
     notes: lead.notes,
+    formDetails: websiteFormDetailLines(lead.metadata, lead.source),
     assignedUser: lead.assignedUser,
     convertedCustomer: lead.convertedCustomer,
     attributionSource: lead.attributionSource,
@@ -42,7 +45,11 @@ export function serializeLead(lead: LeadPayload) {
   };
 }
 
-export async function listLeads(companyId: string, filters?: { search?: string; status?: LeadStatus }) {
+export async function listLeads(
+  companyId: string,
+  filters?: { search?: string; status?: LeadStatus; category?: "STANDARD" | "GIVING" }
+) {
+  const category = filters?.category ?? "STANDARD";
   const where: Prisma.LeadWhereInput = {
     companyId,
     // Careers applications live in Hiring, not Customers → Leads
@@ -52,9 +59,15 @@ export async function listLeads(companyId: string, filters?: { search?: string; 
           OR: [
             { source: { equals: "careers", mode: "insensitive" } },
             { externalId: { startsWith: "careers:" } },
+            ...(category === "STANDARD"
+              ? [{ source: { in: [...GIVING_LEAD_SOURCES], mode: "insensitive" as const } }]
+              : []),
           ],
         },
       },
+      ...(category === "GIVING"
+        ? [{ source: { in: [...GIVING_LEAD_SOURCES], mode: "insensitive" as const } }]
+        : []),
     ],
   };
   if (filters?.status) where.status = filters.status;
@@ -84,6 +97,7 @@ export async function ensureLeadHasContact(
     where: { id: leadId, companyId },
   });
   if (!lead) return null;
+  const givingProgramLead = isGivingLeadSource(lead.source);
   if (lead.convertedCustomerId) {
     if (options.markWon && lead.status !== LeadStatus.WON) {
       await prisma.lead.update({
@@ -91,8 +105,15 @@ export async function ensureLeadHasContact(
         data: { status: LeadStatus.WON },
       });
     }
-    const customer = await prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
+    let customer = await prisma.customer.findUnique({ where: { id: lead.convertedCustomerId } });
     if (customer) {
+      if (givingProgramLead) return customer;
+      if (customer.givingProgramOnly) {
+        customer = await prisma.customer.update({
+          where: { id: customer.id },
+          data: { givingProgramOnly: false, pipelineRemovedAt: null },
+        });
+      }
       await addCustomerToPipelineFromLead({
         companyId,
         customerId: customer.id,
@@ -132,6 +153,7 @@ export async function ensureLeadHasContact(
           data: {
             ...(!existing.phone && phone ? { phone } : {}),
             ...(!existing.email && email ? { email } : {}),
+            ...(!givingProgramLead ? { givingProgramOnly: false, pipelineRemovedAt: null } : {}),
           },
         })
       : await tx.customer.create({
@@ -145,6 +167,7 @@ export async function ensureLeadHasContact(
             city: serviceAddress.city,
             state: serviceAddress.state,
             zip: serviceAddress.zip,
+            givingProgramOnly: givingProgramLead,
           },
         });
     if (serviceAddress.address) {
@@ -182,6 +205,7 @@ export async function ensureLeadHasContact(
   });
 
   await copyLeadFirstTouchToCustomer(leadId, customer.id).catch(() => {});
+  if (givingProgramLead) return customer;
   await addCustomerToPipelineFromLead({
     companyId,
     customerId: customer.id,

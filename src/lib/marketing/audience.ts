@@ -13,6 +13,7 @@ export async function buildAudienceWhere(
     companyId,
     status: "ACTIVE",
     doNotService: false,
+    givingProgramOnly: false,
   };
 
   if (channel === "EMAIL") {

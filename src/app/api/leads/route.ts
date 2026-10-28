@@ -15,8 +15,9 @@ export async function GET(request: NextRequest) {
       statusParam && Object.values(LeadStatus).includes(statusParam as LeadStatus)
         ? (statusParam as LeadStatus)
         : undefined;
+    const category = searchParams.get("category") === "giving" ? "GIVING" as const : "STANDARD" as const;
 
-    const leads = await listLeads(user.companyId, { search, status });
+    const leads = await listLeads(user.companyId, { search, status, category });
     return NextResponse.json({ leads });
   } catch {
     return unauthorizedResponse();

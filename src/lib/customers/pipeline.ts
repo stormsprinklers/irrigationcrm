@@ -1,6 +1,7 @@
 import { LeadStatus, Prisma, SalesPipelineStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildPipelineIdentitySnapshot } from "@/lib/marketing/pipeline-conversion-identifiers";
+import { isGivingLeadSource } from "@/lib/leads/categories";
 
 const STAGE_RANK: Record<SalesPipelineStage, number> = {
   LEAD: 0,
@@ -120,9 +121,11 @@ export async function advanceCustomerPipeline(input: AdvanceInput) {
         pipelineLeadSource: true,
         pipelineFirstContactedAt: true,
         pipelineLeadId: true,
+        givingProgramOnly: true,
       },
     });
     if (!current) return false;
+    if (current.givingProgramOnly) return false;
 
     const occurredAt = input.occurredAt ?? new Date();
     const data = pipelineAdvanceData(current, input.stage, occurredAt, input);
@@ -180,6 +183,7 @@ export async function addCustomerToPipelineFromLead(params: {
     contactedAt: Date | null;
   };
 }) {
+  if (isGivingLeadSource(params.lead.source)) return false;
   return advanceCustomerPipeline({
     companyId: params.companyId,
     customerId: params.customerId,

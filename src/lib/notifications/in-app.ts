@@ -5,6 +5,7 @@ import {
 } from "@/lib/leads/form-labels";
 import { prisma } from "@/lib/prisma";
 import { sendStaffPush } from "@/lib/push/send";
+import { isGivingLeadSource } from "@/lib/leads/categories";
 
 const STAFF_ROLES: UserRole[] = [
   UserRole.ADMIN,
@@ -195,6 +196,7 @@ export async function notifyWebsiteFormInbox(params: {
   const body =
     params.body?.trim() ||
     `New website ${formLabel.toLowerCase()} submission`;
+  const givingHref = isGivingLeadSource(params.source) ? "/customers/giving" : null;
 
   if (params.emailId) {
     await notifyStaffInApp({
@@ -202,7 +204,7 @@ export async function notifyWebsiteFormInbox(params: {
       type: AppNotificationType.INBOX_LEAD,
       title,
       body,
-      href: `/inbox/leads?emailId=${params.emailId}`,
+      href: givingHref ?? `/inbox/leads?emailId=${params.emailId}`,
     });
     return;
   }
@@ -213,7 +215,7 @@ export async function notifyWebsiteFormInbox(params: {
       type: AppNotificationType.INBOX_LEAD,
       title,
       body,
-      href: `/inbox/leads?conversationId=${params.conversationId}`,
+      href: givingHref ?? `/inbox/leads?conversationId=${params.conversationId}`,
     });
     return;
   }
@@ -224,6 +226,6 @@ export async function notifyWebsiteFormInbox(params: {
     type: AppNotificationType.INBOX_LEAD,
     title,
     body,
-    href: "/customers/leads",
+    href: givingHref ?? "/customers/leads",
   });
 }

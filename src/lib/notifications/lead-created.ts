@@ -8,6 +8,7 @@ import {
 import { isEmailConfigured } from "@/lib/inbox/email";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { prisma } from "@/lib/prisma";
+import { isGivingLeadSource } from "@/lib/leads/categories";
 
 /**
  * Email the company support/contact address when a website lead arrives.
@@ -43,7 +44,8 @@ export async function notifyLeadCreated(companyId: string, lead: Lead) {
   }
 
   const crmUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const leadUrl = crmUrl ? `${crmUrl}/customers/leads` : "/customers/leads";
+  const leadPath = isGivingLeadSource(lead.source) ? "/customers/giving" : "/customers/leads";
+  const leadUrl = crmUrl ? `${crmUrl}${leadPath}` : leadPath;
   const formLabel = websiteLeadFormLabel(lead.source);
   const meta =
     lead.metadata && typeof lead.metadata === "object" && !Array.isArray(lead.metadata)

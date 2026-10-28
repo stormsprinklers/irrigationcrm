@@ -115,6 +115,50 @@ async function ensureEstimateVslSettings() {
   console.log("Ensured estimate VSL settings and customer completion field");
 }
 
+async function ensureGivingProgramSeparation() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "givingProgramOnly" BOOLEAN NOT NULL DEFAULT false`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "Customer_companyId_givingProgramOnly_idx" ON "Customer"("companyId", "givingProgramOnly")`
+  );
+
+  // Only classify historical Share the Cheer contacts that never became an
+  // operational customer. Existing customers who participated in the program
+  // keep their normal customer and marketing behavior.
+  const classified = await prisma.$executeRawUnsafe(`
+    UPDATE "Customer" AS c
+    SET "givingProgramOnly" = true,
+        "pipelineRemovedAt" = COALESCE(c."pipelineRemovedAt", CURRENT_TIMESTAMP)
+    WHERE lower(COALESCE(c."leadSource", '')) IN ('share-the-cheer-nomination', 'share-the-cheer-partner')
+      AND NOT EXISTS (
+        SELECT 1 FROM "Lead" l
+        WHERE l."convertedCustomerId" = c.id
+          AND lower(COALESCE(l.source, '')) NOT IN ('share-the-cheer-nomination', 'share-the-cheer-partner')
+      )
+      AND NOT EXISTS (SELECT 1 FROM "Visit" v WHERE v."customerId" = c.id)
+      AND NOT EXISTS (SELECT 1 FROM "Estimate" e WHERE e."customerId" = c.id)
+      AND NOT EXISTS (SELECT 1 FROM "Invoice" i WHERE i."customerId" = c.id)
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "CampaignEnrollment" ce
+    SET status = 'CANCELLED'
+    FROM "Customer" c
+    WHERE ce."customerId" = c.id
+      AND c."givingProgramOnly" = true
+      AND ce.status IN ('ACTIVE', 'PAUSED')
+  `);
+  await prisma.$executeRawUnsafe(`
+    DELETE FROM "CampaignRecipient" cr
+    USING "Customer" c
+    WHERE cr."customerId" = c.id
+      AND c."givingProgramOnly" = true
+      AND cr.status = 'pending'
+  `);
+  console.log(`Separated giving-program contacts (${classified} classified)`);
+}
+
 const WEBSITE_FORMS_SYSTEM_KIND = "WEBSITE_FORMS";
 
 async function ensureWebsiteFormsSystemUser(companyId: string) {
@@ -920,6 +964,7 @@ async function main() {
     console.warn("Estimate deposit threshold ensure skipped:", err);
   }
   await ensureEstimateVslSettings();
+  await ensureGivingProgramSeparation();
 }
 
 main()

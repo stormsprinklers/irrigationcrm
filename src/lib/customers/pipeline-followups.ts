@@ -126,7 +126,7 @@ export async function sendPipelineFollowUp(params: {
     include: { company: true },
   });
   if (!customer) throw new Error("Customer not found");
-  if (customer.pipelineRemovedAt || customer.pipelineDeclinedAt) throw new Error("Follow-ups are disabled for this customer");
+  if (customer.givingProgramOnly || customer.pipelineRemovedAt || customer.pipelineDeclinedAt) throw new Error("Follow-ups are disabled for this customer");
   if (params.automated && customer.pipelineFollowUpsPausedAt) throw new Error("Automatic reminders are paused");
   if (params.automated) {
     const settings = normalizePipelineFollowUpSettings(customer.company.pipelineFollowUpSettings);
@@ -358,6 +358,7 @@ export async function processDuePipelineFollowUps(limit = 75) {
         pipelineDeclinedAt: null,
         pipelineFollowUpsPausedAt: null,
         doNotService: false,
+        givingProgramOnly: false,
       },
       select: {
         id: true,

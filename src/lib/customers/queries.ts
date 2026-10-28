@@ -93,7 +93,7 @@ export function serializeProperty(property: {
 }
 
 function customerListWhere(companyId: string, filters: CustomerListFilters = {}) {
-  const where: Prisma.CustomerWhereInput = { companyId };
+  const where: Prisma.CustomerWhereInput = { companyId, givingProgramOnly: false };
   const and: Prisma.CustomerWhereInput[] = [];
 
   if (filters.search?.trim()) {
