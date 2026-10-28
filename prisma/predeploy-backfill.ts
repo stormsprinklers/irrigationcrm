@@ -136,7 +136,7 @@ async function ensureGivingProgramSeparation() {
         WHERE l."convertedCustomerId" = c.id
           AND lower(COALESCE(l.source, '')) NOT IN ('share-the-cheer-nomination', 'share-the-cheer-partner')
       )
-      AND NOT EXISTS (SELECT 1 FROM "Visit" v WHERE v."customerId" = c.id)
+      AND NOT EXISTS (SELECT 1 FROM "ScheduledJob" v WHERE v."customerId" = c.id)
       AND NOT EXISTS (SELECT 1 FROM "Estimate" e WHERE e."customerId" = c.id)
       AND NOT EXISTS (SELECT 1 FROM "Invoice" i WHERE i."customerId" = c.id)
   `);
