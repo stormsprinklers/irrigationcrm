@@ -39,11 +39,13 @@ export function EstimateVslGate({
   );
   const [videoFinished, setVideoFinished] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showWatchMessage, setShowWatchMessage] = useState(false);
 
   useEffect(() => {
     const deadline = Date.now() + gate.waitSeconds * 1000;
     setRemainingSeconds(gate.canSkipImmediately ? 0 : gate.waitSeconds);
     setVideoFinished(false);
+    setShowWatchMessage(false);
     if (gate.canSkipImmediately || gate.waitSeconds <= 0) return;
 
     const update = () => {
@@ -57,7 +59,10 @@ export function EstimateVslGate({
   const unlocked = videoFinished || remainingSeconds <= 0;
 
   async function continueToEstimate() {
-    if (!unlocked) return;
+    if (!unlocked) {
+      setShowWatchMessage(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const response = await fetch(`/api/portal/estimates/${token}/vsl-viewed`, {
@@ -100,6 +105,8 @@ export function EstimateVslGate({
           src={gate.videoUrl}
           controls
           playsInline
+          autoPlay
+          muted
           preload="auto"
           onEnded={() => setVideoFinished(true)}
           className="aspect-video w-full rounded-xl border border-border bg-black shadow-sm"
@@ -110,12 +117,19 @@ export function EstimateVslGate({
             type="button"
             size="lg"
             className="w-full max-w-sm"
-            disabled={!unlocked || submitting}
+            aria-disabled={!unlocked || submitting}
+            disabled={submitting}
             onClick={() => void continueToEstimate()}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             See My Estimate →
           </Button>
+          {showWatchMessage && !unlocked ? (
+            <p className="max-w-lg text-center text-sm font-medium text-amber-700">
+              This video gives important information about your estimate. Please watch it before
+              proceeding.
+            </p>
+          ) : null}
           {!unlocked ? (
             <p className="text-sm text-muted-foreground">
               Available in {remainingSeconds} second{remainingSeconds === 1 ? "" : "s"}
