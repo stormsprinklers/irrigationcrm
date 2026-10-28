@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { getBlobToken } from "@/lib/blob/storage";
+import { MAX_ESTIMATE_VSL_VIDEO_BYTES } from "@/lib/blob/estimate-vsl-upload";
 import { prisma } from "@/lib/prisma";
 
 const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
-const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         }
         return {
           allowedContentTypes: ALLOWED_VIDEO_TYPES,
-          maximumSizeInBytes: MAX_VIDEO_BYTES,
+          maximumSizeInBytes: MAX_ESTIMATE_VSL_VIDEO_BYTES,
           addRandomSuffix: false,
           tokenPayload: JSON.stringify({ companyId: user.companyId }),
         };

@@ -81,11 +81,6 @@ export default function SettingsEstimatesPage() {
       toast.error("Use an MP4, WebM, or MOV video file");
       return;
     }
-    if (file.size > 500 * 1024 * 1024) {
-      toast.error("Video must be 500 MB or smaller");
-      return;
-    }
-
     setUploadingVideo(true);
     setUploadProgress(0);
     try {
@@ -395,7 +390,8 @@ export default function SettingsEstimatesPage() {
               }}
             />
             <p className="text-xs text-muted-foreground">
-              MP4 is recommended for the best mobile compatibility. Maximum file size: 500 MB.
+              MP4 is recommended for the best mobile compatibility. Large videos upload in parts,
+              up to the 5 TB storage-provider limit.
             </p>
           </div>
         </section>
