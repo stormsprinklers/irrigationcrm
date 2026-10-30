@@ -45,6 +45,7 @@ export function SmsThreadList({
 }) {
   const [threads, setThreads] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
@@ -52,17 +53,35 @@ export function SmsThreadList({
     let cancelled = false;
     async function load() {
       setLoading(true);
-      const params = new URLSearchParams({
-        scope: scope === "customers" ? "external" : "internal",
-        folder,
-      });
-      if (search.trim()) params.set("search", search.trim());
-      const res = await fetch(`/api/inbox/sms/conversations?${params.toString()}`);
-      if (res.ok) {
-        const rows = await res.json();
-        if (!cancelled) setThreads(rows);
+      try {
+        const params = new URLSearchParams({
+          scope: scope === "customers" ? "external" : "internal",
+          folder,
+        });
+        if (search.trim()) params.set("search", search.trim());
+        const res = await fetch(`/api/inbox/sms/conversations?${params.toString()}`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          if (!cancelled) {
+            setLoadError(
+              typeof data?.error === "string"
+                ? data.error
+                : "Could not load conversations. Please try again."
+            );
+          }
+          return;
+        }
+        if (!cancelled) {
+          setThreads(Array.isArray(data) ? data : []);
+          setLoadError("");
+        }
+      } catch {
+        if (!cancelled) {
+          setLoadError("Could not load conversations. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
     }
     const initial = window.setTimeout(() => void load(), search.trim() ? 250 : 0);
     const interval = setInterval(load, 4000);
@@ -144,7 +163,11 @@ export function SmsThreadList({
         </Button>
       </div>
       <div className="min-h-0 flex-1">
-        {loading && !threads.length ? (
+        {loadError ? (
+          <div className="p-4 text-sm text-destructive" role="alert">
+            {loadError}
+          </div>
+        ) : loading && !threads.length ? (
           <div className="p-4 text-sm text-muted-foreground">Loading...</div>
         ) : !threads.length ? (
           <div className="p-4 text-sm text-muted-foreground">{emptyMessage}</div>

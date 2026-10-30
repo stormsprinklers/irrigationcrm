@@ -28,8 +28,12 @@ export async function GET(request: NextRequest) {
       countCustomers(user.companyId, filters),
     ]);
     return NextResponse.json({ customers, total, page, pageSize });
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("Customer list failed", error);
+    return NextResponse.json({ error: "Failed to load customers" }, { status: 500 });
   }
 }
 

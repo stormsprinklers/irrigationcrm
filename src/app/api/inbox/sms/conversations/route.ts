@@ -347,8 +347,15 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(rows);
-  } catch {
-    return unauthorizedResponse();
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    console.error("SMS conversation list failed", error);
+    return NextResponse.json(
+      { error: "Could not load SMS conversations" },
+      { status: 500 }
+    );
   }
 }
 

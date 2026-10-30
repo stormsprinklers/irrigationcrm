@@ -307,6 +307,69 @@ async function ensureMarketerRole() {
   await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'MARKETER'`);
 }
 
+/**
+ * Keep the generated Prisma client compatible with the database before any
+ * model query runs. Affiliate fields are selected implicitly by ordinary
+ * Customer/User queries, so a missing column or enum value breaks unrelated
+ * CRM screens such as Customers and the SMS inbox.
+ */
+async function ensureAffiliateSchema() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'AFFILIATE'`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "IntegrationType" ADD VALUE IF NOT EXISTS 'AFFILIATE'`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "IntegrationCredential" ADD COLUMN IF NOT EXISTS "ownerUserId" TEXT`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "affiliateUserId" TEXT`
+  );
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "AffiliateSignInToken" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "tokenHash" TEXT NOT NULL,
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "usedAt" TIMESTAMP(3),
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "AffiliateSignInToken_pkey" PRIMARY KEY ("id")
+    )
+  `);
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "AffiliateSignInToken_tokenHash_key" ON "AffiliateSignInToken"("tokenHash")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "AffiliateSignInToken_userId_idx" ON "AffiliateSignInToken"("userId")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "AffiliateSignInToken_expiresAt_idx" ON "AffiliateSignInToken"("expiresAt")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "IntegrationCredential_ownerUserId_type_idx" ON "IntegrationCredential"("ownerUserId", "type")`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "Customer_companyId_affiliateUserId_idx" ON "Customer"("companyId", "affiliateUserId")`
+  );
+
+  const foreignKeys = [
+    `ALTER TABLE "IntegrationCredential" ADD CONSTRAINT "IntegrationCredential_ownerUserId_fkey" FOREIGN KEY ("ownerUserId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    `ALTER TABLE "Customer" ADD CONSTRAINT "Customer_affiliateUserId_fkey" FOREIGN KEY ("affiliateUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`,
+    `ALTER TABLE "AffiliateSignInToken" ADD CONSTRAINT "AffiliateSignInToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+  ];
+  for (const statement of foreignKeys) {
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch (error) {
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) {
+        throw error;
+      }
+    }
+  }
+  console.log("Ensured affiliate roles, fields, indexes, and sign-in tokens");
+}
+
 async function ensureSalesPipeline() {
   await prisma.$executeRawUnsafe(`
     DO $$ BEGIN
@@ -914,6 +977,9 @@ async function ensurePipelineFollowUps() {
 }
 
 async function main() {
+  // This must stay first: generated Prisma model queries include affiliate
+  // fields even when the feature itself is not being used.
+  await ensureAffiliateSchema();
   await ensureMarketerRole();
   await ensureSalesPipeline();
   await ensureCustomerTrackingData();
