@@ -11,6 +11,32 @@ export type AssignmentAvailability = {
   warning: string | null;
 };
 
+export function classifyAssignmentAvailability(input: {
+  employeeName: string;
+  hasApprovedTimeOff: boolean;
+  offScheduleWarning?: string | null;
+  conflictingVisitTitle?: string | null;
+}): AssignmentAvailability {
+  if (input.hasApprovedTimeOff) {
+    return {
+      error: `${input.employeeName} has approved time off during this period`,
+      warning: null,
+    };
+  }
+
+  const warnings = [
+    input.offScheduleWarning,
+    input.conflictingVisitTitle
+      ? `Double-booking warning: ${input.employeeName} is already assigned to "${input.conflictingVisitTitle}" during this time. The visit was scheduled anyway.`
+      : null,
+  ].filter((warning): warning is string => Boolean(warning));
+
+  return {
+    error: null,
+    warning: warnings.length ? warnings.join(" ") : null,
+  };
+}
+
 const OFFICE_ROLES = new Set(["ADMIN", "MANAGER", "CSR"]);
 
 export function canManageTeamSchedule(role: string) {
@@ -178,10 +204,10 @@ export async function assertEmployeeAvailableForAssignment(
     },
   });
   if (approvedTimeOff) {
-    return {
-      error: `${employee.name} has approved time off during this period`,
-      warning: null,
-    };
+    return classifyAssignmentAvailability({
+      employeeName: employee.name,
+      hasApprovedTimeOff: true,
+    });
   }
 
   const schedule = await getEmployeeWorkSchedule(companyId, userId);
@@ -209,14 +235,12 @@ export async function assertEmployeeAvailableForAssignment(
     where: conflictWhere,
     select: { id: true, title: true },
   });
-  if (conflict) {
-    return {
-      error: `${employee.name} is already assigned to "${conflict.title}" during this time`,
-      warning: null,
-    };
-  }
-
-  return { error: null, warning: offMessage };
+  return classifyAssignmentAvailability({
+    employeeName: employee.name,
+    hasApprovedTimeOff: false,
+    offScheduleWarning: offMessage,
+    conflictingVisitTitle: conflict?.title,
+  });
 }
 
 export async function validateAssignmentUpdate(

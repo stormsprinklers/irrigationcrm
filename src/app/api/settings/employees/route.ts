@@ -8,6 +8,7 @@ import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { generateReviewNameAliases, REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
 import { prisma } from "@/lib/prisma";
+import { createAffiliateSignInLink } from "@/lib/affiliate/sign-in";
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,9 +37,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { firstName, lastName, name, email, phone, role, title, division, color, address, city, state, zip, birthDate, tags, serviceAreaIds, payType, hourlyRate, commissionPercent, annualSalary, websiteTeamSlug } = body;
+    const employeeRole = (role as UserRole) ?? UserRole.CSR;
 
     if (!email) return badRequestResponse("Email is required");
-    if (!phone || !String(phone).trim()) {
+    if (employeeRole !== UserRole.AFFILIATE && (!phone || !String(phone).trim())) {
       return badRequestResponse(
         "Mobile phone is required for SMS two-factor authentication",
       );
@@ -81,7 +83,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const employeeRole = (role as UserRole) ?? UserRole.CSR;
     const resolvedPay = resolveCreateEmployeePay(
       employeeRole,
       { payType, hourlyRate, commissionPercent },
@@ -111,7 +112,8 @@ export async function POST(request: NextRequest) {
         commissionPercent: resolvedPay.commissionPercent,
         annualSalary: annualSalary != null ? Number(annualSalary) : null,
         websiteTeamSlug: websiteTeamSlug ? String(websiteTeamSlug) : null,
-        onlineBookingEnabled: Boolean(body.onlineBookingEnabled),
+        onlineBookingEnabled:
+          employeeRole === UserRole.AFFILIATE ? false : Boolean(body.onlineBookingEnabled),
         passwordHash,
         serviceAreas: serviceAreaIds?.length
           ? {
@@ -122,7 +124,9 @@ export async function POST(request: NextRequest) {
       select: employeeSelectFields(),
     });
 
-    const lmsSync = await pushEmployeeToLms(employee);
+    const lmsSync = employee.role === UserRole.AFFILIATE
+      ? null
+      : await pushEmployeeToLms(employee);
 
     if (REVIEW_ALIAS_ROLES.includes(employee.role) && employee.firstName) {
       const aliases = await generateReviewNameAliases({
@@ -143,12 +147,30 @@ export async function POST(request: NextRequest) {
       select: employeeSelectFields(),
     });
 
+    let affiliateSignInUrl: string | undefined;
+    let affiliateSignInExpiresAt: Date | undefined;
+    if (employeeRole === UserRole.AFFILIATE) {
+      try {
+        const link = await createAffiliateSignInLink(employee.id, request.nextUrl.origin);
+        affiliateSignInUrl = link.url;
+        affiliateSignInExpiresAt = link.expiresAt;
+      } catch (error) {
+        console.error("Could not create initial affiliate sign-in link", {
+          employeeId: employee.id,
+          error,
+        });
+      }
+    }
+
     return NextResponse.json(
       {
         ...(refreshed ?? employee),
-        lmsSyncStatus: lmsSync.ok ? "synced" : "error",
-        lmsSyncError: lmsSync.ok ? undefined : lmsSync.error,
-        tempPassword: generatedPassword ? plainPassword : undefined,
+        lmsSyncStatus: lmsSync ? (lmsSync.ok ? "synced" : "error") : null,
+        lmsSyncError: lmsSync && !lmsSync.ok ? lmsSync.error : undefined,
+        tempPassword:
+          generatedPassword && employeeRole !== UserRole.AFFILIATE ? plainPassword : undefined,
+        affiliateSignInUrl,
+        affiliateSignInExpiresAt,
       },
       { status: 201 }
     );

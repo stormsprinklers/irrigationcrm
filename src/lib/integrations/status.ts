@@ -24,6 +24,7 @@ const TYPE_LABELS: Record<IntegrationType, string> = {
   LMS: "LMS",
   DESIGN: "Design",
   MAPS: "Maps",
+  AFFILIATE: "Affiliate",
 };
 
 const SPOKE_URL_ENV: Partial<Record<IntegrationType, string>> = {

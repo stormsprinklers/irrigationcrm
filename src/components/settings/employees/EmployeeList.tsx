@@ -114,6 +114,21 @@ export function EmployeeList() {
     await load();
   }
 
+  async function copyAffiliateSignInLink(id: string) {
+    const res = await fetch(`/api/settings/employees/${id}/affiliate-link`, {
+      method: "POST",
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.signInUrl) {
+      toast.error(data.error ?? "Could not create sign-in link");
+      return;
+    }
+    await navigator.clipboard.writeText(data.signInUrl);
+    toast.success("One-time affiliate sign-in link copied", {
+      description: "It expires in 7 days. Creating another link invalidates this one.",
+    });
+  }
+
   const filtered = employees.filter((e) => {
     const fullName = formatEmployeeName(e.firstName, e.lastName).toLowerCase();
     const query = search.toLowerCase();
@@ -182,6 +197,7 @@ export function EmployeeList() {
                   : splitFullName(employee.name);
                 const displayName = formatEmployeeName(nameParts.firstName, nameParts.lastName);
                 const badges = certBadgesByUser[employee.id] ?? [];
+                const showEmployeeLms = showLms && employee.role !== "AFFILIATE";
                 return (
                 <div key={employee.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -218,7 +234,7 @@ export function EmployeeList() {
                         <Badge variant="secondary">{ROLE_LABELS[employee.role]}</Badge>
                         {employee.title ? <Badge variant="outline">{employee.title}</Badge> : null}
                         {employee.division ? <Badge variant="outline">{employee.division}</Badge> : null}
-                        {showLms ? (
+                        {showEmployeeLms ? (
                           employee.lmsSyncStatus === "synced" ? (
                             <Badge variant="outline" className="text-green-700">
                               LMS synced
@@ -233,7 +249,7 @@ export function EmployeeList() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    {showLms ? (
+                    {showEmployeeLms ? (
                       <Button
                         variant="outline"
                         size="sm"
@@ -242,7 +258,7 @@ export function EmployeeList() {
                         Sync LMS
                       </Button>
                     ) : null}
-                    {showLms && process.env.NEXT_PUBLIC_LMS_URL ? (
+                    {showEmployeeLms && process.env.NEXT_PUBLIC_LMS_URL ? (
                       <Button variant="outline" size="sm" asChild>
                         <a
                           href={`${process.env.NEXT_PUBLIC_LMS_URL.replace(/\/$/, "")}/admin/users?email=${encodeURIComponent(employee.email)}`}
@@ -251,6 +267,15 @@ export function EmployeeList() {
                         >
                           LMS
                         </a>
+                      </Button>
+                    ) : null}
+                    {canManage && employee.role === "AFFILIATE" && employee.status === "ACTIVE" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void copyAffiliateSignInLink(employee.id)}
+                      >
+                        Copy sign-in link
                       </Button>
                     ) : null}
                     <Button variant="outline" size="sm" onClick={() => setEditing(employee)}>

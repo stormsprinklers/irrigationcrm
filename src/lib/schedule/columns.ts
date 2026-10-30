@@ -10,4 +10,4 @@ export function parseScheduleCrewColumnId(columnId: string): string | null {
 }
 
 /** Roles that never get their own Day-view schedule columns. */
-export const SCHEDULE_COLUMN_EXCLUDED_ROLES = ["CSR", "SOCIAL_MEDIA_MANAGER"] as const;
+export const SCHEDULE_COLUMN_EXCLUDED_ROLES = ["CSR", "SOCIAL_MEDIA_MANAGER", "AFFILIATE"] as const;

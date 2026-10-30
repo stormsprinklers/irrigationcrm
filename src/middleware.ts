@@ -3,11 +3,13 @@ import { getToken } from "next-auth/jwt";
 import { getAuthSecret } from "@/lib/auth-secret";
 import { PORTAL_SESSION_COOKIE } from "@/lib/portal/constants";
 import { enforceBrowserMutationOrigin } from "@/lib/security/csrf";
+import { affiliatePathAllowed } from "@/lib/affiliate/access";
 
 const publicPaths = [
   "/",
   "/privacy",
   "/login",
+  "/affiliate/sign-in",
   "/forgot-password",
   "/reset-password",
   "/pay",
@@ -116,6 +118,18 @@ export async function middleware(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return withNoIndex(NextResponse.redirect(loginUrl));
+  }
+
+  // Affiliates are intentionally isolated from the staff CRM. Enforce the
+  // boundary here as well as in route handlers so guessing a URL cannot expose
+  // phone records, settings, customer profiles, or other company data.
+  if (token.role === "AFFILIATE") {
+    if (pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
+      return withNoIndex(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+    }
+    if (!pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
+      return withNoIndex(NextResponse.redirect(new URL("/affiliate", request.url)));
+    }
   }
 
   return withNoIndex(NextResponse.next());

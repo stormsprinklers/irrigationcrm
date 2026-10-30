@@ -655,6 +655,7 @@ export function HolidayLightingQuoter({
     }
     const number = snapshot.length + 1;
     const id = crypto.randomUUID();
+    const sourceOption = snapshot.find((option) => option.id === activeOptionId);
     const baseSelections = copyCurrent
       ? { ...selections, designOptions: undefined }
       : holidaySelectionsFromCatalog(catalog);
@@ -677,7 +678,9 @@ export function HolidayLightingQuoter({
     const nextOption: HolidayQuoteDesignOption = {
       id,
       label: `Option ${number}`,
-      previewImageUrl: undefined,
+      // A copied option starts with the same preview. It is cleared later only
+      // when the copied option's visual settings actually change.
+      previewImageUrl: copyCurrent ? sourceOption?.previewImageUrl : undefined,
       measurements: baseMeasurements,
       selections: {
         defaultLightStyleKey: normalized.defaultLightStyleKey,
@@ -1086,7 +1089,7 @@ export function HolidayLightingQuoter({
     }));
   }
 
-  async function runVisualize(optionId?: string) {
+  async function runVisualize(optionId?: string, generateAll = false) {
     if (!paintRef.current?.hasPaint()) {
       toast.error("Paint the areas where lights should go");
       return;
@@ -1101,9 +1104,10 @@ export function HolidayLightingQuoter({
     try {
       const id = await ensureQuote();
       const allOptions = currentOptions();
-      const optionsToRender = optionId
-        ? allOptions.filter((option) => option.id === optionId)
-        : allOptions;
+      const targetOptionId = optionId ?? activeOptionId;
+      const optionsToRender = generateAll
+        ? allOptions
+        : allOptions.filter((option) => option.id === targetOptionId);
       if (!optionsToRender.length) throw new Error("This option is no longer available");
       setVisualizingOptionIds(optionsToRender.map((option) => option.id));
       visualizationTotalRef.current = optionsToRender.length;
@@ -1538,7 +1542,7 @@ export function HolidayLightingQuoter({
                 <div>
                   <p className="font-medium">Copy current option</p>
                   <p className="text-xs text-muted-foreground">
-                    Duplicate the roofline, selections, trees, bushes, and pricing.
+                    Duplicate the roofline, selections, trees, bushes, pricing, and preview image.
                   </p>
                 </div>
               </DropdownMenuItem>
@@ -2089,7 +2093,7 @@ export function HolidayLightingQuoter({
         <section className="space-y-3 rounded-lg border border-border bg-white p-4">
           <h3 className="text-sm font-semibold">AI lighting preview</h3>
           <p className="text-xs text-muted-foreground">
-            Paint where lights should go once. We&apos;ll generate a distinct night preview for every option using that option&apos;s bulb type, colors, and pattern. Permanent lights are rendered as sleek, low-profile architectural LEDs.
+            Paint where lights should go once. Generate the active option first, then create additional previews only when you need them. Copied options keep the source image until their visual design changes.
           </p>
           <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
           <input
@@ -2106,19 +2110,30 @@ export function HolidayLightingQuoter({
             }}
           />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button type="button" disabled={visualizing} onClick={() => void runVisualize()}>
+            <Button type="button" disabled={visualizing} onClick={() => void runVisualize(activeOptionId)}>
               {visualizing ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating previews…
+                  Generating preview…
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  {visualizingPhase === "completed" || visualizingPhase === "partial" ? "Regenerate" : "Generate"} previews for {renderedDesignOptions.length === 1 ? "this option" : `all ${renderedDesignOptions.length} options`}
+                  {visualizingPhase === "completed" || visualizingPhase === "partial" ? "Regenerate" : "Generate"} active option
                 </>
               )}
             </Button>
+            {renderedDesignOptions.length > 1 ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={visualizing}
+                onClick={() => void runVisualize(undefined, true)}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate all {renderedDesignOptions.length} options
+              </Button>
+            ) : null}
             <PreviewGenerationStatus
               phase={visualizingPhase}
               progress={visualizingProgress}

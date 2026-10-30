@@ -9,6 +9,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   SALES: "Sales",
   MARKETER: "Marketer",
   SOCIAL_MEDIA_MANAGER: "Social Media Manager",
+  AFFILIATE: "Affiliate",
 };
 
 export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
@@ -20,6 +21,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   SALES: "Manage leads, estimates, and customer sales pipeline",
   MARKETER: "View marketing performance and all reports, including calls, leads, LTV, and estimates",
   SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
+  AFFILIATE: "Import attributed customers and view only their own affiliate pipeline and revenue",
 };
 
 export function isMarketerRole(role: string | null | undefined) {

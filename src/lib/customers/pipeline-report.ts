@@ -4,6 +4,7 @@ import { pipelineSpeedSeconds } from "@/lib/customers/pipeline";
 
 export type PipelineSpeedFilter = "UNDER_5" | "FIVE_TO_30" | "OVER_30";
 export type PipelineFilters = { search?: string; city?: string; zip?: string; source?: string; createdFrom?: Date; createdTo?: Date; speed?: PipelineSpeedFilter };
+export type PipelineScope = { affiliateUserId?: string };
 export type PipelineFollowUpRow = { id: string; stage: string; sequence: number; method: string; status: string; automated: boolean; completedAt: string | null; smsSentAt: string | null; emailSentAt: string | null };
 export type PipelineRow = {
   id: string; name: string; phone: string | null; email: string | null; city: string | null; zip: string | null; createdAt: Date;
@@ -15,8 +16,9 @@ export type PipelineRow = {
 };
 type MetricsRow = { leadCount: bigint; qualifiedCount: bigint; convertedCount: bigint; soldCount: bigint; averageSpeedSeconds: number | null; qualifiedTotal: number | null; convertedTotal: number | null; soldTotal: number | null };
 
-function pipelineWhere(companyId: string, filters: PipelineFilters) {
+function pipelineWhere(companyId: string, filters: PipelineFilters, scope: PipelineScope = {}) {
   const conditions: Prisma.Sql[] = [Prisma.sql`c."companyId" = ${companyId}`, Prisma.sql`c."givingProgramOnly" = false`, Prisma.sql`c."pipelineLeadAt" IS NOT NULL`, Prisma.sql`c."pipelineRemovedAt" IS NULL`];
+  if (scope.affiliateUserId) conditions.push(Prisma.sql`c."affiliateUserId" = ${scope.affiliateUserId}`);
   if (filters.search?.trim()) conditions.push(Prisma.sql`c.name ILIKE ${`%${filters.search.trim()}%`}`);
   if (filters.city?.trim()) { const value = `%${filters.city.trim()}%`; conditions.push(Prisma.sql`(c.city ILIKE ${value} OR EXISTS (SELECT 1 FROM "CustomerProperty" p WHERE p."customerId" = c.id AND p.city ILIKE ${value}))`); }
   if (filters.zip?.trim()) { const value = `%${filters.zip.trim()}%`; conditions.push(Prisma.sql`(c.zip ILIKE ${value} OR EXISTS (SELECT 1 FROM "CustomerProperty" p WHERE p."customerId" = c.id AND p.zip ILIKE ${value}))`); }
@@ -65,20 +67,23 @@ const PIPELINE_SELECT = Prisma.sql`
   FROM "Customer" c LEFT JOIN LATERAL (SELECT p.city, p.zip FROM "CustomerProperty" p WHERE p."customerId" = c.id ORDER BY p."isPrimary" DESC, p."createdAt" ASC LIMIT 1) primary_property ON true
 `;
 
-export async function querySalesPipeline(companyId: string, filters: PipelineFilters, options: { skip: number; take: number }) {
-  const where = pipelineWhere(companyId, filters);
+export async function querySalesPipeline(companyId: string, filters: PipelineFilters, options: { skip: number; take: number }, scope: PipelineScope = {}) {
+  const where = pipelineWhere(companyId, filters, scope);
+  const sourceScope = scope.affiliateUserId
+    ? Prisma.sql`AND c."affiliateUserId" = ${scope.affiliateUserId}`
+    : Prisma.empty;
   const [rows, metricsRows, sourceRows] = await Promise.all([
     prisma.$queryRaw<PipelineRow[]>(Prisma.sql`${PIPELINE_SELECT} WHERE ${where} ORDER BY c."pipelineLeadAt" DESC, c.id ASC LIMIT ${options.take} OFFSET ${options.skip}`),
     prisma.$queryRaw<MetricsRow[]>(Prisma.sql`SELECT COUNT(*) AS "leadCount", COUNT(*) FILTER (WHERE c."pipelineQualifiedAt" IS NOT NULL) AS "qualifiedCount", COUNT(*) FILTER (WHERE c."pipelineConvertedAt" IS NOT NULL) AS "convertedCount", COUNT(*) FILTER (WHERE c."pipelineSoldAt" IS NOT NULL) AS "soldCount", AVG(EXTRACT(EPOCH FROM (c."pipelineFirstContactedAt" - c."pipelineLeadAt"))) FILTER (WHERE c."pipelineFirstContactedAt" >= c."pipelineLeadAt") AS "averageSpeedSeconds", SUM(${QUALIFIED_VALUE}) FILTER (WHERE c."pipelineQualifiedAt" IS NOT NULL) AS "qualifiedTotal", SUM(${CONVERTED_VALUE}) FILTER (WHERE c."pipelineConvertedAt" IS NOT NULL) AS "convertedTotal", SUM(${SOLD_VALUE}) FILTER (WHERE c."pipelineSoldAt" IS NOT NULL) AS "soldTotal" FROM "Customer" c WHERE ${where}`),
-    prisma.$queryRaw<Array<{ source: string }>>(Prisma.sql`SELECT DISTINCT COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel", 'Unknown source') AS source FROM "Customer" c WHERE c."companyId" = ${companyId} AND c."givingProgramOnly" = false AND c."pipelineLeadAt" IS NOT NULL AND c."pipelineRemovedAt" IS NULL ORDER BY source`),
+    prisma.$queryRaw<Array<{ source: string }>>(Prisma.sql`SELECT DISTINCT COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel", 'Unknown source') AS source FROM "Customer" c WHERE c."companyId" = ${companyId} AND c."givingProgramOnly" = false AND c."pipelineLeadAt" IS NOT NULL AND c."pipelineRemovedAt" IS NULL ${sourceScope} ORDER BY source`),
   ]);
   const raw = metricsRows[0];
   const metrics = { leadCount: Number(raw?.leadCount ?? 0), qualifiedCount: Number(raw?.qualifiedCount ?? 0), convertedCount: Number(raw?.convertedCount ?? 0), soldCount: Number(raw?.soldCount ?? 0), averageSpeedSeconds: raw?.averageSpeedSeconds == null ? null : Number(raw.averageSpeedSeconds), qualifiedTotal: Number(raw?.qualifiedTotal ?? 0), convertedTotal: Number(raw?.convertedTotal ?? 0), soldTotal: Number(raw?.soldTotal ?? 0) };
   return { rows: rows.map((row) => ({ ...row, speedSeconds: pipelineSpeedSeconds(row) })), total: metrics.leadCount, metrics, leadSources: sourceRows.map((row) => row.source) };
 }
 
-export async function exportSalesPipeline(companyId: string, filters: PipelineFilters) {
-  const where = pipelineWhere(companyId, filters);
+export async function exportSalesPipeline(companyId: string, filters: PipelineFilters, scope: PipelineScope = {}) {
+  const where = pipelineWhere(companyId, filters, scope);
   const rows = await prisma.$queryRaw<PipelineRow[]>(Prisma.sql`${PIPELINE_SELECT} WHERE ${where} ORDER BY c."pipelineLeadAt" DESC, c.id ASC`);
   return rows.map((row) => ({ ...row, speedSeconds: pipelineSpeedSeconds(row) }));
 }

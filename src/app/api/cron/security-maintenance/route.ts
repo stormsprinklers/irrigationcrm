@@ -17,9 +17,10 @@ export async function GET(request: Request) {
     now.getTime() - auditRetentionDays() * 24 * 60 * 60 * 1000
   );
 
-  const [oauth, webhooks, rateLimits, audit] = await prisma.$transaction([
+  const [oauth, webhooks, affiliateLinks, rateLimits, audit] = await prisma.$transaction([
     prisma.oAuthStateNonce.deleteMany({ where: { expiresAt: { lt: now } } }),
     prisma.webhookEventReceipt.deleteMany({ where: { expiresAt: { lt: now } } }),
+    prisma.affiliateSignInToken.deleteMany({ where: { expiresAt: { lt: now } } }),
     prisma.securityRateLimitBucket.deleteMany({ where: { updatedAt: { lt: staleRateLimit } } }),
     prisma.securityAuditEvent.deleteMany({ where: { createdAt: { lt: staleAudit } } }),
   ]);
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
     removed: {
       oauthStates: oauth.count,
       webhookReceipts: webhooks.count,
+      affiliateSignInLinks: affiliateLinks.count,
       rateLimitBuckets: rateLimits.count,
       auditEvents: audit.count,
     },

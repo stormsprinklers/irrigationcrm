@@ -170,6 +170,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           });
         }
       }
+
+      if (existing.role === UserRole.AFFILIATE && nextRole !== UserRole.AFFILIATE) {
+        await tx.integrationCredential.updateMany({
+          where: { ownerUserId: id, type: "AFFILIATE", enabled: true },
+          data: { enabled: false },
+        });
+      }
     });
 
     const employee = await prisma.user.findUnique({
@@ -177,7 +184,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       select: employeeSelectFields(),
     });
 
-    const lmsSync = employee ? await pushEmployeeToLms(employee) : null;
+    const lmsSync = employee && employee.role !== UserRole.AFFILIATE
+      ? await pushEmployeeToLms(employee)
+      : null;
 
     return NextResponse.json({
       ...employee,

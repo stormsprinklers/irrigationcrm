@@ -16,6 +16,7 @@ enum UserRole {
   SALES
   MARKETER
   SOCIAL_MEDIA_MANAGER
+  AFFILIATE
 }
 
 enum CustomerStatus {
@@ -1076,6 +1077,8 @@ model User {
   additionalVisitAssignments VisitAssignee[]
   createdVisits              Visit[]                    @relation("CreatedVisits")
   assignedLeads              Lead[]                     @relation("AssignedLeads")
+  affiliateCustomers         Customer[]                 @relation("AffiliateCustomers")
+  affiliateCredentials       IntegrationCredential[]    @relation("AffiliateIntegrationOwner")
   mobileSessions             MobileSession[]
   mobilePushDevices          MobilePushDevice[]
   fieldDeviceLocations       FieldDeviceLocation[]
@@ -1129,6 +1132,7 @@ model User {
   resolvedVehicleIssues      VehicleIssue[]             @relation("VehicleIssueResolver")
   authMfaChallenges          AuthMfaChallenge[]
   passwordResetTokens        PasswordResetToken[]
+  affiliateSignInTokens      AffiliateSignInToken[]
   expenseCard                ExpenseCard?
   createdExpenseCards        ExpenseCard[]              @relation("ExpenseCardCreator")
   accountLinksFrom           UserAccountLink[]          @relation("AccountLinkFrom")
@@ -1466,6 +1470,21 @@ model PasswordResetToken {
   @@index([expiresAt])
 }
 
+/// One-time, hash-only magic links used to sign affiliates into their restricted portal.
+model AffiliateSignInToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 /// Shared fixed-window rate-limit state for authentication and other abuse-sensitive flows.
 /// Keys are one-way hashes; raw email addresses, IP addresses, and tokens are never stored.
 model SecurityRateLimitBucket {
@@ -1542,6 +1561,8 @@ model Customer {
   state                          String?
   zip                            String?
   leadSource                     String?
+  /// Affiliate account that originally imported this customer. Affiliates may only view their own attributed customers.
+  affiliateUserId                String?
   /// Normalized first-touch marketing channel (never overwritten once set).
   attributionChannel             String?
   attributionSource              String?
@@ -1601,6 +1622,7 @@ model Customer {
   updatedAt                      DateTime                     @updatedAt
 
   company                       Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  affiliateUser                 User?                       @relation("AffiliateCustomers", fields: [affiliateUserId], references: [id], onDelete: SetNull)
   referredBy                    Customer?                   @relation("CustomerReferrals", fields: [referredByCustomerId], references: [id], onDelete: SetNull)
   referredCustomers             Customer[]                  @relation("CustomerReferrals")
   referralMember                ReferralMember?
@@ -1642,6 +1664,7 @@ model Customer {
   @@index([companyId, pipelineStage])
   @@index([companyId, pipelineLeadAt])
   @@index([companyId, givingProgramOnly])
+  @@index([companyId, affiliateUserId])
 }
 
 /// Internal follow-up ledger. It does not create or modify advertising conversion events.
@@ -4305,6 +4328,7 @@ enum IntegrationType {
   LMS
   DESIGN
   MAPS
+  AFFILIATE
 }
 
 enum IrrigationMapStatus {
@@ -4415,6 +4439,7 @@ model WebPushSubscription {
 model IntegrationCredential {
   id         String          @id @default(cuid())
   companyId  String
+  ownerUserId String?
   type       IntegrationType
   label      String
   keyHash    String
@@ -4425,8 +4450,10 @@ model IntegrationCredential {
   updatedAt  DateTime        @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  ownerUser User? @relation("AffiliateIntegrationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@index([companyId, type])
+  @@index([ownerUserId, type])
 }
 
 model IntegrationAuditLog {

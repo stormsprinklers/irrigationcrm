@@ -2,12 +2,17 @@ import type { IntegrationType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extractIntegrationKey, hashIntegrationKey } from "./keys";
-import { checkIntegrationRateLimit } from "./rate-limit";
+import {
+  AFFILIATE_DAILY_REQUEST_LIMIT,
+  checkAffiliateDailyRateLimit,
+  checkIntegrationRateLimit,
+} from "./rate-limit";
 
 export type IntegrationContext = {
   companyId: string;
   credentialId: string;
   type: IntegrationType;
+  ownerUserId: string | null;
 };
 
 export async function authenticateIntegration(
@@ -22,6 +27,7 @@ export async function authenticateIntegration(
   const keyHash = hashIntegrationKey(rawKey);
   const credential = await prisma.integrationCredential.findFirst({
     where: { keyHash, enabled: true },
+    include: { company: { select: { timezone: true } } },
   });
 
   if (!credential) {
@@ -39,6 +45,28 @@ export async function authenticateIntegration(
         { error: "Rate limit exceeded" },
         { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
       );
+    }
+
+    if (credential.type === "AFFILIATE" && credential.ownerUserId) {
+      const dailyLimit = await checkAffiliateDailyRateLimit(
+        credential.ownerUserId,
+        credential.company.timezone
+      );
+      if (!dailyLimit.allowed) {
+        return NextResponse.json(
+          {
+            error: `Daily affiliate API limit of ${AFFILIATE_DAILY_REQUEST_LIMIT} calls reached`,
+            code: "AFFILIATE_DAILY_LIMIT_REACHED",
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(dailyLimit.retryAfterSeconds),
+              "X-RateLimit-Limit": String(AFFILIATE_DAILY_REQUEST_LIMIT),
+            },
+          }
+        );
+      }
     }
   } catch (error) {
     console.error("[security] integration rate-limit storage unavailable", {
@@ -62,6 +90,7 @@ export async function authenticateIntegration(
     companyId: credential.companyId,
     credentialId: credential.id,
     type: credential.type,
+    ownerUserId: credential.ownerUserId,
   };
 }
 

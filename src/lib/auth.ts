@@ -11,6 +11,7 @@ import {
 } from "@/lib/staff-auth";
 import { parseAuthSessionAction } from "@/lib/auth-session-action";
 import { writeSecurityAuditEvent } from "@/lib/security/audit";
+import { consumeAffiliateSignInToken } from "@/lib/affiliate/sign-in";
 
 declare module "next-auth" {
   interface Session {
@@ -56,11 +57,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
         companyId: { label: "Company", type: "text" },
         userId: { label: "User", type: "text" },
+        affiliateToken: { label: "Affiliate sign-in token", type: "text" },
       },
       async authorize(credentials) {
         if (!process.env.DATABASE_URL) return null;
 
         try {
+          const affiliateToken = credentials?.affiliateToken
+            ? String(credentials.affiliateToken)
+            : "";
+          if (affiliateToken) {
+            const user = await consumeAffiliateSignInToken(affiliateToken);
+            if (!user) return null;
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              companyId: user.companyId,
+              role: user.role,
+            };
+          }
+
           const email = credentials?.email ? String(credentials.email).trim().toLowerCase() : "";
           const password = credentials?.password ? String(credentials.password) : "";
           const companyId = credentials?.companyId

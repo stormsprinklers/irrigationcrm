@@ -67,6 +67,7 @@ const ROLES = [
   "SALES",
   "MARKETER",
   "SOCIAL_MEDIA_MANAGER",
+  "AFFILIATE",
 ] as const;
 const PAY_TYPES = ["", "HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
 
@@ -390,7 +391,16 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         toast.error(data.error ?? "Save failed");
         return;
       }
-      if (data.tempPassword) {
+      if (data.affiliateSignInUrl) {
+        toast.message("Affiliate created. Copy their one-time sign-in link.", {
+          description: "The link expires in 7 days and is shown only now.",
+          duration: 30_000,
+          action: {
+            label: "Copy",
+            onClick: () => void navigator.clipboard.writeText(data.affiliateSignInUrl),
+          },
+        });
+      } else if (data.tempPassword) {
         toast.message("Employee created. Copy the temporary login password.", {
           description: data.tempPassword,
           duration: 30_000,
