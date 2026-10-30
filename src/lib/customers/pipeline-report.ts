@@ -31,7 +31,27 @@ function pipelineWhere(companyId: string, filters: PipelineFilters) {
 }
 
 const QUALIFIED_VALUE = Prisma.sql`(SELECT COALESCE((SELECT MIN(eo.total) FROM "EstimateOption" eo WHERE eo."estimateId" = e.id AND eo."declinedAt" IS NULL), e.total) FROM "Estimate" e WHERE e."customerId" = c.id AND e."sentAt" IS NOT NULL ORDER BY e."sentAt" DESC LIMIT 1)`;
-const CONVERTED_VALUE = Prisma.sql`COALESCE((SELECT MAX(i.total) FROM "Invoice" i WHERE i."customerId" = c.id), (SELECT MAX(pce.value) FROM "PipelineConversionEvent" pce WHERE pce."customerId" = c.id AND pce.stage = 'CONVERTED'))`;
+// The conversion event stores the full approved estimate/invoice value. Prefer that
+// snapshot over invoices because an estimate approval can create a 50% deposit
+// invoice, whose total is only the amount collected up front. Historical pipeline
+// rows predate conversion events, so fall back to their first approved estimate
+// before considering an invoice.
+const APPROVED_ESTIMATE_VALUE = Prisma.sql`(
+  SELECT COALESCE(
+    (SELECT eo.total FROM "EstimateOption" eo WHERE eo.id = e."selectedOptionId" AND eo."estimateId" = e.id),
+    e.total
+  )
+  FROM "Estimate" e
+  WHERE e."customerId" = c.id
+    AND e.status IN ('APPROVED'::"EstimateStatus", 'CONVERTED'::"EstimateStatus")
+  ORDER BY COALESCE(e."approvedAt", e."updatedAt") ASC, e.id ASC
+  LIMIT 1
+)`;
+const CONVERTED_VALUE = Prisma.sql`COALESCE(
+  (SELECT MAX(pce.value) FROM "PipelineConversionEvent" pce WHERE pce."customerId" = c.id AND pce.stage = 'CONVERTED'),
+  ${APPROVED_ESTIMATE_VALUE},
+  (SELECT MAX(i.total) FROM "Invoice" i WHERE i."customerId" = c.id)
+)`;
 const SOLD_VALUE = Prisma.sql`COALESCE((SELECT MAX(i.total) FROM "Invoice" i WHERE i."customerId" = c.id AND i."paidAt" IS NOT NULL), (SELECT MAX(pce.value) FROM "PipelineConversionEvent" pce WHERE pce."customerId" = c.id AND pce.stage = 'SOLD'))`;
 
 const PIPELINE_SELECT = Prisma.sql`
