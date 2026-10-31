@@ -28,7 +28,6 @@ const SETTINGS_SECTIONS: Array<{
     match: (pathname) =>
       pathname === "/settings" ||
       pathname.startsWith("/settings/appearance") ||
-      pathname.startsWith("/settings/holiday-lighting") ||
       pathname.startsWith("/settings/role-preview"),
     sections: companySettingsSidebar,
   },
@@ -85,7 +84,7 @@ const SETTINGS_SECTIONS: Array<{
   {
     title: "Visits",
     match: (pathname) =>
-      ["/settings/estimates", "/settings/checklists", "/settings/invoices"].some(
+      ["/settings/estimates", "/settings/holiday-lighting", "/settings/checklists", "/settings/invoices"].some(
         (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
       ),
     sections: jobSettingsSidebar,

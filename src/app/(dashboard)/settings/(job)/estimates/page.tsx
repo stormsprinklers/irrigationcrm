@@ -10,6 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl } from "@/lib/blob/urls";
+import { useHolidayLightingFeatures } from "@/components/layout/CompanyBrandProvider";
+import {
+  DEFAULT_HOLIDAY_CATALOG,
+  type HolidayLightingCatalog,
+} from "@/lib/holiday-lighting/types";
 
 type EstimateSettings = {
   id: string;
@@ -31,7 +36,9 @@ type EstimateSettings = {
 };
 
 export default function SettingsEstimatesPage() {
+  const { enabled: holidayLightingEnabled } = useHolidayLightingFeatures();
   const [settings, setSettings] = useState<EstimateSettings | null>(null);
+  const [holidayCatalog, setHolidayCatalog] = useState<HolidayLightingCatalog | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -43,6 +50,17 @@ export default function SettingsEstimatesPage() {
       .then(setSettings)
       .catch(() => toast.error("Failed to load estimate settings"));
   }, []);
+
+  useEffect(() => {
+    if (!holidayLightingEnabled) return;
+    fetch("/api/settings/holiday-lighting")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Failed");
+        setHolidayCatalog(data.catalog ?? DEFAULT_HOLIDAY_CATALOG);
+      })
+      .catch(() => toast.error("Failed to load holiday estimate settings"));
+  }, [holidayLightingEnabled]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -59,6 +77,19 @@ export default function SettingsEstimatesPage() {
         return;
       }
       setSettings(await res.json());
+      if (holidayLightingEnabled && holidayCatalog) {
+        const holidayResponse = await fetch("/api/settings/holiday-lighting", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ catalog: holidayCatalog }),
+        });
+        if (!holidayResponse.ok) {
+          toast.error("Estimate settings saved, but holiday job minimums could not be saved");
+          return;
+        }
+        const holidayData = await holidayResponse.json();
+        setHolidayCatalog(holidayData.catalog ?? holidayCatalog);
+      }
       toast.success("Estimate settings saved");
     } finally {
       setSaving(false);
@@ -139,7 +170,7 @@ export default function SettingsEstimatesPage() {
       <PageHeader
         breadcrumb={["Settings", "Estimates"]}
         title="Estimates"
-        subtitle="Default expiry, customer warranty copy, portal deposits, and post-approval scheduling deposits"
+        subtitle="Default expiry, holiday job minimums, customer warranty copy, and portal deposits"
       />
 
       <form onSubmit={handleSave} className="space-y-6">
@@ -270,6 +301,50 @@ export default function SettingsEstimatesPage() {
             )}
           </div>
         </section>
+
+        {holidayLightingEnabled && holidayCatalog ? (
+          <section className="rounded-lg border border-border bg-white p-4">
+            <h3 className="text-lg font-semibold">Holiday lighting job minimums</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Applied to the flat yearly service price. The minimum never increases the backend
+              material cost or customer cancellation fee.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Seasonal holiday minimum</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={holidayCatalog.quoteDefaults?.temporaryYear1Minimum ?? 0}
+                  onChange={(event) => setHolidayCatalog({
+                    ...holidayCatalog,
+                    quoteDefaults: {
+                      ...(holidayCatalog.quoteDefaults ?? DEFAULT_HOLIDAY_CATALOG.quoteDefaults!),
+                      temporaryYear1Minimum: Number(event.target.value || 0),
+                    },
+                  })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Permanent holiday minimum</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={holidayCatalog.quoteDefaults?.permanentYear1Minimum ?? 0}
+                  onChange={(event) => setHolidayCatalog({
+                    ...holidayCatalog,
+                    quoteDefaults: {
+                      ...(holidayCatalog.quoteDefaults ?? DEFAULT_HOLIDAY_CATALOG.quoteDefaults!),
+                      permanentYear1Minimum: Number(event.target.value || 0),
+                    },
+                  })}
+                />
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="rounded-lg border border-border bg-white p-4">
           <h3 className="text-lg font-semibold">Estimate intro video (VSL)</h3>

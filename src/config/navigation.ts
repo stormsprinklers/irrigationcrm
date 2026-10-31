@@ -165,7 +165,6 @@ export const companySettingsSidebar: NavSection[] = [
     items: [
       { label: "Company details", href: "/settings", exact: true },
       { label: "Appearance", href: "/settings/appearance" },
-      { label: "Holiday lighting", href: "/settings/holiday-lighting" },
       { label: "Role preview", href: "/settings/role-preview" },
     ],
   },
@@ -246,6 +245,7 @@ export const jobSettingsSidebar: NavSection[] = [
   {
     items: [
       { label: "Estimates", href: "/settings/estimates" },
+      { label: "Holiday lighting", href: "/settings/holiday-lighting" },
       { label: "Checklists", href: "/settings/checklists" },
       { label: "Invoices", href: "/settings/invoices" },
     ],
@@ -273,7 +273,6 @@ export const settingsSidebar: NavSection[] = [
         exact: true,
         activePrefixes: [
           "/settings/appearance",
-          "/settings/holiday-lighting",
           "/settings/role-preview",
         ],
         children: companySettingsSidebar[0]!.items,
@@ -343,6 +342,7 @@ export const settingsSidebar: NavSection[] = [
         href: "/settings/estimates",
         activePrefixes: [
           "/settings/estimates",
+          "/settings/holiday-lighting",
           "/settings/checklists",
           "/settings/invoices",
         ],

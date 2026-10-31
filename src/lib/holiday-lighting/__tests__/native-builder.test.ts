@@ -38,7 +38,7 @@ test("native photo markup and independent options survive the CRM parser", () =>
   const quote = fixture();
   const options = holidayDesignOptionsFromQuote({ measurements: parseHolidayMeasurements(quote.measurements), selections: parseHolidaySelections(quote.selections), catalog: DEFAULT_HOLIDAY_CATALOG });
   assert.equal(options[0].selections.pricingMode, "buy");
-  assert.equal(options[1].selections.pricingMode, "lease");
+  assert.equal(options[1].selections.pricingMode, "buy");
   assert.equal(options[1].photoMarkup?.[0].points[0].x, 0.25);
   assert.deepEqual(options[1].measurements.strands?.[0].segmentIds, ["run"]);
   assert.equal(options[1].measurements.segments[0].hasPeak, true);
@@ -174,14 +174,13 @@ test("payload encoded by the Swift models keeps CRM prices, options, peaks and c
   const selections = parseHolidaySelections(payload.selections);
   const options = holidayDesignOptionsFromQuote({ measurements: parseHolidayMeasurements(payload.measurements), selections, catalog: DEFAULT_HOLIDAY_CATALOG });
   const prices = new Map([
-    ["HL-C9-PARTS-FT", { id: "parts", name: "C9 parts", unitPrice: 2.25, unitCost: null }],
-    ["HL-TEMP-INSTALL-FT", { id: "labor", name: "Labor", unitPrice: 2.99, unitCost: null }],
-    ["HL-C9-LEASE-FT", { id: "lease", name: "Lease", unitPrice: 4.59, unitCost: null }],
+    ["HL-C9-SERVICE-FT", { id: "service", name: "C9 service", unitPrice: 4.59, unitCost: 2.25 }],
   ]);
   const buy = computeHolidayQuotePricing({ measurements: options[0].measurements, selections: parseHolidaySelections(options[0].selections), catalog: DEFAULT_HOLIDAY_CATALOG, prices });
   const lease = computeHolidayQuotePricing({ measurements: options[1].measurements, selections: parseHolidaySelections(options[1].selections), catalog: DEFAULT_HOLIDAY_CATALOG, prices });
   assert.equal(buy.billedLengthFt, 45);
-  assert.equal(buy.year1Total, 235.8);
+  assert.equal(buy.year1Total, 206.55);
+  assert.equal(buy.cancellationFee, 101.25);
   assert.equal(lease.leaseTotal, 206.55);
   assert.equal(options[0].measurements.segments[0].colorPattern, "Red / Green");
   assert.equal(options[1].measurements.segments[0].colorPattern, "Warm White");

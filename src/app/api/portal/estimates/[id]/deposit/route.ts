@@ -11,6 +11,7 @@ import { resolvePortalSlug } from "@/lib/portal/company";
 import { findEstimateByPublicToken } from "@/lib/portal/public-estimate";
 import { applyPaidCheckoutSession } from "@/lib/stripe/confirm-checkout";
 import { getStripeClient } from "@/lib/stripe/client";
+import { getCustomerDefaultCardId } from "@/lib/customers/stripe";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -57,6 +58,31 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   if (!estimateId || !publicToken || !companyId || !slugSource) {
     return portalNotFoundResponse();
+  }
+
+  const approvalEstimate = await prisma.estimate.findUnique({
+    where: { id: estimateId },
+    select: { customerId: true, designExportMetadata: true },
+  });
+  const metadata = approvalEstimate?.designExportMetadata;
+  const requiresHolidayCard = Boolean(
+    metadata &&
+      typeof metadata === "object" &&
+      !Array.isArray(metadata) &&
+      (metadata as Record<string, unknown>).source === "holiday-lighting-quote" &&
+      (metadata as Record<string, unknown>).recurringYearlyService === true
+  );
+  if (requiresHolidayCard && approvalEstimate) {
+    const savedCard = await getCustomerDefaultCardId({
+      customerId: approvalEstimate.customerId,
+      companyId,
+    });
+    if (!savedCard) {
+      return NextResponse.json(
+        { error: "Save a card on file before approving a holiday lighting estimate" },
+        { status: 400 }
+      );
+    }
   }
 
   const body = (await request.json().catch(() => ({}))) as { sessionId?: unknown };

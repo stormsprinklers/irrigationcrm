@@ -239,51 +239,52 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
     {
       key: "c9",
       label: "C9",
-      temporaryYear1Sku: "HL-C9-PARTS-FT",
-      temporaryReinstallSku: "HL-TEMP-INSTALL-FT",
-      leaseSku: "HL-C9-LEASE-FT",
-      permanentSku: "HL-PERM-FT",
-      partsSku: "HL-C9-PARTS-FT",
-      installSku: "HL-TEMP-INSTALL-FT",
+      temporaryYear1Sku: "HL-C9-SERVICE-FT",
+      temporaryReinstallSku: "HL-C9-SERVICE-FT",
+      leaseSku: "HL-C9-SERVICE-FT",
+      permanentSku: "HL-C9-SERVICE-FT",
+      partsSku: "HL-C9-SERVICE-FT",
+      installSku: "HL-C9-SERVICE-FT",
       kind: "temporary",
     },
     {
       key: "c7",
       label: "C7",
-      temporaryYear1Sku: "HL-C7-PARTS-FT",
-      temporaryReinstallSku: "HL-TEMP-INSTALL-FT",
-      leaseSku: "HL-C7-LEASE-FT",
-      permanentSku: "HL-PERM-FT",
-      partsSku: "HL-C7-PARTS-FT",
-      installSku: "HL-TEMP-INSTALL-FT",
+      temporaryYear1Sku: "HL-C7-SERVICE-FT",
+      temporaryReinstallSku: "HL-C7-SERVICE-FT",
+      leaseSku: "HL-C7-SERVICE-FT",
+      permanentSku: "HL-C7-SERVICE-FT",
+      partsSku: "HL-C7-SERVICE-FT",
+      installSku: "HL-C7-SERVICE-FT",
       kind: "temporary",
     },
     {
       key: "permanent",
       label: "Permanent",
-      temporaryYear1Sku: "HL-PERM-FT",
+      temporaryYear1Sku: "HL-PERM-SERVICE-FT",
       temporaryReinstallSku: "HL-PERM-SERVICE-FT",
-      leaseSku: "HL-PERM-FT",
-      permanentSku: "HL-PERM-FT",
+      leaseSku: "HL-PERM-SERVICE-FT",
+      permanentSku: "HL-PERM-SERVICE-FT",
+      partsSku: "HL-PERM-SERVICE-FT",
+      installSku: "HL-PERM-SERVICE-FT",
       kind: "permanent",
     },
   ],
   placements: (["tree", "bush"] as const).map((kind) => {
     const prefix = kind === "tree" ? "TREE" : "BUSH";
-    const legacyPartsSku = `HL-${prefix}-S`;
+    const serviceSku = `HL-${prefix}-SERVICE-STRAND`;
     return {
       key: `${kind}-strand`,
       kind,
       size: "small" as const,
       difficulty: 1 as const,
       label: `${kind === "tree" ? "Tree" : "Bush"} lighting / strand`,
-      sku: legacyPartsSku,
-      partsSku: legacyPartsSku,
-      installSku: `${legacyPartsSku}-D1-LABOR`,
-      leaseSku: `${legacyPartsSku}-D1-LEASE`,
+      sku: serviceSku,
+      partsSku: serviceSku,
+      installSku: serviceSku,
+      leaseSku: serviceSku,
     };
   }),
-  liftRentalSku: "HL-LIFT-RENTAL",
   difficultyMultipliers: { 1: 1, 2: 1.25, 3: 1.5 },
   quoteDefaults: {
     defaultLightStyleKey: "c9",
@@ -346,14 +347,14 @@ function parseLightStyle(raw: unknown, fallback: HolidayLightStyle): HolidayLigh
   return {
     key,
     label: typeof obj.label === "string" && obj.label ? obj.label : fallback.label,
-    temporaryYear1Sku:
-      obj.temporaryYear1Sku || obj.partsSku || fallback.temporaryYear1Sku,
-    temporaryReinstallSku:
-      obj.temporaryReinstallSku || obj.installSku || fallback.temporaryReinstallSku,
-    leaseSku: obj.leaseSku || fallback.leaseSku,
-    permanentSku: obj.permanentSku || fallback.permanentSku,
-    partsSku: obj.partsSku || fallback.partsSku,
-    installSku: obj.installSku || fallback.installSku,
+    // Pricing SKUs are policy, not user-editable catalog data. Always migrate
+    // persisted purchase/lease/labor catalogs to the single service SKU.
+    temporaryYear1Sku: fallback.temporaryYear1Sku,
+    temporaryReinstallSku: fallback.temporaryReinstallSku,
+    leaseSku: fallback.leaseSku,
+    permanentSku: fallback.permanentSku,
+    partsSku: fallback.partsSku,
+    installSku: fallback.installSku,
     kind: obj.kind === "permanent" ? "permanent" : fallback.kind ?? "temporary",
   };
 }
@@ -378,11 +379,11 @@ function parsePlacement(
     kind,
     size,
     label: typeof obj.label === "string" && obj.label ? obj.label : fallback.label,
-    sku: typeof obj.sku === "string" && obj.sku ? obj.sku : fallback.sku,
-    leaseSku: typeof obj.leaseSku === "string" && obj.leaseSku ? obj.leaseSku : fallback.leaseSku,
+    sku: fallback.sku,
+    leaseSku: fallback.leaseSku,
     difficulty,
-    partsSku: typeof obj.partsSku === "string" && obj.partsSku ? obj.partsSku : obj.sku || fallback.partsSku || fallback.sku,
-    installSku: typeof obj.installSku === "string" && obj.installSku ? obj.installSku : fallback.installSku,
+    partsSku: fallback.partsSku,
+    installSku: fallback.installSku,
   };
 }
 
@@ -395,7 +396,12 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   const styles =
     hasCurrentStyles
       ? (obj.lightStyles as HolidayLightStyle[]).map((style, i) =>
-          parseLightStyle(style, DEFAULT_HOLIDAY_CATALOG.lightStyles[i] ?? DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!)
+          parseLightStyle(
+            style,
+            DEFAULT_HOLIDAY_CATALOG.lightStyles.find((fallback) => fallback.key === style.key)
+              ?? DEFAULT_HOLIDAY_CATALOG.lightStyles[i]
+              ?? DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!
+          )
         )
       : DEFAULT_HOLIDAY_CATALOG.lightStyles;
   const placements = migratePlacementCatalog(obj.placements);
@@ -415,9 +421,6 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   return {
     lightStyles: styles,
     placements,
-    liftRentalSku: typeof obj.liftRentalSku === "string" && obj.liftRentalSku.trim()
-      ? obj.liftRentalSku.trim()
-      : DEFAULT_HOLIDAY_CATALOG.liftRentalSku,
     difficultyMultipliers,
     quoteDefaults,
   };
@@ -459,21 +462,19 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     rows.push({ sku: code, name, unit, defaultUnitPrice });
   }
   for (const style of catalog.lightStyles) {
-    if (style.kind !== "permanent") {
-      add(style.partsSku ?? style.temporaryYear1Sku, `${style.label} bulbs and materials / ft`, "ft", style.key === "c9" ? 2.25 : 2.15);
-      add(style.installSku ?? style.temporaryReinstallSku, "Temporary lighting installation and take-down / ft", "ft", 2.99);
-      add(style.leaseSku, `${style.label} — lease, seasonal / ft`, "ft", style.key === "c9" ? 4.59 : 4.29);
-    }
-    if (style.kind === "permanent") {
-      add(style.permanentSku, `${style.label} lighting / ft`, "ft", 25);
-    }
+    const sku = style.kind === "permanent"
+      ? style.permanentSku
+      : style.partsSku ?? style.temporaryYear1Sku;
+    add(
+      sku,
+      `${style.label} holiday lighting service / ft`,
+      "ft",
+      style.key === "c9" ? 4.59 : style.key === "c7" ? 4.29 : 25
+    );
   }
   for (const placement of catalog.placements) {
-    add(placement.partsSku ?? placement.sku, `${placement.label} — parts`, "each");
-    add(placement.installSku, `${placement.label} — labor`, "each");
-    add(placement.leaseSku, `${placement.label} — lease`, "each");
+    add(placement.sku, `${placement.label} — yearly service`, "each");
   }
-  add(catalog.liftRentalSku, "Lift rental", "each");
   return rows;
 }
 
@@ -502,33 +503,47 @@ export function applyHolidayCatalogPolicy(
     catalog.lightStyles.find((s) => s.key === selections.defaultLightStyleKey) ??
     catalog.lightStyles.find((s) => s.key === d.defaultLightStyleKey) ??
     catalog.lightStyles[0];
+  const activeKey: HolidayQuoteOptionKey = style?.kind === "permanent" ? "permanent" : "buy";
+  const legacyKey: HolidayQuoteOptionKey = style?.kind === "permanent"
+    ? "permanent"
+    : selections.pricingMode === "lease" || selections.pricingMode === "labor"
+      ? selections.pricingMode
+      : "buy";
+  const legacyAdjustment = selections.optionAdjustments?.[legacyKey];
+  const componentPrice = legacyAdjustment?.partsPrice != null || legacyAdjustment?.laborPrice != null
+    ? parseMoney((legacyAdjustment.partsPrice ?? 0) + (legacyAdjustment.laborPrice ?? 0))
+    : null;
+  const linePrice = legacyAdjustment?.lineItems
+    ? parseMoney(legacyAdjustment.lineItems.reduce(
+        (sum, line) => sum + (line.kind === "included" ? 0 : line.quantity * line.unitPrice),
+        0
+      ))
+    : null;
+  const flatPrice = legacyAdjustment?.price ?? componentPrice ?? linePrice;
+  const optionAdjustments = legacyAdjustment
+    ? {
+        [activeKey]: {
+          price: flatPrice,
+          discountLabel: legacyAdjustment.discountLabel,
+          discountType: legacyAdjustment.discountType,
+          discountAmount: legacyAdjustment.discountAmount,
+        },
+      }
+    : undefined;
   return {
     defaultLightStyleKey: style?.key ?? d.defaultLightStyleKey,
     installKind: style?.kind === "permanent" ? "permanent" : "temporary",
     billingMode: "standard",
-    pricingMode:
-      style?.kind === "permanent"
-        ? "permanent"
-        : selections.pricingMode === "lease" || selections.pricingMode === "labor"
-          ? selections.pricingMode
-          : selections.billingMode === "labor_only"
-            ? "labor"
-            : "buy",
-    includeLaborOnlyOption:
-      style?.kind !== "permanent"
-        ? Boolean(selections.includeLaborOnlyOption || selections.billingMode === "labor_only")
-        : false,
-    includePermanentOption:
-      style?.kind !== "permanent"
-        ? Boolean(selections.includePermanentOption)
-        : false,
+    pricingMode: style?.kind === "permanent" ? "permanent" : "buy",
+    includeLaborOnlyOption: false,
+    includePermanentOption: false,
     notes: selections.notes,
     completedSteps: selections.completedSteps,
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
-    optionAdjustments: selections.optionAdjustments,
-    reinstallPrice: selections.reinstallPrice,
+    optionAdjustments,
+    reinstallPrice: null,
     customServices: selections.customServices,
-    leaseContractYears: selections.leaseContractYears ?? 1,
+    leaseContractYears: 1,
     designOptions: selections.designOptions,
     activeDesignOptionId: selections.activeDesignOptionId,
   };

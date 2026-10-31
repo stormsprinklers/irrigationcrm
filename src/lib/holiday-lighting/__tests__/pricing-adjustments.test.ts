@@ -1,601 +1,123 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  computeHolidayQuotePricing,
-  HOLIDAY_LABOR_ONLY_DISCLAIMER,
-  HOLIDAY_INCLUDED_LINES,
-  HOLIDAY_LEASE_INCLUDED_LINES,
-  HOLIDAY_PERMANENT_INCLUDED_LINES,
-  holidayBuyBreakdownLines,
-  holidayDetailedBuyLines,
-  holidayDetailedLaborOnlyLines,
-  holidayOptionSummary,
-} from "../pricing";
+import test from "node:test";
+import { computeHolidayQuotePricing, type PriceLookup } from "../pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   applyHolidayCatalogPolicy,
-  holidayDesignOptionsFromQuote,
   holidayCatalogSkus,
   parseHolidayCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "../types";
 
-function onlyTotals({ partsPrice, laborPrice, displayLines, includedLines, ...totals }: ReturnType<typeof computeHolidayQuotePricing>["optionDetails"]["buy"]) { return totals; }
+function priceLookup(overrides: Record<string, { unitPrice: number; unitCost: number }>): PriceLookup {
+  return new Map(Object.entries(overrides).map(([sku, value]) => [
+    sku,
+    { id: sku, name: sku, ...value },
+  ]));
+}
 
-const style = DEFAULT_HOLIDAY_CATALOG.lightStyles[0]!;
-const prices = new Map([
-  [style.temporaryYear1Sku, { id: "buy", name: "Buy", unitPrice: 10, unitCost: null }],
-  [style.temporaryReinstallSku, { id: "reinstall", name: "Reinstall", unitPrice: 5, unitCost: null }],
-  [style.leaseSku, { id: "lease", name: "Lease", unitPrice: 8, unitCost: null }],
-  [style.permanentSku, { id: "permanent", name: "Permanent", unitPrice: 20, unitCost: null }],
-]);
-const measurements = {
-  segments: [{ id: "roof", label: "Roof", kind: "roofline" as const, path: [], lengthFt: 10 }],
-  placements: [],
-};
-
-test("quote-specific prices and discounts survive parsing and affect each option", () => {
-  const selections = parseHolidaySelections({
-    defaultLightStyleKey: style.key,
-    installKind: "temporary",
-    reinstallPrice: 45,
-    optionAdjustments: {
-      buy: { price: 120, discountType: "fixed", discountAmount: 30 },
-      lease: { discountLabel: "Early booking", discountType: "percent", discountAmount: 25 },
-      permanent: { discountType: "percent", discountAmount: 10 },
-    },
-  });
-  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.deepEqual(onlyTotals(result.optionDetails.buy), { calculated: 150, subtotal: 120, discountTotal: 30, total: 90 });
-  assert.deepEqual(onlyTotals(result.optionDetails.lease), { calculated: 80, subtotal: 80, discountTotal: 20, total: 60 });
-  assert.equal(selections.optionAdjustments?.lease?.discountLabel, "Early booking");
-  assert.equal(result.permanentTotal, 180);
-  assert.equal(result.reinstallTotal, 45);
-});
-
-test("discounts cannot reduce an option below zero", () => {
-  const selections = parseHolidaySelections({ optionAdjustments: { buy: { price: 20, discountType: "fixed", discountAmount: 100 } } });
-  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.equal(result.optionDetails.buy.discountTotal, 20);
-  assert.equal(result.year1Total, 0);
-});
-
-test("custom services survive parsing and add quantity times unit price to every option", () => {
-  const selections = parseHolidaySelections({
-    customServices: [{
-      id: "wreath-install",
-      name: "Wreath installation",
-      description: "Install two customer-provided wreaths.",
-      quantity: 2,
-      unitPrice: 37.5,
-    }],
-  });
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
-  });
-
-  assert.deepEqual(selections.customServices, [{
-    id: "wreath-install",
-    name: "Wreath installation",
-    description: "Install two customer-provided wreaths.",
-    quantity: 2,
-    unitPrice: 37.5,
-  }]);
-  assert.equal(result.customServicesTotal, 75);
-  assert.equal(result.optionDetails.buy.calculated, 225);
-  assert.equal(result.optionDetails.buy.total, 225);
-  assert.equal(result.optionDetails.labor.total, 125);
-  assert.equal(result.optionDetails.lease.total, 155);
-  assert.equal(result.optionDetails.permanent.total, 275);
-});
-
-test("manual option prices cannot hide priced custom services", () => {
-  const selections = parseHolidaySelections({
-    customServices: [{ id: "lift", name: "Lift service", quantity: 1, unitPrice: 100 }],
-    optionAdjustments: { buy: { price: 50 } },
-  });
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
-  });
-  assert.equal(result.optionDetails.buy.subtotal, 100);
-});
-
-test("lease agreements apply 10% for three years and 20% for five years", () => {
-  const threeYear = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections: parseHolidaySelections({ leaseContractYears: 3 }),
-    prices,
-  });
-  assert.deepEqual(onlyTotals(threeYear.optionDetails.lease), {
-    calculated: 80,
-    subtotal: 80,
-    discountTotal: 8,
-    total: 72,
-    contractDiscountTotal: 8,
-  });
-
-  const fiveYear = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections: parseHolidaySelections({ leaseContractYears: 5 }),
-    prices,
-  });
-  assert.equal(fiveYear.optionDetails.lease.discountTotal, 16);
-  assert.equal(fiveYear.optionDetails.lease.total, 64);
-});
-
-test("lease contract savings remain separate from an additional manual discount", () => {
-  const selections = parseHolidaySelections({
-    leaseContractYears: 3,
-    optionAdjustments: {
-      lease: { discountLabel: "Early booking", discountType: "percent", discountAmount: 25 },
-    },
-  });
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
-  });
-  assert.equal(result.optionDetails.lease.contractDiscountTotal, 8);
-  assert.equal(result.optionDetails.lease.discountTotal, 28);
-  assert.equal(result.optionDetails.lease.total, 52);
-});
-
-test("buy breakdown treats the future-year service amount as labor and the remainder as parts", () => {
-  const lines = holidayBuyBreakdownLines({
-    year1Subtotal: 1_250,
-    year2LaborTotal: 475,
-  });
-  assert.deepEqual(
-    lines.map(({ name, total }) => ({ name, total })),
-    [
-      { name: "Parts", total: 775 },
-      { name: "Labor", total: 475 },
-    ]
-  );
-  assert.equal(lines.reduce((sum, line) => sum + line.total, 0), 1_250);
-  assert.doesNotMatch(lines.map((line) => `${line.name} ${line.description}`).join(" "), /per foot|\/ft/i);
-});
-
-test("permanent holiday lighting defaults to $25 per foot", () => {
-  const permanentSkus = new Set(
-    DEFAULT_HOLIDAY_CATALOG.lightStyles.map((lightStyle) => lightStyle.permanentSku)
-  );
-  const rows = holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG).filter((row) =>
-    permanentSkus.has(row.sku)
-  );
-  assert.ok(rows.length > 0);
-  assert.ok(rows.every((row) => row.unit === "ft" && row.defaultUnitPrice === 25));
-});
-
-test("C9 and C7 default prices are independent of color", () => {
-  const rows = new Map(holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG).map((row) => [row.sku, row]));
-  const c9 = DEFAULT_HOLIDAY_CATALOG.lightStyles.find((item) => item.key === "c9")!;
-  const c7 = DEFAULT_HOLIDAY_CATALOG.lightStyles.find((item) => item.key === "c7")!;
-  assert.equal(rows.get(c9.partsSku!)?.defaultUnitPrice, 2.25);
-  assert.equal(rows.get(c7.partsSku!)?.defaultUnitPrice, 2.15);
-  assert.equal(rows.get(c9.installSku!)?.defaultUnitPrice, 2.99);
-  assert.equal(rows.get(c9.leaseSku)?.defaultUnitPrice, 4.59);
-  assert.equal(rows.get(c7.leaseSku)?.defaultUnitPrice, 4.29);
-});
-
-test("legacy tree and bush sizes migrate to strand counts", () => {
-  const parsed = parseHolidayMeasurements({
-    segments: [],
-    placements: [
-      { id: "small", kind: "tree", size: "small", label: "Small", latLng: { lat: 0, lng: 0 }, lightStyleKey: "c9" },
-      { id: "medium", kind: "tree", size: "medium", label: "Medium", latLng: { lat: 0, lng: 0 }, lightStyleKey: "c7" },
-      { id: "large", kind: "bush", size: "large", label: "Large", latLng: { lat: 0, lng: 0 }, liftRentalNeeded: true },
-    ],
-  });
-  assert.deepEqual(parsed.placements.map((item) => item.strandCount), [1, 2, 3]);
-  assert.deepEqual(parsed.placements.map((item) => item.lightStyleKey), ["mini", "mini", "mini"]);
-  assert.equal(parsed.placements[2]?.liftRentalNeeded, false);
-});
-
-test("tree and bush prices itemize one lift rental with every affected tree", () => {
-  const catalog = parseHolidayCatalog(DEFAULT_HOLIDAY_CATALOG);
-  const tree = catalog.placements.find((item) => item.kind === "tree")!;
-  const liftSku = catalog.liftRentalSku!;
-  const placementPrices = new Map([
-    [tree.partsSku!, { id: "tree-parts", name: "Tree parts", unitPrice: 100, unitCost: null }],
-    [tree.installSku!, { id: "tree-labor", name: "Tree labor", unitPrice: 50, unitCost: null }],
-    [tree.leaseSku!, { id: "tree-lease", name: "Tree lease", unitPrice: 120, unitCost: null }],
-    [liftSku, { id: "lift", name: "Lift", unitPrice: 300, unitCost: null }],
+test("holiday price book exposes only service rates and backend material costs", () => {
+  const rows = holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG);
+  assert.deepEqual(rows.map((row) => row.sku), [
+    "HL-C9-SERVICE-FT",
+    "HL-C7-SERVICE-FT",
+    "HL-PERM-SERVICE-FT",
+    "HL-TREE-SERVICE-STRAND",
+    "HL-BUSH-SERVICE-STRAND",
   ]);
-  const result = computeHolidayQuotePricing({
-    catalog,
+  assert.deepEqual(rows.slice(0, 3).map((row) => row.defaultUnitPrice), [4.59, 4.29, 25]);
+  assert.ok(rows.every((row) => /service/i.test(row.name)));
+  assert.ok(rows.every((row) => !/lease|parts|labor/i.test(row.name)));
+});
+
+test("flat service pricing and cancellation fee use outward price and backend cost", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
     measurements: parseHolidayMeasurements({
-      segments: [],
-      placements: [
-        { id: "tree-1", kind: "tree", size: "small", strandCount: 2, difficulty: 2, liftRentalNeeded: true, label: "Front tree", latLng: { lat: 0, lng: 0 } },
-        { id: "tree-2", kind: "tree", size: "small", strandCount: 1, difficulty: 3, liftRentalNeeded: true, label: "Side tree", latLng: { lat: 0, lng: 0 } },
-      ],
+      segments: [{ id: "roof", label: "Front roof", kind: "roofline", path: [], lengthFt: 100 }],
     }),
     selections: parseHolidaySelections({ defaultLightStyleKey: "c9" }),
-    prices: placementPrices,
+    prices: priceLookup({ "HL-C9-SERVICE-FT": { unitPrice: 8, unitCost: 2.5 } }),
   });
 
-  assert.equal(result.optionDetails.buy.calculated, 900);
-  assert.equal(result.calculatedReinstallTotal, 500);
-  assert.equal(result.optionDetails.lease.calculated, 780);
-  assert.match(result.lines[0]!.staffDetail, /2 strands.*1\.25×.*Lift required/);
-  assert.match(result.lines[1]!.staffDetail, /Lift required/);
-  const liftLine = result.lines.find((line) => line.kind === "lift");
-  assert.equal(liftLine?.name, "Lift rental");
-  assert.equal(liftLine?.purchaseTotal, 300);
-  assert.equal(liftLine?.laborTotal, 300);
-  assert.equal(liftLine?.priceBookItemId, "lift");
-  assert.equal(liftLine?.description, "Lift rental required for: Front tree, Side tree.");
-
-  const customerLines = holidayDetailedBuyLines({
-    lines: result.lines,
-    targetSubtotal: result.optionDetails.buy.subtotal,
-  });
-  assert.doesNotMatch(JSON.stringify(customerLines), /strand|difficulty/i);
-  assert.deepEqual(
-    customerLines.filter((line) => line.name === "Lift rental"),
-    [{
-      name: "Lift rental",
-      description: "Lift rental required for: Front tree, Side tree.",
-      total: 300,
-      itemType: "SERVICE",
-    }]
-  );
-  for (const key of ["lease", "permanent"] as const) {
-    assert.deepEqual(
-      result.optionDetails[key].displayLines.find((line) => line.name === "Lift rental"),
-      {
-        name: "Lift rental",
-        description: "Lift rental required for: Front tree, Side tree.",
-        total: 300,
-        itemType: "SERVICE",
-      }
-    );
-  }
+  assert.equal(pricing.year1Total, 800);
+  assert.equal(pricing.cancellationFee, 250);
+  assert.equal(pricing.optionDetails.buy.partsPrice, 0);
+  assert.equal(pricing.optionDetails.buy.laborPrice, 800);
+  assert.equal(pricing.optionDetails.buy.displayLines.length, 1);
+  assert.equal(pricing.optionDetails.buy.displayLines[0]?.name, "Yearly holiday lighting service");
+  assert.match(pricing.optionDetails.buy.displayLines[0]?.description ?? "", /Flat service price/i);
 });
 
-test("detailed buy lines explain future-year labor without per-foot pricing", () => {
-  const lines = holidayDetailedBuyLines({
-    targetSubtotal: 52.4,
-    lines: [{
-      key: "roof",
-      name: "Roofline 1",
-      description: "10 ft",
-      staffDetail: "10 ft",
-      purchaseTotal: 52.4,
-      leaseTotal: 45.9,
-      partsTotal: 22.5,
-      laborTotal: 29.9,
-      reinstallTotal: 29.9,
-      colorPattern: "Warm White",
-      lightStyleLabel: "C9",
-      kind: "roofline",
-    }],
+test("holiday job minimum raises service price without raising cancellation cost", () => {
+  const catalog = parseHolidayCatalog({
+    ...DEFAULT_HOLIDAY_CATALOG,
+    quoteDefaults: {
+      ...DEFAULT_HOLIDAY_CATALOG.quoteDefaults,
+      temporaryYear1Minimum: 750,
+    },
   });
-  assert.deepEqual(lines.map((line) => line.total), [22.5, 29.9]);
-  assert.equal(lines[1]!.name, "Roofline — labor");
-  assert.match(lines[1]!.description, /In future years, since you already own the lights/);
-  assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
-});
-
-test("branded estimate combines every roofline segment into one parts and labor breakdown", () => {
-  const baseLine = {
-    key: "roof-1",
-    name: "Front eave",
-    description: "10 ft",
-    staffDetail: "10 ft",
-    purchaseTotal: 52.4,
-    leaseTotal: 45.9,
-    partsTotal: 22.5,
-    laborTotal: 29.9,
-    reinstallTotal: 29.9,
-    colorPattern: "Warm White",
-    lightStyleLabel: "C9",
-    kind: "roofline" as const,
-  };
-  const lines = holidayDetailedBuyLines({
-    targetSubtotal: 104.8,
-    lines: [baseLine, { ...baseLine, key: "roof-2", name: "Garage eave" }],
-  });
-  assert.deepEqual(lines.map(({ name, total }) => ({ name, total })), [
-    { name: "Roofline — parts", total: 45 },
-    { name: "Roofline — labor", total: 59.8 },
-  ]);
-  assert.doesNotMatch(JSON.stringify(lines), /Front eave|Garage eave/);
-});
-
-test("labor-only branded estimate combines every roofline segment into one line", () => {
-  const baseLine = {
-    key: "roof-1",
-    name: "Front eave",
-    description: "10 ft",
-    staffDetail: "10 ft",
-    purchaseTotal: 29.9,
-    leaseTotal: 45.9,
-    partsTotal: 0,
-    laborTotal: 29.9,
-    reinstallTotal: 29.9,
-    colorPattern: "Warm White",
-    lightStyleLabel: "C9",
-    kind: "roofline" as const,
-  };
-  const lines = holidayDetailedLaborOnlyLines({
-    targetSubtotal: 59.8,
-    lines: [baseLine, { ...baseLine, key: "roof-2", name: "Garage eave" }],
-  });
-  assert.deepEqual(lines.map(({ name, total }) => ({ name, total })), [
-    { name: "Roofline — labor only", total: 59.8 },
-  ]);
-  assert.doesNotMatch(JSON.stringify(lines), /Front eave|Garage eave/);
-});
-
-test("customer-facing breakdown hides internal price and minimum adjustments", () => {
-  const pricedLine = {
-    key: "roof-1",
-    name: "Front eave",
-    description: "10 ft",
-    staffDetail: "10 ft",
-    purchaseTotal: 52.4,
-    leaseTotal: 45.9,
-    partsTotal: 22.5,
-    laborTotal: 29.9,
-    reinstallTotal: 29.9,
-    colorPattern: "Warm White",
-    lightStyleLabel: "C9",
-    kind: "roofline" as const,
-  };
-  const laborLines = holidayDetailedLaborOnlyLines({
-    targetSubtotal: 25,
-    lines: [pricedLine],
-  });
-  assert.equal(laborLines.length, 1);
-  assert.equal(laborLines[0]!.total, 25);
-  assert.doesNotMatch(JSON.stringify(laborLines), /adjustment|minimum/i);
-
-  const buyLines = holidayDetailedBuyLines({
-    targetSubtotal: 45,
-    lines: [pricedLine],
-  });
-  assert.equal(buyLines.reduce((sum, line) => sum + line.total, 0), 45);
-  assert.doesNotMatch(JSON.stringify(buyLines), /adjustment|minimum/i);
-});
-
-test("legacy labor-only quotes become an additional option without replacing the default", () => {
-  const selections = parseHolidaySelections({
-    defaultLightStyleKey: style.key,
-    installKind: "temporary",
-    billingMode: "labor_only",
-  });
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
-  });
-  assert.equal(selections.billingMode, "labor_only");
-  assert.equal(result.year1Total, 150);
-  assert.equal(result.lines[0]?.partsTotal, 100);
-  assert.equal(result.lines[0]?.laborTotal, 50);
-  assert.equal(result.lines[0]?.purchaseTotal, 150);
-  assert.equal(result.optionDetails.labor.total, 50);
-  assert.equal(result.optionDetails.buy.total, 150);
-
-  const lines = holidayDetailedLaborOnlyLines({
-    lines: result.lines,
-    targetSubtotal: result.optionDetails.labor.subtotal,
-  });
-  assert.deepEqual(lines.map((line) => line.total), [50]);
-  assert.match(lines[0]!.name, /labor only/i);
-  assert.match(lines[0]!.description, /customer-supplied/i);
-  assert.doesNotMatch(JSON.stringify(lines), /per foot|\/ft/i);
-});
-
-test("permanent lights cannot retain labor-only mode", () => {
-  const selections = applyHolidayCatalogPolicy(
-    parseHolidaySelections({
-      defaultLightStyleKey: "permanent",
-      installKind: "permanent",
-      billingMode: "labor_only",
-      includeLaborOnlyOption: true,
-      includePermanentOption: true,
+  const pricing = computeHolidayQuotePricing({
+    catalog,
+    measurements: parseHolidayMeasurements({
+      segments: [{ id: "roof", label: "Roof", kind: "roofline", path: [], lengthFt: 20 }],
     }),
-    DEFAULT_HOLIDAY_CATALOG
-  );
-  assert.equal(selections.billingMode, "standard");
-  assert.equal(selections.includeLaborOnlyOption, false);
-  assert.equal(selections.includePermanentOption, false);
+    selections: parseHolidaySelections({ defaultLightStyleKey: "c9" }),
+    prices: priceLookup({ "HL-C9-SERVICE-FT": { unitPrice: 5, unitCost: 2 } }),
+  });
+
+  assert.equal(pricing.year1Total, 750);
+  assert.equal(pricing.cancellationFee, 40);
+  assert.equal(pricing.year1MinimumApplied, true);
 });
 
-test("temporary quotes retain optional labor-only and permanent customer options", () => {
-  const selections = applyHolidayCatalogPolicy(
-    parseHolidaySelections({
-      defaultLightStyleKey: style.key,
-      includeLaborOnlyOption: true,
-      includePermanentOption: true,
+test("tree difficulty multiplies outward price but not material cancellation cost", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({
+      placements: [{
+        id: "tree", kind: "tree", size: "small", label: "Front tree",
+        latLng: { lat: 40, lng: -111 }, strandCount: 2, difficulty: 3,
+      }],
+    }),
+    selections: parseHolidaySelections({}),
+    prices: priceLookup({ "HL-TREE-SERVICE-STRAND": { unitPrice: 100, unitCost: 35 } }),
+  });
+
+  assert.equal(pricing.year1Total, 300);
+  assert.equal(pricing.cancellationFee, 70);
+  assert.match(pricing.lines[0]?.staffDetail ?? "", /1\.5×/);
+});
+
+test("legacy catalogs and lease/labor selections migrate to the service model", () => {
+  const catalog = parseHolidayCatalog({
+    lightStyles: [
+      { ...DEFAULT_HOLIDAY_CATALOG.lightStyles[0], partsSku: "OLD-PARTS", leaseSku: "OLD-LEASE" },
+      DEFAULT_HOLIDAY_CATALOG.lightStyles[1],
+      DEFAULT_HOLIDAY_CATALOG.lightStyles[2],
+    ],
+  });
+  assert.equal(catalog.lightStyles[0]?.partsSku, "HL-C9-SERVICE-FT");
+  assert.equal(applyHolidayCatalogPolicy(parseHolidaySelections({ pricingMode: "lease" }), catalog).pricingMode, "buy");
+  assert.equal(applyHolidayCatalogPolicy(parseHolidaySelections({ pricingMode: "labor", billingMode: "labor_only" }), catalog).pricingMode, "buy");
+});
+
+test("manual flat price and discounts work without a parts/labor breakdown", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({
+      segments: [{ id: "roof", label: "Roof", kind: "roofline", path: [], lengthFt: 50 }],
+    }),
+    selections: parseHolidaySelections({
       optionAdjustments: {
-        labor: { price: 45, discountLabel: "Returning customer", discountType: "fixed", discountAmount: 5 },
-        buy: { price: 140 },
-        permanent: { price: 250 },
+        buy: { price: 600, discountType: "fixed", discountAmount: 75, discountLabel: "Early booking" },
       },
     }),
-    DEFAULT_HOLIDAY_CATALOG
-  );
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
+    prices: priceLookup({ "HL-C9-SERVICE-FT": { unitPrice: 10, unitCost: 2 } }),
   });
-  assert.equal(selections.billingMode, "standard");
-  assert.equal(selections.includeLaborOnlyOption, true);
-  assert.equal(selections.includePermanentOption, true);
-  assert.equal(result.optionDetails.labor.total, 40);
-  assert.equal(result.optionDetails.buy.total, 140);
-  assert.equal(result.optionDetails.permanent.total, 250);
-  assert.equal(result.year1Total, 140);
-});
-
-test("legacy labor-only selection migrates to a standard quote with labor-only offered", () => {
-  const selections = applyHolidayCatalogPolicy(
-    parseHolidaySelections({
-      defaultLightStyleKey: style.key,
-      billingMode: "labor_only",
-    }),
-    DEFAULT_HOLIDAY_CATALOG
-  );
-  assert.equal(selections.billingMode, "standard");
-  assert.equal(selections.includeLaborOnlyOption, true);
-});
-
-test("labor-only disclaimer covers third-party materials and replacement visits", () => {
-  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not liable/i);
-  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /clips/i);
-  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /provided by another company/i);
-  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /visits to replace lights or strands/i);
-  assert.match(HOLIDAY_LABOR_ONLY_DISCLAIMER, /not included/i);
-});
-
-test("quote design options preserve independent scope and measurements and cap at seven", () => {
-  const rawOptions = Array.from({ length: 8 }, (_, index) => ({
-    id: `design-${index + 1}`,
-    label: `Option ${index + 1}`,
-    previewImageUrl: index === 1 ? "https://example.com/option-2.png" : undefined,
-    measurements: {
-      segments: [{ ...measurements.segments[0], id: `roof-${index + 1}`, lengthFt: 10 + index }],
-      placements: index === 2
-        ? [{ id: "tree-1", kind: "tree", size: "medium", label: "Tree 1", latLng: { lat: 0, lng: 0 } }]
-        : [],
-    },
-    selections: {
-      defaultLightStyleKey: index === 3 ? "permanent" : "c9",
-      pricingMode: index === 0 ? "labor" : "buy",
-      defaultColorPattern: index === 1 ? "Red" : "Warm White",
-      notes: index === 1 ? "Customer-facing option note" : undefined,
-    },
-  }));
-  const parsed = parseHolidaySelections({ designOptions: rawOptions, activeDesignOptionId: "design-2" });
-  const options = holidayDesignOptionsFromQuote({
-    measurements,
-    selections: parsed,
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-  });
-  assert.equal(options.length, 7);
-  assert.equal(options[0]?.selections.pricingMode, "labor");
-  assert.equal(options[1]?.selections.defaultColorPattern, "Red");
-  assert.equal(options[1]?.selections.notes, "Customer-facing option note");
-  assert.equal(options[1]?.previewImageUrl, "https://example.com/option-2.png");
-  assert.equal(options[2]?.measurements.placements.length, 1);
-  assert.equal(options[3]?.selections.pricingMode, "permanent");
-  assert.equal(parsed.activeDesignOptionId, "design-2");
-});
-
-test("customer-facing holiday summaries never expose roofline footage", () => {
-  const summary = holidayOptionSummary({
-    placementCount: 2,
-    styleLabel: "C9 Warm White",
-  });
-  assert.match(summary, /C9 Warm White roofline lighting/);
-  assert.doesNotMatch(summary, /\bft\b|feet|foot/i);
-});
-
-test("permanent-light fixed discounts retain the exact entered amount", () => {
-  const selections = parseHolidaySelections({
-    defaultLightStyleKey: "permanent",
-    pricingMode: "permanent",
-    optionAdjustments: {
-      permanent: { price: 13_175, discountType: "fixed", discountAmount: 1_000 },
-    },
-  });
-  const result = computeHolidayQuotePricing({
-    catalog: DEFAULT_HOLIDAY_CATALOG,
-    measurements,
-    selections,
-    prices,
-  });
-  assert.equal(result.optionDetails.permanent.subtotal, 13_175);
-  assert.equal(result.optionDetails.permanent.discountTotal, 1_000);
-  assert.equal(result.optionDetails.permanent.total, 12_175);
-});
-
-test("included holiday services have customer descriptions and permanent options include only their warranty", () => {
-  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Storage")!.description, /warehouse/i);
-  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name === "Maintenance")!.description, /48 hours/i);
-  assert.match(HOLIDAY_INCLUDED_LINES.find((line) => line.name.startsWith("3-year"))!.name, /3-year parts and labor/i);
-  assert.match(
-    HOLIDAY_LEASE_INCLUDED_LINES.find((line) => /warranty/i.test(line.name))!.name,
-    /lifetime parts and labor/i
-  );
-  assert.doesNotMatch(
-    HOLIDAY_LEASE_INCLUDED_LINES.map((line) => line.name).join(" "),
-    /3-year parts and labor/i
-  );
-  assert.equal(HOLIDAY_PERMANENT_INCLUDED_LINES.length, 1);
-  assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].name, /5-year parts and labor/i);
-  assert.match(HOLIDAY_PERMANENT_INCLUDED_LINES[0].description, /no cost/i);
-  assert.doesNotMatch(
-    HOLIDAY_PERMANENT_INCLUDED_LINES.map((line) => line.name).join(" "),
-    /storage|maintenance/i
-  );
-});
-
-test("native parts and labor overrides persist and agree with generated line items", () => {
-  const selections = parseHolidaySelections({
-    defaultLightStyleKey: style.key, installKind: "temporary",
-    completedSteps: ["design", "price", "design", "invalid"],
-    customServices: [{ id: "extra", name: "Wreath", quantity: 2, unitPrice: 15 }],
-    optionAdjustments: { buy: { partsPrice: 75.25, laborPrice: 42.5, price: 999, discountType: "fixed", discountAmount: 10 } },
-    designOptions: [{ id: "a", label: "A", measurements, selections: { completedSteps: ["notes"], optionAdjustments: { buy: { partsPrice: 75.25, laborPrice: 42.5 } } } }],
-  });
-  assert.deepEqual(selections.completedSteps, ["design", "price"]);
-  assert.deepEqual(holidayDesignOptionsFromQuote({ measurements, selections, catalog: DEFAULT_HOLIDAY_CATALOG })[0]?.selections.completedSteps, ["notes"]);
-  assert.equal(selections.designOptions?.[0]?.selections.optionAdjustments?.buy?.partsPrice, 75.25);
-  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  const detail = result.optionDetails.buy;
-  assert.equal(detail.subtotal, 147.75);
-  assert.equal(detail.total, 137.75);
-  assert.equal(detail.displayLines.filter((line) => line.itemType === "PRODUCT").reduce((sum, line) => sum + line.total, 0), 75.25);
-  assert.equal(detail.displayLines.filter((line) => line.itemType === "SERVICE").reduce((sum, line) => sum + line.total, 0), 42.5);
-  assert.equal(detail.displayLines.reduce((sum, line) => sum + line.total, 0) + result.customServicesTotal, detail.subtotal);
-});
-
-test("zero component prices and lease discounts are honored without changing other options", () => {
-  const selections = parseHolidaySelections({ defaultLightStyleKey: style.key, leaseContractYears: 3,
-    optionAdjustments: { buy: { partsPrice: 0, laborPrice: 0 }, lease: { partsPrice: 100, laborPrice: 50 }, labor: { partsPrice: 900, laborPrice: 25 } } });
-  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.equal(result.optionDetails.buy.total, 0);
-  assert.equal(result.optionDetails.buy.displayLines.reduce((sum, line) => sum + line.total, 0), 0);
-  assert.equal(result.optionDetails.lease.subtotal, 150);
-  assert.equal(result.optionDetails.lease.total, 135);
-  assert.equal(result.optionDetails.labor.total, 25);
-  assert.equal(result.optionDetails.labor.partsPrice, 0);
-  assert.equal(result.optionDetails.labor.displayLines.reduce((sum, line) => sum + line.total, 0), 25);
-});
-
-test("editable holiday line items preserve titles, descriptions, quantities and included takedown", () => {
-  const selections = parseHolidaySelections({ defaultLightStyleKey: style.key, optionAdjustments: { buy: { lineItems: [
-    { id: "parts", name: "Front roof lights", description: "Red and green C9", quantity: 2, unitPrice: 75.5, kind: "parts" },
-    { id: "labor", name: "Installation", description: "Use existing clips", quantity: 3, unitPrice: 20, kind: "labor" },
-    { id: "down", name: "Takedown", description: "Included in January", quantity: 1, unitPrice: 99, kind: "included" },
-  ] } } });
-  const result = computeHolidayQuotePricing({ catalog: DEFAULT_HOLIDAY_CATALOG, measurements, selections, prices });
-  assert.equal(result.optionDetails.buy.subtotal, 211);
-  assert.equal(result.optionDetails.buy.partsPrice, 151);
-  assert.equal(result.optionDetails.buy.laborPrice, 60);
-  assert.equal(result.reinstallTotal, 60);
-  assert.equal(result.optionDetails.buy.displayLines[0]?.name, "Front roof lights");
-  assert.equal(result.optionDetails.buy.displayLines[0]?.description, "Red and green C9");
-  assert.equal(result.optionDetails.buy.displayLines[0]?.quantity, 2);
-  assert.equal(result.optionDetails.buy.displayLines[0]?.unitPrice, 75.5);
-  assert.equal(result.optionDetails.buy.displayLines[2]?.total, 0);
-  assert.equal(result.optionDetails.buy.displayLines.reduce((sum, line) => sum + line.total, 0), 211);
+  assert.equal(pricing.optionDetails.buy.subtotal, 600);
+  assert.equal(pricing.optionDetails.buy.discountTotal, 75);
+  assert.equal(pricing.optionDetails.buy.total, 525);
+  assert.equal(pricing.cancellationFee, 100);
 });

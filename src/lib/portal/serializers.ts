@@ -205,6 +205,7 @@ export function serializePortalEstimate(estimate: {
         ? HOLIDAY_PREVIEW_DISCLAIMER
         : null;
   const isHolidayLightingQuote = meta?.source === "holiday-lighting-quote";
+  const holidayRecurringService = meta?.recurringYearlyService === true;
   const hasHolidayLighting = Boolean(
     isHolidayLightingQuote || holidayStrandMap || holidayPreviewImageUrl
   );
@@ -225,6 +226,7 @@ export function serializePortalEstimate(estimate: {
       : undefined;
     const pricingMode =
       typeof holidayOption?.pricingMode === "string" ? holidayOption.pricingMode : null;
+    const rawCancellationFee = Number(holidayOption?.cancellationFee ?? 0);
     return {
       id: option.id,
       letter: option.letter,
@@ -239,6 +241,12 @@ export function serializePortalEstimate(estimate: {
       total: toNumber(option.total as never),
       displayNumber,
       pricingMode,
+      recurringYearlyService:
+        holidayOption?.recurringYearlyService === true || holidayRecurringService,
+      cancellationFee:
+        Number.isFinite(rawCancellationFee) && rawCancellationFee >= 0
+          ? Math.round(rawCancellationFee * 100) / 100
+          : 0,
       leaseContractYears:
         pricingMode === "lease"
           ? parseHolidayLeaseCommitmentYears(holidayOption?.leaseContractYears)
@@ -390,6 +398,7 @@ export function serializePortalEstimate(estimate: {
     needsScheduling: estimate.needsScheduling ?? false,
     hasDesign,
     hasHolidayLighting,
+    holidayRecurringService,
     holidayPreviewImageUrl,
     holidayPreviewDisclaimer,
     designProjectId: estimate.designProjectId ?? null,

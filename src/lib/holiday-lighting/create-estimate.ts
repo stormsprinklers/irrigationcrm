@@ -8,9 +8,6 @@ import { loadHolidayPriceLookup } from "./catalog";
 import {
   computeHolidayQuotePricing,
   HOLIDAY_BUY_DETAIL,
-  HOLIDAY_LABOR_ONLY_DETAIL,
-  HOLIDAY_LABOR_ONLY_DISCLAIMER,
-  HOLIDAY_LEASE_DETAIL,
   HOLIDAY_PERMANENT_DETAIL,
   holidayIncludedLines,
   holidayOptionSummary,
@@ -65,18 +62,10 @@ export async function createEstimateFromHolidayQuote(params: {
     }
     if (Object.values(selections.optionAdjustments ?? {}).some((adjustment) => adjustment?.lineItems?.some((line) => !line.name.trim()))) throw new Error(`${design.label} has a line item without a title`);
     const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
-    const key = style?.kind === "permanent"
-      ? "permanent" as const
-      : selections.pricingMode === "lease" || selections.pricingMode === "labor"
-        ? selections.pricingMode
-        : "buy" as const;
+    const key = style?.kind === "permanent" ? "permanent" as const : "buy" as const;
     const defaultLabel = key === "permanent"
-      ? "Permanent Lights"
-      : key === "labor"
-        ? "Labor Only"
-        : key === "lease"
-          ? "Lease Lights"
-          : "Lights + Labor";
+      ? "Permanent Holiday Lighting Service"
+      : "Yearly Holiday Lighting Service";
     const label = design.label.trim() || defaultLabel;
     const summary = holidayOptionSummary({
       placementCount: priced.placementCount,
@@ -87,33 +76,10 @@ export async function createEstimateFromHolidayQuote(params: {
       customServiceCount: customServices.length,
     });
     const detail = priced.optionDetails[key];
-    const leaseContractYears = selections.leaseContractYears ?? 1;
-    const leaseContractDiscountPercent = leaseContractYears === 5
-      ? 20
-      : leaseContractYears === 3
-        ? 10
-        : 0;
-    const tagline = key === "buy"
-      ? `Future Years: ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(priced.reinstallTotal)}`
-      : key === "lease"
-        ? leaseContractYears === 5
-          ? "5-Year Agreement · Save 20% Each Year"
-          : leaseContractYears === 3
-            ? "3-Year Agreement · Save 10% Each Year"
-            : "Single Season · No Commitment"
-        : key === "labor"
-          ? "Customer-supplied lights"
-          : "Fit Your Vibe Year-Round";
+    const tagline = "Yearly recurring service · Cancel by paying the unmarked-up material cost";
     const detailCopy = key === "buy"
       ? HOLIDAY_BUY_DETAIL
-      : key === "lease"
-        ? HOLIDAY_LEASE_DETAIL
-        : key === "labor"
-          ? HOLIDAY_LABOR_ONLY_DETAIL
-          : HOLIDAY_PERMANENT_DETAIL;
-    const leaseAgreementCopy = key === "lease" && leaseContractYears > 1
-      ? `This option requires a ${leaseContractYears}-year lease agreement. The ${leaseContractDiscountPercent}% discount applies to the annual lease price in each year of the agreement.`
-      : null;
+      : HOLIDAY_PERMANENT_DETAIL;
     return {
       design,
       selections,
@@ -122,13 +88,11 @@ export async function createEstimateFromHolidayQuote(params: {
       key,
       label,
       tagline,
-      description: [tagline, leaseAgreementCopy, `${detailCopy} ${summary}`]
+      description: [tagline, `${detailCopy} ${summary}`]
         .filter(Boolean)
         .join("\n\n"),
       detail,
       customServices,
-      leaseContractYears,
-      leaseContractDiscountPercent,
       strandMap: buildHolidayStrandMap({ measurements, selections, catalog, pricedLines: priced.lines, address }),
     };
   });
@@ -136,6 +100,7 @@ export async function createEstimateFromHolidayQuote(params: {
   const primaryPreviewImageUrl = prepared[0]?.design.previewImageUrl ?? quote.previewImageUrl;
   const metadata = {
     source: "holiday-lighting-quote",
+    recurringYearlyService: true,
     quoteId: quote.id,
     previewImageUrl: primaryPreviewImageUrl,
     previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
@@ -150,14 +115,12 @@ export async function createEstimateFromHolidayQuote(params: {
       billedLengthFt: item.priced.billedLengthFt,
       placementCount: item.priced.placementCount,
       total: item.detail.total,
-      reinstallTotal: item.priced.reinstallTotal,
+      recurringYearlyService: true,
+      cancellationFee: item.priced.cancellationFee,
       notes: item.selections.notes?.trim() ?? "",
       lightStyleKey: item.selections.defaultLightStyleKey,
       colorPattern: item.selections.defaultColorPattern,
       previewImageUrl: item.design.previewImageUrl ?? quote.previewImageUrl,
-      leaseContractYears: item.key === "lease" ? item.leaseContractYears : undefined,
-      leaseContractDiscountPercent:
-        item.key === "lease" ? item.leaseContractDiscountPercent : undefined,
       strandMap: item.strandMap,
     })),
   };
@@ -239,7 +202,7 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
-    if (key === "buy" || key === "labor" || adjustment?.partsPrice != null || adjustment?.laborPrice != null || adjustment?.lineItems != null || detail.displayLines.length > 1) {
+    if (adjustment?.lineItems != null || detail.displayLines.length > 1) {
       const breakdown = detail.displayLines;
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({
@@ -284,50 +247,23 @@ export async function createEstimateFromHolidayQuote(params: {
         })),
       });
     }
-    if (adjustment?.lineItems == null) {
-      const includedLines = holidayIncludedLines(key);
-      await prisma.estimateLineItem.createMany({
-        data: includedLines.map((line, index) => ({
-          estimateId: estimate.id,
-          optionId: option.id,
-          name: line.name,
-          description: line.description,
-          quantity: 1,
-          unitPrice: 0,
-          unit: "included",
-          total: 0,
-          sortOrder: 200 + index,
-        })),
-      });
-    } else {
-      await prisma.estimateLineItem.create({
-        data: {
-          estimateId: estimate.id,
-          optionId: option.id,
-          name: "Customer-supplied materials",
-          description: HOLIDAY_LABOR_ONLY_DISCLAIMER,
-          quantity: 1,
-          unitPrice: 0,
-          unit: "included",
-          total: 0,
-          sortOrder: 200,
-        },
-      });
-    }
-    if (key === "lease" && pack.leaseContractDiscountPercent > 0) {
-      await prisma.discount.create({
-        data: {
-          estimateId: estimate.id,
-          optionId: option.id,
-          label: `${pack.leaseContractYears}-year lease agreement discount`,
-          type: DiscountType.PERCENT,
-          amount: pack.leaseContractDiscountPercent,
-        },
-      });
-    }
+    const includedLines = holidayIncludedLines(key);
+    await prisma.estimateLineItem.createMany({
+      data: includedLines.map((line, index) => ({
+        estimateId: estimate.id,
+        optionId: option.id,
+        name: line.name,
+        description: line.description,
+        quantity: 1,
+        unitPrice: 0,
+        unit: "included",
+        total: 0,
+        sortOrder: 200 + index,
+      })),
+    });
     const manualDiscountTotal = Math.max(
       0,
-      Math.round((detail.discountTotal - (detail.contractDiscountTotal ?? 0)) * 100) / 100
+      Math.round(detail.discountTotal * 100) / 100
     );
     if (manualDiscountTotal > 0 && adjustment) {
       await prisma.discount.create({

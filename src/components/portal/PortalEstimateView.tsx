@@ -59,6 +59,7 @@ type Estimate = {
   needsScheduling?: boolean;
   hasDesign: boolean;
   hasHolidayLighting?: boolean;
+  holidayRecurringService?: boolean;
   holidayPreviewImageUrl?: string | null;
   holidayPreviewDisclaimer?: string | null;
   premiumOptionTotal: number | null;
@@ -74,6 +75,8 @@ type Estimate = {
     sortOrder?: number;
     popular?: boolean;
     pricingMode?: string | null;
+    recurringYearlyService?: boolean;
+    cancellationFee?: number;
     leaseContractYears?: HolidayLeaseCommitmentYears | null;
     subtotal: number;
     discountTotal: number;
@@ -162,6 +165,7 @@ export function PortalEstimateView({
   const [loading, setLoading] = useState(false);
   const [payLaterLoading, setPayLaterLoading] = useState(false);
   const [paymentReady, setPaymentReady] = useState(false);
+  const [cancellationPolicyOpen, setCancellationPolicyOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -458,7 +462,11 @@ export function PortalEstimateView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to sign");
       setEstimate(data.estimate);
-      toast.success("Signature saved. Choose how you would like to handle payment.");
+      toast.success(
+        estimate.holidayRecurringService
+          ? "Signature saved. Save a card to complete your approval."
+          : "Signature saved. Choose how you would like to handle payment."
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to sign");
     } finally {
@@ -556,6 +564,10 @@ export function PortalEstimateView({
       : Math.round(displayTotal() * (Number(estimate.depositAmount ?? 50) / 100) * 100) / 100
     : 0;
   const paymentDue = depositDue > 0 ? depositDue : displayTotal();
+  const cancellationFee = Math.max(0, Number(activeOption?.cancellationFee ?? 0));
+  const requiresHolidayCard = Boolean(
+    activeOption?.recurringYearlyService ?? estimate.holidayRecurringService
+  );
   const warrantyText =
     activeOption?.pricingMode === "lease"
       ? null
@@ -776,6 +788,19 @@ export function PortalEstimateView({
               </Button>
             </div>
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              {requiresHolidayCard ? (
+                <>
+                  This price is assumed as a yearly recurring service and is subject to our{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-[#4C9BC8] underline underline-offset-2"
+                    onClick={() => setCancellationPolicyOpen(true)}
+                  >
+                    cancellation policy
+                  </button>
+                  . A card must be saved on file to approve this holiday lighting estimate.{" "}
+                </>
+              ) : null}
               By signing, you acknowledge that you understand our{" "}
               <LegalDocLink href={company.termsOfServiceUrl}>Terms of Service</LegalDocLink>,{" "}
               <LegalDocLink href={company.privacyPolicyUrl}>Privacy Policy</LegalDocLink>, and
@@ -787,13 +812,13 @@ export function PortalEstimateView({
             <div>
               <h2 className="font-semibold">Complete your approval</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {depositDue > 0 ? "Pay the required deposit" : "Pay the estimate"} now, or
-                securely save a card so the office can invoice you later. Saving a card does not
-                charge it today. Your estimate is not approved until you complete one of these options.
+                {requiresHolidayCard
+                  ? "Securely save a card for future yearly billing. Saving a card does not charge it today. Your estimate is not approved until a card is on file."
+                  : `${depositDue > 0 ? "Pay the required deposit" : "Pay the estimate"} now, or securely save a card so the office can invoice you later. Saving a card does not charge it today. Your estimate is not approved until you complete one of these options.`}
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {paymentDue > 0 ? (
+            <div className={requiresHolidayCard ? "grid gap-2" : "grid gap-2 sm:grid-cols-2"}>
+              {!requiresHolidayCard && paymentDue > 0 ? (
                 <Button onClick={() => void payDeposit()} disabled={loading || payLaterLoading}>
                   {loading ? "Loading..." : `Pay ${formatCurrency(paymentDue)} now`}
                 </Button>
@@ -803,7 +828,11 @@ export function PortalEstimateView({
                 onClick={() => void payLater()}
                 disabled={loading || payLaterLoading}
               >
-                {payLaterLoading ? "Opening secure card form..." : "Pay later — save card"}
+                {payLaterLoading
+                  ? "Opening secure card form..."
+                  : requiresHolidayCard
+                    ? "Save card and approve"
+                    : "Pay later — save card"}
               </Button>
             </div>
           </section>
@@ -819,6 +848,31 @@ export function PortalEstimateView({
           </p>
         ) : null}
       </div>
+      {cancellationPolicyOpen ? (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="holiday-cancellation-title">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            aria-label="Close cancellation policy"
+            onClick={() => setCancellationPolicyOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-white p-5 shadow-xl">
+            <h2 id="holiday-cancellation-title" className="text-lg font-semibold">Holiday lighting cancellation policy</h2>
+            <div className="mt-3 space-y-3 text-sm text-muted-foreground">
+              <p>This quote assumes a yearly recurring holiday lighting service. There is no multi-year commitment.</p>
+              <p>
+                If you cancel, the cancellation amount for this design is{" "}
+                <strong className="text-foreground">{formatCurrency(cancellationFee)}</strong>.
+              </p>
+              <p>After the cancellation amount is paid, you keep the Christmas lights and materials purchased for your property.</p>
+              <p>We do not mark up the cancellation amount. It is the company&apos;s backend material cost for the lights and materials purchased to perform the work.</p>
+            </div>
+            <Button type="button" className="mt-5 w-full" onClick={() => setCancellationPolicyOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </PortalShell>
   );
 }

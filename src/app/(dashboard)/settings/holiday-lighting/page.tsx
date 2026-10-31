@@ -111,7 +111,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
         title="Holiday lighting"
-        subtitle="Edit roofline, per-strand tree and bush, lift rental, lease, and permanent-light pricing."
+        subtitle="Set yearly service pricing, backend material costs, job minimums, and tree/bush difficulty multipliers."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -140,7 +140,7 @@ export default function HolidayLightingCatalogSettingsPage() {
                 </select>
               </div>
               <label className="text-xs text-muted-foreground">
-                Temporary buy first-year minimum ($)
+                Seasonal holiday job minimum ($)
                 <input
                   type="number"
                   min={0}
@@ -154,7 +154,7 @@ export default function HolidayLightingCatalogSettingsPage() {
                 />
               </label>
               <label className="text-xs text-muted-foreground">
-                Permanent first-year minimum ($)
+                Permanent holiday job minimum ($)
                 <input
                   type="number"
                   min={0}
@@ -170,7 +170,7 @@ export default function HolidayLightingCatalogSettingsPage() {
             </div>
             <div className="mt-4 border-t border-border pt-4">
               <h4 className="text-xs font-semibold">Tree and bush difficulty multipliers</h4>
-              <p className="mt-1 text-xs text-muted-foreground">Applied to the per-strand parts and labor price. These details remain internal.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Applied to the outward per-strand service price. Backend material cost is not multiplied.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 {([1, 2, 3] as const).map((difficulty) => (
                   <label key={difficulty} className="text-xs text-muted-foreground">
@@ -196,7 +196,7 @@ export default function HolidayLightingCatalogSettingsPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Price book SKUs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Tree and bush entries are priced per strand. Lift rental is charged once and folded into tree pricing so customers never see it separately. Internal cost is for your books only.
+              C9, C7, and permanent lights are priced per foot. Trees and bushes have one price per strand. Backend material cost is the unmarked-up cancellation fee basis.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -204,8 +204,8 @@ export default function HolidayLightingCatalogSettingsPage() {
                   <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="py-2 pr-2 font-medium">Item</th>
                     <th className="py-2 pr-2 font-medium">SKU</th>
-                    <th className="py-2 pr-2 font-medium">Cost</th>
-                    <th className="py-2 font-medium">Customer price</th>
+                    <th className="py-2 pr-2 font-medium">Backend material cost</th>
+                    <th className="py-2 font-medium">Outward service price</th>
                   </tr>
                 </thead>
                 <tbody>

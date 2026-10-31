@@ -51,7 +51,6 @@ import {
   type HolidayQuoteOptionKey,
   type HolidayOptionAdjustment,
   type HolidayCustomService,
-  type HolidayLeaseContractYears,
   type HolidayDifficulty,
 } from "@/lib/holiday-lighting/types";
 import { getBrowserMapsApiKey } from "@/lib/holiday-lighting/load-maps";
@@ -1356,31 +1355,18 @@ export function HolidayLightingQuoter({
     : 0;
   const draftPricing = pricing ? {
     buy: optionDetail(draftCalculated("buy"), selections, "buy", draftCustomServicesTotal),
-    lease: optionDetail(
-      draftCalculated("lease"),
-      selections,
-      "lease",
-      draftCustomServicesTotal,
-      selections.leaseContractYears === 5 ? 20 : selections.leaseContractYears === 3 ? 10 : 0
-    ),
+    lease: optionDetail(draftCalculated("lease"), selections, "lease", draftCustomServicesTotal),
     permanent: optionDetail(draftCalculated("permanent"), selections, "permanent", draftCustomServicesTotal),
     labor: optionDetail(draftCalculated("labor"), selections, "labor", draftCustomServicesTotal),
   } : null;
-  const draftReinstall = selections.reinstallPrice ?? pricing?.calculatedReinstallTotal ?? 0;
   const selectedStyle = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey);
   const permanentSelected = selectedStyle?.kind === "permanent";
   const activePricingKey: HolidayQuoteOptionKey = permanentSelected
     ? "permanent"
-    : selections.pricingMode === "lease" || selections.pricingMode === "labor"
-      ? selections.pricingMode
-      : "buy";
+    : "buy";
   const activePricingLabel = activePricingKey === "permanent"
-    ? "Permanent Lights"
-    : activePricingKey === "labor"
-      ? "Labor Only"
-      : activePricingKey === "lease"
-        ? "Lease Lights"
-        : "Lights + Labor";
+    ? "Permanent Holiday Lighting Service"
+    : "Yearly Holiday Lighting Service";
   const visibleQuoteOptions: Array<readonly [HolidayQuoteOptionKey, string]> = [
     [activePricingKey, activePricingLabel],
   ];
@@ -1534,7 +1520,7 @@ export function HolidayLightingQuoter({
                 <div>
                   <p className="font-medium">Create new option</p>
                   <p className="text-xs text-muted-foreground">
-                    Keep the roofline measurements and start fresh with lights, scope, trees, and bushes.
+                    Keep the roofline measurements and start fresh with lights, trees, and bushes.
                   </p>
                 </div>
               </DropdownMenuItem>
@@ -1565,7 +1551,7 @@ export function HolidayLightingQuoter({
           </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Each option keeps its own roofline strands, tree and bush strand counts, colors, scope, and pricing. Switch options before editing to change only that option.
+          Each option keeps its own roofline strands, tree and bush strand counts, colors, and pricing. Switch options before editing to change only that option.
         </p>
       </div>
 
@@ -1753,32 +1739,7 @@ export function HolidayLightingQuoter({
               />
             </label>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-xs text-muted-foreground">Scope
-              <select
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={permanentSelected ? "buy" : activePricingKey}
-                disabled={permanentSelected}
-                onChange={(event) => {
-                  const pricingMode = event.target.value === "lease"
-                    ? "lease" as const
-                    : event.target.value === "labor"
-                      ? "labor" as const
-                      : "buy" as const;
-                  const next = {
-                    ...selections,
-                    pricingMode,
-                    billingMode: pricingMode === "labor" ? "labor_only" as const : "standard" as const,
-                  };
-                  setSelections(next);
-                  void save({ selections: next }, { quiet: true });
-                }}
-              >
-                <option value="buy">Materials + labor</option>
-                <option value="lease">Lease</option>
-                <option value="labor">Labor only</option>
-              </select>
-            </label>
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-muted-foreground">Light type
             <select
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1840,31 +1801,6 @@ export function HolidayLightingQuoter({
               </label>
             ) : null}
           </div>
-          {activePricingKey === "lease" ? (
-            <div className="rounded-md border border-border bg-muted/20 p-3">
-              <label className="block text-xs text-muted-foreground">Lease commitment
-                <select
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={selections.leaseContractYears ?? 1}
-                  onChange={(event) => {
-                    const leaseContractYears = Number(event.target.value) as HolidayLeaseContractYears;
-                    const next = { ...selections, leaseContractYears };
-                    setSelections(next);
-                    void save({ selections: next }, { quiet: true });
-                  }}
-                >
-                  <option value={1}>Single season — no commitment</option>
-                  <option value={3}>3-year agreement — save 10% each year</option>
-                  <option value={5}>5-year agreement — save 20% each year</option>
-                </select>
-              </label>
-              {(selections.leaseContractYears ?? 1) > 1 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  This discount applies to the annual lease price for every year of the agreement.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
           {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" &&
           (customColorEditingOptionId === activeOptionId ||
           !HOLIDAY_COLOR_PATTERNS.includes((selections.defaultColorPattern ?? "Warm White") as typeof HOLIDAY_COLOR_PATTERNS[number]) ||
@@ -1890,7 +1826,7 @@ export function HolidayLightingQuoter({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-semibold">Trees and bushes</h4>
-                <p className="text-xs text-muted-foreground">Strand count and difficulty are internal. Required lift rental is shown as a separate customer line item.</p>
+                <p className="text-xs text-muted-foreground">One per-strand service price is adjusted by the internal difficulty multiplier.</p>
               </div>
               <div className="flex gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => addPlacement("tree")}>Add tree</Button>
@@ -1927,28 +1863,18 @@ export function HolidayLightingQuoter({
                     <input className="mt-1 w-full rounded-md border border-input px-2 py-1.5 text-sm" list="holiday-color-patterns" value={placement.colorPattern ?? "Warm White"} onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, colorPattern: event.target.value } : item) })} />
                   </label>
                 </div>
-                {placement.kind === "tree" ? (
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={placement.liftRentalNeeded === true}
-                      onChange={(event) => updateMeasurementsAndSelection({ ...measurements, placements: measurements.placements.map((item) => item.id === placement.id ? { ...item, liftRentalNeeded: event.target.checked } : item) })}
-                    />
-                    Lift rental needed (charged once per quote, even when multiple trees use it)
-                  </label>
-                ) : null}
               </div>
             ))}
             <datalist id="holiday-color-patterns">{HOLIDAY_COLOR_PATTERNS.filter((color) => color !== "Other").map((color) => <option key={color} value={color} />)}</datalist>
-            {pricing?.lines.some((line) => line.kind === "tree" || line.kind === "bush" || line.kind === "lift") ? (
+            {pricing?.lines.some((line) => line.kind === "tree" || line.kind === "bush") ? (
               <div className="rounded-md border border-dashed border-border bg-muted/20 p-3">
-                <p className="text-xs font-semibold">Tree, bush, and lift pricing</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Tree inputs stay internal; required lift rental is itemized for the customer.</p>
+                <p className="text-xs font-semibold">Tree and bush pricing</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Strand count and difficulty stay internal.</p>
                 <div className="mt-2 space-y-2">
-                  {pricing.lines.filter((line) => line.kind === "tree" || line.kind === "bush" || line.kind === "lift").map((line) => (
+                  {pricing.lines.filter((line) => line.kind === "tree" || line.kind === "bush").map((line) => (
                     <div key={line.key} className="flex items-start justify-between gap-3 text-xs">
                       <div><span className="font-medium text-foreground">{line.name}</span><p className="text-muted-foreground">{line.staffDetail}</p></div>
-                      <span className="shrink-0 font-medium">{money(activePricingKey === "lease" ? line.leaseTotal : activePricingKey === "labor" ? line.reinstallTotal : line.purchaseTotal)}</span>
+                      <span className="shrink-0 font-medium">{money(line.purchaseTotal)}</span>
                     </div>
                   ))}
                 </div>
@@ -2105,12 +2031,6 @@ export function HolidayLightingQuoter({
                   {detail.discountTotal > 0 ? <p className="text-xs text-muted-foreground">{money(detail.subtotal)} minus {money(detail.discountTotal)} discount</p> : null}
                 </div>;
               })}
-              {activePricingKey === "buy" ? <label className="block text-xs text-muted-foreground">Future years ($)
-                <input type="number" min={0} max={9999999} step="0.01" placeholder={pricing.calculatedReinstallTotal.toFixed(2)}
-                  value={selections.reinstallPrice ?? ""}
-                  onChange={(event) => setSelections((current) => ({ ...current, reinstallPrice: event.target.value === "" ? null : Number(event.target.value) }))}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground" />
-              </label> : null}
               <Button type="button" variant="outline" disabled={saving} onClick={() => void save()}>Save prices and discounts</Button>
             </div>
           ) : null}
@@ -2272,38 +2192,21 @@ export function HolidayLightingQuoter({
                     <span>{activePricingLabel}</span>
                     <span className="font-semibold">{money(draftPricing?.[activePricingKey].total ?? pricing.optionDetails[activePricingKey].total)}</span>
                   </div>
-                  {activePricingKey === "buy" ? <p className="text-xs text-muted-foreground">
-                    New customer-owned lights and materials, installation, and take-down. Future
-                    years: {money(draftReinstall)}. Includes bulb replacements during the season.
-                  </p> : null}
-                  {activePricingKey === "lease" ? <p className="text-xs text-muted-foreground">
-                    No commitments. Includes installation, take-down, and bulb replacements during
-                    the season.
-                  </p> : null}
-                  {activePricingKey === "labor" ? <p className="text-xs text-muted-foreground">
-                    Installation and take-down labor for customer-supplied lights. Lights, bulbs,
-                    clips, extension cords, and other materials are not included.
-                  </p> : null}
-                  {activePricingKey === "permanent" ? <p className="text-xs text-muted-foreground">
-                    Fit your vibe year-round. Highest up-front cost, then change colors with an
-                    app for teams, causes, and holidays — not just Christmas.
-                  </p> : null}
+                  <p className="text-xs text-muted-foreground">
+                    Flat yearly service price. Includes company-provided lights, installation,
+                    maintenance, takedown and storage for seasonal displays, a lifetime warranty,
+                    and annual color changes. Cancellation fee: {money(pricing.cancellationFee)}.
+                  </p>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {Math.round(pricing.billedLengthFt)} ft billed
                   {pricing.placementCount
                     ? ` · ${pricing.placementCount} trees/bushes`
                     : ""}
-                  {(activePricingKey === "buy" || activePricingKey === "labor") && pricing.year1MinimumApplied
-                    ? " · new-option first-year minimum applied"
+                  {(pricing.year1MinimumApplied || pricing.permanentMinimumApplied)
+                    ? " · holiday job minimum applied"
                     : ""}
                 </p>
-                {activePricingKey === "lease" && pricing.optionDetails.lease.calculated <= 0 && selections.optionAdjustments?.lease?.price == null ? (
-                  <p className="text-xs text-amber-800">
-                    Seasonal lease is $0.00. Add a lease price per foot in Settings → Holiday
-                    lighting before sending this quote.
-                  </p>
-                ) : null}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">Save measurements to see pricing.</p>
