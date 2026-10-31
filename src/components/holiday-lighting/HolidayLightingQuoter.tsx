@@ -991,7 +991,7 @@ export function HolidayLightingQuoter({
 
     if (targetStep === 5) {
       if (measurements.segments.length === 0 && measurements.placements.length === 0) {
-        toast.error("Draw rooflines or mark trees and bushes on the satellite map");
+        toast.error("Add roofline measurements or mark trees and bushes");
         return;
       }
     }
@@ -1587,8 +1587,9 @@ export function HolidayLightingQuoter({
       <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 3 && step !== 4 && "hidden")}>
         {step === 4 ? (
           <p className="text-sm text-muted-foreground">
-            Draw linear rooflines on satellite. Mark any line that includes a peak to bill it at
-            1.5×. Click trees and bushes and enter the strand count for the currently selected option.
+            Draw rooflines on satellite or enter the footage manually. Select any line and mark it
+            as a peak to bill it at 1.5×. Click trees and bushes and enter the strand count for the
+            currently selected option.
           </p>
         ) : null}
         {step === 3 ? (
@@ -1614,6 +1615,20 @@ export function HolidayLightingQuoter({
             >
               Find on Google Street View
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={visualizing || previewActionOptionId === activeOptionId}
+              onClick={() => chooseOptionPreviewFile(activeOptionId)}
+            >
+              {previewActionOptionId === activeOptionId ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Upload completed preview
+            </Button>
             {previewSource === "street" ? (
               <Button
                 type="button"
@@ -1636,6 +1651,19 @@ export function HolidayLightingQuoter({
                   void onPhotoSelected(file);
                 }
                 e.target.value = "";
+              }}
+            />
+            <input
+              ref={optionPreviewFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                const optionId = optionPreviewTargetRef.current;
+                event.target.value = "";
+                optionPreviewTargetRef.current = null;
+                if (file && optionId) void uploadOptionPreview(optionId, file);
               }}
             />
           </div>
@@ -1685,7 +1713,7 @@ export function HolidayLightingQuoter({
               }
               return {
                 ...seg,
-                horizontalLengthFt: prev.horizontalLengthFt ?? seg.lengthFt,
+                horizontalLengthFt: seg.horizontalLengthFt ?? prev.horizontalLengthFt ?? seg.lengthFt,
                 hasPeak: seg.hasPeak ?? prev.hasPeak,
               };
             });
@@ -2089,57 +2117,52 @@ export function HolidayLightingQuoter({
         </section>
       ) : null}
 
-      {step === 3 && photoApproved && photoUrl ? (
+      {step === 3 && ((photoApproved && photoUrl) || renderedDesignOptions.some((option) => option.previewImageUrl)) ? (
         <section className="space-y-3 rounded-lg border border-border bg-white p-4">
-          <h3 className="text-sm font-semibold">AI lighting preview</h3>
-          <p className="text-xs text-muted-foreground">
-            Paint where lights should go once. Generate the active option first, then create additional previews only when you need them. Copied options keep the source image until their visual design changes.
-          </p>
-          <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
-          <input
-            ref={optionPreviewFileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              const optionId = optionPreviewTargetRef.current;
-              event.target.value = "";
-              optionPreviewTargetRef.current = null;
-              if (file && optionId) void uploadOptionPreview(optionId, file);
-            }}
-          />
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Button type="button" disabled={visualizing} onClick={() => void runVisualize(activeOptionId)}>
-              {visualizing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating preview…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  {visualizingPhase === "completed" || visualizingPhase === "partial" ? "Regenerate" : "Generate"} active option
-                </>
-              )}
-            </Button>
-            {renderedDesignOptions.length > 1 ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={visualizing}
-                onClick={() => void runVisualize(undefined, true)}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate all {renderedDesignOptions.length} options
-              </Button>
-            ) : null}
-            <PreviewGenerationStatus
-              phase={visualizingPhase}
-              progress={visualizingProgress}
-              message={visualizingMessage}
-            />
-          </div>
+          <h3 className="text-sm font-semibold">Lighting preview</h3>
+          {photoApproved && photoUrl ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                Paint where lights should go once. Generate the active option first, then create additional previews only when you need them. Copied options keep the source image until their visual design changes.
+              </p>
+              <PaintCanvas imageUrl={photoUrl} canvasRef={paintRef} disabled={visualizing} />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button type="button" disabled={visualizing} onClick={() => void runVisualize(activeOptionId)}>
+                  {visualizing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating preview…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      {visualizingPhase === "completed" || visualizingPhase === "partial" ? "Regenerate" : "Generate"} active option
+                    </>
+                  )}
+                </Button>
+                {renderedDesignOptions.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={visualizing}
+                    onClick={() => void runVisualize(undefined, true)}
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Generate all {renderedDesignOptions.length} options
+                  </Button>
+                ) : null}
+                <PreviewGenerationStatus
+                  phase={visualizingPhase}
+                  progress={visualizingProgress}
+                  message={visualizingMessage}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              This completed preview was uploaded manually. Upload a house photo only if you also want to create an AI-generated version.
+            </p>
+          )}
           {renderedDesignOptions.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
               {renderedDesignOptions.map((option) => {
@@ -2172,20 +2195,22 @@ export function HolidayLightingQuoter({
                     </div>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={visualizing || isUpdating}
-                      onClick={() => void runVisualize(option.id)}
-                    >
-                      {isGenerating ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      {option.previewImageUrl ? "Regenerate" : "Generate"}
-                    </Button>
+                    {photoApproved && photoUrl ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={visualizing || isUpdating}
+                        onClick={() => void runVisualize(option.id)}
+                      >
+                        {isGenerating ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {option.previewImageUrl ? "Regenerate" : "Generate"}
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       size="sm"

@@ -99,6 +99,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [error, setError] = useState<string | null>(null);
     const [streetViewState, setStreetViewState] = useState<StreetViewState>("loading");
     const [mode, setMode] = useState<DrawMode>("roofline");
+    const [manualLengthFt, setManualLengthFt] = useState("");
     const [placementStrandCount, setPlacementStrandCount] = useState(1);
     const [placementKind, setPlacementKind] = useState<"tree" | "bush">("tree");
     const [activeSegmentId, setActiveSegmentId] = useState<string | null>(
@@ -527,6 +528,29 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       });
     }
 
+    function addManualSegment() {
+      const lengthFt = Number(manualLengthFt);
+      if (!Number.isFinite(lengthFt) || lengthFt <= 0) return;
+
+      const segment: HolidayMeasurementSegment = {
+        id: newId(),
+        label: `Roofline ${measurements.segments.filter((s) => s.kind === "roofline").length + 1}`,
+        kind: "roofline",
+        path: [],
+        lengthFt,
+        horizontalLengthFt: lengthFt,
+        lightStyleKey: defaultLightStyleKey,
+        colorPattern: defaultColorPattern,
+      };
+      onChange({
+        ...measurements,
+        segments: [...measurements.segments, segment],
+      });
+      setManualLengthFt("");
+      setMode("select");
+      selectSegment(segment.id);
+    }
+
     function renameActive(label: string) {
       if (!activeSegmentId) return;
       onChange({
@@ -537,7 +561,36 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       });
     }
 
+    function updateActiveLength(value: string) {
+      if (!activeSegmentId || value === "") return;
+      const lengthFt = Number(value);
+      if (!Number.isFinite(lengthFt) || lengthFt < 0) return;
+      onChange({
+        ...measurements,
+        segments: measurements.segments.map((s) =>
+          s.id === activeSegmentId
+            ? { ...s, lengthFt, horizontalLengthFt: lengthFt }
+            : s
+        ),
+      });
+    }
+
+    function toggleActivePeak() {
+      if (!activeSegmentId) return;
+      onChange({
+        ...measurements,
+        segments: measurements.segments.map((s) =>
+          s.id === activeSegmentId ? { ...s, hasPeak: !s.hasPeak } : s
+        ),
+      });
+    }
+
     const active = measurements.segments.find((s) => s.id === activeSegmentId);
+    const totalMeasuredFt = measurements.segments.reduce(
+      (sum, segment) => sum + billedSegmentLengthFt(segment),
+      0
+    );
+    const validManualLength = Number.isFinite(Number(manualLengthFt)) && Number(manualLengthFt) > 0;
     const hasAny =
       measurements.segments.length > 0 || measurements.placements.length > 0;
 
@@ -569,6 +622,56 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               {label}
             </Button>
           ))}
+          <div className="flex items-center gap-1 border-l border-border pl-2">
+            <Input
+              type="number"
+              min={0.1}
+              step={0.1}
+              className="h-8 w-24"
+              value={manualLengthFt}
+              placeholder="Feet"
+              aria-label="Manual roofline measurement in feet"
+              onChange={(event) => setManualLengthFt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && validManualLength) addManualSegment();
+              }}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!validManualLength}
+              onClick={addManualSegment}
+            >
+              Add manual
+            </Button>
+          </div>
+          {measurements.segments.length > 0 ? (
+            <select
+              className="h-8 max-w-48 rounded-md border border-input bg-background px-2 text-xs"
+              value={activeSegmentId ?? ""}
+              aria-label="Selected measurement segment"
+              onChange={(event) => selectSegment(event.target.value || null)}
+            >
+              <option value="">Choose segment…</option>
+              {measurements.segments.map((segment) => (
+                <option key={segment.id} value={segment.id}>
+                  {segment.label} · {billedSegmentLengthFt(segment).toFixed(1)} ft
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant={active?.hasPeak ? "default" : "outline"}
+            disabled={!active}
+            aria-pressed={Boolean(active?.hasPeak)}
+            title={active ? "Bill this segment as a peak at 1.5×" : "Select a segment first"}
+            onClick={toggleActivePeak}
+          >
+            Peak (1.5×)
+          </Button>
           {mode === "roofline" ? (
             <>
               <Button type="button" size="sm" onClick={finishSegment}>
@@ -638,14 +741,19 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
           )}
         >
           <div
-            ref={mapRef}
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
               !ready && "animate-pulse",
               !mapVisible && "hidden",
               mapVisible && !panoVisible && "min-h-[520px]"
             )}
-          />
+          >
+            <div ref={mapRef} className="absolute inset-0" />
+            <div className="pointer-events-none absolute right-2 top-2 z-10 rounded-md border border-white/30 bg-black/70 px-3 py-1.5 text-right text-white shadow-sm backdrop-blur-sm">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-white/70">Total measured</p>
+              <p className="font-mono text-sm font-semibold">{totalMeasuredFt.toFixed(1)} ft</p>
+            </div>
+          </div>
           <div
             className={cn(
               "relative isolate min-h-[280px] overflow-hidden rounded-md border border-border bg-muted",
@@ -688,25 +796,21 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                   value={active.label}
                   onChange={(e) => renameActive(e.target.value)}
                 />
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  Feet
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    className="h-8 w-24 font-mono text-xs text-foreground"
+                    value={active.horizontalLengthFt ?? active.lengthFt}
+                    onChange={(event) => updateActiveLength(event.target.value)}
+                  />
+                </label>
                 <span className="font-mono text-xs text-muted-foreground">
                   {billedSegmentLengthFt(active).toFixed(1)} ft
                   {active.hasPeak ? " (peak 1.5×)" : ""}
                 </span>
-                <label className="flex items-center gap-1.5 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(active.hasPeak)}
-                    onChange={(e) => {
-                      onChange({
-                        ...measurements,
-                        segments: measurements.segments.map((s) =>
-                          s.id === active.id ? { ...s, hasPeak: e.target.checked } : s
-                        ),
-                      });
-                    }}
-                  />
-                  Peak (1.5×)
-                </label>
                 <Button
                   type="button"
                   size="sm"
