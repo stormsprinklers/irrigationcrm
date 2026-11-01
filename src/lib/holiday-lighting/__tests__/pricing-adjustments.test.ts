@@ -49,8 +49,9 @@ test("flat service pricing and cancellation fee use outward price and backend co
   assert.equal(pricing.optionDetails.buy.partsPrice, 0);
   assert.equal(pricing.optionDetails.buy.laborPrice, 800);
   assert.equal(pricing.optionDetails.buy.displayLines.length, 1);
-  assert.equal(pricing.optionDetails.buy.displayLines[0]?.name, "Yearly holiday lighting service");
-  assert.match(pricing.optionDetails.buy.displayLines[0]?.description ?? "", /Flat service price/i);
+  assert.equal(pricing.optionDetails.buy.displayLines[0]?.name, "Front roof");
+  assert.match(pricing.optionDetails.buy.displayLines[0]?.description ?? "", /100 ft/i);
+  assert.equal(pricing.optionDetails.buy.displayLines[0]?.total, 800);
   assert.equal(
     pricing.optionDetails.buy.includedLines.some(
       (line) => line.name === "Professional installation"
@@ -79,6 +80,10 @@ test("holiday job minimum raises service price without raising cancellation cost
   assert.equal(pricing.year1Total, 750);
   assert.equal(pricing.cancellationFee, 40);
   assert.equal(pricing.year1MinimumApplied, true);
+  assert.deepEqual(
+    pricing.optionDetails.buy.displayLines.map((line) => ({ name: line.name, total: line.total })),
+    [{ name: "Roof", total: 750 }]
+  );
 });
 
 test("permanent lighting is an installed purchase with no cancellation fee", () => {
@@ -95,11 +100,11 @@ test("permanent lighting is an installed purchase with no cancellation fee", () 
   assert.equal(pricing.cancellationFee, 0);
   assert.equal(
     pricing.optionDetails.permanent.displayLines[0]?.name,
-    "Permanent holiday lighting installation"
+    "Roof"
   );
   assert.match(
     pricing.optionDetails.permanent.displayLines[0]?.description ?? "",
-    /Flat installed price/i
+    /100 ft/i
   );
   assert.doesNotMatch(
     pricing.optionDetails.permanent.includedLines.map((line) => line.description).join(" "),
@@ -123,6 +128,51 @@ test("tree difficulty multiplies outward price but not material cancellation cos
   assert.equal(pricing.year1Total, 300);
   assert.equal(pricing.cancellationFee, 70);
   assert.match(pricing.lines[0]?.staffDetail ?? "", /1\.5×/);
+  assert.equal(pricing.optionDetails.buy.displayLines[0]?.name, "Front tree");
+  assert.match(pricing.optionDetails.buy.displayLines[0]?.description ?? "", /2 strands/i);
+  assert.equal(pricing.optionDetails.buy.displayLines[0]?.total, 300);
+});
+
+test("rooflines, trees, and bushes remain separate customer quote lines", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({
+      segments: [{ id: "roof", label: "Front roofline", kind: "roofline", path: [], lengthFt: 100 }],
+      placements: [
+        {
+          id: "tree", kind: "tree", size: "small", label: "Front tree",
+          latLng: { lat: 40, lng: -111 }, strandCount: 2, difficulty: 1,
+        },
+        {
+          id: "bush", kind: "bush", size: "small", label: "Entry bushes",
+          latLng: { lat: 40, lng: -111 }, strandCount: 3, difficulty: 1,
+        },
+      ],
+    }),
+    selections: parseHolidaySelections({ defaultLightStyleKey: "c9" }),
+    prices: priceLookup({
+      "HL-C9-SERVICE-FT": { unitPrice: 8, unitCost: 2.5 },
+      "HL-TREE-SERVICE-STRAND": { unitPrice: 100, unitCost: 35 },
+      "HL-BUSH-SERVICE-STRAND": { unitPrice: 50, unitCost: 20 },
+    }),
+  });
+
+  assert.deepEqual(
+    pricing.optionDetails.buy.displayLines.map((line) => ({
+      name: line.name,
+      description: line.description,
+      total: line.total,
+    })),
+    [
+      { name: "Front roofline", description: "100 ft", total: 800 },
+      { name: "Front tree", description: "2 strands · Warm White", total: 200 },
+      { name: "Entry bushes", description: "3 strands · Warm White", total: 150 },
+    ]
+  );
+  assert.equal(
+    pricing.optionDetails.buy.displayLines.reduce((sum, line) => sum + line.total, 0),
+    pricing.optionDetails.buy.subtotal
+  );
 });
 
 test("legacy catalogs and lease/labor selections migrate to the service model", () => {
@@ -155,4 +205,8 @@ test("manual flat price and discounts work without a parts/labor breakdown", () 
   assert.equal(pricing.optionDetails.buy.discountTotal, 75);
   assert.equal(pricing.optionDetails.buy.total, 525);
   assert.equal(pricing.cancellationFee, 100);
+  assert.deepEqual(
+    pricing.optionDetails.buy.displayLines.map((line) => ({ name: line.name, total: line.total })),
+    [{ name: "Roof", total: 600 }]
+  );
 });

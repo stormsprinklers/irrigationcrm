@@ -207,7 +207,7 @@ export async function createEstimateFromHolidayQuote(params: {
         photoUrl: pack.design.previewImageUrl ?? quote.previewImageUrl,
       },
     });
-    if (adjustment?.lineItems != null || detail.displayLines.length > 1) {
+    if (detail.displayLines.length > 0) {
       const breakdown = detail.displayLines;
       await prisma.estimateLineItem.createMany({
         data: breakdown.map((line, index) => ({

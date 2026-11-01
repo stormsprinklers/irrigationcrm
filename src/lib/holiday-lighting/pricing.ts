@@ -181,7 +181,9 @@ export function computeHolidayQuotePricing(params: {
       name:
         placement.label.trim() ||
         (placement.kind === "tree" ? "Unnamed tree" : "Unnamed bush"),
-      description: placement.label,
+      description: `${strandCount} strand${strandCount === 1 ? "" : "s"}${
+        placement.colorPattern ? ` · ${placement.colorPattern}` : ""
+      }`,
       staffDetail: `${strandCount} strand${strandCount === 1 ? "" : "s"} · Difficulty ${difficulty} (${difficultyMultiplier}×)`,
       purchaseTotal: amount,
       leaseTotal: amount,
@@ -553,24 +555,50 @@ export function holidayCustomerPackages(params: {
 
 export type HolidayDisplayLine = { id?: string; quantity?: number; unitPrice?: number; kind?: "parts" | "labor" | "service" | "included"; name: string; description: string; total: number; itemType: "PRODUCT" | "SERVICE" };
 
-/** Shared native preview and estimate breakdown, including explicit zero-dollar overrides. */
+/**
+ * Customer-facing scope lines for an option. Job minimums and flat-price
+ * overrides are distributed across the measured work so rooflines, trees,
+ * and bushes stay separate without exposing an internal adjustment row.
+ */
 export function holidayOptionLines(params: {
   lines: HolidayPricedLine[]; key: HolidayQuoteOptionKey; targetSubtotal: number;
   partsPrice?: number; laborPrice?: number;
 }): HolidayDisplayLine[] {
-  const result: HolidayDisplayLine[] = [{
-    name: params.key === "permanent"
-      ? "Permanent holiday lighting installation"
-      : "Yearly holiday lighting service",
-    description: params.key === "permanent"
-      ? "Flat installed price. Permanent lighting materials and professional installation are included."
-      : "Flat service price. Materials are provided by the company and are not sold or marked up on this estimate.",
-    total: money(params.targetSubtotal),
-    itemType: "SERVICE",
-  }];
-  if (params.partsPrice == null && params.laborPrice == null) return result;
-  result[0]!.total = money(Math.max(0, params.laborPrice ?? params.targetSubtotal));
-  return result;
+  if (!params.lines.length) return [];
+
+  const targetSubtotal = money(Math.max(0, params.targetSubtotal));
+  const sourceTotals = params.lines.map((line) =>
+    money(Math.max(0,
+      params.key === "lease"
+        ? line.leaseTotal
+        : params.key === "labor"
+          ? line.laborTotal
+          : line.purchaseTotal
+    ))
+  );
+  const sourceSubtotal = money(sourceTotals.reduce((sum, total) => sum + total, 0));
+  let remaining = targetSubtotal;
+
+  return params.lines.map((line, index) => {
+    const isLast = index === params.lines.length - 1;
+    const requestedAllocation = isLast
+      ? remaining
+      : sourceSubtotal > 0
+        ? money(targetSubtotal * sourceTotals[index]! / sourceSubtotal)
+        : money(targetSubtotal / params.lines.length);
+    const allocated = money(Math.min(remaining, Math.max(0, requestedAllocation)));
+    remaining = money(Math.max(0, remaining - allocated));
+    return {
+      id: line.key,
+      name: line.name,
+      description: line.description,
+      quantity: 1,
+      unitPrice: allocated,
+      kind: "service",
+      total: allocated,
+      itemType: "SERVICE",
+    };
+  });
 }
 
 export function holidayIncludedLines(key: HolidayQuoteOptionKey) {
