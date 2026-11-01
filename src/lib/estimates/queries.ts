@@ -2,6 +2,8 @@ import { EstimateStatus, Prisma } from "@prisma/client";
 import { onEstimateClosed } from "@/lib/notifications/estimate-followup";
 import { ensureEstimateOptions, serializeOption } from "@/lib/estimates/options";
 import { estimateOptionPhotoUrl } from "@/lib/blob/urls";
+import { customerEstimateUrl } from "@/lib/company/customer-url";
+import { createEstimatePreviewToken } from "@/lib/portal/estimate-preview";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { EstimateDTO, EstimateListItem } from "./types";
@@ -44,6 +46,7 @@ export function serializeEstimate(
   estimate: EstimatePayload,
   notes?: EstimateDTO["notes"],
   portalPath: string | null = null,
+  staffPreviewPath: string | null = null,
   financingUrl: string | null = null
 ): EstimateDTO {
   const optionCount = estimate.options?.length ?? 0;
@@ -61,6 +64,7 @@ export function serializeEstimate(
     estimateNumber: estimate.estimateNumber ?? null,
     publicToken: estimate.publicToken,
     portalPath,
+    staffPreviewPath,
     status: estimate.status,
     expiresAt: estimate.expiresAt?.toISOString() ?? null,
     depositRequired: estimate.depositRequired,
@@ -253,9 +257,25 @@ export async function getEstimateForCompany(companyId: string, estimateId: strin
   });
   const slug = company?.portalSlug ?? company?.bookingSlug ?? null;
   const portalPath = slug
-    ? `/portal/${encodeURIComponent(slug)}/estimates/${encodeURIComponent(refreshed.publicToken)}`
+    ? customerEstimateUrl(company, refreshed.publicToken, refreshed.id)
     : null;
-  return serializeEstimate(refreshed, notes, portalPath, company?.estimateFinancingUrl ?? null);
+  let staffPreviewPath: string | null = null;
+  if (portalPath) {
+    const previewUrl = new URL(portalPath);
+    previewUrl.searchParams.set("preview", "1");
+    previewUrl.searchParams.set(
+      "previewToken",
+      createEstimatePreviewToken({ companyId, estimateId: refreshed.id })
+    );
+    staffPreviewPath = previewUrl.toString();
+  }
+  return serializeEstimate(
+    refreshed,
+    notes,
+    portalPath,
+    staffPreviewPath,
+    company?.estimateFinancingUrl ?? null
+  );
 }
 
 export async function listEstimates(

@@ -18,8 +18,10 @@ export type EstimateDTO = {
   id: string;
   estimateNumber: string | null;
   publicToken: string;
-  /** Relative customer portal path when company has a portal/booking slug. */
+  /** Absolute customer portal URL on the company's configured public domain. */
   portalPath: string | null;
+  /** Short-lived staff-only customer-view preview URL, including draft estimates. */
+  staffPreviewPath: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;

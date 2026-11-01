@@ -62,6 +62,7 @@ type EstimateData = {
   id: string;
   estimateNumber: string | null;
   portalPath: string | null;
+  staffPreviewPath: string | null;
   status: string;
   expiresAt: string | null;
   depositRequired: boolean;
@@ -662,10 +663,10 @@ export function EstimateDetail({ estimateId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {estimate.portalPath ? (
+          {estimate.staffPreviewPath ? (
             <Button variant="outline" size="sm" asChild>
               <Link
-                href={`${estimate.portalPath}?preview=1`}
+                href={estimate.staffPreviewPath}
                 target="_blank"
                 rel="noopener noreferrer"
               >

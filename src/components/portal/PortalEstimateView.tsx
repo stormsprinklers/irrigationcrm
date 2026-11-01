@@ -141,10 +141,12 @@ export function PortalEstimateView({
   slug,
   token,
   preview = false,
+  previewToken,
 }: {
   slug: string;
   token: string;
   preview?: boolean;
+  previewToken?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const hasInk = useRef(false);
@@ -175,8 +177,11 @@ export function PortalEstimateView({
       setPageLoading(true);
       setError(null);
       try {
-        const continueQuery = vslRefresh > 0 ? "?continueAfterVsl=1" : "";
-        const estRes = await fetch(`/api/portal/estimates/${token}${continueQuery}`, {
+        const query = new URLSearchParams();
+        if (vslRefresh > 0) query.set("continueAfterVsl", "1");
+        if (previewToken) query.set("previewToken", previewToken);
+        const suffix = query.size > 0 ? `?${query.toString()}` : "";
+        const estRes = await fetch(`/api/portal/estimates/${token}${suffix}`, {
           cache: "no-store",
         });
         const estData = await estRes.json().catch(() => ({}));
@@ -231,7 +236,10 @@ export function PortalEstimateView({
         );
 
         if (estData.estimate?.hasDesign) {
-          const designRes = await fetch(`/api/portal/estimates/${token}/design`);
+          const designQuery = previewToken
+            ? `?previewToken=${encodeURIComponent(previewToken)}`
+            : "";
+          const designRes = await fetch(`/api/portal/estimates/${token}/design${designQuery}`);
           if (designRes.ok) {
             const designData = await designRes.json();
             if (!cancelled) {
@@ -252,7 +260,7 @@ export function PortalEstimateView({
     return () => {
       cancelled = true;
     };
-  }, [preview, token, vslRefresh]);
+  }, [preview, previewToken, token, vslRefresh]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

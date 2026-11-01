@@ -102,9 +102,9 @@ test("public estimate normalizes private preview URLs and excludes internal note
       designExportMetadata:{source:"holiday-lighting-quote",recurringYearlyService:true,previewImageUrl:preview,notes:"Secret gate code",options:[{notes:"Private staffing instructions",recurringYearlyService:true,cancellationFee:237.45}]},
       options:[{id:"option",letter:"A",label:"Roofline",description:"Roofline lights\n\nSecret gate code\n\nPrivate staffing instructions",internalNotes:"Secret gate code",photoUrl:preview,sortOrder:0,subtotal:100,discountTotal:0,total:100}],
       lineItems:[]
-    });
+    }, "https://portal.chestnut.example");
     assert.equal(view.holidayPreviewImageUrl, view.options[0].photoUrl);
-    assert.ok(view.holidayPreviewImageUrl?.startsWith("https://crm.example/api/public/blob?"));
+    assert.ok(view.holidayPreviewImageUrl?.startsWith("https://portal.chestnut.example/api/public/blob?"));
     assert.equal(view.options[0].description,"Roofline lights");
     assert.equal(view.options[0].cancellationFee, 237.45);
     assert.equal(view.holidayRecurringService, true);
@@ -150,16 +150,28 @@ test("permanent lighting never exposes seasonal recurring terms or a cancellatio
       discountTotal: 0,
       total: 2_500,
     }],
-    lineItems: [{
-      optionId: "permanent-option",
-      name: "Permanent Holiday Lighting Service",
-      description: "Yearly recurring service · Cancel by paying the unmarked-up material cost",
-      quantity: 1,
-      unitPrice: 2_500,
-      unit: "each",
-      total: 2_500,
-      sortOrder: 0,
-    }],
+    lineItems: [
+      {
+        optionId: "permanent-option",
+        name: "Permanent Holiday Lighting Service",
+        description: "Yearly recurring service · Cancel by paying the unmarked-up material cost",
+        quantity: 1,
+        unitPrice: 2_500,
+        unit: "each",
+        total: 2_500,
+        sortOrder: 0,
+      },
+      {
+        optionId: "permanent-option",
+        name: "Professional installation",
+        description: "Custom-fit holiday lighting installation is included.",
+        quantity: 1,
+        unitPrice: 0,
+        unit: "included",
+        total: 0,
+        sortOrder: 1,
+      },
+    ],
   });
 
   assert.equal(view.options[0]?.recurringYearlyService, false);
@@ -169,4 +181,5 @@ test("permanent lighting never exposes seasonal recurring terms or a cancellatio
   assert.match(view.options[0]?.description ?? "", /one-time permanent/i);
   assert.equal(view.lineItems[0]?.name, "Permanent Holiday Lighting Installation");
   assert.doesNotMatch(view.lineItems[0]?.description ?? "", /recurring|cancel/i);
+  assert.equal(view.lineItems.some((line) => line.name === "Professional installation"), false);
 });

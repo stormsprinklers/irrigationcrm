@@ -35,9 +35,12 @@ export function canPublicAccessBlobPath(pathname: string) {
 }
 
 /** Customer-facing estimate option photo URL (Present mode, portal, mobile). */
-export function estimateOptionPhotoUrl(storedUrl: string | null | undefined) {
+export function estimateOptionPhotoUrl(
+  storedUrl: string | null | undefined,
+  publicBaseUrl?: string | null
+) {
   if (!storedUrl?.trim()) return null;
-  return absolutePublicBlobUrl(storedUrl) ?? storedUrl.trim();
+  return absolutePublicBlobUrl(storedUrl, publicBaseUrl) ?? storedUrl.trim();
 }
 
 function appOrigin() {
@@ -72,7 +75,10 @@ export function absoluteBlobProxyUrl(storedUrl: string | null | undefined) {
  * Absolute URL that email clients / Google can fetch without a CRM session.
  * Non-blob URLs are returned unchanged.
  */
-export function absolutePublicBlobUrl(storedUrl: string | null | undefined) {
+export function absolutePublicBlobUrl(
+  storedUrl: string | null | undefined,
+  publicBaseUrl?: string | null
+) {
   if (!storedUrl?.trim()) return undefined;
 
   if (!isBlobStorageUrl(storedUrl)) {
@@ -84,7 +90,7 @@ export function absolutePublicBlobUrl(storedUrl: string | null | undefined) {
     return storedUrl.trim();
   }
 
-  const origin = appOrigin();
+  const origin = (publicBaseUrl?.trim() || appOrigin()).replace(/\/$/, "");
   const path = `/api/public/blob?pathname=${encodeURIComponent(pathname)}`;
   return origin ? `${origin}${path}` : path;
 }

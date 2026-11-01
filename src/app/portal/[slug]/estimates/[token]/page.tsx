@@ -15,12 +15,19 @@ export const metadata: Metadata = {
 
 type Props = {
   params: Promise<{ slug: string; token: string }>;
-  searchParams: Promise<{ preview?: string }>;
+  searchParams: Promise<{ preview?: string; previewToken?: string }>;
 };
 
 export default async function PortalEstimatePage({ params, searchParams }: Props) {
   const { slug, token } = await params;
-  const { preview } = await searchParams;
+  const { preview, previewToken } = await searchParams;
   if (!(await getCompanyByPortalSlug(slug))) notFound();
-  return <PortalEstimateView slug={slug} token={token} preview={preview === "1"} />;
+  return (
+    <PortalEstimateView
+      slug={slug}
+      token={token}
+      preview={preview === "1"}
+      previewToken={previewToken}
+    />
+  );
 }

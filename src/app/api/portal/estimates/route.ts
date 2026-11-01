@@ -7,6 +7,7 @@ import {
 } from "@/lib/portal/auth";
 import { portalFeatureEnabled } from "@/lib/portal/permissions";
 import { serializePortalEstimate } from "@/lib/portal/serializers";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
 
 export async function GET() {
   const ctx = await requirePortalCustomer();
@@ -27,6 +28,8 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    estimates: estimates.map(serializePortalEstimate),
+    estimates: estimates.map((estimate) =>
+      serializePortalEstimate(estimate, getCustomerBaseUrl(ctx.company))
+    ),
   });
 }

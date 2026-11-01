@@ -14,6 +14,8 @@ import {
   portalCompanyPayload,
 } from "@/lib/portal/public-estimate";
 import { createEstimateVslGate } from "@/lib/portal/estimate-vsl";
+import { getCustomerBaseUrl } from "@/lib/company/customer-url";
+import { verifyEstimatePreviewToken } from "@/lib/portal/estimate-preview";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -55,6 +57,26 @@ async function loadEstimate(companyId: string, customerId: string, idOrToken: st
 export async function GET(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const continueAfterVsl = request.nextUrl.searchParams.get("continueAfterVsl") === "1";
+  const previewToken = request.nextUrl.searchParams.get("previewToken");
+
+  if (previewToken) {
+    const preview = verifyEstimatePreviewToken(previewToken);
+    if (preview) {
+      const estimate = await findEstimateForStaffPreview(preview.companyId, id);
+      if (estimate?.id === preview.estimateId) {
+        return NextResponse.json({
+          estimate: serializePortalEstimate(
+            estimate,
+            getCustomerBaseUrl(estimate.company)
+          ),
+          company: portalCompanyPayload(estimate.company),
+          authenticated: false,
+          staffPreview: true,
+        });
+      }
+    }
+  }
+
   const ctx = await requirePortalCustomer();
 
   if (ctx) {
@@ -80,7 +102,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       });
     }
     return NextResponse.json({
-      estimate: serializePortalEstimate(estimate),
+      estimate: serializePortalEstimate(estimate, getCustomerBaseUrl(ctx.company)),
       company: portalCompanyPayload(ctx.company),
       authenticated: true,
     });
@@ -93,7 +115,10 @@ export async function GET(request: NextRequest, { params }: Params) {
     const estimate = await findEstimateForStaffPreview(staff.companyId, id);
     if (estimate) {
       return NextResponse.json({
-        estimate: serializePortalEstimate(estimate),
+        estimate: serializePortalEstimate(
+          estimate,
+          getCustomerBaseUrl(estimate.company)
+        ),
         company: portalCompanyPayload(estimate.company),
         authenticated: false,
         staffPreview: true,
@@ -123,7 +148,10 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json({
-    estimate: serializePortalEstimate(estimate),
+    estimate: serializePortalEstimate(
+      estimate,
+      getCustomerBaseUrl(estimate.company)
+    ),
     company: portalCompanyPayload(estimate.company),
     authenticated: false,
   });

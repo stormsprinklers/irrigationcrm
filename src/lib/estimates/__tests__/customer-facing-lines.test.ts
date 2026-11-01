@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   customerFacingEstimateLines,
   customerFacingHolidayPlacementName,
+  isRedundantHolidayInstallationLine,
 } from "../customer-facing-lines";
 
 test("holiday placement names omit legacy tree and bush prefixes", () => {
@@ -10,6 +11,23 @@ test("holiday placement names omit legacy tree and bush prefixes", () => {
   assert.equal(customerFacingHolidayPlacementName("Tree wrap — Front maple — parts"), "Front maple — parts");
   assert.equal(customerFacingHolidayPlacementName("Bush: Entry planters"), "Entry planters");
   assert.equal(customerFacingHolidayPlacementName("Entry garland"), "Entry garland");
+});
+
+test("holiday customer views identify the redundant professional installation row", () => {
+  assert.equal(
+    isRedundantHolidayInstallationLine({
+      name: "Professional installation",
+      unit: "included",
+    }),
+    true
+  );
+  assert.equal(
+    isRedundantHolidayInstallationLine({
+      name: "Professional installation",
+      unit: "each",
+    }),
+    false
+  );
 });
 
 test("legacy labor minimum adjustment is hidden and folded into roofline labor", () => {

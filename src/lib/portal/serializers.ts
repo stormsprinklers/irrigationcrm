@@ -8,7 +8,10 @@ import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map"
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
-import { customerFacingHolidayPlacementName } from "@/lib/estimates/customer-facing-lines";
+import {
+  customerFacingHolidayPlacementName,
+  isRedundantHolidayInstallationLine,
+} from "@/lib/estimates/customer-facing-lines";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
@@ -207,7 +210,7 @@ export function serializePortalEstimate(estimate: {
     estimateWarrantyText?: string | null;
     deferredVisitDepositThreshold?: { toNumber?: () => number } | number | null;
   } | null;
-}) {
+}, publicBaseUrl?: string | null) {
   const hasDesign = Boolean(estimate.designProjectId);
   const meta =
     estimate.designExportMetadata && typeof estimate.designExportMetadata === "object"
@@ -221,7 +224,9 @@ export function serializePortalEstimate(estimate: {
   }
   const holidayStrandMap = holidayStrandMapFromMetadata(meta);
   const holidayPreviewImageUrl =
-    typeof meta?.previewImageUrl === "string" ? estimateOptionPhotoUrl(meta.previewImageUrl) : null;
+    typeof meta?.previewImageUrl === "string"
+      ? estimateOptionPhotoUrl(meta.previewImageUrl, publicBaseUrl)
+      : null;
   const holidayPreviewDisclaimer =
     typeof meta?.previewDisclaimer === "string"
       ? meta.previewDisclaimer
@@ -271,7 +276,7 @@ export function serializePortalEstimate(estimate: {
         pricingMode === "permanent"
           ? permanentLightingDescription(description)
           : description,
-      photoUrl: estimateOptionPhotoUrl(option.photoUrl),
+      photoUrl: estimateOptionPhotoUrl(option.photoUrl, publicBaseUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
       popular: hasHolidayLighting && (option.letter === "B" || option.label === "Lease Lights"),
@@ -305,6 +310,9 @@ export function serializePortalEstimate(estimate: {
     sortOrder: item.sortOrder,
     itemType: item.priceBookItem?.type ?? "SERVICE",
   }));
+  if (hasHolidayLighting) {
+    lineItems = lineItems.filter((item) => !isRedundantHolidayInstallationLine(item));
+  }
 
   // Correct permanent-lighting estimates created before permanent installations
   // were separated from the seasonal recurring-service model.

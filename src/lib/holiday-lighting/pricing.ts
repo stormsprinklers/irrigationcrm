@@ -451,10 +451,6 @@ export function holidayDetailedLaborOnlyLines(params: {
 }
 
 export const HOLIDAY_INCLUDED_LINES = [
-  {
-    name: "Professional installation",
-    description: "Custom-fit holiday lighting installation is included in the yearly service.",
-  },
   { name: "Takedown", description: "Seasonal light removal is included." },
   {
     name: "Storage",

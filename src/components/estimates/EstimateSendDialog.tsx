@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { HolidayLightingPlanSection } from "@/components/holiday-lighting/HolidayLightingPlanSection";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
-import { customerFacingEstimateLines } from "@/lib/estimates/customer-facing-lines";
+import {
+  customerFacingEstimateLines,
+  isRedundantHolidayInstallationLine,
+} from "@/lib/estimates/customer-facing-lines";
 import {
   defaultEstimatePreviewOption,
   estimatePreviewTotals,
@@ -19,6 +22,7 @@ type EstimatePreview = {
   id: string;
   estimateNumber: string | null;
   portalPath: string | null;
+  staffPreviewPath: string | null;
   status: string;
   selectedOptionId: string | null;
   total: number;
@@ -141,12 +145,15 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
 
   const lines = useMemo(() => {
     if (!estimate) return [];
-    if (!activeOption) return customerFacingEstimateLines(estimate.lineItems);
-    return customerFacingEstimateLines(
-      estimate.lineItems.filter(
-        (item) => !item.optionId || item.optionId === activeOption.id
-      )
-    );
+    const optionLines = !activeOption
+      ? estimate.lineItems
+      : estimate.lineItems.filter(
+          (item) => !item.optionId || item.optionId === activeOption.id
+        );
+    const customerLines = customerFacingEstimateLines(optionLines);
+    return estimate.designExportMetadata?.source === "holiday-lighting-quote"
+      ? customerLines.filter((item) => !isRedundantHolidayInstallationLine(item))
+      : customerLines;
   }, [estimate, activeOption]);
 
   const activeDiscounts = useMemo(() => {
@@ -327,11 +334,11 @@ export function EstimateSendDialog({ open, estimateId, onClose, onSent }: Props)
                 </div>
               </div>
 
-              {estimate.portalPath ? (
+              {estimate.staffPreviewPath ? (
                 <p className="text-xs text-muted-foreground">
                   Customer link opens a branded approval page (not a PDF attachment).{" "}
                   <Link
-                    href={estimate.portalPath}
+                    href={estimate.staffPreviewPath}
                     target="_blank"
                     className="inline-flex items-center gap-1 text-primary hover:underline"
                   >

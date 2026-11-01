@@ -16,6 +16,17 @@ export function customerFacingHolidayPlacementName(name: string) {
   return name.replace(/^(?:tree|bush)(?:\s+wrap)?\s*(?:—|–|-|:)\s*/i, "").trim() || name;
 }
 
+/** Hide the redundant zero-dollar row from older holiday-lighting estimates. */
+export function isRedundantHolidayInstallationLine(item: {
+  name: string;
+  unit?: string | null;
+}) {
+  return (
+    item.unit?.trim().toLowerCase() === "included" &&
+    /^professional installation$/i.test(item.name.trim())
+  );
+}
+
 /**
  * Hide legacy internal reconciliation rows while preserving the displayed
  * subtotal by folding their value into the corresponding roofline row.

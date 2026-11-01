@@ -51,6 +51,12 @@ test("flat service pricing and cancellation fee use outward price and backend co
   assert.equal(pricing.optionDetails.buy.displayLines.length, 1);
   assert.equal(pricing.optionDetails.buy.displayLines[0]?.name, "Yearly holiday lighting service");
   assert.match(pricing.optionDetails.buy.displayLines[0]?.description ?? "", /Flat service price/i);
+  assert.equal(
+    pricing.optionDetails.buy.includedLines.some(
+      (line) => line.name === "Professional installation"
+    ),
+    false
+  );
 });
 
 test("holiday job minimum raises service price without raising cancellation cost", () => {
