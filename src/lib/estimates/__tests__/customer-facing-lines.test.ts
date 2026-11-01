@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   customerFacingEstimateLines,
+  customerFacingHolidayDescription,
   customerFacingHolidayPlacementName,
   isRedundantHolidayInstallationLine,
 } from "../customer-facing-lines";
@@ -11,6 +12,18 @@ test("holiday placement names omit legacy tree and bush prefixes", () => {
   assert.equal(customerFacingHolidayPlacementName("Tree wrap — Front maple — parts"), "Front maple — parts");
   assert.equal(customerFacingHolidayPlacementName("Bush: Entry planters"), "Entry planters");
   assert.equal(customerFacingHolidayPlacementName("Entry garland"), "Entry garland");
+});
+
+test("holiday customer descriptions never expose footage", () => {
+  assert.equal(customerFacingHolidayDescription("120 ft including peak"), null);
+  assert.equal(
+    customerFacingHolidayDescription("C9 · 120 feet · Warm White"),
+    "C9 · Warm White"
+  );
+  assert.equal(
+    customerFacingHolidayDescription("Custom fit uses 84 foot of warm-white lighting."),
+    "Custom fit uses warm-white lighting."
+  );
 });
 
 test("holiday customer views identify the redundant professional installation row", () => {

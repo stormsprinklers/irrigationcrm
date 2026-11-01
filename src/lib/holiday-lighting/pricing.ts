@@ -557,8 +557,8 @@ export type HolidayDisplayLine = { id?: string; quantity?: number; unitPrice?: n
 
 /**
  * Customer-facing scope lines for an option. Job minimums and flat-price
- * overrides are distributed across the measured work so rooflines, trees,
- * and bushes stay separate without exposing an internal adjustment row.
+ * overrides are distributed across category rows so roofline, tree, and bush
+ * pricing stays separate without exposing measurements or adjustment rows.
  */
 export function holidayOptionLines(params: {
   lines: HolidayPricedLine[]; key: HolidayQuoteOptionKey; targetSubtotal: number;
@@ -567,31 +567,51 @@ export function holidayOptionLines(params: {
   if (!params.lines.length) return [];
 
   const targetSubtotal = money(Math.max(0, params.targetSubtotal));
-  const sourceTotals = params.lines.map((line) =>
-    money(Math.max(0,
-      params.key === "lease"
-        ? line.leaseTotal
-        : params.key === "labor"
-          ? line.laborTotal
-          : line.purchaseTotal
-    ))
-  );
+  const lineSourceTotal = (line: HolidayPricedLine) => money(Math.max(0,
+    params.key === "lease"
+      ? line.leaseTotal
+      : params.key === "labor"
+        ? line.laborTotal
+        : line.purchaseTotal
+  ));
+  const groupOrder: HolidayPricedLine["kind"][] = ["roofline", "tree", "bush", "lift"];
+  const groups = groupOrder.flatMap((kind) => {
+    const lines = params.lines.filter((line) => line.kind === kind);
+    if (!lines.length) return [];
+    const styles = [...new Set(lines.map((line) => line.lightStyleLabel?.trim()).filter(Boolean))];
+    const colors = [...new Set(lines.map((line) => line.colorPattern?.trim()).filter(Boolean))];
+    const description = [...styles, ...colors].join(" · ");
+    return [{
+      kind,
+      name:
+        kind === "roofline"
+          ? "Roofline lighting"
+          : kind === "tree"
+            ? "Tree lighting"
+            : kind === "bush"
+              ? "Bush lighting"
+              : "Lift service",
+      description,
+      sourceTotal: money(lines.reduce((sum, line) => sum + lineSourceTotal(line), 0)),
+    }];
+  });
+  const sourceTotals = groups.map((group) => group.sourceTotal);
   const sourceSubtotal = money(sourceTotals.reduce((sum, total) => sum + total, 0));
   let remaining = targetSubtotal;
 
-  return params.lines.map((line, index) => {
-    const isLast = index === params.lines.length - 1;
+  return groups.map((group, index) => {
+    const isLast = index === groups.length - 1;
     const requestedAllocation = isLast
       ? remaining
       : sourceSubtotal > 0
         ? money(targetSubtotal * sourceTotals[index]! / sourceSubtotal)
-        : money(targetSubtotal / params.lines.length);
+        : money(targetSubtotal / groups.length);
     const allocated = money(Math.min(remaining, Math.max(0, requestedAllocation)));
     remaining = money(Math.max(0, remaining - allocated));
     return {
-      id: line.key,
-      name: line.name,
-      description: line.description,
+      id: group.kind,
+      name: group.name,
+      description: group.description,
       quantity: 1,
       unitPrice: allocated,
       kind: "service",

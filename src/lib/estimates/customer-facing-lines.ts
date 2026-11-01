@@ -16,6 +16,23 @@ export function customerFacingHolidayPlacementName(name: string) {
   return name.replace(/^(?:tree|bush)(?:\s+wrap)?\s*(?:—|–|-|:)\s*/i, "").trim() || name;
 }
 
+/** Remove measurements from holiday-lighting copy shown to customers. */
+export function customerFacingHolidayDescription(description: string | null) {
+  if (!description) return description;
+  const withoutFootage = description.replace(
+    /\b\d+(?:\.\d+)?\s*(?:ft|feet|foot)\b(?:\s+including peak)?(?:\s+of)?/gi,
+    ""
+  );
+  const normalized = withoutFootage
+    .replace(/\s*·\s*/g, " · ")
+    .replace(/(?:\s*·\s*){2,}/g, " · ")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
+    .replace(/^[·,;:\-\s]+|[·,;:\-\s]+$/g, "")
+    .trim();
+  return normalized || null;
+}
+
 /** Hide the redundant zero-dollar row from older holiday-lighting estimates. */
 export function isRedundantHolidayInstallationLine(item: {
   name: string;

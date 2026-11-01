@@ -9,6 +9,7 @@ import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
 import {
+  customerFacingHolidayDescription as hideHolidayFootage,
   customerFacingHolidayPlacementName,
   isRedundantHolidayInstallationLine,
 } from "@/lib/estimates/customer-facing-lines";
@@ -16,7 +17,9 @@ import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
 function customerFacingHolidayDescription(description: string | null) {
-  return description?.replace(/unmarked-up material cost/gi, "material cost") ?? description;
+  return hideHolidayFootage(
+    description?.replace(/unmarked-up material cost/gi, "material cost") ?? description
+  );
 }
 
 function permanentLightingDescription(description: string | null) {
