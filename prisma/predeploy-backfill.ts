@@ -115,6 +115,26 @@ async function ensureEstimateVslSettings() {
   console.log("Ensured estimate VSL settings and customer completion field");
 }
 
+async function backfillChestnutLegalLinks() {
+  const terms = await prisma.company.updateMany({
+    where: {
+      name: "Chestnut & Cheer",
+      termsOfServiceUrl: null,
+    },
+    data: { termsOfServiceUrl: "https://www.utah.christmas/terms-of-service" },
+  });
+  const privacy = await prisma.company.updateMany({
+    where: {
+      name: "Chestnut & Cheer",
+      privacyPolicyUrl: null,
+    },
+    data: { privacyPolicyUrl: "https://www.utah.christmas/privacy-policy" },
+  });
+  console.log(
+    `Backfilled Chestnut & Cheer legal links (terms=${terms.count}, privacy=${privacy.count})`
+  );
+}
+
 async function ensureGivingProgramSeparation() {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "givingProgramOnly" BOOLEAN NOT NULL DEFAULT false`
@@ -1030,6 +1050,7 @@ async function main() {
     console.warn("Estimate deposit threshold ensure skipped:", err);
   }
   await ensureEstimateVslSettings();
+  await backfillChestnutLegalLinks();
   await ensureGivingProgramSeparation();
 }
 

@@ -29,9 +29,19 @@ export function canAccessBlobPath(companyId: string, pathname: string) {
 
 /** Paths safe to expose without auth (email logos, marketing media, portal offers, present photos). */
 export function canPublicAccessBlobPath(pathname: string) {
-  return /^(company-email|company-brand|company-bimi|company-holiday|estimate-vsl|gbp\/local-posts|portal-offers|employees|media|price-book)\/[^/]+\//.test(
-    pathname
-  );
+  if (
+    /^(company-email|company-brand|company-bimi|company-holiday|estimate-vsl|gbp\/local-posts|portal-offers|employees|media|price-book)\/[^/]+\//.test(
+      pathname
+    )
+  ) {
+    return true;
+  }
+
+  // Completed holiday previews uploaded before they moved to company-holiday
+  // must remain visible on estimates that have already been sent. Keep this
+  // deliberately narrower than the general estimates directory, which can
+  // contain customer documents that must never be exposed by this proxy.
+  return /^estimates\/[^/]+\/holiday-quotes\/[^/]+\/options\/[^/]+$/.test(pathname);
 }
 
 /** Customer-facing estimate option photo URL (Present mode, portal, mobile). */

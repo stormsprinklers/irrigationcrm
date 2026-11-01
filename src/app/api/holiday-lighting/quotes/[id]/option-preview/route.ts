@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       .jpeg({ quality: 92 })
       .toBuffer();
     const blob = await uploadPrivateBlob(
-      `estimates/${context.user.companyId}/holiday-quotes/${context.quoteId}/options/${option.id}-${crypto.randomUUID()}.jpg`,
+      `company-holiday/${context.user.companyId}/holiday-quotes/${context.quoteId}/options/${option.id}-${crypto.randomUUID()}.jpg`,
       image,
       { contentType: "image/jpeg" }
     );
