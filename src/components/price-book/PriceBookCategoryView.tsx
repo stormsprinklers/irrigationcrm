@@ -10,6 +10,7 @@ import { CategoryCard } from "@/components/price-book/CategoryCard";
 import { PriceBookItemDialog } from "@/components/price-book/PriceBookItemDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { canManagePriceBook } from "@/lib/price-book/permissions";
 import type { PriceBookCategoryDTO, PriceBookItemDTO } from "@/lib/price-book/types";
 import { blobProxyUrl } from "@/lib/blob/urls";
@@ -34,6 +35,8 @@ export function PriceBookCategoryView({ categoryId }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PriceBookItemDTO | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const load = useCallback(async () => {
     const [catRes, itemRes] = await Promise.all([
@@ -41,7 +44,14 @@ export function PriceBookCategoryView({ categoryId }: Props) {
       fetch(`/api/price-book/items?categoryId=${categoryId}&activeOnly=false`),
     ]);
     if (catRes.ok) setCategory(await catRes.json());
-    if (itemRes.ok) setItems(await itemRes.json());
+    if (itemRes.ok) {
+      const nextItems = (await itemRes.json()) as PriceBookItemDTO[];
+      setItems(nextItems);
+      setSelectedIds((current) => {
+        const availableIds = new Set(nextItems.map((item) => item.id));
+        return new Set([...current].filter((id) => availableIds.has(id)));
+      });
+    }
   }, [categoryId]);
 
   useEffect(() => {
@@ -145,16 +155,64 @@ export function PriceBookCategoryView({ categoryId }: Props) {
   }
 
   async function removeItem(item: PriceBookItemDTO) {
-    if (!confirm(`Remove “${item.name}”? It will be deactivated and hidden from new estimates.`)) {
+    const warning = item.active
+      ? `Remove “${item.name}”? It will be deactivated and hidden from new estimates.`
+      : `Permanently delete “${item.name}”? Existing estimates and visits will keep their copied pricing details. This cannot be undone.`;
+    if (!confirm(warning)) {
       return;
     }
     const res = await fetch(`/api/price-book/items/${item.id}`, { method: "DELETE" });
     if (!res.ok) {
-      toast.error("Failed to remove item");
+      toast.error(item.active ? "Failed to remove item" : "Failed to permanently delete item");
       return;
     }
-    toast.success("Item removed");
+    toast.success(item.active ? "Item moved to inactive" : "Item permanently deleted");
     await load();
+  }
+
+  function toggleItem(itemId: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  }
+
+  function toggleAll(checked: boolean) {
+    setSelectedIds(checked ? new Set(items.map((item) => item.id)) : new Set());
+  }
+
+  async function deleteSelectedItems() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    const noun = ids.length === 1 ? "item" : "items";
+    if (
+      !confirm(
+        `Permanently delete ${ids.length} selected ${noun}? Existing estimates and visits will keep their copied pricing details. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      const res = await fetch("/api/price-book/items", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { deleted?: number; error?: string };
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to delete selected items");
+        return;
+      }
+      toast.success(`${data.deleted ?? ids.length} ${noun} permanently deleted`);
+      setSelectedIds(new Set());
+      await load();
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading category...</p>;
@@ -233,9 +291,25 @@ export function PriceBookCategoryView({ categoryId }: Props) {
       )}
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          {category.type === "SERVICE" ? "Services" : "Materials"}
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {category.type === "SERVICE" ? "Services" : "Materials"}
+          </h2>
+          {canManage && selectedIds.size > 0 ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={bulkDeleting}
+                onClick={() => void deleteSelectedItems()}
+              >
+                <Trash2 className="h-4 w-4" />
+                {bulkDeleting ? "Deleting..." : "Delete selected"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">No items in this category yet.</p>
         ) : (
@@ -243,6 +317,21 @@ export function PriceBookCategoryView({ categoryId }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-left">
                 <tr>
+                  {canManage ? (
+                    <th className="w-10 px-4 py-2">
+                      <Checkbox
+                        aria-label="Select all price book items"
+                        checked={
+                          items.length > 0 && selectedIds.size === items.length
+                            ? true
+                            : selectedIds.size > 0
+                              ? "indeterminate"
+                              : false
+                        }
+                        onCheckedChange={(checked) => toggleAll(checked === true)}
+                      />
+                    </th>
+                  ) : null}
                   <th className="w-12 px-4 py-2 font-medium" />
                   <th className="px-4 py-2 font-medium">Name</th>
                   <th className="px-4 py-2 font-medium">SKU</th>
@@ -256,6 +345,15 @@ export function PriceBookCategoryView({ categoryId }: Props) {
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} className="border-t">
+                    {canManage ? (
+                      <td className="px-4 py-3">
+                        <Checkbox
+                          aria-label={`Select ${item.name}`}
+                          checked={selectedIds.has(item.id)}
+                          onCheckedChange={(checked) => toggleItem(item.id, checked === true)}
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       {item.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -315,7 +413,8 @@ export function PriceBookCategoryView({ categoryId }: Props) {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Remove item"
+                            aria-label={item.active ? "Move item to inactive" : "Permanently delete item"}
+                            title={item.active ? "Move to inactive" : "Permanently delete"}
                             onClick={() => void removeItem(item)}
                           >
                             <Trash2 className="h-4 w-4" />

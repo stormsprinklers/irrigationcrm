@@ -112,8 +112,13 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    await prisma.priceBookItem.update({ where: { id }, data: { active: false } });
-    return NextResponse.json({ ok: true });
+    if (existing.active) {
+      await prisma.priceBookItem.update({ where: { id }, data: { active: false } });
+      return NextResponse.json({ ok: true, deactivated: true, deleted: false });
+    }
+
+    await prisma.priceBookItem.delete({ where: { id } });
+    return NextResponse.json({ ok: true, deactivated: false, deleted: true });
   } catch {
     return unauthorizedResponse();
   }
