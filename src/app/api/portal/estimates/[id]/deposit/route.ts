@@ -62,15 +62,38 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const approvalEstimate = await prisma.estimate.findUnique({
     where: { id: estimateId },
-    select: { customerId: true, designExportMetadata: true },
+    select: {
+      customerId: true,
+      designExportMetadata: true,
+      selectedOptionId: true,
+      options: { select: { id: true, letter: true, sortOrder: true } },
+    },
   });
   const metadata = approvalEstimate?.designExportMetadata;
+  const metadataRecord =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>)
+      : null;
+  const selectedOption = approvalEstimate?.options.find(
+    (option) => option.id === approvalEstimate.selectedOptionId
+  );
+  const metadataOptions = Array.isArray(metadataRecord?.options)
+    ? metadataRecord.options.filter(
+        (option): option is Record<string, unknown> =>
+          Boolean(option) && typeof option === "object" && !Array.isArray(option)
+      )
+    : [];
+  const selectedOptionMetadata = selectedOption
+    ? metadataOptions.find((option) => option.letter === selectedOption.letter) ??
+      metadataOptions[selectedOption.sortOrder]
+    : null;
+  const isPermanentLighting = selectedOptionMetadata?.pricingMode === "permanent";
   const requiresHolidayCard = Boolean(
-    metadata &&
-      typeof metadata === "object" &&
-      !Array.isArray(metadata) &&
-      (metadata as Record<string, unknown>).source === "holiday-lighting-quote" &&
-      (metadata as Record<string, unknown>).recurringYearlyService === true
+    metadataRecord?.source === "holiday-lighting-quote" &&
+      !isPermanentLighting &&
+      (typeof selectedOptionMetadata?.recurringYearlyService === "boolean"
+        ? selectedOptionMetadata.recurringYearlyService
+        : metadataRecord.recurringYearlyService === true)
   );
   if (requiresHolidayCard && approvalEstimate) {
     const savedCard = await getCustomerDefaultCardId({

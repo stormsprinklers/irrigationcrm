@@ -306,8 +306,8 @@ export default function SettingsEstimatesPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-lg font-semibold">Holiday lighting job minimums</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Applied to the flat yearly service price. The minimum never increases the backend
-              material cost or customer cancellation fee.
+                Applied to the seasonal service price or permanent installed price. A minimum never
+                increases backend material cost or a seasonal customer cancellation fee.
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>

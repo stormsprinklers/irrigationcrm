@@ -58,7 +58,7 @@ export type HolidayPricingResult = {
   }>;
   calculatedReinstallTotal: number;
   customServicesTotal: number;
-  /** Unmarked-up material cost due if the recurring service is cancelled. */
+  /** Unmarked-up material cost due if a seasonal recurring service is cancelled. */
   cancellationFee: number;
 };
 
@@ -196,7 +196,10 @@ export function computeHolidayQuotePricing(params: {
     });
   }
   serviceSubtotal = money(serviceSubtotal);
-  cancellationFee = money(cancellationFee);
+  // Permanent lighting is a one-time installed system, not a recurring seasonal
+  // service. Its backend material cost remains on the price-book row for internal
+  // costing, but it must never become a customer cancellation fee.
+  cancellationFee = style?.kind === "permanent" ? 0 : money(cancellationFee);
   const customServicesTotal = money(
     (selections.customServices ?? []).reduce(
       (sum, service) => sum + service.quantity * service.unitPrice,
@@ -474,7 +477,7 @@ export const HOLIDAY_INCLUDED_LINES = [
 export const HOLIDAY_PERMANENT_INCLUDED_LINES = [
   {
     name: "Lifetime warranty",
-    description: "For as long as you continue the recurring service, covered lighting materials and service are warranted for life.",
+    description: "Covered permanent lighting materials and installation are warranted for life.",
   },
 ] as const;
 
@@ -494,7 +497,7 @@ export const HOLIDAY_LEASE_DETAIL =
   "Leasing lights is less up front cost but can be more costly long-term. This lets you change the colors and design each year to fit your preferences. This includes installation and take-down as well as any bulb replacements during the season.";
 
 export const HOLIDAY_PERMANENT_DETAIL =
-  "A complete permanent holiday lighting service with company-provided materials, professional installation, maintenance, and a lifetime warranty.";
+  "A one-time permanent holiday lighting installation with materials, professional installation, covered maintenance, and a lifetime warranty. The installed system remains in place year-round.";
 
 export const HOLIDAY_LABOR_ONLY_DETAIL =
   "Installation and take-down labor for customer-supplied holiday lights. Lights, bulbs, clips, extension cords, and other materials are not included.";
@@ -561,9 +564,11 @@ export function holidayOptionLines(params: {
 }): HolidayDisplayLine[] {
   const result: HolidayDisplayLine[] = [{
     name: params.key === "permanent"
-      ? "Permanent holiday lighting service"
+      ? "Permanent holiday lighting installation"
       : "Yearly holiday lighting service",
-    description: "Flat service price. Materials are provided by the company and are not sold or marked up on this estimate.",
+    description: params.key === "permanent"
+      ? "Flat installed price. Permanent lighting materials and professional installation are included."
+      : "Flat service price. Materials are provided by the company and are not sold or marked up on this estimate.",
     total: money(params.targetSubtotal),
     itemType: "SERVICE",
   }];
@@ -575,6 +580,6 @@ export function holidayOptionLines(params: {
 export function holidayIncludedLines(key: HolidayQuoteOptionKey) {
   return key === "permanent" ? [
     ...HOLIDAY_PERMANENT_INCLUDED_LINES,
-    { name: "Maintenance", description: "Covered system maintenance is included with the recurring service." },
+    { name: "Maintenance", description: "Covered system maintenance is included under the lifetime warranty." },
   ] : HOLIDAY_INCLUDED_LINES;
 }

@@ -64,7 +64,7 @@ export async function createEstimateFromHolidayQuote(params: {
     const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
     const key = style?.kind === "permanent" ? "permanent" as const : "buy" as const;
     const defaultLabel = key === "permanent"
-      ? "Permanent Holiday Lighting Service"
+      ? "Permanent Holiday Lighting Installation"
       : "Yearly Holiday Lighting Service";
     const label = design.label.trim() || defaultLabel;
     const summary = holidayOptionSummary({
@@ -76,7 +76,10 @@ export async function createEstimateFromHolidayQuote(params: {
       customServiceCount: customServices.length,
     });
     const detail = priced.optionDetails[key];
-    const tagline = "Yearly recurring service · Cancel by paying the unmarked-up material cost";
+    const recurringYearlyService = key !== "permanent";
+    const tagline = recurringYearlyService
+      ? "Yearly recurring service · Cancel by paying the unmarked-up material cost"
+      : "One-time permanent lighting installation";
     const detailCopy = key === "buy"
       ? HOLIDAY_BUY_DETAIL
       : HOLIDAY_PERMANENT_DETAIL;
@@ -86,6 +89,7 @@ export async function createEstimateFromHolidayQuote(params: {
       measurements,
       priced,
       key,
+      recurringYearlyService,
       label,
       tagline,
       description: [tagline, `${detailCopy} ${summary}`]
@@ -100,7 +104,8 @@ export async function createEstimateFromHolidayQuote(params: {
   const primaryPreviewImageUrl = prepared[0]?.design.previewImageUrl ?? quote.previewImageUrl;
   const metadata = {
     source: "holiday-lighting-quote",
-    recurringYearlyService: true,
+    recurringYearlyService:
+      prepared.length > 0 && prepared.every((item) => item.recurringYearlyService),
     quoteId: quote.id,
     previewImageUrl: primaryPreviewImageUrl,
     previewDisclaimer: HOLIDAY_PREVIEW_DISCLAIMER,
@@ -115,8 +120,8 @@ export async function createEstimateFromHolidayQuote(params: {
       billedLengthFt: item.priced.billedLengthFt,
       placementCount: item.priced.placementCount,
       total: item.detail.total,
-      recurringYearlyService: true,
-      cancellationFee: item.priced.cancellationFee,
+      recurringYearlyService: item.recurringYearlyService,
+      cancellationFee: item.recurringYearlyService ? item.priced.cancellationFee : 0,
       notes: item.selections.notes?.trim() ?? "",
       lightStyleKey: item.selections.defaultLightStyleKey,
       colorPattern: item.selections.defaultColorPattern,

@@ -17,6 +17,7 @@ import type {
   HolidayMeasurements,
 } from "@/lib/holiday-lighting/types";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +100,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
     const [error, setError] = useState<string | null>(null);
     const [streetViewState, setStreetViewState] = useState<StreetViewState>("loading");
     const [mode, setMode] = useState<DrawMode>("roofline");
+    const [manualEntryOpen, setManualEntryOpen] = useState(false);
     const [manualLengthFt, setManualLengthFt] = useState("");
     const [placementStrandCount, setPlacementStrandCount] = useState(1);
     const [placementKind, setPlacementKind] = useState<"tree" | "bush">("tree");
@@ -547,6 +549,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
         segments: [...measurements.segments, segment],
       });
       setManualLengthFt("");
+      setManualEntryOpen(false);
       setMode("select");
       selectSegment(segment.id);
     }
@@ -575,12 +578,12 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
       });
     }
 
-    function toggleActivePeak() {
+    function setActivePeak(hasPeak: boolean) {
       if (!activeSegmentId) return;
       onChange({
         ...measurements,
         segments: measurements.segments.map((s) =>
-          s.id === activeSegmentId ? { ...s, hasPeak: !s.hasPeak } : s
+          s.id === activeSegmentId ? { ...s, hasPeak } : s
         ),
       });
     }
@@ -616,36 +619,71 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               variant={mode === id ? "default" : "outline"}
               onClick={() => {
                 clearDraft();
+                setManualEntryOpen(false);
+                setManualLengthFt("");
                 setMode(id);
               }}
             >
               {label}
             </Button>
           ))}
-          <div className="flex items-center gap-1 border-l border-border pl-2">
-            <Input
-              type="number"
-              min={0.1}
-              step={0.1}
-              className="h-8 w-24"
-              value={manualLengthFt}
-              placeholder="Feet"
-              aria-label="Manual roofline measurement in feet"
-              onChange={(event) => setManualLengthFt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && validManualLength) addManualSegment();
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!validManualLength}
-              onClick={addManualSegment}
-            >
-              Add manual
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={manualEntryOpen ? "default" : "outline"}
+            onClick={() => {
+              if (manualEntryOpen) return;
+              clearDraft();
+              setMode("select");
+              setManualLengthFt("");
+              setManualEntryOpen(true);
+            }}
+          >
+            Manual
+          </Button>
+          {manualEntryOpen ? (
+            <div className="flex items-center gap-1 rounded-md border border-border bg-background p-1">
+              <Input
+                autoFocus
+                type="number"
+                min={0.1}
+                step={0.1}
+                className="h-7 w-24"
+                value={manualLengthFt}
+                placeholder="Feet"
+                aria-label="Manual roofline measurement in feet"
+                onChange={(event) => setManualLengthFt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && validManualLength) addManualSegment();
+                  if (event.key === "Escape") {
+                    setManualLengthFt("");
+                    setManualEntryOpen(false);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="h-7"
+                disabled={!validManualLength}
+                onClick={addManualSegment}
+              >
+                Save
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2"
+                onClick={() => {
+                  setManualLengthFt("");
+                  setManualEntryOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : null}
           {measurements.segments.length > 0 ? (
             <select
               className="h-8 max-w-48 rounded-md border border-input bg-background px-2 text-xs"
@@ -661,17 +699,27 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
               ))}
             </select>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant={active?.hasPeak ? "default" : "outline"}
-            disabled={!active}
-            aria-pressed={Boolean(active?.hasPeak)}
-            title={active ? "Bill this segment as a peak at 1.5×" : "Select a segment first"}
-            onClick={toggleActivePeak}
+          <div
+            className={cn(
+              "flex h-8 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium",
+              !active && "cursor-not-allowed opacity-50"
+            )}
+            title={active ? "Mark this segment as a peak" : "Select a segment first"}
           >
-            Peak (1.5×)
-          </Button>
+            <Checkbox
+              id="holiday-segment-peak"
+              checked={Boolean(active?.hasPeak)}
+              disabled={!active}
+              aria-label="Peak"
+              onCheckedChange={(checked) => setActivePeak(checked === true)}
+            />
+            <label
+              htmlFor="holiday-segment-peak"
+              className={active ? "cursor-pointer" : "cursor-not-allowed"}
+            >
+              Peak
+            </label>
+          </div>
           {mode === "roofline" ? (
             <>
               <Button type="button" size="sm" onClick={finishSegment}>
@@ -809,7 +857,7 @@ export const HolidayMapPanel = forwardRef<HolidayMapPanelHandle, Props>(
                 </label>
                 <span className="font-mono text-xs text-muted-foreground">
                   {billedSegmentLengthFt(active).toFixed(1)} ft
-                  {active.hasPeak ? " (peak 1.5×)" : ""}
+                  {active.hasPeak ? " · Peak" : ""}
                 </span>
                 <Button
                   type="button"

@@ -116,3 +116,57 @@ test("public estimate normalizes private preview URLs and excludes internal note
     else process.env.NEXT_PUBLIC_APP_URL = savedOrigin;
   }
 });
+
+test("permanent lighting never exposes seasonal recurring terms or a cancellation fee", () => {
+  const view = serializePortalEstimate({
+    id: "estimate",
+    publicToken: "token",
+    status: "SENT",
+    total: 2_500,
+    subtotal: 2_500,
+    discountTotal: 0,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    designExportMetadata: {
+      source: "holiday-lighting-quote",
+      recurringYearlyService: true,
+      options: [{
+        letter: "A",
+        pricingMode: "permanent",
+        recurringYearlyService: true,
+        cancellationFee: 900,
+      }],
+    },
+    options: [{
+      id: "permanent-option",
+      letter: "A",
+      label: "Permanent Holiday Lighting Service",
+      description:
+        "Yearly recurring service · Cancel by paying the unmarked-up material cost\n\nA complete permanent holiday lighting service with company-provided materials, professional installation, maintenance, and a lifetime warranty.",
+      sortOrder: 0,
+      subtotal: 2_500,
+      discountTotal: 0,
+      total: 2_500,
+    }],
+    lineItems: [{
+      optionId: "permanent-option",
+      name: "Permanent Holiday Lighting Service",
+      description: "Yearly recurring service · Cancel by paying the unmarked-up material cost",
+      quantity: 1,
+      unitPrice: 2_500,
+      unit: "each",
+      total: 2_500,
+      sortOrder: 0,
+    }],
+  });
+
+  assert.equal(view.options[0]?.recurringYearlyService, false);
+  assert.equal(view.options[0]?.cancellationFee, 0);
+  assert.equal(view.options[0]?.label, "Permanent Holiday Lighting Installation");
+  assert.doesNotMatch(view.options[0]?.description ?? "", /recurring|cancellation fee/i);
+  assert.match(view.options[0]?.description ?? "", /one-time permanent/i);
+  assert.equal(view.lineItems[0]?.name, "Permanent Holiday Lighting Installation");
+  assert.doesNotMatch(view.lineItems[0]?.description ?? "", /recurring|cancel/i);
+});

@@ -1365,7 +1365,7 @@ export function HolidayLightingQuoter({
     ? "permanent"
     : "buy";
   const activePricingLabel = activePricingKey === "permanent"
-    ? "Permanent Holiday Lighting Service"
+    ? "Permanent Holiday Lighting Installation"
     : "Yearly Holiday Lighting Service";
   const visibleQuoteOptions: Array<readonly [HolidayQuoteOptionKey, string]> = [
     [activePricingKey, activePricingLabel],
@@ -1573,8 +1573,8 @@ export function HolidayLightingQuoter({
       <div className={cn("relative z-0 flex min-h-0 flex-1 flex-col gap-2", step !== 3 && step !== 4 && "hidden")}>
         {step === 4 ? (
           <p className="text-sm text-muted-foreground">
-            Draw rooflines on satellite or enter the footage manually. Select any line and mark it
-            as a peak to bill it at 1.5×. Click trees and bushes and enter the strand count for the
+            Draw rooflines on satellite or use Manual to enter the footage. Select any line and check
+            Peak when applicable. Click trees and bushes and enter the strand count for the
             currently selected option.
           </p>
         ) : null}
@@ -2193,9 +2193,11 @@ export function HolidayLightingQuoter({
                     <span className="font-semibold">{money(draftPricing?.[activePricingKey].total ?? pricing.optionDetails[activePricingKey].total)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Flat yearly service price. Includes company-provided lights, installation,
-                    maintenance, takedown and storage for seasonal displays, a lifetime warranty,
-                    and annual color changes. Cancellation fee: {money(pricing.cancellationFee)}.
+                    {permanentSelected ? (
+                      <>Flat installed price. Includes permanent lighting materials, professional installation, covered maintenance, and a lifetime warranty. No seasonal takedown, storage, recurring service, or cancellation fee applies.</>
+                    ) : (
+                      <>Flat yearly service price. Includes company-provided lights, installation, maintenance, takedown, storage, a lifetime warranty, and annual color changes. Cancellation fee: {money(pricing.cancellationFee)}.</>
+                    )}
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground">

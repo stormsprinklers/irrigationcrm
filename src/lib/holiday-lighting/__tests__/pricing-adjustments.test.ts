@@ -17,7 +17,7 @@ function priceLookup(overrides: Record<string, { unitPrice: number; unitCost: nu
   ]));
 }
 
-test("holiday price book exposes only service rates and backend material costs", () => {
+test("holiday price book separates seasonal service from permanent installation", () => {
   const rows = holidayCatalogSkus(DEFAULT_HOLIDAY_CATALOG);
   assert.deepEqual(rows.map((row) => row.sku), [
     "HL-C9-SERVICE-FT",
@@ -27,7 +27,10 @@ test("holiday price book exposes only service rates and backend material costs",
     "HL-BUSH-SERVICE-STRAND",
   ]);
   assert.deepEqual(rows.slice(0, 3).map((row) => row.defaultUnitPrice), [4.59, 4.29, 25]);
-  assert.ok(rows.every((row) => /service/i.test(row.name)));
+  assert.ok(rows.slice(0, 2).every((row) => /service/i.test(row.name)));
+  assert.match(rows[2]?.name ?? "", /permanent.*installation/i);
+  assert.doesNotMatch(rows[2]?.name ?? "", /service/i);
+  assert.ok(rows.slice(3).every((row) => /service/i.test(row.name)));
   assert.ok(rows.every((row) => !/lease|parts|labor/i.test(row.name)));
 });
 
@@ -70,6 +73,32 @@ test("holiday job minimum raises service price without raising cancellation cost
   assert.equal(pricing.year1Total, 750);
   assert.equal(pricing.cancellationFee, 40);
   assert.equal(pricing.year1MinimumApplied, true);
+});
+
+test("permanent lighting is an installed purchase with no cancellation fee", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({
+      segments: [{ id: "roof", label: "Roof", kind: "roofline", path: [], lengthFt: 100 }],
+    }),
+    selections: parseHolidaySelections({ defaultLightStyleKey: "permanent" }),
+    prices: priceLookup({ "HL-PERM-SERVICE-FT": { unitPrice: 25, unitCost: 9 } }),
+  });
+
+  assert.equal(pricing.permanentTotal, 2_500);
+  assert.equal(pricing.cancellationFee, 0);
+  assert.equal(
+    pricing.optionDetails.permanent.displayLines[0]?.name,
+    "Permanent holiday lighting installation"
+  );
+  assert.match(
+    pricing.optionDetails.permanent.displayLines[0]?.description ?? "",
+    /Flat installed price/i
+  );
+  assert.doesNotMatch(
+    pricing.optionDetails.permanent.includedLines.map((line) => line.description).join(" "),
+    /recurring service/i
+  );
 });
 
 test("tree difficulty multiplies outward price but not material cancellation cost", () => {

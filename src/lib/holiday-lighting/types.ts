@@ -467,7 +467,9 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
       : style.partsSku ?? style.temporaryYear1Sku;
     add(
       sku,
-      `${style.label} holiday lighting service / ft`,
+      style.kind === "permanent"
+        ? `${style.label} holiday lighting installation / ft`
+        : `${style.label} holiday lighting service / ft`,
       "ft",
       style.key === "c9" ? 4.59 : style.key === "c7" ? 4.29 : 25
     );

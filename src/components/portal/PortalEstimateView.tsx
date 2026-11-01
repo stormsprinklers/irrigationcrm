@@ -848,7 +848,7 @@ export function PortalEstimateView({
           </p>
         ) : null}
       </div>
-      {cancellationPolicyOpen ? (
+      {requiresHolidayCard && cancellationPolicyOpen ? (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="holiday-cancellation-title">
           <button
             type="button"

@@ -1,6 +1,9 @@
 import { customerEstimateDescription } from "./estimate-copy";
 import type { VisitStatus } from "@prisma/client";
-import { holidayBuyBreakdownLines } from "@/lib/holiday-lighting/pricing";
+import {
+  HOLIDAY_PERMANENT_DETAIL,
+  holidayBuyBreakdownLines,
+} from "@/lib/holiday-lighting/pricing";
 import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
@@ -8,6 +11,27 @@ import { toNumber } from "@/lib/visits/totals";
 import { customerFacingHolidayPlacementName } from "@/lib/estimates/customer-facing-lines";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
+
+function permanentLightingDescription(description: string | null) {
+  if (!description) return description;
+  const paragraphs = description
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .filter(
+      (paragraph) =>
+        !/yearly recurring service/i.test(paragraph) &&
+        !/cancel by paying the unmarked-up material cost/i.test(paragraph)
+    );
+  const normalized = paragraphs
+    .join("\n\n")
+    .replace(
+      /A complete permanent holiday lighting service with company-provided materials, professional installation, maintenance, and a lifetime warranty\./gi,
+      HOLIDAY_PERMANENT_DETAIL
+    )
+    .replace(/Permanent Holiday Lighting Service/gi, "Permanent Holiday Lighting Installation");
+  return normalized || HOLIDAY_PERMANENT_DETAIL;
+}
 
 /** Portal visit detail — only customer-safe fields (no internal notes). */
 export function serializePortalVisit(visit: {
@@ -227,11 +251,26 @@ export function serializePortalEstimate(estimate: {
     const pricingMode =
       typeof holidayOption?.pricingMode === "string" ? holidayOption.pricingMode : null;
     const rawCancellationFee = Number(holidayOption?.cancellationFee ?? 0);
+    const description = customerEstimateDescription(option.description, internalNotes);
+    const recurringYearlyService = pricingMode === "permanent"
+      ? false
+      : typeof holidayOption?.recurringYearlyService === "boolean"
+        ? holidayOption.recurringYearlyService
+        : holidayRecurringService;
     return {
       id: option.id,
       letter: option.letter,
-      label: option.label,
-      description: customerEstimateDescription(option.description, internalNotes),
+      label:
+        pricingMode === "permanent"
+          ? option.label.replace(
+              /Permanent Holiday Lighting Service/gi,
+              "Permanent Holiday Lighting Installation"
+            )
+          : option.label,
+      description:
+        pricingMode === "permanent"
+          ? permanentLightingDescription(description)
+          : description,
       photoUrl: estimateOptionPhotoUrl(option.photoUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
@@ -241,10 +280,9 @@ export function serializePortalEstimate(estimate: {
       total: toNumber(option.total as never),
       displayNumber,
       pricingMode,
-      recurringYearlyService:
-        holidayOption?.recurringYearlyService === true || holidayRecurringService,
+      recurringYearlyService,
       cancellationFee:
-        Number.isFinite(rawCancellationFee) && rawCancellationFee >= 0
+        pricingMode !== "permanent" && Number.isFinite(rawCancellationFee) && rawCancellationFee >= 0
           ? Math.round(rawCancellationFee * 100) / 100
           : 0,
       leaseContractYears:
@@ -267,6 +305,28 @@ export function serializePortalEstimate(estimate: {
     sortOrder: item.sortOrder,
     itemType: item.priceBookItem?.type ?? "SERVICE",
   }));
+
+  // Correct permanent-lighting estimates created before permanent installations
+  // were separated from the seasonal recurring-service model.
+  const permanentOptionIds = new Set(
+    options.filter((option) => option.pricingMode === "permanent").map((option) => option.id)
+  );
+  lineItems = lineItems.map((item) => {
+    if (!item.optionId || !permanentOptionIds.has(item.optionId)) return item;
+    const name = item.name.replace(
+      /Permanent Holiday Lighting Service/gi,
+      "Permanent Holiday Lighting Installation"
+    );
+    let description = item.description;
+    if (description && /yearly recurring service|cancel by paying/i.test(description)) {
+      description = "Flat installed price. Permanent lighting materials and professional installation are included.";
+    } else if (description && /continue the recurring service/i.test(description)) {
+      description = "Covered permanent lighting materials and installation are warranted for life.";
+    } else if (description && /maintenance is included with the recurring service/i.test(description)) {
+      description = "Covered system maintenance is included under the lifetime warranty.";
+    }
+    return { ...item, name, description };
+  });
 
   // Older lease estimates inherited the purchased-lights three-year warranty.
   // Keep their customer view accurate without changing non-lease options.

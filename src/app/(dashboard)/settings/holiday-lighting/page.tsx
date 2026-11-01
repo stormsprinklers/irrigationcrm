@@ -111,7 +111,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
         title="Holiday lighting"
-        subtitle="Set yearly service pricing, backend material costs, job minimums, and tree/bush difficulty multipliers."
+        subtitle="Set seasonal service pricing, permanent installation pricing, backend costs, job minimums, and tree/bush difficulty multipliers."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -196,7 +196,7 @@ export default function HolidayLightingCatalogSettingsPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Price book SKUs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              C9, C7, and permanent lights are priced per foot. Trees and bushes have one price per strand. Backend material cost is the unmarked-up cancellation fee basis.
+              C9 and C7 seasonal service plus permanent installation are priced per foot. Trees and bushes have one price per strand. Backend cost is the seasonal cancellation-fee basis; for permanent lighting it is internal job cost only.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -205,7 +205,7 @@ export default function HolidayLightingCatalogSettingsPage() {
                     <th className="py-2 pr-2 font-medium">Item</th>
                     <th className="py-2 pr-2 font-medium">SKU</th>
                     <th className="py-2 pr-2 font-medium">Backend material cost</th>
-                    <th className="py-2 font-medium">Outward service price</th>
+                    <th className="py-2 font-medium">Outward customer price</th>
                   </tr>
                 </thead>
                 <tbody>
