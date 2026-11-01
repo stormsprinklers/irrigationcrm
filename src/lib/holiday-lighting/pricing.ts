@@ -58,7 +58,7 @@ export type HolidayPricingResult = {
   }>;
   calculatedReinstallTotal: number;
   customServicesTotal: number;
-  /** Unmarked-up material cost due if a seasonal recurring service is cancelled. */
+  /** Material cost due if a seasonal recurring service is cancelled. */
   cancellationFee: number;
 };
 

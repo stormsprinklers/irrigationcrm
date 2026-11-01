@@ -78,7 +78,7 @@ export async function createEstimateFromHolidayQuote(params: {
     const detail = priced.optionDetails[key];
     const recurringYearlyService = key !== "permanent";
     const tagline = recurringYearlyService
-      ? "Yearly recurring service · Cancel by paying the unmarked-up material cost"
+      ? "Yearly recurring service · Cancel by paying the material cost"
       : "One-time permanent lighting installation";
     const detailCopy = key === "buy"
       ? HOLIDAY_BUY_DETAIL

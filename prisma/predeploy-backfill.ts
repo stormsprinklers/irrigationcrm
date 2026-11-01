@@ -135,6 +135,22 @@ async function backfillChestnutLegalLinks() {
   );
 }
 
+async function removeUnmarkedUpEstimateCopy() {
+  const options = await prisma.$executeRawUnsafe(`
+    UPDATE "EstimateOption"
+    SET description = regexp_replace(description, 'unmarked-up material cost', 'material cost', 'gi')
+    WHERE description ~* 'unmarked-up material cost'
+  `);
+  const lineItems = await prisma.$executeRawUnsafe(`
+    UPDATE "EstimateLineItem"
+    SET description = regexp_replace(description, 'unmarked-up material cost', 'material cost', 'gi')
+    WHERE description ~* 'unmarked-up material cost'
+  `);
+  console.log(
+    `Removed unmarked-up wording from estimates (options=${options}, lineItems=${lineItems})`
+  );
+}
+
 async function ensureGivingProgramSeparation() {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "givingProgramOnly" BOOLEAN NOT NULL DEFAULT false`
@@ -1051,6 +1067,7 @@ async function main() {
   }
   await ensureEstimateVslSettings();
   await backfillChestnutLegalLinks();
+  await removeUnmarkedUpEstimateCopy();
   await ensureGivingProgramSeparation();
 }
 

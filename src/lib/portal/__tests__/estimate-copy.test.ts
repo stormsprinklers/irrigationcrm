@@ -100,12 +100,14 @@ test("public estimate normalizes private preview URLs and excludes internal note
       id:"estimate",publicToken:"token",status:"SENT",total:100,subtotal:100,discountTotal:0,
       expiresAt:null,signedAt:null,signatureBlobUrl:null,createdAt:new Date(),
       designExportMetadata:{source:"holiday-lighting-quote",recurringYearlyService:true,previewImageUrl:preview,notes:"Secret gate code",options:[{notes:"Private staffing instructions",recurringYearlyService:true,cancellationFee:237.45}]},
-      options:[{id:"option",letter:"A",label:"Roofline",description:"Roofline lights\n\nSecret gate code\n\nPrivate staffing instructions",internalNotes:"Secret gate code",photoUrl:preview,sortOrder:0,subtotal:100,discountTotal:0,total:100}],
-      lineItems:[]
+      options:[{id:"option",letter:"A",label:"Roofline",description:"Roofline lights\n\nCancel by paying the unmarked-up material cost\n\nSecret gate code\n\nPrivate staffing instructions",internalNotes:"Secret gate code",photoUrl:preview,sortOrder:0,subtotal:100,discountTotal:0,total:100}],
+      lineItems:[{optionId:"option",name:"Seasonal lighting service",description:"Cancel by paying the unmarked-up material cost",quantity:1,unitPrice:100,total:100,sortOrder:0}]
     }, "https://portal.chestnut.example");
     assert.equal(view.holidayPreviewImageUrl, view.options[0].photoUrl);
     assert.ok(view.holidayPreviewImageUrl?.startsWith("https://portal.chestnut.example/api/public/blob?"));
-    assert.equal(view.options[0].description,"Roofline lights");
+    assert.equal(view.options[0].description,"Roofline lights\n\nCancel by paying the material cost");
+    assert.equal(view.lineItems[0].description,"Cancel by paying the material cost");
+    assert.doesNotMatch(JSON.stringify(view), /unmarked-up/i);
     assert.equal(view.options[0].cancellationFee, 237.45);
     assert.equal(view.holidayRecurringService, true);
     assert.equal(view.options[0].recurringYearlyService, true);

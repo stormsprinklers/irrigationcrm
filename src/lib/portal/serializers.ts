@@ -15,6 +15,10 @@ import {
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
 
+function customerFacingHolidayDescription(description: string | null) {
+  return description?.replace(/unmarked-up material cost/gi, "material cost") ?? description;
+}
+
 function permanentLightingDescription(description: string | null) {
   if (!description) return description;
   const paragraphs = description
@@ -24,7 +28,7 @@ function permanentLightingDescription(description: string | null) {
     .filter(
       (paragraph) =>
         !/yearly recurring service/i.test(paragraph) &&
-        !/cancel by paying the unmarked-up material cost/i.test(paragraph)
+        !/cancel by paying the (?:unmarked-up )?material cost/i.test(paragraph)
     );
   const normalized = paragraphs
     .join("\n\n")
@@ -275,7 +279,7 @@ export function serializePortalEstimate(estimate: {
       description:
         pricingMode === "permanent"
           ? permanentLightingDescription(description)
-          : description,
+          : customerFacingHolidayDescription(description),
       photoUrl: estimateOptionPhotoUrl(option.photoUrl, publicBaseUrl),
       declinedAt: option.declinedAt?.toISOString() ?? null,
       sortOrder: option.sortOrder,
@@ -302,7 +306,9 @@ export function serializePortalEstimate(estimate: {
     name: hasHolidayLighting
       ? customerFacingHolidayPlacementName(item.name)
       : item.name,
-    description: item.description,
+    description: hasHolidayLighting
+      ? customerFacingHolidayDescription(item.description)
+      : item.description,
     quantity: toNumber(item.quantity as never),
     unitPrice: toNumber(item.unitPrice as never),
     unit: item.unit?.trim() || "each",
