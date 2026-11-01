@@ -26,19 +26,36 @@ export async function GET(request: NextRequest) {
     assertHolidayLightingEnabled(company ?? {});
 
     const customerId = request.nextUrl.searchParams.get("customerId");
-    const quotes = await prisma.holidayLightingQuote.findMany({
-      where: {
-        companyId: user.companyId,
-        ...(customerId ? { customerId } : {}),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 50,
-      include: {
-        customer: { select: { id: true, name: true } },
-        estimate: { select: { id: true, estimateNumber: true, status: true } },
-      },
-    });
-    return NextResponse.json({ quotes });
+    const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
+    const page = Math.max(
+      1,
+      Math.min(100_000, Math.floor(Number(request.nextUrl.searchParams.get("page")) || 1))
+    );
+    const pageSize = Math.max(
+      10,
+      Math.min(100, Math.floor(Number(request.nextUrl.searchParams.get("pageSize")) || 25))
+    );
+    const where = {
+      companyId: user.companyId,
+      ...(customerId ? { customerId } : {}),
+      ...(search
+        ? { customer: { is: { name: { contains: search, mode: "insensitive" as const } } } }
+        : {}),
+    };
+    const [quotes, total] = await Promise.all([
+      prisma.holidayLightingQuote.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          customer: { select: { id: true, name: true } },
+          estimate: { select: { id: true, estimateNumber: true, status: true } },
+        },
+      }),
+      prisma.holidayLightingQuote.count({ where }),
+    ]);
+    return NextResponse.json({ quotes, total, page, pageSize });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);
