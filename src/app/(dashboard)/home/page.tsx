@@ -9,5 +9,9 @@ export default async function HomePage() {
   if (user.role === "ADMIN") {
     return <KpiDashboard variant="home" />;
   }
-  return <HomePageInner showPipelineShortcut={user.role === "CSR"} />;
+  return (
+    <HomePageInner
+      showPipelineShortcut={user.role === "CSR" || user.role === "MANAGER"}
+    />
+  );
 }
