@@ -469,6 +469,7 @@ export function VisitDetail({ visitId }: Props) {
           mode="installer"
           title="Holiday lighting job specs"
           description="Approved lighting details for the installation team."
+          lineItems={visit.lineItems}
         />
       ) : null}
 

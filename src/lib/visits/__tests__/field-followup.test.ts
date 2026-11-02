@@ -56,7 +56,11 @@ test("saved strand maps carry bulb colors separately from map legend colors", ()
   assert.notEqual(map.features[0].color, map.features[0].bulbColors);
 });
 
-import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
+import {
+  holidayVisitJobSummary,
+  holidayVisitPlan,
+} from "@/lib/holiday-lighting/visit-plan";
+import { isIncludedVisitLineItem } from "@/lib/visits/included-line-items";
 test("visit plan uses approved option B and preserves its internal job specs", () => {
   const raw = {source: "holiday-lighting-quote", strandMap: {features: [{id: "a"}]}, options: [{letter: "A", strandMap: {features: [{id: "a"}]}}, {letter: "B", colorPattern: "Blue", billedLengthFt: 142.5, previewImageUrl: "https://example.com/b.jpg", strandMap: {features: [{id: "b", bulbColors: "Red"}]}}]};
   const plan = holidayVisitPlan(raw, "B")!;
@@ -77,4 +81,68 @@ test("visit plan keeps only the approved option's material notes", () => {
   ]};
   assert.equal(holidayVisitPlan(raw, "B")!.notes, "C9 warm white; purchase extra clips");
   assert.equal(holidayVisitPlan(raw, "C")!.notes, "");
+});
+
+test("visit job specs use the approved option even when an older map is stale or missing", () => {
+  const staleMap = {
+    version: 1,
+    features: [
+      { kind: "segment", bulbColors: "Warm White", lengthFtWithMargin: 120.1 },
+      { kind: "placement", bulbColors: "Blue", lengthFtWithMargin: 0 },
+    ],
+  };
+  const raw = {
+    source: "holiday-lighting-quote",
+    approvedOptionLetter: "B",
+    options: [
+      { letter: "A", colorPattern: "Warm White", billedLengthFt: 75 },
+      { letter: "B", colorPattern: "Multicolor", billedLengthFt: 120.1, strandMap: staleMap },
+    ],
+  };
+
+  assert.deepEqual(holidayVisitJobSummary(raw, [
+    { name: "Roofline", description: "C9 · Red" },
+  ]), {
+    totalFeet: 120.1,
+    colors: ["Multicolor"],
+    colorLabel: "Multicolor",
+  });
+  assert.deepEqual(
+    holidayVisitJobSummary({
+      source: "holiday-lighting-quote",
+      approvedOptionLetter: "A",
+      options: [{ letter: "A", colorPattern: "Red and white alternating", billedLengthFt: 435 }],
+    }),
+    {
+      totalFeet: 435,
+      colors: ["Red and white alternating"],
+      colorLabel: "Red and white alternating",
+    }
+  );
+});
+
+test("visit job specs flag a custom color whose description was never saved", () => {
+  assert.equal(
+    holidayVisitJobSummary({
+      source: "holiday-lighting-quote",
+      colorPattern: "Other",
+      billedLengthFt: 100,
+    })?.colorLabel,
+    "Custom color — details not specified"
+  );
+});
+
+test("visit line items collapse informational included rows without hiding zero-dollar work", () => {
+  assert.equal(
+    isIncludedVisitLineItem({ name: "Lifetime warranty", unitPrice: 0, total: 0 }),
+    true
+  );
+  assert.equal(
+    isIncludedVisitLineItem({ name: "Storage", unitPrice: 0, total: 0 }),
+    true
+  );
+  assert.equal(
+    isIncludedVisitLineItem({ name: "Tree lighting", unitPrice: 0, total: 0 }),
+    false
+  );
 });

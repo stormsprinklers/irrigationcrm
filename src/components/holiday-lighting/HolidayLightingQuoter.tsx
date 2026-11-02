@@ -1293,6 +1293,15 @@ export function HolidayLightingQuoter({
     setCreating(true);
     setEstimateChoiceOpen(false);
     try {
+      const unspecifiedColorOption = currentOptions().find(
+        (option) => option.selections.defaultColorPattern?.trim().toLowerCase() === "other"
+      );
+      if (unspecifiedColorOption) {
+        toast.error(
+          `${unspecifiedColorOption.label} needs a custom color or pattern description before creating the estimate.`
+        );
+        return;
+      }
       const id = await ensureQuote();
       if (!(await save(undefined, { quiet: true }))) return;
       const res = await fetch(`/api/holiday-lighting/quotes/${id}/create-estimate`, {
@@ -1819,7 +1828,17 @@ export function HolidayLightingQuoter({
                   setSelections(nextSelections);
                   setMeasurements(pruneStrands(nextMeasurements));
                 }}
-                onBlur={() => void save(undefined, { quiet: true })}
+                onBlur={(event) => {
+                  const colorPattern = event.currentTarget.value.trim() || "Other";
+                  const nextSelections = { ...selections, defaultColorPattern: colorPattern };
+                  const nextMeasurements = applyHolidayColorPattern(measurements, colorPattern);
+                  setSelections(nextSelections);
+                  setMeasurements(pruneStrands(nextMeasurements));
+                  void save(
+                    { selections: nextSelections, measurements: nextMeasurements },
+                    { quiet: true }
+                  );
+                }}
               />
             </label>
           ) : null}

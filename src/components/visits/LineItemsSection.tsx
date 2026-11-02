@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
 import { sumDiscounts } from "@/lib/visits/totals";
+import { isIncludedVisitLineItem } from "@/lib/visits/included-line-items";
 
 type LineItem = {
   id: string;
@@ -52,6 +53,7 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
   const [discountSaving, setDiscountSaving] = useState(false);
+  const [includedItemsOpen, setIncludedItemsOpen] = useState(false);
 
   async function addFromPriceBook(item: PriceBookItemDTO) {
     setSaving(true);
@@ -143,6 +145,48 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
   const subtotal = lineItems.reduce((sum, item) => sum + Number(item.total), 0);
   const discountTotal = sumDiscounts(subtotal, discounts);
   const total = Math.max(0, subtotal - discountTotal);
+  const includedLineItems = lineItems.filter(isIncludedVisitLineItem);
+  const primaryLineItems = lineItems.filter((item) => !isIncludedVisitLineItem(item));
+
+  function lineItemRow(item: LineItem) {
+    return (
+      <div
+        key={item.id}
+        className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_80px_100px_auto]"
+      >
+        <div>
+          <p className="font-medium">{item.name}</p>
+          {item.description ? (
+            <p className="text-xs text-muted-foreground">{item.description}</p>
+          ) : null}
+        </div>
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          defaultValue={Number(item.quantity)}
+          onBlur={(e) =>
+            updateItem(item.id, Number(e.target.value), Number(item.unitPrice))
+          }
+        />
+        <Input
+          type="number"
+          min={0}
+          step="0.01"
+          defaultValue={Number(item.unitPrice)}
+          onBlur={(e) =>
+            updateItem(item.id, Number(item.quantity), Number(e.target.value))
+          }
+        />
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-sm font-medium">{formatCurrency(item.total)}</span>
+          <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -158,40 +202,31 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
           {lineItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">No line items yet.</p>
           ) : (
-            lineItems.map((item) => (
-              <div key={item.id} className="grid gap-2 rounded-md border p-3 sm:grid-cols-[1fr_80px_100px_auto]">
-                <div>
-                  <p className="font-medium">{item.name}</p>
-                  {item.description ? (
-                    <p className="text-xs text-muted-foreground">{item.description}</p>
+            <>
+              {primaryLineItems.map(lineItemRow)}
+              {includedLineItems.length ? (
+                <div className="overflow-hidden rounded-md border border-dashed bg-muted/20">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm font-medium hover:bg-muted/40"
+                    aria-expanded={includedItemsOpen}
+                    onClick={() => setIncludedItemsOpen((open) => !open)}
+                  >
+                    <span>Included items ({includedLineItems.length})</span>
+                    {includedItemsOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                  {includedItemsOpen ? (
+                    <div className="space-y-2 border-t p-3">
+                      {includedLineItems.map(lineItemRow)}
+                    </div>
                   ) : null}
                 </div>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  defaultValue={Number(item.quantity)}
-                  onBlur={(e) =>
-                    updateItem(item.id, Number(e.target.value), Number(item.unitPrice))
-                  }
-                />
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  defaultValue={Number(item.unitPrice)}
-                  onBlur={(e) =>
-                    updateItem(item.id, Number(item.quantity), Number(e.target.value))
-                  }
-                />
-                <div className="flex items-center justify-end gap-2">
-                  <span className="text-sm font-medium">{formatCurrency(item.total)}</span>
-                  <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
+              ) : null}
+            </>
           )}
 
           <div className="space-y-3 border-t pt-4">

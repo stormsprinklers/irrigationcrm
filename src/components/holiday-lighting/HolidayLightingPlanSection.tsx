@@ -6,6 +6,12 @@ import {
   type HolidayStrandMap,
 } from "@/lib/holiday-lighting/strand-map";
 import { blobProxyUrl } from "@/lib/blob/urls";
+import { holidayVisitJobSummary } from "@/lib/holiday-lighting/visit-plan";
+
+type SummaryLineItem = {
+  name: string;
+  description?: string | null;
+};
 
 type Props = {
   designExportMetadata: Record<string, unknown> | null | undefined;
@@ -13,6 +19,7 @@ type Props = {
   priceField?: "purchaseTotal" | "leaseTotal";
   title?: string;
   description?: string;
+  lineItems?: SummaryLineItem[];
 };
 
 export function HolidayLightingPlanSection({
@@ -21,6 +28,7 @@ export function HolidayLightingPlanSection({
   priceField = "purchaseTotal",
   title,
   description,
+  lineItems = [],
 }: Props) {
   const strandMap: HolidayStrandMap | null = holidayStrandMapFromMetadata(
     designExportMetadata ?? null
@@ -31,35 +39,15 @@ export function HolidayLightingPlanSection({
       : null;
 
   const showMap = mode === "installer";
-  const metadataFeet = Number(designExportMetadata?.billedLengthFt);
-  const mapFeet =
-    strandMap?.features.reduce(
-      (total, feature) => total + feature.lengthFtWithMargin,
-      0
-    ) ?? 0;
-  const totalFeet = Number.isFinite(metadataFeet) && metadataFeet > 0 ? metadataFeet : mapFeet;
+  const jobSummary = holidayVisitJobSummary(designExportMetadata, lineItems);
   const bulbTypes = [
     ...new Set(strandMap?.features.map((feature) => feature.lightStyleLabel) ?? []),
   ];
-  const mappedColors = [
-    ...new Set(
-      strandMap?.features
-        .map((feature) => feature.bulbColors?.trim())
-        .filter((color): color is string => Boolean(color)) ?? []
-    ),
-  ];
-  const metadataColor =
-    typeof designExportMetadata?.colorPattern === "string"
-      ? designExportMetadata.colorPattern.trim()
-      : "";
-  const lightColors = mappedColors.length
-    ? mappedColors.join("; ")
-    : metadataColor || "Not specified";
   const notes =
     typeof designExportMetadata?.notes === "string"
       ? designExportMetadata.notes.trim()
       : "";
-  if (!previewUrl && !(showMap && strandMap)) return null;
+  if (!previewUrl && !(showMap && (strandMap || jobSummary))) return null;
 
   return (
     <section
@@ -87,7 +75,7 @@ export function HolidayLightingPlanSection({
           </p>
         ) : null}
       </div>
-      {showMap && strandMap ? (
+      {showMap && jobSummary ? (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-amber-300 bg-white p-4">
@@ -95,14 +83,18 @@ export function HolidayLightingPlanSection({
                 Linear feet
               </p>
               <p className="mt-1 text-3xl font-black text-slate-950">
-                {totalFeet.toFixed(1)} ft
+                {jobSummary.totalFeet != null
+                  ? `${jobSummary.totalFeet.toFixed(1)} ft`
+                  : "Not specified"}
               </p>
             </div>
             <div className="rounded-lg border border-amber-300 bg-white p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
                 Light color / pattern
               </p>
-              <p className="mt-1 text-2xl font-black text-slate-950">{lightColors}</p>
+              <p className="mt-1 text-2xl font-black text-slate-950">
+                {jobSummary.colorLabel}
+              </p>
             </div>
           </div>
           <div className="space-y-2 text-sm">

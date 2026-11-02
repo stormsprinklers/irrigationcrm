@@ -49,6 +49,11 @@ export async function createEstimateFromHolidayQuote(params: {
   const address = [quote.address, quote.city, quote.state, quote.zip].filter(Boolean).join(", ");
   const prepared = designs.map((design, index) => {
     const selections = applyHolidayCatalogPolicy(design.selections, catalog);
+    if (selections.defaultColorPattern?.trim().toLowerCase() === "other") {
+      throw new Error(
+        `${design.label || `Option ${index + 1}`} needs a custom color or pattern description`
+      );
+    }
     const measurements = parseHolidayMeasurements(design.measurements);
     const priced = computeHolidayQuotePricing({ catalog, measurements, selections, prices });
     const customServices = (selections.customServices ?? []).filter(
