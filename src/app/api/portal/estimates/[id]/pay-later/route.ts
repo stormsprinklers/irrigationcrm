@@ -81,8 +81,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       customerId: estimate.customerId,
       companyId: estimate.companyId,
       appUrl: request.nextUrl.origin,
-      successUrl: `${quoteUrl}?payment=card-saved&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${quoteUrl}?payment=card-cancelled`,
+      successUrl: `${quoteUrl}?payment=card-saved&session_id={CHECKOUT_SESSION_ID}&continueAfterVsl=1`,
+      cancelUrl: `${quoteUrl}?payment=card-cancelled&continueAfterVsl=1`,
       estimateId: estimate.id,
       purpose: "estimate_pay_later",
     });

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   customerFacingEstimateLines,
+  customerFacingHolidayCategoryDescription,
   customerFacingHolidayDescription,
   customerFacingHolidayPlacementName,
   isRedundantHolidayInstallationLine,
@@ -12,6 +13,17 @@ test("holiday placement names omit legacy tree and bush prefixes", () => {
   assert.equal(customerFacingHolidayPlacementName("Tree wrap — Front maple — parts"), "Front maple — parts");
   assert.equal(customerFacingHolidayPlacementName("Bush: Entry planters"), "Entry planters");
   assert.equal(customerFacingHolidayPlacementName("Entry garland"), "Entry garland");
+});
+
+test("holiday category descriptions use the option color instead of stale white copy", () => {
+  assert.equal(
+    customerFacingHolidayCategoryDescription({
+      name: "Roofline lighting",
+      description: "C9 · Warm White",
+      colorPattern: "Multicolor",
+    }),
+    "C9 · Multicolor"
+  );
 });
 
 test("holiday customer descriptions never expose footage", () => {

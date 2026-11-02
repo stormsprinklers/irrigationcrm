@@ -603,6 +603,18 @@ export function parseHolidayMeasurements(raw: unknown): HolidayMeasurements {
   };
 }
 
+/** Apply an option-wide color choice to every measured lighting area. */
+export function applyHolidayColorPattern(
+  measurements: HolidayMeasurements,
+  colorPattern: string
+): HolidayMeasurements {
+  return {
+    ...measurements,
+    segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })),
+    placements: measurements.placements.map((placement) => ({ ...placement, colorPattern })),
+  };
+}
+
 export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_HOLIDAY_SELECTIONS };
   const obj = raw as Partial<HolidayQuoteSelections>;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Mail, MessageSquare, Phone } from "lucide-react";
+import { CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
@@ -13,6 +13,7 @@ import { PortalShell } from "./PortalShell";
 import { EstimateVslGate } from "./EstimateVslGate";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
+import { isEstimateCheckoutReturn } from "@/lib/portal/estimate-vsl";
 import {
   calculateHolidayLeaseCommitmentPricing,
   holidayLeaseCommitmentDiscount,
@@ -167,6 +168,9 @@ export function PortalEstimateView({
   const [loading, setLoading] = useState(false);
   const [payLaterLoading, setPayLaterLoading] = useState(false);
   const [paymentReady, setPaymentReady] = useState(false);
+  const [paymentConfirmation, setPaymentConfirmation] = useState<
+    "confirming" | "paid" | "card-saved" | null
+  >(null);
   const [cancellationPolicyOpen, setCancellationPolicyOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -178,7 +182,10 @@ export function PortalEstimateView({
       setError(null);
       try {
         const query = new URLSearchParams();
-        if (vslRefresh > 0) query.set("continueAfterVsl", "1");
+        const returnParams = new URLSearchParams(window.location.search);
+        if (vslRefresh > 0 || isEstimateCheckoutReturn(returnParams)) {
+          query.set("continueAfterVsl", "1");
+        }
         if (previewToken) query.set("previewToken", previewToken);
         const suffix = query.size > 0 ? `?${query.toString()}` : "";
         const estRes = await fetch(`/api/portal/estimates/${token}${suffix}`, {
@@ -268,6 +275,7 @@ export function PortalEstimateView({
     const sessionId = params.get("session_id");
     const deposit = params.get("deposit");
     if (deposit === "success") {
+      setPaymentConfirmation("confirming");
       if (!sessionId) {
         toast.message("Your payment is still being confirmed. Refresh in a moment.");
         return;
@@ -292,10 +300,12 @@ export function PortalEstimateView({
               }
             : current);
           setPaymentReady(true);
+          setPaymentConfirmation("paid");
           toast.success("Payment submitted. Your estimate is approved.");
           window.history.replaceState({}, "", window.location.pathname);
         })
         .catch((error) => {
+          setPaymentConfirmation(null);
           toast.error(error instanceof Error ? error.message : "Payment could not be verified");
         })
         .finally(() => setLoading(false));
@@ -313,6 +323,7 @@ export function PortalEstimateView({
     }
     if (payment !== "card-saved" || !sessionId) return;
 
+    setPaymentConfirmation("confirming");
     setPayLaterLoading(true);
     fetch(`/api/portal/estimates/${token}/pay-later`, {
       method: "POST",
@@ -326,10 +337,12 @@ export function PortalEstimateView({
           current ? { ...current, status: "APPROVED", needsScheduling: true } : current
         );
         setPaymentReady(true);
+        setPaymentConfirmation("card-saved");
         toast.success("Card saved. You will not be charged until an invoice is due.");
         window.history.replaceState({}, "", window.location.pathname);
       })
       .catch((error) => {
+        setPaymentConfirmation(null);
         toast.error(error instanceof Error ? error.message : "Card setup could not be verified");
       })
       .finally(() => setPayLaterLoading(false));
@@ -516,6 +529,7 @@ export function PortalEstimateView({
         current ? { ...current, status: "APPROVED", needsScheduling: true } : current
       );
       setPaymentReady(true);
+      setPaymentConfirmation("card-saved");
       toast.success("Your card is already saved. The office can invoice you later.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start card setup");
@@ -611,6 +625,35 @@ export function PortalEstimateView({
           <Link href={`/portal/${slug}`} className="text-sm text-primary hover:underline">
             ← Back to portal
           </Link>
+        ) : null}
+
+        {paymentConfirmation ? (
+          <div
+            className={
+              paymentConfirmation === "confirming"
+                ? "rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950"
+                : "flex items-start gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-emerald-950"
+            }
+            role="status"
+          >
+            {paymentConfirmation !== "confirming" ? (
+              <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-700" />
+            ) : null}
+            <div>
+              <p className="font-semibold">
+                {paymentConfirmation === "confirming"
+                  ? "Confirming your payment…"
+                  : paymentConfirmation === "paid"
+                    ? "Payment confirmed — thank you!"
+                    : "Card saved and estimate approved"}
+              </p>
+              {paymentConfirmation !== "confirming" ? (
+                <p className="mt-1 text-sm">
+                  Your approval is complete. The office will contact you about scheduling.
+                </p>
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         <div>

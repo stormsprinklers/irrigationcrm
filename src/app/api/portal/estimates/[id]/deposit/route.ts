@@ -148,8 +148,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const checkout = await createEstimateDepositCheckout({
       estimateId,
-      successUrl: `${origin}/portal/${slug}/estimates/${publicToken}?deposit=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/portal/${slug}/estimates/${publicToken}?deposit=cancelled`,
+      successUrl: `${origin}/portal/${slug}/estimates/${publicToken}?deposit=success&session_id={CHECKOUT_SESSION_ID}&continueAfterVsl=1`,
+      cancelUrl: `${origin}/portal/${slug}/estimates/${publicToken}?deposit=cancelled&continueAfterVsl=1`,
     });
     return NextResponse.json({ url: checkout.url });
   } catch (error) {

@@ -31,17 +31,55 @@ export function HolidayLightingPlanSection({
       : null;
 
   const showMap = mode === "installer";
-  const totalFeet = strandMap?.features.reduce((total, feature) => total + feature.lengthFtWithMargin, 0) ?? 0;
-  const bulbTypes = [...new Set(strandMap?.features.map(feature => feature.lightStyleLabel) ?? [])];
-  const notes = typeof designExportMetadata?.notes === "string" ? designExportMetadata.notes.trim() : "";
+  const metadataFeet = Number(designExportMetadata?.billedLengthFt);
+  const mapFeet =
+    strandMap?.features.reduce(
+      (total, feature) => total + feature.lengthFtWithMargin,
+      0
+    ) ?? 0;
+  const totalFeet = Number.isFinite(metadataFeet) && metadataFeet > 0 ? metadataFeet : mapFeet;
+  const bulbTypes = [
+    ...new Set(strandMap?.features.map((feature) => feature.lightStyleLabel) ?? []),
+  ];
+  const mappedColors = [
+    ...new Set(
+      strandMap?.features
+        .map((feature) => feature.bulbColors?.trim())
+        .filter((color): color is string => Boolean(color)) ?? []
+    ),
+  ];
+  const metadataColor =
+    typeof designExportMetadata?.colorPattern === "string"
+      ? designExportMetadata.colorPattern.trim()
+      : "";
+  const lightColors = mappedColors.length
+    ? mappedColors.join("; ")
+    : metadataColor || "Not specified";
+  const notes =
+    typeof designExportMetadata?.notes === "string"
+      ? designExportMetadata.notes.trim()
+      : "";
   if (!previewUrl && !(showMap && strandMap)) return null;
 
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-white p-4">
+    <section
+      className={
+        showMap
+          ? "space-y-4 rounded-lg border-2 border-amber-400 bg-amber-50/60 p-4 shadow-sm"
+          : "space-y-3 rounded-lg border border-border bg-white p-4"
+      }
+    >
       <div>
-        <h3 className="font-medium">
-          {title ?? (mode === "installer" ? "Holiday install map" : "Lighting preview")}
-        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className={showMap ? "text-lg font-bold" : "font-medium"}>
+            {title ?? (mode === "installer" ? "Holiday install map" : "Lighting preview")}
+          </h3>
+          {showMap ? (
+            <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-amber-950">
+              Internal job specs
+            </span>
+          ) : null}
+        </div>
         {mode === "installer" || description ? (
           <p className="mt-1 text-sm text-muted-foreground">
             {description ??
@@ -50,10 +88,31 @@ export function HolidayLightingPlanSection({
         ) : null}
       </div>
       {showMap && strandMap ? (
-        <div className="space-y-2 text-sm">
-          <p><strong>Total length including margin:</strong> {totalFeet.toFixed(1)} ft</p>
-          <p><strong>Bulb types:</strong> {bulbTypes.join(", ") || "Not specified"}</p>
-          <p className="whitespace-pre-wrap"><strong>Notes:</strong> {notes || "No quote notes"}</p>
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-amber-300 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                Linear feet
+              </p>
+              <p className="mt-1 text-3xl font-black text-slate-950">
+                {totalFeet.toFixed(1)} ft
+              </p>
+            </div>
+            <div className="rounded-lg border border-amber-300 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                Light color / pattern
+              </p>
+              <p className="mt-1 text-2xl font-black text-slate-950">{lightColors}</p>
+            </div>
+          </div>
+          <div className="space-y-2 text-sm">
+            <p>
+              <strong>Bulb types:</strong> {bulbTypes.join(", ") || "Not specified"}
+            </p>
+            <p className="whitespace-pre-wrap">
+              <strong>Notes:</strong> {notes || "No quote notes"}
+            </p>
+          </div>
         </div>
       ) : null}
       {previewUrl ? (

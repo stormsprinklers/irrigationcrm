@@ -4,11 +4,56 @@ import { computeHolidayQuotePricing, type PriceLookup } from "../pricing";
 import {
   DEFAULT_HOLIDAY_CATALOG,
   applyHolidayCatalogPolicy,
+  applyHolidayColorPattern,
   holidayCatalogSkus,
   parseHolidayCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
 } from "../types";
+
+test("changing an option color updates rooflines, trees, and bushes", () => {
+  const measurements = parseHolidayMeasurements({
+    segments: [{ id: "roof", label: "Roof", kind: "roofline", path: [], lengthFt: 100 }],
+    placements: [
+      { id: "tree", label: "Tree", kind: "tree", strandCount: 2, colorPattern: "Warm White" },
+      { id: "bush", label: "Bush", kind: "bush", strandCount: 1, colorPattern: "Warm White" },
+    ],
+  });
+
+  const updated = applyHolidayColorPattern(measurements, "Red");
+
+  assert.deepEqual(updated.segments.map((segment) => segment.colorPattern), ["Red"]);
+  assert.deepEqual(updated.placements.map((placement) => placement.colorPattern), ["Red", "Red"]);
+});
+
+test("a Multicolor roofline stays Multicolor on the customer quote", () => {
+  const measurements = applyHolidayColorPattern(
+    parseHolidayMeasurements({
+      segments: [
+        { id: "roof", label: "Roof", kind: "roofline", path: [], lengthFt: 100 },
+      ],
+      placements: [],
+    }),
+    "Multicolor"
+  );
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements,
+    selections: parseHolidaySelections({
+      defaultLightStyleKey: "c9",
+      defaultColorPattern: "Multicolor",
+    }),
+    prices: priceLookup({
+      "HL-C9-SERVICE-FT": { unitPrice: 8, unitCost: 3 },
+    }),
+  });
+
+  assert.equal(pricing.lines[0]?.colorPattern, "Multicolor");
+  assert.equal(
+    pricing.optionDetails.buy.displayLines[0]?.description,
+    "C9 · Multicolor"
+  );
+});
 
 function priceLookup(overrides: Record<string, { unitPrice: number; unitCost: number }>): PriceLookup {
   return new Map(Object.entries(overrides).map(([sku, value]) => [

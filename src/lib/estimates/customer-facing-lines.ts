@@ -33,6 +33,21 @@ export function customerFacingHolidayDescription(description: string | null) {
   return normalized || null;
 }
 
+/** Keep the generated roofline row aligned with the option-wide color selection. */
+export function customerFacingHolidayCategoryDescription(params: {
+  name: string;
+  description: string | null;
+  colorPattern?: string | null;
+}) {
+  const description = customerFacingHolidayDescription(params.description);
+  const colorPattern = params.colorPattern?.trim();
+  if (!colorPattern || !/^roofline lighting$/i.test(params.name.trim())) {
+    return description;
+  }
+  const style = description?.split("·", 1)[0]?.trim();
+  return style ? `${style} · ${colorPattern}` : colorPattern;
+}
+
 /** Hide the redundant zero-dollar row from older holiday-lighting estimates. */
 export function isRedundantHolidayInstallationLine(item: {
   name: string;

@@ -461,6 +461,17 @@ export function VisitDetail({ visitId }: Props) {
         />
       ) : null}
 
+      {visit.designExportMetadata &&
+      (visit.designExportMetadata as Record<string, unknown>).source ===
+        "holiday-lighting-quote" ? (
+        <HolidayLightingPlanSection
+          designExportMetadata={visit.designExportMetadata as Record<string, unknown>}
+          mode="installer"
+          title="Holiday lighting job specs"
+          description="Approved lighting details for the installation team."
+        />
+      ) : null}
+
       <TimeTrackingBar
         status={visit.status}
         timeEvents={timeEvents}
@@ -512,15 +523,6 @@ export function VisitDetail({ visitId }: Props) {
           installDurationDays={visit.installDurationDays ?? 4}
           visitId={visit.id}
           onDurationUpdated={load}
-        />
-      ) : null}
-
-      {visit.designExportMetadata &&
-      (visit.designExportMetadata as Record<string, unknown>).source ===
-        "holiday-lighting-quote" ? (
-        <HolidayLightingPlanSection
-          designExportMetadata={visit.designExportMetadata as Record<string, unknown>}
-          mode="installer"
         />
       ) : null}
 

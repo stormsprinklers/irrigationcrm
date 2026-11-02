@@ -57,10 +57,12 @@ test("saved strand maps carry bulb colors separately from map legend colors", ()
 });
 
 import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
-test("visit plan uses approved option B and preserves it across later reads", () => {
-  const raw = {source: "holiday-lighting-quote", strandMap: {features: [{id: "a"}]}, options: [{letter: "A", strandMap: {features: [{id: "a"}]}}, {letter: "B", colorPattern: "Blue", previewImageUrl: "https://example.com/b.jpg", strandMap: {features: [{id: "b", bulbColors: "Red"}]}}]};
+test("visit plan uses approved option B and preserves its internal job specs", () => {
+  const raw = {source: "holiday-lighting-quote", strandMap: {features: [{id: "a"}]}, options: [{letter: "A", strandMap: {features: [{id: "a"}]}}, {letter: "B", colorPattern: "Blue", billedLengthFt: 142.5, previewImageUrl: "https://example.com/b.jpg", strandMap: {features: [{id: "b", bulbColors: "Red"}]}}]};
   const plan = holidayVisitPlan(raw, "B")!;
   assert.equal(plan.approvedOptionLetter, "B");
+  assert.equal(plan.colorPattern, "Blue");
+  assert.equal(plan.billedLengthFt, 142.5);
   assert.equal((plan.strandMap as any).features[0].id, "b");
   assert.equal((plan.strandMap as any).features[0].bulbColors, "Red");
   assert.equal(plan.previewImageUrl, "https://example.com/b.jpg");

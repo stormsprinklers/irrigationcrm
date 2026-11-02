@@ -9,6 +9,7 @@ import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
 import {
+  customerFacingHolidayCategoryDescription,
   customerFacingHolidayDescription as hideHolidayFootage,
   customerFacingHolidayPlacementName,
   isRedundantHolidayInstallationLine,
@@ -252,6 +253,13 @@ export function serializePortalEstimate(estimate: {
           Boolean(option) && typeof option === "object" && !Array.isArray(option)
       )
     : [];
+  const holidayMetadataByOptionId = new Map(
+    (estimate.options ?? []).map((option, index) => [
+      option.id,
+      holidayMetadataOptions.find((item) => item.letter === option.letter) ??
+        holidayMetadataOptions[index],
+    ])
+  );
   const options = (estimate.options ?? []).map((option, index) => {
     const letter = option.letter;
     const base = estimate.estimateNumber?.trim() || "EST";
@@ -310,7 +318,15 @@ export function serializePortalEstimate(estimate: {
       ? customerFacingHolidayPlacementName(item.name)
       : item.name,
     description: hasHolidayLighting
-      ? customerFacingHolidayDescription(item.description)
+      ? customerFacingHolidayCategoryDescription({
+          name: item.name,
+          description: customerFacingHolidayDescription(item.description),
+          colorPattern:
+            item.optionId &&
+            typeof holidayMetadataByOptionId.get(item.optionId)?.colorPattern === "string"
+              ? (holidayMetadataByOptionId.get(item.optionId)?.colorPattern as string)
+              : null,
+        })
       : item.description,
     quantity: toNumber(item.quantity as never),
     unitPrice: toNumber(item.unitPrice as never),

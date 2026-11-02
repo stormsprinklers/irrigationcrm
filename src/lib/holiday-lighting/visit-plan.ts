@@ -10,12 +10,14 @@ export function holidayVisitPlan(raw: Prisma.JsonValue | null, letter?: string |
   return {
     ...raw as Prisma.InputJsonObject,
     ...(typeof chosen?.notes === "string" ? { notes: chosen.notes } : {}),
+    ...(typeof chosen?.colorPattern === "string" ? { colorPattern: chosen.colorPattern } : {}),
+    ...(typeof chosen?.billedLengthFt === "number" ? { billedLengthFt: chosen.billedLengthFt } : {}),
     ...(chosen?.previewImageUrl ? {previewImageUrl: chosen.previewImageUrl} : {}),
     ...(map && typeof map === "object" && !Array.isArray(map) ? {strandMap: {
       ...map as Prisma.InputJsonObject,
       features: Array.isArray(map.features) ? map.features.map(feature => {
         if (!feature || typeof feature !== "object" || Array.isArray(feature)) return feature;
-        return {...feature, ...(feature.bulbColors ? {} : chosen?.colorPattern ? {bulbColors: `Default: ${chosen.colorPattern}`} : {})};
+        return {...feature, ...(feature.bulbColors ? {} : chosen?.colorPattern ? {bulbColors: chosen.colorPattern} : {})};
       }) : [],
     }} : {}),
     ...(letter ? {approvedOptionLetter: letter} : {}),

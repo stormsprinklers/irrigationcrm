@@ -40,6 +40,18 @@ export function normalizeEstimateVslWaitSeconds(value: unknown) {
   return Math.min(MAX_WAIT_SECONDS, Math.max(0, Math.round(parsed)));
 }
 
+/** Checkout returns must resume the estimate flow instead of replaying the VSL. */
+export function isEstimateCheckoutReturn(searchParams: Pick<URLSearchParams, "get">) {
+  const deposit = searchParams.get("deposit");
+  const payment = searchParams.get("payment");
+  return (
+    deposit === "success" ||
+    deposit === "cancelled" ||
+    payment === "card-saved" ||
+    payment === "card-cancelled"
+  );
+}
+
 function secret() {
   const value = getAuthSecret();
   if (!value) throw new Error("AUTH_SECRET is not configured");

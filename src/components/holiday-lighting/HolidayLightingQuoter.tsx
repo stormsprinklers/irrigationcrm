@@ -39,6 +39,7 @@ import {
   HOLIDAY_PREVIEW_DISCLAIMER,
   HOLIDAY_COLOR_PATTERNS,
   applyHolidayCatalogPolicy,
+  applyHolidayColorPattern,
   holidayDesignOptionsFromQuote,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
@@ -1790,7 +1791,7 @@ export function HolidayLightingQuoter({
                           : current
                     );
                     const nextSelections = { ...selections, defaultColorPattern: colorPattern };
-                    const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
+                    const nextMeasurements = applyHolidayColorPattern(measurements, colorPattern);
                     setSelections(nextSelections);
                     setMeasurements(pruneStrands(nextMeasurements));
                     void save({ selections: nextSelections, measurements: nextMeasurements }, { quiet: true });
@@ -1814,7 +1815,7 @@ export function HolidayLightingQuoter({
                 onChange={(event) => {
                   const colorPattern = event.target.value || "Other";
                   const nextSelections = { ...selections, defaultColorPattern: colorPattern };
-                  const nextMeasurements = { ...measurements, segments: measurements.segments.map((segment) => ({ ...segment, colorPattern })) };
+                  const nextMeasurements = applyHolidayColorPattern(measurements, colorPattern);
                   setSelections(nextSelections);
                   setMeasurements(pruneStrands(nextMeasurements));
                 }}

@@ -4,8 +4,21 @@ import {
   canCompleteEstimateVslGate,
   createEstimateVslGate,
   decodeEstimateVslGateToken,
+  isEstimateCheckoutReturn,
   normalizeEstimateVslWaitSeconds,
 } from "../estimate-vsl";
+
+test("estimate checkout returns bypass the VSL", () => {
+  for (const query of [
+    "deposit=success&session_id=checkout",
+    "deposit=cancelled",
+    "payment=card-saved&session_id=setup",
+    "payment=card-cancelled",
+  ]) {
+    assert.equal(isEstimateCheckoutReturn(new URLSearchParams(query)), true);
+  }
+  assert.equal(isEstimateCheckoutReturn(new URLSearchParams()), false);
+});
 
 test("estimate VSL wait defaults to 30 seconds and stays within limits", () => {
   assert.equal(normalizeEstimateVslWaitSeconds(undefined), 30);
