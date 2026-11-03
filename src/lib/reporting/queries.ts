@@ -405,6 +405,7 @@ export const REPORT_LINKS = [
   { title: "Financial", href: "/reporting/financial" },
   { title: "CSR", href: "/reporting/csr" },
   { title: "Estimates", href: "/reporting/estimates" },
+  { title: "Holiday lighting sales", href: "/reporting/holiday-lighting" },
   { title: "Leads", href: "/reporting/leads" },
   { title: "Voice", href: "/reporting/voice" },
   { title: "Service plans", href: "/reporting/service-plans" },
@@ -434,6 +435,7 @@ export const JOBS_REPORT_CATEGORIES = [
     title: "Sales",
     links: [
       { label: "Estimates", href: "/reporting/estimates" },
+      { label: "Holiday lighting sales", href: "/reporting/holiday-lighting" },
       { label: "Leads", href: "/reporting/leads" },
     ],
   },

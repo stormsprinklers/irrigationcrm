@@ -51,6 +51,7 @@ const SETTINGS_KEYWORDS: Record<string, string> = {
   "/settings/integrations/google-business": "google business profile gbp reviews maps",
   "/settings/integrations/google-ads": "google ads advertising ppc conversions tracking",
   "/settings/integrations/meta-ads": "meta ads facebook instagram advertising campaigns",
+  "/settings/integrations/zapier": "zapier webhook ad tracking conversions pipeline",
   "/settings/integrations/rachio": "rachio sprinkler irrigation controller integration",
   "/settings/integrations/apple-demo": "apple demo integration",
   "/settings/integrations/serp-rankings": "search rankings seo serp keywords google",

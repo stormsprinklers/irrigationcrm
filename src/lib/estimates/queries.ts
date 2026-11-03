@@ -12,6 +12,7 @@ export const estimateInclude = {
   customer: { select: { id: true, name: true, phone: true, email: true, doNotService: true } },
   property: { select: { id: true, name: true, address: true, city: true, state: true, zip: true } },
   visit: { select: { id: true, title: true, startAt: true } },
+  sentBy: { select: { id: true, name: true, firstName: true, lastName: true } },
   options: { orderBy: { sortOrder: "asc" as const } },
   lineItems: {
     orderBy: { sortOrder: "asc" as const },
@@ -78,6 +79,7 @@ export function serializeEstimate(
     sentAt:
       estimate.sentAt?.toISOString() ??
       (estimate.status === EstimateStatus.SENT ? estimate.updatedAt.toISOString() : null),
+    sentBy: estimate.sentBy,
     selectedOptionId: estimate.selectedOptionId ?? null,
     subtotal: toNumber(estimate.subtotal),
     discountTotal: toNumber(estimate.discountTotal),

@@ -57,6 +57,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(newStatus === EstimateStatus.SENT
           ? {
               sentAt: new Date(),
+              sentById: existing.sentById ?? user.id,
+              sentByAt: existing.sentByAt ?? new Date(),
               depositRequired: existing.company.estimateDepositRequired,
               depositType: existing.company.estimateDepositType,
               depositAmount: existing.company.estimateDepositAmount,

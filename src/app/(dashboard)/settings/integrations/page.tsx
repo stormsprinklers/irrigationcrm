@@ -527,6 +527,19 @@ export default function SettingsIntegrationsPage() {
 
           <div className="rounded-lg border border-border bg-white p-6 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-sm">Zapier ad tracking</span>
+              <Badge variant="secondary">Webhook</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Send Lead, Qualified, Converted, and Sold pipeline events to a Zapier Catch Hook.
+            </p>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/settings/integrations/zapier">Configure Zapier webhook</Link>
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-border bg-white p-6 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium text-sm">Search rankings</span>
               <Badge variant="secondary">SEO</Badge>
             </div>

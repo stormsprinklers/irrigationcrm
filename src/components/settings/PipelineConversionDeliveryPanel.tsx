@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-type Platform = "GOOGLE" | "META";
+type Platform = "GOOGLE" | "META" | "ZAPIER";
 type StatusResponse = {
   counts: Array<{ platform: Platform; status: "PENDING" | "PROCESSING" | "SENT" | "FAILED"; _count: { _all: number } }>;
   recentFailures: Array<{

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pipelineSpeedSeconds } from "@/lib/customers/pipeline";
+import { employeeFirstNameLastInitial } from "@/lib/employees";
 
 export type PipelineSpeedFilter = "UNDER_5" | "FIVE_TO_30" | "OVER_30";
 export type PipelineFilters = { search?: string; city?: string; zip?: string; source?: string; createdFrom?: Date; createdTo?: Date; speed?: PipelineSpeedFilter };
@@ -12,6 +13,7 @@ export type PipelineRow = {
   pipelineSoldAt: Date | null; pipelineDisqualifiedAt: Date | null; pipelineLeadSource: string | null;
   pipelineFirstContactedAt: Date | null; pipelineDeclinedAt: Date | null; pipelineDeclineReason: string | null;
   pipelineFollowUpsPausedAt: Date | null; qualifiedValue: number | null; convertedValue: number | null; soldValue: number | null;
+  qualifiedEmployee: { firstName: string; lastName: string; name: string } | null;
   followUps: PipelineFollowUpRow[];
 };
 type MetricsRow = { leadCount: bigint; qualifiedCount: bigint; convertedCount: bigint; soldCount: bigint; averageSpeedSeconds: number | null; qualifiedTotal: number | null; convertedTotal: number | null; soldTotal: number | null };
@@ -32,7 +34,7 @@ function pipelineWhere(companyId: string, filters: PipelineFilters, scope: Pipel
   return Prisma.join(conditions, " AND ");
 }
 
-const QUALIFIED_VALUE = Prisma.sql`(SELECT COALESCE((SELECT MIN(eo.total) FROM "EstimateOption" eo WHERE eo."estimateId" = e.id AND eo."declinedAt" IS NULL), e.total) FROM "Estimate" e WHERE e."customerId" = c.id AND e."sentAt" IS NOT NULL ORDER BY e."sentAt" DESC LIMIT 1)`;
+const QUALIFIED_VALUE = Prisma.sql`(SELECT COALESCE((SELECT MIN(eo.total) FROM "EstimateOption" eo WHERE eo."estimateId" = e.id AND eo."declinedAt" IS NULL), e.total) FROM "Estimate" e WHERE e."customerId" = c.id AND e."sentAt" IS NOT NULL ORDER BY e."sentAt" DESC, e.id DESC LIMIT 1)`;
 // The conversion event stores the full approved estimate/invoice value. Prefer that
 // snapshot over invoices because an estimate approval can create a 50% deposit
 // invoice, whose total is only the amount collected up front. Historical pipeline
@@ -62,6 +64,10 @@ const PIPELINE_SELECT = Prisma.sql`
     COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel") AS "pipelineLeadSource", c."pipelineFirstContactedAt",
     c."pipelineDeclinedAt", c."pipelineDeclineReason"::text AS "pipelineDeclineReason", c."pipelineFollowUpsPausedAt",
     ${QUALIFIED_VALUE}::float8 AS "qualifiedValue", ${CONVERTED_VALUE}::float8 AS "convertedValue", ${SOLD_VALUE}::float8 AS "soldValue",
+    (SELECT jsonb_build_object('firstName', u."firstName", 'lastName', u."lastName", 'name', u.name)
+      FROM "Estimate" e JOIN "User" u ON u.id = e."sentById"
+      WHERE e."customerId" = c.id AND e."companyId" = c."companyId" AND e."sentAt" IS NOT NULL
+      ORDER BY e."sentAt" DESC, e.id DESC LIMIT 1) AS "qualifiedEmployee",
     COALESCE((SELECT jsonb_agg(jsonb_build_object('id', pf.id, 'stage', pf.stage::text, 'sequence', pf.sequence, 'method', pf.method::text, 'status', pf.status::text, 'automated', pf.automated, 'completedAt', pf."completedAt", 'smsSentAt', pf."smsSentAt", 'emailSentAt', pf."emailSentAt") ORDER BY pf.stage, pf.sequence)
       FROM "PipelineFollowUp" pf WHERE pf."customerId" = c.id AND pf.status IN ('COMPLETED', 'SKIPPED')), '[]'::jsonb) AS "followUps"
   FROM "Customer" c LEFT JOIN LATERAL (SELECT p.city, p.zip FROM "CustomerProperty" p WHERE p."customerId" = c.id ORDER BY p."isPrimary" DESC, p."createdAt" ASC LIMIT 1) primary_property ON true
@@ -79,11 +85,23 @@ export async function querySalesPipeline(companyId: string, filters: PipelineFil
   ]);
   const raw = metricsRows[0];
   const metrics = { leadCount: Number(raw?.leadCount ?? 0), qualifiedCount: Number(raw?.qualifiedCount ?? 0), convertedCount: Number(raw?.convertedCount ?? 0), soldCount: Number(raw?.soldCount ?? 0), averageSpeedSeconds: raw?.averageSpeedSeconds == null ? null : Number(raw.averageSpeedSeconds), qualifiedTotal: Number(raw?.qualifiedTotal ?? 0), convertedTotal: Number(raw?.convertedTotal ?? 0), soldTotal: Number(raw?.soldTotal ?? 0) };
-  return { rows: rows.map((row) => ({ ...row, speedSeconds: pipelineSpeedSeconds(row) })), total: metrics.leadCount, metrics, leadSources: sourceRows.map((row) => row.source) };
+  return { rows: rows.map(({ qualifiedEmployee, ...row }) => ({
+    ...row,
+    speedSeconds: pipelineSpeedSeconds(row),
+    qualifiedEmployeeName: qualifiedEmployee
+      ? employeeFirstNameLastInitial(qualifiedEmployee) || null
+      : null,
+  })), total: metrics.leadCount, metrics, leadSources: sourceRows.map((row) => row.source) };
 }
 
 export async function exportSalesPipeline(companyId: string, filters: PipelineFilters, scope: PipelineScope = {}) {
   const where = pipelineWhere(companyId, filters, scope);
   const rows = await prisma.$queryRaw<PipelineRow[]>(Prisma.sql`${PIPELINE_SELECT} WHERE ${where} ORDER BY c."pipelineLeadAt" DESC, c.id ASC`);
-  return rows.map((row) => ({ ...row, speedSeconds: pipelineSpeedSeconds(row) }));
+  return rows.map(({ qualifiedEmployee, ...row }) => ({
+    ...row,
+    speedSeconds: pipelineSpeedSeconds(row),
+    qualifiedEmployeeName: qualifiedEmployee
+      ? employeeFirstNameLastInitial(qualifiedEmployee) || null
+      : null,
+  }));
 }

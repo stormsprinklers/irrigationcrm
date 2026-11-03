@@ -13,8 +13,9 @@ import {
   getTechPerformanceReport,
   getVoiceReport,
 } from "@/lib/reporting/queries";
-import { parseReportRangeFromSearchParams } from "@/lib/reporting/date-range";
+import { parseReportRangeFromSearchParams, resolveReportRange } from "@/lib/reporting/date-range";
 import { getKpiDashboardReport } from "@/lib/reporting/kpi-dashboard";
+import { getHolidayLightingSalesReport } from "@/lib/reporting/holiday-lighting-sales";
 
 type RouteParams = { params: Promise<{ type: string }> };
 
@@ -46,6 +47,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           request.nextUrl.searchParams.get("overview") === "1"
         );
         return NextResponse.json(data);
+      } catch {
+        return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
+      }
+    }
+
+    if (type === "holiday-lighting-sales") {
+      try {
+        const range = resolveReportRange(
+          parseReportRangeFromSearchParams(request.nextUrl.searchParams)
+        );
+        const data = await getHolidayLightingSalesReport(user.companyId, range);
+        return NextResponse.json({ ...data, currentUserId: user.id });
       } catch {
         return NextResponse.json({ error: "Invalid date range" }, { status: 400 });
       }

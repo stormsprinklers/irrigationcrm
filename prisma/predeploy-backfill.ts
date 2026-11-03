@@ -115,6 +115,26 @@ async function ensureEstimateVslSettings() {
   console.log("Ensured estimate VSL settings and customer completion field");
 }
 
+async function ensureEstimateSenderAttribution() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Estimate" ADD COLUMN IF NOT EXISTS "sentById" TEXT`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Estimate" ADD COLUMN IF NOT EXISTS "sentByAt" TIMESTAMP(3)`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "Estimate_companyId_sentById_sentByAt_idx" ON "Estimate"("companyId", "sentById", "sentByAt")`
+  );
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "Estimate" ADD CONSTRAINT "Estimate_sentById_fkey" FOREIGN KEY ("sentById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+  }
+  console.log("Ensured estimate sender attribution");
+}
+
 async function backfillChestnutLegalLinks() {
   const terms = await prisma.company.updateMany({
     where: {
@@ -555,6 +575,9 @@ async function ensurePipelineConversionDelivery() {
     );
   }
   await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "zapierPipelineWebhookUrl" TEXT`
+  );
+  await prisma.$executeRawUnsafe(
     `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "googleAdsPipelineConfiguredAt" TIMESTAMP(3)`
   );
   await prisma.$executeRawUnsafe(
@@ -565,6 +588,9 @@ async function ensurePipelineConversionDelivery() {
     DO $$ BEGIN
       CREATE TYPE "PipelineConversionPlatform" AS ENUM ('GOOGLE', 'META');
     EXCEPTION WHEN duplicate_object THEN NULL; END $$
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TYPE "PipelineConversionPlatform" ADD VALUE IF NOT EXISTS 'ZAPIER'
   `);
   await prisma.$executeRawUnsafe(`
     DO $$ BEGIN
@@ -1016,6 +1042,7 @@ async function main() {
   // This must stay first: generated Prisma model queries include affiliate
   // fields even when the feature itself is not being used.
   await ensureAffiliateSchema();
+  await ensureEstimateSenderAttribution();
   await ensureMarketerRole();
   await ensureSalesPipeline();
   await ensureCustomerTrackingData();

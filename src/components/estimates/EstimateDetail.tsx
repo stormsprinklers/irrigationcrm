@@ -72,6 +72,8 @@ type EstimateData = {
   total: number;
   signatureBlobUrl: string | null;
   signedAt: string | null;
+  sentAt: string | null;
+  sentBy: { id: string; name: string; firstName: string; lastName: string } | null;
   customer: {
     id: string;
     name: string;
@@ -648,6 +650,14 @@ export function EstimateDetail({ estimateId }: Props) {
               nameClassName="text-sm font-medium"
             />
           </div>
+          {estimate.sentBy ? (
+            <p className="text-sm text-muted-foreground">
+              Sent by {estimate.sentBy.name}
+              {estimate.sentAt
+                ? ` · ${format(new Date(estimate.sentAt), "MMM d, yyyy h:mm a")}`
+                : ""}
+            </p>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             {estimate.expiresAt
               ? `Expires ${format(new Date(estimate.expiresAt), "MMM d, yyyy")}`

@@ -143,6 +143,10 @@ export async function advanceCustomerPipeline(input: AdvanceInput) {
     if (result.count === 0) return false;
 
     const identity = buildPipelineIdentitySnapshot(current);
+    const zapier = await tx.company.findUnique({
+      where: { id: input.companyId },
+      select: { zapierPipelineWebhookUrl: true },
+    });
     const value =
       typeof input.value === "number" && Number.isFinite(input.value)
         ? Math.max(0, Math.round(input.value * 100) / 100)
@@ -162,7 +166,11 @@ export async function advanceCustomerPipeline(input: AdvanceInput) {
           sourceEntityType: input.sourceEntityType ?? null,
           sourceEntityId: input.sourceEntityId ?? null,
           deliveries: {
-            create: [{ platform: "GOOGLE" }, { platform: "META" }],
+            create: [
+              { platform: "GOOGLE" },
+              { platform: "META" },
+              ...(zapier?.zapierPipelineWebhookUrl ? [{ platform: "ZAPIER" as const }] : []),
+            ],
           },
         },
       });

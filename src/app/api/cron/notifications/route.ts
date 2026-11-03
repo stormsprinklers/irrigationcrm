@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       }
 
       if (job.estimateId && job.event.startsWith("ESTIMATE_SCHEDULED_SEND:")) {
-        const payload = JSON.parse(job.event.slice("ESTIMATE_SCHEDULED_SEND:".length)) as {channel:"sms"|"email"|"both";message:string;subject?:string};
+        const payload = JSON.parse(job.event.slice("ESTIMATE_SCHEDULED_SEND:".length)) as {channel:"sms"|"email"|"both";message:string;subject?:string;senderId?:string};
         const claim = await prisma.notificationJob.updateMany({where:{id:job.id,processedAt:null},data:{processedAt:new Date()}});
         if (!claim.count) continue;
         try {
@@ -63,7 +63,10 @@ export async function GET(request: Request) {
           await prisma.notificationJob.update({where:{id:job.id},data:{processedAt:null,runAt:new Date(Date.now()+5*60*1000)}});
           throw error;
         }
-        await prisma.estimate.updateMany({where:{id:job.estimateId,companyId:job.companyId,status:{in:["DRAFT","SENT"]}},data:{status:"SENT",sentAt:new Date()}});
+        const estimateAttribution = await prisma.estimate.findFirst({where:{id:job.estimateId,companyId:job.companyId},select:{sentById:true,sentByAt:true}});
+        const sentAt = new Date();
+        await prisma.estimate.updateMany({where:{id:job.estimateId,companyId:job.companyId,status:{in:["DRAFT","SENT"]}},data:{status:"SENT"}});
+        await prisma.estimate.updateMany({where:{id:job.estimateId,companyId:job.companyId},data:{sentAt,sentByAt:estimateAttribution?.sentByAt ?? sentAt,...(!estimateAttribution?.sentById && payload.senderId ? {sentById:payload.senderId} : {})}});
         await onEstimateSent(job.estimateId,job.companyId);
       } else if (job.estimateId && job.event === "ESTIMATE_FOLLOW_UP") {
         await processEstimateFollowUpJob({

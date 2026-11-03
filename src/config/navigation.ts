@@ -115,6 +115,7 @@ export const reportingSidebar: NavSection[] = [
     title: "ALL REPORTS",
     items: [
       { label: "Estimates", href: "/reporting/estimates" },
+      { label: "Holiday lighting sales", href: "/reporting/holiday-lighting" },
       { label: "Leads", href: "/reporting/leads" },
       { label: "Marketing", href: "/reporting/marketing" },
       { label: "Voice", href: "/reporting/voice" },
@@ -232,6 +233,7 @@ export const integrationsSettingsSidebar: NavSection[] = [
       { label: "Google Business Profile", href: "/settings/integrations/google-business" },
       { label: "Google Ads", href: "/settings/integrations/google-ads" },
       { label: "Meta Ads", href: "/settings/integrations/meta-ads" },
+      { label: "Zapier", href: "/settings/integrations/zapier" },
       { label: "Rachio", href: "/settings/integrations/rachio" },
       { label: "Apple demo", href: "/settings/integrations/apple-demo" },
       { label: "Search rankings", href: "/settings/integrations/serp-rankings" },

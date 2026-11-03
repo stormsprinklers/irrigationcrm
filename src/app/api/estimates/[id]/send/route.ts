@@ -72,7 +72,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (runAt) {
       if (!channel || !compose) return badRequestResponse("Choose a channel and message");
-      await prisma.notificationJob.create({data:{companyId:user.companyId,estimateId:id,runAt,event:`ESTIMATE_SCHEDULED_SEND:${JSON.stringify({channel,...compose})}`}});
+      await prisma.notificationJob.create({data:{companyId:user.companyId,estimateId:id,runAt,event:`ESTIMATE_SCHEDULED_SEND:${JSON.stringify({channel,...compose,senderId:estimate.sentById ?? user.id})}`}});
       return NextResponse.json({scheduled:true,runAt:runAt.toISOString()});
     }
 
@@ -95,11 +95,16 @@ export async function POST(request: NextRequest, { params }: Params) {
       );
     }
 
-    await prisma.estimate.updateMany({
-      where: { id, companyId: user.companyId, status: {in: ["DRAFT", "SENT"]} },
+    const sentAt = new Date();
+    await prisma.estimate.update({
+      where: { id },
       data: {
-        status: EstimateStatus.SENT,
-        sentAt: new Date(),
+        ...(estimate.status === EstimateStatus.DRAFT || estimate.status === EstimateStatus.SENT
+          ? { status: EstimateStatus.SENT }
+          : {}),
+        sentAt,
+        sentById: estimate.sentById ?? user.id,
+        sentByAt: estimate.sentByAt ?? sentAt,
       },
     });
 

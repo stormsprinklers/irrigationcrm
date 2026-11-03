@@ -6,6 +6,7 @@ import {
 import { sendGooglePipelineEvent } from "@/lib/google-ads/data-manager";
 import { sendMetaPipelineEvent } from "@/lib/meta/conversions-api";
 import { prisma } from "@/lib/prisma";
+import { sendZapierPipelineEvent } from "@/lib/zapier/pipeline-webhook";
 
 const LEASE_MS = 2 * 60 * 1000;
 const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
@@ -31,6 +32,37 @@ async function deliver(
 ) {
   if (platform === "GOOGLE") {
     return sendGooglePipelineEvent({ companyId: event.companyId, event });
+  }
+
+  if (platform === "ZAPIER") {
+    const company = await prisma.company.findUnique({
+      where: { id: event.companyId },
+      select: { zapierPipelineWebhookUrl: true },
+    });
+    if (!company?.zapierPipelineWebhookUrl) {
+      throw new Error("Zapier pipeline webhook is not configured");
+    }
+    const customer = await prisma.customer.findFirst({
+      where: { id: event.customerId, companyId: event.companyId },
+      select: {
+        name: true,
+        email: true,
+        phone: true,
+        city: true,
+        state: true,
+        zip: true,
+        gclid: true,
+        gbraid: true,
+        wbraid: true,
+        userAgent: true,
+      },
+    });
+    if (!customer) throw new Error("Zapier pipeline customer is no longer available");
+    return sendZapierPipelineEvent({
+      webhookUrl: company.zapierPipelineWebhookUrl,
+      event,
+      customer,
+    });
   }
 
   const company = await prisma.company.findUnique({

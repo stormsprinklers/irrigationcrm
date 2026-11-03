@@ -144,6 +144,20 @@ export function employeeInitials(firstName: string, lastName?: string | null) {
   return initials || "?";
 }
 
+export function employeeFirstNameLastInitial(input: {
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+}) {
+  const parsed = input.firstName?.trim()
+    ? { firstName: input.firstName.trim(), lastName: input.lastName?.trim() ?? "" }
+    : splitFullName(input.name ?? "");
+  const lastInitial = parsed.lastName.trim()[0];
+  return [parsed.firstName, lastInitial ? `${lastInitial.toUpperCase()}.` : ""]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function parseEmployeeNameFields(input: {
   firstName?: unknown;
   lastName?: unknown;

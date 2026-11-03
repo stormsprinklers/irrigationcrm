@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const platform = body.platform ? String(body.platform).toUpperCase() : undefined;
     if (platform && !Object.values(PipelineConversionPlatform).includes(platform as PipelineConversionPlatform)) {
-      return badRequestResponse("platform must be GOOGLE or META");
+      return badRequestResponse("platform must be GOOGLE, META, or ZAPIER");
     }
     const requeued = await requeueCompanyPipelineDeliveries(
       user.companyId,

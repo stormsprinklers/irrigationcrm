@@ -33,6 +33,7 @@ export type EstimateDTO = {
   approvedAt: string | null;
   employeeApproval?: { employeeId: string; employeeName: string; approvedAt: string } | null;
   sentAt: string | null;
+  sentBy: { id: string; name: string; firstName: string; lastName: string } | null;
   selectedOptionId: string | null;
   subtotal: number;
   discountTotal: number;
