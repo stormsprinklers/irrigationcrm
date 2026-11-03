@@ -122,7 +122,7 @@ export async function ensureHolidayPriceBookItems(
         sku: row.sku,
         unit: row.unit,
         unitPrice: migrated.unitPrice > 0 ? migrated.unitPrice : row.defaultUnitPrice ?? 0,
-        unitCost: migrated.unitCost,
+        unitCost: migrated.unitCost > 0 ? migrated.unitCost : row.defaultUnitCost ?? 0,
         pricingMode: "MANUAL",
         active: true,
         sortOrder: skus.indexOf(row),

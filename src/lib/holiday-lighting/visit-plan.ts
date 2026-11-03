@@ -23,7 +23,7 @@ function lineItemColors(lines: HolidayVisitLine[]) {
     const description = line.description?.trim();
     if (!description) continue;
     const match = description.match(
-      /(?:C7|C9|Permanent|Mini LEDs)\s*·\s*([^.;\n]+)/i
+      /(?:C7|C9|LightStream(?: \(Color-Changing\))?|Permanent|Mini LEDs)\s*·\s*([^.;\n]+)/i
     );
     const color = specifiedColor(match?.[1]);
     if (color && !colors.includes(color)) colors.push(color);

@@ -67,15 +67,17 @@ test("holiday price book separates seasonal service from permanent installation"
   assert.deepEqual(rows.map((row) => row.sku), [
     "HL-C9-SERVICE-FT",
     "HL-C7-SERVICE-FT",
+    "HL-LIGHTSTREAM-SERVICE-FT",
     "HL-PERM-SERVICE-FT",
     "HL-TREE-SERVICE-STRAND",
     "HL-BUSH-SERVICE-STRAND",
   ]);
-  assert.deepEqual(rows.slice(0, 3).map((row) => row.defaultUnitPrice), [4.59, 4.29, 25]);
-  assert.ok(rows.slice(0, 2).every((row) => /service/i.test(row.name)));
-  assert.match(rows[2]?.name ?? "", /permanent.*installation/i);
-  assert.doesNotMatch(rows[2]?.name ?? "", /service/i);
-  assert.ok(rows.slice(3).every((row) => /service/i.test(row.name)));
+  assert.deepEqual(rows.slice(0, 4).map((row) => row.defaultUnitPrice), [4.59, 4.29, 5.99, 25]);
+  assert.equal(rows[2]?.defaultUnitCost, 3.99);
+  assert.ok(rows.slice(0, 3).every((row) => /service/i.test(row.name)));
+  assert.match(rows[3]?.name ?? "", /permanent.*installation/i);
+  assert.doesNotMatch(rows[3]?.name ?? "", /service/i);
+  assert.ok(rows.slice(4).every((row) => /service/i.test(row.name)));
   assert.ok(rows.every((row) => !/lease|parts|labor/i.test(row.name)));
 });
 
@@ -103,6 +105,37 @@ test("flat service pricing and cancellation fee use outward price and backend co
       (line) => line.name === "Professional installation"
     ),
     false
+  );
+});
+
+test("LightStream uses its own outward rate, cancellation cost, and estimate label", () => {
+  const pricing = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({
+      segments: [{
+        id: "roof",
+        label: "Front roof",
+        kind: "roofline",
+        path: [],
+        lengthFt: 100,
+        lightStyleKey: "lightstream",
+        colorPattern: "Multicolor",
+      }],
+    }),
+    selections: parseHolidaySelections({
+      defaultLightStyleKey: "lightstream",
+      defaultColorPattern: "Multicolor",
+    }),
+    prices: priceLookup({
+      "HL-LIGHTSTREAM-SERVICE-FT": { unitPrice: 5.99, unitCost: 3.99 },
+    }),
+  });
+
+  assert.equal(pricing.year1Total, 599);
+  assert.equal(pricing.cancellationFee, 399);
+  assert.equal(
+    pricing.optionDetails.buy.displayLines[0]?.description,
+    "LightStream (Color-Changing) · Multicolor"
   );
 });
 
@@ -234,10 +267,11 @@ test("legacy catalogs and lease/labor selections migrate to the service model", 
     lightStyles: [
       { ...DEFAULT_HOLIDAY_CATALOG.lightStyles[0], partsSku: "OLD-PARTS", leaseSku: "OLD-LEASE" },
       DEFAULT_HOLIDAY_CATALOG.lightStyles[1],
-      DEFAULT_HOLIDAY_CATALOG.lightStyles[2],
+      DEFAULT_HOLIDAY_CATALOG.lightStyles.find((style) => style.key === "permanent")!,
     ],
   });
   assert.equal(catalog.lightStyles[0]?.partsSku, "HL-C9-SERVICE-FT");
+  assert.equal(catalog.lightStyles.some((style) => style.key === "lightstream"), true);
   assert.equal(applyHolidayCatalogPolicy(parseHolidaySelections({ pricingMode: "lease" }), catalog).pricingMode, "buy");
   assert.equal(applyHolidayCatalogPolicy(parseHolidaySelections({ pricingMode: "labor", billingMode: "labor_only" }), catalog).pricingMode, "buy");
 });

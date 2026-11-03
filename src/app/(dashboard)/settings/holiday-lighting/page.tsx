@@ -196,7 +196,7 @@ export default function HolidayLightingCatalogSettingsPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Price book SKUs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              C9 and C7 seasonal service plus permanent installation are priced per foot. Trees and bushes have one price per strand. Backend cost is the seasonal cancellation-fee basis; for permanent lighting it is internal job cost only.
+              C9, C7, and LightStream seasonal service plus permanent installation are priced per foot. Trees and bushes have one price per strand. Backend cost is the seasonal cancellation-fee basis; for permanent lighting it is internal job cost only.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">

@@ -226,6 +226,7 @@ export type HolidayCatalogSku = {
   name: string;
   unit: "ft" | "each";
   defaultUnitPrice?: number;
+  defaultUnitCost?: number;
 };
 
 export type HolidayPriceBookRow = HolidayCatalogSku & {
@@ -256,6 +257,17 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       permanentSku: "HL-C7-SERVICE-FT",
       partsSku: "HL-C7-SERVICE-FT",
       installSku: "HL-C7-SERVICE-FT",
+      kind: "temporary",
+    },
+    {
+      key: "lightstream",
+      label: "LightStream (Color-Changing)",
+      temporaryYear1Sku: "HL-LIGHTSTREAM-SERVICE-FT",
+      temporaryReinstallSku: "HL-LIGHTSTREAM-SERVICE-FT",
+      leaseSku: "HL-LIGHTSTREAM-SERVICE-FT",
+      permanentSku: "HL-LIGHTSTREAM-SERVICE-FT",
+      partsSku: "HL-LIGHTSTREAM-SERVICE-FT",
+      installSku: "HL-LIGHTSTREAM-SERVICE-FT",
       kind: "temporary",
     },
     {
@@ -390,7 +402,7 @@ function parsePlacement(
 export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   if (!raw || typeof raw !== "object") return DEFAULT_HOLIDAY_CATALOG;
   const obj = raw as Partial<HolidayLightingCatalog>;
-  const hasCurrentStyles = Array.isArray(obj.lightStyles) && ["c9", "c7", "permanent"].every(
+  const hasCurrentStyles = Array.isArray(obj.lightStyles) && ["c9", "c7", "lightstream", "permanent"].every(
     (key) => obj.lightStyles!.some((style) => style && typeof style === "object" && (style as HolidayLightStyle).key === key)
   );
   const styles =
@@ -454,12 +466,13 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     sku: string | undefined,
     name: string,
     unit: "ft" | "each",
-    defaultUnitPrice?: number
+    defaultUnitPrice?: number,
+    defaultUnitCost?: number
   ) {
     const code = sku?.trim();
     if (!code || seen.has(code)) return;
     seen.add(code);
-    rows.push({ sku: code, name, unit, defaultUnitPrice });
+    rows.push({ sku: code, name, unit, defaultUnitPrice, defaultUnitCost });
   }
   for (const style of catalog.lightStyles) {
     const sku = style.kind === "permanent"
@@ -471,7 +484,14 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
         ? `${style.label} holiday lighting installation / ft`
         : `${style.label} holiday lighting service / ft`,
       "ft",
-      style.key === "c9" ? 4.59 : style.key === "c7" ? 4.29 : 25
+      style.key === "c9"
+        ? 4.59
+        : style.key === "c7"
+          ? 4.29
+          : style.key === "lightstream"
+            ? 5.99
+            : 25,
+      style.key === "lightstream" ? 3.99 : undefined
     );
   }
   for (const placement of catalog.placements) {

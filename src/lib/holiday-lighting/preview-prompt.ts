@@ -10,6 +10,9 @@ function styleRenderingInstruction(styleKey: string, styleLabel: string) {
   if (styleKey === "c7" || /c7/i.test(styleLabel)) {
     return "Render authentic C7 LEDs: traditional faceted teardrop bulbs that are visibly smaller and a little less bright than C9 bulbs, consistently spaced and neatly clipped.";
   }
+  if (styleKey === "lightstream" || /lightstream/i.test(styleLabel)) {
+    return "Render individually spaced, programmable color-changing LightStream LED bulbs with crisp, consistent spacing and the requested color pattern. These are removable seasonal roofline lights, not a continuous strip or permanent architectural channel.";
+  }
   return "Render authentic C9 LEDs: large, bright, faceted teardrop bulbs with a bold classic roofline appearance, consistently spaced and neatly clipped. They must look clearly larger and brighter than C7 bulbs.";
 }
 
@@ -39,6 +42,6 @@ The painted guide lines in IMAGE 2 are the only places that should receive holid
 
 ${optionVisualPlan(option, catalog)}
 
-Render individual realistic LED bulbs, small sockets, subtle clips and fine dark wire, with dark gaps between bulbs and restrained natural glow. Avoid continuous glowing ribbons, painted lines, neon tubes, oversaturated halos and illustration effects. Keep C7, C9, mini and permanent architectural lights visually appropriate to their actual construction and scale.
+Render individual realistic LED bulbs, small sockets, subtle clips and fine dark wire, with dark gaps between bulbs and restrained natural glow. Avoid continuous glowing ribbons, painted lines, neon tubes, oversaturated halos and illustration effects. Keep C7, C9, LightStream, mini and permanent architectural lights visually appropriate to their actual construction and scale.
 Relight the scene to attractive blue-hour dusk, add a little fresh snow and a tasteful front-door wreath where appropriate, and keep ordinary porch, garage and interior window lights on. Do not add people, extra cars, text, logos or watermarks. Return one complete photorealistic image of the finished installation.`;
 }
