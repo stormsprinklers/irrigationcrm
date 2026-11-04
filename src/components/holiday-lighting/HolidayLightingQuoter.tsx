@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Search, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -52,6 +52,7 @@ import {
   type HolidayQuoteOptionKey,
   type HolidayOptionAdjustment,
   type HolidayCustomService,
+  type HolidayAdditionalCatalogItem,
   type HolidayDifficulty,
 } from "@/lib/holiday-lighting/types";
 import { getBrowserMapsApiKey } from "@/lib/holiday-lighting/load-maps";
@@ -75,6 +76,14 @@ type QuoteRecord = {
   estimateId: string | null;
   customer?: { id: string; name: string; email: string | null; phone: string | null } | null;
   estimate?: { id: string; estimateNumber: string | null; status: string } | null;
+};
+
+type HolidayPriceRow = {
+  sku: string;
+  name: string;
+  unitPrice: number;
+  unitCost: number | null;
+  priceBookItemId: string | null;
 };
 
 type Props = {
@@ -282,6 +291,9 @@ export function HolidayLightingQuoter({
   const [activeOptionId, setActiveOptionId] = useState("option-1");
   const [customColorEditingOptionId, setCustomColorEditingOptionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
+  const [holidayPrices, setHolidayPrices] = useState<HolidayPriceRow[]>([]);
+  const [additionalItemSearch, setAdditionalItemSearch] = useState("");
+  const [additionalItemPickerOpen, setAdditionalItemPickerOpen] = useState(false);
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoApproved, setPhotoApproved] = useState(false);
@@ -333,6 +345,7 @@ export function HolidayLightingQuoter({
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
       const nextCatalog = (data.catalog as HolidayLightingCatalog | undefined) ?? DEFAULT_HOLIDAY_CATALOG;
       setCatalog(nextCatalog);
+      setHolidayPrices(Array.isArray(data.prices) ? data.prices : []);
       const parsedMeasurements = parseHolidayMeasurements(q.measurements);
       const parsedSelections = applyHolidayCatalogPolicy(
         parseHolidaySelections(q.selections),
@@ -385,6 +398,7 @@ export function HolidayLightingQuoter({
           catalog: nextCatalog,
         });
         setCatalog(nextCatalog);
+        setHolidayPrices(Array.isArray(data.prices) ? data.prices : []);
         setSelections({ ...nextSelections, designOptions: initialOption, activeDesignOptionId: initialOption[0]!.id });
         setDesignOptions(initialOption);
         setActiveOptionId(initialOption[0]!.id);
@@ -602,6 +616,7 @@ export function HolidayLightingQuoter({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       if (data.pricing) setPricing(data.pricing);
+      if (Array.isArray(data.prices)) setHolidayPrices(data.prices);
       if (!quoteRouteReplacedRef.current) {
         quoteRouteReplacedRef.current = true;
         router.replace(`/holiday-lighting/quote/${id}`);
@@ -990,8 +1005,8 @@ export function HolidayLightingQuoter({
     }
 
     if (targetStep === 5) {
-      if (measurements.segments.length === 0 && measurements.placements.length === 0) {
-        toast.error("Add roofline measurements or mark trees and bushes");
+      if (measurements.segments.length === 0 && measurements.placements.length === 0 && !(selections.customServices?.length)) {
+        toast.error("Add roofline measurements, trees/bushes, or an additional item");
         return;
       }
     }
@@ -1052,8 +1067,37 @@ export function HolidayLightingQuoter({
         description: "",
         quantity: 1,
         unitPrice: 0,
+        unitCost: 0,
       },
     ], true);
+    setAdditionalItemPickerOpen(false);
+    setAdditionalItemSearch("");
+  }
+
+  function addPresetItem(item: HolidayAdditionalCatalogItem) {
+    const price = holidayPrices.find((row) => row.sku === item.sku);
+    const existing = (selections.customServices ?? []).find((service) => service.sku === item.sku);
+    const next = existing
+      ? (selections.customServices ?? []).map((service) =>
+          service.id === existing.id
+            ? { ...service, quantity: Math.min(9_999, service.quantity + 1) }
+            : service
+        )
+      : [
+          ...(selections.customServices ?? []),
+          {
+            id: crypto.randomUUID(),
+            sku: item.sku,
+            name: item.label,
+            description: item.description,
+            quantity: 1,
+            unitPrice: price?.unitPrice ?? item.defaultUnitPrice,
+            unitCost: price?.unitCost ?? item.defaultUnitCost,
+          },
+        ];
+    updateCustomServices(next, true);
+    setAdditionalItemPickerOpen(false);
+    setAdditionalItemSearch("");
   }
 
   function patchCustomService(id: string, patch: Partial<HolidayCustomService>) {
@@ -1356,10 +1400,18 @@ export function HolidayLightingQuoter({
 
   const draftCustomServicesTotal = Math.round(
     (selections.customServices ?? []).reduce(
-      (sum, service) => sum + service.quantity * service.unitPrice,
+      (sum, service) => {
+        const priceBookPrice = service.sku
+          ? holidayPrices.find((row) => row.sku === service.sku)?.unitPrice
+          : undefined;
+        return sum + service.quantity * (priceBookPrice ?? service.unitPrice);
+      },
       0
     ) * 100
   ) / 100;
+  const filteredAdditionalItems = catalog.additionalItems.filter((item) =>
+    `${item.label} ${item.description}`.toLowerCase().includes(additionalItemSearch.trim().toLowerCase())
+  );
   const draftCalculated = (key: HolidayQuoteOptionKey) => pricing
     ? pricing.optionDetails[key].calculated - pricing.customServicesTotal + draftCustomServicesTotal
     : 0;
@@ -1902,96 +1954,180 @@ export function HolidayLightingQuoter({
             ) : null}
           </div>
           <div className="space-y-3 border-t border-border pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h4 className="text-sm font-semibold">Additional services</h4>
-                <p className="text-xs text-muted-foreground">Add customer-facing work that is not in the price book.</p>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={(selections.customServices?.length ?? 0) >= 20}
-                onClick={addCustomService}
-              >
-                <Plus className="h-4 w-4" />
-                Add service
-              </Button>
+            <div>
+              <h4 className="text-sm font-semibold">Additional items</h4>
+              <p className="text-xs text-muted-foreground">
+                Search wreaths and garlands from the Holiday Lighting price book, or add a one-off item.
+              </p>
             </div>
-            {(selections.customServices ?? []).map((service) => (
-              <div key={service.id} className="space-y-3 rounded-md border border-border p-3">
-                <div className="flex items-start gap-2">
-                  <label className="min-w-0 flex-1 text-xs text-muted-foreground">Service name
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={service.name}
-                      placeholder="e.g. Wreath installation"
-                      onChange={(event) => patchCustomService(service.id, { name: event.target.value })}
-                      onBlur={() => void save(undefined, { quiet: true })}
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                    />
-                  </label>
-                  <Button
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <input
+                type="search"
+                value={additionalItemSearch}
+                disabled={(selections.customServices?.length ?? 0) >= 20}
+                placeholder="Search additional items..."
+                onFocus={() => setAdditionalItemPickerOpen(true)}
+                onChange={(event) => {
+                  setAdditionalItemSearch(event.target.value);
+                  setAdditionalItemPickerOpen(true);
+                }}
+                className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-9 text-sm text-foreground"
+              />
+              <button
+                type="button"
+                aria-label="Show additional items"
+                className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:bg-muted"
+                onClick={() => setAdditionalItemPickerOpen((open) => !open)}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {additionalItemPickerOpen ? (
+                <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-background p-1 shadow-lg">
+                  {filteredAdditionalItems.map((item) => {
+                    const price = holidayPrices.find((row) => row.sku === item.sku);
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className="flex w-full items-start justify-between gap-4 rounded px-3 py-2 text-left hover:bg-muted"
+                        onClick={() => addPresetItem(item)}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium">{item.label}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">{item.description}</span>
+                        </span>
+                        <span className="shrink-0 text-sm font-medium">
+                          {money(price?.unitPrice ?? item.defaultUnitPrice)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {filteredAdditionalItems.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No preset items found.</p>
+                  ) : null}
+                  <button
                     type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="mt-5 shrink-0 text-destructive"
-                    aria-label="Remove service"
-                    onClick={() => removeCustomService(service.id)}
+                    className="mt-1 flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-sm font-medium text-primary hover:bg-muted"
+                    onClick={addCustomService}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Plus className="h-4 w-4" />
+                    Add new item
+                  </button>
                 </div>
-                <label className="block text-xs text-muted-foreground">Description
-                  <textarea
-                    rows={2}
-                    maxLength={1000}
-                    value={service.description ?? ""}
-                    placeholder="Describe what is included"
-                    onChange={(event) => patchCustomService(service.id, { description: event.target.value })}
-                    onBlur={() => void save(undefined, { quiet: true })}
-                    className="mt-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <label className="text-xs text-muted-foreground">Quantity
-                    <input
-                      type="number"
-                      min={0.01}
-                      max={9999}
-                      step="0.01"
-                      value={service.quantity}
-                      onChange={(event) => {
-                        if (event.target.value === "") return;
-                        patchCustomService(service.id, { quantity: Number(event.target.value) });
-                      }}
-                      onBlur={() => void save(undefined, { quiet: true })}
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                    />
-                  </label>
-                  <label className="text-xs text-muted-foreground">Unit price ($)
-                    <input
-                      type="number"
-                      min={0}
-                      max={9999999}
-                      step="0.01"
-                      value={service.unitPrice}
-                      onChange={(event) => {
-                        if (event.target.value === "") return;
-                        patchCustomService(service.id, { unitPrice: Number(event.target.value) });
-                      }}
-                      onBlur={() => void save(undefined, { quiet: true })}
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
-                    />
-                  </label>
-                  <div className="rounded-md bg-muted/50 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Line total</p>
-                    <p className="mt-1 text-sm font-semibold">{money(service.quantity * service.unitPrice)}</p>
+              ) : null}
+            </div>
+            {(selections.customServices ?? []).map((service) => {
+              const priceBookItem = service.sku
+                ? holidayPrices.find((row) => row.sku === service.sku)
+                : undefined;
+              const resolvedUnitPrice = priceBookItem?.unitPrice ?? service.unitPrice;
+              return (
+                <div key={service.id} className="space-y-3 rounded-md border border-border p-3">
+                  <div className="flex items-start gap-2">
+                    {service.sku ? (
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{service.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{service.description}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Price-book service price: {money(resolvedUnitPrice)} each
+                        </p>
+                      </div>
+                    ) : (
+                      <label className="min-w-0 flex-1 text-xs text-muted-foreground">Item name
+                        <input
+                          type="text"
+                          maxLength={120}
+                          value={service.name}
+                          placeholder="e.g. Custom window swag"
+                          onChange={(event) => patchCustomService(service.id, { name: event.target.value })}
+                          onBlur={() => void save(undefined, { quiet: true })}
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                        />
+                      </label>
+                    )}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="shrink-0 text-destructive"
+                      aria-label="Remove item"
+                      onClick={() => removeCustomService(service.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {!service.sku ? (
+                    <label className="block text-xs text-muted-foreground">Description
+                      <textarea
+                        rows={2}
+                        maxLength={1000}
+                        value={service.description ?? ""}
+                        placeholder="Describe what is included"
+                        onChange={(event) => patchCustomService(service.id, { description: event.target.value })}
+                        onBlur={() => void save(undefined, { quiet: true })}
+                        className="mt-1 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    </label>
+                  ) : null}
+                  <div className={cn("grid gap-3", service.sku ? "sm:grid-cols-2" : "sm:grid-cols-4")}>
+                    <label className="text-xs text-muted-foreground">Quantity
+                      <input
+                        type="number"
+                        min={0.01}
+                        max={9999}
+                        step="0.01"
+                        value={service.quantity}
+                        onChange={(event) => {
+                          if (event.target.value === "") return;
+                          patchCustomService(service.id, { quantity: Number(event.target.value) });
+                        }}
+                        onBlur={() => void save(undefined, { quiet: true })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                      />
+                    </label>
+                    {!service.sku ? (
+                      <>
+                        <label className="text-xs text-muted-foreground">Service price ($)
+                          <input
+                            type="number"
+                            min={0}
+                            max={9999999}
+                            step="0.01"
+                            value={service.unitPrice}
+                            onChange={(event) => {
+                              if (event.target.value === "") return;
+                              patchCustomService(service.id, { unitPrice: Number(event.target.value) });
+                            }}
+                            onBlur={() => void save(undefined, { quiet: true })}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                          />
+                        </label>
+                        <label className="text-xs text-muted-foreground">Backend cost ($)
+                          <input
+                            type="number"
+                            min={0}
+                            max={9999999}
+                            step="0.01"
+                            value={service.unitCost ?? 0}
+                            onChange={(event) => {
+                              if (event.target.value === "") return;
+                              patchCustomService(service.id, { unitCost: Number(event.target.value) });
+                            }}
+                            onBlur={() => void save(undefined, { quiet: true })}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    <div className="rounded-md bg-muted/50 px-3 py-2">
+                      <p className="text-xs text-muted-foreground">Line total</p>
+                      <p className="mt-1 text-sm font-semibold">{money(service.quantity * resolvedUnitPrice)}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           {pricing && draftPricing ? (
             <div className="space-y-4 border-t border-border pt-4">

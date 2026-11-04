@@ -1,6 +1,7 @@
 import type {
   HolidayLightingCatalog,
   HolidayMeasurements,
+  HolidayCustomService,
   HolidayQuoteSelections,
   HolidayQuoteOptionKey,
 } from "./types";
@@ -108,6 +109,20 @@ function itemId(prices: PriceLookup, sku: string | undefined) {
   return lookup(prices, sku)?.id ?? null;
 }
 
+export function resolveHolidayAdditionalItems(
+  services: HolidayCustomService[],
+  prices: PriceLookup
+): HolidayCustomService[] {
+  return services.map((service) => {
+    const item = lookup(prices, service.sku);
+    return {
+      ...service,
+      unitPrice: item?.unitPrice ?? service.unitPrice,
+      unitCost: item?.unitCost ?? service.unitCost ?? 0,
+    };
+  });
+}
+
 export function totalBilledLengthFt(measurements: HolidayMeasurements) {
   return money(
     measurements.segments.reduce((sum, segment) => sum + billedSegmentLengthFt(segment), 0)
@@ -198,16 +213,21 @@ export function computeHolidayQuotePricing(params: {
     });
   }
   serviceSubtotal = money(serviceSubtotal);
-  // Permanent lighting is a one-time installed system, not a recurring seasonal
-  // service. Its backend material cost remains on the price-book row for internal
-  // costing, but it must never become a customer cancellation fee.
-  cancellationFee = style?.kind === "permanent" ? 0 : money(cancellationFee);
+  const additionalItems = resolveHolidayAdditionalItems(selections.customServices ?? [], prices);
   const customServicesTotal = money(
-    (selections.customServices ?? []).reduce(
+    additionalItems.reduce(
       (sum, service) => sum + service.quantity * service.unitPrice,
       0
     )
   );
+  cancellationFee += additionalItems.reduce(
+    (sum, service) => sum + service.quantity * (service.unitCost ?? 0),
+    0
+  );
+  // Permanent lighting is a one-time installed system, not a recurring seasonal
+  // service. Its backend material cost remains on the price-book row for internal
+  // costing, but it must never become a customer cancellation fee.
+  cancellationFee = style?.kind === "permanent" ? 0 : money(cancellationFee);
   const minimum = style?.kind === "permanent"
     ? defaults?.permanentYear1Minimum ?? 0
     : defaults?.temporaryYear1Minimum ?? 0;

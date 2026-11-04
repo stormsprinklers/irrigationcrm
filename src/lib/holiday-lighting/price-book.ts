@@ -72,6 +72,7 @@ export async function ensureHolidayPriceBookItems(
       id: true,
       sku: true,
       name: true,
+      description: true,
       unit: true,
       unitPrice: true,
       unitCost: true,
@@ -87,11 +88,12 @@ export async function ensureHolidayPriceBookItems(
       const shouldApplyDefaultPrice =
         (row.defaultUnitPrice ?? 0) > 0 && Number(found.unitPrice) === 0;
       const shouldApplyMigratedCost = Number(found.unitCost ?? 0) === 0 && migrated.unitCost > 0;
-      if (!found.active || found.name !== row.name || found.unit !== row.unit || shouldApplyDefaultPrice || shouldApplyMigratedCost) {
+      if (!found.active || found.name !== row.name || found.description !== (row.description ?? null) || found.unit !== row.unit || shouldApplyDefaultPrice || shouldApplyMigratedCost) {
         const updated = await prisma.priceBookItem.update({
           where: { id: found.id },
           data: {
             name: row.name,
+            description: row.description ?? null,
             unit: row.unit,
             active: true,
             ...(shouldApplyDefaultPrice
@@ -103,6 +105,7 @@ export async function ensureHolidayPriceBookItems(
             id: true,
             sku: true,
             name: true,
+            description: true,
             unit: true,
             unitPrice: true,
             unitCost: true,
@@ -119,6 +122,7 @@ export async function ensureHolidayPriceBookItems(
         categoryId,
         type: "SERVICE",
         name: row.name,
+        description: row.description ?? null,
         sku: row.sku,
         unit: row.unit,
         unitPrice: migrated.unitPrice > 0 ? migrated.unitPrice : row.defaultUnitPrice ?? 0,
@@ -131,6 +135,7 @@ export async function ensureHolidayPriceBookItems(
         id: true,
         sku: true,
         name: true,
+        description: true,
         unit: true,
         unitPrice: true,
         unitCost: true,
@@ -145,6 +150,7 @@ export async function ensureHolidayPriceBookItems(
     return {
       sku: row.sku,
       name: row.name,
+      description: row.description,
       unit: row.unit,
       unitPrice: item ? Number(item.unitPrice) : 0,
       unitCost: item?.unitCost != null ? Number(item.unitCost) : null,

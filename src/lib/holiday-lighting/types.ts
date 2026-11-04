@@ -154,10 +154,14 @@ export type HolidayQuoteDesignOption = {
 
 export type HolidayCustomService = {
   id: string;
+  /** Present for preset items backed by the Holiday lighting price book. */
+  sku?: string;
   name: string;
   description?: string;
   quantity: number;
   unitPrice: number;
+  /** One-off item material cost. Presets resolve cost from their price-book SKU. */
+  unitCost?: number;
 };
 
 export type HolidayQuoteOptionKey = "buy" | "lease" | "permanent" | "labor";
@@ -200,6 +204,15 @@ export type HolidayPlacementCatalogItem = {
   installSku?: string;
 };
 
+export type HolidayAdditionalCatalogItem = {
+  key: string;
+  label: string;
+  description: string;
+  sku: string;
+  defaultUnitPrice: number;
+  defaultUnitCost: number;
+};
+
 export type HolidayDifficultyMultipliers = Record<HolidayDifficulty, number>;
 
 export type HolidayQuoteDefaults = {
@@ -214,6 +227,7 @@ export type HolidayQuoteDefaults = {
 export type HolidayLightingCatalog = {
   lightStyles: HolidayLightStyle[];
   placements: HolidayPlacementCatalogItem[];
+  additionalItems: HolidayAdditionalCatalogItem[];
   peakSku?: string;
   peakLeaseSku?: string;
   liftRentalSku?: string;
@@ -224,6 +238,7 @@ export type HolidayLightingCatalog = {
 export type HolidayCatalogSku = {
   sku: string;
   name: string;
+  description?: string;
   unit: "ft" | "each";
   defaultUnitPrice?: number;
   defaultUnitCost?: number;
@@ -234,6 +249,26 @@ export type HolidayPriceBookRow = HolidayCatalogSku & {
   unitCost: number | null;
   priceBookItemId: string | null;
 };
+
+const PRELIT_MOUNTING_NOTE =
+  "Artificial and pre-lit. Installation may require mounting brackets or fasteners to the home in order to hang it.";
+
+export const DEFAULT_HOLIDAY_ADDITIONAL_ITEMS: HolidayAdditionalCatalogItem[] = [
+  ["wreath-24", '24" wreath', "HL-WREATH-24-EACH", 41.92],
+  ["wreath-30", '30" wreath', "HL-WREATH-30-EACH", 71],
+  ["wreath-36", '36" wreath', "HL-WREATH-36-EACH", 90.7],
+  ["wreath-48", '48" wreath', "HL-WREATH-48-EACH", 201.39],
+  ["wreath-60", '60" wreath', "HL-WREATH-60-EACH", 314.58],
+  ["wreath-72", '72" wreath', "HL-WREATH-72-EACH", 423.36],
+  ["garland-9", "9 ft garland", "HL-GARLAND-9FT-EACH", 83.06],
+].map(([key, label, sku, cost]) => ({
+  key: String(key),
+  label: String(label),
+  sku: String(sku),
+  description: PRELIT_MOUNTING_NOTE,
+  defaultUnitPrice: Math.round(Number(cost) * 0.7 * 100) / 100,
+  defaultUnitCost: Number(cost),
+}));
 
 export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
   lightStyles: [
@@ -297,6 +332,7 @@ export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
       leaseSku: serviceSku,
     };
   }),
+  additionalItems: DEFAULT_HOLIDAY_ADDITIONAL_ITEMS,
   difficultyMultipliers: { 1: 1, 2: 1.25, 3: 1.5 },
   quoteDefaults: {
     defaultLightStyleKey: "c9",
@@ -433,6 +469,7 @@ export function parseHolidayCatalog(raw: unknown): HolidayLightingCatalog {
   return {
     lightStyles: styles,
     placements,
+    additionalItems: DEFAULT_HOLIDAY_ADDITIONAL_ITEMS,
     difficultyMultipliers,
     quoteDefaults,
   };
@@ -467,12 +504,13 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
     name: string,
     unit: "ft" | "each",
     defaultUnitPrice?: number,
-    defaultUnitCost?: number
+    defaultUnitCost?: number,
+    description?: string
   ) {
     const code = sku?.trim();
     if (!code || seen.has(code)) return;
     seen.add(code);
-    rows.push({ sku: code, name, unit, defaultUnitPrice, defaultUnitCost });
+    rows.push({ sku: code, name, description, unit, defaultUnitPrice, defaultUnitCost });
   }
   for (const style of catalog.lightStyles) {
     const sku = style.kind === "permanent"
@@ -496,6 +534,16 @@ export function holidayCatalogSkus(catalog: HolidayLightingCatalog): HolidayCata
   }
   for (const placement of catalog.placements) {
     add(placement.sku, `${placement.label} — yearly service`, "each");
+  }
+  for (const item of catalog.additionalItems) {
+    add(
+      item.sku,
+      item.label,
+      "each",
+      item.defaultUnitPrice,
+      item.defaultUnitCost,
+      item.description
+    );
   }
   return rows;
 }
@@ -680,6 +728,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
           id: typeof service.id === "string" && service.id.trim()
             ? service.id.trim().slice(0, 80)
             : `service-${index + 1}`,
+          sku:
+            typeof service.sku === "string" && service.sku.trim()
+              ? service.sku.trim().slice(0, 120)
+              : undefined,
           name: typeof service.name === "string" ? service.name.slice(0, 120) : "",
           description:
             typeof service.description === "string"
@@ -693,6 +745,10 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             Number.isFinite(unitPrice) && unitPrice >= 0
               ? Math.round(Math.min(unitPrice, 9_999_999) * 100) / 100
               : 0,
+          unitCost:
+            service.unitCost != null && Number.isFinite(Number(service.unitCost)) && Number(service.unitCost) >= 0
+              ? Math.round(Math.min(Number(service.unitCost), 9_999_999) * 100) / 100
+              : undefined,
         }];
       })
     : [];

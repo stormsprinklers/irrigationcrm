@@ -71,14 +71,64 @@ test("holiday price book separates seasonal service from permanent installation"
     "HL-PERM-SERVICE-FT",
     "HL-TREE-SERVICE-STRAND",
     "HL-BUSH-SERVICE-STRAND",
+    "HL-WREATH-24-EACH",
+    "HL-WREATH-30-EACH",
+    "HL-WREATH-36-EACH",
+    "HL-WREATH-48-EACH",
+    "HL-WREATH-60-EACH",
+    "HL-WREATH-72-EACH",
+    "HL-GARLAND-9FT-EACH",
   ]);
   assert.deepEqual(rows.slice(0, 4).map((row) => row.defaultUnitPrice), [4.59, 4.29, 5.99, 25]);
   assert.equal(rows[2]?.defaultUnitCost, 3.99);
   assert.ok(rows.slice(0, 3).every((row) => /service/i.test(row.name)));
   assert.match(rows[3]?.name ?? "", /permanent.*installation/i);
   assert.doesNotMatch(rows[3]?.name ?? "", /service/i);
-  assert.ok(rows.slice(4).every((row) => /service/i.test(row.name)));
+  assert.ok(rows.slice(4, 6).every((row) => /service/i.test(row.name)));
   assert.ok(rows.every((row) => !/lease|parts|labor/i.test(row.name)));
+  assert.deepEqual(rows.slice(6).map((row) => row.defaultUnitCost), [
+    41.92, 71, 90.7, 201.39, 314.58, 423.36, 83.06,
+  ]);
+  assert.deepEqual(rows.slice(6).map((row) => row.defaultUnitPrice), [
+    29.34, 49.7, 63.49, 140.97, 220.21, 296.35, 58.14,
+  ]);
+  assert.ok(rows.slice(6).every((row) => /artificial and pre-lit/i.test(row.description ?? "")));
+  assert.ok(rows.slice(6).every((row) => /mounting brackets or fasteners/i.test(row.description ?? "")));
+});
+
+test("preset additional items use price-book pricing and material cancellation cost", () => {
+  const selections = parseHolidaySelections({
+    customServices: [{
+      id: "wreath",
+      sku: "HL-WREATH-24-EACH",
+      name: '24" wreath',
+      description: "Artificial and pre-lit.",
+      quantity: 2,
+      unitPrice: 1,
+      unitCost: 1,
+    }],
+  });
+  const prices = priceLookup({
+    "HL-WREATH-24-EACH": { unitPrice: 35, unitCost: 41.92 },
+  });
+  const seasonal = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({}),
+    selections,
+    prices,
+  });
+
+  assert.equal(seasonal.customServicesTotal, 70);
+  assert.equal(seasonal.year1Total, 70);
+  assert.equal(seasonal.cancellationFee, 83.84);
+
+  const permanent = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements: parseHolidayMeasurements({}),
+    selections: parseHolidaySelections({ ...selections, defaultLightStyleKey: "permanent" }),
+    prices,
+  });
+  assert.equal(permanent.cancellationFee, 0);
 });
 
 test("flat service pricing and cancellation fee use outward price and backend cost", () => {

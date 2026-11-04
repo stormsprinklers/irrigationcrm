@@ -11,6 +11,7 @@ import {
   HOLIDAY_PERMANENT_DETAIL,
   holidayIncludedLines,
   holidayOptionSummary,
+  resolveHolidayAdditionalItems,
 } from "./pricing";
 import { buildHolidayStrandMap } from "./strand-map";
 import {
@@ -56,14 +57,17 @@ export async function createEstimateFromHolidayQuote(params: {
     }
     const measurements = parseHolidayMeasurements(design.measurements);
     const priced = computeHolidayQuotePricing({ catalog, measurements, selections, prices });
-    const customServices = (selections.customServices ?? []).filter(
+    const customServices = resolveHolidayAdditionalItems(
+      selections.customServices ?? [],
+      prices
+    ).filter(
       (service) => service.name.trim() || service.unitPrice > 0
     );
     if (customServices.some((service) => !service.name.trim())) {
-      throw new Error(`${design.label || `Option ${index + 1}`} has an additional service without a name`);
+      throw new Error(`${design.label || `Option ${index + 1}`} has an additional item without a name`);
     }
     if (priced.billedLengthFt <= 0 && priced.placementCount <= 0 && customServices.length === 0 && !Object.values(selections.optionAdjustments ?? {}).some((adjustment) => adjustment?.lineItems?.some((line) => line.kind !== "included"))) {
-      throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements, trees/bushes, or an additional service`);
+      throw new Error(`${design.label || `Option ${index + 1}`} needs roofline measurements, trees/bushes, or an additional item`);
     }
     if (Object.values(selections.optionAdjustments ?? {}).some((adjustment) => adjustment?.lineItems?.some((line) => !line.name.trim()))) throw new Error(`${design.label} has a line item without a title`);
     const style = catalog.lightStyles.find((item) => item.key === selections.defaultLightStyleKey) ?? catalog.lightStyles[0];
