@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type AmountType = "PERCENT" | "FIXED";
-type WorkingAction = "EMAIL" | "SMS" | "CARD" | "CASH" | "CHECK" | null;
+type WorkingAction = "EMAIL" | "SMS" | "CARD_ON_FILE" | "NEW_CARD" | "CASH" | "CHECK" | null;
+
+type CardOnFile = {
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+};
 
 type Availability = {
   visitTotal: number;
@@ -50,6 +57,9 @@ export function VisitBillingDialog({
   const [amountType, setAmountType] = useState<AmountType>("PERCENT");
   const [percentage, setPercentage] = useState("50");
   const [fixedAmount, setFixedAmount] = useState("");
+  const [cardOnFile, setCardOnFile] = useState<CardOnFile | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [confirmCardCharge, setConfirmCardCharge] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +68,22 @@ export function VisitBillingDialog({
     setAmountType("PERCENT");
     setPercentage("50");
     setFixedAmount("");
+    setCardOnFile(null);
+    setConfirmCardCharge(false);
     setLoading(true);
+    setCardLoading(true);
+    fetch(`/api/payments/card-on-file?${new URLSearchParams({ visitId })}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "Could not check the saved card");
+        if (!cancelled) setCardOnFile(data.card ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCardOnFile(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCardLoading(false);
+      });
     fetch(`/api/visits/${visitId}/invoice`)
       .then(async (response) => {
         const data = await response.json().catch(() => ({}));
@@ -141,7 +166,7 @@ export function VisitBillingDialog({
 
   async function takeCardPayment() {
     if (amountError) return;
-    setWorking("CARD");
+    setWorking("NEW_CARD");
     try {
       const response = await fetch("/api/payments/checkout", {
         method: "POST",
@@ -156,6 +181,38 @@ export function VisitBillingDialog({
       if (data.url) window.location.href = data.url;
     } catch {
       toast.error("Payment checkout failed. Check your connection and try again.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function chargeCardOnFile() {
+    if (amountError || !cardOnFile) return;
+    setWorking("CARD_ON_FILE");
+    try {
+      const response = await fetch("/api/payments/card-on-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitId, ...amountPayload }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (data.code === "PAYMENT_REQUIRES_CUSTOMER" && typeof data.payLink === "string") {
+          await navigator.clipboard.writeText(data.payLink).catch(() => {});
+          toast.error(data.error ?? "Customer authentication is required", {
+            description: "The customer payment link was copied to your clipboard.",
+          });
+        } else {
+          toast.error(data.error ?? "The saved card could not be charged");
+        }
+        return;
+      }
+      toast.success(`${money(data.amount ?? selectedAmount)} charged to card on file`);
+      setConfirmCardCharge(false);
+      await onUpdated?.();
+      onClose();
+    } catch {
+      toast.error("The card charge could not be confirmed. Check the invoice before retrying.");
     } finally {
       setWorking(null);
     }
@@ -267,11 +324,34 @@ export function VisitBillingDialog({
 
             <div className="space-y-2">
               <p className="text-sm font-medium">Take payment now</p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <Button type="button" onClick={() => void takeCardPayment()} disabled={Boolean(amountError) || Boolean(working)}>{working === "CARD" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />} Card</Button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="button" onClick={() => setConfirmCardCharge(true)} disabled={Boolean(amountError) || Boolean(working) || cardLoading || !cardOnFile}>
+                  {cardLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                  {cardOnFile
+                    ? `Charge ${cardOnFile.brand ?? "card"} •••• ${cardOnFile.last4 ?? ""}`
+                    : cardLoading
+                      ? "Checking saved card..."
+                      : "No card on file"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => void takeCardPayment()} disabled={Boolean(amountError) || Boolean(working)}>{working === "NEW_CARD" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />} Enter another card</Button>
                 <Button type="button" variant="outline" onClick={() => void recordManualPayment("CASH")} disabled={Boolean(amountError) || Boolean(working)}>{working === "CASH" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />} Cash</Button>
                 <Button type="button" variant="outline" onClick={() => void recordManualPayment("CHECK")} disabled={Boolean(amountError) || Boolean(working)}>{working === "CHECK" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />} Check</Button>
               </div>
+              {confirmCardCharge && cardOnFile ? (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-left">
+                  <p className="font-semibold text-amber-950">Charge {money(selectedAmount)} now?</p>
+                  <p className="mt-1 text-sm text-amber-900">
+                    This will charge {cardOnFile.brand ?? "the saved card"} ending in {cardOnFile.last4 ?? "—"} and apply the payment to this invoice.
+                  </p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setConfirmCardCharge(false)} disabled={Boolean(working)}>Cancel</Button>
+                    <Button type="button" size="sm" onClick={() => void chargeCardOnFile()} disabled={Boolean(working)}>
+                      {working === "CARD_ON_FILE" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                      Confirm charge
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-2 border-t pt-4">

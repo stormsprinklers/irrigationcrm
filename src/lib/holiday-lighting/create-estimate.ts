@@ -134,6 +134,7 @@ export async function createEstimateFromHolidayQuote(params: {
       notes: item.selections.notes?.trim() ?? "",
       lightStyleKey: item.selections.defaultLightStyleKey,
       colorPattern: item.selections.defaultColorPattern,
+      strandColor: item.recurringYearlyService ? item.selections.strandColor : undefined,
       previewImageUrl: item.design.previewImageUrl ?? quote.previewImageUrl,
       strandMap: item.strandMap,
     })),

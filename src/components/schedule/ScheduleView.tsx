@@ -451,6 +451,9 @@ export function ScheduleView({
           if (mode === "week") setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
         }}
         onColorByChange={setColorBy}
+        canExport={!fieldRole && !embedded}
+        exportStart={rangeStart}
+        exportEnd={rangeEnd}
       />
 
       {panelMode === "jobs" && timeOffPending > 0 && !fieldRole && !embedded ? (

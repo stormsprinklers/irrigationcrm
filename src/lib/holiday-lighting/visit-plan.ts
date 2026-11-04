@@ -35,6 +35,7 @@ export type HolidayVisitJobSummary = {
   totalFeet: number | null;
   colors: string[];
   colorLabel: string;
+  strandColor: string | null;
 };
 
 /** Internal installer summary with fallbacks for every holiday metadata version. */
@@ -47,7 +48,9 @@ export function holidayVisitJobSummary(
   const approvedLetter =
     typeof root.approvedOptionLetter === "string" ? root.approvedOptionLetter : "A";
   const plan = holidayVisitPlan(root as Prisma.JsonValue, approvedLetter);
-  const normalized = record(plan) ?? root;
+  // Once staff edit specs on the visit, the visit-level values are authoritative
+  // and must not be overwritten by the original estimate option snapshot.
+  const normalized = root.visitSpecsUpdated === true ? root : record(plan) ?? root;
   const map = record(normalized.strandMap);
   const features = Array.isArray(map?.features)
     ? map.features.map(record).filter((feature): feature is Record<string, unknown> => Boolean(feature))
@@ -82,6 +85,10 @@ export function holidayVisitJobSummary(
   return {
     totalFeet,
     colors,
+    strandColor:
+      typeof normalized.strandColor === "string" && normalized.strandColor.trim()
+        ? normalized.strandColor.trim()
+        : null,
     colorLabel:
       colors.join("; ") ||
       (literalOther ? "Custom color — details not specified" : "Not specified"),
@@ -99,6 +106,7 @@ export function holidayVisitPlan(raw: Prisma.JsonValue | null, letter?: string |
     ...raw as Prisma.InputJsonObject,
     ...(typeof chosen?.notes === "string" ? { notes: chosen.notes } : {}),
     ...(typeof chosen?.colorPattern === "string" ? { colorPattern: chosen.colorPattern } : {}),
+    ...(typeof chosen?.strandColor === "string" ? { strandColor: chosen.strandColor } : {}),
     ...(typeof chosen?.billedLengthFt === "number" ? { billedLengthFt: chosen.billedLengthFt } : {}),
     ...(chosen?.previewImageUrl ? {previewImageUrl: chosen.previewImageUrl} : {}),
     ...(map && typeof map === "object" && !Array.isArray(map) ? {strandMap: {

@@ -1,4 +1,4 @@
-export const SCHEDULE_SLOT_MINUTES = 30;
+export const SCHEDULE_SLOT_MINUTES = 15;
 export const DEFAULT_ARRIVAL_WINDOW_HOURS = 3;
 
 export type ScheduleSlotClick = {

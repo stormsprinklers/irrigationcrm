@@ -42,7 +42,11 @@ function getInitials(name: string) {
 }
 
 function toDateInput(iso: string) {
-  return iso.slice(0, 10);
+  const d = new Date(iso);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function toTimeInput(iso: string) {
@@ -121,6 +125,15 @@ export function VisitScheduleSection({
     .map((id) => employeeOptions.find((employee) => employee.id === id))
     .filter((employee): employee is EmployeeOption => Boolean(employee));
 
+  function setStartAndDefaultEnd(nextDate: string, nextStartTime: string) {
+    setDate(nextDate);
+    setStartTime(nextStartTime);
+    const nextStart = new Date(`${nextDate}T${nextStartTime}`);
+    if (Number.isNaN(nextStart.getTime())) return;
+    const nextEnd = new Date(nextStart.getTime() + 2 * 60 * 60 * 1000);
+    setEndTime(toTimeInput(nextEnd.toISOString()));
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!canEdit) return;
@@ -133,6 +146,10 @@ export function VisitScheduleSection({
     }
     if (nextEnd <= nextStart) {
       toast.error("End time must be after start time");
+      return;
+    }
+    if (nextStart.getMinutes() % 15 !== 0 || nextEnd.getMinutes() % 15 !== 0) {
+      toast.error("Visit times must use 15-minute increments");
       return;
     }
 
@@ -152,15 +169,20 @@ export function VisitScheduleSection({
 
     setSaving(true);
     try {
+      const scheduleChanged =
+        date !== toDateInput(startAt) ||
+        startTime !== toTimeInput(startAt) ||
+        endTime !== toTimeInput(endAt);
       const res = await fetch(`/api/visits/${visitId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: visitTitle.trim(),
-          startAt: nextStart.toISOString(),
-          endAt: nextEnd.toISOString(),
+          ...(visitTitle.trim() !== title ? { title: visitTitle.trim() } : {}),
+          ...(scheduleChanged
+            ? { startAt: nextStart.toISOString(), endAt: nextEnd.toISOString() }
+            : {}),
           assignedUserIds,
-          status: "SCHEDULED",
+          ...(status === "UNSCHEDULED" ? { status: "SCHEDULED" } : {}),
           notifyCustomer,
         }),
       });
@@ -179,14 +201,8 @@ export function VisitScheduleSection({
   }
 
   function applyScheduleSlot(slot: ScheduleSlotClick) {
-    const durationMs = (() => {
-      const start = new Date(`${date}T${startTime}`);
-      const end = new Date(`${date}T${endTime}`);
-      const diff = end.getTime() - start.getTime();
-      return Number.isFinite(diff) && diff > 0 ? diff : 2 * 60 * 60 * 1000;
-    })();
     const nextStart = slot.startAt;
-    const nextEnd = new Date(nextStart.getTime() + durationMs);
+    const nextEnd = new Date(nextStart.getTime() + 2 * 60 * 60 * 1000);
     setDate(toDateInput(nextStart.toISOString()));
     setStartTime(toTimeInput(nextStart.toISOString()));
     setEndTime(toTimeInput(nextEnd.toISOString()));
@@ -218,21 +234,27 @@ export function VisitScheduleSection({
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Date</label>
-            <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <Input
+              type="date"
+              value={date}
+              onChange={(event) => setStartAndDefaultEnd(event.target.value, startTime)}
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Start</label>
               <Input
                 type="time"
+                step={900}
                 value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
+                onChange={(event) => setStartAndDefaultEnd(date, event.target.value)}
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">End</label>
               <Input
                 type="time"
+                step={900}
                 value={endTime}
                 onChange={(event) => setEndTime(event.target.value)}
               />

@@ -26,6 +26,9 @@ export const HOLIDAY_COLOR_PATTERNS = [
   "Other",
 ] as const;
 
+export const HOLIDAY_STRAND_COLORS = ["Black", "White", "Green"] as const;
+export type HolidayStrandColor = (typeof HOLIDAY_STRAND_COLORS)[number];
+
 export type HolidayMeasurementSegment = {
   id: string;
   label: string;
@@ -94,6 +97,8 @@ export type HolidayQuoteSelections = {
   includeLaborOnlyOption?: boolean;
   includePermanentOption?: boolean;
   defaultColorPattern?: string;
+  /** Internal-only wire color; never included in customer-facing quote copy. */
+  strandColor?: HolidayStrandColor;
   notes?: string;
   completedSteps?: string[];
   /** @deprecated Company minimums replace per-quote margin. */
@@ -143,6 +148,7 @@ export type HolidayQuoteDesignOption = {
     billingMode: HolidayQuoteBillingMode;
     pricingMode: HolidayQuotePricingMode;
     defaultColorPattern?: string;
+    strandColor?: HolidayStrandColor;
     notes?: string;
     completedSteps?: string[];
     optionAdjustments?: Partial<Record<HolidayQuoteOptionKey, HolidayOptionAdjustment>>;
@@ -350,6 +356,7 @@ export const DEFAULT_HOLIDAY_SELECTIONS: HolidayQuoteSelections = {
   includeLaborOnlyOption: false,
   includePermanentOption: false,
   defaultColorPattern: "Warm White",
+  strandColor: "Green",
   leaseContractYears: 1,
 };
 
@@ -560,6 +567,7 @@ export function holidaySelectionsFromCatalog(
     includeLaborOnlyOption: false,
     includePermanentOption: false,
     defaultColorPattern: "Warm White",
+    strandColor: "Green",
     leaseContractYears: 1,
   };
 }
@@ -610,6 +618,9 @@ export function applyHolidayCatalogPolicy(
     notes: selections.notes,
     completedSteps: selections.completedSteps,
     defaultColorPattern: selections.defaultColorPattern?.trim() || "Warm White",
+    strandColor: HOLIDAY_STRAND_COLORS.includes(selections.strandColor as HolidayStrandColor)
+      ? selections.strandColor
+      : "Green",
     optionAdjustments,
     reinstallPrice: null,
     customServices: selections.customServices,
@@ -787,6 +798,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
             billingMode: nested.billingMode ?? "standard",
             pricingMode: nested.pricingMode ?? "buy",
             defaultColorPattern: nested.defaultColorPattern,
+            strandColor: nested.strandColor,
             notes: nested.notes,
             completedSteps: nested.completedSteps,
             optionAdjustments: nested.optionAdjustments,
@@ -816,6 +828,9 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
       typeof obj.defaultColorPattern === "string" && obj.defaultColorPattern.trim()
         ? obj.defaultColorPattern.trim()
         : "Warm White",
+    strandColor: HOLIDAY_STRAND_COLORS.includes(obj.strandColor as HolidayStrandColor)
+      ? obj.strandColor
+      : "Green",
     optionAdjustments: adjustments,
     reinstallPrice: reinstallPrice != null && Number.isFinite(reinstallPrice) && reinstallPrice >= 0 && reinstallPrice <= 9_999_999
       ? Math.round(reinstallPrice * 100) / 100 : null,
@@ -852,6 +867,7 @@ export function holidayDesignOptionsFromQuote(params: {
           billingMode: normalized.billingMode ?? "standard",
           pricingMode: normalized.pricingMode ?? "buy",
           defaultColorPattern: normalized.defaultColorPattern,
+          strandColor: normalized.strandColor,
           notes: normalized.notes,
           completedSteps: normalized.completedSteps,
           optionAdjustments: normalized.optionAdjustments,
@@ -873,6 +889,7 @@ export function holidayDesignOptionsFromQuote(params: {
       billingMode: normalized.billingMode ?? "standard",
       pricingMode: normalized.pricingMode ?? "buy",
       defaultColorPattern: normalized.defaultColorPattern,
+      strandColor: normalized.strandColor,
       notes: normalized.notes,
       completedSteps: normalized.completedSteps,
       optionAdjustments: normalized.optionAdjustments,

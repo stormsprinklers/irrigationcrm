@@ -106,6 +106,7 @@ test("visit job specs use the approved option even when an older map is stale or
     totalFeet: 120.1,
     colors: ["Multicolor"],
     colorLabel: "Multicolor",
+    strandColor: null,
   });
   assert.deepEqual(
     holidayVisitJobSummary({
@@ -117,6 +118,27 @@ test("visit job specs use the approved option even when an older map is stale or
       totalFeet: 435,
       colors: ["Red and white alternating"],
       colorLabel: "Red and white alternating",
+      strandColor: null,
+    }
+  );
+});
+
+test("visit-level holiday lighting edits override the original approved option", () => {
+  assert.deepEqual(
+    holidayVisitJobSummary({
+      source: "holiday-lighting-quote",
+      approvedOptionLetter: "B",
+      visitSpecsUpdated: true,
+      billedLengthFt: 120,
+      colorPattern: "Blue / Winter White",
+      strandColor: "Black",
+      options: [{ letter: "B", billedLengthFt: 80, colorPattern: "Warm White", strandColor: "Green" }],
+    }),
+    {
+      totalFeet: 120,
+      colors: ["Blue / Winter White"],
+      colorLabel: "Blue / Winter White",
+      strandColor: "Black",
     }
   );
 });

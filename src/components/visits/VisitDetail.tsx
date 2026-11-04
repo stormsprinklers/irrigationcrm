@@ -465,11 +465,15 @@ export function VisitDetail({ visitId }: Props) {
       (visit.designExportMetadata as Record<string, unknown>).source ===
         "holiday-lighting-quote" ? (
         <HolidayLightingPlanSection
+          visitId={visit.id}
           designExportMetadata={visit.designExportMetadata as Record<string, unknown>}
           mode="installer"
           title="Holiday lighting job specs"
           description="Approved lighting details for the installation team."
           lineItems={visit.lineItems}
+          onMetadataUpdated={(designExportMetadata) =>
+            setVisit((current) => current ? { ...current, designExportMetadata } : current)
+          }
         />
       ) : null}
 

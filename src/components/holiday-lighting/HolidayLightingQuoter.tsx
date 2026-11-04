@@ -38,6 +38,7 @@ import {
   EMPTY_HOLIDAY_MEASUREMENTS,
   HOLIDAY_PREVIEW_DISCLAIMER,
   HOLIDAY_COLOR_PATTERNS,
+  HOLIDAY_STRAND_COLORS,
   applyHolidayCatalogPolicy,
   applyHolidayColorPattern,
   holidayDesignOptionsFromQuote,
@@ -536,6 +537,7 @@ export function HolidayLightingQuoter({
             billingMode: nextSelections.billingMode ?? "standard",
             pricingMode: nextSelections.pricingMode ?? "buy",
             defaultColorPattern: nextSelections.defaultColorPattern,
+            strandColor: nextSelections.strandColor,
             notes: nextSelections.notes,
             completedSteps: nextSelections.completedSteps,
             optionAdjustments: nextSelections.optionAdjustments,
@@ -703,6 +705,7 @@ export function HolidayLightingQuoter({
         billingMode: normalized.billingMode ?? "standard",
         pricingMode: normalized.pricingMode ?? "buy",
         defaultColorPattern: normalized.defaultColorPattern,
+        strandColor: normalized.strandColor,
         notes: normalized.notes,
         completedSteps: normalized.completedSteps,
         optionAdjustments: normalized.optionAdjustments,
@@ -1801,7 +1804,7 @@ export function HolidayLightingQuoter({
               />
             </label>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-xs text-muted-foreground">Light type
             <select
               className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -1859,6 +1862,26 @@ export function HolidayLightingQuoter({
                   }}
                 >
                   {HOLIDAY_COLOR_PATTERNS.map((color) => <option key={color} value={color}>{color}</option>)}
+                </select>
+              </label>
+            ) : null}
+            {catalog.lightStyles.find((style) => style.key === selections.defaultLightStyleKey)?.kind !== "permanent" ? (
+              <label className="text-xs text-muted-foreground">Strand color (internal only)
+                <select
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={selections.strandColor ?? "Green"}
+                  onChange={(event) => {
+                    const nextSelections = {
+                      ...selections,
+                      strandColor: event.target.value as (typeof HOLIDAY_STRAND_COLORS)[number],
+                    };
+                    setSelections(nextSelections);
+                    void save({ selections: nextSelections }, { quiet: true });
+                  }}
+                >
+                  {HOLIDAY_STRAND_COLORS.map((color) => (
+                    <option key={color} value={color}>{color}</option>
+                  ))}
                 </select>
               </label>
             ) : null}

@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Menu,
   Settings,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { ScheduleViewMode } from "@/components/schedule/WeekGrid";
 import type { ColorByMode } from "@/lib/schedule/types";
+import { HolidayScheduleExportDialog } from "@/components/schedule/HolidayScheduleExportDialog";
 
 type Props = {
   weekLabel: string;
@@ -32,6 +35,9 @@ type Props = {
   onColorByChange: (mode: ColorByMode) => void;
   viewMode?: ScheduleViewMode;
   onViewModeChange?: (mode: ScheduleViewMode) => void;
+  canExport?: boolean;
+  exportStart?: Date;
+  exportEnd?: Date;
 };
 
 const COLOR_BY_LABELS: Record<ColorByMode, string> = {
@@ -61,12 +67,27 @@ export function ScheduleToolbar({
   onColorByChange,
   viewMode = "week",
   onViewModeChange,
+  canExport = false,
+  exportStart = new Date(),
+  exportEnd = new Date(),
 }: Props) {
   const metricsHidden = viewMode === "month";
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-white px-4 py-2.5">
       <div className="flex items-center gap-2">
+        {canExport ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Export holiday lighting schedule"
+            aria-label="Export holiday lighting schedule"
+            onClick={() => setExportOpen(true)}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        ) : null}
         <Button
           variant={sidebarOpen ? "secondary" : "outline"}
           size="icon"
@@ -145,6 +166,12 @@ export function ScheduleToolbar({
           </a>
         </Button>
       </div>
+      <HolidayScheduleExportDialog
+        open={exportOpen}
+        defaultStart={exportStart}
+        defaultEnd={exportEnd}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   );
 }
