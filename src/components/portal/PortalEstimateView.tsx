@@ -763,6 +763,10 @@ export function PortalEstimateView({
               discounts={displayDiscounts}
               selectedId={selectedOptionId}
               onSelect={setSelectedOptionId}
+              onCancellationPolicy={(optionId) => {
+                setSelectedOptionId(optionId);
+                setCancellationPolicyOpen(true);
+              }}
               approvedId={estimate.signedAt ? estimate.selectedOptionId : null}
               approvedLabel={estimate.status === "APPROVED" ? "Approved option" : "Customer selected"}
               onLeaseCommitmentChange={(optionId, years) =>
@@ -816,6 +820,15 @@ export function PortalEstimateView({
                     : ""}
             </p>
             <p className="text-lg font-semibold">{formatCurrency(displayTotal())}</p>
+            {requiresHolidayCard ? (
+              <button
+                type="button"
+                className="text-sm font-medium text-[#4C9BC8] underline underline-offset-2"
+                onClick={() => setCancellationPolicyOpen(true)}
+              >
+                Cancellation Fee: {formatCurrency(cancellationFee)}
+              </button>
+            ) : null}
             <p className="text-sm text-muted-foreground">Sign with your finger in the box below.</p>
             <canvas
               ref={canvasRef}
@@ -910,13 +923,18 @@ export function PortalEstimateView({
           <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-white p-5 shadow-xl">
             <h2 id="holiday-cancellation-title" className="text-lg font-semibold">Holiday lighting cancellation policy</h2>
             <div className="mt-3 space-y-3 text-sm text-muted-foreground">
-              <p>This quote assumes a yearly recurring holiday lighting service. There is no multi-year commitment.</p>
               <p>
-                If you cancel, the cancellation amount for this design is{" "}
-                <strong className="text-foreground">{formatCurrency(cancellationFee)}</strong>.
+                By approving this estimate, you understand that the materials being installed have
+                a cost that {company.name} bears as a business. In exchange, we assume you will
+                return as a customer each year.
               </p>
-              <p>After the cancellation amount is paid, you keep the Christmas lights and materials purchased for your property.</p>
-              <p>We do not mark up the cancellation amount. It is the company&apos;s backend material cost for the lights and materials purchased to perform the work.</p>
+              <p>
+                If you cancel this yearly service within 10 years, you will be expected to pay the
+                listed MSRP cost of the installed materials. The cancellation fee for this design
+                is <strong className="text-foreground">{formatCurrency(cancellationFee)}</strong>.
+              </p>
+              <p>You may transfer the service to another property with no cancellation fee.</p>
+              <p>You may also apply the cancellation fee as a credit toward permanent lighting.</p>
             </div>
             <Button type="button" className="mt-5 w-full" onClick={() => setCancellationPolicyOpen(false)}>
               Close

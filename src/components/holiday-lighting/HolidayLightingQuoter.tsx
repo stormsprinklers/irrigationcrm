@@ -2153,7 +2153,17 @@ export function HolidayLightingQuoter({
                 const adjustment = selections.optionAdjustments?.[key];
                 const detail = draftPricing[key];
                 return <div key={key} className="space-y-2 rounded-md border border-border p-3">
-                  <div className="flex items-center justify-between text-sm font-medium"><span>{label}</span><span>{money(detail.total)}</span></div>
+                  <div className="flex items-start justify-between gap-3 text-sm font-medium">
+                    <span>{label}</span>
+                    <div className="text-right">
+                      <span className="block">{money(detail.total)}</span>
+                      {key !== "permanent" ? (
+                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                          Cancellation Fee: {money(pricing.cancellationFee)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     <label className="text-xs text-muted-foreground">Price ($)
                       <input type="number" min={0} max={9999999} step="0.01" placeholder={detail.calculated.toFixed(2)}

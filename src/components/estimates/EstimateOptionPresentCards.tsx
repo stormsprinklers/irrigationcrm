@@ -34,6 +34,8 @@ export type PresentOption = {
   sortOrder?: number;
   popular?: boolean;
   pricingMode?: string | null;
+  recurringYearlyService?: boolean;
+  cancellationFee?: number;
   leaseContractYears?: 1 | 3 | 5 | null;
 };
 
@@ -201,6 +203,7 @@ export function EstimateOptionPresentCards({
   onDecline,
   onRename,
   onLeaseCommitmentChange,
+  onCancellationPolicy,
   decidingId,
   approvedId,
   approvedLabel = "Approved option",
@@ -216,6 +219,7 @@ export function EstimateOptionPresentCards({
   onDecline?: (optionId: string) => void;
   onRename?: (optionId: string, label: string) => void;
   onLeaseCommitmentChange?: (optionId: string, years: 1 | 3 | 5) => void;
+  onCancellationPolicy?: (optionId: string) => void;
   decidingId?: string | null;
   approvedId?: string | null;
   approvedLabel?: string;
@@ -386,6 +390,18 @@ export function EstimateOptionPresentCards({
                   )}
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     <p className="text-lg font-semibold">{formatCurrency(option.total)}</p>
+                    {option.recurringYearlyService && onCancellationPolicy ? (
+                      <button
+                        type="button"
+                        className="text-right text-xs font-medium text-[#4C9BC8] underline underline-offset-2"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCancellationPolicy(option.id);
+                        }}
+                      >
+                        Cancellation Fee: {formatCurrency(Math.max(0, option.cancellationFee ?? 0))}
+                      </button>
+                    ) : null}
                     {isApproved ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
                         <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
